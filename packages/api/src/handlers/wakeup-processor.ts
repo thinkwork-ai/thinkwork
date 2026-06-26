@@ -699,7 +699,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const requestedParentModel =
     normalizeRequestedModelId(payload?.modelId) ??
     normalizeRequestedModelId(payload?.requestedModelId);
-  if (requestedParentModel && wakeup.source === "chat_message") {
+  if (
+    requestedParentModel &&
+    (wakeup.source === "chat_message" || wakeup.source === "question_answer")
+  ) {
     if (
       wakeup.requested_by_actor_type !== "user" ||
       !wakeup.requested_by_actor_id

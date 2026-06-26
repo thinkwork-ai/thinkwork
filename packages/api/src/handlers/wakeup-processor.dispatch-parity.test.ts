@@ -299,6 +299,16 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     );
   });
 
+  it("honors selected models for card-answer resumes as well as chat messages", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    expect(wakeupSource).toContain(
+      'wakeup.source === "chat_message" || wakeup.source === "question_answer"',
+    );
+    expect(wakeupSource).toMatch(
+      /assertUserModelApproved\(\{\s*tenantId: wakeup\.tenant_id,\s*userId: wakeup\.requested_by_actor_id,\s*modelId: requestedParentModel,/,
+    );
+  });
+
   it("passes model routing policy and approved model ids through unchanged", () => {
     const routes = [
       {

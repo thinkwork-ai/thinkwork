@@ -24,6 +24,15 @@ const mocks = vi.hoisted(() => ({
       thread_id: { name: "thread_id" },
       status: { name: "status" },
     },
+    messages: {
+      __table__: "messages",
+      id: { name: "id" },
+      tenant_id: { name: "tenant_id" },
+      thread_id: { name: "thread_id" },
+      role: { name: "role" },
+      metadata: { name: "metadata" },
+      created_at: { name: "created_at" },
+    },
     threads: {
       __table__: "threads",
       id: { name: "id" },
@@ -43,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   questionRow: null as Record<string, unknown> | null,
   visibleThreadRows: [] as Array<Record<string, unknown>>,
   threadRow: null as Record<string, unknown> | null,
+  messageRows: [] as Array<Record<string, unknown>>,
   existingWakeupRows: [] as Array<{ id: string }>,
   insertedWakeups: [] as Array<Record<string, unknown>>,
   insertError: null as Error | null,
@@ -64,6 +74,9 @@ vi.mock("@thinkwork/database-pg", () => ({
             if (table === mocks.tables.pendingUserQuestions) {
               return mocks.questionRow ? [mocks.questionRow] : [];
             }
+            if (table === mocks.tables.messages) {
+              return mocks.messageRows;
+            }
             if (table === mocks.tables.threads) {
               // The visibility probe selects only { id }; the wakeup-agent
               // probe selects { agent_id, status, title }.
@@ -78,7 +91,10 @@ vi.mock("@thinkwork/database-pg", () => ({
             return [];
           };
           const promise = resolve();
-          return Object.assign(promise, { limit: () => resolve() });
+          return Object.assign(promise, {
+            limit: () => resolve(),
+            orderBy: () => ({ limit: () => resolve() }),
+          });
         },
       }),
     }),
@@ -97,13 +113,16 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   pendingUserQuestions: mocks.tables.pendingUserQuestions,
+  messages: mocks.tables.messages,
   threads: mocks.tables.threads,
   agentWakeupRequests: mocks.tables.agentWakeupRequests,
 }));
 
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: unknown[]) => ({ __and: conditions }),
+  desc: (field: unknown) => ({ __desc: field }),
   eq: (field: unknown, value: unknown) => ({ __eq: { field, value } }),
+  lt: (field: unknown, value: unknown) => ({ __lt: { field, value } }),
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({
@@ -148,6 +167,7 @@ function pendingQuestionRow(overrides: Record<string, unknown> = {}) {
     answered_by: null,
     answered_at: null,
     delegation_context: { profileSlug: "researcher", escalationCount: 0 },
+    created_at: new Date("2026-06-10T12:00:00Z"),
     ...overrides,
   };
 }
@@ -171,6 +191,7 @@ beforeEach(() => {
     status: "in_progress",
     title: "Quarterly report",
   };
+  mocks.messageRows = [];
   mocks.existingWakeupRows = [];
   mocks.insertedWakeups = [];
   mocks.insertError = null;
@@ -273,6 +294,23 @@ describe("answerUserQuestion — happy path (card route)", () => {
     );
     expect(mocks.shouldDeferWakeup).toHaveBeenCalledWith(THREAD_ID);
     expect(mocks.insertedWakeups[0].status).toBe("deferred");
+  });
+
+  it("carries the selected model from the asking message into the resume wakeup", async () => {
+    mocks.messageRows = [
+      { metadata: { requestedModelId: "openai.gpt-oss-120b-1:0" } },
+    ];
+
+    await answerUserQuestion(
+      {},
+      { questionId: QUESTION_ID, answers: "{}" },
+      ctx,
+    );
+
+    expect(mocks.insertedWakeups[0].payload).toMatchObject({
+      requestedModelId: "openai.gpt-oss-120b-1:0",
+      modelId: "openai.gpt-oss-120b-1:0",
+    });
   });
 });
 
