@@ -15,6 +15,7 @@
 import type { MemoryAdapter } from "./adapter.js";
 import { getMemoryConfig, type MemoryConfig } from "./config.js";
 import { AgentCoreAdapter } from "./adapters/agentcore-adapter.js";
+import { CogneeAdapter } from "./adapters/cognee-adapter.js";
 import { HindsightAdapter } from "./adapters/hindsight-adapter.js";
 import {
   createExportService,
@@ -80,7 +81,12 @@ function buildAdapter(config: MemoryConfig): MemoryAdapter {
     });
   }
   if (config.engine === "cognee") {
-    throw new Error("Cognee memory engine selected but adapter is not wired");
+    if (!config.backends.cogneeEndpoint) {
+      throw new Error("Cognee engine selected but COGNEE_ENDPOINT is empty");
+    }
+    return new CogneeAdapter({
+      endpoint: config.backends.cogneeEndpoint,
+    });
   }
   throw new Error(`Unknown MEMORY_ENGINE: ${String(config.engine)}`);
 }

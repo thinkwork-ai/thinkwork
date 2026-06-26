@@ -180,6 +180,45 @@ describe("CogneeClient", () => {
     ]);
   });
 
+  it("posts scoped Cognee search requests", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, { results: [{ text: "Use concise summaries." }] }),
+      );
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+    });
+
+    const result = await client.search({
+      query: "summary preference",
+      searchType: "CHUNKS",
+      datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
+      nodeNames: ["thinkwork_user_memory", "user_user_1"],
+      includeReferences: true,
+      systemPrompt: "Use memory only.",
+    });
+
+    expect(result).toEqual({
+      results: [{ text: "Use concise summaries." }],
+    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "http://cognee.local/api/v1/search",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          query: "summary preference",
+          search_type: "CHUNKS",
+          datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
+          node_name: ["thinkwork_user_memory", "user_user_1"],
+          include_references: true,
+          system_prompt: "Use memory only.",
+        }),
+      }),
+    );
+  });
+
   it("falls back to add plus cognify when remember is unsupported", async () => {
     const fetchFn = vi
       .fn<typeof fetch>()

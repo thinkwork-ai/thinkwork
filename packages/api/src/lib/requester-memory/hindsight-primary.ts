@@ -1,5 +1,6 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
+import { CogneeAdapter } from "../memory/adapters/cognee-adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
 import {
   maybeEnqueuePostTurnCompile,
@@ -43,13 +44,13 @@ export async function retainRequesterThreadMemoryDigest(
     input.userId,
     input.threadId,
   );
-  const adapter = deps.adapter ?? createDefaultHindsightAdapter();
+  const adapter = deps.adapter ?? createDefaultMemoryDocumentAdapter();
 
   if (!adapter?.upsertMarkdownMemoryDocument) {
     return {
       status: "skipped",
       documentId,
-      error: "hindsight adapter is not configured",
+      error: "memory document adapter is not configured",
     };
   }
 
@@ -111,18 +112,27 @@ export function requesterThreadDigestDocumentId(
 
 // Memoized per container: the adapter carries the configured-banks cache, so
 // per-call construction would re-pay the bank-config GET on every upsert.
-let defaultAdapter: HindsightAdapter | null | undefined;
+let defaultAdapter:
+  | Pick<MemoryAdapter, "kind" | "upsertMarkdownMemoryDocument">
+  | null
+  | undefined;
 
-function createDefaultHindsightAdapter(): Pick<
+function createDefaultMemoryDocumentAdapter(): Pick<
   MemoryAdapter,
   "kind" | "upsertMarkdownMemoryDocument"
 > | null {
   if (defaultAdapter !== undefined) return defaultAdapter;
-  if ((getConfig("MEMORY_ENGINE") || "hindsight") !== "hindsight") {
-    defaultAdapter = null;
-    return null;
+  const engine = getConfig("MEMORY_ENGINE") || "hindsight";
+  if (engine === "hindsight") {
+    const endpoint = getConfig("HINDSIGHT_ENDPOINT") || "";
+    defaultAdapter = endpoint ? new HindsightAdapter({ endpoint }) : null;
+    return defaultAdapter;
   }
-  const endpoint = getConfig("HINDSIGHT_ENDPOINT") || "";
-  defaultAdapter = endpoint ? new HindsightAdapter({ endpoint }) : null;
+  if (engine === "cognee") {
+    const endpoint = getConfig("COGNEE_ENDPOINT") || "";
+    defaultAdapter = endpoint ? new CogneeAdapter({ endpoint }) : null;
+    return defaultAdapter;
+  }
+  defaultAdapter = null;
   return defaultAdapter;
 }
