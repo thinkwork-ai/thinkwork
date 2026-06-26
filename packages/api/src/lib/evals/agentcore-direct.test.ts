@@ -51,6 +51,7 @@ const runtimeConfig: AgentRuntimeConfig = {
   blockedTools: [],
   sandboxTemplate: null,
   browserAutomationEnabled: false,
+  threadJsonRenderUiEnabled: false,
   contextEngineEnabled: false,
   guardrailId: null,
   guardrailConfig: undefined,

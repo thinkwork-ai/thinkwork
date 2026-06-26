@@ -48,6 +48,10 @@ import {
   resolveAgentRuntimeConfig,
   tenantCatalogSkillS3Key,
 } from "../lib/resolve-agent-runtime-config.js";
+import {
+  EMIT_JSON_RENDER_UI_TOOL_NAME,
+  THREAD_JSON_RENDER_UI_CAPABILITY,
+} from "../lib/thread-json-render/capability.js";
 import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js";
 import {
   resolveRuntimeFunctionName,
@@ -1486,6 +1490,14 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       browser_automation_enabled:
         runtimeConfig.browserAutomationEnabled &&
         isAnyToolAllowed("browser_automation", "browser")
+          ? true
+          : undefined,
+      thread_json_render_ui_enabled:
+        runtimeConfig.threadJsonRenderUiEnabled &&
+        isAnyToolAllowed(
+          THREAD_JSON_RENDER_UI_CAPABILITY,
+          EMIT_JSON_RENDER_UI_TOOL_NAME,
+        )
           ? true
           : undefined,
       // U3 of the finance pilot — the runtime reads message_attachments

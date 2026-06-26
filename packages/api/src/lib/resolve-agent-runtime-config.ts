@@ -93,6 +93,7 @@ import {
   applyRuntimeOverrides,
   type SpaceRuntimeOverrides,
 } from "./workspace-renderer/runtime-overrides-applier.js";
+import { threadJsonRenderUiEnabledFromCapabilities } from "./thread-json-render/capability.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 import {
@@ -210,6 +211,7 @@ export interface AgentRuntimeConfig {
   blockedTools: string[];
   sandboxTemplate: TemplateSandboxConfig | null;
   browserAutomationEnabled: boolean;
+  threadJsonRenderUiEnabled: boolean;
   contextEngineEnabled: boolean;
   contextEngineConfig?: TemplateContextEngineConfig;
   /**
@@ -661,6 +663,10 @@ export async function resolveAgentRuntimeConfig(
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
+  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromCapabilities(
+    capabilityRows,
+    blockedTools,
+  );
   const sendEmailConfig =
     templateSendEmailEnabled && !blockedTools.includes("send_email")
       ? {
@@ -724,6 +730,7 @@ export async function resolveAgentRuntimeConfig(
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     browserAutomationEnabled,
+    threadJsonRenderUiEnabled,
     contextEngineEnabled,
     contextEngineConfig,
     guardrailId,

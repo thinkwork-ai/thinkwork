@@ -1,7 +1,7 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 import { mkdtemp, readlink, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,6 +20,7 @@ import {
   type OpenSessionInputs,
 } from "../src/agent-loop.js";
 import { SessionConflictError } from "../src/durable-session-manager.js";
+import { EMIT_JSON_RENDER_UI_TOOL_NAME } from "../src/json-render-runtime.js";
 import { UnsupportedModelError } from "../src/model-provider.js";
 import type { RunAgentLoopArgs } from "../src/types.js";
 
@@ -753,24 +754,24 @@ describe("runAgentLoop", () => {
     );
   });
 
-  it("emits and returns Thread GenUI parts from tool results", async () => {
-    const fixture = createTaskReviewGenUIFixture();
+  it("emits and returns Thread json-render parts from the explicit emit tool", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
       events: [
         {
           type: "tool_execution_start",
           toolCallId: "c1",
-          toolName: "review_task",
+          toolName: EMIT_JSON_RENDER_UI_TOOL_NAME,
           args: { taskId: "task-123" },
         } as AgentSessionEvent,
         {
           type: "tool_execution_end",
           toolCallId: "c1",
-          toolName: "review_task",
+          toolName: EMIT_JSON_RENDER_UI_TOOL_NAME,
           result: {
             content: [{ type: "text", text: "review ready" }],
-            details: { threadGenUI: fixture },
+            details: { thread_json_render_part: fixture },
           },
           isError: false,
         } as AgentSessionEvent,
@@ -793,11 +794,36 @@ describe("runAgentLoop", () => {
         eventType: "ui_message_chunk",
         stream: "ui",
         payload: {
-          kind: "thread_genui.ui_message_chunk",
+          kind: "thread_json_render.ui_message_chunk",
           chunk: fixture,
         },
       }),
     );
+  });
+
+  it("does not trust json-render-looking payloads from arbitrary tool results", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "review_task",
+          result: {
+            content: [{ type: "text", text: "review ready" }],
+            details: { thread_json_render_part: fixture },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    expect(result.uiMessageParts).toBeUndefined();
   });
 
   it("never lets a throwing emitActivity break the turn (best-effort, D1)", async () => {

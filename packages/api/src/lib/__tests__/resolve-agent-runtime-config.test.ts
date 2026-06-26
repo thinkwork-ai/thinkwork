@@ -410,6 +410,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.guardrailId).toBeNull();
     expect(cfg.guardrailConfig).toBeUndefined();
     expect(cfg.browserAutomationEnabled).toBe(false);
+    expect(cfg.threadJsonRenderUiEnabled).toBe(false);
     expect(cfg.contextEngineEnabled).toBe(true);
     expect(cfg.contextEngineConfig).toEqual({ enabled: true });
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
@@ -730,6 +731,46 @@ describe("resolveAgentRuntimeConfig", () => {
       agentId: AGENT_ID,
     });
     expect(cfg.browserAutomationEnabled).toBe(false);
+  });
+
+  it("enables Thread json-render UI only from an explicit agent capability", async () => {
+    stageAgentRow();
+    stageTemplateRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([{ capability: "thread-json-render-ui", enabled: true }]); // agent_capabilities
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.threadJsonRenderUiEnabled).toBe(true);
+  });
+
+  it("keeps Thread json-render UI disabled when the capability or tool is blocked", async () => {
+    for (const blockedTool of [
+      "thread-json-render-ui",
+      "emit_json_render_ui",
+    ]) {
+      rowsQueue.length = 0;
+      stageAgentRow({ blocked_tools: [blockedTool] });
+      stageTemplateRow();
+      stageTenantSlug();
+      rowsQueue.push([]); // default guardrail
+      stageTrustedRuntimeSkillRows();
+      rowsQueue.push([]); // kbs
+      rowsQueue.push([{ capability: "thread-json-render-ui", enabled: true }]); // agent_capabilities
+
+      const cfg = await resolveAgentRuntimeConfig({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+      });
+
+      expect(cfg.threadJsonRenderUiEnabled).toBe(false);
+    }
   });
 
   it("does not inject send_email when the template Send Email opt-in is null", async () => {

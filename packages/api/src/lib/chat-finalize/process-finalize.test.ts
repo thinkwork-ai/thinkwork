@@ -158,7 +158,7 @@ import {
   toFinalizeResponse,
   turnAskedUserQuestion,
 } from "./process-finalize";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -2250,7 +2250,7 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
   });
 
   it("forwards validated UI message parts into assistant message persistence", async () => {
-    const part = createTaskReviewGenUIFixture();
+    const part = createTaskReviewJsonRenderFixture();
     const persistedPart = part as unknown as Record<string, unknown>;
 
     await processFinalize({

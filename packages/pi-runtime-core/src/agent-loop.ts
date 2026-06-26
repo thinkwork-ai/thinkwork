@@ -21,11 +21,11 @@ import {
   type SessionStore,
 } from "./durable-session-manager.js";
 import {
-  extractRuntimeThreadGenUICandidates,
-  mergeFinalThreadGenUIParts,
-  normalizeRuntimeThreadGenUIPart,
-  threadGenUIActivityEvent,
-} from "./genui-runtime.js";
+  EMIT_JSON_RENDER_UI_TOOL_NAME,
+  extractEmitJsonRenderToolPart,
+  mergeFinalThreadJsonRenderParts,
+  threadJsonRenderActivityEvent,
+} from "./json-render-runtime.js";
 import { textFromAssistant } from "./history.js";
 import {
   OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
@@ -851,23 +851,18 @@ export async function runAgentLoop(
             payload: okfWikiTrace,
           });
         }
-        const genuiParts = extractRuntimeThreadGenUICandidates(
-          event.result,
-        ).map(
-          (candidate, index) =>
-            normalizeRuntimeThreadGenUIPart(
-              candidate,
-              `genui:${event.toolCallId}:${index}`,
-            ).part,
-        );
-        if (genuiParts.length > 0) {
-          uiMessageParts = mergeFinalThreadGenUIParts(
-            uiMessageParts,
-            genuiParts,
+        const jsonRenderPart =
+          !event.isError && event.toolName === EMIT_JSON_RENDER_UI_TOOL_NAME
+            ? extractEmitJsonRenderToolPart(event.result)
+            : null;
+        if (jsonRenderPart) {
+          uiMessageParts = mergeFinalThreadJsonRenderParts(uiMessageParts, [
+            jsonRenderPart,
+          ]);
+          emitActivitySafely(
+            deps,
+            threadJsonRenderActivityEvent(jsonRenderPart),
           );
-          for (const part of genuiParts) {
-            emitActivitySafely(deps, threadGenUIActivityEvent(part));
-          }
         }
         // ask_user_question turn-end (U5): the tool result is recorded above;
         // now stop the run deterministically. The sentinel result itself

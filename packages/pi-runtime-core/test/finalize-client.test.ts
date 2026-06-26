@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 import {
   buildFinalizeBody,
@@ -42,7 +42,7 @@ const runResult: RunAgentLoopResult = {
       amount_usd: "0.001",
     },
   ],
-  uiMessageParts: [createTaskReviewGenUIFixture()],
+  uiMessageParts: [createTaskReviewJsonRenderFixture()],
   usage: {
     input: 5,
     output: 7,
