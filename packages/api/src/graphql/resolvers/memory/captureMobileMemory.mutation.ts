@@ -1,8 +1,8 @@
 /**
  * captureMobileMemory — Mobile quick-capture footer writes a user-authored
- * fact directly into the user's Hindsight bank. Not a chat turn;
- * the agent is not invoked. The captured unit will surface on the user's
- * next recall because it lives in the same bank the agent reads from.
+ * fact directly into the active user-memory engine. Not a chat turn; the agent
+ * is not invoked. The captured unit will surface on the user's next recall
+ * because it lives in the same user-owned memory slice the agent reads from.
  *
  * Factor:
  *   FACT        → sourceType explicit_remember, native world
