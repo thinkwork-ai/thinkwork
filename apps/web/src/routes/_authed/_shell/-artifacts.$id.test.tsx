@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { useMutation, useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import { createTaskReviewJsonRenderFixture } from "@/components/workbench/json-render/fixtures";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
 vi.mock("urql", () => ({
@@ -280,12 +280,12 @@ describe("AppletRouteContent", () => {
   });
 });
 
-describe("data-view GenUI snapshots", () => {
-  it("renders a promoted GenUI snapshot without mounting the applet iframe", () => {
-    const fixture = createTaskReviewGenUIFixture();
+describe("data-view json-render snapshots", () => {
+  it("renders a promoted json-render snapshot without mounting the applet iframe", () => {
+    const fixture = createTaskReviewJsonRenderFixture();
     const snapshot = {
-      schemaVersion: "thread-genui-artifact-snapshot/v1",
-      kind: "genui_snapshot",
+      schemaVersion: "thread-json-render-artifact-snapshot/v1",
+      kind: "json_render_snapshot",
       source: {
         threadId: "thread-1",
         sourceMessageId: "message-1",
@@ -294,13 +294,13 @@ describe("data-view GenUI snapshots", () => {
         promotedAt: "2026-06-21T00:00:00Z",
         promotedByUserId: "user-1",
       },
-      genui: fixture,
+      jsonRender: fixture,
     };
     setRouteQueryMocks({
       artifact: artifactPayload({
         type: "DATA_VIEW",
         content: JSON.stringify(snapshot),
-        metadata: { kind: "genui_snapshot" },
+        metadata: { kind: "json_render_snapshot" },
       }),
       applet: null,
     });

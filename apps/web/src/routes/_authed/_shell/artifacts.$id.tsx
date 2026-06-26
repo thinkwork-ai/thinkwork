@@ -23,7 +23,7 @@ import {
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
-import { GenUIRenderer } from "@/components/workbench/genui/GenUIRenderer";
+import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
@@ -88,12 +88,13 @@ export function AppletRouteContent({
    *  root crumb links back via `href`. */
   breadcrumbRoot?: { label: string; href: string };
 }) {
-  const [{ data: artifactData, fetching: artifactFetching, error: artifactError }] =
-    useQuery<ArtifactDetailResult>({
-      query: ArtifactDetailForRouteQuery,
-      variables: { id: appId },
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: artifactData, fetching: artifactFetching, error: artifactError },
+  ] = useQuery<ArtifactDetailResult>({
+    query: ArtifactDetailForRouteQuery,
+    variables: { id: appId },
+    requestPolicy: "cache-and-network",
+  });
   const artifact = artifactData?.artifact ?? null;
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
@@ -351,7 +352,7 @@ function DataViewArtifactContent({
   backHref: string;
   breadcrumbRoot?: { label: string; href: string };
 }) {
-  const snapshot = parseGenUISnapshot(artifact.content);
+  const snapshot = parseJsonRenderSnapshot(artifact.content);
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
       <ArtifactDetailActions
@@ -398,26 +399,30 @@ function DataViewArtifactContent({
         <section className="grid gap-3">
           <div className="rounded-md border border-border/70 bg-card p-3 text-xs text-muted-foreground">
             <span>Source message </span>
-            <span className="font-mono">
-              {snapshot.source.sourceMessageId}
-            </span>
+            <span className="font-mono">{snapshot.source.sourceMessageId}</span>
             <span> · Part </span>
             <span className="font-mono">{snapshot.source.partId}</span>
           </div>
-          <GenUIRenderer data={snapshot.genui.data} partId={snapshot.genui.id} />
+          <ThreadJsonRenderRenderer
+            data={snapshot.jsonRender.data}
+            partId={snapshot.jsonRender.id}
+            sourceMessageId={snapshot.source.sourceMessageId}
+            threadId={snapshot.source.threadId}
+          />
         </section>
       ) : (
         <AppletFailure>
-          This data-view artifact does not include a readable GenUI snapshot.
+          This data-view artifact does not include a readable json-render
+          snapshot.
         </AppletFailure>
       )}
     </main>
   );
 }
 
-interface GenUISnapshotArtifactPayload {
-  schemaVersion: "thread-genui-artifact-snapshot/v1";
-  kind: "genui_snapshot";
+interface JsonRenderSnapshotArtifactPayload {
+  schemaVersion: "thread-json-render-artifact-snapshot/v1";
+  kind: "json_render_snapshot";
   source: {
     threadId: string;
     sourceMessageId: string;
@@ -426,22 +431,24 @@ interface GenUISnapshotArtifactPayload {
     promotedAt: string;
     promotedByUserId: string;
   };
-  genui: { type: "data-genui"; id: string; data: unknown };
+  jsonRender: { type: "data-json-render"; id: string; data: unknown };
 }
 
-function parseGenUISnapshot(
+function parseJsonRenderSnapshot(
   content: string | null | undefined,
-): GenUISnapshotArtifactPayload | null {
+): JsonRenderSnapshotArtifactPayload | null {
   if (!content) return null;
   try {
-    const parsed = JSON.parse(content) as Partial<GenUISnapshotArtifactPayload>;
+    const parsed = JSON.parse(
+      content,
+    ) as Partial<JsonRenderSnapshotArtifactPayload>;
     if (
-      parsed.schemaVersion !== "thread-genui-artifact-snapshot/v1" ||
-      parsed.kind !== "genui_snapshot" ||
+      parsed.schemaVersion !== "thread-json-render-artifact-snapshot/v1" ||
+      parsed.kind !== "json_render_snapshot" ||
       !isRecord(parsed.source) ||
-      !isRecord(parsed.genui) ||
-      parsed.genui.type !== "data-genui" ||
-      typeof parsed.genui.id !== "string"
+      !isRecord(parsed.jsonRender) ||
+      parsed.jsonRender.type !== "data-json-render" ||
+      typeof parsed.jsonRender.id !== "string"
     ) {
       return null;
     }
@@ -456,7 +463,7 @@ function parseGenUISnapshot(
     ) {
       return null;
     }
-    return parsed as GenUISnapshotArtifactPayload;
+    return parsed as JsonRenderSnapshotArtifactPayload;
   } catch {
     return null;
   }
