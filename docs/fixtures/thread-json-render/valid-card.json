@@ -1,0 +1,66 @@
+{
+  "type": "data-json-render",
+  "id": "json-render:primitive:review",
+  "data": {
+    "schemaVersion": "thread-json-render/v1",
+    "catalogVersion": "thread-json-render-catalog/v1",
+    "status": "ready",
+    "spec": {
+      "root": "card",
+      "elements": {
+        "card": {
+          "type": "Card",
+          "props": {
+            "title": "Review queue",
+            "description": "Current generated UI direction",
+            "maxWidth": null,
+            "centered": false,
+            "className": null
+          },
+          "children": ["stack"]
+        },
+        "stack": {
+          "type": "Stack",
+          "props": {
+            "direction": "vertical",
+            "gap": "sm",
+            "align": null,
+            "justify": null,
+            "className": null
+          },
+          "children": ["heading", "summary", "approve"]
+        },
+        "heading": {
+          "type": "Heading",
+          "props": {
+            "text": "Pipeline health",
+            "level": "h3"
+          },
+          "children": []
+        },
+        "summary": {
+          "type": "Text",
+          "props": {
+            "text": "All checks are ready.",
+            "variant": "body"
+          },
+          "children": []
+        },
+        "approve": {
+          "type": "Button",
+          "props": {
+            "label": "Approve",
+            "variant": "primary",
+            "disabled": false
+          },
+          "children": []
+        }
+      }
+    },
+    "mobileFallback": {
+      "title": "Pipeline health",
+      "summary": "All checks are ready."
+    },
+    "specHash": "json-render-fnv1a:00b0bb9e"
+  }
+}

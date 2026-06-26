@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   createAnalyticsJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
@@ -130,6 +132,48 @@ describe("ThreadConversation", () => {
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
   });
 
+  it("renders the checked-in valid-card fixture through the Thread renderer", () => {
+    const part = readJsonRenderFixture("valid-card.json");
+
+    render(
+      <ThreadConversation
+        messages={[
+          {
+            id: "m1",
+            role: "ASSISTANT",
+            content: "",
+            parts: [part],
+            sender: { type: "agent", id: "a1", displayName: "Coordinator" },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Pipeline health")).toBeTruthy();
+    expect(screen.getByText("All checks are ready.")).toBeTruthy();
+  });
+
+  it("does not trust legacy component JSON as Thread generated UI", () => {
+    const legacy = readJsonRenderFixture("invalid-legacy-component.json");
+
+    render(
+      <ThreadConversation
+        messages={[
+          {
+            id: "m1",
+            role: "ASSISTANT",
+            content: JSON.stringify(legacy),
+            parts: [legacy],
+            sender: { type: "agent", id: "a1", displayName: "Coordinator" },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId("json-render-fallback")).toBeNull();
+    expect(screen.getByText(/Legacy component shape/)).toBeTruthy();
+  });
+
   it("renders a persisted analytics json-render domain part inside a Thread message", () => {
     const part = createAnalyticsJsonRenderFixture();
 
@@ -152,3 +196,12 @@ describe("ThreadConversation", () => {
     expect(screen.getByText(/ThinkWork analytics adapter/)).toBeTruthy();
   });
 });
+
+function readJsonRenderFixture(name: string): unknown {
+  return JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), "../../docs/fixtures/thread-json-render", name),
+      "utf8",
+    ),
+  );
+}

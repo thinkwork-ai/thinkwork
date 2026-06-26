@@ -23,6 +23,17 @@ That package is deliberately React-free so the AgentCore runtime, API
 finalization path, web renderer, and mobile fallback parser can validate the
 same wire shape without importing client renderer code.
 
+Golden fixtures live under `docs/fixtures/thread-json-render/`:
+
+- `valid-card.json` is a complete primitive json-render part that must validate
+  at runtime, persist as `Message.parts`, render inline on web, and fall back on
+  mobile.
+- `invalid-legacy-component.json` is the retired `{ component, props }` shape
+  and must never be promoted into trusted UI.
+- `invalid-fenced-markdown.md` is ordinary assistant markdown. Even when it
+  contains a plausible `data-json-render` object, clients and hosts must not
+  parse markdown fences as trusted UI.
+
 Future incompatible changes create a sibling spec at
 `docs/specs/thread-json-render-contract-v2.md`. Downstream units must not
 silently reintroduce `@thinkwork/genui` or a ThinkWork-only component grammar.
@@ -188,6 +199,11 @@ Old `data-genui` parts are not migrated, converted, or read through. They may
 be ignored or shown as unsupported legacy generated UI. Runtime work must emit
 complete `data-json-render` parts directly rather than translating
 well-known json-render examples into a ThinkWork-only grammar.
+
+Assistant prose, fenced JSON, `_type` GenUI cards, and legacy `{ component,
+props }` objects are text or unsupported data only. The only trusted runtime
+path is an `emit_json_render_ui` tool result that becomes a validated
+`data-json-render` part.
 
 ## Promotion
 
