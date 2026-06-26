@@ -11,6 +11,8 @@ const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
 const USER_ID = "55555555-5555-5555-5555-555555555555";
 const SOURCE_MESSAGE_ID = "66666666-6666-6666-6666-666666666666";
+const WORK_ITEM_ID = "77777777-7777-7777-7777-777777777777";
+const STATUS_DONE_ID = "88888888-8888-8888-8888-888888888888";
 
 const mocks = vi.hoisted(() => ({
   tables: {
@@ -25,6 +27,15 @@ const mocks = vi.hoisted(() => ({
       sender_id: { name: "messages.sender_id" },
       created_at: { name: "messages.created_at" },
     },
+    workItemEvents: {
+      __table__: "work_item_events",
+      tenant_id: { name: "work_item_events.tenant_id" },
+      work_item_id: { name: "work_item_events.work_item_id" },
+      thread_id: { name: "work_item_events.thread_id" },
+      metadata: { name: "work_item_events.metadata" },
+      new_status_id: { name: "work_item_events.new_status_id" },
+      created_at: { name: "work_item_events.created_at" },
+    },
     threads: {
       __table__: "threads",
       id: { name: "threads.id" },
@@ -35,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   resolveCallerFromAuth: vi.fn(),
   visiblePredicate: vi.fn(() => ({ visible: true })),
   sendMessage: vi.fn(),
+  setWorkItemStatus: vi.fn(),
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -67,6 +79,7 @@ vi.mock("../../utils.js", () => ({
     values,
   }),
   threads: mocks.tables.threads,
+  workItemEvents: mocks.tables.workItemEvents,
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({
@@ -81,7 +94,12 @@ vi.mock("./sendMessage.mutation.js", () => ({
   sendMessage: mocks.sendMessage,
 }));
 
+vi.mock("../../../lib/work-items/work-item-status-tool.js", () => ({
+  setWorkItemStatus: mocks.setWorkItemStatus,
+}));
+
 import { handleJsonRenderAction } from "./handleJsonRenderAction.mutation.js";
+import { TaskStatusToolError } from "../../../lib/task-status-tool.js";
 
 const ctx = { auth: { authType: "cognito" } } as never;
 
@@ -101,13 +119,22 @@ beforeEach(() => {
     metadata: {},
     createdAt: "2026-06-21T00:00:00.000Z",
   });
+  mocks.setWorkItemStatus.mockResolvedValue({
+    ok: true,
+    workItemId: WORK_ITEM_ID,
+    previousStatusCategory: "active",
+    statusCategory: "done",
+    statusId: STATUS_DONE_ID,
+    linkedTaskId: null,
+  });
 });
 
 describe("handleJsonRenderAction", () => {
-  it("validates the persisted part and dispatches a normal user message", async () => {
+  it("validates the persisted part, updates the Work Item, and records audit metadata", async () => {
     const fixture = sourcePart();
     enqueueHappySource(fixture);
     mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([]); // prior work item event lookup
     mocks.selectQueue.push([{ count: 0 }]); // rate limit
 
     const result = await handleJsonRenderAction(
@@ -117,17 +144,44 @@ describe("handleJsonRenderAction", () => {
     );
 
     expect(result.id).toBe("message-action-1");
+    expect(mocks.setWorkItemStatus).toHaveBeenCalledTimes(1);
+    expect(mocks.setWorkItemStatus).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      workItemId: WORK_ITEM_ID,
+      threadId: THREAD_ID,
+      statusCategory: "DONE",
+      statusId: null,
+      note: "Approved from generated UI",
+      actor: { type: "user", id: USER_ID },
+      metadata: {
+        jsonRenderAction: {
+          source: "json_render_action",
+          sourceMessageId: SOURCE_MESSAGE_ID,
+          partId: fixture.id,
+          actionId: "approve-task",
+          actionKind: "approve",
+          actionLabel: "Approve",
+          target: "work_item_status",
+          workItemId: WORK_ITEM_ID,
+          statusCategory: "DONE",
+          statusId: null,
+          specHash: fixture.data.specHash,
+          idempotencyKey: actionInput(fixture).idempotencyKey,
+        },
+      },
+    });
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     const forwarded = mocks.sendMessage.mock.calls[0][1].input;
     expect(forwarded).toMatchObject({
       threadId: THREAD_ID,
       role: "USER",
-      agentRequested: true,
+      agentRequested: false,
       senderType: "user",
       senderId: USER_ID,
     });
     expect(forwarded.content).toContain("Generated UI action: Approve");
-    expect(JSON.parse(forwarded.metadata).jsonRenderAction).toMatchObject({
+    const metadata = JSON.parse(forwarded.metadata).jsonRenderAction;
+    expect(metadata).toMatchObject({
       source: "json_render_action",
       sourceMessageId: SOURCE_MESSAGE_ID,
       partId: fixture.id,
@@ -135,6 +189,14 @@ describe("handleJsonRenderAction", () => {
       actionKind: "approve",
       specHash: fixture.data.specHash,
       idempotencyKey: actionInput(fixture).idempotencyKey,
+      mutation: {
+        target: "work_item_status",
+        workItemId: WORK_ITEM_ID,
+        statusCategory: "done",
+        statusId: STATUS_DONE_ID,
+        previousStatusCategory: "active",
+        alreadyApplied: false,
+      },
     });
   });
 
@@ -160,7 +222,44 @@ describe("handleJsonRenderAction", () => {
     );
 
     expect(result.id).toBe("message-existing");
+    expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("repairs missing audit when the Work Item event already applied", async () => {
+    const fixture = sourcePart();
+    enqueueHappySource(fixture);
+    mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([
+      {
+        newStatusId: STATUS_DONE_ID,
+        metadata: {
+          manualMetadata: {
+            jsonRenderAction: {
+              idempotencyKey: "idem-1",
+              statusCategory: "DONE",
+            },
+          },
+        },
+        created_at: new Date("2026-06-21T00:00:00Z"),
+      },
+    ]);
+    mocks.selectQueue.push([{ count: 12 }]); // would fail if repair were rate-limited
+
+    await handleJsonRenderAction({}, { input: actionInput(fixture) }, ctx);
+
+    expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    const forwarded = mocks.sendMessage.mock.calls[0][1].input;
+    expect(JSON.parse(forwarded.metadata).jsonRenderAction.mutation).toMatchObject(
+      {
+        target: "work_item_status",
+        workItemId: WORK_ITEM_ID,
+        statusCategory: "DONE",
+        statusId: STATUS_DONE_ID,
+        alreadyApplied: true,
+      },
+    );
   });
 
   it("rejects stale action submissions with an old spec hash", async () => {
@@ -177,6 +276,32 @@ describe("handleJsonRenderAction", () => {
     expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
 
+  it("rejects actions without the Work Item status target before mutation", async () => {
+    const fixture = sourcePart({
+      params: { workItemId: WORK_ITEM_ID, statusCategory: "DONE" },
+    });
+    enqueueHappySource(fixture);
+
+    await expect(
+      handleJsonRenderAction({}, { input: actionInput(fixture) }, ctx),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects Work Item status actions missing a status before mutation", async () => {
+    const fixture = sourcePart({
+      params: { target: "work_item_status", workItemId: WORK_ITEM_ID },
+    });
+    enqueueHappySource(fixture);
+
+    await expect(
+      handleJsonRenderAction({}, { input: actionInput(fixture) }, ctx),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("rejects unknown action ids before dispatch", async () => {
     const fixture = sourcePart();
     enqueueHappySource(fixture);
@@ -188,6 +313,29 @@ describe("handleJsonRenderAction", () => {
         ctx,
       ),
     ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("maps Work Item status failures without writing a success audit", async () => {
+    const fixture = sourcePart();
+    enqueueHappySource(fixture);
+    mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([]); // prior work item event lookup
+    mocks.selectQueue.push([{ count: 0 }]); // rate limit
+    mocks.setWorkItemStatus.mockRejectedValue(
+      new TaskStatusToolError(
+        "Work item is not linked to this thread",
+        403,
+        "WORK_ITEM_THREAD_REQUIRED",
+      ),
+    );
+
+    await expect(
+      handleJsonRenderAction({}, { input: actionInput(fixture) }, ctx),
+    ).rejects.toMatchObject({
+      message: "Work item is not linked to this thread",
+      extensions: { code: "WORK_ITEM_THREAD_REQUIRED", httpStatus: 403 },
+    });
     expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
 
@@ -218,6 +366,7 @@ describe("handleJsonRenderAction", () => {
     const fixture = sourcePart();
     enqueueHappySource(fixture);
     mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([]); // prior work item event lookup
     mocks.selectQueue.push([{ count: 12 }]); // rate limit
 
     await expect(
@@ -231,7 +380,13 @@ describe("handleJsonRenderAction", () => {
   });
 });
 
-function sourcePart() {
+function sourcePart(
+  overrides: {
+    params?: Record<string, string>;
+    actionId?: string;
+  } = {},
+) {
+  const actionId = overrides.actionId ?? "approve-task";
   const spec = {
     root: "review",
     elements: {
@@ -241,7 +396,7 @@ function sourcePart() {
           title: "Review onboarding task",
           summary: "Confirm the customer kickoff task is ready.",
           status: "pending",
-          primaryActionId: "approve-task",
+          primaryActionId: actionId,
         },
         children: [],
       },
@@ -261,10 +416,15 @@ function sourcePart() {
       },
       durableActions: [
         {
-          id: "approve-task",
+          id: actionId,
           label: "Approve",
           kind: "approve",
-          params: { taskId: "task-123" },
+          params: overrides.params ?? {
+            target: "work_item_status",
+            workItemId: WORK_ITEM_ID,
+            statusCategory: "DONE",
+            note: "Approved from generated UI",
+          },
         },
       ],
       specHash: createThreadJsonRenderSpecHash(spec),
@@ -290,9 +450,9 @@ function actionInput(fixture: ReturnType<typeof sourcePart>) {
     threadId: THREAD_ID,
     sourceMessageId: SOURCE_MESSAGE_ID,
     partId: fixture.id,
-    actionId: "approve-task",
+    actionId: fixture.data.durableActions![0].id,
     specHash: fixture.data.specHash!,
     idempotencyKey: "idem-1",
-    params: { taskId: "task-123" },
+    params: fixture.data.durableActions![0].params,
   };
 }

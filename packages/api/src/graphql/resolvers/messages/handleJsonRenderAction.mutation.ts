@@ -16,8 +16,11 @@ import {
   messages,
   sql,
   threads,
+  workItemEvents,
   messageToCamel,
 } from "../../utils.js";
+import { TaskStatusToolError } from "../../../lib/task-status-tool.js";
+import { setWorkItemStatus } from "../../../lib/work-items/work-item-status-tool.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { sendMessage } from "./sendMessage.mutation.js";
@@ -64,6 +67,7 @@ export const handleJsonRenderAction = async (
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
+  const workItemAction = parseWorkItemStatusAction(actionParams);
 
   const duplicate = await findDuplicateActionMessage({
     tenantId: caller.tenantId,
@@ -72,25 +76,40 @@ export const handleJsonRenderAction = async (
   });
   if (duplicate) return messageToCamel(duplicate);
 
-  await assertActionRateLimit({
-    tenantId: caller.tenantId,
-    threadId: input.threadId,
-    userId: caller.userId,
+  const provenance = buildJsonRenderActionProvenance({
+    input,
+    action,
+    workItemAction,
   });
+  const priorEvent = await findPriorWorkItemActionEvent({
+    tenantId: caller.tenantId,
+    workItemId: workItemAction.workItemId,
+    idempotencyKey: input.idempotencyKey,
+  });
+  if (!priorEvent) {
+    await assertActionRateLimit({
+      tenantId: caller.tenantId,
+      threadId: input.threadId,
+      userId: caller.userId,
+    });
+  }
+  const mutationResult = priorEvent
+    ? mutationMetadataFromPriorEvent(workItemAction, priorEvent)
+    : await applyWorkItemStatusAction({
+        tenantId: caller.tenantId,
+        userId: caller.userId,
+        threadId: input.threadId,
+        action: workItemAction,
+        provenance,
+      });
 
   const metadata = {
     jsonRenderAction: {
-      source: "json_render_action",
-      sourceMessageId: input.sourceMessageId,
-      partId: input.partId,
-      actionId: action.id,
-      actionKind: action.kind,
-      actionLabel: action.label,
+      ...provenance,
       params: actionParams,
-      specHash: input.specHash,
-      idempotencyKey: input.idempotencyKey,
       schemaVersion: source.part.data.schemaVersion,
       catalogVersion: source.part.data.catalogVersion,
+      mutation: mutationResult,
     },
   };
 
@@ -101,7 +120,7 @@ export const handleJsonRenderAction = async (
         threadId: input.threadId,
         role: "USER",
         content: actionMessageContent(action, source.part),
-        agentRequested: true,
+        agentRequested: false,
         senderType: "user",
         senderId: caller.userId,
         metadata: JSON.stringify(metadata),
@@ -119,6 +138,34 @@ interface HandleJsonRenderActionInput {
   specHash: string;
   idempotencyKey: string;
   params?: Record<string, ThreadJsonRenderPrimitive>;
+}
+
+interface WorkItemStatusAction {
+  target: "work_item_status";
+  workItemId: string;
+  statusCategory: string | null;
+  statusId: string | null;
+  note: string | null;
+}
+
+interface JsonRenderActionProvenance {
+  source: "json_render_action";
+  sourceMessageId: string;
+  partId: string;
+  actionId: string;
+  actionKind: ThreadJsonRenderDurableActionDescriptor["kind"];
+  actionLabel: string;
+  target: "work_item_status";
+  workItemId: string;
+  statusCategory: string | null;
+  statusId: string | null;
+  specHash: string;
+  idempotencyKey: string;
+}
+
+interface PriorWorkItemActionEvent {
+  newStatusId: string | null;
+  metadata: unknown;
 }
 
 function parseInput(input: HandleJsonRenderActionInput | undefined) {
@@ -286,6 +333,139 @@ async function findDuplicateActionMessage(input: {
   return duplicate ?? null;
 }
 
+async function findPriorWorkItemActionEvent(input: {
+  tenantId: string;
+  workItemId: string;
+  idempotencyKey: string;
+}): Promise<PriorWorkItemActionEvent | null> {
+  const [event] = await db
+    .select({
+      newStatusId: workItemEvents.new_status_id,
+      metadata: workItemEvents.metadata,
+    })
+    .from(workItemEvents)
+    .where(
+      and(
+        eq(workItemEvents.tenant_id, input.tenantId),
+        eq(workItemEvents.work_item_id, input.workItemId),
+        sql`${workItemEvents.metadata}->'manualMetadata'->'jsonRenderAction'->>'idempotencyKey' = ${input.idempotencyKey}`,
+      ),
+    )
+    .limit(1);
+  return event ?? null;
+}
+
+function parseWorkItemStatusAction(
+  params: Record<string, ThreadJsonRenderPrimitive>,
+): WorkItemStatusAction {
+  const target = stringParam(params.target);
+  if (target !== "work_item_status") {
+    throw new GraphQLError(
+      "Generated UI action target is not supported for server mutation",
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+
+  const workItemId = stringParam(params.workItemId);
+  if (!workItemId) {
+    throw new GraphQLError("Generated UI action workItemId is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  const statusCategory = stringParam(params.statusCategory);
+  const statusId = stringParam(params.statusId);
+  if (!statusCategory && !statusId) {
+    throw new GraphQLError(
+      "Generated UI action statusCategory or statusId is required",
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+
+  return {
+    target: "work_item_status",
+    workItemId,
+    statusCategory,
+    statusId,
+    note: stringParam(params.note),
+  };
+}
+
+function buildJsonRenderActionProvenance(input: {
+  input: HandleJsonRenderActionInput;
+  action: ThreadJsonRenderDurableActionDescriptor;
+  workItemAction: WorkItemStatusAction;
+}): JsonRenderActionProvenance {
+  return {
+    source: "json_render_action",
+    sourceMessageId: input.input.sourceMessageId,
+    partId: input.input.partId,
+    actionId: input.action.id,
+    actionKind: input.action.kind,
+    actionLabel: input.action.label,
+    target: input.workItemAction.target,
+    workItemId: input.workItemAction.workItemId,
+    statusCategory: input.workItemAction.statusCategory,
+    statusId: input.workItemAction.statusId,
+    specHash: input.input.specHash,
+    idempotencyKey: input.input.idempotencyKey,
+  };
+}
+
+async function applyWorkItemStatusAction(input: {
+  tenantId: string;
+  userId: string;
+  threadId: string;
+  action: WorkItemStatusAction;
+  provenance: JsonRenderActionProvenance;
+}) {
+  try {
+    const result = await setWorkItemStatus({
+      tenantId: input.tenantId,
+      workItemId: input.action.workItemId,
+      threadId: input.threadId,
+      statusCategory: input.action.statusCategory,
+      statusId: input.action.statusId,
+      note: input.action.note,
+      actor: { type: "user", id: input.userId },
+      metadata: { jsonRenderAction: input.provenance },
+    });
+    return {
+      target: input.action.target,
+      workItemId: result.workItemId,
+      statusCategory: result.statusCategory,
+      statusId: result.statusId,
+      previousStatusCategory: result.previousStatusCategory,
+      linkedTaskId: result.linkedTaskId ?? null,
+      alreadyApplied: false,
+    };
+  } catch (err) {
+    if (err instanceof GraphQLError) throw err;
+    if (err instanceof TaskStatusToolError) {
+      throw new GraphQLError(err.message, {
+        extensions: { code: err.code, httpStatus: err.statusCode },
+      });
+    }
+    throw err;
+  }
+}
+
+function mutationMetadataFromPriorEvent(
+  action: WorkItemStatusAction,
+  event: PriorWorkItemActionEvent,
+) {
+  const manualMetadata = objectValue(objectValue(event.metadata).manualMetadata);
+  const priorAction = objectValue(manualMetadata.jsonRenderAction);
+  return {
+    target: action.target,
+    workItemId: action.workItemId,
+    statusCategory:
+      stringParam(priorAction.statusCategory) ?? action.statusCategory,
+    statusId: event.newStatusId ?? stringParam(priorAction.statusId),
+    alreadyApplied: true,
+  };
+}
+
 async function assertActionRateLimit(input: {
   tenantId: string;
   threadId: string;
@@ -330,4 +510,14 @@ function actionMessageContent(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function stringParam(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
