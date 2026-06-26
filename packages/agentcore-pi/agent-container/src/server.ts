@@ -1633,7 +1633,10 @@ export async function buildInvocationResources(
   // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
   // via the resource loader's `extensionFactories` instead of hand-assembled
   // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
-  // tools until the firming plan's single-engine cutover retires it.
+  // tools until the firming plan's single-engine cutover retires it. Cognee
+  // memory deliberately exposes no raw backend tools here; agents read it
+  // through Context Engine's `query_memory_context`, whose host-closed caller
+  // scope can combine user-carried memory and current-space memory.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -1668,44 +1671,56 @@ export async function buildInvocationResources(
         threadId: args.identity.threadId,
       });
     }
-  } else if (args.env.hindsightEndpoint) {
-    const memoryProvider = createHindsightMemoryProvider({
-      endpoint: args.env.hindsightEndpoint,
-      tenantId: args.identity.tenantId,
-      userId: args.identity.userId,
-    });
-    // Keep long-term memory available as an explicit tool, but do not
-    // proactively recall on every turn. Requester profile facts are already
-    // mounted as `/workspace/User/USER.md` and injected into the system prompt;
-    // proactive grounding made those simple turns take the expensive
-    // recall/reflect path anyway.
-    const memoryExtension = createMemoryExtension({
-      onError: (error, { phase }) =>
-        logStructured({
-          level: "warn",
-          event: "memory_grounding_failed",
-          phase,
-          tenantId: args.identity.tenantId,
-          threadId: args.identity.threadId,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-    });
-    extensionFactories.push(
-      toExtensionFactory(memoryExtension, { memory: memoryProvider }),
-    );
-    // Fold the extension's tool names into the allowlist or recall/reflect
-    // register but never reach the model (the SDK gates to the allowlist).
-    extensionToolNames.push(...(memoryExtension.toolNames ?? []));
-    logStructured({
-      level: "info",
-      event: "memory_extension_loaded",
-      tenantId: args.identity.tenantId,
-      threadId: args.identity.threadId,
-    });
+  } else if (args.env.memoryEngine === "hindsight") {
+    if (args.env.hindsightEndpoint) {
+      const memoryProvider = createHindsightMemoryProvider({
+        endpoint: args.env.hindsightEndpoint,
+        tenantId: args.identity.tenantId,
+        userId: args.identity.userId,
+      });
+      // Keep long-term memory available as an explicit tool, but do not
+      // proactively recall on every turn. Requester profile facts are already
+      // mounted as `/workspace/User/USER.md` and injected into the system
+      // prompt; proactive grounding made those simple turns take the expensive
+      // recall/reflect path anyway.
+      const memoryExtension = createMemoryExtension({
+        onError: (error, { phase }) =>
+          logStructured({
+            level: "warn",
+            event: "memory_grounding_failed",
+            phase,
+            tenantId: args.identity.tenantId,
+            threadId: args.identity.threadId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+      });
+      extensionFactories.push(
+        toExtensionFactory(memoryExtension, { memory: memoryProvider }),
+      );
+      // Fold the extension's tool names into the allowlist or recall/reflect
+      // register but never reach the model (the SDK gates to the allowlist).
+      extensionToolNames.push(...(memoryExtension.toolNames ?? []));
+      logStructured({
+        level: "info",
+        event: "memory_extension_loaded",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+      });
+    } else {
+      logStructured({
+        level: "warn",
+        event: "hindsight_skipped_no_endpoint",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+      });
+    }
   } else {
     logStructured({
-      level: "warn",
-      event: "hindsight_skipped_no_endpoint",
+      level: "info",
+      event:
+        args.payload.context_engine_enabled === true
+          ? "memory_cognee_context_engine_mode"
+          : "memory_cognee_skipped_context_engine_disabled",
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });

@@ -478,6 +478,15 @@ describe("U7 capability extensions", () => {
       "query_memory_context",
       "query_wiki_context",
     ]);
+    expect(getTool(tools, "query_context").description).toContain(
+      "current-space long-term memory",
+    );
+    expect(getTool(tools, "query_memory_context").description).toContain(
+      'scope "team"',
+    );
+    expect(getTool(tools, "query_memory_context").description).toContain(
+      "identity is closed over by the host",
+    );
 
     const result = await getTool(tools, "query_context").execute(
       "call-1",
@@ -499,6 +508,22 @@ describe("U7 capability extensions", () => {
     expect((result.content?.[0] as { text: string }).text).toBe(
       "company brain result",
     );
+
+    await getTool(tools, "query_memory_context").execute(
+      "call-2",
+      { query: "space decision", scope: "team" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    const memoryBody = JSON.parse(String(fetchCalls[1]![1]?.body));
+    expect(memoryBody).toMatchObject({
+      method: "tools/call",
+      params: {
+        name: "query_memory_context",
+        arguments: { query: "space decision", scope: "team" },
+      },
+    });
   });
 
   it("context-engine forwards Brain-specific query and detail arguments", async () => {

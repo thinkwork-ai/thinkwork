@@ -1,17 +1,18 @@
 /**
  * MemoryProvider — the host-supplied seam for the agent's long-term memory.
  *
- * Inert in this unit: the core defines the contract; the Hindsight-backed
- * implementation and the removal of the managed-AgentCore-Memory path land in
- * U8. After U8 there is exactly one memory engine (Hindsight), so this interface
- * is the only memory surface — there is no engine selector.
+ * The core defines the contract; hosts decide which backend is active. In the
+ * Cognee-first path, agents should prefer Context Engine memory search for
+ * user-carried and space-owned memory. This provider remains the explicit
+ * recall/reflect seam for legacy Hindsight mode and any future host-supplied
+ * read-synthesis backend.
  *
  * Recall→reflect chain contract: a `recall` is expected to be followed by a
  * `reflect` in the same turn — recall surfaces the raw prior-memory units to
  * ground the turn, reflect then synthesizes those units into a coherent answer
  * the model can act on. This read-synthesis pairing is load-bearing for memory
- * quality; implementations and callers must preserve it, and the Hindsight
- * wrappers keep their recall/reflect docstrings edited together (see
+ * quality; implementations and callers must preserve it, and backend wrappers
+ * keep their recall/reflect docstrings edited together (see
  * feedback_hindsight_recall_reflect_pair, feedback_hindsight_async_tools).
  *
  * Persistence is a SEPARATE concern, not `reflect`. Writing what a turn learned

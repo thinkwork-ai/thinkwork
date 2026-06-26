@@ -352,8 +352,8 @@ export function createContextEngineExtension(
           "Search the Thinkwork Context Engine (Company Brain) across fast default " +
           "providers: wiki, workspace files, knowledge bases, sub-agent providers, " +
           "and approved search-safe MCP tools. Use this first for ordinary agent " +
-          "context lookup. Use query_memory_context only when raw Hindsight Memory " +
-          "is specifically needed.",
+          "context lookup. Use query_memory_context only when user-carried or " +
+          "current-space long-term memory is specifically needed.",
         parameters: Type.Object({
           ...sharedParams,
           provider_ids: Type.Optional(
@@ -411,9 +411,11 @@ export function createContextEngineExtension(
         name: "query_memory_context",
         label: "Memory Search",
         description:
-          "Search only Thinkwork Hindsight Memory. Use this when the user " +
-          "specifically asks for raw long-term memory recall. Can be much slower " +
-          "than query_context.",
+          "Search only Thinkwork long-term memory through the host-scoped Context Engine. " +
+          'Use scope "personal" for user-carried memory that follows the user, ' +
+          'scope "team" for memory owned by the current Space, and scope "auto" ' +
+          "when either may be relevant. The agent cannot choose arbitrary user or " +
+          "space owners; identity is closed over by the host.",
         parameters: Type.Object(sharedParams),
         executionMode: "sequential",
         async execute(_id, params) {
@@ -446,7 +448,7 @@ export function createContextEngineExtension(
           "Search only tenant-shared Company Brain business/domain context. " +
           "Use this for governed customers, opportunities, commitments, risks, " +
           "stakeholders, products, relationships, and cited provenance. " +
-          "Use query_memory_context for raw Hindsight Memory and " +
+          "Use query_memory_context for user/space long-term memory and " +
           "query_wiki_context for compiled page lookup. Initial results are " +
           "shortlists; call again with detailIds or detailIndexes to expand " +
           "selected Brain results.",
@@ -515,7 +517,7 @@ export function createContextEngineExtension(
         label: "Wiki Search",
         description:
           "Search only Thinkwork Compounding Wiki pages (entities, topics, " +
-          "decisions). Fast page lookup without waiting on Hindsight Memory.",
+          "decisions). Fast page lookup without waiting on long-term memory recall.",
         parameters: Type.Object(sharedParams),
         executionMode: "sequential",
         async execute(_id, params) {

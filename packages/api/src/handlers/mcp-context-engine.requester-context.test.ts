@@ -115,6 +115,46 @@ describe("mcp-context-engine requester context", () => {
     });
   });
 
+  it("lists query_memory_context as host-scoped user and space memory", async () => {
+    const response = await handler(
+      event({
+        headers: {
+          authorization: "Bearer test-secret",
+          "x-tenant-id": "tenant-1",
+          "x-user-id": "user-eric",
+        },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body || "{}");
+    const tools = body.result.tools as Array<{
+      name: string;
+      description: string;
+      inputSchema: {
+        properties?: Record<string, { enum?: string[] }>;
+      };
+    }>;
+    const memoryTool = tools.find(
+      (tool) => tool.name === "query_memory_context",
+    );
+    expect(memoryTool?.description).toContain("user-carried memory");
+    expect(memoryTool?.description).toContain("current-space memory");
+    expect(memoryTool?.description).toContain(
+      "identity is closed over by the host",
+    );
+    expect(memoryTool?.inputSchema.properties?.scope.enum).toEqual([
+      "personal",
+      "team",
+      "auto",
+    ]);
+  });
+
   it("rejects credential subjects for a different requester", async () => {
     const response = await handler(
       event({
