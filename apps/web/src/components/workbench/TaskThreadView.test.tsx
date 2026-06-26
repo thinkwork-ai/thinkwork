@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "./json-render/fixtures";
 import { serializeEditor } from "./SkillTokenInput";
 
 // The follow-up composer is a contenteditable token field, not a <textarea>:
@@ -236,7 +236,7 @@ describe("TaskThreadView", () => {
     expect(reviewLink.getAttribute("href")).toBe("/settings/skills");
   });
 
-  it("renders persisted data-genui parts through the shared Thread renderer", () => {
+  it("renders persisted data-json-render parts through the shared Thread renderer", () => {
     render(
       <TaskThreadView
         thread={{
@@ -248,7 +248,7 @@ describe("TaskThreadView", () => {
               id: "message-1",
               role: "ASSISTANT",
               content: "",
-              parts: [createTaskReviewGenUIFixture()],
+              parts: [createTaskReviewJsonRenderFixture()],
             },
           ],
         }}

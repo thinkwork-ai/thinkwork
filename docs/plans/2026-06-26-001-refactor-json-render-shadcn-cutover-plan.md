@@ -94,8 +94,25 @@ AE5 mobile shows bounded fallback rather than crashing.
 - Do not create a parallel chart/table catalog if `@thinkwork/analytics-display`
   can remain the domain adapter for analytical payloads.
 
+### Course Correction: THNK-78 Runtime Emission Boundary
+
+After THNK-78 was queued, runtime emission should be treated as follow-up work,
+not as part of this THNK-77 implementation. THNK-77 should establish the real
+json-render/shadcn foundation, catalog/validation, web renderer, legacy
+unsupported fallback, mobile fallback posture, and package cleanup. THNK-78 owns
+the explicit `emit_json_render_ui` tool, runtime/API complete-spec emission,
+finalize normalization, and any shared React-free runtime contract package.
+
+In practical terms, do not implement generic tool-result crawling, markdown/JSON
+extraction, new runtime activity event contracts, or Pi/API emission rewrites in
+THNK-77 just to prove json-render works. Use fixtures and persisted
+`data-json-render` parts to validate the render path here; let THNK-78 supply
+the trusted production emitter.
+
 ### Deferred to Follow-Up Work
 
+- Explicit runtime emission of complete `data-json-render` parts via
+  `emit_json_render_ui` (THNK-78).
 - Native mobile json-render rendering with `@json-render/react-native`, after
   the web contract is stable.
 - Tenant-authored or marketplace catalog entries.

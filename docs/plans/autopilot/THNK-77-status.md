@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u2-course-corrected
+status: u3-web-renderer-in-progress
 target_branch: main
 ---
 
@@ -55,16 +55,23 @@ target_branch: main
 3. U3 web renderer
    - Render `data-json-render` parts in Thread surfaces through
      `@json-render/react` and the combined primitive/domain registry.
-4. U4 runtime/API carrier
-   - Emit, stream, merge, and persist `data-json-render`; stop accepting old
-     `data-genui` as current runtime output.
+4. U4 mobile fallback + package cleanup
+   - Add first-cut mobile fallback parsing for `data-json-render`, remove
+     `@thinkwork/genui` dependencies where no longer needed, and leave old
+     `data-genui` as unsupported legacy data.
 5. U5 durable actions + promotion
    - Rebase durable generated UI actions and promotion on `data-json-render`
      with source message, part, spec hash, tenant, idempotency, and rate-limit
      checks.
-6. U6 mobile + deletion cleanup
-   - Remove `@thinkwork/genui`, update mobile fallback for `data-json-render`,
-     regenerate schema clients as needed, and mark superseded docs.
+
+### THNK-78 Boundary
+
+THNK-78 now owns the runtime/API emission path: explicit
+`emit_json_render_ui`, complete-spec tool output, trusted runtime validation
+before finalize/persistence, generic legacy extraction removal, and any shared
+React-free runtime contract package. THNK-77 should not implement those pieces
+just to prove the render path; it should consume persisted/fixture
+`data-json-render` parts and keep old `data-genui` unsupported.
 
 ## Progress Log
 
@@ -80,6 +87,12 @@ target_branch: main
   implementation started.
 - U1 PR merged and local U1 worktree/branch cleaned up.
 - U2 worktree created from updated `origin/main` at U1 merge commit.
+- Course correction after THNK-78 review: removed runtime/API emission from
+  THNK-77's active unit map. Runtime tool output, finalize normalization, and
+  shared runtime contract packaging belong to THNK-78. THNK-77 continues with
+  web render cutover, mobile fallback/package cleanup, and durable
+  action/promotion rebasing where it depends on persisted `data-json-render`
+  parts rather than a new emitter.
 
 ## Unit Log
 
@@ -177,3 +190,36 @@ target_branch: main
     `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
     `pnpm --filter @thinkwork/api typecheck`, and
     `pnpm --filter @thinkwork/web verify:json-render-smoke`; all passed.
+
+### U3 web renderer
+
+- Objective: route persisted and live `data-json-render` parts through
+  `@json-render/react` plus the combined shadcn primitive/ThinkWork domain
+  registry, while rendering old `data-genui` as a compact unsupported legacy
+  state.
+- Branch: `codex/thnk-77-u3-json-render-web`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u3-json-render-web`
+- Base: `origin/main` at `d79a01642655f9dbf20a5b8bd6622514751a4436`
+- Implemented so far:
+  - Added `ThreadJsonRenderRenderer` and `ThreadJsonRenderFallback` for web
+    Thread surfaces.
+  - Wired `renderTypedPart` to render `data-json-render` and fail closed for
+    legacy `data-genui`.
+  - Adapted ThinkWork domain catalog entries through json-render registry
+    context objects, with durable actions intentionally read-only in this unit.
+  - Updated Thread surface tests to use `data-json-render` fixtures instead of
+    legacy GenUI fixtures.
+  - Added a dated THNK-78 boundary note to the THNK-77 plan so implementation
+    does not drift into runtime emission.
+- Verification so far:
+  - `pnpm --filter @thinkwork/web test -- src/components/spaces/ThreadConversation.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/json-render/ThreadJsonRenderRenderer.test.tsx src/components/workbench/render-typed-part.test.tsx`
+    passed: 179 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed with the
+    same measured shadcn bundle delta: 410,610 raw / 121,352 gzip.
+  - `pnpm dlx prettier@3.6.2 --check <touched U3 files>` passed.
+  - `git diff --check` passed.
+  - `pnpm --filter @thinkwork/web lint` reported that no selected package has
+    a `lint` script.
+  - `pnpm --filter @thinkwork/web test` passed: 205 files, 1546 tests.

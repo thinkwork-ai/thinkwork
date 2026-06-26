@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "./json-render/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeEditor } from "./SkillTokenInput";
 import { useMutation, useQuery, useSubscription } from "urql";
@@ -778,8 +778,8 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
-  it("renders live data-genui chunks from thread turn step activity", async () => {
-    const part = createTaskReviewGenUIFixture();
+  it("renders live data-json-render chunks from thread turn step activity", async () => {
+    const part = createTaskReviewJsonRenderFixture();
     taskData = { computerTasks: [] };
     threadTurnsData = {
       threadTurns: [

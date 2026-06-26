@@ -9,11 +9,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAnalyticsDisplayFixture } from "@thinkwork/analytics-display";
-import {
-  createAnalyticsDisplayGenUIPart,
-  createTaskReviewGenUIFixture,
-} from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "./json-render/fixtures";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 
 vi.mock("@/applets/mount", () => ({
@@ -169,20 +165,8 @@ describe("renderTypedPart", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("routes analytics data-genui parts to the inline analytics renderer", () => {
-    const part = createAnalyticsDisplayGenUIPart({
-      id: "genui:analytics:support-volume",
-      payload: createAnalyticsDisplayFixture(),
-    }) as AccumulatedPart;
-
-    render(<>{renderTypedPart(part, rk())}</>);
-
-    expect(screen.getByTestId("analytics-display-part")).toBeTruthy();
-    expect(screen.getByText("Support Volume")).toBeTruthy();
-  });
-
-  it("routes native data-genui parts to the Thread GenUI renderer", () => {
-    const part = createTaskReviewGenUIFixture() as AccumulatedPart;
+  it("routes data-json-render parts through the json-render renderer", () => {
+    const part = createTaskReviewJsonRenderFixture() as AccumulatedPart;
 
     render(<>{renderTypedPart(part, rk())}</>);
 
@@ -190,7 +174,38 @@ describe("renderTypedPart", () => {
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
   });
 
-  it("renders invalid data-genui parts as compact fallbacks", () => {
+  it("renders invalid data-json-render parts as compact fallbacks", () => {
+    const part: AccumulatedPart = {
+      type: "data-json-render",
+      id: "json-render:bad",
+      data: {
+        schemaVersion: "thread-json-render/v1",
+        catalogVersion: "thread-json-render-catalog/v1",
+        status: "ready",
+        spec: {
+          root: "bad",
+          elements: {
+            bad: {
+              type: "unknown.panel",
+              props: { title: "Unsupported" },
+              children: [],
+            },
+          },
+        },
+        mobileFallback: {
+          title: "Unsupported generated UI",
+          summary: "This panel is not in the catalog.",
+        },
+      },
+    };
+
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("json-render-fallback")).toBeTruthy();
+    expect(screen.getByText("unknown.panel")).toBeTruthy();
+  });
+
+  it("renders legacy data-genui parts as unsupported generated UI", () => {
     const part: AccumulatedPart = {
       type: "data-genui",
       id: "genui:bad",
@@ -216,7 +231,8 @@ describe("renderTypedPart", () => {
 
     render(<>{renderTypedPart(part, rk())}</>);
 
-    expect(screen.getByTestId("genui-fallback")).toBeTruthy();
+    expect(screen.getByTestId("json-render-legacy-fallback")).toBeTruthy();
+    expect(screen.getByText("Legacy generated UI unsupported")).toBeTruthy();
     expect(screen.getByText("unknown.panel")).toBeTruthy();
   });
 
