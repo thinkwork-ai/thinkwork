@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "pnpm --filter @thinkwork/analytics-display build && pnpm --filter @thinkwork/genui build && pnpm --filter @thinkwork/deployment-profile build",
+    "prebuild": "pnpm --filter @thinkwork/analytics-display build && pnpm --filter @thinkwork/deployment-profile build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
     "build:json-render-smoke": "vite build --config vite.json-render-smoke.config.ts",
@@ -50,7 +50,6 @@
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
-    "@thinkwork/genui": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",

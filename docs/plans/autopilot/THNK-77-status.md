@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u6-json-render-artifacts-in-progress
+status: u7-web-genui-cleanup-in-progress
 target_branch: main
 ---
 
@@ -63,6 +63,13 @@ target_branch: main
    - Rebase durable generated UI actions and promotion on `data-json-render`
      with source message, part, spec hash, tenant, idempotency, and rate-limit
      checks.
+6. U6 json-render artifact snapshots
+   - Render promoted `data-json-render` artifact snapshots through the same
+     json-render Thread renderer.
+7. U7 web GenUI cleanup
+   - Remove web's old `@thinkwork/genui` dependency and stale renderer/action
+     files while preserving compact unsupported handling for historical
+     `data-genui` parts.
 
 ### THNK-78 Boundary
 
@@ -190,6 +197,10 @@ just to prove the render path; it should consume persisted/fixture
     `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
     `pnpm --filter @thinkwork/api typecheck`, and
     `pnpm --filter @thinkwork/web verify:json-render-smoke`; all passed.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2973
+  - Merge commit: `d79a01642655f9dbf20a5b8bd6622514751a4436`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
 
 ### U3 web renderer
 
@@ -347,3 +358,44 @@ just to prove the render path; it should consume persisted/fixture
   - `cd apps/web && pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'`
     passed: 1 file, 15 tests.
   - `pnpm --filter @thinkwork/web typecheck` passed.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2977
+  - Merge commit: `0e27e01200eead575fc5f5182f10744e93f7c068`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+
+### U7 web GenUI cleanup
+
+- Objective: remove the old web-only `@thinkwork/genui` dependency and stale
+  proprietary GenUI renderer/action files after U3-U6 moved the Thread render,
+  action, promotion, and artifact paths to upstream json-render/shadcn.
+- Branch: `codex/thnk-77-u7-web-genui-cleanup`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u7-web-genui-cleanup`
+- Base: `origin/main` at `0e27e01200eead575fc5f5182f10744e93f7c068`
+- Implemented so far:
+  - Removed `@thinkwork/genui` from `apps/web/package.json`, the web prebuild
+    chain, and the web lockfile importer.
+  - Deleted obsolete web GenUI renderer, fallback, catalog, action, promotion,
+    hook, and AnalyticsDisplay component files under
+    `apps/web/src/components/workbench/genui/`.
+  - Removed old package validation from the web AppSync chunk parser. Historical
+    `data-genui` traffic now passes through as generic data and renders through
+    the existing unsupported legacy fallback instead of relying on a proprietary
+    contract.
+  - Kept runtime/API/finalize `@thinkwork/genui` references out of scope so
+    THNK-78 can replace the actual emission path with `emit_json_render_ui`
+    rather than preserving or adapting the old extractor.
+- THNK-78 boundary:
+  - U7 does not remove the old runtime/finalize package references in
+    `packages/pi-runtime-core` or API chat-finalize code. Those are coupled to
+    THNK-78's explicit json-render tool output and finalize replacement.
+- Verification so far:
+  - `pnpm install` completed. It emitted the known optional `canvas@2.11.2`
+    native-build warning under Node 25 because `pkg-config` is unavailable, but
+    exited 0.
+  - `pnpm --filter @thinkwork/web test -- src/lib/ui-message-chunk-parser.test.ts src/lib/ui-message-merge.test.ts src/components/workbench/render-typed-part.test.tsx src/components/workbench/json-render/ThreadJsonRenderRenderer.test.tsx`
+    passed: 4 files, 73 tests.
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed. Measured
+    bundle delta: 410,610 raw / 121,352 gzip.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web test` passed: 201 files, 1532 tests.

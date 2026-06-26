@@ -6,17 +6,38 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createAnalyticsDisplayFixture } from "@thinkwork/analytics-display";
-import {
-  THREAD_GENUI_PART_TYPE,
-  createAnalyticsDisplayGenUIPart,
-  createTaskReviewGenUIFixture,
-  createThreadGenUISpecHash,
-} from "@thinkwork/genui";
 import {
   __PROTOCOL_TYPE_SETS,
   parseChunkPayload,
 } from "./ui-message-chunk-parser";
+
+const LEGACY_THREAD_GENUI_PART_TYPE = "data-genui";
+
+function createLegacyGenUIFixture() {
+  return {
+    type: LEGACY_THREAD_GENUI_PART_TYPE,
+    id: "genui:task-review:123",
+    data: {
+      spec: {
+        root: "review",
+        elements: {
+          review: {
+            component: "TaskReviewCard",
+            props: {
+              title: "Review deployment plan",
+              status: "pending",
+            },
+          },
+        },
+      },
+      mobileFallback: {
+        title: "Review deployment plan",
+        summary: "Status: pending",
+        lines: ["Status: pending"],
+      },
+    },
+  };
+}
 
 describe("parseChunkPayload", () => {
   describe("happy path — protocol chunks", () => {
@@ -131,29 +152,42 @@ describe("parseChunkPayload", () => {
       expect(result.kind).toBe("protocol");
     });
 
-    it("parses a valid data-genui part using the shared contract", () => {
-      const result = parseChunkPayload(createTaskReviewGenUIFixture());
+    it("passes historical data-genui parts through without old package validation", () => {
+      const result = parseChunkPayload(createLegacyGenUIFixture());
       expect(result.kind).toBe("protocol");
       if (result.kind === "protocol") {
         expect(result.chunk).toMatchObject({
-          type: THREAD_GENUI_PART_TYPE,
+          type: LEGACY_THREAD_GENUI_PART_TYPE,
           id: "genui:task-review:123",
         });
       }
     });
 
-    it("parses analytics.display data-genui parts with the registered adapter", () => {
-      const result = parseChunkPayload(
-        createAnalyticsDisplayGenUIPart({
-          id: "genui:analytics:support-volume",
-          payload: createAnalyticsDisplayFixture(),
-        }),
-      );
+    it("passes historical analytics data-genui parts through as legacy data traffic", () => {
+      const result = parseChunkPayload({
+        type: LEGACY_THREAD_GENUI_PART_TYPE,
+        id: "genui:analytics:support-volume",
+        data: {
+          spec: {
+            root: "analytics",
+            elements: {
+              analytics: {
+                component: "AnalyticsDisplay",
+                props: { title: "Support volume" },
+              },
+            },
+          },
+          mobileFallback: {
+            title: "Support volume",
+            summary: "Historical Gen UI payload",
+          },
+        },
+      });
 
       expect(result.kind).toBe("protocol");
       if (result.kind === "protocol") {
         expect(result.chunk).toMatchObject({
-          type: THREAD_GENUI_PART_TYPE,
+          type: LEGACY_THREAD_GENUI_PART_TYPE,
           id: "genui:analytics:support-volume",
         });
       }
@@ -335,28 +369,33 @@ describe("parseChunkPayload", () => {
       expect(result.kind).toBe("drop");
     });
 
-    it("drops malformed data-genui before merge", () => {
+    it("passes malformed historical data-genui through to the renderer fallback", () => {
       const result = parseChunkPayload({
-        type: THREAD_GENUI_PART_TYPE,
+        type: LEGACY_THREAD_GENUI_PART_TYPE,
         id: "genui:bad",
         data: { status: "ready" },
       });
-      expect(result.kind).toBe("drop");
-      if (result.kind === "drop") {
-        expect(result.reason).toBe("MALFORMED_PROTOCOL_FIELDS");
+      expect(result.kind).toBe("protocol");
+      if (result.kind === "protocol") {
+        expect(result.chunk).toMatchObject({
+          type: LEGACY_THREAD_GENUI_PART_TYPE,
+          id: "genui:bad",
+        });
       }
     });
 
-    it("drops data-genui payloads that fail canonical validation", () => {
-      const fixture = createTaskReviewGenUIFixture();
+    it("passes unapproved historical data-genui components through as fallback-only data", () => {
+      const fixture = createLegacyGenUIFixture();
       fixture.data.spec.elements.review.component = "UnapprovedChart3D";
-      fixture.data.specHash = createThreadGenUISpecHash(fixture.data.spec);
 
       const result = parseChunkPayload(fixture);
 
-      expect(result.kind).toBe("drop");
-      if (result.kind === "drop") {
-        expect(result.reason).toBe("MALFORMED_PROTOCOL_FIELDS");
+      expect(result.kind).toBe("protocol");
+      if (result.kind === "protocol") {
+        expect(result.chunk).toMatchObject({
+          type: LEGACY_THREAD_GENUI_PART_TYPE,
+          id: "genui:task-review:123",
+        });
       }
     });
   });
