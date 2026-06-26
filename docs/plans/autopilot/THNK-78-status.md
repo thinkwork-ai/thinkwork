@@ -123,6 +123,7 @@ target_branch: main
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-78-u2-u3-runtime-api`
 - Base: `origin/main` at `57c92c75b2ed1666131f00ab8a66f5df3dfd22f2`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2981
 - Replaced the Pi runtime's legacy GenUI extraction with an explicit
   `emit_json_render_ui` tool that validates complete upstream json-render specs,
   computes host-owned ids/spec hashes, emits typed live UI chunks, and appends
@@ -144,4 +145,4 @@ target_branch: main
   - `pnpm --filter @thinkwork/api test -- wakeup-processor.dispatch-parity wakeup-processor` passed.
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `git diff --check` passed.
-- Status: implementation complete; PR pending.
+- Status: PR open; CI pending.
