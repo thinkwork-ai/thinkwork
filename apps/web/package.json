@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "pnpm --filter @thinkwork/analytics-display build && pnpm --filter @thinkwork/deployment-profile build",
+    "prebuild": "pnpm --filter @thinkwork/analytics-display build && pnpm --filter @thinkwork/deployment-profile build && pnpm --filter @thinkwork/thread-json-render build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
     "build:json-render-smoke": "vite build --config vite.json-render-smoke.config.ts",
