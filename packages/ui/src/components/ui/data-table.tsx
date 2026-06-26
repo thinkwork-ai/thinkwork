@@ -96,6 +96,8 @@ interface DataTableProps<TData, TValue> {
   allowHorizontalScroll?: boolean;
   /** When true, table body scrolls within its container and pagination sticks to bottom. Parent must constrain height. */
   scrollable?: boolean;
+  /** Render empty state as a full table container instead of a table row. */
+  emptyStatePlacement?: "row" | "container";
   /** Server-side pagination: total row count (enables manual pagination mode) */
   totalCount?: number;
   /** Server-side pagination: current page index (0-based) */
@@ -125,6 +127,7 @@ export function DataTable<TData, TValue>({
   tableClassName,
   allowHorizontalScroll = true,
   scrollable = false,
+  emptyStatePlacement = "row",
   totalCount,
   pageIndex: controlledPageIndex,
   onPageChange,
@@ -224,6 +227,8 @@ export function DataTable<TData, TValue>({
   ) : null;
 
   const visibleColumnCount = Math.max(table.getVisibleLeafColumns().length, 1);
+  const hasRows = table.getRowModel().rows?.length > 0;
+  const renderEmptyContainer = emptyStatePlacement === "container" && !hasRows;
 
   const headerRow = !hideHeader ? (
     <TableHeader
@@ -254,7 +259,7 @@ export function DataTable<TData, TValue>({
 
   const bodyRows = (
     <TableBody>
-      {table.getRowModel().rows?.length ? (
+      {hasRows ? (
         table.getRowModel().rows.map((row) => (
           <TableRow
             key={row.id}
@@ -332,24 +337,29 @@ export function DataTable<TData, TValue>({
       )}
 
       <div
-        className={
+        className={cn(
           scrollable
             ? "flex-1 min-h-0 overflow-y-auto rounded-md border"
             : allowHorizontalScroll
               ? "overflow-x-auto rounded-md border"
-              : "overflow-hidden rounded-md border"
-        }
+              : "overflow-hidden rounded-md border",
+          renderEmptyContainer && "flex items-center justify-center",
+        )}
       >
-        <Table
-          className={tableClassName}
-          containerClassName={
-            allowHorizontalScroll ? undefined : "overflow-hidden"
-          }
-        >
-          {colgroup}
-          {headerRow}
-          {bodyRows}
-        </Table>
+        {renderEmptyContainer ? (
+          emptyState
+        ) : (
+          <Table
+            className={tableClassName}
+            containerClassName={
+              allowHorizontalScroll ? undefined : "overflow-hidden"
+            }
+          >
+            {colgroup}
+            {headerRow}
+            {bodyRows}
+          </Table>
+        )}
       </div>
 
       {/* Pagination */}

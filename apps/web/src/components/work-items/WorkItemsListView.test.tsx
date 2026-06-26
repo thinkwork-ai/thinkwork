@@ -173,6 +173,36 @@ describe("WorkItemsListView", () => {
     });
   });
 
+  it("centers the empty state without a message row divider", () => {
+    render(
+      <WorkItemsListView
+        items={[]}
+        spaces={spaces}
+        statuses={statuses}
+        display={{
+          ...DEFAULT_WORK_ITEM_SEARCH.list,
+          group: "none",
+          subgroup: "none",
+          properties: ["status", "priority"],
+        }}
+        includeSpace
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    const emptyState = screen.getByTestId("work-items-list-empty");
+    const container = emptyState.parentElement;
+
+    expect(emptyState.className).toContain("items-center");
+    expect(emptyState.className).toContain("justify-center");
+    expect(container?.className).toContain("border");
+    expect(container?.className).toContain("items-center");
+    expect(container?.className).toContain("justify-center");
+    expect(screen.getByText("No work items in this view")).toBeTruthy();
+    expect(screen.getByText("Rows per page")).toBeTruthy();
+    expect(document.querySelector("table")).toBeNull();
+  });
+
   it("opens detail from the row and updates assignee from the assignee control", async () => {
     Element.prototype.scrollIntoView = vi.fn();
     const onItemOpen = vi.fn();
