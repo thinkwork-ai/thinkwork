@@ -53,7 +53,7 @@ message contract.
 
 | Unit | Branch | PR | State |
 | --- | --- | --- | --- |
-| U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | TBD | In progress |
+| U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Review/CI |
 
 ## U1/U2 Objective
 
@@ -75,6 +75,9 @@ continuation.
   of the rate-limit check so retry-after-partial-failure can repair a missing
   Thread audit message without being blocked by fresh-action rate limiting.
   Re-ran the focused test and API typecheck successfully.
+- 2026-06-26 U1/U2 PR opened:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2997>. Post-rebase focused
+  test `pnpm --filter @thinkwork/api test -- handleJsonRenderAction` passed.
 - 2026-06-26 formatting attempt:
   `pnpm exec prettier --write ...` failed because `prettier` is not installed
   in this workspace (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prettier" not
