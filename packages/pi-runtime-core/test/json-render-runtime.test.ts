@@ -64,6 +64,90 @@ describe("runtime Thread json-render helper", () => {
     expect(result.part?.data.specHash).toBe(fixture.data.specHash);
   });
 
+  it("fills omitted nullable upstream shadcn props before validation", () => {
+    const result = normalizeRuntimeThreadJsonRenderInput({
+      spec: {
+        root: "card",
+        elements: {
+          card: {
+            type: "Card",
+            props: {
+              title: "THNK-78 Primitive Smoke",
+              description: "Generated through deployed Pi emit_json_render_ui",
+              centered: false,
+            },
+            children: ["stack"],
+          },
+          stack: {
+            type: "Stack",
+            props: {
+              direction: "vertical",
+              gap: "sm",
+            },
+            children: ["heading", "summary", "approve"],
+          },
+          heading: {
+            type: "Heading",
+            props: {
+              text: "json-render is live",
+              level: "h3",
+            },
+            children: [],
+          },
+          summary: {
+            type: "Text",
+            props: {
+              text: "Card, Stack, Heading, Text, and Button are rendered.",
+              variant: "body",
+            },
+            children: [],
+          },
+          approve: {
+            type: "Button",
+            props: {
+              label: "Looks good",
+              variant: "primary",
+            },
+            children: [],
+          },
+        },
+      },
+      mobileFallback: {
+        title: "json-render is live",
+        summary: "Primitive smoke succeeded.",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.part).toMatchObject({
+      type: "data-json-render",
+      data: {
+        spec: {
+          elements: {
+            card: {
+              props: {
+                maxWidth: null,
+                className: null,
+              },
+            },
+            stack: {
+              props: {
+                align: null,
+                justify: null,
+                className: null,
+              },
+            },
+            approve: {
+              props: {
+                disabled: null,
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("rejects invalid candidates instead of producing diagnostic UI parts", () => {
     const result = normalizeRuntimeThreadJsonRenderInput(
       { nope: true },

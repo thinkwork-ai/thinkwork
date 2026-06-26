@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: e2e-closeout-in-progress
+status: e2e-closeout-verified
 target_branch: main
 ---
 
@@ -123,6 +123,53 @@ target_branch: main
   prompt, but the backing agent reported that `emit_json_render_ui` was not
   registered in its available tool list, so no live `data-json-render` part was
   emitted.
+- Enabled the `thread-json-render-ui` capability for the active ThinkWork dev
+  agent through the deployed REST capability API. A retry still showed the tool
+  missing because deployed runtime artifacts were stale.
+- Deployed updated dev runtime artifacts needed for live THNK-78 verification:
+  - `thinkwork-dev-api-chat-agent-invoke` updated at
+    `2026-06-26T16:20:43Z`.
+  - `thinkwork-dev-agentcore-pi` updated to ECR tag
+    `thnk-78-json-render-lambda-20260626162731` at
+    `2026-06-26T16:29:24Z`.
+  - `thinkwork-dev-agentcore-pi` updated again to ECR tag
+    `thnk-78-json-render-normalize-20260626163827` at
+    `2026-06-26T16:41:23Z` after the runtime normalizer fix.
+  - `thinkwork-dev-api-chat-agent-finalize` updated at
+    `2026-06-26T16:44:23Z` so final `ui_message_parts` persist into
+    `messages.parts`.
+- Fixed two deployability gaps found during live verification:
+  - `scripts/build-lambdas.sh` now builds `@thinkwork/thread-json-render`
+    before API Lambdas that import it.
+  - `packages/agentcore-pi/agent-container/Dockerfile` now includes and builds
+    the `@thinkwork/analytics-display` and `@thinkwork/genui` workspace
+    packages required by `@thinkwork/pi-extensions`.
+- Fixed a runtime generation gap found during live verification:
+  `emit_json_render_ui` now canonicalizes missing required-nullable upstream
+  shadcn props to `null` before validation. This preserves the upstream catalog
+  while allowing model-generated specs that omit nullable keys such as
+  `Card.maxWidth`, `Card.className`, `Stack.align`, `Stack.justify`,
+  `Stack.className`, and `Button.disabled`.
+- Live deployed Thread smoke passed after all runtime artifacts were current:
+  assistant message `25ad91c9-4d73-4918-85eb-6eac7904ce65` persisted a
+  `data-json-render` part `json-render:83af9e43` containing primitive
+  components `Card`, `Stack`, `Heading`, `Text`, and `Button`.
+- Live deployed full catalog smoke passed:
+  assistant message `2e25322f-d548-4b97-aa35-fc55c8a70a6a` persisted
+  `data-json-render` part `json-render:0afb9d96` with spec hash
+  `json-render-fnv1a:0afb9d96`, containing primitive components `Card`,
+  `Stack`, `Heading`, `Text`, `Button` and ThinkWork domain components
+  `task.review`, `workflow.status`, `keyValue.list`, `form.action`, and
+  `analytics.display`.
+- Browser UI verification against `http://localhost:5174/threads/833b1da6-fa47-462d-9c85-c19b0ffeee21`
+  passed with a seeded dev Cognito session. DOM evidence:
+  `jsonRenderParts=3`, `genui-task-review=2`, `genui-workflow-status=2`,
+  `genui-action-form=2`, `json-render-analytics-display=2`,
+  `json-render-fallback=0`, `json-render-legacy-fallback=0`. The rendered text
+  included `THNK-78 Full Catalog`, `Thread json-render full catalog`,
+  `Primitive button verified`, `Verification facts`,
+  `thread-json-render-ui`, `Support volume`, `Approval note`,
+  `Catalog verification workflow`, and `Review onboarding task`.
 
 ## Unit Log
 

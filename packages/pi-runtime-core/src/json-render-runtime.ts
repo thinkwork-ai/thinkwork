@@ -4,9 +4,11 @@ import {
   THREAD_JSON_RENDER_PART_TYPE,
   THREAD_JSON_RENDER_SCHEMA_VERSION,
   createThreadJsonRenderSpecHash,
+  threadJsonRenderComponentDefinitions,
   type ThreadJsonRenderData,
   type ThreadJsonRenderDiagnostic,
   type ThreadJsonRenderPart,
+  type ThreadJsonRenderSpec,
   validateThreadJsonRenderData,
   validateThreadJsonRenderPart,
 } from "@thinkwork/thread-json-render";
@@ -54,7 +56,7 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
         spec: {
           type: "object",
           description:
-            "Complete upstream json-render spec: { root, elements }, with each element using type, props, and children.",
+            "Complete upstream json-render spec: { root, elements }. children must contain element ids only; user-visible text belongs in component props such as Heading.text, Text.text, and Button.label.",
         },
         mobileFallback: {
           type: "object",
@@ -181,7 +183,7 @@ export function mergeFinalThreadJsonRenderParts(
 function buildDataFromToolInput(
   input: Record<string, unknown> | null,
 ): ThreadJsonRenderData {
-  const spec = input?.spec;
+  const spec = canonicalizeGeneratedSpec(input?.spec);
   return {
     schemaVersion: THREAD_JSON_RENDER_SCHEMA_VERSION,
     catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
@@ -196,6 +198,78 @@ function buildDataFromToolInput(
       ? createThreadJsonRenderSpecHash(spec)
       : undefined,
   };
+}
+
+function canonicalizeGeneratedSpec(input: unknown): unknown {
+  const spec = recordValue(input);
+  if (!spec) return input;
+  const elements = recordValue(spec.elements);
+  if (!elements) return input;
+
+  let changed = false;
+  const nextElements: ThreadJsonRenderSpec["elements"] = {};
+  for (const [elementId, elementValue] of Object.entries(elements)) {
+    const element = recordValue(elementValue);
+    if (!element || typeof element.type !== "string") {
+      nextElements[elementId] =
+        elementValue as ThreadJsonRenderSpec["elements"][string];
+      continue;
+    }
+
+    const props = canonicalizeNullableCatalogProps(element.type, element.props);
+    if (props !== element.props) changed = true;
+    nextElements[elementId] = {
+      ...element,
+      props,
+    } as ThreadJsonRenderSpec["elements"][string];
+  }
+
+  if (!changed) return input;
+  return {
+    ...spec,
+    elements: nextElements,
+  };
+}
+
+function canonicalizeNullableCatalogProps(
+  componentType: string,
+  propsInput: unknown,
+): Record<string, unknown> {
+  const definition =
+    threadJsonRenderComponentDefinitions[
+      componentType as keyof typeof threadJsonRenderComponentDefinitions
+    ];
+  const shape = recordValue(definition?.props?.def?.shape);
+  const props = { ...(recordValue(propsInput) ?? {}) };
+  if (!shape) return props;
+
+  let changed = false;
+  for (const [key, schema] of Object.entries(shape)) {
+    if (Object.prototype.hasOwnProperty.call(props, key)) continue;
+    if (isRequiredNullableZodSchema(schema)) {
+      props[key] = null;
+      changed = true;
+    }
+  }
+
+  return changed ? props : (propsInput as Record<string, unknown>);
+}
+
+function isRequiredNullableZodSchema(schema: unknown): boolean {
+  const maybeSchema = schema as {
+    isNullable?: () => boolean;
+    isOptional?: () => boolean;
+    type?: string;
+  };
+  if (maybeSchema.type === "nullable") return true;
+  try {
+    return (
+      maybeSchema.isNullable?.() === true &&
+      maybeSchema.isOptional?.() !== true
+    );
+  } catch {
+    return false;
+  }
 }
 
 function withHostComputedHash(

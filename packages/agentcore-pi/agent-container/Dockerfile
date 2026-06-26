@@ -47,6 +47,12 @@ COPY packages/pi-aws/connectors/ packages/pi-aws/connectors/
 COPY packages/pi-runtime-core/package.json packages/pi-runtime-core/package.json
 COPY packages/pi-runtime-core/tsconfig.json packages/pi-runtime-core/tsconfig.json
 COPY packages/pi-runtime-core/src/ packages/pi-runtime-core/src/
+COPY packages/analytics-display/package.json packages/analytics-display/package.json
+COPY packages/analytics-display/tsconfig.json packages/analytics-display/tsconfig.json
+COPY packages/analytics-display/src/ packages/analytics-display/src/
+COPY packages/genui/package.json packages/genui/package.json
+COPY packages/genui/tsconfig.json packages/genui/tsconfig.json
+COPY packages/genui/src/ packages/genui/src/
 # @thinkwork/pi-runtime-core and @thinkwork/agentcore-pi emit json-render parts
 # through @thinkwork/thread-json-render. Keep the workspace package in the
 # filtered install/build context so release image builds match the monorepo graph.
@@ -69,6 +75,8 @@ RUN corepack enable && pnpm install \
     --filter @thinkwork/agentcore-pi \
     --filter @thinkwork/pi-aws \
     --filter @thinkwork/pi-runtime-core \
+    --filter @thinkwork/analytics-display \
+    --filter @thinkwork/genui \
     --filter @thinkwork/thread-json-render \
     --filter @thinkwork/pi-extensions \
     --prod=false --frozen-lockfile
@@ -77,6 +85,8 @@ RUN corepack enable && pnpm install \
 # tolerates raw .ts via the `types` condition, but plain Node ESM does not).
 # pi-extensions depends on pi-runtime-core, so build it after.
 RUN pnpm --filter @thinkwork/pi-aws build
+RUN pnpm --filter @thinkwork/analytics-display build
+RUN pnpm --filter @thinkwork/genui build
 RUN pnpm --filter @thinkwork/thread-json-render build
 RUN pnpm --filter @thinkwork/pi-runtime-core build
 RUN pnpm --filter @thinkwork/pi-extensions build
