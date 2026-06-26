@@ -102,7 +102,7 @@ No Linear child issues exist, so the plan units are the implementation units:
 ## Branches / PRs
 
 - U1 branch: `codex/thnk-79-u1-memory-scope`
-- U1 PR: pending
+- U1 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2988`
 
 ## Verification Log
 
