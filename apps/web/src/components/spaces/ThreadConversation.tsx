@@ -204,9 +204,12 @@ function MessageBody({
     metadata: message.metadata,
     threadAttachments: attachments,
   });
+  const hasRenderedParts = Boolean(renderedParts?.length);
   return (
-    <div className="grid min-w-0 gap-2 rounded-md bg-muted/45 px-3 py-2 text-sm leading-6">
-      {renderedParts?.length ? (
+    <div
+      className={`grid min-w-0 gap-2 rounded-md bg-muted/45 px-3 py-2 text-sm leading-6 ${hasRenderedParts ? "mt-2" : ""}`}
+    >
+      {hasRenderedParts ? (
         <div className="space-y-2">{renderedParts}</div>
       ) : message.content ? (
         <p className="whitespace-pre-wrap break-words">
