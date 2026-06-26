@@ -54,7 +54,8 @@ message contract.
 | Unit | Branch | PR | State |
 | --- | --- | --- | --- |
 | U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Merged |
-| U3 | `codex/thnk-81-json-render-actions-u3` | [#2998](https://github.com/thinkwork-ai/thinkwork/pull/2998) | Review/CI |
+| U3 | `codex/thnk-81-json-render-actions-u3` | [#2998](https://github.com/thinkwork-ai/thinkwork/pull/2998) | Merged |
+| U4 | `codex/thnk-81-json-render-actions-u4` | Pending | In progress |
 
 ## U1/U2 Objective
 
@@ -124,6 +125,29 @@ json-render validation target-agnostic and preserve display-only generated UI.
   in this workspace (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prettier" not
   found`). Root `package.json` references Prettier scripts, but
   `pnpm list prettier --depth 4` returned no installed package.
+- 2026-06-26 U3 CI passed after repair: CLA, lint, verify, typecheck, and
+  test.
+- 2026-06-26 U3 merged via squash commit
+  `3bb3417d6a31b84ab9b289f9896114eb12883312`; remote branch was already
+  removed by GitHub and local worktree/branch cleanup completed.
+
+## U4 Objective
+
+Refresh Work Item-backed web state after a successful generated UI action
+returns an audit message whose metadata confirms
+`jsonRenderAction.mutation.target === "work_item_status"`. Keep the refresh
+scoped to thread and Work Item data because the backend action uses
+`agentRequested: false`.
+
+## U4 Verification
+
+- 2026-06-26 install note: fresh U4 worktree needed `pnpm install`; install
+  completed with the same optional `canvas` native build warning (`pkg-config`
+  unavailable under local Node 25). Focused tests and typecheck were unaffected.
+- 2026-06-26 focused tests passed:
+  `pnpm --filter @thinkwork/web test -- json-render/ThreadJsonRenderRenderer SpacesThreadDetailRoute render-typed-part`
+  (61 tests).
+- 2026-06-26 typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
 
 ## Blockers
 

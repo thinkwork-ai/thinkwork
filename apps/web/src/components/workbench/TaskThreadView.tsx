@@ -109,6 +109,7 @@ import {
 } from "@/components/workbench/turnHeader";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
+import type { JsonRenderActionSuccessHandler } from "@/components/workbench/json-render/use-json-render-action";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
 import { resolveUserQuestionRecord } from "@/lib/user-question-record";
 import {
@@ -287,6 +288,7 @@ interface TaskThreadViewProps {
    * role (TenantContext.isOperator); the server enforces regardless.
    */
   onFlagTurn?: (turn: TaskThreadTurn) => void;
+  onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -432,6 +434,7 @@ export function TaskThreadView({
   artifactPanelState,
   infoPanelState,
   onFlagTurn,
+  onJsonRenderActionSuccess,
 }: TaskThreadViewProps) {
   const { isOperator } = useTenant();
   const composerDockRef = useRef<HTMLDivElement | null>(null);
@@ -588,6 +591,7 @@ export function TaskThreadView({
                       skillCatalog={skillCatalog}
                       viewerIsOperator={isOperator}
                       onFlagTurn={onFlagTurn}
+                      onJsonRenderActionSuccess={onJsonRenderActionSuccess}
                     />
                   );
                 })
@@ -1712,6 +1716,7 @@ function TranscriptSegment({
   skillCatalog,
   viewerIsOperator,
   onFlagTurn,
+  onJsonRenderActionSuccess,
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1738,6 +1743,7 @@ function TranscriptSegment({
   skillCatalog?: SkillOption[];
   viewerIsOperator?: boolean;
   onFlagTurn?: (turn: TaskThreadTurn) => void;
+  onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1759,6 +1765,7 @@ function TranscriptSegment({
         currentUser={currentUser}
         mentionTargets={mentionTargets}
         skillCatalog={skillCatalog}
+        onJsonRenderActionSuccess={onJsonRenderActionSuccess}
       />
       {skillDraft ? (
         <SkillDraftStatusCard
@@ -1784,6 +1791,7 @@ function TranscriptSegment({
                 keyPrefix: `${message.id}::stream`,
                 live: true,
                 threadId,
+                onJsonRenderActionSuccess,
               })}
               {streamState!.status === "streaming" ? (
                 <span
@@ -2304,6 +2312,7 @@ function TranscriptMessage({
   currentUser,
   mentionTargets,
   skillCatalog,
+  onJsonRenderActionSuccess,
 }: {
   message: TaskThreadMessage;
   threadId?: string;
@@ -2319,6 +2328,7 @@ function TranscriptMessage({
   currentUser?: CurrentUserIdentity | null;
   mentionTargets?: MentionTarget[];
   skillCatalog?: SkillOption[];
+  onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
 }) {
   const role = message.role.toUpperCase();
   const isUser = role === "USER";
@@ -2346,6 +2356,7 @@ function TranscriptMessage({
           sourceMessageId: message.id,
           threadId,
           userQuestion,
+          onJsonRenderActionSuccess,
         }).filter(Boolean)
       : [];
   const transcriptContentClassName =

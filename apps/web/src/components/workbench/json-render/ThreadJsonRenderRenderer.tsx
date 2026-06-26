@@ -36,6 +36,7 @@ import {
 } from "./validation";
 import {
   useJsonRenderAction,
+  type JsonRenderActionSuccessHandler,
   type JsonRenderActionStatus,
 } from "./use-json-render-action";
 import { usePromoteJsonRender } from "./use-promote-json-render";
@@ -50,6 +51,7 @@ export interface ThreadJsonRenderRendererProps {
   live?: boolean;
   sourceMessageId?: string | null;
   threadId?: string | null;
+  onActionSuccess?: JsonRenderActionSuccessHandler;
 }
 
 interface DurableActionState {
@@ -150,6 +152,7 @@ export function ThreadJsonRenderRenderer({
   live = false,
   sourceMessageId,
   threadId,
+  onActionSuccess,
 }: ThreadJsonRenderRendererProps) {
   const lastGood = useRef<ThreadJsonRenderData | null>(null);
   const result = validateThreadJsonRenderData(data);
@@ -165,6 +168,7 @@ export function ThreadJsonRenderRenderer({
               partId={partId}
               sourceMessageId={sourceMessageId}
               threadId={threadId}
+              onActionSuccess={onActionSuccess}
             />
           </ThreadJsonRenderErrorBoundary>
           <ThreadJsonRenderFallback
@@ -196,6 +200,7 @@ export function ThreadJsonRenderRenderer({
         partId={partId}
         sourceMessageId={sourceMessageId}
         threadId={threadId}
+        onActionSuccess={onActionSuccess}
       />
     </ThreadJsonRenderErrorBoundary>,
   );
@@ -207,12 +212,14 @@ function ValidatedThreadJsonRenderRenderer({
   partId,
   sourceMessageId,
   threadId,
+  onActionSuccess,
 }: {
   data: ThreadJsonRenderData;
   live: boolean;
   partId?: string;
   sourceMessageId?: string | null;
   threadId?: string | null;
+  onActionSuccess?: JsonRenderActionSuccessHandler;
 }) {
   if (live || !partId || !threadId || !sourceMessageId) {
     return <ReadOnlyThreadJsonRenderRenderer data={data} />;
@@ -224,6 +231,7 @@ function ValidatedThreadJsonRenderRenderer({
       partId={partId}
       sourceMessageId={sourceMessageId}
       threadId={threadId}
+      onActionSuccess={onActionSuccess}
     />
   );
 }
@@ -267,17 +275,20 @@ function InteractiveThreadJsonRenderRenderer({
   partId,
   sourceMessageId,
   threadId,
+  onActionSuccess,
 }: {
   data: ThreadJsonRenderData;
   partId: string;
   sourceMessageId: string;
   threadId: string;
+  onActionSuccess?: JsonRenderActionSuccessHandler;
 }) {
   const { submitAction, statusForAction } = useJsonRenderAction({
     data,
     partId,
     sourceMessageId,
     threadId,
+    onActionSuccess,
   });
   const promotion = usePromoteJsonRender({
     data,

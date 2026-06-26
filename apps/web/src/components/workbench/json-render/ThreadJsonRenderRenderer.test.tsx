@@ -65,6 +65,18 @@ describe("ThreadJsonRenderRenderer", () => {
 
   it("submits durable actions through the json-render action mutation", async () => {
     const fixture = createTaskReviewJsonRenderFixture();
+    const onActionSuccess = vi.fn();
+    const message = {
+      id: "audit-message-1",
+      metadata: {
+        jsonRenderAction: {
+          mutation: { target: "work_item_status" },
+        },
+      },
+    };
+    mocks.executeMutation.mockResolvedValue({
+      data: { handleJsonRenderAction: message },
+    });
 
     render(
       <ThreadJsonRenderRenderer
@@ -72,6 +84,7 @@ describe("ThreadJsonRenderRenderer", () => {
         partId={fixture.id}
         sourceMessageId="message-1"
         threadId="thread-1"
+        onActionSuccess={onActionSuccess}
       />,
     );
 
@@ -95,6 +108,10 @@ describe("ThreadJsonRenderRenderer", () => {
           note: "Approved from generated UI",
         },
       },
+    });
+    expect(onActionSuccess).toHaveBeenCalledWith({
+      action: fixture.data.durableActions![0],
+      message,
     });
   });
 

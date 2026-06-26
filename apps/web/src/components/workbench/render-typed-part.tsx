@@ -40,6 +40,7 @@ import {
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
 import { ThreadJsonRenderFallback } from "@/components/workbench/json-render/ThreadJsonRenderFallback";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
+import type { JsonRenderActionSuccessHandler } from "@/components/workbench/json-render/use-json-render-action";
 import {
   GoalRunCard,
   normalizeGoalRunEvidence,
@@ -69,6 +70,7 @@ export interface RenderTypedPartOptions {
   /** Thread/source context for server-verified generated UI actions. */
   threadId?: string;
   sourceMessageId?: string;
+  onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
 }
 
 export function renderTypedPart(
@@ -80,6 +82,7 @@ export function renderTypedPart(
     live = false,
     sourceMessageId,
     threadId,
+    onJsonRenderActionSuccess,
   }: RenderTypedPartOptions,
 ): ReactNode {
   const key = `${keyPrefix}::${index}`;
@@ -208,6 +211,7 @@ export function renderTypedPart(
           partId={part.id}
           sourceMessageId={sourceMessageId}
           threadId={threadId}
+          onActionSuccess={onJsonRenderActionSuccess}
         />
       );
     }
@@ -291,6 +295,7 @@ export function renderTypedParts(
     live?: boolean;
     threadId?: string;
     sourceMessageId?: string;
+    onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
   },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -324,6 +329,7 @@ export function renderTypedParts(
         live: options.live,
         sourceMessageId: options.sourceMessageId,
         threadId: options.threadId,
+        onJsonRenderActionSuccess: options.onJsonRenderActionSuccess,
       }),
     );
   });

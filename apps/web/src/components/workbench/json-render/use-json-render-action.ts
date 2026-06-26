@@ -17,13 +17,29 @@ export type JsonRenderActionStatus =
   | { state: "submitted" }
   | { state: "error"; message: string };
 
+export interface JsonRenderActionMessage {
+  id?: string | null;
+  metadata?: unknown;
+}
+
+export interface JsonRenderActionSuccess {
+  action: ThreadJsonRenderDurableActionDescriptor;
+  message: JsonRenderActionMessage | null;
+}
+
+export type JsonRenderActionSuccessHandler = (
+  result: JsonRenderActionSuccess,
+) => void;
+
 export function useJsonRenderAction(source: {
   threadId?: string | null;
   sourceMessageId?: string | null;
   partId?: string | null;
   data: ThreadJsonRenderData;
+  onActionSuccess?: JsonRenderActionSuccessHandler;
 }) {
   const [, execute] = useMutation(HandleJsonRenderActionMutation);
+  const { onActionSuccess } = source;
   const [statuses, setStatuses] = useState<
     Record<string, JsonRenderActionStatus>
   >({});
@@ -48,10 +64,17 @@ export function useJsonRenderAction(source: {
         const input = buildHandleJsonRenderActionInput(actionSource, action);
         const result = await execute({ input });
         if (result.error) throw result.error;
+        const message =
+          (
+            result.data as
+              | { handleJsonRenderAction?: JsonRenderActionMessage | null }
+              | undefined
+          )?.handleJsonRenderAction ?? null;
         setStatuses((current) => ({
           ...current,
           [key]: { state: "submitted" },
         }));
+        onActionSuccess?.({ action, message });
       } catch (err) {
         setStatuses((current) => ({
           ...current,
@@ -65,7 +88,7 @@ export function useJsonRenderAction(source: {
         }));
       }
     },
-    [actionSource, execute],
+    [actionSource, execute, onActionSuccess],
   );
 
   const statusForAction = useCallback(
