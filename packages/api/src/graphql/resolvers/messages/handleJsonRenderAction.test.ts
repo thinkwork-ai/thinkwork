@@ -81,7 +81,7 @@ vi.mock("./sendMessage.mutation.js", () => ({
   sendMessage: mocks.sendMessage,
 }));
 
-import { handleGenUIAction } from "./handleGenUIAction.mutation.js";
+import { handleJsonRenderAction } from "./handleJsonRenderAction.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as never;
 
@@ -97,20 +97,20 @@ beforeEach(() => {
     threadId: THREAD_ID,
     tenantId: TENANT_ID,
     role: "USER",
-    content: "GenUI action: Approve",
+    content: "Generated UI action: Approve",
     metadata: {},
     createdAt: "2026-06-21T00:00:00.000Z",
   });
 });
 
-describe("handleGenUIAction", () => {
+describe("handleJsonRenderAction", () => {
   it("validates the persisted part and dispatches a normal user message", async () => {
     const fixture = sourcePart();
     enqueueHappySource(fixture);
     mocks.selectQueue.push([]); // duplicate lookup
     mocks.selectQueue.push([{ count: 0 }]); // rate limit
 
-    const result = await handleGenUIAction(
+    const result = await handleJsonRenderAction(
       {},
       { input: actionInput(fixture) },
       ctx,
@@ -147,13 +147,13 @@ describe("handleGenUIAction", () => {
         thread_id: THREAD_ID,
         tenant_id: TENANT_ID,
         role: "user",
-        content: "GenUI action: Approve",
+        content: "Generated UI action: Approve",
         metadata: { jsonRenderAction: { idempotencyKey: "idem-1" } },
         created_at: new Date("2026-06-21T00:00:00Z"),
       },
     ]);
 
-    const result = await handleGenUIAction(
+    const result = await handleJsonRenderAction(
       {},
       { input: actionInput(fixture) },
       ctx,
@@ -168,7 +168,7 @@ describe("handleGenUIAction", () => {
     enqueueHappySource(fixture);
 
     await expect(
-      handleGenUIAction(
+      handleJsonRenderAction(
         {},
         { input: { ...actionInput(fixture), specHash: "old" } },
         ctx,
@@ -182,7 +182,7 @@ describe("handleGenUIAction", () => {
     enqueueHappySource(fixture);
 
     await expect(
-      handleGenUIAction(
+      handleJsonRenderAction(
         {},
         { input: { ...actionInput(fixture), actionId: "unknown" } },
         ctx,
@@ -196,7 +196,7 @@ describe("handleGenUIAction", () => {
     enqueueHappySource(fixture);
 
     await expect(
-      handleGenUIAction(
+      handleJsonRenderAction(
         {},
         {
           input: {
@@ -221,7 +221,7 @@ describe("handleGenUIAction", () => {
     mocks.selectQueue.push([{ count: 12 }]); // rate limit
 
     await expect(
-      handleGenUIAction(
+      handleJsonRenderAction(
         {},
         { input: { ...actionInput(fixture), idempotencyKey: "idem-2" } },
         ctx,

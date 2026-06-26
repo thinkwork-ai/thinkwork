@@ -3,6 +3,7 @@ export {
   THREAD_JSON_RENDER_SCHEMA_VERSION,
   THREAD_JSON_RENDER_CATALOG_VERSION,
   createThreadJsonRenderSpecHash,
+  normalizeThreadJsonRenderActionParams,
   stableStringify,
   type ThreadJsonRenderDurableActionDescriptor,
   type ThreadJsonRenderPart,

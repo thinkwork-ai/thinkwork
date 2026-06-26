@@ -3,7 +3,7 @@ import { sendMessage } from "./sendMessage.mutation.js";
 import { deleteMessage } from "./deleteMessage.mutation.js";
 import { refreshGenUI } from "./refreshGenUI.mutation.js";
 import { answerUserQuestion } from "./answerUserQuestion.mutation.js";
-import { handleGenUIAction } from "./handleGenUIAction.mutation.js";
+import { handleJsonRenderAction } from "./handleJsonRenderAction.mutation.js";
 
 export const messageQueries = { messages };
 export const messageMutations = {
@@ -11,5 +11,5 @@ export const messageMutations = {
   deleteMessage,
   refreshGenUI,
   answerUserQuestion,
-  handleGenUIAction,
+  handleJsonRenderAction,
 };
