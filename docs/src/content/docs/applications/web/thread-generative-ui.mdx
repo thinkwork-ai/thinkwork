@@ -1,9 +1,9 @@
 ---
 title: Web — Thread Generative UI
-description: Inline Thread GenUI rendering, the data-genui envelope, shared analytical display contract, action security, and artifact promotion behavior in the ThinkWork web app.
+description: Inline Thread json-render rendering, the data-json-render envelope, shared analytical display contract, action security, and artifact promotion behavior in the ThinkWork web app.
 ---
 
-Thread Generative UI renders agent-produced interface fragments inside web Thread conversations. The v1 surface is web-first: agents can stream or persist bounded `data-genui` parts, the web app renders supported catalog components inline, and mobile renders the same parts through the required fallback summary.
+Thread Generative UI renders agent-produced interface fragments inside web Thread conversations. The v1 surface consumes bounded `data-json-render` parts that carry complete upstream json-render specs, renders supported catalog components inline on web, and gives mobile the same part with a required fallback summary.
 
 ## Scope
 
@@ -13,30 +13,36 @@ Durable dashboards, saved reports, refresh schedules, sharing, and dashboard lay
 
 ## Envelope
 
-Persisted and streamed Thread GenUI parts use the canonical `data-genui` envelope:
+Persisted Thread GenUI parts use the canonical `data-json-render` envelope:
 
 ```json
 {
-  "type": "data-genui",
-  "id": "genui:example",
+  "type": "data-json-render",
+  "id": "json-render:example",
   "data": {
-    "schemaVersion": "thread-genui/v1",
-    "catalogVersion": "thread-genui-catalog/v1",
+    "schemaVersion": "thread-json-render/v1",
+    "catalogVersion": "thread-json-render-catalog/v1",
+    "status": "ready",
     "spec": {
       "root": "root",
       "elements": {
         "root": {
-          "component": "task.review",
-          "props": {}
+          "type": "task.review",
+          "props": {
+            "title": "Review task",
+            "summary": "Confirm the task is ready.",
+            "status": "pending"
+          },
+          "children": []
         }
       }
     },
-    "status": "ready",
     "mobileFallback": {
       "title": "Review task",
       "summary": "Confirm the task is ready.",
       "lines": ["Status: pending"]
-    }
+    },
+    "specHash": "json-render-fnv1a:..."
   }
 }
 ```
@@ -45,18 +51,20 @@ The `mobileFallback` object is required. It is the compatibility contract for na
 
 ## Catalog Ownership
 
-Thread GenUI owns the inline catalog components used in conversation:
+Thread GenUI uses a two-layer catalog. Layer one is upstream
+`@json-render/shadcn`; layer two contains ThinkWork domain components used in
+conversation:
 
 - `task.review`
 - `workflow.status`
 - `keyValue.list`
 - `form.action`
 
-Analytical charts and tables use the reserved `analytics.display` adapter from `@thinkwork/analytics-display`. Thread GenUI does not define a parallel chart or table catalog. Agents that need inline charts emit an `analytics.display` payload wrapped in the same `data-genui` envelope.
+Analytical charts and tables use the reserved `analytics.display` adapter from `@thinkwork/analytics-display`. Thread GenUI does not define a parallel chart or table catalog. Agents that need inline charts emit an `analytics.display` json-render component inside the same `data-json-render` envelope.
 
 ## Rendering
 
-The web Thread renderer accepts both live stream chunks and persisted message `parts`. It validates `data-genui` through the shared `@thinkwork/genui` validator before rendering. Unsupported or malformed parts fail closed to the fallback copy rather than executing arbitrary payloads.
+The web Thread renderer accepts persisted message `parts` and validates `data-json-render` through the shared `@thinkwork/thread-json-render` validator before rendering. Unsupported or malformed parts fail closed to the fallback copy rather than executing arbitrary payloads.
 
 Component props must be bounded data, not code. References to external dashboards or datasets are rejected for inline analytical payloads; the inline part must include the bounded render payload needed for the current Thread view.
 
@@ -68,13 +76,13 @@ Clients must not treat payload-provided tool names, URLs, or arbitrary params as
 
 ## Promotion
 
-Ready `data-genui` parts can be promoted to durable `DATA_VIEW` artifacts. Promotion creates a snapshot of the validated source part and records source thread/message/part metadata, spec hash, status, title, summary, provenance, freshness, diagnostics, and sensitivity metadata where present.
+Ready `data-json-render` parts can be promoted to durable `DATA_VIEW` artifacts. Promotion creates a snapshot of the validated source part and records source thread/message/part metadata, spec hash, status, title, summary, provenance, freshness, diagnostics, and sensitivity metadata where present.
 
 Promotion does not create dashboard persistence, refresh scheduling, or sharing. Those workflows remain separate durable analytics work.
 
 ## Mobile Compatibility
 
-Mobile receives the same persisted message `parts` but v1 does not implement the full web renderer. It renders the required `mobileFallback` title, summary, and lines. If a malformed `data-genui` part is present, mobile shows a stable unsupported state instead of blanking the message or crashing.
+Mobile receives the same persisted message `parts` but v1 does not implement the full web renderer. It renders the required `mobileFallback` title, summary, and lines. If a malformed `data-json-render` part is present, mobile shows a stable unsupported state instead of blanking the message or crashing. Legacy `data-genui` payloads are not converted into json-render specs.
 
 ## Related Pages
 

@@ -76,9 +76,9 @@ When the tenant platform agent calls a tool during a turn, the tool call can ren
 
 ### Thread GenUI fallback
 
-The web Thread surface can render validated `data-genui` parts inline, including analytical `analytics.display` payloads backed by the shared `@thinkwork/analytics-display` contract. Mobile receives the same persisted message `parts`, but v1 does not implement the full web renderer catalog.
+The web Thread surface can render validated `data-json-render` parts inline, including analytical `analytics.display` components backed by the shared `@thinkwork/analytics-display` contract. Mobile receives the same persisted message `parts`, but v1 does not implement the full web renderer catalog.
 
-Mobile renders each part's required fallback title, summary, and lines. If a `data-genui` part is malformed or omits the fallback, the timeline shows a stable unsupported generated-view state instead of a blank message. Existing mobile `_type` GenUI cards and fenced `genui` message blocks continue to render through the mobile registry.
+Mobile renders each part's required fallback title, summary, and lines. If a `data-json-render` part is malformed or omits the fallback, the timeline shows a stable unsupported generated-view state instead of a blank message. Legacy `data-genui`, `_type` GenUI cards, and fenced `genui` message blocks are not converted into json-render specs.
 
 See [Web — Thread Generative UI](/applications/web/thread-generative-ui/) for the envelope, catalog ownership, action security, and artifact promotion contract.
 
