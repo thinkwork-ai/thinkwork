@@ -4,8 +4,8 @@ import {
   readActivityCallbackConfig,
   type ActivityCallbackConfig,
 } from "../src/activity-client.js";
-import { threadGenUIActivityEvent } from "../src/genui-runtime.js";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { threadJsonRenderActivityEvent } from "../src/json-render-runtime.js";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 const TURN_ID = "44444444-4444-4444-4444-444444444444";
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
@@ -93,13 +93,13 @@ describe("createActivityEmitter", () => {
     });
   });
 
-  it("POSTs data-genui UIMessage chunks on the ui stream", async () => {
-    const fixture = createTaskReviewGenUIFixture();
+  it("POSTs data-json-render UIMessage chunks on the ui stream", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
     const fetchImpl = okFetch();
     const emitter = createActivityEmitter(config(), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    emitter.emit(threadGenUIActivityEvent(fixture));
+    emitter.emit(threadJsonRenderActivityEvent(fixture));
     await emitter.drain();
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -112,7 +112,7 @@ describe("createActivityEmitter", () => {
       stream: "ui",
       message: "Review onboarding task",
       payload: {
-        kind: "thread_genui.ui_message_chunk",
+        kind: "thread_json_render.ui_message_chunk",
         chunk: fixture,
       },
     });

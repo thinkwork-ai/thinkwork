@@ -170,6 +170,7 @@ beforeEach(() => {
     blockedTools: [],
     sandboxTemplate: null,
     browserAutomationEnabled: true,
+    threadJsonRenderUiEnabled: false,
     contextEngineEnabled: false,
     guardrailId: null,
     guardrailConfig: undefined,
@@ -246,6 +247,51 @@ describe("chat-agent-invoke runtime routing", () => {
     // Wakeup parity (plan 2026-06-12-002 U1): a tenant with no profiles
     // ships agent_profiles as [] on the wire, never absent.
     expect(body.agent_profiles).toEqual([]);
+    expect(body.thread_json_render_ui_enabled).toBeUndefined();
+  });
+
+  it("passes the Thread json-render UI runtime gate only when enabled", async () => {
+    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      agentName: "ThinkWork",
+      agentSlug: "thinkwork",
+      agentSystemPrompt: null,
+      humanName: undefined,
+      humanPairId: null,
+      tenantSlug: "acme",
+      templateId: null,
+      templateModel: "moonshotai.kimi-k2.5",
+      runtimeType: "pi",
+      budgetMonthlyCents: null,
+      budgetPaused: false,
+      blockedTools: [],
+      sandboxTemplate: null,
+      browserAutomationEnabled: false,
+      threadJsonRenderUiEnabled: true,
+      contextEngineEnabled: false,
+      guardrailId: null,
+      guardrailConfig: undefined,
+      skillsConfig: [],
+      knowledgeBasesConfig: undefined,
+      mcpConfigs: [],
+      agentProfilesConfig: [],
+    });
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "render a task review",
+      messageId: "message-1",
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+    expect(body.thread_json_render_ui_enabled).toBe(true);
   });
 
   it("passes the normalized goal_mode runtime envelope to Pi dispatch", async () => {
@@ -296,6 +342,7 @@ describe("chat-agent-invoke runtime routing", () => {
       blockedTools: [],
       sandboxTemplate: null,
       browserAutomationEnabled: true,
+      threadJsonRenderUiEnabled: false,
       contextEngineEnabled: false,
       guardrailId: null,
       guardrailConfig: undefined,
@@ -358,6 +405,7 @@ describe("chat-agent-invoke runtime routing", () => {
       blockedTools: [],
       sandboxTemplate: null,
       browserAutomationEnabled: true,
+      threadJsonRenderUiEnabled: false,
       contextEngineEnabled: false,
       guardrailId: null,
       guardrailConfig: undefined,
@@ -756,6 +804,7 @@ describe("chat-agent-invoke runtime routing", () => {
       blockedTools: [],
       sandboxTemplate: null,
       browserAutomationEnabled: true,
+      threadJsonRenderUiEnabled: false,
       contextEngineEnabled: true,
       contextEngineConfig: { enabled: true },
       webSearchConfig: { provider: "exa", apiKey: "exa-key" },

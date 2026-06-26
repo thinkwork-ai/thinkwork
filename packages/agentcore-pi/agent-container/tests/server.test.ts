@@ -27,7 +27,7 @@ import {
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 import {
   buildToolAllowlist,
   type DelegationProvider,
@@ -252,7 +252,7 @@ describe("handleInvocation — payload validation", () => {
 describe("handleInvocation — happy path", () => {
   it("chat-turn invocation returns 200 and SKIPS the completion callback (chat-agent-invoke owns turn writeback)", async () => {
     let fetchCalled = 0;
-    const part = createTaskReviewGenUIFixture();
+    const part = createTaskReviewJsonRenderFixture();
     const fetchImpl: typeof fetch = (async () => {
       fetchCalled += 1;
       return new Response();

@@ -1,0 +1,228 @@
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  THREAD_JSON_RENDER_CATALOG_VERSION,
+  THREAD_JSON_RENDER_PART_TYPE,
+  THREAD_JSON_RENDER_SCHEMA_VERSION,
+  createThreadJsonRenderSpecHash,
+  type ThreadJsonRenderData,
+  type ThreadJsonRenderDiagnostic,
+  type ThreadJsonRenderPart,
+  validateThreadJsonRenderData,
+  validateThreadJsonRenderPart,
+} from "@thinkwork/thread-json-render";
+
+import type { ActivityEmitEvent } from "./agent-loop.js";
+
+export const THREAD_JSON_RENDER_UI_CAPABILITY =
+  "thread-json-render-ui" as const;
+export const EMIT_JSON_RENDER_UI_TOOL_NAME = "emit_json_render_ui" as const;
+export const THREAD_JSON_RENDER_ACTIVITY_EVENT_TYPE =
+  "ui_message_chunk" as const;
+export const THREAD_JSON_RENDER_ACTIVITY_STREAM = "ui" as const;
+export const THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND =
+  "thread_json_render.ui_message_chunk" as const;
+
+export interface ThreadJsonRenderRuntimePartResult {
+  part?: ThreadJsonRenderPart;
+  ok: boolean;
+  diagnostics: ThreadJsonRenderDiagnostic[];
+}
+
+export interface ThreadJsonRenderActivityPayload {
+  kind: typeof THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND;
+  chunk: ThreadJsonRenderPart;
+}
+
+export function buildEmitJsonRenderUiTool(): AgentTool<any> {
+  return {
+    name: EMIT_JSON_RENDER_UI_TOOL_NAME,
+    label: "Emit json-render UI",
+    description:
+      "Emit a complete, bounded json-render UI part for the current Thread. " +
+      "Use this only when structured UI is clearly better than prose. Provide " +
+      "a full spec using root/elements/type/props/children plus mobileFallback.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["spec", "mobileFallback"],
+      properties: {
+        id: {
+          type: "string",
+          description:
+            "Optional stable part id. Omit unless updating the same generated UI.",
+        },
+        spec: {
+          type: "object",
+          description:
+            "Complete upstream json-render spec: { root, elements }, with each element using type, props, and children.",
+        },
+        mobileFallback: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "summary"],
+          properties: {
+            title: { type: "string" },
+            summary: { type: "string" },
+            lines: { type: "array", items: { type: "string" } },
+          },
+        },
+        durableActions: {
+          type: "array",
+          description:
+            "Optional ThinkWork durable action descriptors. Do not include arbitrary callbacks or URLs.",
+          items: { type: "object", additionalProperties: true },
+        },
+      },
+    },
+    executionMode: "sequential",
+    execute: async (_toolCallId, params) => {
+      const result = normalizeRuntimeThreadJsonRenderInput(params);
+      if (!result.ok || !result.part) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Generated UI was rejected by the ThinkWork json-render validator. " +
+                diagnosticSummary(result.diagnostics),
+            },
+          ],
+          details: { ok: false, diagnostics: result.diagnostics },
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Generated UI ready: ${result.part.data.mobileFallback.title}`,
+          },
+        ],
+        details: { ok: true, thread_json_render_part: result.part },
+      };
+    },
+  } as AgentTool<any>;
+}
+
+export function normalizeRuntimeThreadJsonRenderInput(
+  candidate: unknown,
+  fallbackId?: string,
+): ThreadJsonRenderRuntimePartResult {
+  const record = recordValue(candidate);
+  const partResult = validateThreadJsonRenderPart(candidate);
+  if (partResult.ok) {
+    return {
+      part: withHostComputedHash(partResult.part),
+      ok: true,
+      diagnostics: [],
+    };
+  }
+
+  const dataCandidate =
+    record && record.type === THREAD_JSON_RENDER_PART_TYPE
+      ? record.data
+      : buildDataFromToolInput(record);
+  const dataResult = validateThreadJsonRenderData(dataCandidate);
+  if (dataResult.ok) {
+    const data = withSpecHash(dataResult.data);
+    const id =
+      typeof record?.id === "string" && record.id.trim()
+        ? record.id.trim()
+        : fallbackId || stablePartId(data);
+    return {
+      part: { type: THREAD_JSON_RENDER_PART_TYPE, id, data },
+      ok: true,
+      diagnostics: [],
+    };
+  }
+
+  return {
+    ok: false,
+    diagnostics: [...partResult.diagnostics, ...dataResult.diagnostics],
+  };
+}
+
+export function extractEmitJsonRenderToolPart(
+  result: unknown,
+): ThreadJsonRenderPart | null {
+  const resultRecord = recordValue(result);
+  const details = recordValue(resultRecord?.details);
+  const candidate =
+    details?.thread_json_render_part ?? resultRecord?.thread_json_render_part;
+  if (!candidate) return null;
+  const normalized = normalizeRuntimeThreadJsonRenderInput(candidate);
+  return normalized.ok && normalized.part ? normalized.part : null;
+}
+
+export function threadJsonRenderActivityEvent(
+  part: ThreadJsonRenderPart,
+): ActivityEmitEvent {
+  return {
+    eventType: THREAD_JSON_RENDER_ACTIVITY_EVENT_TYPE,
+    message: part.data.mobileFallback.title,
+    stream: THREAD_JSON_RENDER_ACTIVITY_STREAM,
+    payload: {
+      kind: THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
+      chunk: part,
+    } satisfies ThreadJsonRenderActivityPayload,
+  };
+}
+
+export function mergeFinalThreadJsonRenderParts(
+  existing: readonly ThreadJsonRenderPart[] | undefined,
+  incoming: readonly ThreadJsonRenderPart[],
+): ThreadJsonRenderPart[] {
+  const byId = new Map<string, ThreadJsonRenderPart>();
+  for (const part of existing ?? []) byId.set(part.id, part);
+  for (const part of incoming) byId.set(part.id, part);
+  return [...byId.values()];
+}
+
+function buildDataFromToolInput(
+  input: Record<string, unknown> | null,
+): ThreadJsonRenderData {
+  const spec = input?.spec;
+  return {
+    schemaVersion: THREAD_JSON_RENDER_SCHEMA_VERSION,
+    catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
+    status: "ready",
+    spec: spec as ThreadJsonRenderData["spec"],
+    mobileFallback:
+      input?.mobileFallback as ThreadJsonRenderData["mobileFallback"],
+    durableActions: Array.isArray(input?.durableActions)
+      ? (input.durableActions as ThreadJsonRenderData["durableActions"])
+      : undefined,
+    specHash: recordValue(spec)
+      ? createThreadJsonRenderSpecHash(spec)
+      : undefined,
+  };
+}
+
+function withHostComputedHash(
+  part: ThreadJsonRenderPart,
+): ThreadJsonRenderPart {
+  return { ...part, data: withSpecHash(part.data) };
+}
+
+function withSpecHash(data: ThreadJsonRenderData): ThreadJsonRenderData {
+  return { ...data, specHash: createThreadJsonRenderSpecHash(data.spec) };
+}
+
+function stablePartId(data: ThreadJsonRenderData): string {
+  const hash = data.specHash ?? createThreadJsonRenderSpecHash(data.spec);
+  return `json-render:${hash.replace(/^json-render-fnv1a:/, "").slice(0, 24)}`;
+}
+
+function diagnosticSummary(diagnostics: ThreadJsonRenderDiagnostic[]): string {
+  if (diagnostics.length === 0) return "No diagnostics were returned.";
+  return diagnostics
+    .slice(0, 3)
+    .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+    .join(" ");
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}

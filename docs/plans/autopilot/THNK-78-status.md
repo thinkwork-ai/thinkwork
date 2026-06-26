@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u1-contract-in-progress
+status: u2-u3-runtime-api-in-progress
 target_branch: main
 ---
 
@@ -87,6 +87,11 @@ target_branch: main
 - Goal expanded to require full end-to-end UI verification after landing:
   primitives plus custom components from the two-layer catalog must be exercised
   in the Thread UI before Linear is closed.
+- U1 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2980
+  at `57c92c75b2ed1666131f00ab8a66f5df3dfd22f2`.
+- U1 branch and worktree were cleaned up after merge.
+- U2+U3 worktree created from updated `origin/main` at
+  `57c92c75b2ed1666131f00ab8a66f5df3dfd22f2`.
 
 ## Unit Log
 
@@ -107,4 +112,36 @@ target_branch: main
   - Full `pnpm install` completed but existing optional `canvas` native install
     attempted a Node 25 source build and reported missing `pkg-config`; package
     linking was refreshed with `pnpm install --ignore-scripts`.
-- Status: in progress.
+- Status: merged.
+
+### U2+U3 runtime emission + API finalize boundary
+
+- Objective: add the platform-owned `emit_json_render_ui` runtime tool behind
+  the `thread-json-render-ui` capability, then persist only final validated
+  `data-json-render` parts at the API boundary.
+- Branch: `codex/thnk-78-u2-u3-runtime-api`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-78-u2-u3-runtime-api`
+- Base: `origin/main` at `57c92c75b2ed1666131f00ab8a66f5df3dfd22f2`
+- Replaced the Pi runtime's legacy GenUI extraction with an explicit
+  `emit_json_render_ui` tool that validates complete upstream json-render specs,
+  computes host-owned ids/spec hashes, emits typed live UI chunks, and appends
+  only trusted parts to final runtime output.
+- Added API capability gating for chat and wakeup dispatch so the Pi container
+  only registers the tool when the agent capability is enabled and not blocked.
+- Moved finalization/persistence to the shared `@thinkwork/thread-json-render`
+  validator and stopped lifting UI parts from arbitrary legacy tool metadata.
+- Updated Pi container Docker build context and tests to use
+  `@thinkwork/thread-json-render` instead of `@thinkwork/genui`.
+- Verification:
+  - `pnpm --filter @thinkwork/thread-json-render test` passed.
+  - `pnpm --filter @thinkwork/thread-json-render typecheck` passed.
+  - `pnpm --filter @thinkwork/pi-runtime-core test -- json-render-runtime agent-loop finalize-client activity-client json-render-contract` passed.
+  - `pnpm --filter @thinkwork/pi-runtime-core typecheck` passed.
+  - `pnpm --filter @thinkwork/agentcore-pi test -- server json-render-contract` passed.
+  - `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- json-render-contract process-finalize chat-agent-activity chat-agent-invoke.runtime-routing resolve-agent-runtime-config` passed.
+  - `pnpm --filter @thinkwork/api test -- wakeup-processor.dispatch-parity wakeup-processor` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `git diff --check` passed.
+- Status: implementation complete; PR pending.

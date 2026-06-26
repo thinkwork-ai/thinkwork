@@ -133,7 +133,12 @@ import {
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
 import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
-import { normalizeThreadGenUIParts } from "../lib/chat-finalize/notify.js";
+import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
+import {
+  EMIT_JSON_RENDER_UI_TOOL_NAME,
+  THREAD_JSON_RENDER_UI_CAPABILITY,
+  threadJsonRenderUiEnabledFromCapabilities,
+} from "../lib/thread-json-render/capability.js";
 
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
@@ -1056,6 +1061,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
+  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromCapabilities(
+    capabilityRows,
+    blockedTools,
+  );
   const sendEmailConfig =
     templateSendEmailEnabled && !blockedTools.includes("send_email")
       ? {
@@ -1794,6 +1803,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveBrowserAutomationEnabled =
     browserAutomationEnabled &&
     isAnyToolAllowed("browser_automation", "browser");
+  const effectiveThreadJsonRenderUiEnabled =
+    threadJsonRenderUiEnabled &&
+    isAnyToolAllowed(
+      THREAD_JSON_RENDER_UI_CAPABILITY,
+      EMIT_JSON_RENDER_UI_TOOL_NAME,
+    );
 
   // Resolve thread_id — for email_triage, use the dedicated triage thread
   let resolvedThreadId = String(payload?.threadId || "");
@@ -2033,6 +2048,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
       browser_automation_enabled:
         effectiveBrowserAutomationEnabled || undefined,
+      thread_json_render_ui_enabled:
+        effectiveThreadJsonRenderUiEnabled || undefined,
       // Extension gate + model-governance parity with chat-agent-invoke
       // (#2395 bug class): the runtime registers ask_user_question /
       // task-status only when the payload carries the API wiring + active
@@ -2677,6 +2694,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 : undefined,
             browser_automation_enabled:
               effectiveBrowserAutomationEnabled || undefined,
+            thread_json_render_ui_enabled:
+              effectiveThreadJsonRenderUiEnabled || undefined,
             // Same dispatch-control parity as the primary wakeup payload
             // above — the re-invoked turn must not lose extension tools or
             // model governance mid-loop (#2395 bug class).
@@ -3422,7 +3441,7 @@ async function insertAssistantMessage(
   uiMessageParts?: Array<Record<string, unknown>>,
 ): Promise<{ id: string } | null> {
   try {
-    const parts = normalizeThreadGenUIParts(uiMessageParts);
+    const parts = normalizeThreadJsonRenderParts(uiMessageParts);
     const [row] = await db
       .insert(messages)
       .values({

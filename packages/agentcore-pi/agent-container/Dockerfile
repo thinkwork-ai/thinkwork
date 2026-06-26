@@ -47,16 +47,12 @@ COPY packages/pi-aws/connectors/ packages/pi-aws/connectors/
 COPY packages/pi-runtime-core/package.json packages/pi-runtime-core/package.json
 COPY packages/pi-runtime-core/tsconfig.json packages/pi-runtime-core/tsconfig.json
 COPY packages/pi-runtime-core/src/ packages/pi-runtime-core/src/
-# @thinkwork/pi-runtime-core and @thinkwork/agentcore-pi emit GenUI parts
-# through @thinkwork/genui, which in turn validates display specs with
-# @thinkwork/analytics-display. Keep both workspace packages in the filtered
-# install/build context so release image builds match the monorepo graph.
-COPY packages/analytics-display/package.json packages/analytics-display/package.json
-COPY packages/analytics-display/tsconfig.json packages/analytics-display/tsconfig.json
-COPY packages/analytics-display/src/ packages/analytics-display/src/
-COPY packages/genui/package.json packages/genui/package.json
-COPY packages/genui/tsconfig.json packages/genui/tsconfig.json
-COPY packages/genui/src/ packages/genui/src/
+# @thinkwork/pi-runtime-core and @thinkwork/agentcore-pi emit json-render parts
+# through @thinkwork/thread-json-render. Keep the workspace package in the
+# filtered install/build context so release image builds match the monorepo graph.
+COPY packages/thread-json-render/package.json packages/thread-json-render/package.json
+COPY packages/thread-json-render/tsconfig.json packages/thread-json-render/tsconfig.json
+COPY packages/thread-json-render/src/ packages/thread-json-render/src/
 # @thinkwork/pi-extensions — shared Pi-extension capability package (plan §004
 # U5). agentcore-pi loads the memory extension from it; the source must be
 # present for the frozen install + the tsc compile against it.
@@ -73,8 +69,7 @@ RUN corepack enable && pnpm install \
     --filter @thinkwork/agentcore-pi \
     --filter @thinkwork/pi-aws \
     --filter @thinkwork/pi-runtime-core \
-    --filter @thinkwork/analytics-display \
-    --filter @thinkwork/genui \
+    --filter @thinkwork/thread-json-render \
     --filter @thinkwork/pi-extensions \
     --prod=false --frozen-lockfile
 # Build the workspace deps first so their dist/ exists for the runtime import
@@ -82,8 +77,7 @@ RUN corepack enable && pnpm install \
 # tolerates raw .ts via the `types` condition, but plain Node ESM does not).
 # pi-extensions depends on pi-runtime-core, so build it after.
 RUN pnpm --filter @thinkwork/pi-aws build
-RUN pnpm --filter @thinkwork/analytics-display build
-RUN pnpm --filter @thinkwork/genui build
+RUN pnpm --filter @thinkwork/thread-json-render build
 RUN pnpm --filter @thinkwork/pi-runtime-core build
 RUN pnpm --filter @thinkwork/pi-extensions build
 RUN pnpm --filter @thinkwork/agentcore-pi build

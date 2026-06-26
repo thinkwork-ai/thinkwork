@@ -21,10 +21,10 @@
     "@earendil-works/pi-coding-agent": "0.76.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@narumitw/pi-goal": "0.4.2",
-    "@thinkwork/genui": "workspace:*",
     "@thinkwork/pi-aws": "workspace:*",
     "@thinkwork/pi-extensions": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
+    "@thinkwork/thread-json-render": "workspace:*",
     "typebox": "^1.1.33"
   },
   "devDependencies": {

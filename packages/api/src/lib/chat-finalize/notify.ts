@@ -15,10 +15,7 @@
 import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
-import {
-  createAnalyticsDisplayGenUIValidationContext,
-  validateThreadGenUIPart,
-} from "@thinkwork/genui";
+import { validateThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 
 const db = getDb();
 
@@ -67,20 +64,6 @@ export async function insertAssistantMessage(
   extraMetadata?: Record<string, unknown>,
 ): Promise<{ id: string } | null> {
   try {
-    // Extract GenUI data from tool invocations (typed JSON with _type field)
-    // MCP tools return _type JSON directly (Places, CRM, Tasks)
-    const genuiResults = (toolInvocations || [])
-      .filter((inv) => inv.genui_data)
-      .flatMap((inv) =>
-        Array.isArray(inv.genui_data) ? inv.genui_data : [inv.genui_data],
-      )
-      .filter(
-        (item): item is Record<string, unknown> =>
-          item !== null &&
-          typeof item === "object" &&
-          "_type" in (item as Record<string, unknown>),
-      );
-
     const toolInvocationMetadata =
       toolInvocations && toolInvocations.length > 0
         ? {
@@ -108,15 +91,12 @@ export async function insertAssistantMessage(
         content,
         sender_type: "agent",
         sender_id: agentId,
-        parts: normalizeThreadGenUIParts(uiMessageParts) || undefined,
-        tool_results: genuiResults.length > 0 ? genuiResults : undefined,
+        parts: normalizeThreadJsonRenderParts(uiMessageParts) || undefined,
         metadata,
       })
       .returning({ id: messages.id });
 
-    console.log(
-      `[chat-finalize] Inserted assistant message: ${row.id}${genuiResults.length > 0 ? ` (${genuiResults.length} genui results)` : ""}`,
-    );
+    console.log(`[chat-finalize] Inserted assistant message: ${row.id}`);
     return row;
   } catch (err) {
     console.error(`[chat-finalize] Failed to insert assistant message:`, err);
@@ -124,14 +104,13 @@ export async function insertAssistantMessage(
   }
 }
 
-export function normalizeThreadGenUIParts(
+export function normalizeThreadJsonRenderParts(
   parts: Array<Record<string, unknown>> | undefined,
 ): Array<Record<string, unknown>> | null {
   if (!Array.isArray(parts) || parts.length === 0) return null;
-  const context = createAnalyticsDisplayGenUIValidationContext();
   const byId = new Map<string, Record<string, unknown>>();
   for (const part of parts) {
-    const result = validateThreadGenUIPart(part, context);
+    const result = validateThreadJsonRenderPart(part);
     if (!result.ok) continue;
     byId.set(result.part.id, result.part as unknown as Record<string, unknown>);
   }

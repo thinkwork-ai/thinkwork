@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 const mocks = vi.hoisted(() => ({
   selectResult: [] as Array<{
@@ -263,8 +263,8 @@ describe("chat-agent-activity — append + publish", () => {
     expect(mocks.appendThreadTurnEvent.mock.calls[0][1].stream).toBe("step");
   });
 
-  it("preserves data-genui UIMessage chunk events for live Thread rendering", async () => {
-    const part = createTaskReviewGenUIFixture();
+  it("preserves data-json-render UIMessage chunk events for live Thread rendering", async () => {
+    const part = createTaskReviewJsonRenderFixture();
 
     const res = await handler(
       mockEvent({
@@ -279,7 +279,7 @@ describe("chat-agent-activity — append + publish", () => {
               stream: "ui",
               message: "Review onboarding task",
               payload: {
-                kind: "thread_genui.ui_message_chunk",
+                kind: "thread_json_render.ui_message_chunk",
                 chunk: part,
               },
             },
@@ -293,14 +293,14 @@ describe("chat-agent-activity — append + publish", () => {
       eventType: "ui_message_chunk",
       stream: "ui",
       payload: {
-        kind: "thread_genui.ui_message_chunk",
+        kind: "thread_json_render.ui_message_chunk",
         chunk: part,
       },
     });
     expect(mocks.notifyThreadTurnStep.mock.calls[0][0]).toMatchObject({
       eventType: "ui_message_chunk",
       payload: {
-        kind: "thread_genui.ui_message_chunk",
+        kind: "thread_json_render.ui_message_chunk",
         chunk: part,
       },
       seq: 0,

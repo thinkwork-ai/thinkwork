@@ -79,6 +79,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
   OKF_WIKI_NAVIGATOR_LIMITS,
+  buildEmitJsonRenderUiTool,
   collectToolCosts,
   createActivityEmitter,
   type ActivityEmitEvent,
@@ -1317,6 +1318,10 @@ export async function buildInvocationResources(
           ) as Promise<AgentToolResult<unknown>>,
       }),
     );
+  }
+
+  if (args.payload.thread_json_render_ui_enabled === true) {
+    tools.push(buildEmitJsonRenderUiTool());
   }
 
   addExtension(createAnalyticsDisplayExtension());
