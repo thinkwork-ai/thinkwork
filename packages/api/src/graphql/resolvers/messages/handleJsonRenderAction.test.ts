@@ -11,6 +11,7 @@ import { createResultListJsonRenderFixture } from "@thinkwork/thread-json-render
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
 const USER_ID = "55555555-5555-5555-5555-555555555555";
+const SPACE_ID = "44444444-4444-4444-4444-444444444444";
 const SOURCE_MESSAGE_ID = "66666666-6666-6666-6666-666666666666";
 const WORK_ITEM_ID = "77777777-7777-7777-7777-777777777777";
 const STATUS_DONE_ID = "88888888-8888-8888-8888-888888888888";
@@ -41,6 +42,7 @@ const mocks = vi.hoisted(() => ({
       __table__: "threads",
       id: { name: "threads.id" },
       tenant_id: { name: "threads.tenant_id" },
+      space_id: { name: "threads.space_id" },
     },
   },
   selectQueue: [] as Array<Array<Record<string, unknown>>>,
@@ -48,6 +50,7 @@ const mocks = vi.hoisted(() => ({
   visiblePredicate: vi.fn(() => ({ visible: true })),
   sendMessage: vi.fn(),
   setWorkItemStatus: vi.fn(),
+  createWorkItemRow: vi.fn(),
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -99,6 +102,10 @@ vi.mock("../../../lib/work-items/work-item-status-tool.js", () => ({
   setWorkItemStatus: mocks.setWorkItemStatus,
 }));
 
+vi.mock("../../../lib/work-items/work-item-service.js", () => ({
+  createWorkItem: mocks.createWorkItemRow,
+}));
+
 import { handleJsonRenderAction } from "./handleJsonRenderAction.mutation.js";
 import { TaskStatusToolError } from "../../../lib/task-status-tool.js";
 
@@ -127,6 +134,11 @@ beforeEach(() => {
     statusCategory: "done",
     statusId: STATUS_DONE_ID,
     linkedTaskId: null,
+  });
+  mocks.createWorkItemRow.mockResolvedValue({
+    id: "99999999-9999-9999-9999-999999999999",
+    title: "Draft QA checklist",
+    owner_user_id: USER_ID,
   });
 });
 
@@ -259,6 +271,65 @@ describe("handleJsonRenderAction", () => {
     });
   });
 
+  it("creates a new Work Item from a source-bound result.list action and assigns it to the caller", async () => {
+    const fixture = createWorkItemSourcePart();
+    enqueueHappySource(fixture);
+    mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([]); // prior create event lookup
+    mocks.selectQueue.push([{ count: 0 }]); // rate limit
+
+    const result = await handleJsonRenderAction(
+      {},
+      { input: actionInput(fixture) },
+      ctx,
+    );
+
+    expect(result.id).toBe("message-action-1");
+    expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
+    expect(mocks.createWorkItemRow).toHaveBeenCalledTimes(1);
+    expect(mocks.createWorkItemRow).toHaveBeenCalledWith(ctx, {
+      tenantId: TENANT_ID,
+      spaceId: SPACE_ID,
+      threadId: THREAD_ID,
+      title: "Draft QA checklist",
+      notes: "Create the checklist from the generated UI confirmation.",
+      priority: "high",
+      dueAt: null,
+      ownerUserId: USER_ID,
+      metadata: {
+        jsonRenderAction: {
+          source: "json_render_action",
+          sourceMessageId: SOURCE_MESSAGE_ID,
+          partId: fixture.id,
+          actionId: "create-qa-checklist",
+          actionKind: "submit",
+          actionLabel: "Create Work Item",
+          target: "work_item_create",
+          title: "Draft QA checklist",
+          threadSpaceId: SPACE_ID,
+          specHash: fixture.data.specHash,
+          idempotencyKey: actionInput(fixture).idempotencyKey,
+        },
+      },
+    });
+    const forwarded = mocks.sendMessage.mock.calls[0][1].input;
+    expect(forwarded.content).toContain(
+      "Generated UI action: Create Work Item",
+    );
+    expect(JSON.parse(forwarded.metadata).jsonRenderAction).toMatchObject({
+      actionId: "create-qa-checklist",
+      actionKind: "submit",
+      target: "work_item_create",
+      mutation: {
+        target: "work_item_create",
+        workItemId: "99999999-9999-9999-9999-999999999999",
+        title: "Draft QA checklist",
+        ownerUserId: USER_ID,
+        alreadyApplied: false,
+      },
+    });
+  });
+
   it("returns an existing idempotent action message without dispatching twice", async () => {
     const fixture = sourcePart();
     enqueueHappySource(fixture);
@@ -291,6 +362,7 @@ describe("handleJsonRenderAction", () => {
     mocks.selectQueue.push([]); // duplicate lookup
     mocks.selectQueue.push([
       {
+        workItemId: WORK_ITEM_ID,
         newStatusId: STATUS_DONE_ID,
         metadata: {
           manualMetadata: {
@@ -492,7 +564,7 @@ function sourcePart(
 }
 
 function enqueueHappySource(fixture: ThreadJsonRenderPart) {
-  mocks.selectQueue.push([{ id: THREAD_ID }]);
+  mocks.selectQueue.push([{ id: THREAD_ID, spaceId: SPACE_ID }]);
   mocks.selectQueue.push([
     {
       id: SOURCE_MESSAGE_ID,
@@ -502,6 +574,63 @@ function enqueueHappySource(fixture: ThreadJsonRenderPart) {
       parts: [fixture],
     },
   ]);
+}
+
+function createWorkItemSourcePart() {
+  const spec = {
+    root: "results",
+    elements: {
+      results: {
+        type: "result.list",
+        props: {
+          title: "Work Item proposal",
+          summary: "Create the proposed task if it looks right.",
+          groups: [{ id: "reviews", title: "Approval and review queues" }],
+          items: [
+            {
+              id: "review-create-1",
+              variant: "review",
+              groupId: "reviews",
+              title: "Would you like to create this Work Item?",
+              summary: "Draft QA checklist assigned to you.",
+              statusLabel: "Needs confirmation",
+              primaryActionId: "create-qa-checklist",
+            },
+          ],
+        },
+        children: [],
+      },
+    },
+  };
+  return {
+    type: THREAD_JSON_RENDER_PART_TYPE,
+    id: "json-render:result-list:create-work-item",
+    data: {
+      schemaVersion: THREAD_JSON_RENDER_SCHEMA_VERSION,
+      catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
+      status: "ready",
+      spec,
+      mobileFallback: {
+        title: "Work Item proposal",
+        summary: "Create the proposed task if it looks right.",
+      },
+      durableActions: [
+        {
+          id: "create-qa-checklist",
+          label: "Create Work Item",
+          kind: "submit",
+          params: {
+            target: "work_item_create",
+            title: "Draft QA checklist",
+            notes: "Create the checklist from the generated UI confirmation.",
+            priority: "high",
+            ownerUserId: "current_user",
+          },
+        },
+      ],
+      specHash: createThreadJsonRenderSpecHash(spec),
+    },
+  } satisfies ThreadJsonRenderPart;
 }
 
 function actionInput(fixture: ThreadJsonRenderPart) {
