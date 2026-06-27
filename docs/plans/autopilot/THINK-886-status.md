@@ -77,9 +77,11 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U3 Status
 
-- Status: verified locally
+- Status: merged
 - Branch: `codex/think-86-u3-open-engine-receipts`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u3-open-engine-receipts`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3028
+- Merge commit: `bdbfb9e0fd2daad66627a4e940b1a44436214fae`
 - Goal: add durable Open Engine receipt semantics on Work Item events.
 
 ## U3 Validation Targets
@@ -94,3 +96,34 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 - `pnpm --filter @thinkwork/api test -- src/lib/work-items/open-engine-receipt-service.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
+
+## U4 Status
+
+- Status: PR open / Verification
+- Branch: `codex/think-86-u4-open-engine-api`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u4-open-engine-api`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3030
+- Goal: expose a minimal GraphQL contract for Open Engine queue list, claim, and receipt operations.
+
+## U4 Validation Targets
+
+- Agents can query eligible Open Engine Work Items by queue key.
+- Agents can claim at most one eligible Work Item through the atomic claim service.
+- Agents can record Open Engine receipts with evidence metadata.
+- GraphQL contract remains narrow and does not add a human UI surface.
+
+## U4 Verification
+
+- `pnpm schema:build`
+- `pnpm --filter thinkwork-cli codegen`
+- `pnpm --filter @thinkwork/web codegen`
+- `pnpm --filter @thinkwork/mobile codegen`
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/work-items/openEngine.resolver.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm --filter @thinkwork/web typecheck`
+
+## U4 Review Notes
+
+- Local structured review found that the initial GraphQL queue resolvers were tenant-scoped but not admin/service-gated like other internal automation surfaces.
+- Fix applied before PR: `openEngineEligibleWorkItems`, `claimNextOpenEngineWorkItem`, and `recordOpenEngineWorkItemReceipt` now require `requireAdminOrServiceCaller` with operation-specific allowlist names, and resolver tests cover the rejection path before claim.
