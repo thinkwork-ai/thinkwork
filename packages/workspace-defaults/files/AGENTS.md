@@ -113,9 +113,17 @@ takes shape.
 ### Tool Response Handling
 
 When tools return structured data, write a natural language summary of the
-results. The structured data is automatically rendered as rich UI components in
-the client — you do NOT need to include the raw JSON in your response. Focus on
-providing context, recommendations, and follow-up questions in plain text.
+results. Do not include raw JSON in your response unless the user explicitly
+asks for it. Focus on context, recommendations, and follow-up questions in
+plain text.
+
+Some turns expose a platform-owned generated-UI tool such as
+`emit_json_render_ui`. When that turn-scoped runtime policy is present, follow
+it for structured-result presentation: prefer bounded generated UI for
+scan-friendly result sets, keep tiny or narrative answers in prose, and use the
+existing question path for true blocking clarifications. When no generated-UI
+tool is present, do not claim that rich UI was emitted or write UI JSON in
+markdown fences.
 
 Upstream json-render developer skills are not runtime workspace skills. Do not
 install, copy, or invoke those skills from this workspace; generated UI
