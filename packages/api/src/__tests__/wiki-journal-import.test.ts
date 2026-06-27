@@ -206,6 +206,21 @@ describe("buildRetainPayload", () => {
       owner,
     );
     expect(out).not.toBeNull();
+    expect(out!.hindsight).toEqual(
+      expect.objectContaining({
+        timestamp: "2026-04-17T10:00:00.000Z",
+        tags: [
+          "source:journal-import",
+          "surface:import",
+          "scope:imported-history",
+        ],
+        documentTags: ["source:journal-import", "scope:imported-history"],
+        observationScopes: [
+          ["source:journal-import"],
+          ["scope:imported-history"],
+        ],
+      }),
+    );
     expect((out!.metadata as any).idea_created).toMatch(/^2026-04-17T10:00:00/);
     expect(out!.content).toContain("(2026-04-17–2026-04-18)");
   });

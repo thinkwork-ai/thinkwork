@@ -17,6 +17,7 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { buildMobileCaptureRetainOptions } from "../../../lib/memory/hindsight-retain-params.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 const MAX_CONTENT_LENGTH = 2000;
@@ -90,6 +91,7 @@ export const captureMobileMemory = async (
     sourceType: "explicit_remember",
     content: trimmed,
     role: "user",
+    hindsight: buildMobileCaptureRetainOptions(capturedAt),
     metadata,
   });
 

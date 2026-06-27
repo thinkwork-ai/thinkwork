@@ -1,5 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { buildSpaceMemoryRetainOptions } from "../../../lib/memory/hindsight-retain-params.js";
 import { requireSpaceMemoryScope } from "./space-memory-scope.js";
 
 const MAX_CONTENT_LENGTH = 4000;
@@ -55,6 +56,7 @@ export const captureSpaceMemory = async (
     sourceType: "explicit_remember",
     content: trimmed,
     role: "user",
+    hindsight: buildSpaceMemoryRetainOptions({ spaceId, capturedAt }),
     metadata,
   });
 

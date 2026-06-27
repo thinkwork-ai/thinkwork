@@ -217,6 +217,12 @@ describe("memory-retain handler", () => {
     expect(call.messages).toHaveLength(32);
     expect(call.tenantId).toBe(TENANT_A);
     expect(call.ownerId).toBe(USER_ID);
+    expect(call.hindsight).toEqual({
+      timestamp: "2026-04-28T00:00:31.000Z",
+      tags: ["source:thread", "surface:pi", "scope:personal", "scope:thread"],
+      documentTags: ["source:thread", "scope:thread"],
+      observationScopes: [["source:thread"], ["scope:thread"]],
+    });
   });
 
   it("merge race: DB has 30 msgs, event has new pair → merged is 32", async () => {
@@ -351,7 +357,18 @@ describe("memory-retain handler", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(retainDailyMemoryMock).toHaveBeenCalledTimes(1);
+    expect(retainDailyMemoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        date: "2026-04-27",
+        content: "- learning bullet",
+        hindsight: {
+          timestamp: "2026-04-27T00:00:00.000Z",
+          tags: ["source:daily", "surface:pi", "scope:personal"],
+          documentTags: ["source:daily", "scope:personal"],
+          observationScopes: [["source:daily"], ["scope:personal"]],
+        },
+      }),
+    );
     expect(selectMock).not.toHaveBeenCalled();
     expect(retainConversationMock).not.toHaveBeenCalled();
   });

@@ -398,7 +398,7 @@ export class HindsightAdapter implements MemoryAdapter {
     if (lines.length === 0) return;
 
     const content = lines.join("\n");
-    const item = {
+    const item: Record<string, unknown> = {
       content,
       document_id: req.threadId,
       update_mode: "replace",
@@ -412,7 +412,10 @@ export class HindsightAdapter implements MemoryAdapter {
         source: "thinkwork",
       }),
     };
-    await this.postItems(bankId, [item], "retainConversation");
+    applyHindsightRetainOptions(item, req.hindsight);
+    await this.postItems(bankId, [item], "retainConversation", {
+      documentTags: req.hindsight?.documentTags,
+    });
     console.log(
       `[hindsight-adapter] retainConversation ok bank=${bankId.slice(0, 18)} thread=${req.threadId.slice(0, 12)} turns=${lines.length} bytes=${content.length}`,
     );
@@ -423,7 +426,7 @@ export class HindsightAdapter implements MemoryAdapter {
     if (!content) return;
 
     const bankId = await this.resolveBankId(req);
-    const item = {
+    const item: Record<string, unknown> = {
       content,
       document_id: `workspace_daily:${req.ownerId}:${req.date}`,
       update_mode: "replace",
@@ -436,7 +439,10 @@ export class HindsightAdapter implements MemoryAdapter {
         source: "thinkwork",
       }),
     };
-    await this.postItems(bankId, [item], "retainDailyMemory");
+    applyHindsightRetainOptions(item, req.hindsight);
+    await this.postItems(bankId, [item], "retainDailyMemory", {
+      documentTags: req.hindsight?.documentTags,
+    });
     console.log(
       `[hindsight-adapter] retainDailyMemory ok bank=${bankId.slice(0, 18)} date=${req.date} bytes=${content.length}`,
     );
@@ -449,7 +455,7 @@ export class HindsightAdapter implements MemoryAdapter {
     if (!content) return;
 
     const bankId = await this.resolveBankId(req);
-    const item = {
+    const item: Record<string, unknown> = {
       content,
       document_id: req.documentId,
       update_mode: "replace",
@@ -462,8 +468,10 @@ export class HindsightAdapter implements MemoryAdapter {
         source: "requester_memory_markdown",
       }),
     };
+    applyHindsightRetainOptions(item, req.hindsight);
     await this.postItems(bankId, [item], "upsertMarkdownMemoryDocument", {
       async: req.async !== false,
+      documentTags: req.hindsight?.documentTags,
     });
     console.log(
       `[hindsight-adapter] upsertMarkdownMemoryDocument ok bank=${bankId.slice(0, 18)} document=${req.documentId.slice(0, 64)} bytes=${content.length}`,
@@ -969,9 +977,10 @@ export class HindsightAdapter implements MemoryAdapter {
     bankId: string,
     items: Array<Record<string, unknown>>,
     action: string,
-    opts: { async?: boolean } = {},
+    opts: { async?: boolean; documentTags?: string[] } = {},
   ): Promise<void> {
     await this.ensureBankConfiguredById(bankId);
+    const documentTags = toHindsightTags(opts.documentTags);
     try {
       const resp = await fetch(
         `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories`,
@@ -980,6 +989,7 @@ export class HindsightAdapter implements MemoryAdapter {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             items,
+            ...(documentTags.length > 0 ? { document_tags: documentTags } : {}),
             ...(opts.async ? { async: true } : {}),
           }),
           signal: AbortSignal.timeout(this.timeoutMs),

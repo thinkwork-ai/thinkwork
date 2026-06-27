@@ -104,6 +104,17 @@ describe("requester memory Hindsight sync", () => {
       content: "# Durable memory",
       documentId: "requester_memory:user-1:memory/MEMORY.md",
       context: "thinkwork_requester_memory",
+      hindsight: {
+        timestamp: "unset",
+        tags: [
+          "source:requester-memory",
+          "surface:requester",
+          "scope:personal",
+          "scope:requester",
+        ],
+        documentTags: ["source:requester-memory", "scope:requester"],
+        observationScopes: [["source:requester-memory"], ["scope:requester"]],
+      },
       metadata: {
         runId: "run-1",
         threadId: "thread-1",
@@ -116,6 +127,33 @@ describe("requester memory Hindsight sync", () => {
         evidenceMessageIds: ["msg-1"],
       },
     });
+  });
+
+  it("uses the working-note date as the first-class requester timestamp", async () => {
+    const upsertMarkdownMemoryDocument = vi.fn().mockResolvedValue(undefined);
+    s3Mock.on(GetObjectCommand).resolves(s3Body("# Working note"));
+
+    await syncRequesterMemoryToHindsight({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      runId: "run-1",
+      threadId: "thread-1",
+      changedFiles: [
+        {
+          ...changedMemoryFile,
+          path: "memory/working/2026-05-18.md",
+        },
+      ],
+      adapter: { upsertMarkdownMemoryDocument },
+    });
+
+    expect(upsertMarkdownMemoryDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hindsight: expect.objectContaining({
+          timestamp: "2026-05-18T00:00:00.000Z",
+        }),
+      }),
+    );
   });
 
   it("returns a failed sync result without throwing when Hindsight upsert fails", async () => {

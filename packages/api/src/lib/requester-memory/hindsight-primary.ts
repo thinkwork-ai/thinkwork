@@ -2,6 +2,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { CogneeAdapter } from "../memory/adapters/cognee-adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
+import { buildRequesterThreadDigestRetainOptions } from "../memory/hindsight-retain-params.js";
 import { resolveCogneeEndpoint } from "../memory/config.js";
 import {
   maybeEnqueuePostTurnCompile,
@@ -65,6 +66,7 @@ export async function retainRequesterThreadMemoryDigest(
       documentId,
       context: REQUESTER_THREAD_DIGEST_CONTEXT,
       async: false,
+      hindsight: buildRequesterThreadDigestRetainOptions(),
       metadata: {
         ...(input.metadata ?? {}),
         runId: input.runId,

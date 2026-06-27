@@ -141,19 +141,36 @@ describe("mcp-user-memory handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(retainMock).toHaveBeenCalledWith({
-      tenantId: "tenant-a",
-      ownerType: "user",
-      ownerId: "user-a",
-      sourceType: "explicit_remember",
-      content: "Remember the onboarding call summary.",
-      metadata: {
-        source: "mcp-user-memory",
-        hindsight_async: true,
-        kind: "learning",
-        tags: ["codex-e2e"],
-      },
-    });
+    expect(retainMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        ownerType: "user",
+        ownerId: "user-a",
+        sourceType: "explicit_remember",
+        content: "Remember the onboarding call summary.",
+        hindsight: expect.objectContaining({
+          tags: [
+            "source:mcp-user-memory",
+            "surface:mcp",
+            "scope:personal",
+            "scope:explicit-memory",
+            "codex-e2e",
+          ],
+          documentTags: ["source:mcp-user-memory", "scope:explicit-memory"],
+          observationScopes: [
+            ["source:mcp-user-memory"],
+            ["scope:explicit-memory"],
+          ],
+        }),
+        metadata: expect.objectContaining({
+          source: "mcp-user-memory",
+          hindsight_async: true,
+          captured_at: expect.any(String),
+          kind: "learning",
+          tags: ["codex-e2e"],
+        }),
+      }),
+    );
     const body = JSON.parse(response.body || "{}");
     expect(body.result.structuredContent).toMatchObject({
       ok: true,

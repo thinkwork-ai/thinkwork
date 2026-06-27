@@ -56,6 +56,21 @@ describe("requester thread digest Hindsight retain", () => {
       documentId: "requester_thread_digest:user-1:thread-1",
       context: REQUESTER_THREAD_DIGEST_CONTEXT,
       async: false,
+      hindsight: {
+        timestamp: "unset",
+        tags: [
+          "source:requester-thread-digest",
+          "surface:requester",
+          "scope:personal",
+          "scope:requester",
+          "scope:thread",
+        ],
+        documentTags: ["source:requester-thread-digest", "scope:requester"],
+        observationScopes: [
+          ["source:requester-thread-digest"],
+          ["scope:requester"],
+        ],
+      },
       metadata: {
         candidateSummary: { promoted: 1, staged: 0 },
         runId: "run-1",

@@ -24,6 +24,7 @@
 import { sql } from "drizzle-orm";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { getMemoryServices } from "../memory/index.js";
+import { buildJournalImportRetainOptions } from "../memory/hindsight-retain-params.js";
 import { db } from "../db.js";
 import { enqueueCompileJob } from "./repository.js";
 
@@ -231,6 +232,9 @@ export function buildRetainPayload(
     ownerId: owner.userId,
     sourceType: "import" as const,
     content: text,
+    hindsight: buildJournalImportRetainOptions({
+      timestamp: row.date_created ?? row.created,
+    }),
     metadata,
   };
 }
