@@ -30,6 +30,15 @@ describe("loadMemoryConfig", () => {
     );
   });
 
+  it("accepts the compact Cognee runtime-config status value", () => {
+    const config = loadMemoryConfig({
+      MEMORY_ENGINE: "cognee",
+      COGNEE: "dogfood| https://cognee.example/mcp ",
+    });
+
+    expect(config.backends.cogneeEndpoint).toBe("https://cognee.example/mcp");
+  });
+
   it("requires a Cognee endpoint when Cognee memory is enabled", () => {
     expect(() =>
       loadMemoryConfig({

@@ -2,6 +2,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { CogneeAdapter } from "../memory/adapters/cognee-adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
+import { resolveCogneeEndpoint } from "../memory/config.js";
 import {
   readRequesterMemoryFile,
   type ChangedRequesterMemoryFile,
@@ -143,7 +144,7 @@ function createDefaultMemoryDocumentAdapter(): Pick<
     return defaultAdapter;
   }
   if (engine === "cognee") {
-    const endpoint = getConfig("COGNEE_ENDPOINT") || "";
+    const endpoint = resolveCogneeEndpoint() || "";
     defaultAdapter = endpoint ? new CogneeAdapter({ endpoint }) : null;
     return defaultAdapter;
   }
