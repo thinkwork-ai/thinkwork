@@ -33,11 +33,13 @@ describe("SettingsMemory", () => {
     expect(source).toContain("canForget={false}");
   });
 
-  it("surfaces Cognee user and space memory without claiming company/wiki completion", () => {
-    expect(source).toContain("Cognee memory");
+  it("surfaces core Hindsight memory without claiming company/wiki completion", () => {
+    expect(source).toContain("ThinkWork Brain diagnostic");
+    expect(source).toContain("Hindsight memory");
     expect(source).toContain("User memory");
     expect(source).toContain("Space memory");
-    expect(source).toContain("Hindsight legacy available");
+    expect(source).toContain("Legacy Hindsight banks available");
+    expect(source).toContain("Hindsight is the active core memory engine");
     expect(source).toContain("Company distillation");
     expect(source).toContain("Wiki projection");
     expect(source).toContain("deferred");

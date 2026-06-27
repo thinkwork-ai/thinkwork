@@ -660,7 +660,7 @@ export function PluginDetail() {
             </SettingsRow>
             <SettingsRow
               label="Memory graph"
-              description="Open the Cognee-backed graph workspace for user and space memory evidence."
+              description="Open the ThinkWork Brain graph workspace for ontology and graph infrastructure evidence."
             >
               <Button asChild type="button" variant="outline" size="sm">
                 <Link to="/settings/memory/knowledge-graph">

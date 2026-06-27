@@ -387,7 +387,7 @@ describe("pluginCatalogMetadata", () => {
 });
 
 describe("pluginCatalog", () => {
-  it("canonicalizes a legacy Data Integrations install onto the Company ETL catalog entry", async () => {
+  it("canonicalizes a legacy Data Integrations install onto the ThinkWork ETL catalog entry", async () => {
     store.seedInstall({
       tenant_id: "tenant-1",
       plugin_key: "data-integrations",
@@ -402,11 +402,13 @@ describe("pluginCatalog", () => {
       install: { pluginKey: string; pinnedPayloadSha256: string } | null;
     }>;
 
-    const companyEtl = result.find((entry) => entry.pluginKey === "company-etl");
+    const companyEtl = result.find(
+      (entry) => entry.pluginKey === "company-etl",
+    );
     expect(companyEtl).toBeDefined();
     expect(companyEtl).toMatchObject({
       pluginKey: "company-etl",
-      displayName: "Company ETL",
+      displayName: "ThinkWork ETL",
       install: {
         pluginKey: "company-etl",
         pinnedPayloadSha256: COMPANY_ETL_PAYLOAD_SHA256,
@@ -417,7 +419,7 @@ describe("pluginCatalog", () => {
     ).toBe(false);
   });
 
-  it("canonicalizes legacy Data Integrations activations to Company ETL", async () => {
+  it("canonicalizes legacy Data Integrations activations to ThinkWork ETL", async () => {
     const install = store.seedInstall({
       tenant_id: "tenant-1",
       plugin_key: "data-integrations",

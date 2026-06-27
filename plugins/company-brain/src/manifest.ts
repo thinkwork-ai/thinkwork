@@ -1,7 +1,7 @@
 /**
- * Company Brain plugin manifest.
+ * ThinkWork Brain plugin manifest.
  *
- * Company Brain is the customer-facing premium product. The infrastructure
+ * ThinkWork Brain is the customer-facing premium product. The infrastructure
  * component is backed by the existing internal Cognee managed-app adapter, but
  * manifest display copy keeps Cognee out of the customer-facing catalog.
  *
@@ -15,14 +15,14 @@
 
 export const companyBrainManifest = {
   pluginKey: "company-brain",
-  displayName: "Company Brain",
+  displayName: "ThinkWork Brain",
   description:
     "Premium ontology and knowledge-graph substrate for organizing shared Brain context.",
   premium: {
     entitlementProductKey: "company-brain",
     installKeyRequired: true,
     installKeyPrompt:
-      "Enter the Company Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
+      "Enter the ThinkWork Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
   },
   versions: [
     {
@@ -36,12 +36,12 @@ export const companyBrainManifest = {
           // Mirrors the deployment-runner Cognee adapter's requiredInputs
           // for ENABLE/UPGRADE. The adapter remains internal implementation
           // machinery; Hindsight remains the user and Space memory provider.
-          // The catalog presents the component as Company Brain's knowledge
+          // The catalog presents the component as ThinkWork Brain's knowledge
           // graph substrate.
           terraformInputs: {
             imageUri: {
               description:
-                "Company Brain substrate container image URI pinned with @sha256.",
+                "ThinkWork Brain substrate container image URI pinned with @sha256.",
               type: "string",
             },
             dbPasswordSecretArn: {
@@ -51,7 +51,7 @@ export const companyBrainManifest = {
             },
             bedrockModelResourceArns: {
               description:
-                "Explicit Bedrock model or inference-profile ARNs for Company Brain providers.",
+                "Explicit Bedrock model or inference-profile ARNs for ThinkWork Brain providers.",
               type: "list(string)",
             },
           },
@@ -69,12 +69,12 @@ export const companyBrainManifest = {
           // Mirrors the deployment-runner Cognee adapter's requiredInputs
           // for ENABLE/UPGRADE. The adapter remains internal implementation
           // machinery; Hindsight remains the user and Space memory provider.
-          // The catalog presents the component as Company Brain's knowledge
+          // The catalog presents the component as ThinkWork Brain's knowledge
           // graph substrate.
           terraformInputs: {
             imageUri: {
               description:
-                "Company Brain substrate container image URI pinned with @sha256.",
+                "ThinkWork Brain substrate container image URI pinned with @sha256.",
               type: "string",
             },
             dbPasswordSecretArn: {
@@ -84,7 +84,7 @@ export const companyBrainManifest = {
             },
             bedrockModelResourceArns: {
               description:
-                "Explicit Bedrock model or inference-profile ARNs for Company Brain providers.",
+                "Explicit Bedrock model or inference-profile ARNs for ThinkWork Brain providers.",
               type: "list(string)",
             },
           },
@@ -92,9 +92,9 @@ export const companyBrainManifest = {
         {
           type: "mcp-server",
           key: "brain",
-          displayName: "Company Brain",
+          displayName: "ThinkWork Brain",
           description:
-            "Direct MCP access to the tenant's Company Brain substrate for ontology, graph search, and substrate-native operations.",
+            "Direct MCP access to the tenant's ThinkWork Brain substrate for ontology, graph search, and substrate-native operations.",
           endpointFrom: {
             managedApp: "cognee",
             configKey: "cogneeEndpoint",
@@ -102,8 +102,8 @@ export const companyBrainManifest = {
           },
           auth: { mode: "none" },
           toolNotes: [
-            "Company Brain MCP is tenant-internal and plugin-owned; agents should discover the live tool list before calling substrate-native ontology or graph operations.",
-            "Use Hindsight-backed ThinkWork memory APIs for user and Space memory. Company Brain direct MCP/API access is for Brain substrate operations; GraphQL is control-plane only.",
+            "ThinkWork Brain MCP is tenant-internal and plugin-owned; agents should discover the live tool list before calling substrate-native ontology or graph operations.",
+            "Use Hindsight-backed ThinkWork memory APIs for user and Space memory. ThinkWork Brain direct MCP/API access is for Brain substrate operations; GraphQL is control-plane only.",
           ],
         },
       ],

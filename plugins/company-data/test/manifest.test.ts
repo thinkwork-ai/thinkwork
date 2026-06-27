@@ -14,12 +14,12 @@ import {
   companyDataManifest,
 } from "../src/manifest";
 
-describe("Company Data plugin manifest", () => {
+describe("ThinkWork Data Warehouse plugin manifest", () => {
   it("validates as an inert shell plugin", () => {
     const validated = validatePluginManifest(companyDataManifest);
 
     expect(validated.pluginKey).toBe("company-data");
-    expect(validated.displayName).toBe("Company Data");
+    expect(validated.displayName).toBe("ThinkWork Data Warehouse");
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].capabilities).toEqual([]);
@@ -27,7 +27,7 @@ describe("Company Data plugin manifest", () => {
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "Company Data settings",
+        displayName: "ThinkWork Data Warehouse settings",
         intendedMount: COMPANY_DATA_SETTINGS_SURFACE,
       },
     ]);
@@ -59,10 +59,13 @@ describe("Company Data plugin manifest", () => {
       ),
     ].join("\n");
 
-    expect(customerFacingText).toContain("Company Data");
+    expect(customerFacingText).toContain("ThinkWork Data Warehouse");
     expect(customerFacingText).toContain("governed operational facts");
     expect(customerFacingText).toContain("agent and UI reads");
-    expect(customerFacingText).toContain("later Company Data releases");
+    expect(customerFacingText).toContain(
+      "later ThinkWork Data Warehouse releases",
+    );
+    expect(customerFacingText).not.toContain("Company Data");
     expect(customerFacingText).not.toMatch(
       /\b(stores?|loads?)\s+every\s+operational\s+row\s+in\s+Company\s+Brain/i,
     );

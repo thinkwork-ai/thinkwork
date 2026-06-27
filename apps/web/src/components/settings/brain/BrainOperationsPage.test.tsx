@@ -115,7 +115,7 @@ describe("BrainOperationsPage", () => {
     expect(screen.getByText("Projection follow-up")).toBeTruthy();
     expect(screen.getByText("Company/wiki projections")).toBeTruthy();
     expect(
-      screen.getByText(/company distillation and wiki projection/i),
+      screen.getByText(/Hindsight remains the user and Space memory provider/i),
     ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /open tools/i }).getAttribute("href"),

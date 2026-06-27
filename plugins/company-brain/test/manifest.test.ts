@@ -11,16 +11,16 @@ import { companyBrainManifest } from "../src/manifest";
 const latestVersion =
   companyBrainManifest.versions[companyBrainManifest.versions.length - 1]!;
 
-describe("Company Brain plugin manifest", () => {
+describe("ThinkWork Brain plugin manifest", () => {
   it("validates as a premium infrastructure plus MCP plugin", () => {
     const validated = validatePluginManifest(companyBrainManifest);
     expect(validated.pluginKey).toBe("company-brain");
-    expect(validated.displayName).toBe("Company Brain");
+    expect(validated.displayName).toBe("ThinkWork Brain");
     expect(validated.premium).toEqual({
       entitlementProductKey: "company-brain",
       installKeyRequired: true,
       installKeyPrompt:
-        "Enter the Company Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
+        "Enter the ThinkWork Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
     });
     expect(validated.versions.map((version) => version.version)).toEqual([
       "0.1.0",
@@ -50,12 +50,12 @@ describe("Company Brain plugin manifest", () => {
     );
   });
 
-  it("declares Company Brain MCP as a plugin-owned direct agent surface", () => {
+  it("declares ThinkWork Brain MCP as a plugin-owned direct agent surface", () => {
     const component = latestVersion.components[1] as McpServerComponent;
     expect(component).toMatchObject({
       type: "mcp-server",
       key: "brain",
-      displayName: "Company Brain",
+      displayName: "ThinkWork Brain",
       endpointFrom: {
         managedApp: "cognee",
         configKey: "cogneeEndpoint",
@@ -77,7 +77,7 @@ describe("Company Brain plugin manifest", () => {
     expect(latestVersion.requiredOauthScopes).toEqual([]);
   });
 
-  it("keeps customer-facing copy on Company Brain rather than Cognee", () => {
+  it("keeps customer-facing copy on ThinkWork Brain rather than Cognee", () => {
     const customerFacingText = [
       companyBrainManifest.displayName,
       companyBrainManifest.description,
@@ -88,7 +88,8 @@ describe("Company Brain plugin manifest", () => {
       ).map((spec) => spec.description),
     ].join("\n");
 
-    expect(customerFacingText).toContain("Company Brain");
+    expect(customerFacingText).toContain("ThinkWork Brain");
+    expect(customerFacingText).not.toContain("Company Brain");
     expect(customerFacingText).not.toMatch(/\bCognee\b/);
   });
 });

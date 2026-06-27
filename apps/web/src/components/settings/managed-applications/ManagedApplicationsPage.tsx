@@ -71,7 +71,7 @@ export function ManagedApplicationsPage() {
     <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Applications"
-        description="Legacy managed-application operations. Company Brain and Twenty CRM move to Plugins once installed."
+        description="Legacy managed-application operations. ThinkWork Brain and Twenty CRM move to Plugins once installed."
         actions={
           <Button
             type="button"

@@ -47,13 +47,13 @@ describe("first-party plugin packages", () => {
 
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
-      "company-brain",
-      "company-data",
-      "company-etl",
       "lastmile",
       "n8n",
       "email-channel",
       "sendgrid",
+      "company-brain",
+      "company-data",
+      "company-etl",
       "twenty",
       "workos-auth",
     ]);

@@ -81,7 +81,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
   // "Applications" (managed-applications) is retired from the nav — Plugins
   // supersedes it. Twenty already moved to a plugin; Cognee is managed-app
-  // only until the Company Brain plugin absorbs it. The route still resolves
+  // only until the ThinkWork Brain plugin absorbs it. The route still resolves
   // by URL until that lands; the deployment plan dialog stays for plugin infra.
   // Plugins is deliberately NOT operatorOnly (plan 2026-06-12-001 U8): all
   // members can browse and connect; install/update/uninstall gate at render

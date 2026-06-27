@@ -14,12 +14,12 @@ import {
   companyEtlManifest,
 } from "../src/manifest";
 
-describe("Company ETL plugin manifest", () => {
+describe("ThinkWork ETL plugin manifest", () => {
   it("validates as an inert shell plugin", () => {
     const validated = validatePluginManifest(companyEtlManifest);
 
     expect(validated.pluginKey).toBe("company-etl");
-    expect(validated.displayName).toBe("Company ETL");
+    expect(validated.displayName).toBe("ThinkWork ETL");
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].capabilities).toEqual([]);
@@ -27,7 +27,7 @@ describe("Company ETL plugin manifest", () => {
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "Company ETL settings",
+        displayName: "ThinkWork ETL settings",
         intendedMount: COMPANY_ETL_SETTINGS_SURFACE,
       },
     ]);
@@ -59,12 +59,14 @@ describe("Company ETL plugin manifest", () => {
       ),
     ].join("\n");
 
-    expect(customerFacingText).toContain("Company ETL");
+    expect(customerFacingText).toContain("ThinkWork ETL");
     expect(customerFacingText).toContain("tenant-managed ETL shell");
     expect(customerFacingText).toContain("SaaS apps");
     expect(customerFacingText).toContain("agent-accessible systems");
-    expect(customerFacingText).toContain("Company Data projection");
+    expect(customerFacingText).toContain("ThinkWork Data Warehouse projection");
     expect(customerFacingText).toContain("separate plugins");
+    expect(customerFacingText).not.toContain("Company ETL");
+    expect(customerFacingText).not.toContain("Company Data");
     expect(customerFacingText).not.toMatch(
       /\b(deploys?|provides?|operates?)\s+(analytics|BI|dashboards?|lakehouse query)/i,
     );
@@ -84,7 +86,8 @@ describe("Company ETL plugin manifest", () => {
     expect(defined.ownedSources).toContainEqual({
       kind: "tests",
       path: "plugins/company-etl/test",
-      description: "Company ETL package-local manifest and shell-boundary tests.",
+      description:
+        "Company ETL package-local manifest and shell-boundary tests.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });

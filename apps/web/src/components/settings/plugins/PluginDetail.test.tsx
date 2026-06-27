@@ -936,7 +936,7 @@ describe("PluginDetail", () => {
     expect(screen.getByText("Save rotated key")).toBeTruthy();
   });
 
-  it("opens an install-key dialog for unentitled Company Brain installs", async () => {
+  it("opens an install-key dialog for unentitled ThinkWork Brain installs", async () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
       install: null,
@@ -986,7 +986,7 @@ describe("PluginDetail", () => {
     });
   });
 
-  it("shows Company Brain operations, workspace, and adoption evidence once entitled", () => {
+  it("shows ThinkWork Brain operations, workspace, and adoption evidence once entitled", () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
       install: companyBrainInstall,
@@ -1001,7 +1001,9 @@ describe("PluginDetail", () => {
     const operations = screen.getByRole("link", { name: /open operations/i });
     expect(operations.getAttribute("href")).toBe("/settings/brain-operations");
     expect(screen.getByText("Memory graph")).toBeTruthy();
-    expect(screen.getByText(/user and space memory evidence/i)).toBeTruthy();
+    expect(
+      screen.getByText(/ontology and graph infrastructure evidence/i),
+    ).toBeTruthy();
     const link = screen.getByRole("link", { name: /open graph/i });
     expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
   });
@@ -1497,7 +1499,7 @@ const companyBrainEntitlement = {
 const companyBrainEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "company-brain",
-  displayName: "Company Brain",
+  displayName: "ThinkWork Brain",
   description: "Premium knowledge graph substrate.",
   latestVersion: "0.1.0",
   updateAvailable: false,
@@ -1505,7 +1507,7 @@ const companyBrainEntry = {
     entitlementProductKey: "company-brain",
     installKeyRequired: true,
     installKeyPrompt:
-      "Enter the Company Brain install key provided by ThinkWork.",
+      "Enter the ThinkWork Brain install key provided by ThinkWork.",
   },
   entitlement: null,
   versions: [

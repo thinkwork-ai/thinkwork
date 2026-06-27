@@ -286,3 +286,53 @@ smoke stays available only as a compatibility diagnostic.
   - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
   - `pnpm dlx prettier --check ...` for authored U6 files
   - `git diff --check`
+
+### 2026-06-27 - U4 objective
+
+Rebrand customer-facing Brain, Data, and ETL product surfaces while preserving
+stable internal plugin keys, routes, package names, and compatibility slugs.
+This unit updates display names and Settings/catalog copy only; deeper
+docs/tool copy remains U5.
+
+- Created isolated U4 branch/worktree:
+  `codex/think-83-u4-product-rebrand` at
+  `/Users/ericodom/.codex/worktrees/think-83-u4`.
+- Implemented U4 product rebrand:
+  - Changed first-party plugin display names to `ThinkWork Brain`,
+    `ThinkWork Data Warehouse`, and `ThinkWork ETL`.
+  - Updated customer-facing plugin descriptions, install-key prompts, component
+    labels, and manifest tests without changing `company-brain`,
+    `company-data`, or `company-etl` keys.
+  - Regenerated and checked the first-party plugin registry.
+  - Updated Settings plugin rows/details, managed-application fallback labels,
+    tools copy, and Brain operations copy to use ThinkWork product names.
+  - Updated `/settings/memory` status copy so active Hindsight appears as core
+    ThinkWork memory, and Cognee/Brain evidence appears as diagnostic graph
+    infrastructure rather than the memory provider.
+  - Cleaned current non-test web source comments that still referred to Company
+    Brain as the product name.
+- U4 verification passed:
+  - `pnpm --filter @thinkwork/plugin-company-brain test -- test/manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-company-data test -- test/manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-company-etl test -- test/manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-catalog test -- src/__tests__/catalog.test.ts src/__tests__/plugin-registry.test.ts`
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/brain/BrainOperationsPage.test.tsx src/components/settings/SettingsMemory.test.tsx`
+  - `pnpm --filter @thinkwork/plugin-catalog check:plugins`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+  - `pnpm --filter @thinkwork/plugin-company-data typecheck`
+  - `pnpm --filter @thinkwork/plugin-company-etl typecheck`
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck`
+  - `pnpm dlx prettier --check ...` for authored U4 files
+  - `rg -n 'Company Brain|Company Data|Company ETL|Hindsight legacy|legacy Hindsight' apps/web/src --glob '!**/*.test.*' --glob '!**/gql/**'` returned no matches.
+  - `git diff --check`
+- U4 PR #3026 initial CI found two missed plugin-catalog order assertions after
+  the display-name sort changed. Fixed the expectations and reran:
+  - `pnpm --filter @thinkwork/plugin-catalog test`
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- U4 PR #3026 rerun CI found one API plugin catalog assertion still expecting
+  `Company ETL` for a legacy Data Integrations install. Fixed the compatibility
+  test to expect the stable `company-etl` key with `ThinkWork ETL` display
+  copy, then reran:
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`

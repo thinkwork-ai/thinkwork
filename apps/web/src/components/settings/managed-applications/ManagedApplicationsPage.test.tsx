@@ -58,7 +58,7 @@ describe("ManagedApplicationsPage", () => {
 
     expect(
       screen
-        .getByRole("link", { name: /open company brain/i })
+        .getByRole("link", { name: /open thinkwork brain/i })
         .getAttribute("href"),
     ).toBe("/settings/plugins/company-brain");
     expect(
@@ -76,24 +76,24 @@ describe("ManagedApplicationsPage", () => {
     expect(screen.queryByRole("button", { name: /view plan/i })).toBeNull();
   });
 
-  it("hides the Twenty row once a twenty plugin install exists while Company Brain is unaffected", () => {
+  it("hides the Twenty row once a twenty plugin install exists while ThinkWork Brain is unaffected", () => {
     pluginInstallsHolder.current = [{ pluginKey: "twenty" }];
     render(<ManagedApplicationsPage />);
 
     expect(screen.queryByRole("link", { name: /open twenty crm/i })).toBeNull();
     expect(
       screen
-        .getByRole("link", { name: /open company brain/i })
+        .getByRole("link", { name: /open thinkwork brain/i })
         .getAttribute("href"),
     ).toBe("/settings/plugins/company-brain");
   });
 
-  it("hides the Company Brain backing row once the company-brain plugin is installed", () => {
+  it("hides the ThinkWork Brain backing row once the company-brain plugin is installed", () => {
     pluginInstallsHolder.current = [{ pluginKey: "company-brain" }];
     render(<ManagedApplicationsPage />);
 
     expect(
-      screen.queryByRole("link", { name: /open company brain/i }),
+      screen.queryByRole("link", { name: /open thinkwork brain/i }),
     ).toBeNull();
     expect(
       screen

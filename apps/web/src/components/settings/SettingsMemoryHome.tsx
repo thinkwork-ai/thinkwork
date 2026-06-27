@@ -26,7 +26,7 @@ function tabForPath(pathname: string): MemoryTab {
 
 /**
  * The unified Memory settings page. Memory, Knowledge Bases, Wiki, and (when
- * Company Brain's substrate is available) the Knowledge Graph explorer are
+ * ThinkWork Brain's substrate is available) the Knowledge Graph explorer are
  * sibling tabs rendered in the AppTopBar — driven by the route so each tab is
  * deep-linkable. This page owns the page header and renders the active facet's
  * body; each embedded facet suppresses its own header so the "Memory"

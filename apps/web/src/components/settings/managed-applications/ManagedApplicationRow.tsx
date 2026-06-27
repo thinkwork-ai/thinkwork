@@ -20,7 +20,7 @@ export function ManagedApplicationRow({
   runtime?: RuntimeDeployment;
 }) {
   const key = app.key as ManagedAppKey;
-  const displayName = key === "cognee" ? "Company Brain" : app.displayName;
+  const displayName = key === "cognee" ? "ThinkWork Brain" : app.displayName;
   const runtimeEnabled =
     runtime?.runtimeEnabled ?? app.currentStatus === "running";
   const status = runtime?.status ?? app.currentStatus;
@@ -80,7 +80,7 @@ function managedAppDescription(key: ManagedAppKey): string {
   if (key === "n8n") {
     return "Self-hosted workflow automation runtime with queue workers, retained workflow data, and native MCP integration.";
   }
-  return "Company Brain knowledge graph substrate with dedicated graph/vector storage and provider credentials.";
+  return "ThinkWork Brain knowledge graph substrate with dedicated graph/vector storage and provider credentials.";
 }
 
 function statusBadgeClassName(status: string) {

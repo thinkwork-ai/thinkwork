@@ -5,9 +5,9 @@ export const COMPANY_ETL_SETTINGS_SURFACE =
 
 export const companyEtlManifest = {
   pluginKey: "company-etl",
-  displayName: "Company ETL",
+  displayName: "ThinkWork ETL",
   description:
-    "Provides the tenant-managed ETL shell for moving data between SaaS apps, databases, and agent-accessible systems. Analytics dashboards, BI, warehouse query UI, and Company Data projection behavior belong to separate plugins.",
+    "Provides the tenant-managed ETL shell for moving data between SaaS apps, databases, and agent-accessible systems. Analytics dashboards, BI, warehouse query UI, and ThinkWork Data Warehouse projection behavior belong to separate plugins.",
   versions: [
     {
       version: "0.1.0",
@@ -17,7 +17,7 @@ export const companyEtlManifest = {
         {
           type: "ui-surface",
           key: "settings",
-          displayName: "Company ETL settings",
+          displayName: "ThinkWork ETL settings",
           intendedMount: COMPANY_ETL_SETTINGS_SURFACE,
         },
       ],
