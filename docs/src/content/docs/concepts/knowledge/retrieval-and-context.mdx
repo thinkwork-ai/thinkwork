@@ -1,27 +1,28 @@
 ---
 title: Source Routing
-description: How thread history, knowledge bases, memory, compiled pages, workspace files, and approved tools come together through Memory at turn time.
+description: How thread history, Hindsight memory, Brain Sources, compiled pages, workspace files, and approved tools come together at turn time.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, Memory assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
+A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, the runtime assembles context from eligible sources, budgets them against the model's context window, and decides what to include vs. truncate. This source routing is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop): the moment the harness decides what the model gets to see.
 
 ## Source families
 
 Any given turn can draw from:
 
 - **Thread history.** The recent conversation in this thread — prior user messages, agent responses, tool calls, and their outputs. This is the short-term context.
-- **Knowledge bases.** Chunks retrieved from assigned Bedrock Knowledge Bases, based on semantic similarity to the user's message.
-- **Memory.** Facts and preferences recalled from the memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
+- **Hindsight memory.** Facts, preferences, and source-backed Space records recalled or reflected from Hindsight banks. These are carry-forward learnings, not chat history.
+- **Brain Sources.** Authored Space documents retained into Hindsight with source evidence, tags, context, and observation scopes.
 - **Compiled pages.** Relevant entity, topic, and decision pages produced by the Memory compile pipeline.
 - **OKF wiki traversal.** Explicitly enabled Pi runtimes can browse a generated
   read-only OKF projection with bounded wiki tools. This is traceable
   traversal, not the default compiled-page provider.
 - **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
 - **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
+- **Legacy knowledge bases.** Explicitly attached Bedrock Knowledge Bases for compatibility deployments or external retrieval experiments.
 
-Not every source feeds every turn. A focused chatbot may use only thread history + document knowledge. A long-running research agent adds memory. An agent deeply embedded in a user's workspace uses all four.
+Not every source feeds every turn. A focused chatbot may use only thread history and Hindsight Space memory. A long-running research agent adds compiled pages and workspace files. A deployment that still needs Bedrock KB retrieval attaches that source explicitly.
 
 ## The assembly step
 
@@ -36,8 +37,9 @@ Load agent + template (which sources are enabled?)
         ▼
 Query the enabled sources in parallel:
   ├─ thread.getRecentTurns(threadId, limit)
-  ├─ knowledge.retrieve(query=message, kbIds, topK)
-  ├─ memory.recall(query=message, ownerId, k)
+  ├─ hindsight.recall(query=message, userBank, spaceBank)
+  ├─ hindsight.reflect(query=message, spaceBank)
+  ├─ external.query_context(query=message, enabledSources)
   └─ wiki.recall(query=message, ownerId)
         │
         ▼
@@ -49,7 +51,10 @@ the system prompt, tool definitions, and response.
 Assembled context → Bedrock converse call
 ```
 
-Source queries run in parallel. Whichever is slowest sets the turn's baseline latency — usually Bedrock KB retrieval or memory recall. Compiled page lookup is fast (a single structured query against `wiki_pages` + `wiki_page_sections`).
+Source queries run in parallel where the runtime path supports it. Whichever is
+slowest sets the turn's baseline latency — usually external provider retrieval
+or a broad memory recall. Compiled page lookup is fast (a single structured
+query against `wiki_pages` + `wiki_page_sections`).
 
 ## Token budget tradeoffs
 
@@ -58,52 +63,52 @@ The model's context window is a hard limit. Every token spent on retrieved conte
 - **System prompt** — template base + agent-specific prompt. Typically 500–2000 tokens.
 - **Tool definitions** — registered tools from skill packs, integrations, MCP. Typically 200–1500 tokens depending on agent surface.
 - **Response headroom** — `maxTokens` from the template, reserved so the model has room to generate.
-- **Retrieved context** — what's left after the above. The four sources compete for this pool.
+- **Retrieved context** — what's left after the above. Hindsight memory, Brain Sources, compiled pages, workspace files, and explicit external sources compete for this pool.
 
 When the retrieval layer produces more content than the budget allows, it truncates by priority:
 
 1. Most recent thread turns are kept in full.
-2. Top-K retrieved document chunks are kept in full until the budget runs out.
-3. Recalled memories and wiki pages get summarized (first 2–3 lines of each) before being included.
+2. Top Hindsight source facts and authored-source evidence are kept while they fit.
+3. Compiled pages and external provider results get summarized before being included.
 4. Older thread history is summarized or dropped.
 
-This priority is tunable through the runtime configuration surfaces that feed the current turn. In Space-aware operation, tune retrieval behavior for the Space that needs it: a Space that should lean heavily on retrieved documents uses a higher KB topK, while a Space that should lean on memory uses a higher memory recall count where exposed.
+This priority is tunable through the runtime configuration surfaces that feed the current turn. In Space-aware operation, tune retrieval behavior for the Space that needs it: a Space that should lean heavily on retained source documents uses Hindsight source tags and observation scopes, while an agent that needs external data uses explicit Context Engine sources.
 
 <Aside type="tip">
   If an agent's responses feel "forgetful," check the context budget before
-  adding more sources. The common failure mode is adding a wiki on top of a big
-  KB on top of long memory recall — each source is good individually, but
-  together they starve the response budget. Better to tune each down than to
-  stuff them all.
+  adding more sources. The common failure mode is adding a large external
+  provider on top of broad source recall and long thread history — each source
+  is good individually, but together they starve the response budget. Better to
+  tune each down than to stuff them all.
 </Aside>
 
 ## Why this matters to keep separate
 
 It's tempting to collapse everything into one big "just feed the model context" blob. Three reasons not to:
 
-- **Separate cost accounting.** Tokens from retrieved docs vs. recalled memories vs. thread history show up separately in audit records. An operator debugging "why did this turn cost $2" can see whether the document KB was bloated or whether the thread history was too long.
-- **Separate failure modes.** If the KB sync is broken today, document retrieval fails silently — and the rest of the turn still works. A single blob would fail the whole turn.
-- **Separate tuning knobs.** You change the topK for KB retrieval without touching memory recall. Without the separation, tuning is all-or-nothing.
+- **Separate cost accounting.** Tokens from source-backed memories vs. external retrieval vs. thread history show up separately in audit records. An operator debugging "why did this turn cost $2" can see whether source recall, external context, or thread history was too large.
+- **Separate failure modes.** If an external provider is down today, durable Hindsight memory still works. A single blob would fail the whole turn.
+- **Separate tuning knobs.** You change external source eligibility without touching Hindsight recall/reflect. Without the separation, tuning is all-or-nothing.
 
 ## Short-term vs. long-term
 
 A distinction that bites people:
 
 - **Short-term context** = thread history. It's the canonical record of what happened _in this conversation_. The model reads it verbatim (within budget).
-- **Long-term memory** = facts recalled from prior work. The model reads these as selective summaries, not verbatim chat logs.
+- **Long-term memory** = facts and source-backed observations recalled or reflected from Hindsight. The model reads these as selective summaries and evidence, not verbatim chat logs.
 
-Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in the memory adapter. Memory is _derived_ context; the thread is _canonical_ record.
+Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in Hindsight. Memory is _derived_ context; the thread is _canonical_ record.
 
 ## Known limits
 
-- **No runtime introspection of what was assembled.** The admin thread detail shows the final context shape for a turn (which KB returned which chunks, which memories were recalled), but modifying the assembly mid-turn isn't possible. Tune at the template level and re-run.
+- **No runtime introspection of what was assembled.** The admin thread detail shows the final context shape for a turn (which sources returned which results and which memories were recalled), but modifying the assembly mid-turn isn't possible. Tune at the template level and re-run.
 - **Budgeting is heuristic.** The harness approximates token counts; the model's tokenizer is authoritative. A turn that appears to fit the budget can still truncate if the estimate is off by a few percent. Keep headroom.
 - **Compiled page recall is optional per-invocation.** If the compile job is behind, compiled page lookup returns older content. Operators can force a compile if this matters.
 
 ## Related pages
 
 - [Memory](/concepts/knowledge/) — the umbrella
-- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
+- [Brain Sources and Legacy Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
 - [Retained Memory](/concepts/knowledge/memory/) — the recall source
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
 - [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) — explicit read-only filesystem traversal over compiled pages
@@ -111,6 +116,6 @@ Long-term memory should never masquerade as the thread record. If an operator as
 
 ## Under the hood
 
-Context assembly happens inside the AgentCore Pi runtime before any Bedrock call. The four sources are queried in parallel, token-counted, and merged into the final input. Budget knobs (retrieval `top_k`, memory recall count, max thread-history window) live on the agent template and can be tuned without a redeploy.
+Context assembly happens inside the AgentCore Pi runtime before any Bedrock call. Eligible sources are queried, token-counted, and merged into the final input. Budget knobs for memory recall, external source retrieval, and max thread-history window live on runtime configuration surfaces and can be tuned without a redeploy.
 
 Each source emits OpenTelemetry spans recording latency, result count, and token contribution — surfaced in the turn trace view. See [Admin: Threads](/applications/admin/threads/) for the turn-trace operator view.
