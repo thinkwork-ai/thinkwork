@@ -155,6 +155,11 @@ describe("space memory resolvers", () => {
         ownerId: "space-1",
         query: "onboarding template",
         limit: 5,
+        hindsight: {
+          include: {
+            sourceFacts: true,
+          },
+        },
         requestContext: {
           contextClass: "space_memory_search",
           requesterUserId: "user-1",

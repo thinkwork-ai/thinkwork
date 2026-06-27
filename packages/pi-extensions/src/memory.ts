@@ -74,6 +74,7 @@ function formatMemories(memories: MemoryItem[]): string {
           tags.push(`${memory.proofCount} supporting facts`);
         }
       }
+      if (memory.sourceScope === "space") tags.push("space");
       const prefix = tags.length > 0 ? `[${tags.join(", ")}] ` : "";
       return `${index + 1}. ${prefix}${memory.content}`;
     })
@@ -138,7 +139,15 @@ export function createMemoryExtension(
           const result = await memory.recall({ query: trimmed, limit }, signal);
           return {
             content: [{ type: "text", text: formatMemories(result.memories) }],
-            details: { query: trimmed, count: result.memories.length },
+            details: {
+              query: trimmed,
+              count: result.memories.length,
+              memories: result.memories.map((memory) => ({
+                id: memory.id,
+                sourceScope: memory.sourceScope ?? "user",
+                evidence: memory.evidence,
+              })),
+            },
           };
         },
       };
@@ -184,7 +193,11 @@ export function createMemoryExtension(
             (result.ok ? "No synthesis produced." : "Reflection failed.");
           return {
             content: [{ type: "text", text }],
-            details: { query: trimmed, ok: result.ok },
+            details: {
+              query: trimmed,
+              ok: result.ok,
+              evidence: result.evidence,
+            },
           };
         },
       };

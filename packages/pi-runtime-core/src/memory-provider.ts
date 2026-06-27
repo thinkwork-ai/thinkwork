@@ -33,9 +33,36 @@
  */
 
 /** A single recalled memory. */
+export interface MemoryEvidenceSourceFact {
+  id: string;
+  type?: string | null;
+  context?: string | null;
+  documentId?: string | null;
+  chunkId?: string | null;
+  tags?: string[] | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryBasedOnEvidence {
+  memoryIds: string[];
+  mentalModelIds: string[];
+  directiveIds: string[];
+  memories?: MemoryEvidenceSourceFact[];
+  mentalModels?: MemoryEvidenceSourceFact[];
+  directives?: MemoryEvidenceSourceFact[];
+}
+
+export interface MemoryEvidence {
+  sourceFactIds?: string[];
+  sourceFacts?: MemoryEvidenceSourceFact[];
+  basedOn?: MemoryBasedOnEvidence;
+}
+
 export interface MemoryItem {
   id: string;
   content: string;
+  /** Logical source scope for multi-bank recall; never exposes raw bank ids. */
+  sourceScope?: "user" | "space";
   /** Relevance score when the backing store provides one. */
   score?: number;
   /** Backing-store fact type (e.g. "world", "experience", "observation"). */
@@ -48,6 +75,8 @@ export interface MemoryItem {
   freshness?: string;
   /** Number of supporting facts behind a consolidated observation. */
   proofCount?: number;
+  /** Redacted backing-store evidence descriptors; raw source text is omitted. */
+  evidence?: MemoryEvidence;
 }
 
 export interface MemoryRecallRequest {
@@ -85,6 +114,9 @@ export interface MemoryReflectResult {
   text?: string;
   /** Token/cost usage for the reflect call, when the backing store reports it. */
   usage?: unknown;
+  /** Redacted backing-store evidence descriptors; raw source text is omitted. */
+  evidence?: MemoryEvidence;
+  trace?: unknown;
 }
 
 export interface MemoryProvider {

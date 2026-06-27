@@ -1,4 +1,7 @@
 import type {
+  MemoryBasedOnEvidence,
+  MemoryEvidence,
+  MemoryEvidenceSourceFact,
   MemoryItem,
   MemoryProvider,
   MemoryRecallRequest,
@@ -44,6 +47,8 @@ export interface HindsightMemoryProviderOptions {
   tenantId: string;
   /** User id from the invocation scope (keys the memory bank). Required. */
   userId: string;
+  /** Current Space id, when the invocation is scoped to a Space. */
+  spaceId?: string | null;
   /** Per-attempt request timeout in ms (default 30_000). */
   timeoutMs?: number;
   /** Test seam: override the global fetch implementation. */
@@ -60,8 +65,12 @@ export class HindsightMemoryProviderError extends Error {
   }
 }
 
-function bankFor(userId: string): string {
+function userBankFor(userId: string): string {
   return `user_${userId}`;
+}
+
+function spaceBankFor(spaceId: string): string {
+  return `space_${spaceId}`;
 }
 
 function jitter(): number {
@@ -84,12 +93,21 @@ function unitText(unit: unknown): string {
   return "";
 }
 
+type HindsightBankTarget = {
+  bankId: string;
+  sourceScope: "user" | "space";
+};
+
 /** Normalize a raw Hindsight recall response into structured memory items. */
-function toMemoryItems(data: unknown): MemoryItem[] {
+function toMemoryItems(
+  data: unknown,
+  target: HindsightBankTarget,
+): MemoryItem[] {
   if (!data || typeof data !== "object") return [];
   const record = data as Record<string, unknown>;
   const raw = record.memory_units ?? record.memories ?? record.results ?? [];
   if (!Array.isArray(raw)) return [];
+  const sourceFacts = parseSourceFacts(record.source_facts);
   return raw
     .map((unit, index): MemoryItem | null => {
       const text = unitText(unit);
@@ -125,13 +143,17 @@ function toMemoryItems(data: unknown): MemoryItem[] {
         (Array.isArray(u.source_fact_ids) && u.source_fact_ids.length > 0
           ? u.source_fact_ids.length
           : undefined);
+      const sourceFactIds = stringArray(u.source_fact_ids);
+      const evidence = sourceEvidence(sourceFactIds, sourceFacts);
       return {
         id,
         content: text,
+        sourceScope: target.sourceScope,
         ...(score !== undefined ? { score } : {}),
         ...(factType !== undefined ? { factType } : {}),
         ...(freshness !== undefined ? { freshness } : {}),
         ...(proofCount !== undefined ? { proofCount } : {}),
+        ...(evidence ? { evidence } : {}),
       };
     })
     .filter((item): item is MemoryItem => item !== null);
@@ -146,6 +168,202 @@ function toReflectText(data: unknown): string | undefined {
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
+  );
+}
+
+function parseSourceFacts(value: unknown): Map<string, MemoryEvidenceSourceFact> {
+  const facts = new Map<string, MemoryEvidenceSourceFact>();
+  const entries = Array.isArray(value)
+    ? value.map((fact) => {
+        const id =
+          fact && typeof fact === "object"
+            ? (fact as Record<string, unknown>).id
+            : undefined;
+        return [id, fact] as const;
+      })
+    : value && typeof value === "object"
+      ? Object.entries(value as Record<string, unknown>)
+      : [];
+  for (const [key, raw] of entries) {
+    const fact = redactedSourceFact(raw, typeof key === "string" ? key : null);
+    if (fact) facts.set(fact.id, fact);
+  }
+  return facts;
+}
+
+function redactedSourceFact(
+  raw: unknown,
+  fallbackId: string | null,
+): MemoryEvidenceSourceFact | null {
+  if (!raw || typeof raw !== "object") {
+    return fallbackId ? { id: fallbackId } : null;
+  }
+  const record = raw as Record<string, unknown>;
+  const id = stringField(record.id) ?? fallbackId;
+  if (!id) return null;
+  return {
+    id,
+    ...(stringField(record.type) ? { type: stringField(record.type) } : {}),
+    ...(stringField(record.fact_type)
+      ? { type: stringField(record.fact_type) }
+      : {}),
+    ...(stringField(record.context)
+      ? { context: stringField(record.context) }
+      : {}),
+    ...(stringField(record.document_id)
+      ? { documentId: stringField(record.document_id) }
+      : {}),
+    ...(stringField(record.documentId)
+      ? { documentId: stringField(record.documentId) }
+      : {}),
+    ...(stringField(record.chunk_id)
+      ? { chunkId: stringField(record.chunk_id) }
+      : {}),
+    ...(stringField(record.chunkId) ? { chunkId: stringField(record.chunkId) } : {}),
+    ...(stringArray(record.tags).length > 0 ? { tags: stringArray(record.tags) } : {}),
+    ...(redactedMetadata(record.metadata)
+      ? { metadata: redactedMetadata(record.metadata) }
+      : {}),
+  };
+}
+
+function sourceEvidence(
+  sourceFactIds: string[],
+  sourceFacts: Map<string, MemoryEvidenceSourceFact>,
+): MemoryEvidence | null {
+  if (sourceFactIds.length === 0 && sourceFacts.size === 0) return null;
+  const matchingFacts = sourceFactIds
+    .map((id) => sourceFacts.get(id))
+    .filter((fact): fact is MemoryEvidenceSourceFact => Boolean(fact));
+  return {
+    ...(sourceFactIds.length > 0 ? { sourceFactIds } : {}),
+    ...(matchingFacts.length > 0 ? { sourceFacts: matchingFacts } : {}),
+  };
+}
+
+function basedOnEvidence(data: unknown): MemoryEvidence | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const record = data as Record<string, unknown>;
+  const basedOn = record.based_on ?? record.basedOn;
+  if (!basedOn || typeof basedOn !== "object") return undefined;
+  const b = basedOn as Record<string, unknown>;
+  const evidence: MemoryBasedOnEvidence = {
+    memoryIds: stringArray(b.memory_ids ?? b.memoryIds),
+    mentalModelIds: stringArray(b.mental_model_ids ?? b.mentalModelIds),
+    directiveIds: stringArray(b.directive_ids ?? b.directiveIds),
+  };
+  const memories = sourceFactArray(b.memories);
+  const mentalModels = sourceFactArray(b.mental_models ?? b.mentalModels);
+  const directives = sourceFactArray(b.directives);
+  if (memories.length > 0) evidence.memories = memories;
+  if (mentalModels.length > 0) evidence.mentalModels = mentalModels;
+  if (directives.length > 0) evidence.directives = directives;
+  if (
+    evidence.memoryIds.length === 0 &&
+    evidence.mentalModelIds.length === 0 &&
+    evidence.directiveIds.length === 0 &&
+    !evidence.memories &&
+    !evidence.mentalModels &&
+    !evidence.directives
+  ) {
+    return undefined;
+  }
+  return { basedOn: evidence };
+}
+
+function sourceFactArray(value: unknown): MemoryEvidenceSourceFact[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => redactedSourceFact(item, null))
+    .filter((item): item is MemoryEvidenceSourceFact => Boolean(item));
+}
+
+function redactedMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const safe: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized.includes("text") ||
+      normalized.includes("content") ||
+      normalized.includes("chunk") ||
+      normalized.includes("body")
+    ) {
+      continue;
+    }
+    if (
+      typeof raw === "string" ||
+      typeof raw === "number" ||
+      typeof raw === "boolean" ||
+      raw === null
+    ) {
+      safe[key] = raw;
+    } else if (Array.isArray(raw) && raw.every((item) => typeof item === "string")) {
+      safe[key] = raw;
+    }
+  }
+  return Object.keys(safe).length > 0 ? safe : undefined;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function mergeEvidence(items: MemoryEvidence[]): MemoryEvidence | undefined {
+  const basedOnItems = items
+    .map((item) => item.basedOn)
+    .filter((item): item is MemoryBasedOnEvidence => Boolean(item));
+  if (basedOnItems.length === 0) return undefined;
+  const basedOn: MemoryBasedOnEvidence = {
+    memoryIds: dedupe(basedOnItems.flatMap((item) => item.memoryIds)),
+    mentalModelIds: dedupe(
+      basedOnItems.flatMap((item) => item.mentalModelIds),
+    ),
+    directiveIds: dedupe(basedOnItems.flatMap((item) => item.directiveIds)),
+  };
+  const memories = dedupeFacts(basedOnItems.flatMap((item) => item.memories ?? []));
+  const mentalModels = dedupeFacts(
+    basedOnItems.flatMap((item) => item.mentalModels ?? []),
+  );
+  const directives = dedupeFacts(
+    basedOnItems.flatMap((item) => item.directives ?? []),
+  );
+  if (memories.length > 0) basedOn.memories = memories;
+  if (mentalModels.length > 0) basedOn.mentalModels = mentalModels;
+  if (directives.length > 0) basedOn.directives = directives;
+  return { basedOn };
+}
+
+function dedupe(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function dedupeFacts(
+  facts: MemoryEvidenceSourceFact[],
+): MemoryEvidenceSourceFact[] {
+  const seen = new Set<string>();
+  const out: MemoryEvidenceSourceFact[] = [];
+  for (const fact of facts) {
+    if (seen.has(fact.id)) continue;
+    seen.add(fact.id);
+    out.push(fact);
+  }
+  return out;
+}
+
+function mergeUnknownValues(values: unknown[]): unknown {
+  const present = values.filter((value) => value !== undefined && value !== null);
+  if (present.length === 0) return undefined;
+  return present.length === 1 ? present[0] : present;
 }
 
 /**
@@ -284,7 +502,17 @@ export function createHindsightMemoryProvider(
   options: HindsightMemoryProviderOptions,
 ): MemoryProvider {
   requireScope(options);
-  const bankId = bankFor(options.userId);
+  const targets: HindsightBankTarget[] = [
+    { bankId: userBankFor(options.userId), sourceScope: "user" },
+    ...(options.spaceId?.trim()
+      ? [
+          {
+            bankId: spaceBankFor(options.spaceId.trim()),
+            sourceScope: "space" as const,
+          },
+        ]
+      : []),
+  ];
   // Identity (endpoint/tenantId/userId) is captured in this closure at
   // construction time — cred-snapshot-at-entry; never re-read from env mid-turn.
 
@@ -299,25 +527,35 @@ export function createHindsightMemoryProvider(
           "recall called with an empty query.",
         );
       }
-      const data = await postJson(
-        options,
-        `/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
-        {
-          query,
-          budget: "low",
-          max_tokens: RECALL_MAX_TOKENS,
-          include: { entities: null },
-          types: ["world", "experience", "observation"],
-        },
-        signal,
+      const batches = await Promise.all(
+        targets.map(async (target) => {
+          const data = await postJson(
+            options,
+            `/v1/default/banks/${encodeURIComponent(target.bankId)}/memories/recall`,
+            {
+              query,
+              budget: "low",
+              max_tokens: RECALL_MAX_TOKENS,
+              include: { entities: null, source_facts: {} },
+              types: ["world", "experience", "observation"],
+            },
+            signal,
+          );
+          return {
+            memories: toMemoryItems(data, target),
+            usage:
+              data && typeof data === "object"
+                ? (data as Record<string, unknown>).usage
+                : undefined,
+          };
+        }),
       );
-      const memories = toMemoryItems(data);
+      const memories = batches
+        .flatMap((batch) => batch.memories)
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
       return {
         memories: request.limit ? memories.slice(0, request.limit) : memories,
-        usage:
-          data && typeof data === "object"
-            ? (data as Record<string, unknown>).usage
-            : undefined,
+        usage: mergeUnknownValues(batches.map((batch) => batch.usage)),
       };
     },
 
@@ -331,19 +569,57 @@ export function createHindsightMemoryProvider(
           "reflect called with an empty query.",
         );
       }
-      const data = await postJson(
-        options,
-        `/v1/default/banks/${encodeURIComponent(bankId)}/reflect`,
-        { query, budget: "mid" },
-        signal,
+      const batches = await Promise.all(
+        targets.map(async (target) => {
+          const data = await postJson(
+            options,
+            `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
+            { query, budget: "mid", include: { facts: {} } },
+            signal,
+          );
+          return { target, data };
+        }),
+      );
+      const texts = batches
+        .map(({ target, data }) => {
+          const text = toReflectText(data);
+          return text ? { sourceScope: target.sourceScope, text } : null;
+        })
+        .filter(
+          (item): item is { sourceScope: "user" | "space"; text: string } =>
+            item !== null,
+        );
+      const evidence = mergeEvidence(
+        batches
+          .map(({ data }) => basedOnEvidence(data))
+          .filter((item): item is MemoryEvidence => Boolean(item)),
       );
       return {
         ok: true,
-        text: toReflectText(data),
-        usage:
-          data && typeof data === "object"
-            ? (data as Record<string, unknown>).usage
-            : undefined,
+        text:
+          texts.length === 1
+            ? texts[0]?.text
+            : texts
+                .map(
+                  (item) =>
+                    `${item.sourceScope === "space" ? "Space" : "User"} memory:\n${item.text}`,
+                )
+                .join("\n\n"),
+        usage: mergeUnknownValues(
+          batches.map(({ data }) =>
+            data && typeof data === "object"
+              ? (data as Record<string, unknown>).usage
+              : undefined,
+          ),
+        ),
+        ...(evidence ? { evidence } : {}),
+        trace: mergeUnknownValues(
+          batches.map(({ data }) =>
+            data && typeof data === "object"
+              ? (data as Record<string, unknown>).trace
+              : undefined,
+          ),
+        ),
       };
     },
   };

@@ -121,6 +121,66 @@ describe("createMemoryExtension", () => {
     expect(text).toContain("pi is the core runtime");
   });
 
+  it("recall tool labels Space memories and carries redacted evidence in details", async () => {
+    const provider: MemoryProvider = {
+      recall: async () => ({
+        memories: [
+          {
+            id: "space-memory-1",
+            content: "Shared onboarding plan",
+            sourceScope: "space",
+            evidence: {
+              sourceFactIds: ["fact-1"],
+              sourceFacts: [
+                {
+                  id: "fact-1",
+                  context: "thinkwork_thread",
+                  metadata: { safe_id: "msg-1" },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      reflect: async () => ({ ok: true }),
+    };
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createMemoryExtension(), { memory: provider })(
+      api,
+    );
+
+    const result = await getTool(tools, "recall").execute(
+      "call-space",
+      { query: "onboarding" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    const text = (result.content?.[0] as { text: string }).text;
+    expect(text).toContain("[space] Shared onboarding plan");
+    expect(result.details).toEqual({
+      query: "onboarding",
+      count: 1,
+      memories: [
+        {
+          id: "space-memory-1",
+          sourceScope: "space",
+          evidence: {
+            sourceFactIds: ["fact-1"],
+            sourceFacts: [
+              {
+                id: "fact-1",
+                context: "thinkwork_thread",
+                metadata: { safe_id: "msg-1" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
   it("recall tool rejects an empty query", async () => {
     const { provider } = makeFakeMemory();
     const { api, tools } = makeFakeApi();
@@ -169,6 +229,11 @@ describe("createMemoryExtension", () => {
     expect(reflectCalls).toEqual([{ query: "pi", context: undefined }]);
     const text = (result.content?.[0] as { text: string }).text;
     expect(text).toBe("synthesis for pi");
+    expect(result.details).toEqual({
+      query: "pi",
+      ok: true,
+      evidence: undefined,
+    });
   });
 
   it("reflect tool rejects an empty query", async () => {

@@ -82,8 +82,13 @@ describe("createHindsightMemoryProvider", () => {
       budget: "low",
     });
     expect(result.memories).toEqual([
-      { id: "u1", content: "pi is the core runtime", score: 0.9 },
-      { id: "unit-1", content: "deploy uses canary.55" },
+      {
+        id: "u1",
+        content: "pi is the core runtime",
+        sourceScope: "user",
+        score: 0.9,
+      },
+      { id: "unit-1", content: "deploy uses canary.55", sourceScope: "user" },
     ]);
   });
 
@@ -180,7 +185,9 @@ describe("createHindsightMemoryProvider", () => {
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await promise;
       expect(fetchImpl).toHaveBeenCalledTimes(2);
-      expect(result.memories).toEqual([{ id: "unit-0", content: "ok" }]);
+      expect(result.memories).toEqual([
+        { id: "unit-0", content: "ok", sourceScope: "user" },
+      ]);
     } finally {
       vi.useRealTimers();
     }
@@ -228,7 +235,9 @@ describe("createHindsightMemoryProvider", () => {
       fetchImpl,
     });
     const result = await provider.recall({ query: "x" });
-    expect(result.memories).toEqual([{ id: "unit-0", content: "a" }]);
+    expect(result.memories).toEqual([
+      { id: "unit-0", content: "a", sourceScope: "user" },
+    ]);
   });
 
   it("extracts reflect text from the `response` key (not just text)", async () => {
@@ -276,6 +285,7 @@ describe("observation signal parsing", () => {
     expect(result.memories[0]).toEqual({
       id: "obs-1",
       content: "Alice is a Python-focused developer",
+      sourceScope: "user",
       score: 0.8,
       factType: "observation",
       freshness: "strengthening",
@@ -284,6 +294,7 @@ describe("observation signal parsing", () => {
     expect(result.memories[1]).toEqual({
       id: "raw-1",
       content: "Alice mentioned pytest today",
+      sourceScope: "user",
       score: 0.8,
       factType: "experience",
     });
@@ -312,10 +323,12 @@ describe("observation signal parsing", () => {
     expect(result.memories[0]).toEqual({
       id: "plain",
       content: "no signals at all",
+      sourceScope: "user",
     });
     expect(result.memories[1]).toEqual({
       id: "meta",
       content: "signals in metadata",
+      sourceScope: "user",
       factType: "observation",
       freshness: "stale",
     });
@@ -347,8 +360,172 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
     expect(result.memories[0]).toEqual({
       id: "obs-wire",
       content: "consolidated belief",
+      sourceScope: "user",
       factType: "observation",
       proofCount: 2,
+      evidence: {
+        sourceFactIds: ["f1", "f2"],
+      },
     });
+  });
+
+  it("preserves redacted source-fact evidence when recall includes source_facts", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        memory_units: [
+          {
+            id: "obs-evidence",
+            text: "Alice prefers concise summaries",
+            type: "observation",
+            source_fact_ids: ["fact-1"],
+          },
+        ],
+        source_facts: {
+          "fact-1": {
+            id: "fact-1",
+            type: "experience",
+            context: "thinkwork_thread",
+            document_id: "thread-1",
+            chunk_id: "chunk-1",
+            tags: ["source:thread"],
+            text: "raw source fact text must not leak",
+            metadata: {
+              role: "user",
+              content: "raw content must not leak",
+              safe_id: "msg-1",
+            },
+          },
+        },
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "alice" });
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      include: { entities: null, source_facts: {} },
+    });
+    expect(result.memories[0].evidence).toEqual({
+      sourceFactIds: ["fact-1"],
+      sourceFacts: [
+        {
+          id: "fact-1",
+          type: "experience",
+          context: "thinkwork_thread",
+          documentId: "thread-1",
+          chunkId: "chunk-1",
+          tags: ["source:thread"],
+          metadata: { role: "user", safe_id: "msg-1" },
+        },
+      ],
+    });
+    expect(JSON.stringify(result.memories[0].evidence)).not.toContain(
+      "raw source",
+    );
+    expect(JSON.stringify(result.memories[0].evidence)).not.toContain(
+      "raw content",
+    );
+  });
+
+  it("recalls from user and current Space banks and labels each result", async () => {
+    const fetchImpl = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/banks/space_space-1/")) {
+        return Promise.resolve(
+          jsonResponse({
+            memory_units: [{ id: "space-hit", text: "Shared rollout plan", score: 0.95 }],
+          }),
+        );
+      }
+      return Promise.resolve(
+        jsonResponse({
+          memory_units: [{ id: "user-hit", text: "Personal preference", score: 0.7 }],
+        }),
+      );
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      spaceId: "space-1",
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "rollout", limit: 5 });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
+      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
+      "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/recall",
+    ]);
+    expect(result.memories).toEqual([
+      {
+        id: "space-hit",
+        content: "Shared rollout plan",
+        sourceScope: "space",
+        score: 0.95,
+      },
+      {
+        id: "user-hit",
+        content: "Personal preference",
+        sourceScope: "user",
+        score: 0.7,
+      },
+    ]);
+  });
+
+  it("preserves reflect based_on evidence and usage without raw fact text", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        text: "Use the launch checklist.",
+        usage: { input_tokens: 10, output_tokens: 5 },
+        trace: { request_id: "trace-1" },
+        based_on: {
+          memory_ids: ["mem-1"],
+          mental_model_ids: ["model-1"],
+          directive_ids: ["dir-1"],
+          memories: [
+            {
+              id: "mem-1",
+              context: "thinkwork_thread",
+              text: "raw memory text must not leak",
+              metadata: { safe_id: "msg-1", body: "raw body must not leak" },
+            },
+          ],
+        },
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.reflect({ query: "launch" });
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      include: { facts: {} },
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      text: "Use the launch checklist.",
+      usage: { input_tokens: 10, output_tokens: 5 },
+      trace: { request_id: "trace-1" },
+      evidence: {
+        basedOn: {
+          memoryIds: ["mem-1"],
+          mentalModelIds: ["model-1"],
+          directiveIds: ["dir-1"],
+          memories: [
+            {
+              id: "mem-1",
+              context: "thinkwork_thread",
+              metadata: { safe_id: "msg-1" },
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(result.evidence)).not.toContain("raw memory");
+    expect(JSON.stringify(result.evidence)).not.toContain("raw body");
   });
 });
