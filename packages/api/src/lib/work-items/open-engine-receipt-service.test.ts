@@ -11,6 +11,9 @@ const { captures, mockDb, tables } = vi.hoisted(() => {
     workItems: table("work_items", [
       "id",
       "tenant_id",
+      "blocked",
+      "completed_at",
+      "completed_by_agent_id",
       "open_engine_human_hold",
       "open_engine_human_hold_reason",
       "open_engine_claimed_by_agent_id",
@@ -137,6 +140,7 @@ describe("Open Engine Work Item receipts", () => {
 
     expect(event).toEqual({ id: "event-1" });
     expect(captures.updateSet[0]).toEqual({
+      blocked: true,
       open_engine_human_hold: true,
       open_engine_human_hold_reason: "Need the customer EIN.",
       open_engine_claimed_by_agent_id: null,
@@ -174,6 +178,7 @@ describe("Open Engine Work Item receipts", () => {
     });
 
     expect(captures.updateSet[0]).toEqual({
+      blocked: false,
       open_engine_human_hold: false,
       open_engine_human_hold_reason: null,
       updated_at: NOW,
@@ -212,6 +217,64 @@ describe("Open Engine Work Item receipts", () => {
         },
       }),
     );
+  });
+
+  it("accepts agent-prefixed Open Engine receipt vocabulary", async () => {
+    captures.selectQueue.push([WORK_ITEM]);
+    captures.insertReturningQueue.push([{ id: "event-4" }]);
+
+    await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "AGENT HUMAN HOLD",
+      message: "Waiting for design approval.",
+      now: NOW,
+    });
+
+    expect(captures.updateSet[0]).toEqual({
+      blocked: false,
+      open_engine_human_hold: true,
+      open_engine_human_hold_reason: "Waiting for design approval.",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      metadata: {
+        source: "open_engine",
+        receiptType: "human_hold",
+      },
+    });
+  });
+
+  it("marks done receipts as completed by the agent and releases the claim", async () => {
+    captures.selectQueue.push([WORK_ITEM]);
+    captures.insertReturningQueue.push([{ id: "event-5" }]);
+
+    await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "AGENT DONE",
+      now: NOW,
+    });
+
+    expect(captures.updateSet[0]).toEqual({
+      completed_at: NOW,
+      completed_by_agent_id: "agent-1",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      metadata: {
+        source: "open_engine",
+        receiptType: "done",
+      },
+    });
   });
 
   it("returns NOT_FOUND when the Work Item is missing", async () => {

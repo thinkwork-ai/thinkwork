@@ -6,9 +6,20 @@ export const OPEN_ENGINE_RECEIPT_TYPES = [
   "claimed",
   "progress",
   "blocked",
+  "unblocked",
+  "human_hold",
+  "human_answered",
   "resumed",
   "failed",
   "completed",
+  "done",
+  "applied",
+  "skill_subscribed",
+  "skill_installed",
+  "skill_updated",
+  "skill_declined",
+  "follow_up",
+  "status",
 ] as const;
 
 export type OpenEngineReceiptType = (typeof OPEN_ENGINE_RECEIPT_TYPES)[number];
@@ -29,7 +40,7 @@ export interface RecordOpenEngineReceiptInput {
 export async function recordOpenEngineReceipt(
   input: RecordOpenEngineReceiptInput,
 ): Promise<OpenEngineWorkItemEvent> {
-  const receiptType = normalizeReceiptType(input.receiptType);
+  const receiptType = normalizeOpenEngineReceiptType(input.receiptType);
   const now = input.now ?? new Date();
 
   return db.transaction(async (tx) => {
@@ -48,7 +59,12 @@ export async function recordOpenEngineReceipt(
       });
     }
 
-    const stateUpdate = stateUpdateForReceipt(receiptType, input.message, now);
+    const stateUpdate = stateUpdateForReceipt(
+      receiptType,
+      input.message,
+      input.agentId,
+      now,
+    );
     if (stateUpdate) {
       await tx
         .update(workItems)
@@ -89,11 +105,22 @@ export async function recordOpenEngineReceipt(
   });
 }
 
-function normalizeReceiptType(value: string): OpenEngineReceiptType {
-  const normalized = value
+export function normalizeOpenEngineReceiptType(
+  value: string,
+): OpenEngineReceiptType {
+  let normalized = value
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
+  if (normalized.startsWith("agent_")) {
+    normalized = normalized.slice("agent_".length);
+  }
+  if (normalized === "done") return "done";
+  if (normalized === "complete") return "completed";
+  if (normalized === "human_holded") return "human_hold";
+  if (normalized === "hold") return "human_hold";
+  if (normalized === "answered") return "human_answered";
+  if (normalized === "followup") return "follow_up";
   if ((OPEN_ENGINE_RECEIPT_TYPES as readonly string[]).includes(normalized)) {
     return normalized as OpenEngineReceiptType;
   }
@@ -105,10 +132,12 @@ function normalizeReceiptType(value: string): OpenEngineReceiptType {
 function stateUpdateForReceipt(
   receiptType: OpenEngineReceiptType,
   message: string | null | undefined,
+  agentId: string,
   now: Date,
 ) {
-  if (receiptType === "blocked") {
+  if (receiptType === "blocked" || receiptType === "human_hold") {
     return {
+      blocked: receiptType === "blocked",
       open_engine_human_hold: true,
       open_engine_human_hold_reason: optionalTrim(message),
       open_engine_claimed_by_agent_id: null,
@@ -117,14 +146,29 @@ function stateUpdateForReceipt(
       updated_at: now,
     };
   }
-  if (receiptType === "resumed") {
+  if (
+    receiptType === "unblocked" ||
+    receiptType === "human_answered" ||
+    receiptType === "resumed"
+  ) {
     return {
+      blocked: false,
       open_engine_human_hold: false,
       open_engine_human_hold_reason: null,
       updated_at: now,
     };
   }
-  if (receiptType === "failed" || receiptType === "completed") {
+  if (receiptType === "done" || receiptType === "completed") {
+    return {
+      completed_at: now,
+      completed_by_agent_id: agentId,
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: now,
+    };
+  }
+  if (receiptType === "failed") {
     return {
       open_engine_claimed_by_agent_id: null,
       open_engine_claimed_at: null,

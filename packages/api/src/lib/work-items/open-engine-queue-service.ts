@@ -1,6 +1,13 @@
 import { GraphQLError } from "graphql";
 
-import { asc, db, sql, workItems } from "../../graphql/utils.js";
+import {
+  asc,
+  db,
+  sql,
+  workItemLabelAssignments,
+  workItemLabels,
+  workItems,
+} from "../../graphql/utils.js";
 
 const DEFAULT_CLAIM_LEASE_SECONDS = 15 * 60;
 const MAX_CLAIM_LEASE_SECONDS = 24 * 60 * 60;
@@ -12,9 +19,16 @@ export type OpenEngineWorkItem = typeof workItems.$inferSelect;
 export interface OpenEngineQueueScope {
   tenantId: string;
   queueKey?: string | null;
+  spaceId?: string | null;
+  statusId?: string | null;
+  labelSlugs?: string[] | null;
+  ownerUserId?: string | null;
+  ownerAgentId?: string | null;
+  agentId?: string | null;
 }
 
-export interface ListEligibleOpenEngineWorkItemsInput extends OpenEngineQueueScope {
+export interface ListEligibleOpenEngineWorkItemsInput
+  extends OpenEngineQueueScope {
   now?: Date;
   limit?: number | null;
 }
@@ -77,6 +91,19 @@ export function openEngineEligibilityPredicate(
     AND ${workItems.open_engine_queue_key} IS NOT DISTINCT FROM ${
       input.queueKey ?? null
     }
+    ${input.spaceId ? sql`AND ${workItems.space_id} = ${input.spaceId}` : sql``}
+    ${input.statusId ? sql`AND ${workItems.status_id} = ${input.statusId}` : sql``}
+    ${
+      input.ownerUserId
+        ? sql`AND ${workItems.owner_user_id} = ${input.ownerUserId}`
+        : sql``
+    }
+    ${
+      (input.ownerAgentId ?? input.agentId)
+        ? sql`AND ${workItems.owner_agent_id} = ${input.ownerAgentId ?? input.agentId}`
+        : sql``
+    }
+    ${labelSlugsPredicate(input.tenantId, input.labelSlugs)}
     AND ${workItems.archived_at} IS NULL
     AND ${workItems.completed_at} IS NULL
     AND ${workItems.applicable} = true
@@ -92,6 +119,38 @@ export function openEngineEligibilityPredicate(
       OR ${workItems.open_engine_claim_expires_at} IS NULL
       OR ${workItems.open_engine_claim_expires_at} <= ${now}
     )`;
+}
+
+function labelSlugsPredicate(
+  tenantId: string,
+  labelSlugs: string[] | null | undefined,
+) {
+  const slugs = [...new Set((labelSlugs ?? []).map(normalizeLabelSlug))].filter(
+    Boolean,
+  );
+  if (slugs.length === 0) return sql``;
+  return sql`AND EXISTS (
+    SELECT 1
+      FROM ${workItemLabelAssignments} open_engine_wila
+      JOIN ${workItemLabels} open_engine_wil
+        ON open_engine_wil.id = open_engine_wila.label_id
+       AND open_engine_wil.tenant_id = open_engine_wila.tenant_id
+     WHERE open_engine_wila.tenant_id = ${tenantId}
+       AND open_engine_wila.work_item_id = ${workItems.id}
+       AND open_engine_wil.archived_at IS NULL
+       AND open_engine_wil.slug IN (${sql.join(
+         slugs.map((slug) => sql`${slug}`),
+         sql`, `,
+       )})
+  )`;
+}
+
+function normalizeLabelSlug(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function openEnginePriorityOrder() {
