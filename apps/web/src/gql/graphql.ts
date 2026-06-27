@@ -1570,8 +1570,10 @@ export type CreateWebhookInput = {
 };
 
 export type CreateWorkItemDocumentInput = {
-  content: Scalars['String']['input'];
+  content?: InputMaybe<Scalars['String']['input']>;
+  contentBase64?: InputMaybe<Scalars['String']['input']>;
   contentType?: InputMaybe<Scalars['String']['input']>;
+  filename?: InputMaybe<Scalars['String']['input']>;
   kind?: InputMaybe<WorkItemDocumentKind>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -9700,7 +9702,9 @@ export type UpdateWebhookInput = {
 export type UpdateWorkItemDocumentInput = {
   archived?: InputMaybe<Scalars['Boolean']['input']>;
   content?: InputMaybe<Scalars['String']['input']>;
+  contentBase64?: InputMaybe<Scalars['String']['input']>;
   contentType?: InputMaybe<Scalars['String']['input']>;
+  filename?: InputMaybe<Scalars['String']['input']>;
   id: Scalars['ID']['input'];
   kind?: InputMaybe<WorkItemDocumentKind>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;

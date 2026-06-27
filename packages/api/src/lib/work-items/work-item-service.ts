@@ -471,11 +471,18 @@ export async function createWorkItemDocument(
   const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
   const now = new Date();
   const id = randomUUID();
-  const contentType = normalizeDocumentContentType(input.contentType);
-  const content = normalizeDocumentContent(input.content);
-  const contentBuffer = Buffer.from(content, "utf8");
+  const payload = resolveCreateDocumentPayload(input);
+  const contentType = payload.contentType;
+  const contentBuffer = payload.buffer;
   const checksum = sha256(contentBuffer);
-  const s3Key = buildWorkItemDocumentS3Key(tenantId, item.id, id, contentType);
+  const s3Key = buildWorkItemDocumentS3Key(
+    tenantId,
+    item.id,
+    id,
+    contentType,
+    input.filename,
+  );
+  const metadata = documentMetadata(input);
 
   validateDocumentSize(contentBuffer);
   await putWorkItemDocumentContent({
@@ -500,7 +507,7 @@ export async function createWorkItemDocument(
         s3_key: s3Key,
         size_bytes: contentBuffer.byteLength,
         checksum_sha256: checksum,
-        metadata: parseAwsJsonObject(input.metadata),
+        metadata,
         created_by_user_id: callerUserId,
         updated_at: now,
       })
@@ -521,7 +528,7 @@ export async function createWorkItemDocument(
       }),
     });
 
-    return { ...created, content };
+    return { ...created, content: payload.previewContent };
   });
 }
 
@@ -552,7 +559,7 @@ export async function updateWorkItemDocument(
   const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
   const now = new Date();
   const updates: Record<string, unknown> = { updated_at: now };
-  let updatedContent: string | undefined;
+  let updatedContent: string | null | undefined;
 
   if (input.title !== undefined) {
     updates.title = requireNonEmpty(input.title, "title");
@@ -560,22 +567,34 @@ export async function updateWorkItemDocument(
   if (input.kind !== undefined) {
     updates.kind = normalizeWorkItemDocumentKind(input.kind);
   }
-  if (input.metadata !== undefined) {
-    updates.metadata = parseAwsJsonObject(input.metadata);
+  if (input.metadata !== undefined || input.filename !== undefined) {
+    updates.metadata = documentMetadata({
+      metadata:
+        input.metadata !== undefined ? input.metadata : document.metadata,
+      filename: input.filename,
+    });
   }
   if (input.archived !== undefined) {
     updates.archived_at = input.archived ? now : null;
   }
-  if (input.content !== undefined || input.contentType !== undefined) {
-    const content = normalizeDocumentContent(
-      input.content !== undefined
-        ? input.content
-        : await readWorkItemDocumentContent(document.s3_key),
-    );
-    const contentType = normalizeDocumentContentType(
-      input.contentType ?? document.content_type,
-    );
-    const contentBuffer = Buffer.from(content, "utf8");
+  if (
+    input.content !== undefined ||
+    input.contentBase64 !== undefined ||
+    input.contentType !== undefined
+  ) {
+    const payload =
+      input.contentBase64 !== undefined || input.content !== undefined
+        ? resolveCreateDocumentPayload({
+            content: input.content,
+            contentBase64: input.contentBase64,
+            contentType: input.contentType ?? document.content_type,
+          })
+        : resolveExistingDocumentPayload(
+            await readWorkItemDocumentContentBuffer(document.s3_key),
+            input.contentType ?? document.content_type,
+          );
+    const contentBuffer = payload.buffer;
+    const contentType = payload.contentType;
     validateDocumentSize(contentBuffer);
     await putWorkItemDocumentContent({
       s3Key: document.s3_key,
@@ -588,7 +607,7 @@ export async function updateWorkItemDocument(
     updates.content_type = contentType;
     updates.size_bytes = contentBuffer.byteLength;
     updates.checksum_sha256 = sha256(contentBuffer);
-    updatedContent = content;
+    updatedContent = payload.previewContent;
   }
 
   return db.transaction(async (tx) => {
@@ -625,10 +644,12 @@ export async function updateWorkItemDocument(
     return {
       ...updated,
       content:
-        updatedContent ??
-        (input.archived === true
-          ? null
-          : await readWorkItemDocumentContent(updated.s3_key)),
+        updatedContent !== undefined
+          ? updatedContent
+          : input.archived === true ||
+              !isPreviewableContentType(updated.content_type)
+            ? null
+            : await readWorkItemDocumentContent(updated.s3_key),
     };
   });
 }
@@ -956,23 +977,107 @@ export function normalizeWorkItemDocumentKind(
 }
 
 function normalizeDocumentContent(value: unknown) {
-  if (value === undefined || value === null) return "";
+  if (value === undefined || value === null) {
+    throw new GraphQLError("content or contentBase64 is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
   return String(value);
 }
 
 function normalizeDocumentContentType(value: unknown) {
   const contentType = optionalTrim(value) ?? "text/markdown";
-  const allowed =
-    contentType.startsWith("text/") || contentType === "application/json";
-  if (!allowed) {
-    throw new GraphQLError(
-      "Work Item documents currently support text content",
-      {
-        extensions: { code: "BAD_USER_INPUT" },
-      },
-    );
+  if (isSupportedDocumentContentType(contentType)) {
+    return contentType;
   }
-  return contentType;
+  throw new GraphQLError(
+    `Unsupported Work Item document content type: ${contentType}`,
+    {
+      extensions: { code: "BAD_USER_INPUT" },
+    },
+  );
+}
+
+function resolveCreateDocumentPayload(input: Record<string, any>) {
+  const contentType = normalizeDocumentContentType(input.contentType);
+  if (input.contentBase64 !== undefined && input.contentBase64 !== null) {
+    const buffer = decodeBase64Content(input.contentBase64);
+    return {
+      buffer,
+      contentType,
+      previewContent: isPreviewableContentType(contentType)
+        ? buffer.toString("utf8")
+        : null,
+    };
+  }
+  const content = normalizeDocumentContent(input.content);
+  return {
+    buffer: Buffer.from(content, "utf8"),
+    contentType,
+    previewContent: content,
+  };
+}
+
+function resolveExistingDocumentPayload(
+  buffer: Buffer,
+  contentTypeValue: unknown,
+) {
+  const contentType = normalizeDocumentContentType(contentTypeValue);
+  return {
+    buffer,
+    contentType,
+    previewContent: isPreviewableContentType(contentType)
+      ? buffer.toString("utf8")
+      : null,
+  };
+}
+
+function decodeBase64Content(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    throw new GraphQLError("contentBase64 is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  if (!isValidBase64(text)) {
+    throw new GraphQLError("contentBase64 must be valid base64", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  const buffer = Buffer.from(text, "base64");
+  if (buffer.byteLength === 0) {
+    throw new GraphQLError("Uploaded document is empty", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return buffer;
+}
+
+function isValidBase64(value: string) {
+  return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+    value,
+  );
+}
+
+function isSupportedDocumentContentType(contentType: string) {
+  return (
+    contentType.startsWith("text/") ||
+    contentType === "application/json" ||
+    contentType === "application/pdf" ||
+    contentType === "application/csv" ||
+    contentType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    contentType === "application/msword" ||
+    contentType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    contentType === "application/vnd.ms-excel" ||
+    contentType === "application/octet-stream"
+  );
+}
+
+function isPreviewableContentType(contentType: unknown) {
+  const normalized = String(contentType ?? "").toLowerCase();
+  return normalized.startsWith("text/") || normalized === "application/json";
 }
 
 function validateDocumentSize(buffer: Buffer) {
@@ -992,8 +1097,10 @@ function buildWorkItemDocumentS3Key(
   workItemId: string,
   documentId: string,
   contentType: string,
+  filename?: unknown,
 ) {
-  const extension = contentType === "application/json" ? "json" : "md";
+  const extension =
+    extensionFromFilename(filename) ?? extensionFromContentType(contentType);
   return [
     "tenants",
     tenantId,
@@ -1002,6 +1109,47 @@ function buildWorkItemDocumentS3Key(
     "documents",
     `${documentId}.${extension}`,
   ].join("/");
+}
+
+function extensionFromFilename(value: unknown) {
+  const filename = optionalTrim(value);
+  if (!filename) return null;
+  const match = filename.toLowerCase().match(/\.([a-z0-9]{1,12})$/);
+  return match ? match[1] : null;
+}
+
+function extensionFromContentType(contentType: string) {
+  switch (contentType) {
+    case "application/json":
+      return "json";
+    case "application/pdf":
+      return "pdf";
+    case "text/plain":
+      return "txt";
+    case "text/csv":
+    case "application/csv":
+      return "csv";
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return "docx";
+    case "application/msword":
+      return "doc";
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return "xlsx";
+    case "application/vnd.ms-excel":
+      return "xls";
+    default:
+      return "md";
+  }
+}
+
+function documentMetadata(input: Record<string, any>) {
+  const parsed = parseAwsJsonObject(input.metadata);
+  const filename = optionalTrim(input.filename);
+  if (!filename) return parsed;
+  return {
+    ...(parsed && typeof parsed === "object" ? parsed : {}),
+    filename,
+  };
 }
 
 async function putWorkItemDocumentContent(input: {
@@ -1030,36 +1178,48 @@ async function putWorkItemDocumentContent(input: {
 async function hydrateWorkItemDocumentContent(row: Record<string, any>) {
   return {
     ...row,
-    content: row.archived_at
-      ? null
-      : await readWorkItemDocumentContent(row.s3_key),
+    content:
+      row.archived_at || !isPreviewableContentType(row.content_type)
+        ? null
+        : await readWorkItemDocumentContent(row.s3_key),
   };
 }
 
 async function readWorkItemDocumentContent(s3Key: string) {
+  return (await readWorkItemDocumentContentBuffer(s3Key)).toString("utf8");
+}
+
+async function readWorkItemDocumentContentBuffer(s3Key: string) {
   const response = await workItemDocumentS3.send(
     new GetObjectCommand({
       Bucket: requireWorkspaceBucket(),
       Key: s3Key,
     }),
   );
-  return bodyToString(response.Body);
+  return bodyToBuffer(response.Body);
 }
 
-async function bodyToString(body: unknown) {
-  if (!body) return "";
+async function bodyToBuffer(body: unknown) {
+  if (!body) return Buffer.alloc(0);
+  if (
+    typeof body === "object" &&
+    "transformToByteArray" in body &&
+    typeof body.transformToByteArray === "function"
+  ) {
+    return Buffer.from(await body.transformToByteArray());
+  }
   if (
     typeof body === "object" &&
     "transformToString" in body &&
     typeof body.transformToString === "function"
   ) {
-    return body.transformToString();
+    return Buffer.from(await body.transformToString(), "utf8");
   }
   const chunks: Buffer[] = [];
   for await (const chunk of body as AsyncIterable<Uint8Array>) {
     chunks.push(Buffer.from(chunk));
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks);
 }
 
 function requireWorkspaceBucket() {

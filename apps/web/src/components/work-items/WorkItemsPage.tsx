@@ -284,7 +284,10 @@ export function WorkItemsPage({
     async (input: {
       title: string;
       kind: WorkItemDocumentKind;
-      content: string;
+      content?: string;
+      contentBase64?: string;
+      contentType?: string;
+      filename?: string;
     }) => {
       if (!tenantId || !detailItemId || documentCreating) return false;
       const result = await executeCreateDocument({
@@ -294,7 +297,9 @@ export function WorkItemsPage({
           title: input.title,
           kind: input.kind,
           content: input.content,
-          contentType: "text/markdown",
+          contentBase64: input.contentBase64,
+          contentType: input.contentType ?? "text/markdown",
+          filename: input.filename,
         },
       });
       if (result.error) {
