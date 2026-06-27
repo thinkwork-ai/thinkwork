@@ -416,6 +416,7 @@ input RecordOpenEngineWorkItemReceiptInput {
   message: String
   evidence: AWSJSON
   metadata: AWSJSON
+  idempotencyKey: String
   now: AWSDateTime
 }
 

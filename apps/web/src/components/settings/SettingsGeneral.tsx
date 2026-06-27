@@ -17,6 +17,7 @@ import {
   SelectValue,
   Switch,
   useTheme,
+  type Theme,
 } from "@thinkwork/ui";
 import {
   EmailChannelProvider,
@@ -1201,18 +1202,16 @@ function ThemeRow() {
   return (
     <SettingsRow
       label="Theme"
-      description="Light or dark appearance on this device."
+      description="Light, neutral dark, or LastMile-style blue dark appearance on this device."
     >
-      <Select
-        value={theme}
-        onValueChange={(v) => setTheme(v as "light" | "dark")}
-      >
+      <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
         <SelectTrigger className="w-40">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="light">Light</SelectItem>
           <SelectItem value="dark">Dark</SelectItem>
+          <SelectItem value="dark-blue">Dark Blue</SelectItem>
         </SelectContent>
       </Select>
     </SettingsRow>

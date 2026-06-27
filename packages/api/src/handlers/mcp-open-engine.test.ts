@@ -5,6 +5,7 @@ const {
   mockClaimNext,
   mockCreateDocument,
   mockCreateWorkItem,
+  mockGetQueueSnapshot,
   mockGetDocument,
   mockGetWorkItem,
   mockListDocuments,
@@ -27,6 +28,7 @@ const {
     mockClaimNext: vi.fn(),
     mockCreateDocument: vi.fn(),
     mockCreateWorkItem: vi.fn(),
+    mockGetQueueSnapshot: vi.fn(),
     mockGetDocument: vi.fn(),
     mockGetWorkItem: vi.fn(),
     mockListDocuments: vi.fn(),
@@ -101,6 +103,7 @@ vi.mock("../graphql/utils.js", () => {
 
 vi.mock("../lib/work-items/open-engine-queue-service.js", () => ({
   claimNextOpenEngineWorkItem: mockClaimNext,
+  getOpenEngineQueueSnapshot: mockGetQueueSnapshot,
   listEligibleOpenEngineWorkItems: mockListEligible,
 }));
 
@@ -135,6 +138,25 @@ beforeEach(() => {
     metadata: { receiptType: "claimed" },
     created_at: new Date("2026-06-27T12:00:00Z"),
   });
+  mockGetQueueSnapshot.mockResolvedValue({
+    tenantId: "tenant-1",
+    queueKey: "codex",
+    generatedAt: "2026-06-27T12:00:00.000Z",
+    total: 1,
+    counts: {
+      eligible: 1,
+      claimed: 0,
+      stale_claim: 0,
+      scheduled: 0,
+      waiting: 0,
+      human_hold: 0,
+      blocked: 0,
+      completed: 0,
+      archived: 0,
+      disabled: 0,
+    },
+    staleClaims: [],
+  });
 });
 
 describe("OpenEngine MCP handler", () => {
@@ -154,6 +176,9 @@ describe("OpenEngine MCP handler", () => {
     expect(response.statusCode).toBe(200);
     expect(body.result.tools.map((tool: any) => tool.name)).toContain(
       "open_engine_claim_next",
+    );
+    expect(body.result.tools.map((tool: any) => tool.name)).toContain(
+      "open_engine_queue_snapshot",
     );
   });
 
@@ -208,9 +233,33 @@ describe("OpenEngine MCP handler", () => {
         workItemId: "work-item-1",
         agentId: "agent-1",
         receiptType: "claimed",
+        idempotencyKey: expect.stringContaining("open-engine-claim:"),
       }),
     );
     expect(body.result.structuredContent.claimed.id).toBe("work-item-1");
+  });
+
+  it("returns an OpenEngine queue snapshot for operational visibility", async () => {
+    const response = await callTool("open_engine_queue_snapshot", {
+      queueKey: "codex",
+      labelSlugs: ["Codex"],
+      agentId: "agent-1",
+      limit: 10,
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(mockGetQueueSnapshot).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      queueKey: "codex",
+      spaceId: null,
+      statusId: null,
+      labelSlugs: ["Codex"],
+      ownerUserId: null,
+      ownerAgentId: null,
+      agentId: "agent-1",
+      limit: 10,
+    });
+    expect(body.result.structuredContent.snapshot.counts.eligible).toBe(1);
   });
 
   it("creates OpenEngine-enabled Work Items by default", async () => {
@@ -299,6 +348,7 @@ describe("OpenEngine MCP handler", () => {
       agentId: "agent-1",
       status: "checking",
       message: "Looking for work",
+      idempotencyKey: "status-key-1",
     });
     const body = JSON.parse(response.body ?? "{}");
 
@@ -316,6 +366,7 @@ describe("OpenEngine MCP handler", () => {
       expect.objectContaining({
         receiptType: "status",
         metadata: { status: "checking", ledgerDocumentId: "ledger-1" },
+        idempotencyKey: "status-key-1",
       }),
     );
     expect(body.result.structuredContent.document.id).toBe("ledger-1");

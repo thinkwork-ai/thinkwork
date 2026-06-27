@@ -759,7 +759,7 @@ function ThreadInfoPanelBody({
 
   return (
     <aside
-      className="absolute bottom-4 right-5 top-2.5 z-20 hidden w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
+      className="tw-thread-info-panel absolute bottom-4 right-5 top-2.5 z-20 hidden w-[300px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[1.4rem] border border-white/10 bg-[#2b2b2b]/95 text-[#ececec] shadow-2xl md:grid"
       aria-label={hasGoal ? "Thread Goal info" : "Thread info"}
       data-testid="thread-info-panel"
     >
@@ -3034,7 +3034,7 @@ function FollowUpComposer({
       className={cn(
         "grid gap-2",
         hasTaskQueue &&
-          "overflow-hidden rounded-[28px] border border-white/10 bg-[#262626] text-white shadow-lg",
+          "tw-composer-shell overflow-hidden rounded-[28px] border border-white/10 text-white shadow-lg",
       )}
     >
       {taskQueue ? (
@@ -3061,7 +3061,7 @@ function FollowUpComposer({
         ) : null}
         <PromptInput
           className={cn(
-            "text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-[#262626] [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10 dark:[&_[data-slot=input-group]]:!bg-[#262626]",
+            "tw-composer-surface text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-white/10",
             hasTaskQueue
               ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
               : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",

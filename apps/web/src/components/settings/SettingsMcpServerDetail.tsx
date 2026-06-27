@@ -11,6 +11,7 @@ import {
   Save,
 } from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   buildMcpOAuthAuthorizeUrl,
@@ -54,6 +55,7 @@ export function SettingsMcpServerDetail() {
   const { serverId } = useParams({
     from: "/_authed/settings/mcp-servers/$serverId",
   });
+  const { user } = useAuth();
   const { tenant, tenantId, userId } = useTenant();
   const tenantSlug = tenant?.slug ?? null;
   const navigate = useNavigate();
@@ -267,7 +269,7 @@ export function SettingsMcpServerDetail() {
   }
 
   function authenticate() {
-    if (!tenantId || !userId || !server) return;
+    if (!tenantId || !oauthUserId || !server) return;
     setPending(true);
     setNotice(null);
     const returnUrl = new URL(window.location.href);
@@ -277,7 +279,7 @@ export function SettingsMcpServerDetail() {
     returnUrl.searchParams.delete("status");
     const authorizeUrl = buildMcpOAuthAuthorizeUrl({
       mcpServerId: server.id,
-      userId,
+      userId: oauthUserId,
       tenantId,
       returnTo: returnUrl.toString(),
       force: true,
@@ -286,11 +288,11 @@ export function SettingsMcpServerDetail() {
   }
 
   async function clearAuthentication() {
-    if (!tenantId || !userId || !server) return;
+    if (!tenantId || !oauthUserId || !server) return;
     setPending(true);
     setNotice(null);
     try {
-      await clearUserMcpToken(tenantId, userId, server.id);
+      await clearUserMcpToken(tenantId, oauthUserId, server.id);
       setUserServers((prev) =>
         prev.map((s) =>
           s.id === server.id ? { ...s, authStatus: "not_connected" } : s,
@@ -374,6 +376,12 @@ export function SettingsMcpServerDetail() {
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
   const managed = isPluginInstalledMcpServer(server);
+  const oauthUserId = userId ?? user?.sub ?? null;
+  const authUnavailableReason = !tenantId
+    ? "Tenant identity is still loading."
+    : !oauthUserId
+      ? "User identity is still loading."
+      : null;
   const managedDescription =
     server.managementSource === "plugin"
       ? "Lifecycle changes are controlled from the plugin settings page."
@@ -461,7 +469,8 @@ export function SettingsMcpServerDetail() {
               </Badge>
               <Button
                 size="sm"
-                disabled={pending || !tenantId || !userId}
+                disabled={pending || Boolean(authUnavailableReason)}
+                title={authUnavailableReason ?? undefined}
                 onClick={authenticate}
                 className="gap-2"
               >
@@ -472,7 +481,8 @@ export function SettingsMcpServerDetail() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={pending || !tenantId || !userId}
+                  disabled={pending || Boolean(authUnavailableReason)}
+                  title={authUnavailableReason ?? undefined}
                   onClick={clearAuthentication}
                   className="gap-2"
                 >

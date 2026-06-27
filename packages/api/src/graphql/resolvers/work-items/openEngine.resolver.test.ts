@@ -162,6 +162,7 @@ describe("Open Engine Work Item resolvers", () => {
           message: "Need EIN.",
           evidence: JSON.stringify({ questionId: "q-1" }),
           metadata: { attempt: 1 },
+          idempotencyKey: "receipt-key-1",
           now: "2026-06-27T13:00:00.000Z",
         },
       },
@@ -182,6 +183,7 @@ describe("Open Engine Work Item resolvers", () => {
       message: "Need EIN.",
       evidence: { questionId: "q-1" },
       metadata: { attempt: 1 },
+      idempotencyKey: "receipt-key-1",
       now: new Date("2026-06-27T13:00:00.000Z"),
     });
     expect(result).toEqual({

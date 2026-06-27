@@ -32,6 +32,7 @@ import {
 } from "../lib/work-items/work-item-service.js";
 import {
   claimNextOpenEngineWorkItem,
+  getOpenEngineQueueSnapshot,
   listEligibleOpenEngineWorkItems,
 } from "../lib/work-items/open-engine-queue-service.js";
 import {
@@ -86,8 +87,28 @@ const TOOLS = [
         labelSlugs: { type: "array", items: { type: "string" } },
         leaseSeconds: { type: "integer", minimum: 1, maximum: 86400 },
         message: { type: "string" },
+        idempotencyKey: { type: "string" },
       },
       required: ["agentId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "open_engine_queue_snapshot",
+    description:
+      "Return OpenEngine queue health counts for eligible, claimed, stale, blocked, held, scheduled, and completed work.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        queueKey: { type: "string" },
+        spaceId: { type: "string" },
+        statusId: { type: "string" },
+        labelSlugs: { type: "array", items: { type: "string" } },
+        ownerUserId: { type: "string" },
+        ownerAgentId: { type: "string" },
+        agentId: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+      },
       additionalProperties: false,
     },
   },
@@ -265,6 +286,7 @@ const TOOLS = [
         message: { type: "string" },
         evidence: { type: "object" },
         metadata: { type: "object" },
+        idempotencyKey: { type: "string" },
       },
       required: ["workItemId", "agentId", "receiptType"],
       additionalProperties: false,
@@ -292,6 +314,7 @@ const TOOLS = [
         },
         message: { type: "string" },
         evidence: { type: "object" },
+        idempotencyKey: { type: "string" },
         statusId: { type: "string" },
         statusCategory: {
           type: "string",
@@ -325,6 +348,7 @@ const TOOLS = [
         },
         message: { type: "string" },
         queueResult: { type: "object" },
+        idempotencyKey: { type: "string" },
       },
       required: ["workItemId", "agentId", "status"],
       additionalProperties: false,
@@ -462,78 +486,62 @@ async function handleToolCall(
     );
   }
   const ctx = graphQlContextForMcpCaller(caller, claims);
+  const startedAt = Date.now();
 
   try {
+    let result: Record<string, unknown>;
     switch (toolName) {
       case "open_engine_list_work_items":
-        return jsonRpcToolResult(
-          request.id,
-          await listOpenEngineTool(ctx, caller, args),
-        );
+        result = await listOpenEngineTool(ctx, caller, args);
+        break;
       case "open_engine_claim_next":
-        return jsonRpcToolResult(
-          request.id,
-          await claimNextTool(ctx, caller, args),
-        );
+        result = await claimNextTool(ctx, caller, args);
+        break;
+      case "open_engine_queue_snapshot":
+        result = await queueSnapshotTool(caller, args);
+        break;
       case "open_engine_get_work_item":
-        return jsonRpcToolResult(
-          request.id,
-          await getWorkItemContext(ctx, caller, args),
-        );
+        result = await getWorkItemContext(ctx, caller, args);
+        break;
       case "open_engine_get_context":
-        return jsonRpcToolResult(
-          request.id,
-          await getWorkItemContext(ctx, caller, args),
-        );
+        result = await getWorkItemContext(ctx, caller, args);
+        break;
       case "open_engine_create_work_item":
-        return jsonRpcToolResult(
-          request.id,
-          await createWorkItemTool(ctx, caller, args),
-        );
+        result = await createWorkItemTool(ctx, caller, args);
+        break;
       case "open_engine_update_work_item":
-        return jsonRpcToolResult(
-          request.id,
-          await updateWorkItemTool(ctx, caller, args),
-        );
+        result = await updateWorkItemTool(ctx, caller, args);
+        break;
       case "open_engine_list_documents":
-        return jsonRpcToolResult(
-          request.id,
-          await listDocumentsTool(ctx, caller, args),
-        );
+        result = await listDocumentsTool(ctx, caller, args);
+        break;
       case "open_engine_fetch_document":
-        return jsonRpcToolResult(
-          request.id,
-          await fetchDocumentTool(ctx, caller, args),
-        );
+        result = await fetchDocumentTool(ctx, caller, args);
+        break;
       case "open_engine_create_document":
-        return jsonRpcToolResult(
-          request.id,
-          await createDocumentTool(ctx, caller, args),
-        );
+        result = await createDocumentTool(ctx, caller, args);
+        break;
       case "open_engine_update_document":
-        return jsonRpcToolResult(
-          request.id,
-          await updateDocumentTool(ctx, caller, args),
-        );
+        result = await updateDocumentTool(ctx, caller, args);
+        break;
       case "open_engine_record_receipt":
-        return jsonRpcToolResult(
-          request.id,
-          await recordReceiptTool(caller, args),
-        );
+        result = await recordReceiptTool(caller, args);
+        break;
       case "open_engine_update_state":
-        return jsonRpcToolResult(
-          request.id,
-          await updateStateTool(ctx, caller, args),
-        );
+        result = await updateStateTool(ctx, caller, args);
+        break;
       case "open_engine_update_status_ledger":
-        return jsonRpcToolResult(
-          request.id,
-          await updateStatusLedgerTool(ctx, caller, args),
-        );
+        result = await updateStatusLedgerTool(ctx, caller, args);
+        break;
       default:
         return jsonRpcError(request.id, -32601, `Unknown tool: ${toolName}`);
     }
+    logOpenEngineToolCall("ok", caller, toolName, startedAt, result);
+    return jsonRpcToolResult(request.id, result);
   } catch (err) {
+    logOpenEngineToolCall("error", caller, toolName, startedAt, {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return jsonRpcError(
       request.id,
       errorCode(err),
@@ -579,6 +587,24 @@ async function listOpenEngineTool(
   return { ok: true, workItems: rows.map(formatWorkItemSummary) };
 }
 
+async function queueSnapshotTool(
+  caller: McpCaller,
+  args: Record<string, unknown>,
+) {
+  const snapshot = await getOpenEngineQueueSnapshot({
+    tenantId: caller.tenantId,
+    queueKey: nullableStringArg(args.queueKey),
+    spaceId: stringArg(args.spaceId),
+    statusId: stringArg(args.statusId),
+    labelSlugs: stringArrayArg(args.labelSlugs),
+    ownerUserId: stringArg(args.ownerUserId),
+    ownerAgentId: stringArg(args.ownerAgentId),
+    agentId: stringArg(args.agentId),
+    limit: limitArg(args.limit),
+  });
+  return { ok: true, snapshot };
+}
+
 async function claimNextTool(
   ctx: GraphQLContext,
   caller: McpCaller,
@@ -607,6 +633,9 @@ async function claimNextTool(
     agentId,
     receiptType: "claimed",
     message: stringArg(args.message) ?? "AGENT CLAIMED",
+    idempotencyKey:
+      stringArg(args.idempotencyKey) ??
+      buildClaimReceiptIdempotencyKey(caller.tenantId, claimed, agentId),
     metadata: { sourceTool: "open_engine_claim_next" },
   });
   return {
@@ -766,6 +795,7 @@ async function recordReceiptTool(
     message: stringArg(args.message),
     evidence: optionalRecordArg(args.evidence) ?? null,
     metadata: optionalRecordArg(args.metadata) ?? null,
+    idempotencyKey: stringArg(args.idempotencyKey),
   });
   return { ok: true, receipt: formatEvent(event) };
 }
@@ -785,6 +815,7 @@ async function updateStateTool(
     message: stringArg(args.message),
     evidence: optionalRecordArg(args.evidence) ?? null,
     metadata: { sourceTool: "open_engine_update_state", state },
+    idempotencyKey: stringArg(args.idempotencyKey),
   });
   const statusId = stringArg(args.statusId);
   const statusCategory = stringArg(args.statusCategory);
@@ -865,6 +896,7 @@ async function updateStatusLedgerTool(
     receiptType: "status",
     message: stringArg(args.message) ?? `AGENT STATUS ${status}`,
     metadata: { status, ledgerDocumentId: document.id },
+    idempotencyKey: stringArg(args.idempotencyKey),
   });
   return {
     ok: true,
@@ -1122,6 +1154,73 @@ function formatEvent(row: Record<string, any>) {
     metadata: row.metadata ?? null,
     createdAt: iso(row.created_at),
   };
+}
+
+function buildClaimReceiptIdempotencyKey(
+  tenantId: string,
+  workItem: Record<string, any>,
+  agentId: string,
+) {
+  const claimedAt = iso(workItem.open_engine_claimed_at) ?? "unknown";
+  return `open-engine-claim:${tenantId}:${workItem.id}:${agentId}:${claimedAt}`;
+}
+
+function logOpenEngineToolCall(
+  outcome: "ok" | "error",
+  caller: McpCaller,
+  toolName: string,
+  startedAt: number,
+  result: Record<string, unknown>,
+) {
+  const summary = summarizeToolResult(result);
+  console.info(
+    JSON.stringify({
+      event: "open_engine_mcp_tool_call",
+      outcome,
+      toolName,
+      tenantId: caller.tenantId,
+      userId: caller.userId,
+      agentId: caller.agentId,
+      durationMs: Date.now() - startedAt,
+      ...summary,
+    }),
+  );
+}
+
+function summarizeToolResult(result: Record<string, unknown>) {
+  const claimed = isRecord(result.claimed) ? result.claimed : null;
+  const workItems = Array.isArray(result.workItems) ? result.workItems : null;
+  const documents = Array.isArray(result.documents) ? result.documents : null;
+  const snapshot = isRecord(result.snapshot) ? result.snapshot : null;
+  return {
+    ok: result.ok,
+    workItemId:
+      stringFromRecord(result.workItem, "id") ??
+      stringFromRecord(result.context, "workItem.id") ??
+      stringFromRecord(claimed, "id") ??
+      null,
+    claimedWorkItemId: stringFromRecord(claimed, "id"),
+    receiptId: stringFromRecord(result.receipt, "id"),
+    documentId: stringFromRecord(result.document, "id"),
+    workItemCount: workItems?.length,
+    documentCount: documents?.length,
+    queueCounts: snapshot?.counts,
+    error: typeof result.error === "string" ? result.error : undefined,
+  };
+}
+
+function stringFromRecord(value: unknown, key: string) {
+  if (!isRecord(value)) return null;
+  if (!key.includes(".")) {
+    const child = value[key];
+    return typeof child === "string" ? child : null;
+  }
+  let current: unknown = value;
+  for (const segment of key.split(".")) {
+    if (!isRecord(current)) return null;
+    current = current[segment];
+  }
+  return typeof current === "string" ? current : null;
 }
 
 function receiptTypeForState(state: string): OpenEngineReceiptType {

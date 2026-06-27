@@ -21,6 +21,16 @@ const mocks = vi.hoisted(() => ({
   saveMcpServiceCredential: vi.fn(),
   clearUserMcpToken: vi.fn(),
   buildMcpOAuthAuthorizeUrl: vi.fn(),
+  tenantContext: {
+    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
+    tenantId: "tenant-1",
+    userId: "user-1" as string | null,
+  },
+  authUser: {
+    email: "operator@example.com",
+    sub: "cognito-sub-1",
+    groups: [],
+  } as { email: string; sub: string; groups: string[] } | null,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -33,10 +43,12 @@ vi.mock("@/context/PageHeaderContext", () => ({
 }));
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({
-    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
-    tenantId: "tenant-1",
-    userId: "user-1",
+  useTenant: () => mocks.tenantContext,
+}));
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({
+    user: mocks.authUser,
   }),
 }));
 
@@ -77,6 +89,16 @@ beforeEach(() => {
   mocks.saveMcpServiceCredential.mockReset();
   mocks.clearUserMcpToken.mockReset();
   mocks.buildMcpOAuthAuthorizeUrl.mockReset();
+  mocks.tenantContext = {
+    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
+    tenantId: "tenant-1",
+    userId: "user-1",
+  };
+  mocks.authUser = {
+    email: "operator@example.com",
+    sub: "cognito-sub-1",
+    groups: [],
+  };
   mocks.useQuery.mockReturnValue([{ data: { agent: { id: "agent-1" } } }]);
   mocks.listRuntimeMcpTools.mockResolvedValue({ tools: [] });
   mocks.callRuntimeMcpTool.mockResolvedValue({ content: [] });
@@ -112,6 +134,18 @@ describe("SettingsMcpServerDetail", () => {
     expect(screen.getByText("Connected")).toBeTruthy();
     expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /clear/i })).toBeTruthy();
+  });
+
+  it("keeps OAuth authentication available while DB user id discovery is loading", async () => {
+    mocks.tenantContext.userId = null;
+    mockServerState("not_connected");
+
+    render(<SettingsMcpServerDetail />);
+
+    const button = await screen.findByRole("button", {
+      name: /authenticate/i,
+    });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("keeps managed MCP servers authenticatable but not manually removable", async () => {
