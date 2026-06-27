@@ -1,17 +1,17 @@
 ---
-title: KBs
-description: The Space Studio KBs tab for selecting knowledge bases available inside a Space.
+title: Sources
+description: The Space Studio Sources tab for selecting Brain Sources and legacy knowledge-base compatibility available inside a Space.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-KBs is the Space Studio tab for selecting which knowledge bases are available inside a Space. Use it when a workroom needs access to specific authored documents, runbooks, policies, or customer material.
+Sources is the Space Studio tab for selecting which authored document sources are available inside a Space. Use it when a workroom needs access to specific documents, runbooks, policies, or customer material. The route remains `/spaces/:spaceId/kbs` for compatibility.
 
 **Route:** `/spaces/:spaceId/kbs`
 
 ## What the tab controls
 
-The KBs tab selects tenant knowledge bases for this Space. Selected knowledge bases become eligible context sources when the tenant platform agent works in the Space.
+The Sources tab selects Space Brain Sources and any explicit legacy knowledge-base bindings for this Space. New retained documents should flow into Hindsight Space memory as Brain Sources; legacy Bedrock KBs are compatibility context.
 
 Use the tab for:
 
@@ -20,7 +20,7 @@ Use the tab for:
 - project documentation;
 - department-specific source material.
 
-This tab is named **KBs** in the Admin UI. Do not treat it as the full Memory surface; memory and knowledge bases are related context sources with different contracts.
+Do not treat this tab as the full Memory surface. Space memory, Brain Sources, and legacy knowledge bases are related context sources with different contracts.
 
 <Aside type="tip">
   If a document should inform only one customer or workflow, attach it through
@@ -31,6 +31,6 @@ This tab is named **KBs** in the Admin UI. Do not treat it as the full Memory su
 ## Related pages
 
 - [Knowledge and Memory](/concepts/spaces/knowledge-and-memory/) - how Space knowledge and memory fit the model
-- [Admin - Memory](/applications/admin/memory/) - retained memory, pages, knowledge bases, and graph diagnostics
-- [Knowledge Bases](/applications/admin/knowledge-bases/) - knowledge-base management
+- [Admin - Memory](/applications/admin/memory/) - retained memory, Brain Sources, pages, and graph diagnostics
+- [Knowledge Bases](/applications/admin/knowledge-bases/) - legacy knowledge-base compatibility management
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) - authored document sources

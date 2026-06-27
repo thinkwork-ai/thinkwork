@@ -1,9 +1,9 @@
 ---
-title: Memory Context API
-description: "The internal Context Engine contract behind Memory source routing: `query_context`, provider families, statuses, and MCP/runtime behavior."
+title: Context Engine API
+description: "The internal Context Engine contract for lazy-loaded external context: `query_context`, provider families, statuses, and MCP/runtime behavior."
 ---
 
-Memory is the product surface. **Context Engine** is the internal API/service boundary that powers its source routing. Developer-facing docs keep the exact names because clients, runtimes, and MCP tools still call `query_context`.
+**Context Engine** is ThinkWork's read-only orchestration layer for context that should be loaded for the current turn without becoming durable memory by default. Hosted user and Space Brain memory is Hindsight-backed; Context Engine remains useful for workspace files, compiled pages, approved MCP tools, source agents, web/search providers, and explicit diagnostics.
 
 ## Contract
 
@@ -14,21 +14,21 @@ Memory is the product surface. **Context Engine** is the internal API/service bo
 - `scope`: `personal`, `team`, or `auto`.
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
-- `agentId`: optional target agent id when the caller needs agent-scoped workspace files or agent-specific knowledge-base attachments.
+- `agentId`: optional target agent id when the caller needs agent-scoped workspace files or legacy compatibility attachments.
 - provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect` and ThinkWork Brain source/dataset scoping for `query_brain_context`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
 ## Provider Families
 
-- `memory`: user-scoped Hindsight/managed memory recall.
+- `memory`: explicit Hindsight user/Space memory recall or reflect. It is not part of default `query_context`; use `query_memory_context` when durable memory is specifically needed.
 - `brain`: tenant-shared ontology-shaped memory pages and facets.
 - `wiki`: compiled memory pages. The database-backed wiki provider remains the
   baseline for `query_wiki_context`; the OKF Wiki Navigator is a generated
   filesystem projection used by explicitly enabled Pi runtimes, not a raw
   backend provider exposed through normal routing.
 - `workspace`: permissioned workspace files for the active target.
-- `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
+- `knowledge-base`: legacy Bedrock Knowledge Bases. This provider is opt-in compatibility, not a default hosted Brain provider.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
 - `sub-agent`: legacy provider id for read-only folder-specialist providers, when enabled by the Memory v0 work.
 
@@ -57,11 +57,11 @@ Operators inspect this posture in **Settings -> Plugins -> ThinkWork Brain -> Br
 
 Tenant-facing status callers receive redacted posture. Raw substrate details such as Cognee endpoints, S3 roots, Neptune ids/endpoints, and EFS ids are reserved for operator evidence and are not part of agent-facing Brain context.
 
-Brain is intentionally separate from:
+Context Engine sources are intentionally separate from the Hindsight Brain substrate:
 
-- `memory`, which reads raw retained observations through Hindsight or the configured memory backend;
-- `wiki`, which reads owner-scoped compiled pages;
-- authored `knowledge-base` sources, which read operator-uploaded documents.
+- Hindsight `memory`, which owns durable user/Space observations, retained documents, recall, reflect, and evidence;
+- `wiki`, which reads owner-scoped compiled pages derived from memory;
+- legacy `knowledge-base` sources, which read operator-uploaded Bedrock KB documents only when explicitly opted in.
 
 ## Hindsight Strategy
 
@@ -70,7 +70,7 @@ The memory provider can use Hindsight in two modes:
 - `recall`: returns matching memory records directly.
 - `reflect`: asks Hindsight to synthesize a higher-level reflection over matching memories.
 
-Admin exposes this as the Hindsight strategy dropdown on Memory → Sources. For agent-facing use, `reflect` is the preferred default when the caller wants concise answer-like memory output; `recall` is useful for diagnostics and record-level inspection.
+Admin exposes this as the Hindsight strategy control on Memory -> Sources. For agent-facing use, direct Hindsight recall/reflect is the normal durable-memory path; `query_memory_context` is useful when a Context Engine caller needs the same Hindsight memory through the external context facade.
 
 ## ThinkWork Brain MCP
 
@@ -84,9 +84,9 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 
 Pi registers `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
-When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. These are still Context Engine tools at the API layer: Hindsight memory, ontology-shaped Brain, and compiled pages remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. Hindsight remains the direct memory provider for normal Brain recall/reflect; these tools exist for explicit context lookup, diagnostics, and source-specific retrieval.
 
-`query_brain_context` should be the model's first choice for governed tenant-shared business/domain context such as customers, opportunities, commitments, risks, stakeholders, products, relationships, and cited provenance. Use `query_memory_context` for raw Hindsight Memory and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
+`query_context` should be the model's first choice for lazy-loaded external context such as workspace files, compiled pages, approved MCP tools, and source agents. Use direct memory tools or `query_memory_context` when durable Hindsight memory is specifically needed, and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
 
 The [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) is separate
 from `query_wiki_context`. When a Pi runtime is explicitly configured for OKF
@@ -108,6 +108,6 @@ Admin operators verify source routing from **Memory → Sources**. The test harn
 - run a query against the same backend Context Engine path used by runtimes;
 - inspect provider statuses, latency, partial failures, top hits, and the full structured response.
 
-Provider failures are expected to be partial. A Hindsight timeout, skipped Bedrock KB, unavailable MCP adapter, or empty Brain result should appear as provider-local status while successful providers still return hits.
+Provider failures are expected to be partial. A Hindsight timeout, skipped legacy Bedrock KB, unavailable MCP adapter, or empty source result should appear as provider-local status while successful providers still return hits.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.

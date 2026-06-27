@@ -3,11 +3,11 @@ title: Admin — Memory
 description: "The legacy overview for the Settings Memory operator surface."
 ---
 
-The Settings Memory page is the operator hub for the context an agent can use. It combines Hindsight memory records, compiled pages, Bedrock Knowledge Bases, workspace/source routing, and provider verification under one tabbed module.
+The Settings Memory page is the operator hub for durable Brain memory and lazy-loaded context. It combines Hindsight memory records, Hindsight-backed Brain Sources, compiled pages, workspace/source routing, and provider verification under one tabbed module.
 
 **Route:** `/settings/memory`
 
-**Tabs:** Memory, Wiki, Knowledge Bases, Knowledge Graph
+**Tabs:** Memory, Sources, Wiki, Knowledge Graph
 
 Older docs and redirects may still refer to `/knowledge`. The visible product/module name is Memory, and the canonical operator route is `/settings/memory`.
 
@@ -15,11 +15,11 @@ Older docs and redirects may still refer to `/knowledge`. The visible product/mo
 
 Agents draw context from several places:
 
-- durable memory, including Hindsight-backed memory when enabled;
+- durable user and Space memory in Hindsight;
 - compiled pages from the page compile pipeline;
-- Bedrock Knowledge Bases attached to the tenant, template, or agent;
+- Hindsight-retained Brain Sources for Space documents;
 - workspace files scoped to an agent or template;
-- approved MCP context tools.
+- approved MCP context tools and other lazy-loaded external context.
 
 Memory keeps source inspection and source routing close together. Operators can look at the raw source, then run the same backend query path agents use through `query_context`.
 
@@ -29,7 +29,7 @@ Memory keeps source inspection and source routing close together. Operators can 
 | --------------- | -------------------------------------------------------------------------------- |
 | Memory          | Browse and search retained Hindsight memory records                              |
 | Wiki            | Inspect compiled pages and page search output                                    |
-| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status                            |
+| Sources         | Manage Hindsight Brain Sources and document ingest                               |
 | Knowledge Graph | Inspect ThinkWork Brain graph diagnostics when graph infrastructure is available |
 
 The old standalone routes redirect into the matching tab:
@@ -46,32 +46,32 @@ The Sources tab includes a safe query harness for operator verification. It is i
 
 The harness controls are:
 
-- **Sources** — multi-select dropdown for provider families such as Hindsight Memory, ThinkWork Brain pages, workspace files, Bedrock Knowledge Bases, and approved MCP tools.
+- **Sources** — multi-select dropdown for provider families such as Hindsight Memory, compiled pages, workspace files, approved MCP tools, and explicit legacy Bedrock KB compatibility.
 - **Agent target** — optional agent picker used when workspace files or agent-scoped attachments should participate in the test.
 - **Hindsight strategy** — `recall` for direct memory-record retrieval or `reflect` for synthesized memory output.
 - **Search** — natural-language query field.
 
-Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a skipped Bedrock KB or slow Hindsight call should not hide successful page or workspace hits.
+Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a skipped legacy Bedrock KB or slow external provider should not hide successful page or workspace hits.
 
 ## Template Configuration
 
-Agent Templates expose Memory as a built-in tool alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling it injects the platform-owned `query_context` tool into supported runtimes.
+Agent Templates expose ThinkWork Brain/context tools alongside Code Sandbox, Browser Automation, Web Search, and Send Email. Enabling Context Engine injects the platform-owned `query_context` tool for external context; durable memory remains direct Hindsight recall/reflect.
 
-Template configuration can choose which tenant-approved sources participate by default and can expose source-specific options such as Hindsight strategy. Normal agent configuration should show Hindsight as a Memory source, not as a separate peer tool. Raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Memory.
+Template configuration can choose which tenant-approved external sources participate by default. Hindsight is the hosted Brain substrate rather than one interchangeable Context Engine adapter; raw Hindsight tools may still exist for diagnostics, but the operator-facing path is Memory.
 
 ## Operational Guidance
 
-- Use the Sources tab first when debugging provider behavior. It gives provider-level latency, hit counts, skipped states, and partial failures without model/tool-selection noise.
+- Use the Sources tab first when debugging external provider behavior. It gives provider-level latency, hit counts, skipped states, and partial failures without model/tool-selection noise.
 - Select an agent target when testing workspace files. Workspace search needs the agent workspace scope to find files such as `USER.md`.
 - Use `reflect` for answer-like memory verification and `recall` when debugging raw memory retrieval.
 - Use Pages when you want the durable compiled view of what an agent has learned; use Memory when you need the raw retained records.
-- Use Knowledge Bases for authored, operator-curated documents that should remain distinct from learned memory.
+- Use Brain Sources for authored, operator-curated Space documents that should be retained into Hindsight. Use Bedrock KBs only for explicit legacy compatibility.
 
 ## Related Pages
 
 - [Memory](/concepts/knowledge/) — product model and source families
 - [Memory Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
 - [Retained Memory](/applications/admin/memory/) — details of the Hindsight-backed Memory tab behavior
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — Bedrock KB management
+- [Knowledge Bases](/applications/admin/knowledge-bases/) — legacy Bedrock KB compatibility management
 - [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent workspace
 - [Spaces](/applications/admin/spaces/) — Space-scoped workspace, tools, memory, and knowledge context

@@ -1,11 +1,11 @@
 ---
 title: Admin — Memory
-description: Browse, search, edit, and visualize retained memory across one agent or the whole tenant.
+description: Browse, search, and visualize Hindsight-backed user and Space memory.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-The Memory page is the operator view for retained Hindsight records. It reports active user and Space memory, shows bank and scope evidence, and lets operators inspect what was retained before agents retrieve it through Context Engine.
+The Memory page is the operator view for retained Hindsight records. It reports active user and Space memory, shows bank and scope evidence, and lets operators inspect what was retained before agents use direct Hindsight recall/reflect.
 
 **Route:** `/settings/memory`
 **Route wrapper:** `apps/web/src/routes/_authed/settings.memory.tsx`
@@ -15,9 +15,7 @@ The Knowledge Graph subview remains available at `/settings/memory/knowledge-gra
 
 ## Layout
 
-The page has three primary controls and one operator status band:
-
-- **Memory mode** — shows the active memory engine. Hindsight appears as the core memory engine; ThinkWork Brain/Cognee graph infrastructure appears only as operator diagnostic evidence.
+The page has three primary controls:
 
 - **View toggle** — table / graph inspection for retained memory evidence.
 - **Search bar** — text search across operator-visible Hindsight memory records, backed by `memoryRecords(scope: OPERATOR)`.
@@ -41,8 +39,9 @@ The table view shows:
 Clicking a row opens a detail sheet with full content, bank/scope metadata, and retention metadata. Operator-wide rows are read-only in this pass; cross-bank deletion is intentionally disabled until a safer scoped mutation exists.
 
 - **Hindsight memory** — canonical user and Space memory for this pass.
-- **AgentCore managed memory** — an explicit low-cost/development opt-out; records are immutable by default.
-- **ThinkWork Brain/Cognee graph infrastructure** — optional ontology/graph/warehouse evidence, not the user or Space memory provider.
+- **Brain Sources** — retained Space documents in Hindsight, not a separate Bedrock KB default.
+- **AgentCore managed memory** — an explicit low-cost/development compatibility mode.
+- **ThinkWork Brain/Cognee graph infrastructure** — optional ontology/graph/warehouse diagnostics, not the user or Space memory provider.
 
 ## Graph View
 
@@ -65,7 +64,7 @@ When graph infrastructure is enabled, the graph view renders entities and relati
 
 ### Debug Memory Results
 
-1. Run the query from the Context Engine tool in `/settings/tools`.
+1. Reproduce the direct Hindsight recall/reflect query or the explicit `query_memory_context` call.
 2. If a memory hit looks wrong, open `/settings/memory`.
 3. Search for the same term, bank id, or owner id.
 4. Inspect the raw record and backend metadata.
@@ -82,14 +81,15 @@ Cross-bank delete is disabled in the operator table for this pass. For bulk reda
 
 - **Hindsight user memory** — Hindsight memory keyed to the requester.
 - **Hindsight Space memory** — Hindsight memory keyed to the current Space. It stays with the Space and is available to authorized members and agents.
-- **AgentCore managed memory** — Aurora `memory_records` table with strategy, namespace, content, tags, confidence, access count, and bi-temporal dates.
+- **Brain Sources** — Hindsight-retained Space documents with stable document ids, source context, tags, and observation scopes.
+- **AgentCore managed memory** — compatibility records from the managed-memory path when a deployment explicitly opts out of Hindsight.
 - **ThinkWork Brain graph diagnostics** — optional graph infrastructure evidence surfaced when the Brain substrate is installed or legacy Cognee is available.
 - **Namespaces** — records are namespaced by strategy and agent; prefixes such as `semantic_`, `preferences_`, and `episodes_` identify the retention strategy.
 
 ## Known Limits
 
 - **Graph diagnostics are not memory authority.** Hindsight is the user and Space memory path for this pass.
-- **ThinkWork Brain distillation is deferred.** This page proves retained-memory inspection; it does not prove Brain distillation.
+- **ThinkWork Brain distillation is separate.** This page proves retained-memory inspection; compiled pages and ontology views are projections over or beside memory.
 - **Wiki projection is separate.** Wiki pages are compiled context, not an upstream source of truth for retained memory.
 - **Operator rows are read-only.** Editing/deleting across Hindsight banks is intentionally disabled in this pass.
 - **Graph view lacks drill-in.** Clicking a node does not open a detail sheet.
