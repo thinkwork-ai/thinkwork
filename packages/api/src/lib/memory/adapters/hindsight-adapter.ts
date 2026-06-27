@@ -276,6 +276,7 @@ export class HindsightAdapter implements MemoryAdapter {
     const bankId = await this.resolveBankId(req);
     await this.ensureBankConfiguredById(bankId);
     const factType = resolveFactType(req);
+    const ignoredFactTypeOverride = resolveIgnoredFactTypeOverride(req);
 
     const {
       fact_type_override: _omitOverride,
@@ -292,6 +293,9 @@ export class HindsightAdapter implements MemoryAdapter {
       ...callerMetadata,
       ...ownerMetadata(req),
       fact_type: factType,
+      ...(ignoredFactTypeOverride
+        ? { ignored_fact_type_override: ignoredFactTypeOverride }
+        : {}),
     });
     if (req.role) mergedMetadata.role = req.role;
     item.metadata = mergedMetadata;
@@ -1542,6 +1546,14 @@ function resolveFactType(req: RetainRequest): string {
     return override;
   }
   return sourceTypeToFactType(req.sourceType);
+}
+
+function resolveIgnoredFactTypeOverride(
+  req: RetainRequest,
+): string | undefined {
+  const override = req.metadata?.fact_type_override;
+  if (typeof override !== "string") return undefined;
+  return LEGAL_FACT_TYPE_OVERRIDES.has(override) ? undefined : override;
 }
 
 function toHindsightMetadata(

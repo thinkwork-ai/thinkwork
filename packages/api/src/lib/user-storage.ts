@@ -19,18 +19,21 @@ export async function writeUserMemorySeed(seed: ActivationSeed): Promise<void> {
   const text = seed.content ?? seed.summary ?? seed.title ?? "";
   if (!text.trim()) return;
   const { adapter } = getMemoryServices();
+  const { fact_type_override: _ignoredOverride, ...seedMetadata } =
+    seed.metadata ?? {};
+  const metadata = {
+    ...seedMetadata,
+    source: "activation",
+    layer: seed.layer,
+    ...(seed.layer === "friction" ? { fact_type_override: "opinion" } : {}),
+  };
   await adapter.retain({
     tenantId: seed.tenantId,
     ownerType: "user",
     ownerId: seed.userId,
     sourceType: "explicit_remember",
     content: text,
-    metadata: {
-      ...seed.metadata,
-      source: "activation",
-      layer: seed.layer,
-      fact_type_override: seed.layer === "friction" ? "preference" : "semantic",
-    },
+    metadata,
   });
 }
 
