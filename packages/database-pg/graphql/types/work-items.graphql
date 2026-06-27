@@ -55,6 +55,15 @@ enum WorkItemOpenEngineDependencyState {
   WAITING
 }
 
+enum WorkItemOpenEngineReceiptType {
+  CLAIMED
+  PROGRESS
+  BLOCKED
+  RESUMED
+  FAILED
+  COMPLETED
+}
+
 type WorkItemStatus {
   id: ID!
   tenantId: ID!
@@ -270,18 +279,54 @@ input DeleteWorkItemViewInput {
   id: ID!
 }
 
+input OpenEngineEligibleWorkItemsInput {
+  tenantId: ID
+  queueKey: String
+  now: AWSDateTime
+  limit: Int
+}
+
+input ClaimNextOpenEngineWorkItemInput {
+  tenantId: ID
+  queueKey: String
+  agentId: ID!
+  now: AWSDateTime
+  leaseSeconds: Int
+}
+
+input RecordOpenEngineWorkItemReceiptInput {
+  tenantId: ID
+  workItemId: ID!
+  agentId: ID!
+  receiptType: WorkItemOpenEngineReceiptType!
+  threadId: ID
+  message: String
+  evidence: AWSJSON
+  metadata: AWSJSON
+  now: AWSDateTime
+}
+
 extend type Query {
   workItems(input: WorkItemsInput): [WorkItem!]!
   workItem(tenantId: ID, id: ID!): WorkItem
   threadWorkItems(tenantId: ID, threadId: ID!): [WorkItem!]!
   workItemStatuses(tenantId: ID, spaceId: ID!): [WorkItemStatus!]!
   workItemSavedViews(tenantId: ID, spaceId: ID): [WorkItemSavedView!]!
+  openEngineEligibleWorkItems(
+    input: OpenEngineEligibleWorkItemsInput!
+  ): [WorkItem!]!
 }
 
 extend type Mutation {
   createWorkItem(input: CreateWorkItemInput!): WorkItem!
   updateWorkItem(input: UpdateWorkItemInput!): WorkItem!
   updateWorkItemStatus(input: UpdateWorkItemStatusInput!): WorkItem!
+  claimNextOpenEngineWorkItem(
+    input: ClaimNextOpenEngineWorkItemInput!
+  ): WorkItem
+  recordOpenEngineWorkItemReceipt(
+    input: RecordOpenEngineWorkItemReceiptInput!
+  ): WorkItemEvent!
   saveWorkItemStatuses(input: SaveWorkItemStatusesInput!): [WorkItemStatus!]!
   saveWorkItemView(input: SaveWorkItemViewInput!): WorkItemSavedView!
   deleteWorkItemView(input: DeleteWorkItemViewInput!): Boolean!

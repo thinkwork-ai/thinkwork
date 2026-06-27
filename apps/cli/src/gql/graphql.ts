@@ -1018,6 +1018,14 @@ export type CheckoutThreadInput = {
   runId: Scalars["String"]["input"];
 };
 
+export type ClaimNextOpenEngineWorkItemInput = {
+  agentId: Scalars["ID"]["input"];
+  leaseSeconds?: InputMaybe<Scalars["Int"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  queueKey?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type CompanyBrainCapabilities = {
   __typename?: "CompanyBrainCapabilities";
   launch: Array<CompanyBrainCapability>;
@@ -3372,6 +3380,7 @@ export type Mutation = {
   captureMobileMemory: MobileMemoryCapture;
   captureSpaceMemory: MemoryRecord;
   checkoutThread: Thread;
+  claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
   /**
    * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
    * Returns the job row (newly inserted or the in-flight dedupe hit).
@@ -3524,6 +3533,7 @@ export type Mutation = {
    * the counts it would write without mutating. Returns one result per tenant.
    */
   rebuildSkillCatalogIndex: Array<SkillCatalogRebuildResult>;
+  recordOpenEngineWorkItemReceipt: WorkItemEvent;
   /**
    * Tenant-admin: redeem a ThinkWork-provided premium plugin install key into a
    * persistent tenant entitlement.
@@ -3847,6 +3857,10 @@ export type MutationCaptureSpaceMemoryArgs = {
 export type MutationCheckoutThreadArgs = {
   id: Scalars["ID"]["input"];
   input: CheckoutThreadInput;
+};
+
+export type MutationClaimNextOpenEngineWorkItemArgs = {
+  input: ClaimNextOpenEngineWorkItemInput;
 };
 
 export type MutationCompileWikiNowArgs = {
@@ -4286,6 +4300,10 @@ export type MutationRebuildSkillCatalogIndexArgs = {
   all?: InputMaybe<Scalars["Boolean"]["input"]>;
   dryRun?: InputMaybe<Scalars["Boolean"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationRecordOpenEngineWorkItemReceiptArgs = {
+  input: RecordOpenEngineWorkItemReceiptInput;
 };
 
 export type MutationRedeemPremiumPluginInstallKeyArgs = {
@@ -5291,6 +5309,13 @@ export type OntologyVersion = {
   versionNumber: Scalars["Int"]["output"];
 };
 
+export type OpenEngineEligibleWorkItemsInput = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  queueKey?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type OrgUpdateEvent = {
   __typename?: "OrgUpdateEvent";
   changeType: Scalars["String"]["output"];
@@ -5714,6 +5739,7 @@ export type Query = {
   ontologyDefinitions: OntologyDefinitions;
   ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
   ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
+  openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   pinnedThreads: Array<PinnedThread>;
@@ -6326,6 +6352,10 @@ export type QueryOntologySuggestionScanJobArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type QueryOpenEngineEligibleWorkItemsArgs = {
+  input: OpenEngineEligibleWorkItemsInput;
+};
+
 export type QueryPendingSystemReviewsCountArgs = {
   tenantId: Scalars["ID"]["input"];
 };
@@ -6792,6 +6822,18 @@ export type Recipe = {
   title: Scalars["String"]["output"];
   tool: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type RecordOpenEngineWorkItemReceiptInput = {
+  agentId: Scalars["ID"]["input"];
+  evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  receiptType: WorkItemOpenEngineReceiptType;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
 };
 
 export type RedeemPremiumPluginInstallKeyInput = {
@@ -9740,6 +9782,15 @@ export enum WorkItemExternalRefProvider {
 export enum WorkItemOpenEngineDependencyState {
   Ready = "READY",
   Waiting = "WAITING",
+}
+
+export enum WorkItemOpenEngineReceiptType {
+  Blocked = "BLOCKED",
+  Claimed = "CLAIMED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Progress = "PROGRESS",
+  Resumed = "RESUMED",
 }
 
 export enum WorkItemPriority {
