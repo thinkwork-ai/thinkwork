@@ -97,7 +97,7 @@ export function WorkItemListRow({
       role="button"
       tabIndex={onItemOpen ? 0 : undefined}
       className={cn(
-        "flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-md px-1 outline-none",
+        "grid h-10 w-full min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-1 outline-none",
         onItemOpen &&
           "cursor-pointer hover:bg-muted/25 focus-visible:ring-1 focus-visible:ring-ring",
         updating && "opacity-60",
@@ -112,7 +112,7 @@ export function WorkItemListRow({
         }
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+      <div className="flex min-w-0 items-center gap-2">
         {selected.has("priority") ? (
           <PriorityBadgeSelector
             item={item}
@@ -124,7 +124,9 @@ export function WorkItemListRow({
         <span className="shrink-0 font-mono text-xs font-medium text-muted-foreground">
           {sequenceNumber ? `WI-${sequenceNumber}` : shortWorkItemKey(item)}
         </span>
+      </div>
 
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden">
         {selected.has("status") ? (
           <WorkItemStatusIconSelector
             title={item.title}

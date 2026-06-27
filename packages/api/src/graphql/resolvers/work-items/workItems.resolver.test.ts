@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -462,6 +463,110 @@ describe("work item resolvers", () => {
         title: "Implementation plan",
       }),
     );
+  });
+
+  it("creates uploaded binary Work Item documents without inline content", async () => {
+    const pdfBytes = Buffer.from("%PDF-1.7");
+    const checksum = createHash("sha256").update(pdfBytes).digest("hex");
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Implement OpenEngine docs",
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [
+        {
+          id: "document-1",
+          tenant_id: "tenant-1",
+          work_item_id: "work-item-1",
+          kind: "evidence",
+          title: "Evidence.pdf",
+          content_type: "application/pdf",
+          s3_key:
+            "tenants/tenant-1/work-items/work-item-1/documents/document-1.pdf",
+          size_bytes: 8,
+          checksum_sha256: "checksum",
+          created_by_user_id: "user-1",
+        },
+      ],
+    );
+
+    const result = await createWorkItemDocument(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          kind: "EVIDENCE",
+          title: "Evidence.pdf",
+          contentBase64: Buffer.from("%PDF-1.7").toString("base64"),
+          contentType: "application/pdf",
+          filename: "Evidence.pdf",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockS3Send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "PutObjectCommand",
+        input: expect.objectContaining({
+          Bucket: "workspace-bucket",
+          ContentType: "application/pdf",
+          Key: expect.stringMatching(/document.*\.pdf$/),
+          Body: pdfBytes,
+        }),
+      }),
+    );
+    expect(captures.insertValues[0]).toEqual(
+      expect.objectContaining({
+        content_type: "application/pdf",
+        size_bytes: pdfBytes.byteLength,
+        checksum_sha256: checksum,
+        metadata: { filename: "Evidence.pdf" },
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: "document-1",
+        kind: "EVIDENCE",
+        content: null,
+      }),
+    );
+  });
+
+  it("rejects malformed base64 Work Item document uploads", async () => {
+    captures.selectQueue.push([
+      {
+        id: "work-item-1",
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        title: "Implement OpenEngine docs",
+      },
+    ]);
+
+    await expect(
+      createWorkItemDocument(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            workItemId: "work-item-1",
+            title: "Evidence.pdf",
+            contentBase64: "not-base64",
+            contentType: "application/pdf",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "BAD_USER_INPUT" },
+      message: "contentBase64 must be valid base64",
+    });
+    expect(mockS3Send).not.toHaveBeenCalled();
+    expect(captures.insertValues).toEqual([]);
   });
 
   it("lists Work Item document content when requested", async () => {

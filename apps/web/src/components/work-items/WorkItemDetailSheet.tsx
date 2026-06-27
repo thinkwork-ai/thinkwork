@@ -1,15 +1,17 @@
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Archive,
   CalendarDays,
+  ChevronDown,
   CheckCircle2,
   FileText,
   Flag,
   MessageSquareText,
   Plus,
   Tags,
+  Upload,
   UserRound,
   X,
 } from "lucide-react";
@@ -19,6 +21,10 @@ import {
   Button,
   Calendar,
   Checkbox,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
   Label,
   Popover,
@@ -89,7 +95,10 @@ interface WorkItemDetailSheetProps {
   onDocumentCreate?: (input: {
     title: string;
     kind: WorkItemDocumentKind;
-    content: string;
+    content?: string;
+    contentBase64?: string;
+    contentType?: string;
+    filename?: string;
   }) => Promise<boolean | void>;
   onDocumentArchive?: (document: WorkItemDocumentSummary) => void;
 }
@@ -225,14 +234,21 @@ function DocumentsSection({
   onCreate?: (input: {
     title: string;
     kind: WorkItemDocumentKind;
-    content: string;
+    content?: string;
+    contentBase64?: string;
+    contentType?: string;
+    filename?: string;
   }) => Promise<boolean | void>;
   onArchive?: (document: WorkItemDocumentSummary) => void;
 }) {
-  const [adding, setAdding] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [addMode, setAddMode] = useState<"text" | "upload" | null>(null);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<WorkItemDocumentKind>("NOTE");
   const [content, setContent] = useState("");
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadKind, setUploadKind] = useState<WorkItemDocumentKind>("NOTE");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   return (
     <section className="grid gap-3">
@@ -242,20 +258,34 @@ function DocumentsSection({
           Documents
         </h3>
         {onCreate ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={() => setAdding((current) => !current)}
-          >
-            <Plus className="size-3" />
-            Add
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+              >
+                <Plus className="size-3" />
+                Add
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => setAddMode("text")}>
+                <FileText className="mr-2 size-3.5" />
+                Text document
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddMode("upload")}>
+                <Upload className="mr-2 size-3.5" />
+                Upload file
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
 
-      {adding && onCreate ? (
+      {addMode === "text" && onCreate ? (
         <form
           className="grid gap-3 rounded-md border border-border/80 bg-muted/10 p-3"
           onSubmit={async (event) => {
@@ -271,7 +301,7 @@ function DocumentsSection({
             setTitle("");
             setKind("NOTE");
             setContent("");
-            setAdding(false);
+            setAddMode(null);
           }}
         >
           <div className="grid gap-2">
@@ -318,12 +348,112 @@ function DocumentsSection({
               variant="ghost"
               size="sm"
               disabled={saving}
-              onClick={() => setAdding(false)}
+              onClick={() => setAddMode(null)}
             >
               Cancel
             </Button>
             <Button type="submit" size="sm" disabled={saving || !title.trim()}>
               Save
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
+      {addMode === "upload" && onCreate ? (
+        <form
+          className="grid gap-3 rounded-md border border-border/80 bg-muted/10 p-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!uploadFile) return;
+            const contentType =
+              uploadFile.type || guessContentType(uploadFile.name);
+            const isPreviewable =
+              contentType.startsWith("text/") ||
+              contentType === "application/json";
+            const uploadContent = isPreviewable
+              ? await uploadFile.text()
+              : undefined;
+            const contentBase64 = isPreviewable
+              ? undefined
+              : await fileToBase64(uploadFile);
+            const created = await onCreate({
+              title: uploadTitle.trim() || uploadFile.name,
+              kind: uploadKind,
+              content: uploadContent,
+              contentBase64,
+              contentType,
+              filename: uploadFile.name,
+            });
+            if (created === false) return;
+            setUploadTitle("");
+            setUploadKind("NOTE");
+            setUploadFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            setAddMode(null);
+          }}
+        >
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-file">File</Label>
+            <Input
+              ref={fileInputRef}
+              id="work-item-document-file"
+              type="file"
+              disabled={saving}
+              accept=".md,.txt,.csv,.json,.pdf,.doc,.docx,.xls,.xlsx"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                setUploadFile(file);
+                if (file && !uploadTitle.trim()) setUploadTitle(file.name);
+              }}
+            />
+            {uploadFile ? (
+              <p className="text-xs text-muted-foreground">
+                {formatBytes(uploadFile.size)}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-upload-title">Title</Label>
+            <Input
+              id="work-item-document-upload-title"
+              value={uploadTitle}
+              disabled={saving}
+              onChange={(event) => setUploadTitle(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-upload-kind">Kind</Label>
+            <Select
+              value={uploadKind}
+              disabled={saving}
+              onValueChange={(value) =>
+                setUploadKind(value as WorkItemDocumentKind)
+              }
+            >
+              <SelectTrigger id="work-item-document-upload-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WORK_ITEM_DOCUMENT_KIND_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {workItemDocumentKindLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => setAddMode(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={saving || !uploadFile}>
+              Upload
             </Button>
           </div>
         </form>
@@ -351,7 +481,7 @@ function DocumentsSection({
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatBytes(document.sizeBytes)} |{" "}
+                    {document.contentType} | {formatBytes(document.sizeBytes)} |{" "}
                     {formatDate(document.updatedAt ?? document.createdAt)}
                   </p>
                 </div>
@@ -374,6 +504,11 @@ function DocumentsSection({
                 <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/20 p-2 text-xs leading-5 text-muted-foreground">
                   {document.content}
                 </pre>
+              ) : null}
+              {!document.content && !isPreviewableDocument(document) ? (
+                <p className="rounded-md bg-muted/20 p-2 text-xs text-muted-foreground">
+                  Preview unavailable for this file type.
+                </p>
               ) : null}
             </article>
           ))}
@@ -642,6 +777,37 @@ const WORK_ITEM_DOCUMENT_KIND_OPTIONS: WorkItemDocumentKind[] = [
 ];
 const controlClassName =
   "h-7 max-w-full gap-1.5 rounded-full border border-border bg-muted/10 px-2.5 text-xs font-medium text-muted-foreground";
+
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function guessContentType(filename: string) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".md")) return "text/markdown";
+  if (lower.endsWith(".txt")) return "text/plain";
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".json")) return "application/json";
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".docx")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".xlsx")) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (lower.endsWith(".xls")) return "application/vnd.ms-excel";
+  return "application/octet-stream";
+}
+
+function isPreviewableDocument(document: WorkItemDocumentSummary) {
+  const contentType = document.contentType.toLowerCase();
+  return contentType.startsWith("text/") || contentType === "application/json";
+}
 
 function formatBytes(value?: number | null) {
   const bytes = Number(value ?? 0);

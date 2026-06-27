@@ -323,7 +323,9 @@ input CreateWorkItemDocumentInput {
   workItemId: ID!
   kind: WorkItemDocumentKind
   title: String!
-  content: String!
+  content: String
+  contentBase64: String
+  filename: String
   contentType: String
   metadata: AWSJSON
 }
@@ -334,6 +336,8 @@ input UpdateWorkItemDocumentInput {
   kind: WorkItemDocumentKind
   title: String
   content: String
+  contentBase64: String
+  filename: String
   contentType: String
   metadata: AWSJSON
   archived: Boolean
