@@ -248,7 +248,16 @@ export class CogneeAdapter implements MemoryAdapter {
         "Cognee memory ingest did not return a dataset id for indexing",
       );
     }
-    await this.client.waitForDatasetIndexing?.(ingest.datasetId);
+    if (this.client.waitForDatasetIndexing) {
+      try {
+        await this.client.waitForDatasetIndexing(ingest.datasetId);
+      } catch (err) {
+        console.warn("[cognee-memory] indexing still pending after capture", {
+          datasetId: ingest.datasetId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
 
   async inspect(_req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
