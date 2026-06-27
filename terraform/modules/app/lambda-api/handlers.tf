@@ -152,6 +152,13 @@ locals {
     # Settings > General starts release updates from the GraphQL API.
     DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
     DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    # Cognee user + Space memory captures must be searchable before GraphQL
+    # reports success. Use the explicit add+cognify path and wait within the
+    # Lambda ceiling; the default /remember background path can acknowledge a
+    # capture before the scoped memory dataset is queryable.
+    COGNEE_INGEST_MODE      = "add_cognify"
+    COGNEE_INDEX_TIMEOUT_MS = "700000"
+    COGNEE_INDEX_POLL_MS    = "7000"
     # THNK-37 — the GraphQL API is the runtime trust boundary for the
     # GitHub-hosted signed plugin catalog. Browsers keep reading through
     # GraphQL; API verifies the release asset with the trusted public key
