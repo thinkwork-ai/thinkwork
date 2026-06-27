@@ -131,9 +131,11 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U5 Status
 
-- Status: verified locally
+- Status: merged
 - Branch: `codex/think-86-u5-open-engine-runner-smoke`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u5-open-engine-runner-smoke`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3032
+- Merge commit: `98cb0ceb2e5900b380017e5bf7c4e7b00c07c898`
 - Goal: prove the Open Engine queue contract can be consumed by the existing AgentLoop dispatch ledger by claiming one Work Item and enqueueing exactly one runner action.
 
 ## U5 Validation Targets
@@ -155,3 +157,28 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 - Local structured review found that adding a new AgentLoop trigger family would violate the existing database check constraint on `agent_loop_runs.trigger_family`.
 - Fix applied before PR: U5 uses the existing `api` trigger family with `triggerSource: "open_engine_queue"` and carries Open Engine identity in the run/wakeup input summary, avoiding a schema/migration expansion in the runner-smoke slice.
+
+## U6 Status
+
+- Status: in progress
+- Branch: `codex/think-86-u6-open-engine-verdict`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u6-open-engine-verdict`
+- Goal: publish the native-vs-Linear verdict artifact and leave implementation-ready follow-up issues for the chosen path.
+
+## U6 Validation Targets
+
+- Verdict artifact explicitly answers whether native Work Items or Linear should be the Open Engine queue foundation.
+- Verdict is backed by U1-U5 evidence instead of a product preference alone.
+- Linear remains positioned as benchmark, adapter, and fallback rather than the default source of truth.
+- Follow-up issues exist for the next work needed to make native Work Items usable by agents and humans.
+
+## U6 Verdict
+
+- Result: native Work Items pass with gaps.
+- Decision: Work Items should be the Open Engine queue foundation for ThinkWork.
+- Linear role: optional adapter and benchmark, not required substrate.
+- Artifact: `docs/verification/open-engine-native-work-items-validation.md`
+- Follow-up issues:
+  - THINK-89: Open Engine Native: ThinkWork MCP queue tools.
+  - THINK-90: Open Engine Native: human blocker and receipt surface.
+  - THINK-91: Open Engine Native: queue operations hardening and observability.
