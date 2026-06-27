@@ -96,9 +96,8 @@ export class CogneeAdapter implements MemoryAdapter {
     this.ontologyLoader = opts.ontologyLoader;
     this.searchType =
       opts.searchType ||
-      process.env.COGNEE_MEMORY_SEARCH_TYPE ||
       getConfig("COGNEE_MEMORY_SEARCH_TYPE") ||
-      "GRAPH_COMPLETION";
+      "CHUNKS";
   }
 
   async capabilities(): Promise<MemoryCapabilities> {
@@ -446,9 +445,16 @@ function searchItemMatchesScope(
   const datasetName = searchItemDatasetName(item);
   if (datasetName && datasetName !== args.datasetName) return false;
 
-  const expectedOwnerType = `"owner_type":"${args.request.ownerType}"`;
-  const expectedOwnerId = `"owner_id":"${args.request.ownerId}"`;
-  return text.includes(expectedOwnerType) && text.includes(expectedOwnerId);
+  const ownerMarkers = searchItemOwnerMarkers(text);
+  if (ownerMarkers.length > 0) {
+    return ownerMarkers.every(
+      (marker) =>
+        marker.ownerType === args.request.ownerType &&
+        marker.ownerId === args.request.ownerId,
+    );
+  }
+
+  return false;
 }
 
 function requiredOwnerNodeSets(args: {
@@ -493,6 +499,44 @@ function searchItemDatasetName(item: unknown): string | null {
     (value): value is string => typeof value === "string" && !!value,
   );
   return match ?? null;
+}
+
+function searchItemOwnerMarkers(
+  text: string,
+): Array<{ ownerType: string; ownerId: string }> {
+  const markers: Array<{ ownerType: string; ownerId: string }> = [];
+  const metadataBlocks = text.match(/<!--\s*thinkwork_memory\s+\{.*?\}\s*-->/gs);
+  if (metadataBlocks?.length) {
+    for (const block of metadataBlocks) {
+      const jsonStart = block.indexOf("{");
+      const jsonEnd = block.lastIndexOf("}");
+      if (jsonStart < 0 || jsonEnd <= jsonStart) continue;
+      try {
+        const parsed = JSON.parse(block.slice(jsonStart, jsonEnd + 1)) as {
+          owner_type?: unknown;
+          owner_id?: unknown;
+        };
+        if (
+          typeof parsed.owner_type === "string" &&
+          typeof parsed.owner_id === "string"
+        ) {
+          markers.push({
+            ownerType: parsed.owner_type,
+            ownerId: parsed.owner_id,
+          });
+        }
+      } catch {
+        // Fall through to the regex parser below.
+      }
+    }
+  }
+
+  const ownerPattern =
+    /"owner_type"\s*:\s*"([^"]+)"[\s\S]*?"owner_id"\s*:\s*"([^"]+)"/g;
+  for (const match of text.matchAll(ownerPattern)) {
+    markers.push({ ownerType: match[1], ownerId: match[2] });
+  }
+  return markers;
 }
 
 function collectNestedValues(item: unknown, keys: string[]): unknown[] {

@@ -156,9 +156,10 @@ locals {
     # documents enter the scoped graph. GraphQL has a 30s Lambda ceiling, so
     # indexing wait is intentionally short/best-effort; callers poll search for
     # eventual retrieval instead of pinning the capture request.
-    COGNEE_INGEST_MODE      = "add_cognify"
-    COGNEE_INDEX_TIMEOUT_MS = "8000"
-    COGNEE_INDEX_POLL_MS    = "2000"
+    COGNEE_INGEST_MODE        = "add_cognify"
+    COGNEE_INDEX_TIMEOUT_MS   = "8000"
+    COGNEE_INDEX_POLL_MS      = "2000"
+    COGNEE_MEMORY_SEARCH_TYPE = "CHUNKS"
     # THNK-37 — the GraphQL API is the runtime trust boundary for the
     # GitHub-hosted signed plugin catalog. Browsers keep reading through
     # GraphQL; API verifies the release asset with the trusted public key

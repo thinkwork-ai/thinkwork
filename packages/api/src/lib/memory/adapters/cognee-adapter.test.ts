@@ -180,7 +180,7 @@ describe("CogneeAdapter", () => {
 
     expect(client.search).toHaveBeenCalledWith({
       query: "summary preference",
-      searchType: "GRAPH_COMPLETION",
+      searchType: "CHUNKS",
       datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
       nodeNames: [
         "thinkwork_memory",
@@ -296,7 +296,7 @@ describe("CogneeAdapter", () => {
 
     expect(client.search).toHaveBeenCalledWith({
       query: "onboarding template",
-      searchType: "GRAPH_COMPLETION",
+      searchType: "CHUNKS",
       datasets: ["thinkwork:memory:v1:tenant:tenant_1:space:space_1"],
       nodeNames: [
         "thinkwork_memory",
@@ -373,6 +373,36 @@ describe("CogneeAdapter", () => {
 
     expect(hits).toHaveLength(1);
     expect(hits[0].record.id).toBe("space-hit");
+  });
+
+  it("rejects graph-completion context blobs that mix memory owners", async () => {
+    const client = {
+      ingestDocument: vi.fn(),
+      search: vi.fn().mockResolvedValue({
+        result: [
+          "Nodes:",
+          'Node: <!-- thinkwork_memory {"document_id":"space-a","owner_id":"space-1","owner_type":"space"} -->',
+          "Space A memory.",
+          'Node: <!-- thinkwork_memory {"document_id":"space-b","owner_id":"space-2","owner_type":"space"} -->',
+          "Space B memory.",
+        ].join("\n"),
+      }),
+    };
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client,
+      ontology,
+    });
+
+    const hits = await adapter.recall({
+      tenantId: "tenant-1",
+      ownerType: "space",
+      ownerId: "space-1",
+      query: "space memory",
+      limit: 5,
+    });
+
+    expect(hits).toEqual([]);
   });
 
   it("rejects agent owners until the runtime memory unit wires policy", async () => {
