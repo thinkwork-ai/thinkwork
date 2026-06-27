@@ -28,6 +28,7 @@ export interface InvocationIdentity {
   userId: string;
   agentId: string;
   threadId: string;
+  spaceId?: string;
 }
 
 export interface IdentitySnapshot extends InvocationIdentity {
@@ -54,6 +55,11 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function spaceIdFromTurnContext(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return asString((value as Record<string, unknown>).spaceId);
+}
+
 /**
  * Pull identity scope out of the invocation payload, fail-closed. Missing
  * tenantId / agentId / threadId throw with `statusCode = 400` so the caller
@@ -72,6 +78,7 @@ export function snapshotIdentity(
   const userId = asString(payload.user_id);
   const agentId = asString(payload.assistant_id);
   const threadId = asString(payload.thread_id);
+  const spaceId = spaceIdFromTurnContext(payload.turn_context);
   const evalMode = payload.eval_mode === true;
   const triggerChannel = asString(payload.trigger_channel);
   const userlessSystemChannel =
@@ -94,6 +101,7 @@ export function snapshotIdentity(
     userId,
     agentId,
     threadId,
+    spaceId: spaceId || undefined,
     tenantSlug: asString(payload.tenant_slug),
     agentSlug: asString(payload.instance_id),
     traceId: asString(payload.trace_id),
