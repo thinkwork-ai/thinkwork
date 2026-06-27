@@ -333,6 +333,9 @@ build_handler "mcp-user-memory" \
 build_handler "mcp-context-engine" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-context-engine.ts"
 
+build_handler "mcp-open-engine" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-open-engine.ts"
+
 build_handler "brain-agent-write" \
   "$REPO_ROOT/packages/api/src/handlers/brain-agent-write.ts"
 

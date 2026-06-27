@@ -489,6 +489,7 @@ resource "aws_lambda_function" "handler" {
     "mcp-oauth",
     "mcp-user-memory",
     "mcp-context-engine",
+    "mcp-open-engine",
     "activity",
     "routines",
     "budgets",
@@ -1078,6 +1079,7 @@ locals {
       "POST /mcp/oauth/revoke"                             = "mcp-oauth"
       "ANY /mcp/user-memory"                               = "mcp-user-memory"
       "ANY /mcp/context-engine"                            = "mcp-context-engine"
+      "ANY /mcp/open-engine"                               = "mcp-open-engine"
 
       # Brain v0 service-auth writeback.
       "POST /api/brain/agent-write"    = "brain-agent-write"

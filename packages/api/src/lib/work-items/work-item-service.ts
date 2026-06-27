@@ -218,6 +218,23 @@ export async function createWorkItem(
         template_source_id: input.templateSourceId ?? null,
         created_by_user_id: callerUserId,
         metadata: parseAwsJsonObject(input.metadata),
+        open_engine_enabled: Boolean(
+          input.openEngineEnabled ?? input.open_engine_enabled ?? false,
+        ),
+        open_engine_queue_key: optionalTrim(
+          input.openEngineQueueKey ?? input.open_engine_queue_key,
+        ),
+        open_engine_scheduled_at: optionalDate(
+          input.openEngineScheduledAt ?? input.open_engine_scheduled_at,
+        ),
+        open_engine_dependency_state: normalizeOpenEngineDependencyState(
+          input.openEngineDependencyState ??
+            input.open_engine_dependency_state ??
+            "ready",
+        ),
+        open_engine_routing: parseAwsJsonObject(
+          input.openEngineRouting ?? input.open_engine_routing,
+        ),
         updated_at: now,
       })
       .returning();
@@ -288,6 +305,25 @@ export async function updateWorkItem(
   if (input.blocked !== undefined) updates.blocked = Boolean(input.blocked);
   if (input.metadata !== undefined)
     updates.metadata = parseAwsJsonObject(input.metadata);
+  if (input.openEngineEnabled !== undefined) {
+    updates.open_engine_enabled = Boolean(input.openEngineEnabled);
+  }
+  if (input.openEngineQueueKey !== undefined) {
+    updates.open_engine_queue_key = optionalTrim(input.openEngineQueueKey);
+  }
+  if (input.openEngineScheduledAt !== undefined) {
+    updates.open_engine_scheduled_at = optionalDate(
+      input.openEngineScheduledAt,
+    );
+  }
+  if (input.openEngineDependencyState !== undefined) {
+    updates.open_engine_dependency_state = normalizeOpenEngineDependencyState(
+      input.openEngineDependencyState,
+    );
+  }
+  if (input.openEngineRouting !== undefined) {
+    updates.open_engine_routing = parseAwsJsonObject(input.openEngineRouting);
+  }
   if (input.archived !== undefined) {
     updates.archived_at = input.archived ? now : null;
   }
@@ -880,6 +916,28 @@ export function normalizeWorkItemPriority(value: unknown): WorkItemPriority {
   throw new GraphQLError(`Unsupported work item priority: ${value}`, {
     extensions: { code: "BAD_USER_INPUT" },
   });
+}
+
+function normalizeOpenEngineDependencyState(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (normalized === "ready" || normalized === "waiting") return normalized;
+  throw new GraphQLError(`Unsupported Open Engine dependency state: ${value}`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
+}
+
+function optionalDate(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    throw new GraphQLError("Date fields must be valid ISO date strings", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return date;
 }
 
 function eventTypeForStatus(category: string) {

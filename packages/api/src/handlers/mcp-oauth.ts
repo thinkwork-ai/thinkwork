@@ -40,6 +40,12 @@ const SUPPORTED_SCOPES = new Set([
   "memory:write",
   "wiki:read",
   "context:read",
+  "open_engine:work_items",
+]);
+const MCP_RESOURCE_PATHS = new Set([
+  "/mcp/user-memory",
+  "/mcp/context-engine",
+  "/mcp/open-engine",
 ]);
 
 const secrets = new SecretsManagerClient({
@@ -164,8 +170,9 @@ function protectedResourceMetadata(event: APIGatewayProxyEventV2) {
       "memory:write",
       "wiki:read",
       "context:read",
+      "open_engine:work_items",
     ],
-    resource_documentation: `${issuerUrl(event)}/docs/mcp/user-memory`,
+    resource_documentation: `${issuerUrl(event)}/docs/mcp`,
   });
 }
 
@@ -189,6 +196,7 @@ function authorizationServerMetadata(event: APIGatewayProxyEventV2) {
       "memory:write",
       "wiki:read",
       "context:read",
+      "open_engine:work_items",
     ],
   });
 }
@@ -296,7 +304,7 @@ function authorize(event: APIGatewayProxyEventV2) {
       400,
     );
   }
-  if (!sameResource(resource, resourceUrl(event))) {
+  if (!isAllowedMcpResource(event, resource)) {
     return oauthError(
       "invalid_target",
       "resource does not match this MCP server",
@@ -704,7 +712,16 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 function resourceUrl(event: APIGatewayProxyEventV2): string {
-  return `${issuerUrl(event)}/mcp/user-memory`;
+  return `${issuerUrl(event)}${resourcePath(event)}`;
+}
+
+function resourcePath(event: APIGatewayProxyEventV2): string {
+  const path = event.rawPath || event.requestContext.http.path || "";
+  const match = path.match(
+    /\/\.well-known\/oauth-protected-resource(\/mcp\/[^/]+)$/,
+  );
+  const candidate = match?.[1] ?? "/mcp/user-memory";
+  return MCP_RESOURCE_PATHS.has(candidate) ? candidate : "/mcp/user-memory";
 }
 
 function mcpOAuthCallbackUrl(event: APIGatewayProxyEventV2): string {
@@ -751,6 +768,15 @@ function stringClaimOptional(value: unknown): string | undefined {
 
 function sameResource(left: string, right: string): boolean {
   return left.replace(/\/+$/, "") === right.replace(/\/+$/, "");
+}
+
+function isAllowedMcpResource(
+  event: APIGatewayProxyEventV2,
+  resource: string,
+): boolean {
+  return [...MCP_RESOURCE_PATHS].some((path) =>
+    sameResource(resource, `${issuerUrl(event)}${path}`),
+  );
 }
 
 function isAllowedRedirectUri(value: string): boolean {
