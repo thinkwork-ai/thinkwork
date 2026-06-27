@@ -17,7 +17,7 @@ export const companyBrainManifest = {
   pluginKey: "company-brain",
   displayName: "Company Brain",
   description:
-    "Premium knowledge graph substrate for organizing company memory and powering the Memory / Ontology workspace.",
+    "Premium ontology and knowledge-graph substrate for organizing shared Brain context.",
   premium: {
     entitlementProductKey: "company-brain",
     installKeyRequired: true,
@@ -35,8 +35,9 @@ export const companyBrainManifest = {
           managedAppKey: "cognee",
           // Mirrors the deployment-runner Cognee adapter's requiredInputs
           // for ENABLE/UPGRADE. The adapter remains internal implementation
-          // machinery; the catalog presents the component as Company Brain's
-          // knowledge graph substrate.
+          // machinery; Hindsight remains the user and Space memory provider.
+          // The catalog presents the component as Company Brain's knowledge
+          // graph substrate.
           terraformInputs: {
             imageUri: {
               description:
@@ -67,8 +68,9 @@ export const companyBrainManifest = {
           managedAppKey: "cognee",
           // Mirrors the deployment-runner Cognee adapter's requiredInputs
           // for ENABLE/UPGRADE. The adapter remains internal implementation
-          // machinery; the catalog presents the component as Company Brain's
-          // knowledge graph substrate.
+          // machinery; Hindsight remains the user and Space memory provider.
+          // The catalog presents the component as Company Brain's knowledge
+          // graph substrate.
           terraformInputs: {
             imageUri: {
               description:
@@ -92,7 +94,7 @@ export const companyBrainManifest = {
           key: "brain",
           displayName: "Company Brain",
           description:
-            "Direct MCP access to the tenant's Company Brain substrate for memory capture, recall, graph search, and substrate-native operations.",
+            "Direct MCP access to the tenant's Company Brain substrate for ontology, graph search, and substrate-native operations.",
           endpointFrom: {
             managedApp: "cognee",
             configKey: "cogneeEndpoint",
@@ -100,8 +102,8 @@ export const companyBrainManifest = {
           },
           auth: { mode: "none" },
           toolNotes: [
-            "Company Brain MCP is tenant-internal and plugin-owned; agents should discover the live tool list before calling substrate-native memory or graph operations.",
-            "Use direct MCP/API access from Pi for Company Brain reads and writes. GraphQL is control-plane only and must not be required for agent memory operations.",
+            "Company Brain MCP is tenant-internal and plugin-owned; agents should discover the live tool list before calling substrate-native ontology or graph operations.",
+            "Use Hindsight-backed ThinkWork memory APIs for user and Space memory. Company Brain direct MCP/API access is for Brain substrate operations; GraphQL is control-plane only.",
           ],
         },
       ],

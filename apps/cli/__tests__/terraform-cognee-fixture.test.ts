@@ -381,6 +381,8 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
   it("keeps Cognee disabled by default with explicit safe enablement inputs", () => {
     const vars = read(THINKWORK_VARS);
 
+    expect(vars).toMatch(/variable "enable_hindsight"/);
+    expect(vars).toMatch(/default\s*=\s*true/);
     expect(vars).toMatch(/variable "enable_cognee"/);
     expect(vars).toMatch(/default\s*=\s*false/);
     expect(vars).toMatch(/variable "cognee_image_uri"/);
@@ -429,16 +431,19 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     );
   });
 
-  it("allows Cognee to be selected as the canonical memory engine", () => {
+  it("keeps Hindsight as the default memory path and labels Cognee legacy diagnostic", () => {
     const vars = read(THINKWORK_VARS);
     const source = read(THINKWORK_MAIN);
 
-    expect(vars).toMatch(/"agentcore", "cognee"/);
+    expect(vars).toMatch(/Empty auto-selects Hindsight/);
+    expect(vars).toMatch(/legacy diagnostic 'cognee'/);
     expect(vars).toMatch(/memory_engine = 'cognee' requires enable_cognee/);
+    expect(vars).not.toMatch(/make it canonical for user and Space memory/);
     expect(source).toMatch(/var\.memory_engine == "cognee"/);
+    expect(source).toMatch(/legacy diagnostic compatibility value/);
   });
 
-  it("attaches graphql-http to the Cognee VPC path when Cognee owns memory", () => {
+  it("keeps graphql-http Cognee VPC wiring for legacy diagnostic Cognee memory mode", () => {
     const source = read(LAMBDA_API_HANDLERS);
 
     expect(source).toMatch(/each\.key == "graphql-http"/);
@@ -503,16 +508,21 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
 });
 
 describe("U4 - Cognee deployment template propagation", () => {
-  it("adds safe disabled Cognee defaults to the greenfield example", () => {
+  it("adds Hindsight-default memory and safe disabled Cognee defaults to the greenfield example", () => {
     const source = read(GREENFIELD_MAIN);
     const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
 
+    expect(source).toMatch(/variable "enable_hindsight"/);
+    expect(source).toMatch(/default\s*=\s*true/);
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/default\s*=\s*false/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
     expect(source).toMatch(/variable "cognee_db_name"/);
     expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(thinkworkModule).toMatch(
+      /enable_hindsight\s*=\s*var\.enable_hindsight/,
+    );
     expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
     expect(thinkworkModule).toMatch(
       /cognee_image_uri\s*=\s*var\.cognee_image_uri/,
@@ -528,6 +538,10 @@ describe("U4 - Cognee deployment template propagation", () => {
   it("generates init tfvars and wrapper HCL with Cognee disabled by default", () => {
     const source = read(INIT_COMMAND);
 
+    expect(source).toMatch(/config\.enable_hindsight = "true"/);
+    expect(source).toMatch(
+      /variable "enable_hindsight"[\s\S]{0,80}default = true/,
+    );
     expect(source).toMatch(/enable_cognee = false/);
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
@@ -565,16 +579,21 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(initSource).toMatch(/cpSync\(bundledPlugins, targetPlugins/);
   });
 
-  it("exposes safe Cognee defaults in the enterprise deploy template", () => {
+  it("exposes Hindsight-default memory and safe Cognee defaults in the enterprise deploy template", () => {
     const source = read(ENTERPRISE_TEMPLATE_MAIN);
     const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
 
+    expect(source).toMatch(/variable "enable_hindsight"/);
+    expect(source).toMatch(/default\s*=\s*true/);
     expect(source).toMatch(/variable "enable_cognee"/);
     expect(source).toMatch(/default\s*=\s*false/);
     expect(source).toMatch(/variable "cognee_image_uri"/);
     expect(source).toMatch(/variable "cognee_db_name"/);
     expect(source).toMatch(/variable "cognee_db_password_secret_arn"/);
     expect(source).toMatch(/variable "cognee_bedrock_model_resource_arns"/);
+    expect(thinkworkModule).toMatch(
+      /enable_hindsight\s*=\s*var\.enable_hindsight/,
+    );
     expect(thinkworkModule).toMatch(/enable_cognee\s*=\s*var\.enable_cognee/);
     expect(thinkworkModule).toMatch(/cognee_db_name\s*=\s*var\.cognee_db_name/);
     expect(thinkworkModule).toMatch(

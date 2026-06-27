@@ -45,9 +45,11 @@ locals {
     : module.vpc.private_subnet_ids
   )
 
-  # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
-  # For one release we also honor the legacy var.memory_engine == "hindsight"
-  # so existing tfvars keep working.
+  # Hindsight is the canonical user/Space memory provider for full ThinkWork
+  # installs. AgentCore managed memory remains available as an explicit
+  # low-cost/development opt-out; Cognee stays optional Brain infrastructure.
+  # We still honor var.memory_engine == "hindsight" so existing tfvars keep
+  # working even when enable_hindsight was not set.
   hindsight_enabled      = var.enable_hindsight || var.memory_engine == "hindsight"
   cognee_enabled         = var.enable_cognee
   twenty_provisioned     = var.twenty_provisioned
@@ -114,10 +116,11 @@ locals {
   ])
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
-  # is active per deployment for recall/inspect/export. Auto-selects from
-  # enable_hindsight when var.memory_engine is left empty so existing deploys
-  # keep working without config changes. Legacy value "managed" maps to
-  # "agentcore".
+  # is active per deployment for recall/inspect/export. Empty selects
+  # Hindsight for full installs; callers can explicitly choose AgentCore for
+  # low-cost/development deployments. Legacy value "managed" maps to
+  # "agentcore"; "cognee" remains a legacy diagnostic compatibility value, not
+  # the supported user/Space memory path.
   resolved_memory_engine = (
     var.memory_engine == "hindsight" || var.memory_engine == "agentcore" || var.memory_engine == "cognee"
     ? var.memory_engine

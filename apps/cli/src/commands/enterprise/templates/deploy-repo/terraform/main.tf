@@ -64,14 +64,20 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "enable_hindsight" {
+  description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
+  type        = bool
+  default     = true
+}
+
 variable "enable_cognee" {
-  description = "Enable Cognee as the Company Brain substrate. Disabled by default."
+  description = "Enable Cognee as optional ThinkWork Brain ontology/knowledge-graph infrastructure. Disabled by default."
   type        = bool
   default     = false
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine. Use 'cognee' when enable_cognee = true and Company Brain should own user/Space memory."
+  description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments; 'cognee' is legacy diagnostic compatibility, not the supported user/Space memory path."
   type        = string
   default     = ""
 }
@@ -308,6 +314,7 @@ module "thinkwork" {
   db_password     = var.db_password
   api_auth_secret = var.api_auth_secret
 
+  enable_hindsight                           = var.enable_hindsight
   memory_engine                              = var.memory_engine
   enable_cognee                              = var.enable_cognee
   cognee_image_uri                           = var.cognee_image_uri

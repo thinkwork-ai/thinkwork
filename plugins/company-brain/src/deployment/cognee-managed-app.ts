@@ -68,7 +68,8 @@ const enableRequiredInputs: RequiredManagedAppInput[] = [
 export const cogneeAdapter: ManagedAppAdapter = {
   appKey: "cognee",
   displayName: "Cognee",
-  description: "Knowledge graph runtime with app-owned graph/vector storage.",
+  description:
+    "ThinkWork Brain ontology/knowledge-graph runtime with app-owned graph/vector storage.",
   catalogVisible: true,
   terraformModulePath: "plugins/company-brain/terraform/cognee",
   requiredInputs(operation) {

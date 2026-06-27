@@ -13,12 +13,12 @@ account_id = "123456789012"  # your AWS account ID
 database_engine = "rds-postgres"
 
 # Memory:
-#   AgentCore managed memory is always on — every agent gets automatic
-#   per-turn retention with zero config. Uncomment the line below to
-#   enable Hindsight as an optional add-on (adds an ECS+ALB service for
-#   semantic + entity-graph + cross-encoder retrieval tools alongside the
-#   built-in remember/recall/forget tools).
-# enable_hindsight = true
+#   Hindsight is the canonical user and Space memory provider for full
+#   ThinkWork installs and is enabled by default. Set enable_hindsight = false
+#   and memory_engine = "agentcore" only for explicit low-cost/development
+#   AgentCore-only deployments.
+# enable_hindsight = false
+# memory_engine    = "agentcore"
 
 # Managed applications:
 #   Twenty CRM is optional. First enable should set both booleans true after
