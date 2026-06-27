@@ -213,6 +213,14 @@ export interface McpUrlValidation {
   host?: string;
 }
 
+export interface McpUrlValidationOptions {
+  /**
+   * Server-side trust marker for plugin-owned tenant-internal MCP endpoints.
+   * Never set this for user-supplied URLs.
+   */
+  trustedInternal?: boolean;
+}
+
 /**
  * Single-octet IPv4 private-range matchers. Encoded as predicates rather than
  * a regex so the test surface mirrors the CIDR ranges the audit applies.
@@ -354,7 +362,10 @@ function classifyHostname(host: string): McpUrlRejection | null {
  * worker-thread's response scrubbing in U16 + the connect timeout in U7's
  * `connectMcpServer` factory. This validator is the cheap pre-flight gate.
  */
-export function validateMcpUrl(url: string): McpUrlValidation {
+export function validateMcpUrl(
+  url: string,
+  options: McpUrlValidationOptions = {},
+): McpUrlValidation {
   if (typeof url !== "string" || !url.trim()) {
     return { ok: false, reason: "invalid-url" };
   }
@@ -364,9 +375,13 @@ export function validateMcpUrl(url: string): McpUrlValidation {
   } catch {
     return { ok: false, reason: "invalid-url" };
   }
-  // Only HTTPS is permitted. Plaintext HTTP, websockets (ws/wss), file://,
-  // gopher://, etc. are all rejected.
-  if (parsed.protocol !== "https:") {
+  // Only HTTPS is permitted for user-supplied MCP. Trusted plugin-owned
+  // internal endpoints may use HTTP because the private substrate ALB is
+  // intentionally not internet-facing.
+  if (
+    parsed.protocol !== "https:" &&
+    !(options.trustedInternal === true && parsed.protocol === "http:")
+  ) {
     return { ok: false, reason: "unsupported-scheme" };
   }
   const host = parsed.hostname;
@@ -388,13 +403,13 @@ export function validateMcpUrl(url: string): McpUrlValidation {
   const ipFamily = isIP(normalised);
   if (ipFamily === 4) {
     const reason = classifyIpv4(normalised);
-    if (reason) return { ok: false, reason };
+    if (reason && !options.trustedInternal) return { ok: false, reason };
   } else if (ipFamily === 6) {
     const reason = classifyIpv6(normalised);
-    if (reason) return { ok: false, reason };
+    if (reason && !options.trustedInternal) return { ok: false, reason };
   } else {
     const reason = classifyHostname(normalised);
-    if (reason) return { ok: false, reason };
+    if (reason && !options.trustedInternal) return { ok: false, reason };
   }
   return { ok: true, host: normalised.toLowerCase() };
 }

@@ -252,6 +252,23 @@ describe("validateMcpUrl", () => {
     expect(result.reason).toBe(reason);
   });
 
+  it("allows trusted plugin-owned internal HTTP MCP endpoints", () => {
+    expect(
+      validateMcpUrl(
+        "http://internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com/mcp-server/http",
+        { trustedInternal: true },
+      ),
+    ).toEqual({
+      ok: true,
+      host: "internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com",
+    });
+    expect(
+      validateMcpUrl("http://10.0.2.38:8000/mcp-server/http", {
+        trustedInternal: true,
+      }),
+    ).toEqual({ ok: true, host: "10.0.2.38" });
+  });
+
   it.each([
     ["https://169.254.169.254/latest/meta-data/", "link-local-host"],
     ["https://169.254.0.1/", "link-local-host"],

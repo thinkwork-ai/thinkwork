@@ -96,6 +96,18 @@ variable "db_secret_arn" {
   default     = ""
 }
 
+variable "cognee_subnet_ids" {
+  description = "Subnet IDs for Pi's private-network attachment when Company Brain/Cognee direct MCP access is enabled."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_security_group_ids" {
+  description = "Security group IDs for Pi's private-network attachment when Company Brain/Cognee direct MCP access is enabled."
+  type        = list(string)
+  default     = []
+}
+
 variable "okf_efs_enabled" {
   description = "When true, mount the generated OKF wiki EFS view into Pi. Requires subnet/security-group inputs and an access point ARN."
   type        = bool

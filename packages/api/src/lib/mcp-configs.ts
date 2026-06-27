@@ -17,8 +17,9 @@
  *     user_mcp_tokens for that requester and server. The plugin owns the MCP
  *     server registration/lifecycle; each user still authenticates to the MCP
  *     server individually. Plugin-managed user_headers servers continue to use
- *     user_plugin_activation_tokens, and service_credential rows are
- *     tenant-owned and resolve server-side without requester activation.
+ *     user_plugin_activation_tokens. service_credential and no-auth plugin
+ *     rows are tenant-owned and resolve server-side without requester
+ *     activation.
  *
  * URL dedupe: when a plugin server and a direct server share an endpoint
  * URL, the dispatch includes the plugin entry for users whose activation
@@ -48,6 +49,12 @@ export interface McpServerConfig {
   name: string;
   url: string;
   transport: "streamable-http" | "sse";
+  /**
+   * Server-side trust marker for plugin-owned tenant-internal MCP endpoints.
+   * The Pi runtime uses this to allow private/plain HTTP URLs and no-auth
+   * connects only for configs emitted by this trusted resolver.
+   */
+  trustedInternal?: boolean;
   auth?:
     | { type: "bearer"; token: string }
     | { type: "headers"; headers: Record<string, string> }
@@ -191,7 +198,8 @@ export async function buildMcpConfigs(
     // Plugin installation registers and owns the server row, but OAuth MCP
     // access is still per-user MCP auth. Resolve that from the REQUESTER's
     // user_mcp_tokens record, never from humanPairId. user_headers remains an
-    // app-level activation shape, and service_credential is tenant-owned.
+    // app-level activation shape. service_credential and no-auth rows are
+    // tenant-owned.
     if (isPluginRow(mcp)) {
       if (mcp.auth_type === "service_credential") {
         const resolved = await resolveServiceCredentialAuth(
@@ -203,6 +211,11 @@ export async function buildMcpConfigs(
         mcpConfigs.push(
           toMcpServerConfig(mcp, resolved.token, resolved.headers),
         );
+        includedPluginUrls.add(normalizeServerUrl(mcp.url));
+        continue;
+      }
+      if (mcp.auth_type === "none") {
+        mcpConfigs.push(toMcpServerConfig(mcp, undefined));
         includedPluginUrls.add(normalizeServerUrl(mcp.url));
         continue;
       }
@@ -264,8 +277,8 @@ export async function buildMcpConfigs(
           pluginToken = resolved;
         }
       } else {
-        // Non-OAuth plugin servers still gate on the requester's active
-        // activation (R14: install alone exposes nothing to end users).
+        // Non-OAuth plugin servers with user-supplied credentials still gate
+        // on the requester's active activation.
         const active = await (
           await getPluginAuth()
         ).hasActiveActivation(requesterUserId, pluginInstallId);
@@ -516,6 +529,7 @@ function toMcpServerConfig(
     runtime_metadata?: unknown;
     management_source?: unknown;
     plugin_install_id?: unknown;
+    auth_type?: unknown;
   },
   token: string | undefined,
   headers?: Record<string, string>,
@@ -536,18 +550,43 @@ function toMcpServerConfig(
     url: mcp.url,
     transport:
       (mcp.transport as "streamable-http" | "sse") || "streamable-http",
-    auth: token
-      ? headers
-        ? { type: "bearer", token, headers }
-        : { type: "bearer", token }
-      : headers
-        ? { type: "headers", headers }
-        : undefined,
-    tools: toolAllowlist,
-    availableTools: availableTools.length > 0 ? availableTools : undefined,
   };
+  if (token) {
+    config.auth = headers
+      ? { type: "bearer", token, headers }
+      : { type: "bearer", token };
+  } else if (headers) {
+    config.auth = { type: "headers", headers };
+  }
+  if (toolAllowlist) config.tools = toolAllowlist;
+  if (availableTools.length > 0) config.availableTools = availableTools;
+  if (isTrustedInternalNoAuthPluginMcp(mcp)) {
+    config.trustedInternal = true;
+  }
   if (recordLinkHints) config.recordLinkHints = recordLinkHints;
   return config;
+}
+
+function isTrustedInternalNoAuthPluginMcp(mcp: {
+  url: string;
+  management_source?: unknown;
+  plugin_install_id?: unknown;
+  auth_type?: unknown;
+}): boolean {
+  if (
+    mcp.management_source !== "plugin" ||
+    !mcp.plugin_install_id ||
+    mcp.auth_type !== "none"
+  ) {
+    return false;
+  }
+  try {
+    // Only server-built plugin configs for internal HTTP endpoints get the Pi
+    // private-network bypass. Public HTTPS no-auth plugins stay untrusted.
+    return new URL(mcp.url).protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 const RECORD_LINK_FIELD_RE =

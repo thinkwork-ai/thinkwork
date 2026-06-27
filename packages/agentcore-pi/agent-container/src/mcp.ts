@@ -247,6 +247,12 @@ export interface McpServerConfig {
   transport?: "streamable-http" | "sse";
   /** Optional non-secret record-link hints for enriching MCP tool results. */
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /**
+   * Server-built trust marker for plugin-owned tenant-internal MCP endpoints.
+   * Allows no-auth connects; URL validation remains owned by the trusted
+   * handler before this builder runs.
+   */
+  trustedInternal?: boolean;
 }
 
 export interface BuildMcpToolsOptions {
@@ -554,13 +560,16 @@ export async function buildMcpTools(
     if (
       !config?.serverName ||
       !config.url ||
-      (!bearer && Object.keys(extraHeaders).length === 0)
+      (!bearer &&
+        Object.keys(extraHeaders).length === 0 &&
+        !config.trustedInternal)
     ) {
       // Skip incomplete configs rather than crashing the entire build.
       // Whitespace-only bearers are rejected here so they don't reach
       // HandleStore.mint (which throws — that throw would bubble out
       // and kill the entire MCP build for one bad config). Header-auth
-      // configs are allowed when they carry at least one extra header.
+      // configs are allowed when they carry at least one extra header. Trusted
+      // internal plugin configs may connect with no auth headers.
       continue;
     }
 

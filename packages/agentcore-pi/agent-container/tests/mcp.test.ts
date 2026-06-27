@@ -851,6 +851,32 @@ describe("buildMcpTools — fail-closed validation", () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
+  it("allows trusted internal plugin configs to connect without auth headers", async () => {
+    const store = new HandleStore();
+    const captured: any[] = [];
+    const connect: ConnectMcpServerFn = async (args) => {
+      captured.push(args);
+      return [makeFakeTool("brain", args.headers)];
+    };
+
+    const tools = await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "company-brain--brain",
+          url: "http://internal-cognee.example.local/mcp-server/http",
+          trustedInternal: true,
+        },
+      ],
+      handleStore: store,
+      connectMcpServer: connect,
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual(["mcp_brain"]);
+    expect(captured).toHaveLength(1);
+    expect(captured[0].headers).toEqual({});
+    expect(store.size).toBe(0);
+  });
+
   it("skips whitespace-only bearer without throwing past buildMcpTools", async () => {
     // Regression test: a "   " bearer is truthy in JS, so a naive
     // !config.bearer check passes — but HandleStore.mint then throws

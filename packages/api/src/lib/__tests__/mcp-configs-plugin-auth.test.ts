@@ -490,34 +490,32 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
-  it("non-OAuth plugin servers still gate on an active activation", async () => {
+  it("no-auth plugin servers are tenant-owned and dispatch after install", async () => {
     mockJoinRows.mockReturnValue([
-      pluginRow("docs", { auth_type: "none", auth_config: null }),
+      pluginRow("brain", {
+        slug: "company-brain--brain",
+        name: "Company Brain",
+        url: "http://internal-cognee.example.local/mcp-server/http",
+        auth_type: "none",
+        auth_config: null,
+      }),
     ]);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // Without activation: excluded.
-    expect(
-      await buildMcpConfigs(
-        AGENT,
-        { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
-        "[test]",
-        { pluginAuth: resolver() },
-      ),
-    ).toHaveLength(0);
-    // With an active activation: included (no bearer auth required).
-    store.seedActivation({
-      user_id: REQUESTER,
-      plugin_install_id: INSTALL,
-    });
+
     const configs = await buildMcpConfigs(
       AGENT,
-      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      { humanPairId: HUMAN_PAIR, requesterUserId: null },
       "[test]",
       { pluginAuth: resolver() },
     );
-    expect(configs).toHaveLength(1);
-    expect(configs[0]!.auth).toBeUndefined();
-    warn.mockRestore();
+
+    expect(configs).toEqual([
+      {
+        name: "company-brain--brain",
+        url: "http://internal-cognee.example.local/mcp-server/http",
+        transport: "streamable-http",
+        trustedInternal: true,
+      },
+    ]);
   });
 
   it("service_credential plugin servers resolve tenant auth without requester activation", async () => {

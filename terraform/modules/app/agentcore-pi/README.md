@@ -8,6 +8,7 @@ This module owns the dedicated Pi Lambda + log group + IAM role + event-invoke c
 
 - `aws_iam_role.agentcore_pi` (`thinkwork-${stage}-agentcore-pi-role`) — assumed by Lambda + Bedrock AgentCore Runtime principals.
 - `aws_iam_role_policy.agentcore_pi` — baseline permissions (S3 skill catalog, Bedrock model invoke, AgentCore Memory + Code Interpreter, CloudWatch Logs, X-Ray ingestion, ECR pull, SSM parameter access, memory-retain Lambda invoke). Forward-compat additions for U4-U8: Aurora Data API + Secrets Manager scoped to `thinkwork-${stage}-*`.
+- `aws_iam_role_policy_attachment.agentcore_pi_vpc_access` — attached when Pi needs private-network access for Company Brain/Cognee direct MCP or the OKF EFS mount.
 - `aws_iam_role_policy.agentcore_pi_dlq_send` — `sqs:SendMessage` against the shared async DLQ (injected via `var.async_dlq_arn`).
 - `aws_cloudwatch_log_group.agentcore_pi` (`/thinkwork/${stage}/agentcore-pi`).
 - `aws_lambda_function.agentcore_pi` (`thinkwork-${stage}-agentcore-pi`) — `package_type = "Image"`, pulls `${ecr_repository_url}:pi-latest`.
@@ -47,6 +48,8 @@ The Lambda function name changes from `thinkwork-${stage}-agentcore-flue` to `th
 | `api_endpoint`        | no       | API Gateway base URL for the `/api/skills/complete` callback.                  |
 | `api_auth_secret`     | no       | Service-auth bearer for the same callback.                                     |
 | `memory_engine`       | no       | `hindsight` or `agentcore`; surfaced as `MEMORY_ENGINE` env var.               |
+| `cognee_subnet_ids`   | no       | Private subnets for direct Company Brain/Cognee MCP access.                    |
+| `cognee_security_group_ids` | no | Security groups allowed to reach the internal Company Brain/Cognee endpoint.    |
 
 ## Outputs
 
