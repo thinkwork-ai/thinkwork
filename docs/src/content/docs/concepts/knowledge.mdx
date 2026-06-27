@@ -1,6 +1,6 @@
 ---
 title: Memory
-description: "The harness-owned context layer for ThinkWork agents: retained memory, compiled pages, knowledge bases, workspace files, and approved tools behind one inspectable contract."
+description: "The harness-owned context layer for ThinkWork agents: Hindsight memory, Brain Sources, compiled pages, workspace files, and approved tools behind one inspectable contract."
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
@@ -23,13 +23,12 @@ That distinction matters. Threads answer "what happened?" Memory answers "what s
 
 ## What It Contains
 
-Memory is an umbrella over several source families. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
+Memory is an umbrella over durable Hindsight memory plus source families that can be inspected or lazy-loaded. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
 
 <CardGrid>
   <Card title="Retained Memory" icon="seti:bookmark">
     Durable facts, preferences, and observations retained from prior work.
-    Hindsight and AgentCore Memory are adapter implementations below the
-    ThinkWork memory contract.
+    Hosted ThinkWork stores user and Space Brain memory in Hindsight.
   </Card>
   <Card title="Pages" icon="graph">
     Compiled pages: entity, topic, and decision pages distilled from memory
@@ -43,10 +42,9 @@ Memory is an umbrella over several source families. Operators see them together 
     Tenant-governed business types, relationships, facet templates, and mappings
     that shape durable memory materialization.
   </Card>
-  <Card title="Knowledge Bases" icon="open-book">
-    Operator-curated documents backed by Bedrock Knowledge Bases and Aurora
-    pgvector. Best for policies, runbooks, product docs, and other authored
-    source material.
+  <Card title="Brain Sources" icon="open-book">
+    Operator-curated Space documents retained into Hindsight with stable
+    document ids, tags, observation scopes, and source evidence.
   </Card>
   <Card title="Workspace Files" icon="file">
     Permissioned files from an agent workspace, template workspace, or tenant
@@ -66,27 +64,27 @@ Memory is an umbrella over several source families. Operators see them together 
 
 Most agent systems expose memory, RAG, workspace search, and external search as separate tools. That makes agents choose implementation details mid-turn and makes operators debug the wrong layer: was the answer bad because the memory engine missed, the KB was stale, or the agent never called the right tool?
 
-Memory puts those sources behind one product boundary:
+Memory puts those sources behind one operator boundary:
 
 - operators can inspect and test the sources together;
-- agents can ask for context without hard-coding every backend;
+- agents can use direct Hindsight memory plus external context without hard-coding every backend;
 - every hit carries provenance, source family, rank, freshness, and provider status;
 - backend choices can change without changing the product story.
 
 ## How a Turn Uses Memory
 
-At turn time, Memory can assemble context from recent thread history, memory recall, compiled pages, knowledge-base chunks, workspace files, and approved MCP tools. The router ranks and budgets those results before the model sees them.
+At turn time, the runtime combines recent thread history, direct Hindsight memory recall/reflect, compiled pages, Brain Sources, workspace files, and approved external context tools. Context Engine ranks and budgets lazy-loaded external results before the model sees them.
 
 ```
 User message arrives in a thread
         │
         ▼
-  Memory source routing
+  Turn context assembly
         │
         ├─ Recent thread history
-        ├─ Memory recall
+        ├─ Hindsight recall/reflect
         ├─ Compiled pages
-        ├─ Knowledge-base chunks
+        ├─ Brain Sources
         ├─ Workspace files
         └─ Approved MCP search tools
         │
@@ -97,14 +95,14 @@ User message arrives in a thread
   Response + tool calls → thread
 ```
 
-Every source is optional. A focused support bot may only need a knowledge base. A long-running sales agent may use memory, compiled customer pages, workspace files, and approved operational search tools.
+Every external source is optional. A focused support bot may only need Space Brain Sources. A long-running sales agent may use Hindsight memory, compiled customer pages, workspace files, and approved operational search tools.
 
 ## Trust and Provenance
 
 Memory treats source trust as a product concern, not a prompt afterthought.
 
-- **Authored knowledge** comes from operator-managed documents and keeps file/chunk citations.
-- **Memory** comes from prior work and keeps adapter/source references.
+- **Authored knowledge** comes from Hindsight-retained Brain Sources and keeps document/source citations.
+- **Memory** comes from prior work and keeps Hindsight bank/source references.
 - **Ontology** defines approved business meaning before it changes durable memory structure.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
@@ -113,7 +111,8 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 <Aside type="note">
   The internal Context Engine service and `query_context` tool are still the
   developer contract behind Memory source routing. Product-facing docs use
-  Memory; API reference docs still name the exact contract developers call.
+  Memory; API reference docs still name the exact contract developers call for
+  external context.
 </Aside>
 
 ## Admin Surface
@@ -125,7 +124,7 @@ views:
 | --------------- | ------------------------------------------------------------------------------ |
 | Memory          | Browse and search operator-visible Hindsight memory records with bank evidence |
 | Wiki            | Inspect compiled pages and page search output                                  |
-| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status                          |
+| Sources         | Manage Hindsight Brain Sources and document ingest                             |
 | Knowledge Graph | Inspect ThinkWork Brain graph diagnostics when graph infrastructure is present |
 
 Ontology Studio lives under **Manage → Ontology** because it governs tenant-level business vocabulary rather than one source family. Operators use it to scan for suggestions, review change sets, approve definitions, and monitor reprocess jobs.
@@ -136,8 +135,8 @@ compatibility, but the canonical operator route for this pass is
 
 ## Related Pages
 
-- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and Bedrock KBs
-- [Retained Memory](/concepts/knowledge/memory/) — retained facts and memory backends
+- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and legacy Bedrock KBs
+- [Retained Memory](/concepts/knowledge/memory/) — Hindsight-backed retained facts and Space memory
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
 - [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) — read-only linked markdown traversal over compiled pages
 - [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for durable memory materialization

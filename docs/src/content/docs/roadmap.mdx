@@ -11,33 +11,34 @@ ThinkWork v1 is a working, production-deployable Agent Harness. It is not a fini
 
 These features are complete and supported in v1:
 
-| Feature                                                                      | Status |
-| ---------------------------------------------------------------------------- | ------ |
-| Managed agents (AgentCore + Bedrock)                                         | Stable |
-| Spaces (per-space rendered workspace, scoped to tenant platform agent)       | Beta   |
-| Pi managed runtime substrate (parallel AgentCore runtime)                    | Beta   |
-| Connected agents (BYO runtime webhook)                                       | Stable |
-| Agent Templates                                                              | Stable |
-| Skill packs (SKILL.md → S3 → invoke-time loading)                            | Stable |
-| Threads + channels (CHAT, AUTO, EMAIL, GITHUB)                               | Stable |
-| AgentCore managed memory with automatic per-turn retention (always on)       | Stable |
-| Hindsight memory add-on (`enable_hindsight = true`, ECS Fargate)             | Beta   |
-| Knowledge Bases (Bedrock KB + document upload)                               | Stable |
-| GitHub integration                                                           | Stable |
-| Google Workspace integration (Gmail + Calendar)                              | Beta   |
-| private extension tracker integration (pickup + PR writeback)                | Beta   |
-| Tenant credential vault (KMS-backed provider credentials)                    | Stable |
-| Scheduled automations (EventBridge + Step Functions)                         | Stable |
-| Event-driven automations                                                     | Beta   |
-| Guardrails (Bedrock Guardrails integration)                                  | Stable |
-| Budgets and usage tracking (turn-level)                                      | Stable |
-| Audit logging (S3 NDJSON)                                                    | Stable |
-| Admin web app (React/Vite)                                                   | Beta   |
-| CLI (`thinkwork-cli`)                                                        | Beta   |
-| Terraform module (`thinkwork-ai/thinkwork/aws`)                              | Beta   |
-| BYO VPC, database, Cognito                                                   | Stable |
-| Evaluations (in-app authoring, runs, scoring)                                | Beta   |
-| Multi-tenancy (Postgres RLS)                                                 | Stable |
+| Feature                                                                | Status |
+| ---------------------------------------------------------------------- | ------ |
+| Managed agents (AgentCore + Bedrock)                                   | Stable |
+| Spaces (per-space rendered workspace, scoped to tenant platform agent) | Beta   |
+| Pi managed runtime substrate (parallel AgentCore runtime)              | Beta   |
+| Connected agents (BYO runtime webhook)                                 | Stable |
+| Agent Templates                                                        | Stable |
+| Skill packs (SKILL.md → S3 → invoke-time loading)                      | Stable |
+| Threads + channels (CHAT, AUTO, EMAIL, GITHUB)                         | Stable |
+| Hindsight Brain memory (`enable_hindsight = true`, ECS Fargate)        | Beta   |
+| AgentCore managed memory compatibility                                 | Stable |
+| Brain Sources (Hindsight document ingest)                              | Beta   |
+| Legacy Knowledge Bases (Bedrock KB + document upload)                  | Stable |
+| GitHub integration                                                     | Stable |
+| Google Workspace integration (Gmail + Calendar)                        | Beta   |
+| private extension tracker integration (pickup + PR writeback)          | Beta   |
+| Tenant credential vault (KMS-backed provider credentials)              | Stable |
+| Scheduled automations (EventBridge + Step Functions)                   | Stable |
+| Event-driven automations                                               | Beta   |
+| Guardrails (Bedrock Guardrails integration)                            | Stable |
+| Budgets and usage tracking (turn-level)                                | Stable |
+| Audit logging (S3 NDJSON)                                              | Stable |
+| Admin web app (React/Vite)                                             | Beta   |
+| CLI (`thinkwork-cli`)                                                  | Beta   |
+| Terraform module (`thinkwork-ai/thinkwork/aws`)                        | Beta   |
+| BYO VPC, database, Cognito                                             | Stable |
+| Evaluations (in-app authoring, runs, scoring)                          | Beta   |
+| Multi-tenancy (Postgres RLS)                                           | Stable |
 
 <Aside type="note">
   "Beta" means the feature works and is deployed in production by early users,
@@ -51,9 +52,9 @@ These features are explicitly not in scope for v1. They're on the roadmap but do
 
 ### Knowledge Graph + Ontology Studio
 
-A Postgres-backed knowledge graph with entity extraction, relationship modeling, and an ontology editor UI. This would complement Knowledge Bases (unstructured document RAG) with structured entity graphs for precise, relationship-aware retrieval.
+A Postgres-backed knowledge graph with entity extraction, relationship modeling, and an ontology editor UI. This would complement Hindsight Brain Sources and legacy document RAG with structured entity graphs for precise, relationship-aware retrieval.
 
-**Not in v1 because:** The RAG + Knowledge Base path covers 90% of use cases. The graph data model needs more design work before we commit to a schema.
+**Not in v1 because:** Hindsight Brain Sources and legacy document retrieval cover the common authored-document path. The graph data model needs more design work before we commit to a schema.
 
 ### AutoResearch
 

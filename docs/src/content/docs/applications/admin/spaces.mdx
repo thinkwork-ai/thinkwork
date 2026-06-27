@@ -1,6 +1,6 @@
 ---
 title: Admin - Spaces
-description: "Operator guide to Space Studio: the Spaces list plus Workspace, KBs, Triggers, Settings, and Members tabs."
+description: "Operator guide to Space Studio: the Spaces list plus Workspace, Sources, Triggers, Settings, and Members tabs."
 ---
 
 import { LinkCard, CardGrid, Aside } from "@astrojs/starlight/components";
@@ -16,7 +16,7 @@ The Admin UI has two levels:
 - **Spaces list:** `/spaces`
 - **Space Studio:** `/spaces/:spaceId`, which redirects to `/spaces/:spaceId/workspace`
 
-Space Studio tabs appear in this order: **Workspace**, **KBs**, **Triggers**, **Settings**, and **Members**. The Members tab appears only for Private Spaces.
+Space Studio tabs appear in this order: **Workspace**, **Sources**, **Triggers**, **Settings**, and **Members**. The Members tab appears only for Private Spaces. Legacy routes may still use `/kbs`.
 
 <Aside type="note">
   Workspace is the landing tab for a Space. If you open `/spaces/:spaceId`,
@@ -41,10 +41,10 @@ Start with Spaces list if you are creating or finding a Space. Then open the pag
     description="Space-local files for procedures, customer context, project notes, and workroom instructions."
   />
   <LinkCard
-    title="KBs"
+    title="Sources"
     icon="open-book"
     href="/applications/admin/spaces/kbs/"
-    description="Knowledge-base selection for the Space."
+    description="Brain Source and legacy knowledge-base selection for the Space."
   />
   <LinkCard
     title="Triggers"
@@ -72,7 +72,7 @@ Use Admin Spaces when the operator decision is local to a workroom:
 
 - local workspace files;
 - Space-owned Goal templates for repeatable workflows;
-- selected knowledge bases;
+- Space Brain Sources and explicit legacy knowledge-base bindings;
 - schedules, webhooks, or Space email triggers;
 - Public or Private access;
 - Private Space membership.
@@ -122,4 +122,4 @@ Keep task status, owners, permissions, and final review in ThinkWork's structure
 - [Admin - Tenant Agent](/applications/admin/agents/) - tenant-wide platform-agent baseline
 - [Admin - Threads](/applications/admin/threads/) - thread records created in Spaces
 - [Admin - Automations](/applications/admin/automations/) - tenant-wide workflows, schedules, and webhooks
-- [Admin - Memory](/applications/admin/memory/) - retained memory, pages, knowledge bases, and graph diagnostics
+- [Admin - Memory](/applications/admin/memory/) - retained memory, Brain Sources, pages, and graph diagnostics

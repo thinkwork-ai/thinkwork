@@ -1,26 +1,26 @@
 ---
-title: Knowledge and Memory
-description: How Space knowledge bases and scoped memory affect what the tenant platform agent can know for a workroom.
+title: Sources and Memory
+description: How Space Brain Sources and scoped memory affect what the tenant platform agent can know for a workroom.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Spaces can narrow what the tenant platform agent knows for a particular workroom. Knowledge bases bring authored source material into the Space. Memory captures retained facts and observations that belong to that Space's history.
+Spaces can narrow what the tenant platform agent knows for a particular workroom. Brain Sources bring authored material into the Space through Hindsight document memory. Space memory captures retained facts and observations that belong to that Space's history.
 
 This keeps context local. A support Space can use support runbooks, a customer Space can use customer documents, and an internal finance Space can retain finance-specific lessons without making every other Space inherit them.
 
-## Knowledge bases
+## Brain Sources
 
-Knowledge bases are operator-curated document sources. Assign them to a Space when the agent should be able to retrieve from that material while working there.
+Brain Sources are operator-curated document sources retained into the Space's Hindsight bank. Assign them to a Space when the agent should be able to recall from that material while working there.
 
-Good Space knowledge-base candidates include:
+Good Space Source candidates include:
 
 - Customer documentation.
 - Product or policy runbooks.
 - Project plans and operating docs.
 - Department-specific source material.
 
-The Admin KBs tab controls which knowledge bases are selected for the Space.
+The Admin Sources tab controls which Brain Sources and explicit legacy knowledge-base bindings are selected for the Space.
 
 ## Space-scoped memory
 
@@ -29,13 +29,14 @@ Memory is retained knowledge from prior work. Space-scoped memory should answer 
 Use Space memory for observations, preferences, and facts that should follow future work in the same Space. Use tenant-wide Memory or agent workspace files for broader facts that should apply across Spaces.
 
 <Aside type="note">
-  Knowledge bases and memory are related but not interchangeable. Knowledge
-  bases are authored source material. Memory is retained from work over time.
+  Brain Sources and conversational memory are related but not interchangeable.
+  Sources are authored material retained with stable document ids. Memory is
+  retained from work over time.
 </Aside>
 
 ## Related pages
 
-- [Admin - Space KBs](/applications/admin/spaces/kbs/) - selecting knowledge bases for a Space
+- [Admin - Space Sources](/applications/admin/spaces/kbs/) - selecting Brain Sources for a Space
 - [Memory](/concepts/knowledge/) - the broader context substrate
-- [Retained Memory](/concepts/knowledge/memory/) - retained facts and memory backends
+- [Retained Memory](/concepts/knowledge/memory/) - Hindsight-backed retained facts and Space memory
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) - authored document sources

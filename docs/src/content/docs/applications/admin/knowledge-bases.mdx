@@ -1,11 +1,15 @@
 ---
 title: Admin — Knowledge Bases
-description: Create and manage Bedrock Knowledge Bases, upload documents via presigned S3 URLs, trigger Bedrock ingestion, and monitor sync status.
+description: Manage legacy Bedrock Knowledge Bases for compatibility deployments.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Memory page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
+Knowledge Bases are the legacy Bedrock Knowledge Base path backed by Aurora
+`pgvector`. New authored Space documents should normally use Memory → Sources,
+which retains full document content into the Space's Hindsight Brain bank. Use
+this page when a deployment explicitly needs Bedrock KB compatibility, existing
+KB attachments, or a side-by-side external retrieval experiment.
 
 ## The list view
 
@@ -103,16 +107,19 @@ The upload URL response is short-lived and regenerated on each upload. The URL i
 
 The detail query carries most of the interesting fields: `status`, `errorMessage`, `lastSyncAt`, `lastSyncStatus`, `chunkingStrategy`, `chunkSizeTokens`, `chunkOverlapPercent`, `embeddingModel`, `documentCount`.
 
-## Assigning a KB to an agent
+## Assigning a legacy KB to an agent
 
-Knowledge bases are not automatically attached to every agent. An operator attaches a KB to a specific agent or template, and the agent retrieves from that KB on every turn.
+Legacy knowledge bases are not automatically attached to every agent. An
+operator attaches a KB to a specific agent or template when that agent should use
+Bedrock retrieval in addition to the Hindsight Brain. Hosted durable memory and
+Brain Sources do not require this attachment path.
 
 ## Data model
 
 - **`knowledge_bases`** — Aurora table with name, slug, status, description, error_message, chunking_strategy, chunk_size_tokens, chunk_overlap_percent, embedding_model, last_sync_at, last_sync_status, document_count
 - **Source documents** — S3 under `s3://<bucket>/kbs/<kbId>/<filename>`
 - **Vector index** — Aurora `pgvector` extension; the Bedrock ingestion job writes chunks and their embeddings directly into Aurora
-- **Agent attachment** — `agent_knowledge_bases` join table
+- **Agent attachment** — `agent_knowledge_bases` join table for explicit legacy Bedrock KB routing
 
 Because the vector index lives in Aurora, a single Aurora snapshot restore brings back KBs, their vector indexes, and all tenant data in one shot. The only S3 state to worry about on disaster recovery is the source documents themselves, and those have S3 versioning enabled.
 
@@ -127,8 +134,8 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 5. Upload documents one at a time or in a batch (each upload goes directly to S3 via presigned URL)
 6. Click **Sync Now** — the KB transitions to `syncing`
 7. The page polls every 5s until sync completes
-8. Attach the KB to one or more agents or templates
-9. Agents start retrieving from the new KB on their next turn
+8. Attach the KB to one or more agents or templates that explicitly need legacy retrieval
+9. Those agents start retrieving from the new KB on their next turn
 
 ### Update a document
 
@@ -156,8 +163,8 @@ Because the vector index lives in Aurora, a single Aurora snapshot restore bring
 ## Related pages
 
 - [Agents](/applications/web/agents/) — where a KB can be attached to an agent
-- [Admin — Memory](/applications/web/knowledge/) — the combined Admin surface for Memory, Pages, Knowledge Bases, and Sources
-- [Memory](/applications/web/memory/) — the Memory tab behavior: stateful memory vs stateless documents
+- [Admin — Memory](/applications/web/knowledge/) — the combined Admin surface for Hindsight memory, Brain Sources, pages, and legacy sources
+- [Memory](/applications/web/memory/) — the Hindsight-backed Memory tab behavior
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the product model
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
 - [Architecture](/architecture/) — the three-tier deployment including Bedrock and Aurora pgvector
