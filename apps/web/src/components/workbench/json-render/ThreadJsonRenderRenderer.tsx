@@ -109,7 +109,170 @@ function createDomainComponents(actionState: DurableActionState) {
         </p>
       </section>
     )) satisfies ThreadJsonRenderComponentFn<"analytics.display">,
+    "result.list": (({ props }) => (
+      <section
+        aria-label={props.title}
+        className="grid gap-3 rounded-md border border-border bg-card p-3 text-sm shadow-sm"
+        data-testid="json-render-result-list"
+      >
+        <div className="grid gap-1">
+          <h3 className="text-sm font-semibold text-foreground">
+            {props.title}
+          </h3>
+          {props.summary ? (
+            <p className="text-sm text-muted-foreground">{props.summary}</p>
+          ) : null}
+        </div>
+        {props.items.length > 0 ? (
+          <div className="grid gap-2">
+            {props.items.map((item) => (
+              <article
+                className="grid gap-2 rounded border border-border/70 bg-background p-3"
+                data-result-list-variant={item.variant}
+                key={item.id}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-medium text-foreground">
+                        {item.title}
+                      </h4>
+                      {item.statusLabel ? (
+                        <span
+                          className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${resultListToneClass(
+                            item.statusTone,
+                          )}`}
+                        >
+                          {item.statusLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                    {item.summary ? (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {item.summary}
+                      </p>
+                    ) : null}
+                  </div>
+                  <ResultListActions item={item} actionState={actionState} />
+                </div>
+                {item.meta?.length ? (
+                  <dl className="grid gap-1 sm:grid-cols-2">
+                    {item.meta.map((meta) => (
+                      <div className="flex gap-1.5" key={meta.label}>
+                        <dt className="text-xs font-medium text-muted-foreground">
+                          {meta.label}
+                        </dt>
+                        <dd className="text-xs text-foreground">
+                          {String(meta.value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                {item.evidence?.length ? (
+                  <div className="grid gap-1 border-l-2 border-border pl-2">
+                    {item.evidence.map((evidence, index) => (
+                      <p
+                        className="text-xs text-muted-foreground"
+                        key={`${evidence.label ?? "evidence"}-${index}`}
+                      >
+                        {evidence.label ? (
+                          <span className="font-medium text-foreground">
+                            {evidence.label}:{" "}
+                          </span>
+                        ) : null}
+                        {evidence.text}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : props.emptyState ? (
+          <div className="rounded border border-dashed border-border p-3">
+            <p className="text-sm font-medium text-foreground">
+              {props.emptyState.title}
+            </p>
+            {props.emptyState.summary ? (
+              <p className="text-sm text-muted-foreground">
+                {props.emptyState.summary}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    )) satisfies ThreadJsonRenderComponentFn<"result.list">,
   } satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
+}
+
+function ResultListActions({
+  item,
+  actionState,
+}: {
+  item: Parameters<
+    ThreadJsonRenderComponentFn<"result.list">
+  >[0]["props"]["items"][number];
+  actionState: DurableActionState;
+}) {
+  const actionIds = [item.primaryActionId, item.secondaryActionId].filter(
+    (actionId): actionId is string => Boolean(actionId),
+  );
+  if (actionIds.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {actionIds.map((actionId) => {
+        const action = actionState.actions.find((item) => item.id === actionId);
+        if (!action) return null;
+        const status = actionState.statusForAction(action);
+        const disabled =
+          actionState.actionsDisabled ||
+          action.disabled === true ||
+          status.state === "submitting";
+
+        return (
+          <button
+            className="rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={disabled}
+            key={action.id}
+            onClick={() => actionState.onAction(action)}
+            type="button"
+          >
+            {status.state === "submitting" ? "Working..." : action.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function resultListToneClass(
+  tone:
+    | "neutral"
+    | "info"
+    | "success"
+    | "warning"
+    | "danger"
+    | "muted"
+    | null
+    | undefined,
+) {
+  switch (tone) {
+    case "info":
+      return "bg-blue-50 text-blue-700";
+    case "success":
+      return "bg-emerald-50 text-emerald-700";
+    case "warning":
+      return "bg-amber-50 text-amber-800";
+    case "danger":
+      return "bg-red-50 text-red-700";
+    case "muted":
+      return "bg-muted text-muted-foreground";
+    case "neutral":
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
 }
 
 function normalizeActionFormFields(

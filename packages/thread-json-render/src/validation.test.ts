@@ -11,6 +11,7 @@ import {
 import {
   createAnalyticsJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
+  createResultListJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
   createThreadJsonRenderPart,
 } from "./test-fixtures.js";
@@ -41,6 +42,70 @@ describe("thread json-render validation", () => {
     expect(
       validateThreadJsonRenderPart(createAnalyticsJsonRenderFixture()).ok,
     ).toBe(true);
+    expect(
+      validateThreadJsonRenderPart(createResultListJsonRenderFixture()).ok,
+    ).toBe(true);
+  });
+
+  it("validates result.list variants and durable action references", () => {
+    const resultList = createResultListJsonRenderFixture();
+    const validation = validateThreadJsonRenderPart(resultList);
+
+    expect(validation.ok).toBe(true);
+    expect(resultList.data.spec.elements.results.type).toBe("result.list");
+    expect(resultList.data.durableActions).toHaveLength(2);
+  });
+
+  it("rejects result.list action references that are missing, disabled, or reused", () => {
+    const missingAction = createResultListJsonRenderFixture();
+    missingAction.data.specHash = undefined;
+    const missingActionItems = missingAction.data.spec.elements.results.props
+      .items as Array<Record<string, unknown>>;
+    missingActionItems[0]!.primaryActionId = "not-a-durable-action";
+
+    const disabledAction = createResultListJsonRenderFixture();
+    disabledAction.data.specHash = undefined;
+    disabledAction.data.durableActions![0]!.disabled = true;
+
+    const duplicateAction = createResultListJsonRenderFixture();
+    duplicateAction.data.specHash = undefined;
+    const duplicateActionItems = duplicateAction.data.spec.elements.results
+      .props.items as Array<Record<string, unknown>>;
+    duplicateActionItems[1]!.secondaryActionId = "complete-work-item";
+
+    expect(codes(validateThreadJsonRenderPart(missingAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_MISSING",
+    );
+    expect(codes(validateThreadJsonRenderPart(disabledAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DISABLED",
+    );
+    expect(codes(validateThreadJsonRenderPart(duplicateAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
+    );
+  });
+
+  it("rejects unapproved result.list fields and nested imperative props", () => {
+    const unknownNestedField = createResultListJsonRenderFixture();
+    unknownNestedField.data.specHash = undefined;
+    const unknownFieldItems = unknownNestedField.data.spec.elements.results
+      .props.items as Array<Record<string, unknown>>;
+    unknownFieldItems[0]!.routeId = "linear://THNK-82";
+
+    const callbackProp = createResultListJsonRenderFixture();
+    callbackProp.data.specHash = undefined;
+    const callbackItems = callbackProp.data.spec.elements.results.props
+      .items as Array<Record<string, unknown>>;
+    callbackItems[0]!.meta = [{ label: "Safe", value: "ok", onClick: "run()" }];
+
+    expect(codes(validateThreadJsonRenderPart(unknownNestedField))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
+    expect(codes(validateThreadJsonRenderPart(unknownNestedField))).toContain(
+      "JSON_RENDER_PROPS_INVALID",
+    );
+    expect(codes(validateThreadJsonRenderPart(callbackProp))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
   });
 
   it("allows explicit null className values but rejects generated styling", () => {
