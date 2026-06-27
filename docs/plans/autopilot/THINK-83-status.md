@@ -110,3 +110,7 @@ infrastructure deployed through the Brain plugin/managed-app path.
 - Note: `pnpm install` logged an optional `canvas` native build failure under
   Node 25 because `pkg-config` is unavailable, but exited successfully and the
   focused package tests/typechecks ran afterward.
+- Pushed U0 branch to GitHub and opened PR:
+  https://github.com/thinkwork-ai/thinkwork/pull/3020
+- Kept parent Linear issue in `In Progress` because THINK-83 has multiple
+  implementation units and no child/unit Linear issues.
