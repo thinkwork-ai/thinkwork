@@ -231,6 +231,78 @@ function toolPreview(value: unknown, max = 600): string {
   }
 }
 
+function messageContentParts(message: AgentMessage): unknown[] {
+  const content = (message as { content?: unknown }).content;
+  return Array.isArray(content) ? content : [];
+}
+
+function mergeTranscriptToolInvocations(
+  messages: readonly AgentMessage[],
+  invocations: RunAgentLoopResult["toolInvocations"],
+  toolsCalled: Set<string>,
+) {
+  const byId = new Map(
+    invocations.map((invocation) => [invocation.id, invocation]),
+  );
+
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      for (const part of messageContentParts(message)) {
+        const record = recordValue(part);
+        if (record?.type !== "toolCall") continue;
+        const id = optionalStringValue(record.id);
+        const name = optionalStringValue(record.name);
+        if (!id || !name) continue;
+        toolsCalled.add(name);
+        if (byId.has(id)) continue;
+        const invocation: RunAgentLoopResult["toolInvocations"][number] = {
+          id,
+          name,
+          tool_name: name,
+          args: record.arguments,
+          input_preview: toolPreview(record.arguments),
+          status: "running",
+          runtime: "pi",
+        };
+        invocations.push(invocation);
+        byId.set(id, invocation);
+      }
+      continue;
+    }
+
+    if (message.role !== "toolResult") continue;
+    const record = message as unknown as Record<string, unknown>;
+    const id = optionalStringValue(record.toolCallId);
+    const name = optionalStringValue(record.toolName);
+    if (!id || !name) continue;
+    toolsCalled.add(name);
+    const result = {
+      content: record.content,
+      details: record.details,
+    };
+    const existing = byId.get(id);
+    if (existing) {
+      existing.result = result;
+      existing.is_error = Boolean(record.isError);
+      existing.output_preview = toolPreview(result);
+      existing.status = record.isError ? "error" : "ok";
+      continue;
+    }
+    const invocation: RunAgentLoopResult["toolInvocations"][number] = {
+      id,
+      name,
+      tool_name: name,
+      result,
+      is_error: Boolean(record.isError),
+      output_preview: toolPreview(result),
+      status: record.isError ? "error" : "ok",
+      runtime: "pi",
+    };
+    invocations.push(invocation);
+    byId.set(id, invocation);
+  }
+}
+
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -924,6 +996,12 @@ export async function runAgentLoop(
     if (assistantFailure) {
       throw new Error(assistantFailure);
     }
+
+    mergeTranscriptToolInvocations(
+      session.messages,
+      toolInvocations,
+      toolsCalled,
+    );
 
     // Persist the durable session only after a successful turn — a failed turn
     // leaves the stored session at its prior good state for the retry to resume.

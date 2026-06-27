@@ -3961,6 +3961,7 @@ export function actionRowsForTurn(
     seen.add(key);
     rows.push({
       title: toolActionTitle(name),
+      detail: toolCalledFallbackDetail(name),
       kind: toolKind(name),
     });
   }
@@ -4909,6 +4910,17 @@ function toolActionTitle(name: string) {
     return "Applying code changes";
   }
   return `Using ${name.replace(/_/g, " ")}`;
+}
+
+function toolCalledFallbackDetail(name: string) {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("recall") || normalized.includes("memory")) {
+    return [
+      "Memory was checked during this turn, but detailed invocation metadata was not captured.",
+      "New runs include memory input, output, and status details when the runtime records the invocation trace.",
+    ].join("\n");
+  }
+  return undefined;
 }
 
 function wikiContextKey(record: Record<string, unknown>) {
