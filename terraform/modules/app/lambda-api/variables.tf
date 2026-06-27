@@ -239,12 +239,12 @@ variable "agentcore_memory_id" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export. Defaults to 'hindsight' for hosted ThinkWork; self-hosted/serverless deployments may choose 'agentcore'."
+  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export. Hosted ThinkWork may choose 'cognee' when the Company Brain substrate is enabled."
   type        = string
   default     = "hindsight"
   validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
+    condition     = contains(["hindsight", "agentcore", "cognee"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight', 'agentcore', or 'cognee'."
   }
 }
 

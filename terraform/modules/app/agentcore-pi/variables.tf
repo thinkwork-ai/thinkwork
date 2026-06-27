@@ -69,12 +69,12 @@ variable "api_auth_secret" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
+  description = "Active long-term memory engine ('hindsight', 'agentcore', or 'cognee'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
   type        = string
   default     = "hindsight"
   validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
+    condition     = contains(["hindsight", "agentcore", "cognee"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight', 'agentcore', or 'cognee'."
   }
 }
 

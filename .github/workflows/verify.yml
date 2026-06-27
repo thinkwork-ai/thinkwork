@@ -313,6 +313,11 @@ jobs:
             fi
           fi
 
+          memory_engine="hindsight"
+          if [ "$cognee_enabled" = "true" ]; then
+            memory_engine="cognee"
+          fi
+
           set +e
           terraform plan \
             -refresh=true \
@@ -324,6 +329,7 @@ jobs:
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
+            -var "memory_engine=$memory_engine" \
             -var "enable_cognee=$cognee_enabled" \
             -var "cognee_image_uri=$cognee_image_uri" \
             -var "cognee_db_username=$cognee_db_username" \

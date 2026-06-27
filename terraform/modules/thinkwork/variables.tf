@@ -354,13 +354,18 @@ variable "enable_hindsight" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Accepted values: 'hindsight' (requires enable_hindsight = true), 'agentcore' (uses the always-on AgentCore managed memory). Legacy value 'managed' maps to 'agentcore'. Empty = auto-select: 'hindsight' when enable_hindsight = true, otherwise 'agentcore'."
+  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Accepted values: 'hindsight' (requires enable_hindsight = true), 'agentcore' (uses the always-on AgentCore managed memory), or 'cognee' (requires enable_cognee = true). Legacy value 'managed' maps to 'agentcore'. Empty = auto-select: 'hindsight' when enable_hindsight = true, otherwise 'agentcore'."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.memory_engine == "" || contains(["managed", "hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be empty, 'hindsight', 'agentcore', or legacy 'managed'."
+    condition     = var.memory_engine == "" || contains(["managed", "hindsight", "agentcore", "cognee"], var.memory_engine)
+    error_message = "memory_engine must be empty, 'hindsight', 'agentcore', 'cognee', or legacy 'managed'."
+  }
+
+  validation {
+    condition     = var.memory_engine != "cognee" || var.enable_cognee
+    error_message = "memory_engine = 'cognee' requires enable_cognee = true."
   }
 }
 
@@ -389,7 +394,7 @@ variable "hindsight_observations_mission" {
 }
 
 variable "enable_cognee" {
-  description = "Enable Cognee as an optional ontology/knowledge-graph add-on. This does not change memory_engine or replace Hindsight."
+  description = "Enable Cognee as the Company Brain substrate. Set memory_engine = 'cognee' to make it canonical for user and Space memory."
   type        = bool
   default     = false
 }
