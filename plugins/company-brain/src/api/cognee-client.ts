@@ -83,6 +83,7 @@ export interface CogneeSearchArgs {
   nodeNames?: string[];
   nodeNameFilterOperator?: "AND" | "OR";
   topK?: number;
+  onlyContext?: boolean;
   includeReferences?: boolean;
   systemPrompt?: string | null;
 }
@@ -199,6 +200,9 @@ export class CogneeClient {
             ? { node_name_filter_operator: args.nodeNameFilterOperator }
             : {}),
           ...(args.topK ? { top_k: args.topK } : {}),
+          ...(args.onlyContext !== undefined
+            ? { only_context: args.onlyContext }
+            : {}),
           ...(args.includeReferences !== undefined
             ? { include_references: args.includeReferences }
             : {}),

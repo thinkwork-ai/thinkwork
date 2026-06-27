@@ -99,7 +99,7 @@ describe("CogneeAdapter", () => {
 
     expect(client.search).toHaveBeenCalledWith({
       query: "summary preference",
-      searchType: "CHUNKS",
+      searchType: "GRAPH_COMPLETION",
       datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
       nodeNames: [
         "thinkwork_memory",
@@ -110,6 +110,7 @@ describe("CogneeAdapter", () => {
       ],
       nodeNameFilterOperator: "AND",
       topK: 25,
+      onlyContext: true,
       includeReferences: true,
     });
     expect(hits).toEqual([
@@ -214,7 +215,7 @@ describe("CogneeAdapter", () => {
 
     expect(client.search).toHaveBeenCalledWith({
       query: "onboarding template",
-      searchType: "CHUNKS",
+      searchType: "GRAPH_COMPLETION",
       datasets: ["thinkwork:memory:v1:tenant:tenant_1:space:space_1"],
       nodeNames: [
         "thinkwork_memory",
@@ -225,6 +226,7 @@ describe("CogneeAdapter", () => {
       ],
       nodeNameFilterOperator: "AND",
       topK: 25,
+      onlyContext: true,
       includeReferences: true,
     });
     expect(hits[0]).toMatchObject({
