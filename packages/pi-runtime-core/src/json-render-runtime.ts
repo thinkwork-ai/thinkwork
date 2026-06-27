@@ -41,11 +41,17 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
     label: "Emit json-render UI",
     description:
       "Emit a complete, bounded json-render UI part for the current Thread. " +
-      "Use this only when structured UI is clearly better than prose. Provide " +
-      "a full spec using root/elements/type/props/children plus mobileFallback. " +
+      "Use this when structured UI is clearly better than prose, especially " +
+      "for scan-friendly result.list collections of Work Items, user-question " +
+      "summaries, approval/review queues, and similar result sets. Keep true " +
+      "blocking clarifications on ask_user_question instead of generated UI. " +
+      "Provide a full spec using root/elements/type/props/children plus mobileFallback. " +
+      "Do not include secrets, OAuth tokens, API keys, raw connector payloads, " +
+      "arbitrary URLs, scripts, callbacks, imports, or route instructions. " +
       "For actionable approval or review UI, pair component action references " +
       "such as task.review.primaryActionId or form.action.submitActionId with " +
-      "matching durableActions descriptors. Work Item approval actions should " +
+      "matching durableActions descriptors; result.list item action ids must " +
+      "also reference matching durableActions descriptors. Work Item approval actions should " +
       'use params target "work_item_status", workItemId, and statusCategory or statusId.',
     parameters: {
       type: "object",
@@ -75,7 +81,7 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
         durableActions: {
           type: "array",
           description:
-            "Optional ThinkWork durable action descriptors. Required for actionable approval/review UI whose components reference action ids. Do not include arbitrary callbacks or URLs.",
+            "Optional ThinkWork durable action descriptors. Required for actionable approval/review/form/result-list UI whose components reference action ids. Do not include arbitrary callbacks, URLs, tokens, raw connector payloads, scripts, imports, or route instructions.",
           items: { type: "object", additionalProperties: true },
         },
       },
@@ -268,8 +274,7 @@ function isRequiredNullableZodSchema(schema: unknown): boolean {
   if (maybeSchema.type === "nullable") return true;
   try {
     return (
-      maybeSchema.isNullable?.() === true &&
-      maybeSchema.isOptional?.() !== true
+      maybeSchema.isNullable?.() === true && maybeSchema.isOptional?.() !== true
     );
   } catch {
     return false;

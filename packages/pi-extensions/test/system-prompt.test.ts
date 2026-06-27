@@ -192,6 +192,15 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
 
     expect(prompt).toContain("### Generated Thread UI");
     expect(prompt).toContain("`emit_json_render_ui` tool is available");
+    expect(prompt).toContain("run a quick presentation pass");
+    expect(prompt).toContain("scan-friendly structured results");
+    expect(prompt).toContain("Prefer `result.list`");
+    expect(prompt).toContain("Work Items/Linear-like issues");
+    expect(prompt).toContain("agent-authored user-question collections");
+    expect(prompt).toContain("approval/review queues");
+    expect(prompt).toContain("True blocking clarifications still use");
+    expect(prompt).toContain("`ask_user_question` and end the turn");
+    expect(prompt).toContain("Keep tiny, narrative, unsupported");
     expect(prompt).toContain("one complete json-render spec object");
     expect(prompt).toContain("top-level `root` plus `elements`");
     expect(prompt).toContain(
@@ -199,9 +208,13 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     );
     expect(prompt).toContain("Do not write UI JSON in prose, markdown fences");
     expect(prompt).toContain("Always include a concise mobile fallback");
+    expect(prompt).toContain("do not include secrets");
+    expect(prompt).toContain("OAuth tokens");
+    expect(prompt).toContain("raw connector payloads");
     expect(prompt).toContain("matching `durableActions` descriptor");
     expect(prompt).toContain("`task.review.primaryActionId`");
     expect(prompt).toContain("`form.action.submitActionId`");
+    expect(prompt).toContain("`result.list` item action ids");
     expect(prompt).toContain('`target: "work_item_status"`');
     expect(prompt).toContain("`workItemId`");
     expect(prompt).toContain("either `statusCategory` or `statusId`");
