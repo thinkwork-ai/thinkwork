@@ -99,9 +99,10 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U4 Status
 
-- Status: verified locally
+- Status: PR open / Verification
 - Branch: `codex/think-86-u4-open-engine-api`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u4-open-engine-api`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3030
 - Goal: expose a minimal GraphQL contract for Open Engine queue list, claim, and receipt operations.
 
 ## U4 Validation Targets
