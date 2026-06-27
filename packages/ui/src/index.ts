@@ -1,5 +1,5 @@
 export { cn } from "./lib/utils.js";
-export { ThemeProvider, useTheme } from "./context/ThemeContext.js";
+export { ThemeProvider, useTheme, type Theme } from "./context/ThemeContext.js";
 export { useIsMobile } from "./hooks/use-mobile.js";
 
 export * from "./components/ui/accordion.js";
