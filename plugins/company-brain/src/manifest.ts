@@ -1,11 +1,11 @@
 /**
- * Company Brain plugin manifest — v0.1.0 (THNK-15 U1).
+ * Company Brain plugin manifest.
  *
  * Company Brain is the customer-facing premium product. The infrastructure
  * component is backed by the existing internal Cognee managed-app adapter, but
  * manifest display copy keeps Cognee out of the customer-facing catalog.
  *
- * V1 proves the premium plugin shell plus direct agent access:
+ * v0.1.1 proves the premium plugin shell plus direct agent access:
  *   - always visible in the catalog
  *   - install gated by a ThinkWork-provided key
  *   - internal Brain substrate provisioned/adopted through managed-app infra
@@ -27,6 +27,38 @@ export const companyBrainManifest = {
   versions: [
     {
       version: "0.1.0",
+      requiredOauthScopes: [],
+      components: [
+        {
+          type: "infrastructure",
+          key: "brain-substrate",
+          managedAppKey: "cognee",
+          // Mirrors the deployment-runner Cognee adapter's requiredInputs
+          // for ENABLE/UPGRADE. The adapter remains internal implementation
+          // machinery; the catalog presents the component as Company Brain's
+          // knowledge graph substrate.
+          terraformInputs: {
+            imageUri: {
+              description:
+                "Company Brain substrate container image URI pinned with @sha256.",
+              type: "string",
+            },
+            dbPasswordSecretArn: {
+              description:
+                "Secrets Manager ARN containing the dedicated Brain substrate database password.",
+              type: "string",
+            },
+            bedrockModelResourceArns: {
+              description:
+                "Explicit Bedrock model or inference-profile ARNs for Company Brain providers.",
+              type: "list(string)",
+            },
+          },
+        },
+      ],
+    },
+    {
+      version: "0.1.1",
       requiredOauthScopes: [],
       components: [
         {
