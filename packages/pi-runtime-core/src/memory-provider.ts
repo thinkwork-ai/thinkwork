@@ -84,6 +84,8 @@ export interface MemoryRecallRequest {
   query: string;
   /** Optional cap on the number of memories returned. */
   limit?: number;
+  /** Optional temporal anchor for Hindsight recall ranking/filtering. */
+  queryTimestamp?: string | null;
 }
 
 export interface MemoryRecallResult {
