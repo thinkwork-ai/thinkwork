@@ -18,9 +18,15 @@ const requireSpaceMemoryScopeMock = vi.mocked(requireSpaceMemoryScope);
 describe("space memory resolvers", () => {
   const retainMock = vi.fn();
   const recallMock = vi.fn();
+  const capabilitiesMock = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilitiesMock.mockResolvedValue({
+      retain: true,
+      recall: true,
+      spaceMemory: true,
+    });
     requireSpaceMemoryScopeMock.mockResolvedValue({
       tenantId: "tenant-1",
       spaceId: "space-1",
@@ -36,11 +42,11 @@ describe("space memory resolvers", () => {
         sourceType: "explicit_remember",
         status: "active",
         content: { text: "Use the enterprise onboarding template." },
-        backendRefs: [{ backend: "cognee", ref: "space-memory-1" }],
+        backendRefs: [{ backend: "hindsight", ref: "space-memory-1" }],
         createdAt: "2026-06-26T19:00:00.000Z",
         metadata: {},
       },
-      backend: "cognee",
+      backend: "hindsight",
     });
     recallMock.mockResolvedValue([
       {
@@ -53,16 +59,20 @@ describe("space memory resolvers", () => {
           sourceType: "import",
           status: "active",
           content: { text: "Use the enterprise onboarding template." },
-          backendRefs: [{ backend: "cognee", ref: "space-dataset" }],
+          backendRefs: [{ backend: "hindsight", ref: "space-bank" }],
           createdAt: "2026-06-26T19:00:00.000Z",
           metadata: {},
         },
         score: 0.92,
-        backend: "cognee",
+        backend: "hindsight",
       },
     ]);
     getMemoryServicesMock.mockReturnValue({
-      adapter: { kind: "cognee", retain: retainMock },
+      adapter: {
+        kind: "hindsight",
+        retain: retainMock,
+        capabilities: capabilitiesMock,
+      },
       recall: { recall: recallMock },
     } as any);
   });
@@ -144,9 +154,18 @@ describe("space memory resolvers", () => {
     });
   });
 
-  it("fails closed when the active engine is not Cognee", async () => {
+  it("fails closed when the active engine lacks Space memory capability", async () => {
+    capabilitiesMock.mockResolvedValue({
+      retain: true,
+      recall: true,
+      spaceMemory: false,
+    });
     getMemoryServicesMock.mockReturnValue({
-      adapter: { kind: "hindsight", retain: retainMock },
+      adapter: {
+        kind: "agentcore",
+        retain: retainMock,
+        capabilities: capabilitiesMock,
+      },
       recall: { recall: recallMock },
     } as any);
 
@@ -160,7 +179,9 @@ describe("space memory resolvers", () => {
         },
         {} as any,
       ),
-    ).rejects.toThrow("Space memory requires the Cognee memory engine");
+    ).rejects.toThrow(
+      "Active memory engine does not support Space memory capture",
+    );
     await expect(
       spaceMemorySearch(
         null,
@@ -171,6 +192,8 @@ describe("space memory resolvers", () => {
         },
         {} as any,
       ),
-    ).rejects.toThrow("Space memory requires the Cognee memory engine");
+    ).rejects.toThrow(
+      "Active memory engine does not support Space memory search",
+    );
   });
 });

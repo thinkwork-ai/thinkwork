@@ -41,11 +41,11 @@ export const captureSpaceMemory = async (
   }
 
   const { adapter } = getMemoryServices();
-  if (adapter.kind !== "cognee") {
-    throw new Error("Space memory requires the Cognee memory engine");
-  }
-  if (!adapter.retain) {
-    throw new Error("Memory retain is not supported on the active engine");
+  const capabilities = await adapter.capabilities();
+  if (!capabilities.spaceMemory || !capabilities.retain) {
+    throw new Error(
+      "Active memory engine does not support Space memory capture",
+    );
   }
 
   const result = await adapter.retain({

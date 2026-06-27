@@ -148,3 +148,45 @@ and deployed smoke evidence stay in later units.
   - `pnpm --filter @thinkwork/api typecheck`
   - `pnpm dlx prettier --check packages/api/src/lib/memory/adapter.ts packages/api/src/lib/memory/adapters/hindsight-adapter.ts packages/api/src/lib/memory/adapters/hindsight-adapter.bank-id.test.ts packages/api/src/lib/memory/adapters/hindsight-adapter.test.ts docs/plans/autopilot/THINK-83-status.md`
   - `git diff --check`
+- U1 PR merged:
+  https://github.com/thinkwork-ai/thinkwork/pull/3021
+- U1 merge commit:
+  `4daa634c18199abbaf63212d0ec8e854e84de3ab`
+- U1 CI passed before merge: CLA, lint, typecheck, test, and verify.
+- U1 remote branch deleted and local U1 worktree/branch cleaned up.
+
+### 2026-06-27 - U2 objective
+
+Pivot GraphQL memory semantics from Cognee-only to Hindsight-canonical: Space
+capture/search should be allowed for active Hindsight when the adapter supports
+the required operation, `memorySystemConfig` should report Hindsight-backed user
+and Space memory as enabled, and Cognee fields/copy should remain compatibility
+diagnostics rather than the canonical memory path.
+
+- Created isolated U2 branch/worktree:
+  `codex/think-83-u2-graphql-hindsight` at
+  `/Users/ericodom/.codex/worktrees/think-83-u2`.
+- Implemented U2 GraphQL memory pivot:
+  - Added an internal `spaceMemory` adapter capability.
+  - Hindsight and Cognee advertise Space memory support; AgentCore does not.
+  - `captureSpaceMemory` and `spaceMemorySearch` now gate on provider-neutral
+    capabilities instead of `adapter.kind === "cognee"`.
+  - `memorySystemConfig` derives user/Space memory flags from active adapter
+    capabilities and reports Hindsight-backed user/Space memory as enabled.
+  - GraphQL schema descriptions now frame Cognee as compatibility/diagnostic
+    and Hindsight as canonical user/Space memory for this pass.
+  - Regenerated AppSync schema and GraphQL codegen for CLI, web, and mobile;
+    `packages/api` has no codegen script.
+- U2 verification passed:
+  - `pnpm schema:build`
+  - `pnpm --filter thinkwork-cli codegen`
+  - `pnpm --filter @thinkwork/web codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/memory/spaceMemory.resolver.test.ts src/graphql/resolvers/memory/memorySystemConfig.query.test.ts src/graphql/resolvers/memory/memorySearch.query.test.ts src/lib/memory/adapters/hindsight-adapter.bank-id.test.ts src/lib/memory/adapters/hindsight-adapter.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter thinkwork-cli typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --filter @thinkwork/mobile typecheck` returned no matching script,
+    consistent with repo notes.
+  - `pnpm dlx prettier --check ...` for authored U2 files
+  - `git diff --check`

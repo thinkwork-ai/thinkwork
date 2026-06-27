@@ -35,7 +35,7 @@ describe("memorySystemConfig", () => {
     });
   });
 
-  it("reports Hindsight only when it is the active engine", async () => {
+  it("reports Hindsight as active user and Space memory when it is the active engine", async () => {
     vi.stubEnv("MEMORY_ENABLED", "true");
     vi.stubEnv("MEMORY_ENGINE", "hindsight");
     vi.stubEnv("HINDSIGHT_ENDPOINT", "https://hindsight.active.example.com");
@@ -45,7 +45,23 @@ describe("memorySystemConfig", () => {
       activeEngine: "hindsight",
       hindsightEnabled: true,
       cogneeMemoryEnabled: false,
-      userMemoryEnabled: false,
+      userMemoryEnabled: true,
+      spaceMemoryEnabled: true,
+      legacyHindsightAvailable: false,
+    });
+  });
+
+  it("reports AgentCore user memory without Space memory support", async () => {
+    vi.stubEnv("MEMORY_ENABLED", "true");
+    vi.stubEnv("MEMORY_ENGINE", "agentcore");
+    vi.stubEnv("AGENTCORE_MEMORY_ID", "mem-123");
+    resetMemory();
+
+    await expect(memorySystemConfig()).resolves.toMatchObject({
+      activeEngine: "agentcore",
+      hindsightEnabled: false,
+      cogneeMemoryEnabled: false,
+      userMemoryEnabled: true,
       spaceMemoryEnabled: false,
       legacyHindsightAvailable: false,
     });
