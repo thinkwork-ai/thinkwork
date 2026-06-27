@@ -85,7 +85,9 @@ export class CogneeAdapter implements MemoryAdapter {
     this.ontology = opts.ontology;
     this.ontologyLoader = opts.ontologyLoader;
     this.searchType =
-      opts.searchType || process.env.COGNEE_MEMORY_SEARCH_TYPE || "CHUNKS";
+      opts.searchType ||
+      process.env.COGNEE_MEMORY_SEARCH_TYPE ||
+      "GRAPH_COMPLETION";
   }
 
   async capabilities(): Promise<MemoryCapabilities> {
@@ -105,6 +107,7 @@ export class CogneeAdapter implements MemoryAdapter {
         MAX_RECALL_OVERFETCH,
         Math.max(requestedLimit, requestedLimit * 5),
       ),
+      onlyContext: true,
       includeReferences: true,
     });
     return parseCogneeSearchResults({

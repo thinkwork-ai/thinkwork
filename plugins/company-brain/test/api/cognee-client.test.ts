@@ -198,6 +198,7 @@ describe("CogneeClient", () => {
       nodeNames: ["thinkwork_user_memory", "user_user_1"],
       nodeNameFilterOperator: "AND",
       topK: 25,
+      onlyContext: true,
       includeReferences: true,
       systemPrompt: "Use memory only.",
     });
@@ -216,6 +217,7 @@ describe("CogneeClient", () => {
           node_name: ["thinkwork_user_memory", "user_user_1"],
           node_name_filter_operator: "AND",
           top_k: 25,
+          only_context: true,
           include_references: true,
           system_prompt: "Use memory only.",
         }),
