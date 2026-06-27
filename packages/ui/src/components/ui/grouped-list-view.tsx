@@ -18,6 +18,9 @@ export interface GroupedListViewProps<Row> {
   renderRow: (row: Row) => React.ReactNode;
   emptyState?: React.ReactNode;
   className?: string;
+  groupCountPlacement?: "end" | "inline";
+  groupCountClassName?: string;
+  groupLabelClassName?: string;
   rowClassName?: string;
   "data-testid"?: string;
 }
@@ -28,6 +31,9 @@ export function GroupedListView<Row>({
   renderRow,
   emptyState = "No results.",
   className,
+  groupCountPlacement = "end",
+  groupCountClassName,
+  groupLabelClassName,
   rowClassName,
   "data-testid": testId,
 }: GroupedListViewProps<Row>) {
@@ -95,6 +101,9 @@ export function GroupedListView<Row>({
             collapsed={collapsed}
             getRowId={getRowId}
             renderRow={renderRow}
+            groupCountPlacement={groupCountPlacement}
+            groupCountClassName={groupCountClassName}
+            groupLabelClassName={groupLabelClassName}
             rowClassName={rowClassName}
             onToggle={toggle}
           />
@@ -110,6 +119,9 @@ function GroupSection<Row>({
   collapsed,
   getRowId,
   renderRow,
+  groupCountPlacement,
+  groupCountClassName,
+  groupLabelClassName,
   rowClassName,
   onToggle,
   depth = 0,
@@ -119,6 +131,9 @@ function GroupSection<Row>({
   collapsed: Set<string>;
   getRowId: (row: Row) => string;
   renderRow: (row: Row) => React.ReactNode;
+  groupCountPlacement: "end" | "inline";
+  groupCountClassName?: string;
+  groupLabelClassName?: string;
   rowClassName?: string;
   onToggle: (id: string) => void;
   depth?: number;
@@ -142,8 +157,18 @@ function GroupSection<Row>({
         ) : (
           <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
         )}
-        <span className="min-w-0 truncate">{group.label}</span>
-        <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[11px]">
+        <span className={cn("min-w-0 truncate", groupLabelClassName)}>
+          {group.label}
+        </span>
+        <Badge
+          variant="secondary"
+          className={cn(
+            groupCountPlacement === "end"
+              ? "ml-auto h-5 px-1.5 text-[11px]"
+              : "h-auto rounded-none border-transparent bg-transparent px-0 text-xs font-medium text-muted-foreground shadow-none",
+            groupCountClassName,
+          )}
+        >
           {totalRows}
         </Badge>
       </button>
@@ -158,6 +183,9 @@ function GroupSection<Row>({
                   collapsed={collapsed}
                   getRowId={getRowId}
                   renderRow={renderRow}
+                  groupCountPlacement={groupCountPlacement}
+                  groupCountClassName={groupCountClassName}
+                  groupLabelClassName={groupLabelClassName}
                   rowClassName={rowClassName}
                   onToggle={onToggle}
                   depth={depth + 1}

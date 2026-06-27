@@ -96,6 +96,29 @@ describe("GroupedListView", () => {
     expect(screen.getByRole("button", { name: /disabled 1/i })).toBeTruthy();
   });
 
+  it("can render group counts inline with the label", () => {
+    render(
+      <GroupedListView
+        groups={[
+          {
+            id: "active",
+            label: "Active",
+            rows: [{ id: "one", title: "Follow up" }],
+          },
+        ]}
+        getRowId={(row) => row.id}
+        renderRow={(row) => <span>{row.title}</span>}
+        groupCountPlacement="inline"
+        groupLabelClassName="text-foreground"
+        groupCountClassName="text-muted-foreground"
+      />,
+    );
+
+    const header = screen.getByRole("button", { name: /active 1/i });
+    expect(header.querySelector(".ml-auto")).toBeNull();
+    expect(header.textContent).toContain("Active1");
+  });
+
   it("keeps subgroup header counts aligned with parent group counts", () => {
     render(
       <GroupedListView

@@ -22,6 +22,12 @@ function WorkItemsRoute() {
       tenantId={tenantId}
       userId={userId}
       state={state}
+      onItemOpen={(item) => {
+        void navigate({
+          to: "/work-items/$workItemId",
+          params: { workItemId: item.id },
+        });
+      }}
       onStateChange={(next) => {
         void navigate({
           to: "/work-items",
