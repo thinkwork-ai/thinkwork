@@ -18,7 +18,9 @@ import {
 import {
   ComputerMemoryRecordsQuery,
   ComputerMemorySystemConfigQuery,
+  SpacesQuery,
 } from "@/lib/graphql-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
@@ -87,6 +89,31 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     query: ComputerMemorySystemConfigQuery,
   });
 
+  const [spacesResult] = useQuery<{
+    spaces?: Array<{ id: string; name?: string | null; slug?: string | null }>;
+  }>({
+    query: SpacesQuery,
+    variables: { tenantId: effectiveTenantId ?? "" },
+    pause: !effectiveTenantId,
+  });
+
+  const [membersResult] = useQuery<{
+    tenantMembers?: Array<{
+      principalType?: string | null;
+      principalId?: string | null;
+      user?: {
+        id?: string | null;
+        name?: string | null;
+        email?: string | null;
+        profile?: { callBy?: string | null } | null;
+      } | null;
+    }>;
+  }>({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: effectiveTenantId ?? "" },
+    pause: !effectiveTenantId,
+  });
+
   const [recordsResult] = useQuery<{
     memoryRecords?: any[] | null;
   }>({
@@ -151,6 +178,22 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     [rawRecords, mapRecord],
   );
 
+  const ownerLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const space of spacesResult.data?.spaces ?? []) {
+      const label = space.name || space.slug || space.id;
+      if (space.id && label) labels.set(`space:${space.id}`, label);
+    }
+    for (const member of membersResult.data?.tenantMembers ?? []) {
+      if (member.principalType?.toUpperCase() !== "USER") continue;
+      const user = member.user;
+      const userId = user?.id || member.principalId;
+      const label = user?.profile?.callBy || user?.name || user?.email || userId;
+      if (userId && label) labels.set(`user:${userId}`, label);
+    }
+    return labels;
+  }, [membersResult.data, spacesResult.data]);
+
   const columns: ColumnDef<MemoryRow>[] = useMemo(
     () => [
       {
@@ -173,25 +216,13 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         ),
       },
       {
-        accessorKey: "updatedAt",
-        header: "Updated",
-        size: 140,
-        cell: ({ row }) => (
-          <span
-            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
-          >
-            {formatShortDate(row.original.updatedAt)}
-          </span>
-        ),
-      },
-      {
         accessorKey: "bankId",
         header: "Bank",
         size: 180,
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
-            <span className="truncate font-mono text-xs">
-              {row.original.bankId ?? row.original.namespace ?? "-"}
+            <span className="truncate text-xs">
+              {formatBankLabel(row.original, ownerLabels)}
             </span>
           </span>
         ),
@@ -203,7 +234,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
             <span className="truncate text-xs">
-              {formatOwnerScope(row.original)}
+              {formatOwnerScope(row.original, ownerLabels)}
             </span>
           </span>
         ),
@@ -232,7 +263,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         ),
       },
     ],
-    [],
+    [ownerLabels],
   );
 
   const isLoading = recordsResult.fetching && !recordsResult.data;
@@ -244,7 +275,6 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         title="Memory"
         description="Inspect and manage what your agents remember across threads."
       />
-      <MemoryModeStatus config={systemResult.data?.memorySystemConfig} />
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -368,76 +398,44 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   );
 }
 
-function formatShortDate(value: string | null): string {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatBankLabel(
+  row: MemoryRow,
+  ownerLabels: Map<string, string>,
+): string {
+  const ownerLabel = formatOwnerName(row, ownerLabels);
+  if (ownerLabel) return ownerLabel;
+  return compactMemoryId(row.bankId ?? row.namespace ?? "-");
 }
 
-function formatOwnerScope(row: MemoryRow): string {
+function formatOwnerScope(
+  row: MemoryRow,
+  ownerLabels: Map<string, string>,
+): string {
   const type = row.ownerType ?? "unknown";
-  const id = row.ownerId ?? "";
-  return id ? `${type}:${id}` : type;
+  const ownerLabel = formatOwnerName(row, ownerLabels);
+  if (ownerLabel) return `${formatOwnerType(type)}: ${ownerLabel}`;
+  const id = row.ownerId ? compactMemoryId(row.ownerId) : "";
+  return id ? `${formatOwnerType(type)}: ${id}` : formatOwnerType(type);
 }
 
-function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
-  const activeEngine = config?.activeEngine ?? "unknown";
-  const hindsightActive = config?.hindsightEnabled === true;
-  const userMemoryReady = hindsightActive && config?.userMemoryEnabled === true;
-  const spaceMemoryReady =
-    hindsightActive && config?.spaceMemoryEnabled === true;
+function formatOwnerName(
+  row: MemoryRow,
+  ownerLabels: Map<string, string>,
+): string | null {
+  if (!row.ownerType || !row.ownerId) return null;
+  return ownerLabels.get(`${row.ownerType}:${row.ownerId}`) ?? null;
+}
 
-  return (
-    <div className="mb-4 border-y border-border bg-muted/30 px-4 py-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">
-              {hindsightActive
-                ? "Memory engine: Hindsight"
-                : "Memory service update required"}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={
-                userMemoryReady
-                  ? "border-emerald-500/40 text-emerald-700"
-                  : "text-muted-foreground"
-              }
-            >
-              User memory {userMemoryReady ? "on" : "pending"}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={
-                spaceMemoryReady
-                  ? "border-emerald-500/40 text-emerald-700"
-                  : "text-muted-foreground"
-              }
-            >
-              Space memory {spaceMemoryReady ? "on" : "pending"}
-            </Badge>
-            {!hindsightActive && config?.legacyHindsightAvailable ? (
-              <Badge variant="outline" className="text-muted-foreground">
-                Redeploy required
-              </Badge>
-            ) : null}
-          </div>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            {!hindsightActive
-              ? "This deployment has not switched to Hindsight yet. Redeploy the memory service and retain user or Space memory to populate rows."
-              : activeEngine === "hindsight"
-                ? "Hindsight is the authoritative user and Space memory engine for this deployment. This table reads Hindsight memory rows across user, Space, and agent banks."
-                : "Memory status is reported by the selected deployment engine."}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+function formatOwnerType(value: string): string {
+  if (value === "user") return "User";
+  if (value === "space") return "Space";
+  if (value === "agent") return "Agent";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function compactMemoryId(value: string): string {
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 14)}...`;
 }
 
 function MemoryEmptyState({
@@ -447,7 +445,6 @@ function MemoryEmptyState({
   activeSearch: string;
   config?: MemorySystemConfig | null;
 }) {
-  const activeEngine = config?.activeEngine ?? "unknown";
   const hindsightActive = config?.hindsightEnabled === true;
   const hindsightAvailableButInactive =
     !hindsightActive && config?.legacyHindsightAvailable === true;

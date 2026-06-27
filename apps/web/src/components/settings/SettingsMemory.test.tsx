@@ -29,19 +29,16 @@ describe("SettingsMemory", () => {
   it("renders operator evidence columns and disables cross-bank forget", () => {
     expect(source).toContain('header: "Bank"');
     expect(source).toContain('header: "Scope"');
-    expect(source).toContain('header: "Updated"');
+    expect(source).not.toContain('header: "Updated"');
     expect(source).toContain("canForget={false}");
   });
 
-  it("surfaces core Hindsight memory without claiming company/wiki completion", () => {
-    expect(source).toContain("Memory engine:");
-    expect(source).toContain("User memory");
-    expect(source).toContain("Space memory");
-    expect(source).toContain("Redeploy required");
-    expect(source).toContain(
-      "Hindsight is the authoritative user and Space memory engine",
-    );
-    expect(source).toContain("This deployment has not switched to Hindsight");
+  it("keeps diagnostics out of the primary memory table", () => {
+    expect(source).not.toContain("<MemoryModeStatus");
+    expect(source).not.toContain("Memory engine:");
+    expect(source).not.toContain("User memory on");
+    expect(source).not.toContain("Space memory on");
+    expect(source).toContain("has not switched to Hindsight");
     expect(source).not.toContain("ThinkWork Brain diagnostic");
     expect(source).not.toContain("Company distillation");
     expect(source).not.toContain("Wiki projection");
