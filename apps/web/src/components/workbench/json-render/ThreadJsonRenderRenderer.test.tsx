@@ -62,6 +62,9 @@ describe("ThreadJsonRenderRenderer", () => {
     expect(
       screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled"),
     ).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: /save as artifact/i }),
+    ).toBeNull();
   });
 
   it("renders result.list rows with groups, variant details, and evidence", () => {
