@@ -128,6 +128,7 @@ describe("dispatchAgentLoop", () => {
       idempotencyKey: "agent-loop:run-1:iteration:1",
       payload: {
         message: "Prepare the daily research brief.",
+        inputSummary: { reason: "operator-test" },
         goalMode: {
           enabled: true,
           action: "start",
