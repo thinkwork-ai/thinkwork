@@ -80,12 +80,14 @@ locals {
     module.vpc.private_route_table_ids,
     module.vpc.public_route_table_ids,
   )
+  okf_wiki_private_endpoints_enabled = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints
   okf_wiki_interface_endpoint_services = toset(concat(
     [
       "bedrock",
       "bedrock-agentcore",
       "bedrock-agentcore-control",
       "bedrock-agentcore.gateway",
+      "execute-api",
       "lambda",
       "logs",
       "rds-data",
@@ -96,6 +98,20 @@ locals {
     ],
     local.cognee_enabled ? [] : ["bedrock-runtime"],
   ))
+  brain_private_interface_endpoint_services = toset([
+    "bedrock",
+    "bedrock-agentcore",
+    "bedrock-agentcore-control",
+    "bedrock-agentcore.gateway",
+    "execute-api",
+    "lambda",
+    "logs",
+    "rds-data",
+    "secretsmanager",
+    "ssm",
+    "sts",
+    "xray",
+  ])
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
   # is active per deployment for recall/inspect/export. Auto-selects from
@@ -706,7 +722,7 @@ resource "aws_security_group" "okf_wiki_vpc_endpoint" {
 }
 
 resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
-  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? 1 : 0
+  count = local.okf_wiki_private_endpoints_enabled ? 1 : 0
 
   type                     = "ingress"
   from_port                = 443
@@ -716,8 +732,19 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
   security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
 }
 
+resource "aws_security_group_rule" "okf_wiki_vpce_from_cognee_worker" {
+  count = local.okf_wiki_private_endpoints_enabled && local.cognee_enabled ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.cognee_worker[0].id
+  security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
+}
+
 resource "aws_security_group_rule" "okf_wiki_vpce_from_twenty" {
-  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints && local.twenty_provisioned ? 1 : 0
+  count = local.okf_wiki_private_endpoints_enabled && local.twenty_provisioned ? 1 : 0
 
   type                     = "ingress"
   from_port                = 443
@@ -728,7 +755,7 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_twenty" {
 }
 
 resource "aws_vpc_endpoint" "okf_wiki_interface" {
-  for_each = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? local.okf_wiki_interface_endpoint_services : toset([])
+  for_each = local.okf_wiki_private_endpoints_enabled ? local.okf_wiki_interface_endpoint_services : toset([])
 
   vpc_id              = module.vpc.vpc_id
   service_name        = "com.amazonaws.${var.region}.${each.key}"
@@ -744,7 +771,7 @@ resource "aws_vpc_endpoint" "okf_wiki_interface" {
 }
 
 resource "aws_vpc_endpoint" "okf_wiki_s3" {
-  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints && length(local.okf_wiki_route_table_ids) > 0 ? 1 : 0
+  count = local.okf_wiki_private_endpoints_enabled && length(local.okf_wiki_route_table_ids) > 0 ? 1 : 0
 
   vpc_id            = module.vpc.vpc_id
   service_name      = "com.amazonaws.${var.region}.s3"
@@ -754,6 +781,58 @@ resource "aws_vpc_endpoint" "okf_wiki_s3" {
   tags = {
     Name    = "thinkwork-${var.stage}-okf-wiki-s3-vpce"
     Purpose = "okf-wiki-private-egress"
+  }
+}
+
+resource "aws_security_group" "brain_private_vpc_endpoint" {
+  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-brain-vpce-"
+  description = "HTTPS endpoints for private Company Brain/Pi runtime egress"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = { Name = "thinkwork-${var.stage}-brain-vpce-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group_rule" "brain_vpce_from_cognee_worker" {
+  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.cognee_worker[0].id
+  security_group_id        = aws_security_group.brain_private_vpc_endpoint[0].id
+}
+
+resource "aws_vpc_endpoint" "brain_private_interface" {
+  for_each = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? local.brain_private_interface_endpoint_services : toset([])
+
+  vpc_id              = module.vpc.vpc_id
+  service_name        = "com.amazonaws.${var.region}.${each.key}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.cognee_worker_subnet_ids
+  security_group_ids  = [aws_security_group.brain_private_vpc_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-brain-${each.key}-vpce"
+    Purpose = "company-brain-private-runtime-egress"
+  }
+}
+
+resource "aws_vpc_endpoint" "brain_private_s3" {
+  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled && length(local.okf_wiki_route_table_ids) > 0 ? 1 : 0
+
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = local.okf_wiki_route_table_ids
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-brain-s3-vpce"
+    Purpose = "company-brain-private-runtime-egress"
   }
 }
 
@@ -1303,6 +1382,9 @@ module "agentcore_pi" {
   # graphql-http hit the same cluster + same credential rotation surface.
   db_cluster_arn = module.database.db_cluster_arn
   db_secret_arn  = module.database.graphql_db_secret_arn
+
+  cognee_subnet_ids         = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
+  cognee_security_group_ids = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
 
   okf_efs_enabled               = var.okf_wiki_efs_enabled
   okf_efs_subnet_ids            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []

@@ -590,6 +590,78 @@ describe("managed application deployment evidence reconciliation", () => {
     );
   });
 
+  it("merges Cognee endpoint output into desired_config for Company Brain MCP provisioning", async () => {
+    const applyingJob = {
+      ...destructiveJob,
+      id: "job-cognee-apply",
+      app_key: "cognee",
+      operation: "ENABLE",
+      status: "applying",
+      application_id: "app-cognee",
+      evidence_bucket: "evidence-bucket",
+      evidence_prefix: "tenant-1/cognee/job-cognee-apply/plan",
+    };
+    mockS3Send.mockResolvedValue({
+      Body: {
+        transformToString: async () =>
+          JSON.stringify({
+            status: "succeeded",
+            terraformExitCode: 0,
+            codebuildBuildId: "build-cognee",
+            terraform: {
+              outputs: {
+                cognee_enabled: { value: true },
+                cognee_endpoint: {
+                  value:
+                    "http://internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com",
+                },
+              },
+            },
+          }),
+      },
+    });
+    returningQueue.push([
+      {
+        ...applyingJob,
+        status: "succeeded",
+        codebuild_build_arn: "build-cognee",
+      },
+    ]);
+    selectQueue.push([applyingJob]);
+    selectQueue.push([
+      {
+        desired_config: {
+          imageUri: "repo/cognee@sha256:" + "a".repeat(64),
+        },
+      },
+    ]);
+    returningQueue.push([{ id: "app-cognee", current_status: "running" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "apply_evidence_reconciled" },
+    ]);
+
+    const result = await queryMod.managedApplicationDeployment(
+      null,
+      { jobId: "job-cognee-apply" },
+      {} as any,
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: "succeeded" }),
+        expect.objectContaining({
+          current_status: "running",
+          desired_config: {
+            imageUri: "repo/cognee@sha256:" + "a".repeat(64),
+            cogneeEndpoint:
+              "http://internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com",
+          },
+        }),
+      ]),
+    );
+  });
+
   it("uses n8n Terraform status outputs instead of the requested operation", async () => {
     const applyingJob = {
       ...destructiveJob,

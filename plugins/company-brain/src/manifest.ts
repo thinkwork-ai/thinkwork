@@ -5,10 +5,11 @@
  * component is backed by the existing internal Cognee managed-app adapter, but
  * manifest display copy keeps Cognee out of the customer-facing catalog.
  *
- * V1 proves the premium plugin shell only:
+ * V1 proves the premium plugin shell plus direct agent access:
  *   - always visible in the catalog
  *   - install gated by a ThinkWork-provided key
  *   - internal Brain substrate provisioned/adopted through managed-app infra
+ *   - Brain substrate MCP registered as a plugin-owned server for Pi/direct MCP
  *   - no rendered plugin UI surface and no Full Brain runtime component
  */
 
@@ -53,6 +54,23 @@ export const companyBrainManifest = {
               type: "list(string)",
             },
           },
+        },
+        {
+          type: "mcp-server",
+          key: "brain",
+          displayName: "Company Brain",
+          description:
+            "Direct MCP access to the tenant's Company Brain substrate for memory capture, recall, graph search, and substrate-native operations.",
+          endpointFrom: {
+            managedApp: "cognee",
+            configKey: "cogneeEndpoint",
+            path: "/mcp-server/http",
+          },
+          auth: { mode: "none" },
+          toolNotes: [
+            "Company Brain MCP is tenant-internal and plugin-owned; agents should discover the live tool list before calling substrate-native memory or graph operations.",
+            "Use direct MCP/API access from Pi for Company Brain reads and writes. GraphQL is control-plane only and must not be required for agent memory operations.",
+          ],
         },
       ],
     },

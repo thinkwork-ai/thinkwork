@@ -812,10 +812,11 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
       ...stringRecord(record.extraHeaders),
       ...authHeaders,
     };
+    const trustedInternal = record.trustedInternal === true;
     if (
       !url ||
       !serverName ||
-      (!bearer && Object.keys(extraHeaders).length === 0)
+      (!bearer && Object.keys(extraHeaders).length === 0 && !trustedInternal)
     ) {
       return [];
     }
@@ -825,6 +826,7 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
         url,
         ...(bearer ? { bearer } : {}),
         ...(Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {}),
+        ...(trustedInternal ? { trustedInternal } : {}),
         transport: record.transport === "sse" ? "sse" : "streamable-http",
         toolWhitelist: Array.isArray(record.tools)
           ? (record.tools.filter(
@@ -1633,10 +1635,9 @@ export async function buildInvocationResources(
   // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
   // via the resource loader's `extensionFactories` instead of hand-assembled
   // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
-  // tools until the firming plan's single-engine cutover retires it. Cognee
-  // memory deliberately exposes no raw backend tools here; agents read it
-  // through Context Engine's `query_memory_context`, whose host-closed caller
-  // scope can combine user-carried memory and current-space memory.
+  // tools until the firming plan's single-engine cutover retires it. Cognee /
+  // Company Brain is exposed through plugin-owned MCP configs instead of this
+  // legacy memory-extension block, so Pi can reach the substrate directly.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -1719,8 +1720,8 @@ export async function buildInvocationResources(
       level: "info",
       event:
         args.payload.context_engine_enabled === true
-          ? "memory_cognee_context_engine_mode"
-          : "memory_cognee_skipped_context_engine_disabled",
+          ? "memory_cognee_plugin_mcp_mode"
+          : "memory_cognee_plugin_mcp_mode_context_engine_disabled",
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });
@@ -1753,7 +1754,9 @@ export async function buildInvocationResources(
   const rawConfigs = parseMcpConfigs(args.payload.mcp_configs);
   const validatedConfigs: McpServerConfig[] = [];
   for (const config of rawConfigs) {
-    const validation = validateMcpUrl(config.url);
+    const validation = validateMcpUrl(config.url, {
+      trustedInternal: config.trustedInternal === true,
+    });
     if (!validation.ok) {
       logStructured({
         level: "warn",

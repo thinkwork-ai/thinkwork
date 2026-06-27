@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   validatePluginManifest,
   type InfrastructureComponent,
+  type McpServerComponent,
 } from "@thinkwork/plugin-catalog/contracts";
 
 import { companyBrainManifest } from "../src/manifest";
 
 describe("Company Brain plugin manifest", () => {
-  it("validates as a premium infrastructure-only plugin", () => {
+  it("validates as a premium infrastructure plus MCP plugin", () => {
     const validated = validatePluginManifest(companyBrainManifest);
     expect(validated.pluginKey).toBe("company-brain");
     expect(validated.displayName).toBe("Company Brain");
@@ -19,8 +20,9 @@ describe("Company Brain plugin manifest", () => {
         "Enter the Company Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
     });
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
-    expect(validated.versions[0].components).toHaveLength(1);
+    expect(validated.versions[0].components).toHaveLength(2);
     expect(validated.versions[0].components[0].type).toBe("infrastructure");
+    expect(validated.versions[0].components[1].type).toBe("mcp-server");
   });
 
   it("declares the internal Cognee-backed Brain substrate component", () => {
@@ -41,11 +43,28 @@ describe("Company Brain plugin manifest", () => {
     );
   });
 
-  it("does not declare Full Brain runtime, MCP, skills, or rendered UI surfaces in v1", () => {
+  it("declares Company Brain MCP as a plugin-owned direct agent surface", () => {
+    const component = companyBrainManifest.versions[0]
+      .components[1] as McpServerComponent;
+    expect(component).toMatchObject({
+      type: "mcp-server",
+      key: "brain",
+      displayName: "Company Brain",
+      endpointFrom: {
+        managedApp: "cognee",
+        configKey: "cogneeEndpoint",
+        path: "/mcp-server/http",
+      },
+      auth: { mode: "none" },
+    });
+    expect(component.toolNotes?.join("\n")).toMatch(/direct MCP\/API access/i);
+  });
+
+  it("does not declare Full Brain runtime, skills, or rendered UI surfaces in v1", () => {
     const componentTypes = companyBrainManifest.versions[0].components.map(
       (component) => component.type,
     );
-    expect(componentTypes).toEqual(["infrastructure"]);
+    expect(componentTypes).toEqual(["infrastructure", "mcp-server"]);
     expect(companyBrainManifest.versions[0].requiredOauthScopes).toEqual([]);
   });
 

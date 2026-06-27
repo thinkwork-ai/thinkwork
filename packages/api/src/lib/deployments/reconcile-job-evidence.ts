@@ -237,6 +237,11 @@ function desiredConfigPatchFromTerraformOutputs(
   appKey: string,
   outputs: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (appKey === "cognee") {
+    return compactRecord({
+      cogneeEndpoint: stringOutputValue(outputs, "cognee_endpoint"),
+    });
+  }
   if (appKey !== "n8n") return {};
   const publicUrl = stringOutputValue(outputs, "n8n_url");
   return compactRecord({
