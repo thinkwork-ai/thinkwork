@@ -6,6 +6,7 @@ import { deleteMemoryRecord } from "./deleteMemoryRecord.mutation.js";
 import { updateMemoryRecord } from "./updateMemoryRecord.mutation.js";
 import { captureMobileMemory } from "./captureMobileMemory.mutation.js";
 import { captureSpaceMemory } from "./captureSpaceMemory.mutation.js";
+import { ingestSpaceMemoryDocument } from "./ingestSpaceMemoryDocument.mutation.js";
 import { mobileMemoryCaptures } from "./mobileMemoryCaptures.query.js";
 import { mobileMemorySearch } from "./mobileMemorySearch.query.js";
 import { mobileWikiSearch } from "./mobileWikiSearch.query.js";
@@ -37,6 +38,7 @@ export const memoryMutations = {
   updateMemoryRecord,
   captureMobileMemory,
   captureSpaceMemory,
+  ingestSpaceMemoryDocument,
   deleteMobileMemoryCapture,
   rollbackThreadIdleLearningRun,
 };

@@ -183,6 +183,7 @@ describe("HindsightAdapter legacy user bank reads", () => {
           context: "thinkwork_requester_memory",
           metadata: {
             tenantId: TENANT_ID,
+            ownerType: "user",
             userId: USER_ID,
             path: "memory/MEMORY.md",
             source: "requester_memory_markdown",
@@ -190,6 +191,68 @@ describe("HindsightAdapter legacy user bank reads", () => {
             threadId: "thread-1",
             beforeHash: "old",
             afterHash: "new",
+          },
+        },
+      ],
+    });
+  });
+
+  it("upserts Space documents into the Space bank with source metadata", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example/",
+      bankConfig: null,
+    });
+    await adapter.upsertMarkdownMemoryDocument({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      path: "kb/onboarding.md",
+      content: "# Onboarding",
+      documentId: `space_document:${SPACE_ID}:kb/onboarding.md`,
+      context: "thinkwork_space_document",
+      hindsight: {
+        timestamp: "unset",
+        tags: ["space:alpha", "source:space-document"],
+        documentTags: ["space:alpha", "source:space-document"],
+        observationScopes: [["space:alpha"], ["source:space-document"]],
+      },
+      metadata: {
+        documentTitle: "Onboarding",
+        sourceUrl: "https://example.com/onboarding",
+        source: "space_memory_document",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/memories`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      async: true,
+      document_tags: ["space:alpha", "source:space-document"],
+      items: [
+        {
+          content: "# Onboarding",
+          document_id: `space_document:${SPACE_ID}:kb/onboarding.md`,
+          update_mode: "replace",
+          context: "thinkwork_space_document",
+          timestamp: "unset",
+          tags: ["space:alpha", "source:space-document"],
+          observation_scopes: [["space:alpha"], ["source:space-document"]],
+          metadata: {
+            tenantId: TENANT_ID,
+            ownerType: "space",
+            spaceId: SPACE_ID,
+            path: "kb/onboarding.md",
+            source: "space_memory_document",
+            documentTitle: "Onboarding",
+            sourceUrl: "https://example.com/onboarding",
           },
         },
       ],

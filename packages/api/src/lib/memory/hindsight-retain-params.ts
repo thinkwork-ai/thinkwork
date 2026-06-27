@@ -73,6 +73,40 @@ export function buildSpaceMemoryRetainOptions(input: {
   });
 }
 
+export function buildSpaceDocumentRetainOptions(input: {
+  spaceId: string;
+  timestamp?: string | null;
+  tags?: unknown[];
+}): HindsightRetainOptions {
+  const spaceTag = `space:${input.spaceId}`;
+  const callerTags = normalizeHindsightTags(input.tags);
+  return retainOptions({
+    timestamp: toIsoTimestamp(input.timestamp) ?? "unset",
+    tags: [
+      spaceTag,
+      "source:space-document",
+      "surface:web",
+      "surface:graphql",
+      "scope:space",
+      "scope:document",
+      ...callerTags,
+    ],
+    documentTags: [
+      spaceTag,
+      "source:space-document",
+      "scope:space",
+      "scope:document",
+      ...callerTags,
+    ],
+    observationScopes: [
+      [spaceTag],
+      ["source:space-document"],
+      ["scope:space"],
+      ["scope:document"],
+    ],
+  });
+}
+
 export function buildMcpUserMemoryRetainOptions(input: {
   capturedAt: string;
   callerTags?: unknown;

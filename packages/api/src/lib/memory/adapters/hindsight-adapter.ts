@@ -462,10 +462,11 @@ export class HindsightAdapter implements MemoryAdapter {
       context: req.context,
       metadata: toHindsightMetadata({
         ...(req.metadata || {}),
-        tenantId: req.tenantId,
-        userId: req.ownerId,
+        ...ownerMetadata(req),
         path: req.path,
-        source: "requester_memory_markdown",
+        source:
+          stringField((req.metadata || {}).source) ??
+          defaultMarkdownDocumentSource(req.context),
       }),
     };
     applyHindsightRetainOptions(item, req.hindsight);
@@ -1180,6 +1181,19 @@ function dedupeRecordsById<T>(records: T[], getId: (record: T) => string): T[] {
     out.push(record);
   }
   return out;
+}
+
+function defaultMarkdownDocumentSource(context: string): string {
+  if (context === "thinkwork_requester_memory") {
+    return "requester_memory_markdown";
+  }
+  if (context === "thinkwork_requester_thread_digest") {
+    return "requester_thread_digest";
+  }
+  if (context === "thinkwork_space_document") {
+    return "space_memory_document";
+  }
+  return "thinkwork_memory_document";
 }
 
 function observationRank(result: RecallResult): number {
