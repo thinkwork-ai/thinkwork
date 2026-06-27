@@ -196,6 +196,8 @@ describe("CogneeClient", () => {
       searchType: "CHUNKS",
       datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
       nodeNames: ["thinkwork_user_memory", "user_user_1"],
+      nodeNameFilterOperator: "AND",
+      topK: 25,
       includeReferences: true,
       systemPrompt: "Use memory only.",
     });
@@ -212,6 +214,8 @@ describe("CogneeClient", () => {
           search_type: "CHUNKS",
           datasets: ["thinkwork:memory:v1:tenant:tenant_1:user:user_1"],
           node_name: ["thinkwork_user_memory", "user_user_1"],
+          node_name_filter_operator: "AND",
+          top_k: 25,
           include_references: true,
           system_prompt: "Use memory only.",
         }),

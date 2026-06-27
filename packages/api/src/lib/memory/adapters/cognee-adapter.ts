@@ -59,6 +59,8 @@ const DEFAULT_MEMORY_ONTOLOGY: KnowledgeGraphOntologyExport = {
   ].join("\n"),
 };
 
+const MAX_RECALL_OVERFETCH = 50;
+
 export class CogneeAdapter implements MemoryAdapter {
   readonly kind = "cognee" as const;
 
@@ -92,18 +94,25 @@ export class CogneeAdapter implements MemoryAdapter {
 
   async recall(req: RecallRequest): Promise<RecallResult[]> {
     const scope = scopeForOwner(req);
+    const requestedLimit = req.limit ?? 10;
     const raw = await this.client.search({
       query: req.query,
       searchType: this.searchType,
       datasets: [scope.datasetName],
       nodeNames: scope.nodeSets,
+      nodeNameFilterOperator: "AND",
+      topK: Math.min(
+        MAX_RECALL_OVERFETCH,
+        Math.max(requestedLimit, requestedLimit * 5),
+      ),
       includeReferences: true,
     });
     return parseCogneeSearchResults({
       raw,
       request: req,
       datasetName: scope.datasetName,
-      limit: req.limit ?? 10,
+      nodeSets: scope.nodeSets,
+      limit: requestedLimit,
     });
   }
 
@@ -340,6 +349,7 @@ function parseCogneeSearchResults(args: {
   raw: unknown;
   request: RecallRequest;
   datasetName: string;
+  nodeSets: string[];
   limit: number;
 }): RecallResult[] {
   const items = searchItems(args.raw);
@@ -355,10 +365,12 @@ function searchItemToRecall(
   args: {
     request: RecallRequest;
     datasetName: string;
+    nodeSets: string[];
   },
 ): RecallResult | null {
   const text = searchItemText(item).trim();
   if (!text) return null;
+  if (!searchItemMatchesScope(item, text, args)) return null;
   const recordId = searchItemId(item) ?? `cognee:${hashString(text)}`;
   const createdAt = searchItemDate(item) ?? new Date().toISOString();
   const score = searchItemScore(item) ?? Math.max(0, 1 - index * 0.05);
@@ -384,6 +396,93 @@ function searchItemToRecall(
     score,
     backend: "cognee",
   };
+}
+
+function searchItemMatchesScope(
+  item: unknown,
+  text: string,
+  args: {
+    request: RecallRequest;
+    datasetName: string;
+    nodeSets: string[];
+  },
+): boolean {
+  const requiredNodeSets = requiredOwnerNodeSets(args);
+  const explicitSets = searchItemSets(item);
+  if (explicitSets.length > 0) {
+    const set = new Set(explicitSets);
+    return requiredNodeSets.every((nodeSet) => set.has(nodeSet));
+  }
+
+  const datasetName = searchItemDatasetName(item);
+  if (datasetName && datasetName !== args.datasetName) return false;
+
+  const expectedOwnerType = `"owner_type":"${args.request.ownerType}"`;
+  const expectedOwnerId = `"owner_id":"${args.request.ownerId}"`;
+  return text.includes(expectedOwnerType) && text.includes(expectedOwnerId);
+}
+
+function requiredOwnerNodeSets(args: {
+  request: RecallRequest;
+  nodeSets: string[];
+}): string[] {
+  const ownerPrefix =
+    args.request.ownerType === "space" ? "space_" : "user_";
+  const ownerNodeSet = args.nodeSets.find((nodeSet) =>
+    nodeSet.startsWith(ownerPrefix),
+  );
+  const kindNodeSet = args.nodeSets.find((nodeSet) =>
+    nodeSet.startsWith(`thinkwork_${args.request.ownerType}_memory`),
+  );
+  return [kindNodeSet, ownerNodeSet].filter((value): value is string =>
+    Boolean(value),
+  );
+}
+
+function searchItemSets(item: unknown): string[] {
+  const values = collectNestedValues(item, [
+    "belongs_to_set",
+    "belongsToSet",
+    "node_set",
+    "nodeSet",
+    "node_sets",
+    "nodeSets",
+    "sets",
+  ]);
+  return values
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === "string" && !!value);
+}
+
+function searchItemDatasetName(item: unknown): string | null {
+  const values = collectNestedValues(item, [
+    "datasetName",
+    "dataset_name",
+    "dataset",
+  ]);
+  const match = values.find(
+    (value): value is string => typeof value === "string" && !!value,
+  );
+  return match ?? null;
+}
+
+function collectNestedValues(item: unknown, keys: string[]): unknown[] {
+  if (!item || typeof item !== "object") return [];
+  const record = item as Record<string, unknown>;
+  const values: unknown[] = [];
+  for (const key of keys) {
+    if (record[key] !== undefined) values.push(record[key]);
+  }
+  for (const containerKey of ["metadata", "properties", "raw"]) {
+    const nested = record[containerKey];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const nestedRecord = nested as Record<string, unknown>;
+      for (const key of keys) {
+        if (nestedRecord[key] !== undefined) values.push(nestedRecord[key]);
+      }
+    }
+  }
+  return values;
 }
 
 function searchItems(raw: unknown): unknown[] {
