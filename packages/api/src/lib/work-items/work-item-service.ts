@@ -1,4 +1,11 @@
 import { GraphQLError } from "graphql";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
+import { createHash, randomUUID } from "node:crypto";
 
 import type { GraphQLContext } from "../../graphql/context.js";
 import {
@@ -15,6 +22,7 @@ import {
   sql,
   spaceMembers,
   spaces,
+  workItemDocuments,
   workItemEvents,
   workItemLabelAssignments,
   workItemLabels,
@@ -31,6 +39,26 @@ import {
 } from "./status-service.js";
 
 export type WorkItemPriority = "low" | "normal" | "high" | "urgent";
+export type WorkItemDocumentKind =
+  | "plan"
+  | "progress"
+  | "spec"
+  | "evidence"
+  | "handoff"
+  | "note"
+  | "other";
+
+const WORK_ITEM_DOCUMENT_KINDS = new Set<WorkItemDocumentKind>([
+  "plan",
+  "progress",
+  "spec",
+  "evidence",
+  "handoff",
+  "note",
+  "other",
+]);
+const MAX_WORK_ITEM_DOCUMENT_BYTES = 2 * 1024 * 1024;
+const workItemDocumentS3 = new S3Client({});
 
 export async function listWorkItems(
   ctx: GraphQLContext,
@@ -384,6 +412,227 @@ export async function updateWorkItemLabel(
   return updated;
 }
 
+export async function listWorkItemDocuments(
+  ctx: GraphQLContext,
+  input: Record<string, any> = {},
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
+
+  const conditions: any[] = [
+    eq(workItemDocuments.tenant_id, tenantId),
+    eq(workItemDocuments.work_item_id, input.workItemId),
+  ];
+  if (!input.includeArchived) {
+    conditions.push(isNull(workItemDocuments.archived_at));
+  }
+  if (input.kind) {
+    conditions.push(
+      eq(workItemDocuments.kind, normalizeWorkItemDocumentKind(input.kind)),
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(workItemDocuments)
+    .where(and(...conditions))
+    .orderBy(desc(workItemDocuments.updated_at))
+    .limit(clampLimit(input.limit));
+
+  if (!input.includeContent) return rows;
+  return Promise.all(rows.map((row) => hydrateWorkItemDocumentContent(row)));
+}
+
+export async function getWorkItemDocument(
+  ctx: GraphQLContext,
+  input: { tenantId?: string | null; id: string },
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  const [document] = await db
+    .select()
+    .from(workItemDocuments)
+    .where(
+      and(
+        eq(workItemDocuments.tenant_id, tenantId),
+        eq(workItemDocuments.id, input.id),
+      ),
+    );
+  if (!document) return null;
+  await loadAuthorizedWorkItem(ctx, tenantId, document.work_item_id);
+  return hydrateWorkItemDocumentContent(document);
+}
+
+export async function createWorkItemDocument(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  const item = await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
+  const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+  const now = new Date();
+  const id = randomUUID();
+  const contentType = normalizeDocumentContentType(input.contentType);
+  const content = normalizeDocumentContent(input.content);
+  const contentBuffer = Buffer.from(content, "utf8");
+  const checksum = sha256(contentBuffer);
+  const s3Key = buildWorkItemDocumentS3Key(tenantId, item.id, id, contentType);
+
+  validateDocumentSize(contentBuffer);
+  await putWorkItemDocumentContent({
+    s3Key,
+    contentType,
+    body: contentBuffer,
+    tenantId,
+    workItemId: item.id,
+    documentId: id,
+  });
+
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(workItemDocuments)
+      .values({
+        id,
+        tenant_id: tenantId,
+        work_item_id: item.id,
+        kind: input.kind ? normalizeWorkItemDocumentKind(input.kind) : "note",
+        title: requireNonEmpty(input.title, "title"),
+        content_type: contentType,
+        s3_key: s3Key,
+        size_bytes: contentBuffer.byteLength,
+        checksum_sha256: checksum,
+        metadata: parseAwsJsonObject(input.metadata),
+        created_by_user_id: callerUserId,
+        updated_at: now,
+      })
+      .returning();
+
+    await tx.insert(workItemEvents).values({
+      tenant_id: tenantId,
+      space_id: item.space_id,
+      work_item_id: item.id,
+      actor_user_id: callerUserId,
+      event_type: "updated",
+      message: `${created.title} document created.`,
+      metadata: compactObject({
+        source: "graphql",
+        action: "document_created",
+        documentId: created.id,
+        kind: created.kind,
+      }),
+    });
+
+    return { ...created, content };
+  });
+}
+
+export async function updateWorkItemDocument(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  const [document] = await db
+    .select()
+    .from(workItemDocuments)
+    .where(
+      and(
+        eq(workItemDocuments.tenant_id, tenantId),
+        eq(workItemDocuments.id, input.id),
+      ),
+    );
+  if (!document) {
+    throw new GraphQLError("Work Item document not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  const item = await loadAuthorizedWorkItem(
+    ctx,
+    tenantId,
+    document.work_item_id,
+  );
+  const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+  const now = new Date();
+  const updates: Record<string, unknown> = { updated_at: now };
+  let updatedContent: string | undefined;
+
+  if (input.title !== undefined) {
+    updates.title = requireNonEmpty(input.title, "title");
+  }
+  if (input.kind !== undefined) {
+    updates.kind = normalizeWorkItemDocumentKind(input.kind);
+  }
+  if (input.metadata !== undefined) {
+    updates.metadata = parseAwsJsonObject(input.metadata);
+  }
+  if (input.archived !== undefined) {
+    updates.archived_at = input.archived ? now : null;
+  }
+  if (input.content !== undefined || input.contentType !== undefined) {
+    const content = normalizeDocumentContent(
+      input.content !== undefined
+        ? input.content
+        : await readWorkItemDocumentContent(document.s3_key),
+    );
+    const contentType = normalizeDocumentContentType(
+      input.contentType ?? document.content_type,
+    );
+    const contentBuffer = Buffer.from(content, "utf8");
+    validateDocumentSize(contentBuffer);
+    await putWorkItemDocumentContent({
+      s3Key: document.s3_key,
+      contentType,
+      body: contentBuffer,
+      tenantId,
+      workItemId: item.id,
+      documentId: document.id,
+    });
+    updates.content_type = contentType;
+    updates.size_bytes = contentBuffer.byteLength;
+    updates.checksum_sha256 = sha256(contentBuffer);
+    updatedContent = content;
+  }
+
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(workItemDocuments)
+      .set(updates)
+      .where(
+        and(
+          eq(workItemDocuments.tenant_id, tenantId),
+          eq(workItemDocuments.id, document.id),
+        ),
+      )
+      .returning();
+
+    await tx.insert(workItemEvents).values({
+      tenant_id: tenantId,
+      space_id: item.space_id,
+      work_item_id: item.id,
+      actor_user_id: callerUserId,
+      event_type: "updated",
+      message:
+        input.archived === true
+          ? `${updated.title} document archived.`
+          : `${updated.title} document updated.`,
+      metadata: compactObject({
+        source: "graphql",
+        action:
+          input.archived === true ? "document_archived" : "document_updated",
+        documentId: updated.id,
+        changedFields: Object.keys(updates).sort(),
+      }),
+    });
+
+    return {
+      ...updated,
+      content:
+        updatedContent ??
+        (input.archived === true
+          ? null
+          : await readWorkItemDocumentContent(updated.s3_key)),
+    };
+  });
+}
+
 export async function updateWorkItemStatus(
   ctx: GraphQLContext,
   input: Record<string, any>,
@@ -689,6 +938,138 @@ function normalizeLabelSlug(value: unknown) {
     });
   }
   return slug;
+}
+
+export function normalizeWorkItemDocumentKind(
+  value: unknown,
+): WorkItemDocumentKind {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (WORK_ITEM_DOCUMENT_KINDS.has(normalized as WorkItemDocumentKind)) {
+    return normalized as WorkItemDocumentKind;
+  }
+  throw new GraphQLError(`Unsupported Work Item document kind: ${value}`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
+}
+
+function normalizeDocumentContent(value: unknown) {
+  if (value === undefined || value === null) return "";
+  return String(value);
+}
+
+function normalizeDocumentContentType(value: unknown) {
+  const contentType = optionalTrim(value) ?? "text/markdown";
+  const allowed =
+    contentType.startsWith("text/") || contentType === "application/json";
+  if (!allowed) {
+    throw new GraphQLError(
+      "Work Item documents currently support text content",
+      {
+        extensions: { code: "BAD_USER_INPUT" },
+      },
+    );
+  }
+  return contentType;
+}
+
+function validateDocumentSize(buffer: Buffer) {
+  if (buffer.byteLength > MAX_WORK_ITEM_DOCUMENT_BYTES) {
+    throw new GraphQLError("Work Item document exceeds the 2 MB limit", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+}
+
+function sha256(buffer: Buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function buildWorkItemDocumentS3Key(
+  tenantId: string,
+  workItemId: string,
+  documentId: string,
+  contentType: string,
+) {
+  const extension = contentType === "application/json" ? "json" : "md";
+  return [
+    "tenants",
+    tenantId,
+    "work-items",
+    workItemId,
+    "documents",
+    `${documentId}.${extension}`,
+  ].join("/");
+}
+
+async function putWorkItemDocumentContent(input: {
+  s3Key: string;
+  contentType: string;
+  body: Buffer;
+  tenantId: string;
+  workItemId: string;
+  documentId: string;
+}) {
+  await workItemDocumentS3.send(
+    new PutObjectCommand({
+      Bucket: requireWorkspaceBucket(),
+      Key: input.s3Key,
+      Body: input.body,
+      ContentType: input.contentType,
+      Metadata: {
+        tenantId: input.tenantId,
+        workItemId: input.workItemId,
+        documentId: input.documentId,
+      },
+    }),
+  );
+}
+
+async function hydrateWorkItemDocumentContent(row: Record<string, any>) {
+  return {
+    ...row,
+    content: row.archived_at
+      ? null
+      : await readWorkItemDocumentContent(row.s3_key),
+  };
+}
+
+async function readWorkItemDocumentContent(s3Key: string) {
+  const response = await workItemDocumentS3.send(
+    new GetObjectCommand({
+      Bucket: requireWorkspaceBucket(),
+      Key: s3Key,
+    }),
+  );
+  return bodyToString(response.Body);
+}
+
+async function bodyToString(body: unknown) {
+  if (!body) return "";
+  if (
+    typeof body === "object" &&
+    "transformToString" in body &&
+    typeof body.transformToString === "function"
+  ) {
+    return body.transformToString();
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function requireWorkspaceBucket() {
+  const bucket = getConfig("WORKSPACE_BUCKET");
+  if (!bucket) {
+    throw new GraphQLError("WORKSPACE_BUCKET is not configured", {
+      extensions: { code: "INTERNAL_SERVER_ERROR" },
+    });
+  }
+  return bucket;
 }
 
 function compactObject(value: Record<string, unknown>) {

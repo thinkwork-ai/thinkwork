@@ -13,6 +13,7 @@ import {
   ComputerWikiBacklinksQuery,
   ComputerWikiPageQuery,
   ComputerWikiSearchQuery,
+  CreateWorkItemDocumentMutation,
   DeleteComputerMemoryRecordMutation,
   PromoteDraftAppletMutation,
   SpaceQuery,
@@ -28,7 +29,9 @@ import {
   ThreadTurnUpdatedSubscription,
   UpdateLinkedTaskMutation,
   UpdateWorkItemStatusMutation,
+  UpdateWorkItemDocumentMutation,
   WorkItemLabelsQuery,
+  WorkItemDocumentsQuery,
   UpdateThreadMutation,
   WorkItemSavedViewsQuery,
   WorkItemStatusesQuery,
@@ -175,6 +178,16 @@ describe("computer GraphQL queries", () => {
     expect(list).toContain("threadLinks");
     expect(print(WorkItemLabelsQuery)).toContain(
       "workItemLabels(input: $input)",
+    );
+    expect(print(WorkItemDocumentsQuery)).toContain(
+      "workItemDocuments(input: $input)",
+    );
+    expect(print(WorkItemDocumentsQuery)).toContain("content");
+    expect(print(CreateWorkItemDocumentMutation)).toContain(
+      "createWorkItemDocument",
+    );
+    expect(print(UpdateWorkItemDocumentMutation)).toContain(
+      "updateWorkItemDocument",
     );
     expect(threadItems).toContain("threadWorkItems");
     expect(statuses).toContain("workItemStatuses");

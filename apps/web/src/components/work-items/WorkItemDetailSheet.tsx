@@ -2,10 +2,13 @@ import type React from "react";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  Archive,
   CalendarDays,
   CheckCircle2,
+  FileText,
   Flag,
   MessageSquareText,
+  Plus,
   Tags,
   UserRound,
   X,
@@ -16,6 +19,8 @@ import {
   Button,
   Calendar,
   Checkbox,
+  Input,
+  Label,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -30,15 +35,19 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  Textarea,
 } from "@thinkwork/ui";
 import {
   WORK_ITEM_PRIORITY_ORDER,
+  type WorkItemDocumentKind,
+  type WorkItemDocumentSummary,
   type WorkItemPriority,
   type WorkItemAssigneeSummary,
   type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
+  workItemDocumentKindLabel,
   workItemAssigneeLabel,
   workItemDueLabel,
   workItemLabels,
@@ -56,6 +65,9 @@ interface WorkItemDetailSheetProps {
   sequenceNumber?: number;
   spaces: WorkItemSpaceSummary[];
   labels?: WorkItemLabelSummary[];
+  documents?: WorkItemDocumentSummary[];
+  documentsLoading?: boolean;
+  documentSaving?: boolean;
   statuses: WorkItemStatusSummary[];
   assignees: WorkItemAssigneeSummary[];
   updating?: boolean;
@@ -74,6 +86,12 @@ interface WorkItemDetailSheetProps {
       labelIds?: string[];
     },
   ) => void;
+  onDocumentCreate?: (input: {
+    title: string;
+    kind: WorkItemDocumentKind;
+    content: string;
+  }) => Promise<boolean | void>;
+  onDocumentArchive?: (document: WorkItemDocumentSummary) => void;
 }
 
 export function WorkItemDetailSheet({
@@ -81,6 +99,9 @@ export function WorkItemDetailSheet({
   sequenceNumber,
   spaces,
   labels = [],
+  documents = [],
+  documentsLoading,
+  documentSaving,
   statuses,
   assignees,
   updating,
@@ -88,6 +109,8 @@ export function WorkItemDetailSheet({
   onOpenChange,
   onStatusChange,
   onItemUpdate,
+  onDocumentCreate,
+  onDocumentArchive,
 }: WorkItemDetailSheetProps) {
   const primaryThreadId = item?.threadLinks?.[0]?.threadId;
 
@@ -155,6 +178,14 @@ export function WorkItemDetailSheet({
                 </section>
               ) : null}
 
+              <DocumentsSection
+                documents={documents}
+                loading={documentsLoading}
+                saving={documentSaving}
+                onCreate={onDocumentCreate}
+                onArchive={onDocumentArchive}
+              />
+
               <Separator />
 
               <section className="grid gap-3">
@@ -178,6 +209,177 @@ export function WorkItemDetailSheet({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function DocumentsSection({
+  documents,
+  loading,
+  saving,
+  onCreate,
+  onArchive,
+}: {
+  documents: WorkItemDocumentSummary[];
+  loading?: boolean;
+  saving?: boolean;
+  onCreate?: (input: {
+    title: string;
+    kind: WorkItemDocumentKind;
+    content: string;
+  }) => Promise<boolean | void>;
+  onArchive?: (document: WorkItemDocumentSummary) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<WorkItemDocumentKind>("NOTE");
+  const [content, setContent] = useState("");
+
+  return (
+    <section className="grid gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <FileText className="size-4 text-muted-foreground" />
+          Documents
+        </h3>
+        {onCreate ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setAdding((current) => !current)}
+          >
+            <Plus className="size-3" />
+            Add
+          </Button>
+        ) : null}
+      </div>
+
+      {adding && onCreate ? (
+        <form
+          className="grid gap-3 rounded-md border border-border/80 bg-muted/10 p-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const trimmedTitle = title.trim();
+            if (!trimmedTitle) return;
+            const created = await onCreate({
+              title: trimmedTitle,
+              kind,
+              content,
+            });
+            if (created === false) return;
+            setTitle("");
+            setKind("NOTE");
+            setContent("");
+            setAdding(false);
+          }}
+        >
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-title">Title</Label>
+            <Input
+              id="work-item-document-title"
+              value={title}
+              disabled={saving}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-kind">Kind</Label>
+            <Select
+              value={kind}
+              disabled={saving}
+              onValueChange={(value) => setKind(value as WorkItemDocumentKind)}
+            >
+              <SelectTrigger id="work-item-document-kind">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WORK_ITEM_DOCUMENT_KIND_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {workItemDocumentKindLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="work-item-document-content">Content</Label>
+            <Textarea
+              id="work-item-document-content"
+              rows={6}
+              value={content}
+              disabled={saving}
+              onChange={(event) => setContent(event.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => setAdding(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={saving || !title.trim()}>
+              Save
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
+      {loading && documents.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Loading documents...</p>
+      ) : documents.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No documents yet.</p>
+      ) : (
+        <div className="grid gap-2">
+          {documents.map((document) => (
+            <article
+              key={document.id}
+              className="grid gap-2 rounded-md border border-border/80 bg-background p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="truncate text-sm font-medium">
+                      {document.title}
+                    </h4>
+                    <Badge variant="outline" className="h-5 rounded-full px-2">
+                      {workItemDocumentKindLabel(document.kind)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatBytes(document.sizeBytes)} |{" "}
+                    {formatDate(document.updatedAt ?? document.createdAt)}
+                  </p>
+                </div>
+                {onArchive ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                    disabled={saving}
+                    aria-label={`Archive ${document.title}`}
+                    title="Archive"
+                    onClick={() => onArchive(document)}
+                  >
+                    <Archive className="size-3.5" />
+                  </Button>
+                ) : null}
+              </div>
+              {document.content ? (
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-muted/20 p-2 text-xs leading-5 text-muted-foreground">
+                  {document.content}
+                </pre>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -429,8 +631,36 @@ function DetailBadge({
 }
 
 const UNASSIGNED_VALUE = "__unassigned__";
+const WORK_ITEM_DOCUMENT_KIND_OPTIONS: WorkItemDocumentKind[] = [
+  "PLAN",
+  "PROGRESS",
+  "SPEC",
+  "EVIDENCE",
+  "HANDOFF",
+  "NOTE",
+  "OTHER",
+];
 const controlClassName =
   "h-7 max-w-full gap-1.5 rounded-full border border-border bg-muted/10 px-2.5 text-xs font-medium text-muted-foreground";
+
+function formatBytes(value?: number | null) {
+  const bytes = Number(value ?? 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
+  return `${Math.round(bytes / 104857.6) / 10} MB`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Updated recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Updated recently";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 function parseDate(value?: string | null) {
   if (!value) return null;

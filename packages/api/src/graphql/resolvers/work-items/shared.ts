@@ -9,6 +9,7 @@ const WORK_ITEM_EVENT_ENUM_FIELDS = new Set(["eventType"]);
 const WORK_ITEM_LINK_ENUM_FIELDS = new Set(["relationship"]);
 const WORK_ITEM_VIEW_ENUM_FIELDS = new Set(["viewType"]);
 const WORK_ITEM_REF_ENUM_FIELDS = new Set(["provider"]);
+const WORK_ITEM_DOCUMENT_ENUM_FIELDS = new Set(["kind"]);
 
 export function toGraphqlWorkItem(row: Record<string, unknown>) {
   const result = snakeToCamel(row);
@@ -48,6 +49,12 @@ export function toGraphqlWorkItemExternalRef(row: Record<string, unknown>) {
 
 export function toGraphqlWorkItemLabel(row: Record<string, unknown>) {
   return snakeToCamel(row);
+}
+
+export function toGraphqlWorkItemDocument(row: Record<string, unknown>) {
+  const result = snakeToCamel(row);
+  uppercaseFields(result, WORK_ITEM_DOCUMENT_ENUM_FIELDS);
+  return result;
 }
 
 function uppercaseFields(

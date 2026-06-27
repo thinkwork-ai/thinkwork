@@ -64,6 +64,16 @@ enum WorkItemOpenEngineReceiptType {
   COMPLETED
 }
 
+enum WorkItemDocumentKind {
+  PLAN
+  PROGRESS
+  SPEC
+  EVIDENCE
+  HANDOFF
+  NOTE
+  OTHER
+}
+
 type WorkItemStatus {
   id: ID!
   tenantId: ID!
@@ -132,6 +142,24 @@ type WorkItemLabel {
   archivedAt: AWSDateTime
 }
 
+type WorkItemDocument {
+  id: ID!
+  tenantId: ID!
+  workItemId: ID!
+  kind: WorkItemDocumentKind!
+  title: String!
+  content: String
+  contentType: String!
+  sizeBytes: Int!
+  checksumSha256: String
+  metadata: AWSJSON
+  createdByUserId: ID
+  createdByAgentId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  archivedAt: AWSDateTime
+}
+
 type WorkItem {
   id: ID!
   tenantId: ID!
@@ -168,6 +196,7 @@ type WorkItem {
   events: [WorkItemEvent!]!
   externalRefs: [WorkItemExternalRef!]!
   labels: [WorkItemLabel!]!
+  documents: [WorkItemDocument!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
   archivedAt: AWSDateTime
@@ -217,6 +246,20 @@ input WorkItemLabelsInput {
   includeArchived: Boolean
   search: String
   limit: Int
+}
+
+input WorkItemDocumentsInput {
+  tenantId: ID
+  workItemId: ID!
+  kind: WorkItemDocumentKind
+  includeArchived: Boolean
+  includeContent: Boolean
+  limit: Int
+}
+
+input WorkItemDocumentInput {
+  tenantId: ID
+  id: ID!
 }
 
 input CreateWorkItemInput {
@@ -272,6 +315,27 @@ input UpdateWorkItemLabelInput {
   slug: String
   color: String
   description: String
+  archived: Boolean
+}
+
+input CreateWorkItemDocumentInput {
+  tenantId: ID
+  workItemId: ID!
+  kind: WorkItemDocumentKind
+  title: String!
+  content: String!
+  contentType: String
+  metadata: AWSJSON
+}
+
+input UpdateWorkItemDocumentInput {
+  tenantId: ID
+  id: ID!
+  kind: WorkItemDocumentKind
+  title: String
+  content: String
+  contentType: String
+  metadata: AWSJSON
   archived: Boolean
 }
 
@@ -356,6 +420,8 @@ extend type Query {
   workItem(tenantId: ID, id: ID!): WorkItem
   threadWorkItems(tenantId: ID, threadId: ID!): [WorkItem!]!
   workItemLabels(input: WorkItemLabelsInput): [WorkItemLabel!]!
+  workItemDocuments(input: WorkItemDocumentsInput!): [WorkItemDocument!]!
+  workItemDocument(input: WorkItemDocumentInput!): WorkItemDocument
   workItemStatuses(tenantId: ID, spaceId: ID!): [WorkItemStatus!]!
   workItemSavedViews(tenantId: ID, spaceId: ID): [WorkItemSavedView!]!
   openEngineEligibleWorkItems(
@@ -368,6 +434,8 @@ extend type Mutation {
   updateWorkItem(input: UpdateWorkItemInput!): WorkItem!
   createWorkItemLabel(input: CreateWorkItemLabelInput!): WorkItemLabel!
   updateWorkItemLabel(input: UpdateWorkItemLabelInput!): WorkItemLabel!
+  createWorkItemDocument(input: CreateWorkItemDocumentInput!): WorkItemDocument!
+  updateWorkItemDocument(input: UpdateWorkItemDocumentInput!): WorkItemDocument!
   updateWorkItemStatus(input: UpdateWorkItemStatusInput!): WorkItem!
   claimNextOpenEngineWorkItem(
     input: ClaimNextOpenEngineWorkItemInput!

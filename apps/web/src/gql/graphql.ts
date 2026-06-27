@@ -1569,6 +1569,16 @@ export type CreateWebhookInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type CreateWorkItemDocumentInput = {
+  content: Scalars['String']['input'];
+  contentType?: InputMaybe<Scalars['String']['input']>;
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  title: Scalars['String']['input'];
+  workItemId: Scalars['ID']['input'];
+};
+
 export type CreateWorkItemInput = {
   applicable?: InputMaybe<Scalars['Boolean']['input']>;
   blocked?: InputMaybe<Scalars['Boolean']['input']>;
@@ -3440,6 +3450,7 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   createWorkItem: WorkItem;
+  createWorkItemDocument: WorkItemDocument;
   createWorkItemLabel: WorkItemLabel;
   /**
    * One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
@@ -3698,6 +3709,7 @@ export type Mutation = {
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
   updateWorkItem: WorkItem;
+  updateWorkItemDocument: WorkItemDocument;
   updateWorkItemLabel: WorkItemLabel;
   updateWorkItemStatus: WorkItem;
   /**
@@ -4030,6 +4042,11 @@ export type MutationCreateWebhookArgs = {
 
 export type MutationCreateWorkItemArgs = {
   input: CreateWorkItemInput;
+};
+
+
+export type MutationCreateWorkItemDocumentArgs = {
+  input: CreateWorkItemDocumentInput;
 };
 
 
@@ -5090,6 +5107,11 @@ export type MutationUpdateWorkItemArgs = {
 };
 
 
+export type MutationUpdateWorkItemDocumentArgs = {
+  input: UpdateWorkItemDocumentInput;
+};
+
+
 export type MutationUpdateWorkItemLabelArgs = {
   input: UpdateWorkItemLabelInput;
 };
@@ -6138,6 +6160,8 @@ export type Query = {
    */
   wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
+  workItemDocument?: Maybe<WorkItemDocument>;
+  workItemDocuments: Array<WorkItemDocument>;
   workItemLabels: Array<WorkItemLabel>;
   workItemSavedViews: Array<WorkItemSavedView>;
   workItemStatuses: Array<WorkItemStatus>;
@@ -7164,6 +7188,16 @@ export type QueryWikiSearchArgs = {
 export type QueryWorkItemArgs = {
   id: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryWorkItemDocumentArgs = {
+  input: WorkItemDocumentInput;
+};
+
+
+export type QueryWorkItemDocumentsArgs = {
+  input: WorkItemDocumentsInput;
 };
 
 
@@ -9663,6 +9697,17 @@ export type UpdateWebhookInput = {
   targetType?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UpdateWorkItemDocumentInput = {
+  archived?: InputMaybe<Scalars['Boolean']['input']>;
+  content?: InputMaybe<Scalars['String']['input']>;
+  contentType?: InputMaybe<Scalars['String']['input']>;
+  id: Scalars['ID']['input'];
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type UpdateWorkItemInput = {
   applicable?: InputMaybe<Scalars['Boolean']['input']>;
   archived?: InputMaybe<Scalars['Boolean']['input']>;
@@ -10146,6 +10191,7 @@ export type WorkItem = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdByAgentId?: Maybe<Scalars['ID']['output']>;
   createdByUserId?: Maybe<Scalars['ID']['output']>;
+  documents: Array<WorkItemDocument>;
   dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
   events: Array<WorkItemEvent>;
   externalRefs: Array<WorkItemExternalRef>;
@@ -10175,6 +10221,49 @@ export type WorkItem = {
   threadLinks: Array<WorkItemThreadLink>;
   title: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type WorkItemDocument = {
+  __typename?: 'WorkItemDocument';
+  archivedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  checksumSha256?: Maybe<Scalars['String']['output']>;
+  content?: Maybe<Scalars['String']['output']>;
+  contentType: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByAgentId?: Maybe<Scalars['ID']['output']>;
+  createdByUserId?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  kind: WorkItemDocumentKind;
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  sizeBytes: Scalars['Int']['output'];
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workItemId: Scalars['ID']['output'];
+};
+
+export type WorkItemDocumentInput = {
+  id: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export enum WorkItemDocumentKind {
+  Evidence = 'EVIDENCE',
+  Handoff = 'HANDOFF',
+  Note = 'NOTE',
+  Other = 'OTHER',
+  Plan = 'PLAN',
+  Progress = 'PROGRESS',
+  Spec = 'SPEC'
+}
+
+export type WorkItemDocumentsInput = {
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  includeContent?: InputMaybe<Scalars['Boolean']['input']>;
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  workItemId: Scalars['ID']['input'];
 };
 
 export type WorkItemEvent = {

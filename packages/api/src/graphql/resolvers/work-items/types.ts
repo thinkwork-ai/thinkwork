@@ -4,6 +4,8 @@ import {
   db,
   eq,
   isNull,
+  desc,
+  workItemDocuments,
   workItemEvents,
   workItemExternalRefs,
   workItemLabelAssignments,
@@ -14,6 +16,7 @@ import {
 import {
   toGraphqlWorkItemEvent,
   toGraphqlWorkItemExternalRef,
+  toGraphqlWorkItemDocument,
   toGraphqlWorkItemLabel,
   toGraphqlWorkItemStatus,
   toGraphqlWorkItemThreadLink,
@@ -113,5 +116,21 @@ export const workItemTypeResolvers = {
       )
       .orderBy(asc(workItemLabels.name));
     return rows.map((row) => toGraphqlWorkItemLabel(row));
+  },
+  documents: async (parent: any) => {
+    const workItemId = parent.id;
+    const tenantId = parent.tenantId ?? parent.tenant_id;
+    const rows = await db
+      .select()
+      .from(workItemDocuments)
+      .where(
+        and(
+          eq(workItemDocuments.tenant_id, tenantId),
+          eq(workItemDocuments.work_item_id, workItemId),
+          isNull(workItemDocuments.archived_at),
+        ),
+      )
+      .orderBy(desc(workItemDocuments.updated_at));
+    return rows.map((row) => toGraphqlWorkItemDocument(row));
   },
 };

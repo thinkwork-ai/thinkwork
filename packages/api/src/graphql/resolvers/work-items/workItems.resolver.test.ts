@@ -7,6 +7,7 @@ const {
   mockHasSpaceMemberAccess,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
+  mockS3Send,
   tables,
 } = vi.hoisted(() => {
   const table = (name: string, fields: string[]) =>
@@ -63,6 +64,23 @@ const {
       "work_item_id",
       "label_id",
       "created_by_user_id",
+    ]),
+    workItemDocuments: table("work_item_documents", [
+      "id",
+      "tenant_id",
+      "work_item_id",
+      "kind",
+      "title",
+      "content_type",
+      "s3_key",
+      "size_bytes",
+      "checksum_sha256",
+      "metadata",
+      "created_by_user_id",
+      "created_by_agent_id",
+      "created_at",
+      "updated_at",
+      "archived_at",
     ]),
     workItemSavedViews: table("work_item_saved_views", [
       "id",
@@ -156,9 +174,23 @@ const {
     mockHasSpaceMemberAccess: vi.fn(async () => true),
     mockResolveCallerTenantId: vi.fn(async () => "tenant-1"),
     mockResolveCallerUserId: vi.fn(async () => "user-1"),
+    mockS3Send: vi.fn(),
     tables,
   };
 });
+
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn(() => ({ send: mockS3Send })),
+  PutObjectCommand: vi.fn((input) => ({ kind: "PutObjectCommand", input })),
+  GetObjectCommand: vi.fn((input) => ({ kind: "GetObjectCommand", input })),
+}));
+
+vi.mock("@thinkwork/runtime-config", () => ({
+  getConfig: vi.fn((key: string) =>
+    key === "WORKSPACE_BUCKET" ? "workspace-bucket" : undefined,
+  ),
+  getApiAuthSecret: vi.fn(() => "test-secret"),
+}));
 
 vi.mock("../../utils.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../utils.js")>();
@@ -188,6 +220,7 @@ vi.mock("../../utils.js", async (importOriginal) => {
     workItemEvents: tables.workItemEvents,
     workItemLabels: tables.workItemLabels,
     workItemLabelAssignments: tables.workItemLabelAssignments,
+    workItemDocuments: tables.workItemDocuments,
     workItemSavedViews: tables.workItemSavedViews,
   };
 });
@@ -205,8 +238,12 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 import { workItems } from "./workItems.query.js";
 import { workItemLabels } from "./workItemLabels.query.js";
 import { createWorkItemLabel } from "./createWorkItemLabel.mutation.js";
+import { createWorkItemDocument } from "./createWorkItemDocument.mutation.js";
 import { updateWorkItemLabel } from "./updateWorkItemLabel.mutation.js";
+import { updateWorkItemDocument } from "./updateWorkItemDocument.mutation.js";
 import { updateWorkItemStatus } from "./updateWorkItemStatus.mutation.js";
+import { workItemDocument } from "./workItemDocument.query.js";
+import { workItemDocuments } from "./workItemDocuments.query.js";
 import { deleteWorkItemView } from "./deleteWorkItemView.mutation.js";
 
 const ctx = { auth: { authType: "cognito", tenantId: "tenant-1" } } as any;
@@ -223,6 +260,9 @@ beforeEach(() => {
   mockHasSpaceMemberAccess.mockReset().mockResolvedValue(true);
   mockResolveCallerTenantId.mockReset().mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockReset().mockResolvedValue("user-1");
+  mockS3Send.mockReset().mockResolvedValue({
+    Body: { transformToString: async () => "# Plan\n\nDo the thing." },
+  });
 });
 
 describe("work item resolvers", () => {
@@ -343,6 +383,191 @@ describe("work item resolvers", () => {
 
     expect(captures.updateSets[0]).toHaveProperty("archived_at");
     expect(result).toMatchObject({ id: "label-1", slug: "blocked" });
+  });
+
+  it("creates Work Item documents in S3 and records metadata", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Implement OpenEngine docs",
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [
+        {
+          id: "document-1",
+          tenant_id: "tenant-1",
+          work_item_id: "work-item-1",
+          kind: "plan",
+          title: "Implementation plan",
+          content_type: "text/markdown",
+          s3_key:
+            "tenants/tenant-1/work-items/work-item-1/documents/document-1.md",
+          size_bytes: 12,
+          checksum_sha256: "checksum",
+          created_by_user_id: "user-1",
+        },
+      ],
+    );
+
+    const result = await createWorkItemDocument(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          kind: "PLAN",
+          title: "Implementation plan",
+          content: "# Plan",
+          metadata: JSON.stringify({ source: "test" }),
+        },
+      },
+      ctx,
+    );
+
+    expect(mockS3Send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "PutObjectCommand",
+        input: expect.objectContaining({
+          Bucket: "workspace-bucket",
+          ContentType: "text/markdown",
+          Key: expect.stringContaining(
+            "tenants/tenant-1/work-items/work-item-1/documents/",
+          ),
+        }),
+      }),
+    );
+    expect(captures.insertValues[0]).toEqual(
+      expect.objectContaining({
+        tenant_id: "tenant-1",
+        work_item_id: "work-item-1",
+        kind: "plan",
+        title: "Implementation plan",
+        content_type: "text/markdown",
+        created_by_user_id: "user-1",
+        metadata: { source: "test" },
+      }),
+    );
+    expect(captures.insertValues[1]).toEqual(
+      expect.objectContaining({
+        event_type: "updated",
+        metadata: expect.objectContaining({ action: "document_created" }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: "document-1",
+        kind: "PLAN",
+        title: "Implementation plan",
+      }),
+    );
+  });
+
+  it("lists Work Item document content when requested", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Implement OpenEngine docs",
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [
+        {
+          id: "document-1",
+          tenant_id: "tenant-1",
+          work_item_id: "work-item-1",
+          kind: "handoff",
+          title: "Agent handoff",
+          content_type: "text/markdown",
+          s3_key: "doc.md",
+          size_bytes: 21,
+        },
+      ],
+    );
+
+    const result = await workItemDocuments(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          includeContent: true,
+        },
+      },
+      ctx,
+    );
+
+    expect(mockS3Send).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "GetObjectCommand" }),
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "document-1",
+        kind: "HANDOFF",
+        content: "# Plan\n\nDo the thing.",
+      }),
+    ]);
+  });
+
+  it("fetches and archives Work Item documents", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Implement OpenEngine docs",
+    };
+    const documentRow = {
+      id: "document-1",
+      tenant_id: "tenant-1",
+      work_item_id: "work-item-1",
+      kind: "evidence",
+      title: "Verification",
+      content_type: "text/markdown",
+      s3_key: "doc.md",
+      size_bytes: 21,
+    };
+    captures.selectQueue.push([documentRow], [existingItem]);
+
+    const fetched = await workItemDocument(
+      null,
+      { input: { tenantId: "tenant-1", id: "document-1" } },
+      ctx,
+    );
+
+    expect(fetched).toEqual(
+      expect.objectContaining({
+        id: "document-1",
+        kind: "EVIDENCE",
+        content: "# Plan\n\nDo the thing.",
+      }),
+    );
+
+    captures.selectQueue.push([documentRow], [existingItem]);
+    captures.updateReturningQueue.push([
+      {
+        ...documentRow,
+        archived_at: new Date("2026-06-27T12:00:00Z"),
+      },
+    ]);
+
+    const archived = await updateWorkItemDocument(
+      null,
+      { input: { tenantId: "tenant-1", id: "document-1", archived: true } },
+      ctx,
+    );
+
+    expect(captures.updateSets[0]).toHaveProperty("archived_at");
+    expect(captures.insertValues.at(-1)).toEqual(
+      expect.objectContaining({
+        event_type: "updated",
+        metadata: expect.objectContaining({ action: "document_archived" }),
+      }),
+    );
+    expect(archived).toEqual(
+      expect.objectContaining({ id: "document-1", content: null }),
+    );
   });
 
   it("updates status transactionally and records an event", async () => {

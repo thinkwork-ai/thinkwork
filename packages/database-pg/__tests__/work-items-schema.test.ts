@@ -7,6 +7,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  WORK_ITEM_DOCUMENT_KINDS,
   WORK_ITEM_EVENT_TYPES,
   WORK_ITEM_EXTERNAL_REF_PROVIDERS,
   WORK_ITEM_DOGFOOD_LABELS,
@@ -17,6 +18,7 @@ import {
   WORK_ITEM_VIEW_TYPES,
   workItemEvents,
   workItemExternalRefs,
+  workItemDocuments,
   workItemLabelAssignments,
   workItemLabels,
   workItemSavedViews,
@@ -36,6 +38,10 @@ const migration0191 = readFileSync(
 );
 const migration0192 = readFileSync(
   join(HERE, "..", "drizzle", "0192_work_item_labels.sql"),
+  "utf-8",
+);
+const migration0193 = readFileSync(
+  join(HERE, "..", "drizzle", "0193_work_item_documents.sql"),
   "utf-8",
 );
 
@@ -124,6 +130,21 @@ describe("Work Items schema", () => {
     expect(assignmentColumns.label_id.notNull).toBe(true);
   });
 
+  it("models S3-backed Work Item documents", () => {
+    const columns = getTableColumns(workItemDocuments);
+
+    expect(getTableName(workItemDocuments)).toBe("work_item_documents");
+    expect(columns.tenant_id.notNull).toBe(true);
+    expect(columns.work_item_id.notNull).toBe(true);
+    expect(columns.kind.default).toBe("note");
+    expect(columns.title.notNull).toBe(true);
+    expect(columns.content_type.default).toBe("text/markdown");
+    expect(columns.s3_key.notNull).toBe(true);
+    expect(columns.size_bytes.default).toBe(0);
+    expect(columns.checksum_sha256.notNull).toBe(false);
+    expect(columns.archived_at.notNull).toBe(false);
+  });
+
   it("declares constrained vocabularies in schema and migration", () => {
     expect(WORK_ITEM_STATUS_CATEGORIES).toEqual([
       "todo",
@@ -155,10 +176,20 @@ describe("Work Items schema", () => {
       "review",
       "blocked",
     ]);
+    expect(WORK_ITEM_DOCUMENT_KINDS).toEqual([
+      "plan",
+      "progress",
+      "spec",
+      "evidence",
+      "handoff",
+      "note",
+      "other",
+    ]);
 
     const checks = [
       ...getTableConfig(workItemStatuses).checks,
       ...getTableConfig(workItems).checks,
+      ...getTableConfig(workItemDocuments).checks,
       ...getTableConfig(workItemThreadLinks).checks,
       ...getTableConfig(workItemEvents).checks,
       ...getTableConfig(workItemSavedViews).checks,
@@ -175,6 +206,7 @@ describe("Work Items schema", () => {
         "work_item_saved_views_owner_required",
         "work_item_external_refs_provider_allowed",
         "work_items_open_engine_dependency_state_allowed",
+        "work_item_documents_kind_allowed",
       ]),
     );
 
@@ -188,6 +220,9 @@ describe("Work Items schema", () => {
     }
     expect(migration0191).toContain(
       "CHECK (open_engine_dependency_state IN ('ready', 'waiting'))",
+    );
+    expect(migration0193).toContain(
+      "CHECK (kind IN ('plan','progress','spec','evidence','handoff','note','other'))",
     );
   });
 
@@ -258,6 +293,17 @@ describe("Work Items schema", () => {
       "creates: public.idx_work_item_label_assignments_item",
     ]) {
       expect(migration0192).toContain(`-- ${marker}`);
+    }
+  });
+
+  it("declares manual migration drift markers for Work Item documents", () => {
+    for (const marker of [
+      "creates: public.work_item_documents",
+      "creates: public.idx_work_item_documents_item_active",
+      "creates: public.idx_work_item_documents_tenant_kind",
+      "creates-constraint: public.work_item_documents.work_item_documents_kind_allowed",
+    ]) {
+      expect(migration0193).toContain(`-- ${marker}`);
     }
   });
 });
