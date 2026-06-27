@@ -36,6 +36,16 @@ export interface WorkItemExternalRefSummary {
   metadata?: unknown;
 }
 
+export interface WorkItemLabelSummary {
+  id: string;
+  tenantId?: string | null;
+  name: string;
+  slug: string;
+  color?: string | null;
+  description?: string | null;
+  archivedAt?: string | null;
+}
+
 export interface WorkItemSummary {
   id: string;
   tenantId?: string | null;
@@ -53,6 +63,7 @@ export interface WorkItemSummary {
   blocked: boolean;
   completedAt?: string | null;
   metadata?: unknown;
+  labels?: WorkItemLabelSummary[] | null;
   threadLinks?: WorkItemThreadLinkSummary[] | null;
   externalRefs?: WorkItemExternalRefSummary[] | null;
   createdAt?: string | null;
@@ -269,6 +280,41 @@ export function workItemThreadCountLabel(item: WorkItemSummary) {
   return `${count} thread${count === 1 ? "" : "s"}`;
 }
 
+export function workItemLabels(item: WorkItemSummary): WorkItemLabelSummary[] {
+  if (item.labels?.length) {
+    return item.labels.filter((label) => !label.archivedAt);
+  }
+
+  const metadata = objectRecord(item.metadata);
+  const rawLabels = Array.isArray(metadata.labels)
+    ? metadata.labels
+    : Array.isArray(metadata.tags)
+      ? metadata.tags
+      : [];
+
+  return rawLabels
+    .map((label, index): WorkItemLabelSummary | null => {
+      if (typeof label === "string") {
+        return {
+          id: label,
+          name: label,
+          slug: normalizeLabelSlug(label),
+          color: labelColor(index),
+        };
+      }
+      const record = objectRecord(label);
+      const name = stringValue(record.name) || stringValue(record.label);
+      if (!name) return null;
+      return {
+        id: stringValue(record.id) || name,
+        name,
+        slug: stringValue(record.slug) || normalizeLabelSlug(name),
+        color: stringValue(record.color) || labelColor(index),
+      };
+    })
+    .filter(isWorkItemLabelSummary);
+}
+
 export function workItemDueLabel(value?: string | null, now = new Date()) {
   if (!value) return "No due date";
   const date = new Date(value);
@@ -372,4 +418,22 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function isWorkItemLabelSummary(
+  label: WorkItemLabelSummary | null,
+): label is WorkItemLabelSummary {
+  return Boolean(label);
+}
+
+function normalizeLabelSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function labelColor(index: number) {
+  return ["#ef4444", "#06b6d4", "#f97316", "#3b82f6", "#22c55e"][index % 5];
 }

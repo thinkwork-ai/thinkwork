@@ -119,6 +119,19 @@ type WorkItemExternalRef {
   updatedAt: AWSDateTime!
 }
 
+type WorkItemLabel {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  color: String
+  description: String
+  createdByUserId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  archivedAt: AWSDateTime
+}
+
 type WorkItem {
   id: ID!
   tenantId: ID!
@@ -154,6 +167,7 @@ type WorkItem {
   threadLinks: [WorkItemThreadLink!]!
   events: [WorkItemEvent!]!
   externalRefs: [WorkItemExternalRef!]!
+  labels: [WorkItemLabel!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
   archivedAt: AWSDateTime
@@ -191,8 +205,17 @@ input WorkItemsInput {
   priority: WorkItemPriority
   required: Boolean
   applicable: Boolean
+  labelIds: [ID!]
+  labelSlugs: [String!]
   search: String
   includeArchived: Boolean
+  limit: Int
+}
+
+input WorkItemLabelsInput {
+  tenantId: ID
+  includeArchived: Boolean
+  search: String
   limit: Int
 }
 
@@ -211,6 +234,8 @@ input CreateWorkItemInput {
   applicable: Boolean
   blocked: Boolean
   templateSourceId: ID
+  labelIds: [ID!]
+  labelSlugs: [String!]
   metadata: AWSJSON
 }
 
@@ -226,7 +251,27 @@ input UpdateWorkItemInput {
   required: Boolean
   applicable: Boolean
   blocked: Boolean
+  labelIds: [ID!]
+  labelSlugs: [String!]
   metadata: AWSJSON
+  archived: Boolean
+}
+
+input CreateWorkItemLabelInput {
+  tenantId: ID
+  name: String!
+  slug: String
+  color: String
+  description: String
+}
+
+input UpdateWorkItemLabelInput {
+  tenantId: ID
+  id: ID!
+  name: String
+  slug: String
+  color: String
+  description: String
   archived: Boolean
 }
 
@@ -310,6 +355,7 @@ extend type Query {
   workItems(input: WorkItemsInput): [WorkItem!]!
   workItem(tenantId: ID, id: ID!): WorkItem
   threadWorkItems(tenantId: ID, threadId: ID!): [WorkItem!]!
+  workItemLabels(input: WorkItemLabelsInput): [WorkItemLabel!]!
   workItemStatuses(tenantId: ID, spaceId: ID!): [WorkItemStatus!]!
   workItemSavedViews(tenantId: ID, spaceId: ID): [WorkItemSavedView!]!
   openEngineEligibleWorkItems(
@@ -320,6 +366,8 @@ extend type Query {
 extend type Mutation {
   createWorkItem(input: CreateWorkItemInput!): WorkItem!
   updateWorkItem(input: UpdateWorkItemInput!): WorkItem!
+  createWorkItemLabel(input: CreateWorkItemLabelInput!): WorkItemLabel!
+  updateWorkItemLabel(input: UpdateWorkItemLabelInput!): WorkItemLabel!
   updateWorkItemStatus(input: UpdateWorkItemStatusInput!): WorkItem!
   claimNextOpenEngineWorkItem(
     input: ClaimNextOpenEngineWorkItemInput!

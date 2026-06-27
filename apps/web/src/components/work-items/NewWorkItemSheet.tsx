@@ -19,6 +19,7 @@ import {
 } from "@thinkwork/ui";
 import {
   WORK_ITEM_PRIORITY_ORDER,
+  type WorkItemLabelSummary,
   type WorkItemPriority,
   type WorkItemSpaceSummary,
   workItemPriorityLabel,
@@ -27,6 +28,7 @@ import {
 interface NewWorkItemSheetProps {
   open: boolean;
   spaces: WorkItemSpaceSummary[];
+  labels?: WorkItemLabelSummary[];
   defaultSpaceId?: string;
   saving?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,11 +44,13 @@ export interface NewWorkItemFormInput {
   required: boolean;
   applicable: boolean;
   blocked: boolean;
+  labelIds?: string[];
 }
 
 export function NewWorkItemSheet({
   open,
   spaces,
+  labels = [],
   defaultSpaceId,
   saving,
   onOpenChange,
@@ -67,6 +71,7 @@ export function NewWorkItemSheet({
   const [required, setRequired] = useState(true);
   const [applicable, setApplicable] = useState(true);
   const [blocked, setBlocked] = useState(false);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -78,6 +83,7 @@ export function NewWorkItemSheet({
       setRequired(true);
       setApplicable(true);
       setBlocked(false);
+      setSelectedLabelIds([]);
     }
   }, [fallbackSpaceId, open]);
 
@@ -107,6 +113,7 @@ export function NewWorkItemSheet({
               required,
               applicable,
               blocked,
+              labelIds: selectedLabelIds,
             });
             if (created === false) return;
             onOpenChange(false);
@@ -204,6 +211,28 @@ export function NewWorkItemSheet({
                 onCheckedChange={setBlocked}
               />
             </div>
+
+            {labels.length > 0 ? (
+              <div className="grid gap-3 rounded-md border border-border/70 p-3">
+                <Label>Labels</Label>
+                <div className="flex flex-wrap gap-2">
+                  {labels.map((label) => (
+                    <LabelChip
+                      key={label.id}
+                      label={label}
+                      checked={selectedLabelIds.includes(label.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedLabelIds((current) =>
+                          checked
+                            ? [...new Set([...current, label.id])]
+                            : current.filter((id) => id !== label.id),
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <SheetFooter className="mt-auto border-t border-border/70 px-6 py-4">
@@ -224,6 +253,36 @@ export function NewWorkItemSheet({
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function LabelChip({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: WorkItemLabelSummary;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const id = `new-work-item-label-${label.id}`;
+  return (
+    <label
+      htmlFor={id}
+      className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/30"
+    >
+      <Checkbox
+        id={id}
+        className="size-3.5"
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      <span
+        className="size-2 rounded-full"
+        style={{ backgroundColor: label.color ?? "#64748b" }}
+      />
+      <span>{label.name}</span>
+    </label>
   );
 }
 

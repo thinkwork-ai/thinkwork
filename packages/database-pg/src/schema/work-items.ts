@@ -75,6 +75,21 @@ export const WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES = [
   "waiting",
 ] as const;
 
+export const WORK_ITEM_DOGFOOD_LABELS = [
+  "openengine",
+  "dogfood",
+  "codex",
+  "claude",
+  "thinkwork-agent",
+  "bug",
+  "feature",
+  "docs",
+  "infra",
+  "needs-human",
+  "review",
+  "blocked",
+] as const;
+
 export const workItemStatuses = pgTable(
   "work_item_statuses",
   {
@@ -259,6 +274,80 @@ export const workItems = pgTable(
     check(
       "work_items_open_engine_dependency_state_allowed",
       sql`${table.open_engine_dependency_state} IN ('ready','waiting')`,
+    ),
+  ],
+);
+
+export const workItemLabels = pgTable(
+  "work_item_labels",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    color: text("color"),
+    description: text("description"),
+    created_by_user_id: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    archived_at: timestamp("archived_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("uq_work_item_labels_tenant_slug").on(
+      table.tenant_id,
+      table.slug,
+    ),
+    index("idx_work_item_labels_tenant_active").on(
+      table.tenant_id,
+      table.archived_at,
+      table.name,
+    ),
+  ],
+);
+
+export const workItemLabelAssignments = pgTable(
+  "work_item_label_assignments",
+  {
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    work_item_id: uuid("work_item_id")
+      .references(() => workItems.id, { onDelete: "cascade" })
+      .notNull(),
+    label_id: uuid("label_id")
+      .references(() => workItemLabels.id, { onDelete: "cascade" })
+      .notNull(),
+    created_by_user_id: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_work_item_label_assignments_pair").on(
+      table.tenant_id,
+      table.work_item_id,
+      table.label_id,
+    ),
+    index("idx_work_item_label_assignments_label").on(
+      table.tenant_id,
+      table.label_id,
+      table.work_item_id,
+    ),
+    index("idx_work_item_label_assignments_item").on(
+      table.tenant_id,
+      table.work_item_id,
     ),
   ],
 );
@@ -502,7 +591,45 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   threadLinks: many(workItemThreadLinks),
   events: many(workItemEvents),
   externalRefs: many(workItemExternalRefs),
+  labelAssignments: many(workItemLabelAssignments),
 }));
+
+export const workItemLabelsRelations = relations(
+  workItemLabels,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [workItemLabels.tenant_id],
+      references: [tenants.id],
+    }),
+    createdByUser: one(users, {
+      fields: [workItemLabels.created_by_user_id],
+      references: [users.id],
+    }),
+    assignments: many(workItemLabelAssignments),
+  }),
+);
+
+export const workItemLabelAssignmentsRelations = relations(
+  workItemLabelAssignments,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [workItemLabelAssignments.tenant_id],
+      references: [tenants.id],
+    }),
+    workItem: one(workItems, {
+      fields: [workItemLabelAssignments.work_item_id],
+      references: [workItems.id],
+    }),
+    label: one(workItemLabels, {
+      fields: [workItemLabelAssignments.label_id],
+      references: [workItemLabels.id],
+    }),
+    createdByUser: one(users, {
+      fields: [workItemLabelAssignments.created_by_user_id],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const workItemThreadLinksRelations = relations(
   workItemThreadLinks,

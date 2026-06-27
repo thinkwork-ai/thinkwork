@@ -47,6 +47,23 @@ const {
       "thread_id",
     ]),
     workItemEvents: table("work_item_events", []),
+    workItemLabels: table("work_item_labels", [
+      "id",
+      "tenant_id",
+      "name",
+      "slug",
+      "color",
+      "description",
+      "archived_at",
+      "created_by_user_id",
+      "updated_at",
+    ]),
+    workItemLabelAssignments: table("work_item_label_assignments", [
+      "tenant_id",
+      "work_item_id",
+      "label_id",
+      "created_by_user_id",
+    ]),
     workItemSavedViews: table("work_item_saved_views", [
       "id",
       "tenant_id",
@@ -155,6 +172,9 @@ vi.mock("../../utils.js", async (importOriginal) => {
     eq: vi.fn((field: unknown, value: unknown) => ({ eq: [field, value] })),
     gte: vi.fn((field: unknown, value: unknown) => ({ gte: [field, value] })),
     lte: vi.fn((field: unknown, value: unknown) => ({ lte: [field, value] })),
+    inArray: vi.fn((field: unknown, values: unknown[]) => ({
+      inArray: [field, values],
+    })),
     isNull: vi.fn((field: unknown) => ({ isNull: field })),
     sql: Object.assign(
       vi.fn((strings: TemplateStringsArray) => ({ sql: strings.join("?") })),
@@ -166,6 +186,8 @@ vi.mock("../../utils.js", async (importOriginal) => {
     workItemStatuses: tables.workItemStatuses,
     workItemThreadLinks: tables.workItemThreadLinks,
     workItemEvents: tables.workItemEvents,
+    workItemLabels: tables.workItemLabels,
+    workItemLabelAssignments: tables.workItemLabelAssignments,
     workItemSavedViews: tables.workItemSavedViews,
   };
 });
@@ -181,6 +203,9 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 }));
 
 import { workItems } from "./workItems.query.js";
+import { workItemLabels } from "./workItemLabels.query.js";
+import { createWorkItemLabel } from "./createWorkItemLabel.mutation.js";
+import { updateWorkItemLabel } from "./updateWorkItemLabel.mutation.js";
 import { updateWorkItemStatus } from "./updateWorkItemStatus.mutation.js";
 import { deleteWorkItemView } from "./deleteWorkItemView.mutation.js";
 
@@ -231,6 +256,93 @@ describe("work item resolvers", () => {
       }),
     ]);
     expect(captures.selectWhere[0]).toMatchObject({ op: "and" });
+  });
+
+  it("filters Work Items by normalized label slugs", async () => {
+    captures.selectQueue.push([]);
+
+    await workItems(
+      null,
+      { input: { tenantId: "tenant-1", labelSlugs: ["Needs Human"] } },
+      ctx,
+    );
+
+    expect(captures.selectWhere[0]).toMatchObject({ op: "and" });
+    expect(JSON.stringify(captures.selectWhere[0])).toContain(
+      "wil.archived_at IS NULL",
+    );
+    expect(JSON.stringify(captures.selectWhere[0])).toContain("IN (?)");
+  });
+
+  it("lists Work Item labels", async () => {
+    captures.selectQueue.push([
+      {
+        id: "label-1",
+        tenant_id: "tenant-1",
+        name: "OpenEngine",
+        slug: "openengine",
+        color: "#3b82f6",
+      },
+    ]);
+
+    const result = await workItemLabels(
+      null,
+      { input: { tenantId: "tenant-1" } },
+      ctx,
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "label-1",
+        name: "OpenEngine",
+        slug: "openengine",
+      }),
+    ]);
+  });
+
+  it("creates Work Item labels with normalized slugs", async () => {
+    captures.selectQueue.push([
+      {
+        id: "label-1",
+        tenant_id: "tenant-1",
+        name: "Needs Human",
+        slug: "needs-human",
+      },
+    ]);
+
+    const result = await createWorkItemLabel(
+      null,
+      { input: { tenantId: "tenant-1", name: "Needs Human" } },
+      ctx,
+    );
+
+    expect(captures.insertValues[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      name: "Needs Human",
+      slug: "needs-human",
+    });
+    expect(result).toMatchObject({ id: "label-1", slug: "needs-human" });
+  });
+
+  it("archives Work Item labels without deleting assignments", async () => {
+    captures.updateReturningQueue.push([
+      {
+        id: "label-1",
+        tenant_id: "tenant-1",
+        name: "Blocked",
+        slug: "blocked",
+        archived_at: new Date("2026-06-27T00:00:00Z"),
+      },
+    ]);
+
+    const result = await updateWorkItemLabel(
+      null,
+      { input: { tenantId: "tenant-1", id: "label-1", archived: true } },
+      ctx,
+    );
+
+    expect(captures.updateSets[0]).toHaveProperty("archived_at");
+    expect(result).toMatchObject({ id: "label-1", slug: "blocked" });
   });
 
   it("updates status transactionally and records an event", async () => {

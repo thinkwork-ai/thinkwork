@@ -1038,6 +1038,15 @@ const WorkItemFieldsFragment = gql`
       isDefault
       displayOrder
     }
+    labels {
+      id
+      tenantId
+      name
+      slug
+      color
+      description
+      archivedAt
+    }
     threadLinks {
       id
       threadId
@@ -1079,6 +1088,20 @@ export const ThreadWorkItemsQuery = gql`
     }
   }
   ${WorkItemFieldsFragment}
+`;
+
+export const WorkItemLabelsQuery = gql`
+  query WorkItemLabels($input: WorkItemLabelsInput) {
+    workItemLabels(input: $input) {
+      id
+      tenantId
+      name
+      slug
+      color
+      description
+      archivedAt
+    }
+  }
 `;
 
 export const WorkItemStatusesQuery = gql`

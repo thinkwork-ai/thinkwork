@@ -18,6 +18,7 @@ import {
 import {
   type WorkItemPriority,
   type WorkItemAssigneeSummary,
+  type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
@@ -50,6 +51,7 @@ interface WorkItemsListViewProps {
   showDoneItems?: boolean;
   updatingItemId?: string | null;
   assignees?: WorkItemAssigneeSummary[];
+  labels?: WorkItemLabelSummary[];
   currentUserId?: string | null;
   sequenceNumbers?: Map<string, number>;
   onStatusChange: (
@@ -76,6 +78,7 @@ export function WorkItemsListView({
   showDoneItems = false,
   updatingItemId,
   assignees = [],
+  labels = [],
   currentUserId,
   sequenceNumbers,
   onStatusChange,
@@ -88,10 +91,10 @@ export function WorkItemsListView({
   );
   const tokenFilterColumns = useMemo(
     () =>
-      buildWorkItemTokenFilterColumns(spaces, assignees)
+      buildWorkItemTokenFilterColumns(spaces, assignees, labels)
         .filter((column) => column.id !== WORK_ITEM_FILTER_COLUMNS.search)
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [assignees, spaces],
+    [assignees, labels, spaces],
   );
   const filterColumns = useMemo(
     () => buildWorkItemFilterColumnDefs(assignees),

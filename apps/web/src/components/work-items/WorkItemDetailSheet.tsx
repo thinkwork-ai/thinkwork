@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Flag,
   MessageSquareText,
+  Tags,
   UserRound,
   X,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   Badge,
   Button,
   Calendar,
+  Checkbox,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -33,11 +35,13 @@ import {
   WORK_ITEM_PRIORITY_ORDER,
   type WorkItemPriority,
   type WorkItemAssigneeSummary,
+  type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
   workItemAssigneeLabel,
   workItemDueLabel,
+  workItemLabels,
   workItemPriorityLabel,
   workItemSourceLabel,
   workItemSpaceLabel,
@@ -51,6 +55,7 @@ interface WorkItemDetailSheetProps {
   item: WorkItemSummary | null;
   sequenceNumber?: number;
   spaces: WorkItemSpaceSummary[];
+  labels?: WorkItemLabelSummary[];
   statuses: WorkItemStatusSummary[];
   assignees: WorkItemAssigneeSummary[];
   updating?: boolean;
@@ -66,6 +71,7 @@ interface WorkItemDetailSheetProps {
       priority?: WorkItemPriority;
       dueAt?: string | null;
       ownerUserId?: string | null;
+      labelIds?: string[];
     },
   ) => void;
 }
@@ -74,6 +80,7 @@ export function WorkItemDetailSheet({
   item,
   sequenceNumber,
   spaces,
+  labels = [],
   statuses,
   assignees,
   updating,
@@ -130,6 +137,15 @@ export function WorkItemDetailSheet({
                 />
               </div>
 
+              {labels.length > 0 ? (
+                <LabelAssignments
+                  item={item}
+                  labels={labels}
+                  disabled={updating || !onItemUpdate}
+                  onChange={(labelIds) => onItemUpdate?.(item, { labelIds })}
+                />
+              ) : null}
+
               {item.notes ? (
                 <section className="grid gap-2">
                   <h3 className="text-sm font-semibold">Notes</h3>
@@ -162,6 +178,56 @@ export function WorkItemDetailSheet({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function LabelAssignments({
+  item,
+  labels,
+  disabled,
+  onChange,
+}: {
+  item: WorkItemSummary;
+  labels: WorkItemLabelSummary[];
+  disabled?: boolean;
+  onChange: (labelIds: string[]) => void;
+}) {
+  const selectedIds = new Set(workItemLabels(item).map((label) => label.id));
+  return (
+    <section className="grid gap-3">
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        <Tags className="size-4 text-muted-foreground" />
+        Labels
+      </h3>
+      <div className="flex flex-wrap gap-2">
+        {labels.map((label) => {
+          const checked = selectedIds.has(label.id);
+          return (
+            <label
+              key={label.id}
+              className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/30"
+            >
+              <Checkbox
+                className="size-3.5"
+                checked={checked}
+                disabled={disabled}
+                onCheckedChange={(value) => {
+                  const next = new Set(selectedIds);
+                  if (value === true) next.add(label.id);
+                  else next.delete(label.id);
+                  onChange([...next]);
+                }}
+              />
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: label.color ?? "#64748b" }}
+              />
+              <span>{label.name}</span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

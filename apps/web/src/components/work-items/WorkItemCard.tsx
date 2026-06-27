@@ -15,6 +15,7 @@ import {
   isWorkItemDueSoon,
   workItemDueLabel,
   workItemAssigneeLabel,
+  workItemLabels,
   workItemPriorityLabel,
   workItemPriorityTone,
   workItemSourceLabel,
@@ -51,6 +52,7 @@ export function WorkItemCard({
 }: WorkItemCardProps) {
   const primaryThreadId = item.threadLinks?.[0]?.threadId;
   const dueSoon = isWorkItemDueSoon(item.dueAt);
+  const labels = workItemLabels(item);
   const selected = new Set(properties);
   const showMetadata =
     selected.has("due") ||
@@ -100,6 +102,19 @@ export function WorkItemCard({
             {workItemPriorityLabel(item.priority)}
           </Badge>
         ) : null}
+        {labels.slice(0, 4).map((label) => (
+          <Badge
+            key={label.id}
+            variant="outline"
+            className="gap-1.5 rounded-full text-xs"
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: label.color ?? "#64748b" }}
+            />
+            {label.name}
+          </Badge>
+        ))}
       </div>
 
       {showMetadata ? (

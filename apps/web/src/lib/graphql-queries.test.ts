@@ -28,6 +28,7 @@ import {
   ThreadTurnUpdatedSubscription,
   UpdateLinkedTaskMutation,
   UpdateWorkItemStatusMutation,
+  WorkItemLabelsQuery,
   UpdateThreadMutation,
   WorkItemSavedViewsQuery,
   WorkItemStatusesQuery,
@@ -170,7 +171,11 @@ describe("computer GraphQL queries", () => {
 
     expect(list).toContain("workItems(input: $input)");
     expect(list).toContain("status {");
+    expect(list).toContain("labels {");
     expect(list).toContain("threadLinks");
+    expect(print(WorkItemLabelsQuery)).toContain(
+      "workItemLabels(input: $input)",
+    );
     expect(threadItems).toContain("threadWorkItems");
     expect(statuses).toContain("workItemStatuses");
     expect(statuses).toContain("displayOrder");
