@@ -1,8 +1,8 @@
 /**
  * Hindsight memory adapter.
  *
- * Maps ThinkWork owner refs (tenant + user UUID) to Hindsight bank IDs
- * (`user_${userId}`) and normalizes Hindsight memory units / recall hits into
+ * Maps ThinkWork owner refs to Hindsight bank IDs (`user_${userId}` or
+ * `space_${spaceId}`) and normalizes Hindsight memory units / recall hits into
  * {@link ThinkWorkMemoryRecord}. Hindsight-specific fields (fact_type,
  * tags, confidence, occurred_start/end) land under `metadata`.
  *
@@ -22,6 +22,7 @@ import type {
   ExportRequest,
   InspectRequest,
   MemoryCapabilities,
+  MemoryOwnerRef,
   MemoryExportBundle,
   MemoryStrategy,
   RecallRequest,
@@ -100,6 +101,12 @@ const HINDSIGHT_CAPABILITIES: MemoryCapabilities = {
   compact: false,
   forget: true,
 };
+
+type HindsightBankOwner = Pick<MemoryOwnerRef, "ownerType" | "ownerId">;
+type HindsightReadOwner = Pick<
+  MemoryOwnerRef,
+  "tenantId" | "ownerType" | "ownerId"
+>;
 
 export class HindsightAdapter implements MemoryAdapter {
   readonly kind = "hindsight" as const;
@@ -222,7 +229,10 @@ export class HindsightAdapter implements MemoryAdapter {
    * (ops scripts) can surface per-bank errors.
    */
   async consolidateBank(ownerId: string): Promise<void> {
-    const bankId = await this.resolveBankId(ownerId);
+    const bankId = await this.resolveBankId({
+      ownerType: "user",
+      ownerId,
+    });
     await this.consolidateBankById(bankId);
   }
 
@@ -252,7 +262,7 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async retain(req: RetainRequest): Promise<RetainResult> {
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     await this.ensureBankConfiguredById(bankId);
     const factType = resolveFactType(req);
 
@@ -268,6 +278,7 @@ export class HindsightAdapter implements MemoryAdapter {
     };
     const mergedMetadata = toHindsightMetadata({
       ...callerMetadata,
+      ...ownerMetadata(req),
       fact_type: factType,
     });
     if (req.role) mergedMetadata.role = req.role;
@@ -319,7 +330,7 @@ export class HindsightAdapter implements MemoryAdapter {
     // Deprecated compatibility path. New callers should use
     // retainConversation so Hindsight receives one replaceable item per
     // conversation rather than one item per message.
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     await this.ensureBankConfiguredById(bankId);
     const items = req.messages
       .filter((m) => m.content && m.content.trim().length > 0)
@@ -328,6 +339,7 @@ export class HindsightAdapter implements MemoryAdapter {
         context: "thread_turn",
         metadata: toHindsightMetadata({
           ...(req.metadata || {}),
+          ...ownerMetadata(req),
           role: m.role,
           thread_id: req.threadId,
         }),
@@ -355,7 +367,7 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async retainConversation(req: RetainConversationRequest): Promise<void> {
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     const lines = req.messages
       .filter((m) => m.content && m.content.trim().length > 0)
       .map(
@@ -389,7 +401,7 @@ export class HindsightAdapter implements MemoryAdapter {
     const content = req.content.trim();
     if (!content) return;
 
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     const item = {
       content,
       document_id: `workspace_daily:${req.ownerId}:${req.date}`,
@@ -415,7 +427,7 @@ export class HindsightAdapter implements MemoryAdapter {
     const content = req.content.trim();
     if (!content) return;
 
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     const item = {
       content,
       document_id: req.documentId,
@@ -438,7 +450,7 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
-    const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
+    const bankIds = await this.resolveReadBankIds(req);
     const limit = Math.min(req.limit ?? this.inspectLimit, this.inspectLimit);
 
     let result: any;
@@ -467,7 +479,7 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async export(req: ExportRequest): Promise<MemoryExportBundle> {
-    const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
+    const bankIds = await this.resolveReadBankIds(req);
     let result: any;
     try {
       result = await this.db.execute(sql`
@@ -515,7 +527,7 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async reflect(req: RecallRequest): Promise<RecallResult[]> {
-    const bankId = await this.resolveBankId(req.ownerId);
+    const bankId = await this.resolveBankId(req);
     const quick = req.depth !== "deep";
     const maxTokens =
       req.hindsight?.maxTokens ??
@@ -607,7 +619,9 @@ export class HindsightAdapter implements MemoryAdapter {
   async listRecordsUpdatedSince(
     req: ListRecordsUpdatedSinceRequest,
   ): Promise<ListRecordsUpdatedSinceResult> {
-    const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
+    const ownerType = req.ownerType ?? "user";
+    const owner = { ...req, ownerType };
+    const bankIds = await this.resolveReadBankIds(owner);
     const limit = Math.max(1, Math.min(req.limit, 500));
     const sinceTs = req.sinceUpdatedAt ?? new Date(0);
     const sinceId = req.sinceRecordId ?? "00000000-0000-0000-0000-000000000000";
@@ -653,7 +667,7 @@ export class HindsightAdapter implements MemoryAdapter {
 
     const ownerRef = {
       tenantId: req.tenantId,
-      ownerType: "user" as const,
+      ownerType,
       ownerId: req.ownerId,
     };
     const records = rows.map((row) => this.mapRow(row, ownerRef, row.bank_id));
@@ -666,11 +680,13 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   private async resolveReadBankIds(
-    ownerId: string,
-    tenantId?: string,
+    owner: HindsightReadOwner,
   ): Promise<string[]> {
-    const primaryBankId = await this.resolveBankId(ownerId);
-    const legacyBankIds = await this.resolveLegacyBankIds(ownerId, tenantId);
+    const primaryBankId = await this.resolveBankId(owner);
+    const legacyBankIds =
+      owner.ownerType === "user"
+        ? await this.resolveLegacyBankIds(owner.ownerId, owner.tenantId)
+        : [];
     return uniqueStrings(
       [primaryBankId, ...legacyBankIds].filter((value): value is string =>
         Boolean(value),
@@ -680,9 +696,9 @@ export class HindsightAdapter implements MemoryAdapter {
 
   private async resolveRecallBankIds(req: RecallRequest): Promise<string[]> {
     if (req.hindsight?.includeLegacyBanks === true) {
-      return this.resolveReadBankIds(req.ownerId, req.tenantId);
+      return this.resolveReadBankIds(req);
     }
-    const primaryBankId = await this.resolveBankId(req.ownerId);
+    const primaryBankId = await this.resolveBankId(req);
     return [primaryBankId];
   }
 
@@ -720,13 +736,17 @@ export class HindsightAdapter implements MemoryAdapter {
     }
   }
 
-  private async resolveBankId(ownerId: string): Promise<string> {
+  private async resolveBankId(owner: HindsightBankOwner): Promise<string> {
     const uuidRe =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ownerId = owner.ownerId;
     if (!uuidRe.test(ownerId)) {
       throw new Error(
-        "[hindsight-adapter] user-scoped bank requires a UUID userId",
+        `[hindsight-adapter] ${owner.ownerType}-scoped bank requires a UUID ${owner.ownerType}Id`,
       );
+    }
+    if (owner.ownerType === "space") {
+      return `space_${ownerId}`;
     }
     return `user_${ownerId}`;
   }
@@ -740,7 +760,7 @@ export class HindsightAdapter implements MemoryAdapter {
   async ensureBankConfigured(ownerId: string): Promise<void> {
     let bankId: string;
     try {
-      bankId = await this.resolveBankId(ownerId);
+      bankId = await this.resolveBankId({ ownerType: "user", ownerId });
     } catch (err) {
       // The interface contract is never-throws — a non-UUID owner logs and
       // returns rather than failing the caller.
@@ -960,6 +980,20 @@ export class HindsightAdapter implements MemoryAdapter {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
+}
+
+function ownerMetadata(owner: MemoryOwnerRef): Record<string, unknown> {
+  const base = {
+    tenantId: owner.tenantId,
+    ownerType: owner.ownerType,
+  };
+  if (owner.ownerType === "space") {
+    return { ...base, spaceId: owner.ownerId };
+  }
+  if (owner.ownerType === "agent") {
+    return { ...base, agentId: owner.ownerId };
+  }
+  return { ...base, userId: owner.ownerId };
 }
 
 function slugifyLegacyBankName(value: string): string {

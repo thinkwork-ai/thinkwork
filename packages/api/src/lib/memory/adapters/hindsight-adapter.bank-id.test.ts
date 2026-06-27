@@ -124,4 +124,28 @@ describe("HindsightAdapter user-only bank ids", () => {
       "https://hindsight.example/v1/default/banks/user_c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c/memories/recall",
     ]);
   });
+
+  it("recalls Space memory from the Space bank without legacy user fan-out", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      query: "space-only onboarding token",
+      hindsight: { includeLegacyBanks: true },
+    });
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/memories/recall`,
+    ]);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
 });

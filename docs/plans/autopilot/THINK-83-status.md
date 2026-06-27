@@ -114,3 +114,37 @@ infrastructure deployed through the Brain plugin/managed-app path.
   https://github.com/thinkwork-ai/thinkwork/pull/3020
 - Kept parent Linear issue in `In Progress` because THINK-83 has multiple
   implementation units and no child/unit Linear issues.
+- U0 PR merged:
+  https://github.com/thinkwork-ai/thinkwork/pull/3020
+- U0 merge commit:
+  `d46d878b3887905fb83762e03f5dcaa6f589fc13`
+- U0 CI passed before merge: CLA, lint, typecheck, test, verify, and signed
+  catalog validation.
+- U0 remote branch deleted and local U0 worktree/branch cleaned up.
+
+### 2026-06-27 - U1 objective
+
+Make Hindsight owner-aware for user and Space memory: user reads/writes stay in
+`user_<userId>` banks, Space reads/writes use `space_<spaceId>` banks, and
+legacy user-bank fan-out remains user-only. This unit covers Hindsight adapter
+bank routing and adapter-level tests; GraphQL resolver semantics, operator UI,
+and deployed smoke evidence stay in later units.
+
+- Created isolated U1 branch/worktree:
+  `codex/think-83-u1-hindsight-banks` at
+  `/Users/ericodom/.codex/worktrees/think-83-u1`.
+- Implemented U1 owner-aware Hindsight bank routing:
+  - User and agent owners keep the existing `user_<ownerId>` compatibility
+    path.
+  - Space owners use `space_<spaceId>`.
+  - Legacy paired user/agent bank fan-out is now user-only, including when a
+    Space recall asks for legacy banks.
+  - Space retain metadata records `tenantId`, `ownerType: "space"`, and
+    `spaceId` rather than implying the Space is a user.
+  - Inspect, export, and cursor-list paths normalize Space records as
+    `ownerType: "space"` / `ownerId: <spaceId>`.
+- U1 verification passed:
+  - `pnpm --filter @thinkwork/api test -- src/lib/memory/adapters/hindsight-adapter.bank-id.test.ts src/lib/memory/adapters/hindsight-adapter.test.ts src/lib/memory/hindsight-bank-merge.test.ts src/lib/requester-memory/hindsight-primary.test.ts src/lib/requester-memory/hindsight-sync.test.ts src/__tests__/wiki-compiler.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm dlx prettier --check packages/api/src/lib/memory/adapter.ts packages/api/src/lib/memory/adapters/hindsight-adapter.ts packages/api/src/lib/memory/adapters/hindsight-adapter.bank-id.test.ts packages/api/src/lib/memory/adapters/hindsight-adapter.test.ts docs/plans/autopilot/THINK-83-status.md`
+  - `git diff --check`
