@@ -227,11 +227,15 @@ jobs:
           # We treat 2 (drift) as a soft signal and write a summary instead
           # of failing — operators triage manually rather than getting
           # paged by every benign drift.
-          cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
-          if [ "$cognee_enabled" != "true" ] && [ "$cognee_enabled" != "false" ]; then
+          requested_cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          if [ "$requested_cognee_enabled" != "true" ] && [ "$requested_cognee_enabled" != "false" ]; then
             echo "::error::COGNEE_ENABLED must be true or false."
             exit 1
           fi
+          if [ "$requested_cognee_enabled" = "true" ]; then
+            echo "::warning::Deprecated graph memory is ignored. Planning with enable_cognee=false."
+          fi
+          cognee_enabled="false"
 
           cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
           cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
@@ -313,10 +317,9 @@ jobs:
             fi
           fi
 
+          # The deprecated graph memory path is disabled for all deploys.
+          # Hindsight is the authoritative user and Space memory engine.
           memory_engine="hindsight"
-          if [ "$cognee_enabled" = "true" ]; then
-            memory_engine="cognee"
-          fi
 
           set +e
           terraform plan \

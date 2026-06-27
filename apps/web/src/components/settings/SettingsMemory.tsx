@@ -311,14 +311,10 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
             <LoadingShimmer />
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <Brain className="h-12 w-12 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {activeSearch
-                ? "No operator-visible Hindsight records match your search."
-                : "No Hindsight records were returned for this tenant."}
-            </p>
-          </div>
+          <MemoryEmptyState
+            activeSearch={activeSearch}
+            config={systemResult.data?.memorySystemConfig}
+          />
         ) : (
           <DataTable
             columns={columns}
@@ -390,8 +386,10 @@ function formatOwnerScope(row: MemoryRow): string {
 
 function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
   const activeEngine = config?.activeEngine ?? "unknown";
-  const cogneeActive = config?.cogneeMemoryEnabled === true;
   const hindsightActive = config?.hindsightEnabled === true;
+  const userMemoryReady = hindsightActive && config?.userMemoryEnabled === true;
+  const spaceMemoryReady =
+    hindsightActive && config?.spaceMemoryEnabled === true;
 
   return (
     <div className="mb-4 border-y border-border bg-muted/30 px-4 py-3">
@@ -399,56 +397,79 @@ function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">
-              {cogneeActive
-                ? "ThinkWork Brain diagnostic"
-                : hindsightActive
-                  ? "Hindsight memory"
-                  : `${activeEngine} memory`}
+              {hindsightActive
+                ? "Memory engine: Hindsight"
+                : "Memory service update required"}
             </Badge>
             <Badge
               variant="outline"
               className={
-                config?.userMemoryEnabled
+                userMemoryReady
                   ? "border-emerald-500/40 text-emerald-700"
                   : "text-muted-foreground"
               }
             >
-              User memory
+              User memory {userMemoryReady ? "on" : "pending"}
             </Badge>
             <Badge
               variant="outline"
               className={
-                config?.spaceMemoryEnabled
+                spaceMemoryReady
                   ? "border-emerald-500/40 text-emerald-700"
                   : "text-muted-foreground"
               }
             >
-              Space memory
+              Space memory {spaceMemoryReady ? "on" : "pending"}
             </Badge>
-            {config?.legacyHindsightAvailable ? (
+            {!hindsightActive && config?.legacyHindsightAvailable ? (
               <Badge variant="outline" className="text-muted-foreground">
-                Legacy Hindsight banks available
+                Redeploy required
               </Badge>
             ) : null}
           </div>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            {cogneeActive
-              ? "ThinkWork Brain graph infrastructure is present for operator diagnostics. Hindsight-backed ThinkWork memory remains the user and Space memory product path for this pass."
-              : hindsightActive
-                ? "Hindsight is the active core memory engine for this deployment. User memory follows the requester; Space memory belongs to the current Space."
+            {!hindsightActive
+              ? "This deployment has not switched to Hindsight yet. Redeploy the memory service and retain user or Space memory to populate rows."
+              : activeEngine === "hindsight"
+                ? "Hindsight is the authoritative user and Space memory engine for this deployment. This table reads Hindsight memory rows across user, Space, and agent banks."
                 : "Memory status is reported by the selected deployment engine."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="text-muted-foreground">
-            Company distillation{" "}
-            {config?.companyDistillationEnabled ? "enabled" : "deferred"}
-          </Badge>
-          <Badge variant="outline" className="text-muted-foreground">
-            Wiki projection{" "}
-            {config?.wikiProjectionEnabled ? "enabled" : "deferred"}
-          </Badge>
-        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemoryEmptyState({
+  activeSearch,
+  config,
+}: {
+  activeSearch: string;
+  config?: MemorySystemConfig | null;
+}) {
+  const activeEngine = config?.activeEngine ?? "unknown";
+  const hindsightActive = config?.hindsightEnabled === true;
+  const hindsightAvailableButInactive =
+    !hindsightActive && config?.legacyHindsightAvailable === true;
+
+  const title = activeSearch
+    ? "No matching memory rows"
+    : hindsightAvailableButInactive
+      ? "Memory service update required"
+      : "No memory rows found";
+
+  const detail = activeSearch
+    ? "The operator memory query returned 0 Hindsight rows for this search."
+    : hindsightAvailableButInactive
+      ? "The table reads Hindsight banks, but this deployment has not switched to Hindsight yet. Redeploy with MEMORY_ENGINE=hindsight and retain user or Space memory to populate rows."
+      : "The operator memory query returned 0 Hindsight memory_units across user, Space, and agent banks for this tenant.";
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="max-w-xl px-6 text-center">
+        <Brain className="mx-auto h-11 w-11 text-muted-foreground/40" />
+        <h3 className="mt-4 text-base font-medium text-foreground">{title}</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
       </div>
     </div>
   );

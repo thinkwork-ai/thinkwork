@@ -225,4 +225,38 @@ describe("SettingsMemory render", () => {
     );
     expect(screen.queryByText("Forget")).toBeNull();
   });
+
+  it("explains when Hindsight is available but not the active engine without naming the legacy backend", () => {
+    useQueryMock.mockImplementation(({ variables }: { variables?: any }) => {
+      if (variables?.scope === "OPERATOR") {
+        return [{ data: { memoryRecords: [] }, fetching: false }] as any;
+      }
+
+      return [
+        {
+          data: {
+            memorySystemConfig: {
+              activeEngine: "cognee",
+              hindsightEnabled: false,
+              cogneeMemoryEnabled: true,
+              userMemoryEnabled: true,
+              spaceMemoryEnabled: true,
+              legacyHindsightAvailable: true,
+            },
+          },
+          fetching: false,
+        },
+      ] as any;
+    });
+
+    render(<SettingsMemory embedded />);
+
+    expect(screen.getAllByText("Memory service update required").length).toBe(
+      2,
+    );
+    expect(screen.getByText("Redeploy required")).toBeTruthy();
+    expect(screen.queryByText("Company distillation")).toBeNull();
+    expect(screen.queryByText("Wiki projection")).toBeNull();
+    expect(screen.queryByText("Cognee")).toBeNull();
+  });
 });

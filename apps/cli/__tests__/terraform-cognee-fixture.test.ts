@@ -624,6 +624,11 @@ describe("U4 - Cognee deployment template propagation", () => {
       expect(workflow).toMatch(/-var "cognee_llm_provider=\$/);
       expect(workflow).toMatch(/-var "cognee_embedding_provider=\$/);
     }
+
+    expect(read(VERIFY_WORKFLOW)).toContain('memory_engine="hindsight"');
+    expect(read(VERIFY_WORKFLOW)).not.toContain('memory_engine="cognee"');
+    expect(read(DEPLOY_WORKFLOW)).toContain('MEMORY_ENGINE="hindsight"');
+    expect(read(DEPLOY_WORKFLOW)).not.toContain('MEMORY_ENGINE="cognee"');
   });
 
   it("builds a pinned Cognee image with Bedrock runtime dependencies for deploy", () => {
@@ -646,7 +651,8 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(deployWorkflow).toMatch(
       /'plugins\/company-brain\/terraform\/cognee\/\*\*'/,
     );
-    expect(deployWorkflow).toMatch(/Build and push Cognee Bedrock image/);
+    expect(deployWorkflow).toMatch(/Build and push deprecated graph image/);
+    expect(deployWorkflow).toMatch(/if: \$\{\{ false \}\}/);
     expect(deployWorkflow).toMatch(
       /file: plugins\/company-brain\/runtime\/cognee\/Dockerfile/,
     );
