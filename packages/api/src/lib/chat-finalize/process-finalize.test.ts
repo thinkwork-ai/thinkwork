@@ -158,7 +158,10 @@ import {
   toFinalizeResponse,
   turnAskedUserQuestion,
 } from "./process-finalize";
-import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
+import {
+  createResultListJsonRenderFixture,
+  createTaskReviewJsonRenderFixture,
+} from "@thinkwork/thread-json-render";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -2269,6 +2272,45 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
       "Here is the review.",
       expect.any(Array),
       [persistedPart],
+      undefined,
+    );
+  });
+
+  it("preserves result.list UI message parts during finalize", async () => {
+    const part = createResultListJsonRenderFixture();
+    const persistedPart = part as unknown as Record<string, unknown>;
+
+    await processFinalize({
+      ...askingPayload,
+      response: {
+        content: "Here is the current handoff.",
+        tools_called: ["emit_json_render_ui"],
+        ui_message_parts: [persistedPart],
+      },
+    });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "Here is the current handoff.",
+      expect.any(Array),
+      [
+        expect.objectContaining({
+          id: "json-render:result-list:handoff",
+          data: expect.objectContaining({
+            specHash: part.data.specHash,
+            mobileFallback: expect.objectContaining({
+              title: "Agent handoff",
+              lines: expect.arrayContaining([
+                "Work item: Implement structured result list",
+                "Question: Which queue should ship first?",
+                "Review: Review generated UI plan",
+              ]),
+            }),
+          }),
+        }),
+      ],
       undefined,
     );
   });

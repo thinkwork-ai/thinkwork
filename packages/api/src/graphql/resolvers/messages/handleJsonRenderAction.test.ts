@@ -6,6 +6,7 @@ import {
   createThreadJsonRenderSpecHash,
   type ThreadJsonRenderPart,
 } from "../../../lib/thread-json-render/persisted-parts.js";
+import { createResultListJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
@@ -195,6 +196,64 @@ describe("handleJsonRenderAction", () => {
         statusCategory: "done",
         statusId: STATUS_DONE_ID,
         previousStatusCategory: "active",
+        alreadyApplied: false,
+      },
+    });
+  });
+
+  it("dispatches result.list item actions through the persisted source-part boundary", async () => {
+    const fixture =
+      createResultListJsonRenderFixture() as unknown as ThreadJsonRenderPart;
+    enqueueHappySource(fixture);
+    mocks.selectQueue.push([]); // duplicate lookup
+    mocks.selectQueue.push([]); // prior work item event lookup
+    mocks.selectQueue.push([{ count: 0 }]); // rate limit
+
+    const result = await handleJsonRenderAction(
+      {},
+      { input: actionInput(fixture) },
+      ctx,
+    );
+
+    expect(result.id).toBe("message-action-1");
+    expect(mocks.setWorkItemStatus).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      workItemId: WORK_ITEM_ID,
+      threadId: THREAD_ID,
+      statusCategory: "DONE",
+      statusId: null,
+      note: null,
+      actor: { type: "user", id: USER_ID },
+      metadata: {
+        jsonRenderAction: {
+          source: "json_render_action",
+          sourceMessageId: SOURCE_MESSAGE_ID,
+          partId: fixture.id,
+          actionId: "complete-work-item",
+          actionKind: "submit",
+          actionLabel: "Complete",
+          target: "work_item_status",
+          workItemId: WORK_ITEM_ID,
+          statusCategory: "DONE",
+          statusId: null,
+          specHash: fixture.data.specHash,
+          idempotencyKey: actionInput(fixture).idempotencyKey,
+        },
+      },
+    });
+    const forwarded = mocks.sendMessage.mock.calls[0][1].input;
+    expect(forwarded.content).toContain("Generated UI action: Complete");
+    expect(forwarded.content).toContain("Source: Agent handoff");
+    expect(JSON.parse(forwarded.metadata).jsonRenderAction).toMatchObject({
+      actionId: "complete-work-item",
+      actionKind: "submit",
+      actionLabel: "Complete",
+      partId: "json-render:result-list:handoff",
+      mutation: {
+        target: "work_item_status",
+        workItemId: WORK_ITEM_ID,
+        statusCategory: "done",
+        statusId: STATUS_DONE_ID,
         alreadyApplied: false,
       },
     });
@@ -432,7 +491,7 @@ function sourcePart(
   } satisfies ThreadJsonRenderPart;
 }
 
-function enqueueHappySource(fixture: ReturnType<typeof sourcePart>) {
+function enqueueHappySource(fixture: ThreadJsonRenderPart) {
   mocks.selectQueue.push([{ id: THREAD_ID }]);
   mocks.selectQueue.push([
     {
@@ -445,7 +504,7 @@ function enqueueHappySource(fixture: ReturnType<typeof sourcePart>) {
   ]);
 }
 
-function actionInput(fixture: ReturnType<typeof sourcePart>) {
+function actionInput(fixture: ThreadJsonRenderPart) {
   return {
     threadId: THREAD_ID,
     sourceMessageId: SOURCE_MESSAGE_ID,
