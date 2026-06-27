@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-82
-status: u4-verified
+status: u5-verified
 target_branch: main
 ---
 
@@ -123,6 +123,14 @@ target_branch: main
   branch `codex/thnk-82-u4-workspace-default-guidance` from `origin/main`
   (`36b9526a6`).
 - U4 implemented and locally verified.
+- U4 PR #3007 merged after green CI. Merge commit:
+  `86489c820c03530163ac49d6e785903bdd9e2983`.
+- U4 local worktree and branch cleaned up after merge.
+- U5 worktree created at
+  `/Users/ericodom/.codex/worktrees/thnk-82-u5-cross-layer-evidence` on
+  branch `codex/thnk-82-u5-cross-layer-evidence` from `origin/main`
+  (`86489c820`).
+- U5 implemented and locally verified.
 
 ## Unit Log
 
@@ -232,11 +240,13 @@ target_branch: main
 
 - Objective: align static workspace defaults with the turn-scoped runtime
   generated-UI policy and keep the inline defaults mirror/parity tests green.
-- Status: verified locally; ready for PR.
+- Status: merged.
 - Branch: `codex/thnk-82-u4-workspace-default-guidance`
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-82-u4-workspace-default-guidance`
 - Base: `origin/main` at `36b9526a6`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3007
+- Merge commit: `86489c820c03530163ac49d6e785903bdd9e2983`
 - Changes:
   - Reworded default `AGENTS.md` Tool Response Handling so it no longer claims
     structured tool data is always automatically rendered as rich UI.
@@ -251,3 +261,46 @@ target_branch: main
 - Verification:
   - `pnpm --filter @thinkwork/workspace-defaults test -- parity.test.ts`
   - `pnpm --filter @thinkwork/workspace-defaults typecheck`
+- Notes:
+  - Fresh worktree setup required `pnpm install`. The install completed with
+    the same optional `canvas@2.11.2` native build output about missing
+    `pkg-config` on Node 25. This did not block focused U4 tests or typecheck.
+
+### U5 cross-layer regression and evidence
+
+- Objective: prove the new `result.list` generated UI contract survives across
+  mobile fallback parsing, Pi runtime emission, finalize persistence, and
+  server-validated durable action dispatch.
+- Status: verified locally; ready for PR.
+- Branch: `codex/thnk-82-u5-cross-layer-evidence`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-82-u5-cross-layer-evidence`
+- Base: `origin/main` at `86489c820`
+- Changes:
+  - Added mobile fallback regression coverage for `result.list`, including
+    work item, question, and review fallback lines for surfaces without the web
+    renderer.
+  - Added Pi runtime regression coverage proving `emit_json_render_ui` can emit
+    and return a validated `result.list` part with its spec hash and fallback
+    lines intact.
+  - Added finalize regression coverage proving `result.list` UI message parts
+    are forwarded into assistant message persistence.
+  - Added API action regression coverage proving `result.list` item actions
+    dispatch only through the persisted source-part boundary, validated
+    durable action id, matching params, and current spec hash.
+- Verification:
+  - `pnpm --filter @thinkwork/mobile test -- lib/genui-registry.test.ts`
+  - `pnpm --filter @thinkwork/pi-runtime-core test -- agent-loop.test.ts`
+  - `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/messages/handleJsonRenderAction.test.ts`
+  - `pnpm --filter @thinkwork/pi-runtime-core typecheck`
+  - `pnpm --filter @thinkwork/api typecheck`
+- Notes:
+  - `pnpm --filter @thinkwork/mobile typecheck` reports that the selected
+    package has no `typecheck` script.
+  - `pnpm exec prettier --check ...` could not run because this workspace does
+    not install a local `prettier` binary even though root format scripts refer
+    to one.
+  - Fresh worktree setup required `pnpm install`. The install completed with
+    the same optional `canvas@2.11.2` native build output about missing
+    `pkg-config` on Node 25. This did not block focused U5 tests or
+    typechecks.

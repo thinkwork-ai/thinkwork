@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
+import {
+  createResultListJsonRenderFixture,
+  createTaskReviewJsonRenderFixture,
+} from "@thinkwork/thread-json-render";
 
 import {
   parseMessageBlocks,
@@ -25,6 +28,28 @@ describe("mobile GenUI registry", () => {
         lines: ["Status: pending"],
       }),
     ]);
+  });
+
+  it("renders result.list generated UI as readable mobile fallback lines", () => {
+    const fixture = createResultListJsonRenderFixture();
+
+    const [fallback] = parseThreadJsonRenderFallbacks([fixture]);
+
+    expect(fallback).toEqual(
+      expect.objectContaining({
+        id: "json-render:result-list:handoff",
+        title: "Agent handoff",
+        summary: "Current work items, questions, reviews, and approvals.",
+        status: "ready",
+        component: "result.list",
+        specHash: fixture.data.specHash,
+        lines: [
+          "Work item: Implement structured result list",
+          "Question: Which queue should ship first?",
+          "Review: Review generated UI plan",
+        ],
+      }),
+    );
   });
 
   it("renders the checked-in valid-card fixture as a mobile fallback summary", () => {

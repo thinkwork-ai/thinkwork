@@ -1,7 +1,10 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
-import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
+import {
+  createResultListJsonRenderFixture,
+  createTaskReviewJsonRenderFixture,
+} from "@thinkwork/thread-json-render";
 import { mkdtemp, readlink, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -799,6 +802,45 @@ describe("runAgentLoop", () => {
         },
       }),
     );
+  });
+
+  it("emits result.list json-render parts from the explicit emit tool", async () => {
+    const fixture = createResultListJsonRenderFixture();
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: EMIT_JSON_RENDER_UI_TOOL_NAME,
+          result: {
+            content: [{ type: "text", text: "handoff ready" }],
+            details: { thread_json_render_part: fixture },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    expect(result.uiMessageParts).toEqual([
+      expect.objectContaining({
+        id: "json-render:result-list:handoff",
+        data: expect.objectContaining({
+          specHash: fixture.data.specHash,
+          mobileFallback: expect.objectContaining({
+            lines: expect.arrayContaining([
+              "Work item: Implement structured result list",
+              "Question: Which queue should ship first?",
+              "Review: Review generated UI plan",
+            ]),
+          }),
+        }),
+      }),
+    ]);
   });
 
   it("does not trust json-render-looking payloads from arbitrary tool results", async () => {
