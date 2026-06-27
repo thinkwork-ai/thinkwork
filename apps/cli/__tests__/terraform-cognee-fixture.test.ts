@@ -438,6 +438,17 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(source).toMatch(/var\.memory_engine == "cognee"/);
   });
 
+  it("attaches graphql-http to the Cognee VPC path when Cognee owns memory", () => {
+    const source = read(LAMBDA_API_HANDLERS);
+
+    expect(source).toMatch(/each\.key == "graphql-http"/);
+    expect(source).toMatch(/var\.memory_engine == "cognee"/);
+    expect(source).toMatch(/local\.cognee_worker_vpc_enabled/);
+    expect(source).toMatch(
+      /security_group_ids = each\.key == "okf-efs-refresh" \? var\.okf_efs_security_group_ids : var\.cognee_worker_security_group_ids/,
+    );
+  });
+
   it("fails unsafe enabled Cognee parent configurations at plan time", () => {
     const source = read(THINKWORK_MAIN);
     const guardrails = firstNestedBlock(

@@ -718,7 +718,12 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "vpc_config" {
-    for_each = contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) && local.cognee_worker_vpc_enabled ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
+    for_each = (
+      (
+        contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) ||
+        (each.key == "graphql-http" && var.memory_engine == "cognee")
+      ) && local.cognee_worker_vpc_enabled
+    ) ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 
     content {
       subnet_ids         = each.key == "okf-efs-refresh" ? var.okf_efs_subnet_ids : var.cognee_worker_subnet_ids
