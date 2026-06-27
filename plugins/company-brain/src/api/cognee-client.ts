@@ -81,6 +81,8 @@ export interface CogneeSearchArgs {
   datasets?: string[];
   datasetIds?: string[];
   nodeNames?: string[];
+  nodeNameFilterOperator?: "AND" | "OR";
+  topK?: number;
   includeReferences?: boolean;
   systemPrompt?: string | null;
 }
@@ -193,6 +195,10 @@ export class CogneeClient {
           ...(args.datasets?.length ? { datasets: args.datasets } : {}),
           ...(args.datasetIds?.length ? { dataset_ids: args.datasetIds } : {}),
           ...(args.nodeNames?.length ? { node_name: args.nodeNames } : {}),
+          ...(args.nodeNameFilterOperator
+            ? { node_name_filter_operator: args.nodeNameFilterOperator }
+            : {}),
+          ...(args.topK ? { top_k: args.topK } : {}),
           ...(args.includeReferences !== undefined
             ? { include_references: args.includeReferences }
             : {}),

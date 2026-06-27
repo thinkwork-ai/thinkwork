@@ -71,6 +71,14 @@ describe("CogneeAdapter", () => {
             text: "Use concise summaries.",
             score: 0.92,
             createdAt: "2026-06-26T19:00:00.000Z",
+            metadata: {
+              belongs_to_set: [
+                "thinkwork_memory",
+                "thinkwork_user_memory",
+                "tenant_tenant_1",
+                "user_user_1",
+              ],
+            },
           },
         ],
       }),
@@ -100,6 +108,8 @@ describe("CogneeAdapter", () => {
         "tenant_tenant_1",
         "user_user_1",
       ],
+      nodeNameFilterOperator: "AND",
+      topK: 25,
       includeReferences: true,
     });
     expect(hits).toEqual([
@@ -176,6 +186,14 @@ describe("CogneeAdapter", () => {
             id: "space-hit-1",
             text: "All onboarding runs use the enterprise template.",
             score: 0.88,
+            properties: {
+              belongs_to_set: [
+                "thinkwork_memory",
+                "thinkwork_space_memory",
+                "tenant_tenant_1",
+                "space_space_1",
+              ],
+            },
           },
         ],
       }),
@@ -205,6 +223,8 @@ describe("CogneeAdapter", () => {
         "tenant_tenant_1",
         "space_space_1",
       ],
+      nodeNameFilterOperator: "AND",
+      topK: 25,
       includeReferences: true,
     });
     expect(hits[0]).toMatchObject({
@@ -220,6 +240,56 @@ describe("CogneeAdapter", () => {
         },
       },
     });
+  });
+
+  it("drops Cognee search rows that do not belong to the requested memory owner", async () => {
+    const client = {
+      ingestDocument: vi.fn(),
+      search: vi.fn().mockResolvedValue({
+        results: [
+          {
+            id: "wiki-hit",
+            text: "Old wiki index content.",
+            metadata: {
+              belongs_to_set: [
+                "thinkwork_wiki",
+                "tenant_tenant_1",
+                "wiki_owner_user_1_recent",
+              ],
+            },
+          },
+          {
+            id: "space-hit",
+            text: "All onboarding runs use the enterprise template.",
+            metadata: {
+              belongs_to_set: [
+                "thinkwork_memory",
+                "thinkwork_memory_v1",
+                "thinkwork_space_memory",
+                "tenant_tenant_1",
+                "space_space_1",
+              ],
+            },
+          },
+        ],
+      }),
+    };
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client,
+      ontology,
+    });
+
+    const hits = await adapter.recall({
+      tenantId: "tenant-1",
+      ownerType: "space",
+      ownerId: "space-1",
+      query: "onboarding template",
+      limit: 5,
+    });
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0].record.id).toBe("space-hit");
   });
 
   it("rejects agent owners until the runtime memory unit wires policy", async () => {
