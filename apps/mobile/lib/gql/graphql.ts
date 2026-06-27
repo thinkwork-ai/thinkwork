@@ -6921,6 +6921,7 @@ export type Recipe = {
 export type RecordOpenEngineWorkItemReceiptInput = {
   agentId: Scalars["ID"]["input"];
   evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
   message?: InputMaybe<Scalars["String"]["input"]>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;

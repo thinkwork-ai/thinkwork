@@ -87,6 +87,12 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
       if (value && typeof value === "object" && "__table__" in value) {
         return (value as { __table__: string }).__table__;
       }
+      if (value && typeof value === "object" && "desc" in value) {
+        return `${renderSqlValue((value as { desc: unknown }).desc)} DESC`;
+      }
+      if (value && typeof value === "object" && "asc" in value) {
+        return `${renderSqlValue((value as { asc: unknown }).asc)} ASC`;
+      }
       return "?";
     },
     tables,
@@ -96,17 +102,28 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
 vi.mock("../../graphql/utils.js", () => ({
   db: mockDb,
   asc: vi.fn((column: unknown) => ({ asc: column })),
-  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
-    text: strings.reduce((acc, fragment, index) => {
-      const value = index < values.length ? renderSqlValue(values[index]) : "";
-      return `${acc}${fragment}${value}`;
-    }, ""),
-  })),
+  desc: vi.fn((column: unknown) => ({ desc: column })),
+  sql: Object.assign(
+    vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+      text: strings.reduce((acc, fragment, index) => {
+        const value =
+          index < values.length ? renderSqlValue(values[index]) : "";
+        return `${acc}${fragment}${value}`;
+      }, ""),
+    })),
+    {
+      join: vi.fn((values: unknown[], separator: { text: string }) => ({
+        text: values.map(renderSqlValue).join(separator.text),
+      })),
+    },
+  ),
   workItems: tables.workItems,
 }));
 
 import {
+  buildOpenEngineQueueSnapshot,
   claimNextOpenEngineWorkItem,
+  classifyOpenEngineQueueState,
   listEligibleOpenEngineWorkItems,
   openEngineEligibilityPredicate,
 } from "./open-engine-queue-service.js";
@@ -169,6 +186,9 @@ describe("Open Engine Work Item queue service", () => {
     expect(captures.selectOrderBy[0]![0]).toMatchObject({
       text: expect.stringContaining("WHEN 'urgent' THEN 0"),
     });
+    expect(captures.selectOrderBy[0]![1]).toMatchObject({
+      desc: "work_items.created_at",
+    });
     expect(captures.selectLimit).toEqual([25]);
   });
 
@@ -193,6 +213,7 @@ describe("Open Engine Work Item queue service", () => {
     expect(captures.updateWhere[0]!.text).toContain("SELECT work_items.id");
     expect(captures.updateWhere[0]!.text).toContain("LIMIT 1");
     expect(captures.updateWhere[0]!.text).toContain("FOR UPDATE SKIP LOCKED");
+    expect(captures.updateWhere[0]!.text).toContain("work_items.created_at");
     expect(captures.updateWhere[0]!.text).toContain(
       "work_items.open_engine_claim_expires_at <=",
     );
@@ -211,6 +232,30 @@ describe("Open Engine Work Item queue service", () => {
     ).resolves.toBeNull();
   });
 
+  it("returns one winner when two agents try to claim the same queue", async () => {
+    captures.updateReturningQueue.push([{ id: "work-item-1" }], []);
+
+    const [first, second] = await Promise.all([
+      claimNextOpenEngineWorkItem({
+        tenantId: "tenant-1",
+        queueKey: "default",
+        agentId: "agent-1",
+        now: NOW,
+      }),
+      claimNextOpenEngineWorkItem({
+        tenantId: "tenant-1",
+        queueKey: "default",
+        agentId: "agent-2",
+        now: NOW,
+      }),
+    ]);
+
+    expect([first, second].filter(Boolean)).toEqual([{ id: "work-item-1" }]);
+    expect([first, second].filter((value) => value === null)).toHaveLength(1);
+    expect(captures.updateWhere[0]!.text).toContain("FOR UPDATE SKIP LOCKED");
+    expect(captures.updateWhere[1]!.text).toContain("FOR UPDATE SKIP LOCKED");
+  });
+
   it("rejects invalid claim lease windows", async () => {
     await expect(
       claimNextOpenEngineWorkItem({
@@ -223,5 +268,76 @@ describe("Open Engine Work Item queue service", () => {
     ).rejects.toMatchObject({
       extensions: { code: "BAD_USER_INPUT" },
     });
+  });
+
+  it("classifies queue states for operator-visible health", () => {
+    expect(
+      classifyOpenEngineQueueState(
+        { open_engine_enabled: true, open_engine_dependency_state: "ready" },
+        NOW,
+      ),
+    ).toBe("eligible");
+    expect(
+      classifyOpenEngineQueueState(
+        {
+          open_engine_enabled: true,
+          open_engine_dependency_state: "ready",
+          open_engine_claimed_by_agent_id: "agent-1",
+          open_engine_claim_expires_at: new Date("2026-06-27T11:59:00Z"),
+        },
+        NOW,
+      ),
+    ).toBe("stale_claim");
+    expect(
+      classifyOpenEngineQueueState(
+        {
+          open_engine_enabled: true,
+          open_engine_dependency_state: "ready",
+          open_engine_claimed_by_agent_id: "agent-1",
+          open_engine_claim_expires_at: new Date("2026-06-27T12:01:00Z"),
+        },
+        NOW,
+      ),
+    ).toBe("claimed");
+    expect(
+      classifyOpenEngineQueueState(
+        { open_engine_enabled: true, open_engine_dependency_state: "waiting" },
+        NOW,
+      ),
+    ).toBe("waiting");
+  });
+
+  it("builds a queue snapshot with stale claim evidence", () => {
+    const snapshot = buildOpenEngineQueueSnapshot(
+      { tenantId: "tenant-1", queueKey: "codex" },
+      [
+        {
+          id: "work-item-1",
+          title: "Ready",
+          open_engine_enabled: true,
+          open_engine_dependency_state: "ready",
+        },
+        {
+          id: "work-item-2",
+          title: "Expired",
+          open_engine_enabled: true,
+          open_engine_dependency_state: "ready",
+          open_engine_claimed_by_agent_id: "agent-old",
+          open_engine_claim_expires_at: new Date("2026-06-27T11:59:00Z"),
+        },
+      ],
+      NOW,
+    );
+
+    expect(snapshot.counts.eligible).toBe(1);
+    expect(snapshot.counts.stale_claim).toBe(1);
+    expect(snapshot.staleClaims).toEqual([
+      {
+        id: "work-item-2",
+        title: "Expired",
+        claimedByAgentId: "agent-old",
+        claimExpiresAt: "2026-06-27T11:59:00.000Z",
+      },
+    ]);
   });
 });

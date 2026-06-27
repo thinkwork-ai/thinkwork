@@ -3,6 +3,7 @@ import { GraphQLError } from "graphql";
 import {
   asc,
   db,
+  desc,
   sql,
   workItemLabelAssignments,
   workItemLabels,
@@ -15,6 +16,31 @@ const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 500;
 
 export type OpenEngineWorkItem = typeof workItems.$inferSelect;
+export type OpenEngineQueueState =
+  | "eligible"
+  | "claimed"
+  | "stale_claim"
+  | "scheduled"
+  | "waiting"
+  | "human_hold"
+  | "blocked"
+  | "completed"
+  | "archived"
+  | "disabled";
+
+export interface OpenEngineQueueSnapshot {
+  tenantId: string;
+  queueKey: string | null;
+  generatedAt: string;
+  total: number;
+  counts: Record<OpenEngineQueueState, number>;
+  staleClaims: Array<{
+    id: string;
+    title: string;
+    claimedByAgentId: string | null;
+    claimExpiresAt: string | null;
+  }>;
+}
 
 export interface OpenEngineQueueScope {
   tenantId: string;
@@ -47,7 +73,7 @@ export async function listEligibleOpenEngineWorkItems(
     .select()
     .from(workItems)
     .where(openEngineEligibilityPredicate(input, now))
-    .orderBy(openEnginePriorityOrder(), asc(workItems.updated_at))
+    .orderBy(...openEngineQueueOrder())
     .limit(normalizeLimit(input.limit));
 }
 
@@ -72,7 +98,7 @@ export async function claimNextOpenEngineWorkItem(
         SELECT ${workItems.id}
           FROM ${workItems}
          WHERE ${openEngineEligibilityPredicate(input, now)}
-         ORDER BY ${openEnginePriorityOrder()}, ${workItems.updated_at} ASC
+         ORDER BY ${sql.join(openEngineQueueOrder(), sql`, `)}
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )`,
@@ -80,6 +106,67 @@ export async function claimNextOpenEngineWorkItem(
     .returning();
 
   return claimed ?? null;
+}
+
+export async function getOpenEngineQueueSnapshot(
+  input: ListEligibleOpenEngineWorkItemsInput,
+): Promise<OpenEngineQueueSnapshot> {
+  const now = input.now ?? new Date();
+  const rows = await db
+    .select()
+    .from(workItems)
+    .where(openEngineSnapshotPredicate(input))
+    .orderBy(...openEngineQueueOrder())
+    .limit(normalizeLimit(input.limit ?? MAX_LIST_LIMIT));
+  return buildOpenEngineQueueSnapshot(input, rows, now);
+}
+
+export function buildOpenEngineQueueSnapshot(
+  input: OpenEngineQueueScope,
+  rows: Array<Record<string, any>>,
+  now: Date,
+): OpenEngineQueueSnapshot {
+  const counts = emptyQueueCounts();
+  for (const row of rows) {
+    counts[classifyOpenEngineQueueState(row, now)] += 1;
+  }
+  return {
+    tenantId: input.tenantId,
+    queueKey: input.queueKey ?? null,
+    generatedAt: now.toISOString(),
+    total: rows.length,
+    counts,
+    staleClaims: rows
+      .filter((row) => classifyOpenEngineQueueState(row, now) === "stale_claim")
+      .slice(0, 10)
+      .map((row) => ({
+        id: String(row.id),
+        title: String(row.title ?? ""),
+        claimedByAgentId: row.open_engine_claimed_by_agent_id ?? null,
+        claimExpiresAt: iso(row.open_engine_claim_expires_at),
+      })),
+  };
+}
+
+export function classifyOpenEngineQueueState(
+  row: Record<string, any>,
+  now: Date,
+): OpenEngineQueueState {
+  if (row.archived_at) return "archived";
+  if (row.completed_at) return "completed";
+  if (row.open_engine_enabled !== true) return "disabled";
+  if (row.blocked === true) return "blocked";
+  if (row.open_engine_human_hold === true) return "human_hold";
+  if (row.open_engine_dependency_state !== "ready") return "waiting";
+  const scheduledAt = dateOrNull(row.open_engine_scheduled_at);
+  if (scheduledAt && scheduledAt.getTime() > now.getTime()) return "scheduled";
+  const claimedBy = row.open_engine_claimed_by_agent_id;
+  if (claimedBy) {
+    const expiresAt = dateOrNull(row.open_engine_claim_expires_at);
+    if (!expiresAt || expiresAt.getTime() > now.getTime()) return "claimed";
+    return "stale_claim";
+  }
+  return "eligible";
 }
 
 export function openEngineEligibilityPredicate(
@@ -121,6 +208,27 @@ export function openEngineEligibilityPredicate(
     )`;
 }
 
+function openEngineSnapshotPredicate(input: OpenEngineQueueScope) {
+  return sql`${workItems.tenant_id} = ${input.tenantId}
+    AND ${workItems.open_engine_enabled} = true
+    AND ${workItems.open_engine_queue_key} IS NOT DISTINCT FROM ${
+      input.queueKey ?? null
+    }
+    ${input.spaceId ? sql`AND ${workItems.space_id} = ${input.spaceId}` : sql``}
+    ${input.statusId ? sql`AND ${workItems.status_id} = ${input.statusId}` : sql``}
+    ${
+      input.ownerUserId
+        ? sql`AND ${workItems.owner_user_id} = ${input.ownerUserId}`
+        : sql``
+    }
+    ${
+      (input.ownerAgentId ?? input.agentId)
+        ? sql`AND ${workItems.owner_agent_id} = ${input.ownerAgentId ?? input.agentId}`
+        : sql``
+    }
+    ${labelSlugsPredicate(input.tenantId, input.labelSlugs)}`;
+}
+
 function labelSlugsPredicate(
   tenantId: string,
   labelSlugs: string[] | null | undefined,
@@ -153,15 +261,18 @@ function normalizeLabelSlug(value: unknown) {
     .replace(/^-+|-+$/g, "");
 }
 
-function openEnginePriorityOrder() {
-  return sql`CASE ${workItems.priority}
+function openEngineQueueOrder() {
+  return [
+    sql`CASE ${workItems.priority}
     WHEN 'urgent' THEN 0
     WHEN 'high' THEN 1
     WHEN 'normal' THEN 2
     WHEN 'low' THEN 3
     ELSE 4
-  END ASC,
-  COALESCE(${workItems.open_engine_scheduled_at}, ${workItems.created_at}) ASC`;
+  END ASC`,
+    desc(workItems.created_at),
+    asc(workItems.id),
+  ];
 }
 
 function normalizeLeaseSeconds(value: number | null | undefined) {
@@ -182,4 +293,30 @@ function normalizeLimit(value: number | null | undefined) {
   const parsed = Number(value ?? DEFAULT_LIST_LIMIT);
   if (!Number.isFinite(parsed)) return DEFAULT_LIST_LIMIT;
   return Math.min(Math.max(Math.trunc(parsed), 1), MAX_LIST_LIMIT);
+}
+
+function emptyQueueCounts(): Record<OpenEngineQueueState, number> {
+  return {
+    eligible: 0,
+    claimed: 0,
+    stale_claim: 0,
+    scheduled: 0,
+    waiting: 0,
+    human_hold: 0,
+    blocked: 0,
+    completed: 0,
+    archived: 0,
+    disabled: 0,
+  };
+}
+
+function dateOrNull(value: unknown) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function iso(value: unknown) {
+  return dateOrNull(value)?.toISOString() ?? null;
 }

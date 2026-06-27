@@ -26,6 +26,7 @@ export async function recordOpenEngineWorkItemReceipt(
     message: input.message,
     evidence: parseOptionalAwsJsonObject(input.evidence),
     metadata: parseOptionalAwsJsonObject(input.metadata),
+    idempotencyKey: input.idempotencyKey ?? null,
     now: input.now ? new Date(input.now) : undefined,
   });
   return toGraphqlWorkItemEvent(event as Record<string, unknown>);
