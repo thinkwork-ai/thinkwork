@@ -148,7 +148,7 @@ export const DEFAULT_WORK_ITEM_DISPLAY_STATE: WorkItemDisplayState = {
   list: {
     group: "none",
     subgroup: "none",
-    sort: "title",
+    sort: "priority",
     dir: "asc",
     showEmptyGroups: false,
     showEmptySubgroups: false,
@@ -332,26 +332,30 @@ export function groupWorkItemsForDisplay({
     return [{ id: "all", label: "All Work Items", rows: sortedItems }];
   }
 
-  return groupBuckets(
-    group,
-    items,
-    spaces,
-    statuses,
-    showEmptyGroups,
-    assignees,
+  return orderBuckets(
+    groupBuckets(
+      group,
+      items,
+      spaces,
+      statuses,
+      showEmptyGroups,
+      assignees,
+    ),
   )
     .map((bucket) => {
       const bucketItems = sortedItems.filter((item) => bucket.matches(item));
       const subgroups =
         subgroup === "none"
           ? undefined
-          : groupBuckets(
-              subgroup,
-              bucketItems,
-              spaces,
-              statuses,
-              showEmptySubgroups,
-              assignees,
+          : orderBuckets(
+              groupBuckets(
+                subgroup,
+                bucketItems,
+                spaces,
+                statuses,
+                showEmptySubgroups,
+                assignees,
+              ),
             )
               .map((subBucket) => ({
                 id: subBucket.id,
@@ -467,10 +471,11 @@ function compareWorkItems(
 ) {
   if (sort === "title") return left.title.localeCompare(right.title);
   if (sort === "priority") {
-    return (
+    const priorityDelta =
       WORK_ITEM_PRIORITY_ORDER.indexOf(left.priority) -
-      WORK_ITEM_PRIORITY_ORDER.indexOf(right.priority)
-    );
+      WORK_ITEM_PRIORITY_ORDER.indexOf(right.priority);
+    if (priorityDelta !== 0) return priorityDelta;
+    return compareDates(right.createdAt, left.createdAt);
   }
   if (sort === "due") {
     return compareDates(left.dueAt, right.dueAt);
@@ -496,6 +501,7 @@ function compareDates(left?: string | null, right?: string | null) {
 interface Bucket {
   id: string;
   label: string;
+  rank: number;
   matches: (item: WorkItemSummary) => boolean;
 }
 
@@ -512,6 +518,7 @@ function groupBuckets(
       ? statuses.map((status) => ({
           id: `status:${status.id}`,
           label: status.name || workItemStatusCategoryLabel(status.category),
+          rank: statusBucketRank(status.category, status.displayOrder),
           matches: (item: WorkItemSummary) =>
             status.spaceId && item.status?.id
               ? item.status.id === status.id
@@ -520,6 +527,7 @@ function groupBuckets(
       : WORK_ITEM_CATEGORY_ORDER.map((category) => ({
           id: `status:${category}`,
           label: workItemStatusCategoryLabel(category),
+          rank: statusBucketRank(category),
           matches: (item: WorkItemSummary) =>
             workItemStatusCategory(item) === category,
         }));
@@ -530,6 +538,7 @@ function groupBuckets(
     return WORK_ITEM_PRIORITY_ORDER.map((priority) => ({
       id: `priority:${priority}`,
       label: workItemPriorityLabel(priority),
+      rank: WORK_ITEM_PRIORITY_ORDER.indexOf(priority),
       matches: (item) => item.priority === priority,
     }));
   }
@@ -538,6 +547,7 @@ function groupBuckets(
     const buckets = spaces.map((space) => ({
       id: `space:${space.id}`,
       label: space.name?.trim() || "Space",
+      rank: 0,
       matches: (item: WorkItemSummary) => item.spaceId === space.id,
     }));
     const missingSpaces = items
@@ -548,6 +558,7 @@ function groupBuckets(
       ...Array.from(new Set(missingSpaces)).map((spaceId) => ({
         id: `space:${spaceId}`,
         label: workItemSpaceLabel(spaceId, spaces),
+        rank: 0,
         matches: (item: WorkItemSummary) => item.spaceId === spaceId,
       })),
     ];
@@ -558,21 +569,25 @@ function groupBuckets(
       {
         id: "due:overdue",
         label: "Overdue",
+        rank: 0,
         matches: (item) => dueStateLabel(item) === "Overdue",
       },
       {
         id: "due:soon",
         label: "Due soon",
+        rank: 1,
         matches: (item) => dueStateLabel(item) === "Due soon",
       },
       {
         id: "due:later",
         label: "Later",
+        rank: 2,
         matches: (item) => dueStateLabel(item) === "Later",
       },
       {
         id: "due:none",
         label: "No due date",
+        rank: 3,
         matches: (item) => dueStateLabel(item) === "No due date",
       },
     ];
@@ -619,6 +634,7 @@ function groupBuckets(
     .map((label) => ({
       id: `${group}:${label}`,
       label,
+      rank: 0,
       matches: (item: WorkItemSummary) => labelFor(item) === label,
     }));
   return includeEmpty ? dynamicBuckets : dynamicBuckets;
@@ -631,9 +647,42 @@ function booleanBuckets(
   getter: (item: WorkItemSummary) => boolean,
 ): Bucket[] {
   return [
-    { id: `${id}:true`, label: trueLabel, matches: getter },
-    { id: `${id}:false`, label: falseLabel, matches: (item) => !getter(item) },
+    { id: `${id}:true`, label: trueLabel, rank: 0, matches: getter },
+    {
+      id: `${id}:false`,
+      label: falseLabel,
+      rank: 1,
+      matches: (item) => !getter(item),
+    },
   ];
+}
+
+function orderBuckets(buckets: Bucket[]) {
+  return [...buckets].sort((left, right) => {
+    const rankDelta = left.rank - right.rank;
+    if (rankDelta !== 0) return rankDelta;
+    return right.label.localeCompare(left.label);
+  });
+}
+
+function statusBucketRank(
+  category?: WorkItemStatusCategory | string | null,
+  displayOrder?: number | null,
+) {
+  const normalized = String(category ?? "TODO").toUpperCase();
+  const categoryRank =
+    normalized === "ACTIVE"
+      ? 0
+      : normalized === "BLOCKED"
+        ? 1
+        : normalized === "TODO"
+          ? 2
+          : normalized === "SKIPPED"
+            ? 3
+            : normalized === "DONE"
+              ? 99
+              : 50;
+  return categoryRank * 1000 + (displayOrder ?? 0);
 }
 
 function countGroupRows(group: GroupedListGroup<WorkItemSummary>): number {

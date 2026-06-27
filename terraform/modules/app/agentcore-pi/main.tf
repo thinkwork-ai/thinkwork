@@ -18,13 +18,17 @@
 # taken as inputs to avoid a circular dependency: the lambda-api module
 # already consumes this module's output (agentcore_pi_function_name/arn).
 locals {
-  memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
-  memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
-  pi_image_uri          = "${var.ecr_repository_url}:pi-latest"
-  cognee_vpc_enabled    = length(var.cognee_subnet_ids) > 0 && length(var.cognee_security_group_ids) > 0
-  okf_efs_vpc_enabled   = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
-  private_vpc_enabled   = local.cognee_vpc_enabled || local.okf_efs_vpc_enabled
-  private_subnet_ids    = distinct(concat(var.cognee_subnet_ids, var.okf_efs_subnet_ids))
+  memory_retain_fn_name       = "thinkwork-${var.stage}-api-memory-retain"
+  memory_retain_fn_arn        = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
+  chat_agent_finalize_fn_name = "thinkwork-${var.stage}-api-chat-agent-finalize"
+  chat_agent_finalize_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_finalize_fn_name}"
+  chat_agent_activity_fn_name = "thinkwork-${var.stage}-api-chat-agent-activity"
+  chat_agent_activity_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_activity_fn_name}"
+  pi_image_uri                = "${var.ecr_repository_url}:pi-latest"
+  cognee_vpc_enabled          = length(var.cognee_subnet_ids) > 0 && length(var.cognee_security_group_ids) > 0
+  okf_efs_vpc_enabled         = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  private_vpc_enabled         = local.cognee_vpc_enabled || local.okf_efs_vpc_enabled
+  private_subnet_ids          = distinct(concat(var.cognee_subnet_ids, var.okf_efs_subnet_ids))
   private_security_group_ids = distinct(concat(
     var.cognee_security_group_ids,
     var.okf_efs_security_group_ids,
@@ -241,15 +245,17 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/agentcore/*"
       },
       {
-        # Async-invoke the memory-retain Lambda after every chat turn so
-        # the API's normalized memory layer can run the active engine's
-        # retainTurn() path (Hindsight POST /memories or AgentCore
-        # CreateEvent). InvocationType=Event from the runtime; this Lambda
-        # is the only target.
-        Sid      = "MemoryRetainInvoke"
-        Effect   = "Allow"
-        Action   = ["lambda:InvokeFunction"]
-        Resource = local.memory_retain_fn_arn
+        # Invoke API Lambdas from Pi's private VPC. Memory retain is queued
+        # async; chat activity/finalize are RequestResponse callbacks because
+        # public API Gateway endpoints are not reachable reliably from this VPC.
+        Sid    = "ApiLambdaInvoke"
+        Effect = "Allow"
+        Action = ["lambda:InvokeFunction"]
+        Resource = [
+          local.memory_retain_fn_arn,
+          local.chat_agent_finalize_fn_arn,
+          local.chat_agent_activity_fn_arn,
+        ]
       },
       {
         # Aurora Data API — U4 SessionStore writes thread/message rows via
@@ -343,6 +349,7 @@ resource "terraform_data" "seed_pi_image" {
       else
         echo "Unable to pull release image ${var.source_image_uri}; building Pi image from $repo_root"
         docker build \
+          --platform linux/amd64 \
           -f "$repo_root/packages/agentcore-pi/agent-container/Dockerfile" \
           -t "${local.pi_image_uri}" \
           "$repo_root"
@@ -371,6 +378,8 @@ resource "aws_lambda_function" "agentcore_pi" {
       MEMORY_ENGINE                          = var.memory_engine
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
       MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
+      CHAT_AGENT_FINALIZE_FN_NAME            = local.chat_agent_finalize_fn_name
+      CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
       THINKWORK_API_URL                      = var.api_endpoint
       API_AUTH_SECRET                        = var.api_auth_secret

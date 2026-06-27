@@ -27,7 +27,7 @@ describe("work item display state", () => {
       view: "list",
       list: {
         group: "none",
-        sort: "title",
+        sort: "priority",
         dir: "asc",
         properties: ["priority"],
       },
@@ -96,6 +96,43 @@ describe("work item display state", () => {
     ]);
     expect(groups[0]?.subgroups?.[0]?.label).toBe("Agent");
     expect(groups[1]?.subgroups?.[0]?.label).toBe("User");
+  });
+
+  it("orders grouped statuses with active work first and done last", () => {
+    const groups = groupWorkItemsForDisplay({
+      items: [
+        item({
+          id: "done",
+          status: { id: "done", name: "Done", category: "DONE" },
+        }),
+        item({
+          id: "todo",
+          status: { id: "todo", name: "Todo", category: "TODO" },
+        }),
+        item({
+          id: "active",
+          status: { id: "active", name: "In progress", category: "ACTIVE" },
+        }),
+      ],
+      spaces,
+      statuses: [
+        { id: "todo", name: "Todo", category: "TODO" },
+        { id: "active", name: "In progress", category: "ACTIVE" },
+        { id: "done", name: "Done", category: "DONE" },
+      ],
+      group: "status",
+      subgroup: "none",
+      sort: "priority",
+      dir: "asc",
+      showEmptyGroups: false,
+      showEmptySubgroups: false,
+    });
+
+    expect(groups.map((group) => group.label)).toEqual([
+      "In progress",
+      "Todo",
+      "Done",
+    ]);
   });
 
   it("sorts descending display rows without mutating input", () => {

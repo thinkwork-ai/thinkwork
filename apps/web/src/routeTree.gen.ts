@@ -85,6 +85,7 @@ import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_aut
 import { Route as AuthedSettingsAgentLoopsAgentLoopIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
 import { Route as AuthedSettingsActivityThreadsRouteImport } from "./routes/_authed/settings.activity.threads";
+import { Route as AuthedShellWorkItemsWorkItemIdRouteImport } from "./routes/_authed/_shell/work-items.$workItemId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
 import { Route as AuthedShellMemoryPagesRouteImport } from "./routes/_authed/_shell/memory.pages";
@@ -111,6 +112,7 @@ import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImpor
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
 import { Route as AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId_.runs.$runId";
 import { Route as AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport } from "./routes/_authed/crm.$provider.$objectType.$objectId.$workflowKey";
+import { Route as AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRouteImport } from "./routes/_authed/_shell/work-items.$workItemId.documents.$documentId";
 import { Route as AuthedShellSpacesSpaceIdThreadsThreadIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId.threads.$threadId";
 
 const SignInRoute = SignInRouteImport.update({
@@ -538,6 +540,12 @@ const AuthedSettingsActivityThreadsRoute =
     path: "/threads",
     getParentRoute: () => AuthedSettingsActivityRoute,
   } as any);
+const AuthedShellWorkItemsWorkItemIdRoute =
+  AuthedShellWorkItemsWorkItemIdRouteImport.update({
+    id: "/work-items/$workItemId",
+    path: "/work-items/$workItemId",
+    getParentRoute: () => AuthedShellRoute,
+  } as any);
 const AuthedShellThreadsIdRoute = AuthedShellThreadsIdRouteImport.update({
   id: "/threads/$id",
   path: "/threads/$id",
@@ -689,6 +697,12 @@ const AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute =
     path: "/crm/$provider/$objectType/$objectId/$workflowKey",
     getParentRoute: () => AuthedRoute,
   } as any);
+const AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute =
+  AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRouteImport.update({
+    id: "/documents/$documentId",
+    path: "/documents/$documentId",
+    getParentRoute: () => AuthedShellWorkItemsWorkItemIdRoute,
+  } as any);
 const AuthedShellSpacesSpaceIdThreadsThreadIdRoute =
   AuthedShellSpacesSpaceIdThreadsThreadIdRouteImport.update({
     id: "/threads/$threadId",
@@ -737,6 +751,7 @@ export interface FileRoutesByFullPath {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
@@ -793,6 +808,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/work-items/$workItemId/documents/$documentId": typeof AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute;
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -835,6 +851,7 @@ export interface FileRoutesByTo {
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
@@ -891,6 +908,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/work-items/$workItemId/documents/$documentId": typeof AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute;
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -941,6 +959,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
+  "/_authed/_shell/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   "/_authed/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
@@ -997,6 +1016,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/_authed/_shell/work-items/$workItemId/documents/$documentId": typeof AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute;
   "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -1046,6 +1066,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/work-items/$workItemId"
     | "/settings/activity/threads"
     | "/settings/activity/$threadId"
     | "/settings/agent-loops/$agentLoopId"
@@ -1102,6 +1123,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/replay-tools/"
     | "/settings/evaluations/studio/"
     | "/spaces/$spaceId/threads/$threadId"
+    | "/work-items/$workItemId/documents/$documentId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -1144,6 +1166,7 @@ export interface FileRouteTypes {
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
+    | "/work-items/$workItemId"
     | "/settings/activity/threads"
     | "/settings/activity/$threadId"
     | "/settings/agent-loops/$agentLoopId"
@@ -1200,6 +1223,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/replay-tools"
     | "/settings/evaluations/studio"
     | "/spaces/$spaceId/threads/$threadId"
+    | "/work-items/$workItemId/documents/$documentId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -1249,6 +1273,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/pages"
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
+    | "/_authed/_shell/work-items/$workItemId"
     | "/_authed/settings/activity/threads"
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agent-loops/$agentLoopId"
@@ -1305,6 +1330,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/replay-tools/"
     | "/_authed/settings/evaluations/studio/"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
+    | "/_authed/_shell/work-items/$workItemId/documents/$documentId"
     | "/_authed/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
@@ -1857,6 +1883,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsActivityThreadsRouteImport;
       parentRoute: typeof AuthedSettingsActivityRoute;
     };
+    "/_authed/_shell/work-items/$workItemId": {
+      id: "/_authed/_shell/work-items/$workItemId";
+      path: "/work-items/$workItemId";
+      fullPath: "/work-items/$workItemId";
+      preLoaderRoute: typeof AuthedShellWorkItemsWorkItemIdRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/threads/$id": {
       id: "/_authed/_shell/threads/$id";
       path: "/threads/$id";
@@ -2039,6 +2072,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport;
       parentRoute: typeof AuthedRoute;
     };
+    "/_authed/_shell/work-items/$workItemId/documents/$documentId": {
+      id: "/_authed/_shell/work-items/$workItemId/documents/$documentId";
+      path: "/documents/$documentId";
+      fullPath: "/work-items/$workItemId/documents/$documentId";
+      preLoaderRoute: typeof AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRouteImport;
+      parentRoute: typeof AuthedShellWorkItemsWorkItemIdRoute;
+    };
     "/_authed/_shell/spaces/$spaceId/threads/$threadId": {
       id: "/_authed/_shell/spaces/$spaceId/threads/$threadId";
       path: "/threads/$threadId";
@@ -2124,6 +2164,21 @@ const AuthedShellSpacesSpaceIdRouteWithChildren =
     AuthedShellSpacesSpaceIdRouteChildren,
   );
 
+interface AuthedShellWorkItemsWorkItemIdRouteChildren {
+  AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute: typeof AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute;
+}
+
+const AuthedShellWorkItemsWorkItemIdRouteChildren: AuthedShellWorkItemsWorkItemIdRouteChildren =
+  {
+    AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute:
+      AuthedShellWorkItemsWorkItemIdDocumentsDocumentIdRoute,
+  };
+
+const AuthedShellWorkItemsWorkItemIdRouteWithChildren =
+  AuthedShellWorkItemsWorkItemIdRoute._addFileChildren(
+    AuthedShellWorkItemsWorkItemIdRouteChildren,
+  );
+
 interface AuthedShellRouteChildren {
   AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRouteWithChildren;
   AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRouteWithChildren;
@@ -2135,6 +2190,7 @@ interface AuthedShellRouteChildren {
   AuthedShellArtifactsIdRoute: typeof AuthedShellArtifactsIdRoute;
   AuthedShellSpacesSpaceIdRoute: typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
+  AuthedShellWorkItemsWorkItemIdRoute: typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellSpacesIndexRoute: typeof AuthedShellSpacesIndexRoute;
@@ -2153,6 +2209,8 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellArtifactsIdRoute: AuthedShellArtifactsIdRoute,
   AuthedShellSpacesSpaceIdRoute: AuthedShellSpacesSpaceIdRouteWithChildren,
   AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
+  AuthedShellWorkItemsWorkItemIdRoute:
+    AuthedShellWorkItemsWorkItemIdRouteWithChildren,
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellSpacesIndexRoute: AuthedShellSpacesIndexRoute,
