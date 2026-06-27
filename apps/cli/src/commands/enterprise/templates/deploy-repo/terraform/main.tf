@@ -65,9 +65,15 @@ variable "database_engine" {
 }
 
 variable "enable_cognee" {
-  description = "Enable Cognee as an optional ontology/knowledge-graph add-on. Disabled by default."
+  description = "Enable Cognee as the Company Brain substrate. Disabled by default."
   type        = bool
   default     = false
+}
+
+variable "memory_engine" {
+  description = "Active long-term memory engine. Use 'cognee' when enable_cognee = true and Company Brain should own user/Space memory."
+  type        = string
+  default     = ""
 }
 
 variable "cognee_image_uri" {
@@ -302,6 +308,7 @@ module "thinkwork" {
   db_password     = var.db_password
   api_auth_secret = var.api_auth_secret
 
+  memory_engine                              = var.memory_engine
   enable_cognee                              = var.enable_cognee
   cognee_image_uri                           = var.cognee_image_uri
   cognee_db_username                         = var.cognee_db_username
@@ -371,4 +378,3 @@ output "twenty_runtime_enabled" {
 output "twenty_url" {
   value = module.thinkwork.twenty_url
 }
-

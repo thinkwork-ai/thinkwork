@@ -225,17 +225,23 @@ export function registerConfigCommand(program: Command): void {
         let tfValue = value;
 
         if (tfKey === "memory_engine") {
-          if (value !== "managed" && value !== "hindsight") {
+          if (
+            value !== "managed" &&
+            value !== "hindsight" &&
+            value !== "agentcore" &&
+            value !== "cognee"
+          ) {
             printError(
-              `Invalid memory engine "${value}". Must be 'managed' or 'hindsight'. Note: memory_engine is deprecated — use enable_hindsight instead.`,
+              `Invalid memory engine "${value}". Must be 'managed', 'hindsight', 'agentcore', or 'cognee'.`,
             );
             process.exit(1);
           }
-          printWarning(
-            "memory_engine is deprecated — translating to enable_hindsight. Managed memory is always on.",
-          );
-          tfKey = "enable_hindsight";
-          tfValue = value === "hindsight" ? "true" : "false";
+          if (value === "managed") {
+            printWarning(
+              "memory_engine value 'managed' is deprecated — storing it as 'agentcore'.",
+            );
+            tfValue = "agentcore";
+          }
         }
 
         if (

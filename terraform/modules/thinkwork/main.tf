@@ -119,7 +119,7 @@ locals {
   # keep working without config changes. Legacy value "managed" maps to
   # "agentcore".
   resolved_memory_engine = (
-    var.memory_engine == "hindsight" || var.memory_engine == "agentcore"
+    var.memory_engine == "hindsight" || var.memory_engine == "agentcore" || var.memory_engine == "cognee"
     ? var.memory_engine
     : var.memory_engine == "managed"
     ? "agentcore"

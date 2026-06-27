@@ -396,7 +396,7 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     );
   });
 
-  it("wires the Cognee module behind enable_cognee without touching memory selection", () => {
+  it("wires the Cognee module behind enable_cognee without implicitly changing memory selection", () => {
     const source = read(THINKWORK_MAIN);
     const cogneeModule = firstNestedBlock(source, 'module "cognee"');
 
@@ -427,6 +427,15 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(cogneeModule).not.toMatch(
       /db_password_secret_arn\s*=\s*module\.database/,
     );
+  });
+
+  it("allows Cognee to be selected as the canonical memory engine", () => {
+    const vars = read(THINKWORK_VARS);
+    const source = read(THINKWORK_MAIN);
+
+    expect(vars).toMatch(/"agentcore", "cognee"/);
+    expect(vars).toMatch(/memory_engine = 'cognee' requires enable_cognee/);
+    expect(source).toMatch(/var\.memory_engine == "cognee"/);
   });
 
   it("fails unsafe enabled Cognee parent configurations at plan time", () => {

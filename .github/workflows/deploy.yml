@@ -1494,6 +1494,10 @@ jobs:
           export TF_VAR_api_auth_secret="${{ secrets.API_AUTH_SECRET }}"
           export TF_VAR_google_oauth_client_secret="${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
           export TF_VAR_mapbox_public_token="${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}"
+          MEMORY_ENGINE="hindsight"
+          if [ "$COGNEE_ENABLED" = "true" ]; then
+            MEMORY_ENGINE="cognee"
+          fi
 
           TF_VAR_ARGS=(
             -var "stage=${{ env.STAGE }}"
@@ -1501,6 +1505,7 @@ jobs:
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}"
             -var "database_engine=aurora-serverless"
             -var "enable_hindsight=true"
+            -var "memory_engine=$MEMORY_ENGINE"
             -var "enable_cognee=$COGNEE_ENABLED"
             -var "cognee_image_uri=$COGNEE_IMAGE_URI"
             -var "cognee_db_username=$COGNEE_DB_USERNAME"
