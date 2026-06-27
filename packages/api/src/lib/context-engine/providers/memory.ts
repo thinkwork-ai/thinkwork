@@ -290,11 +290,11 @@ async function loadWikiBridgeHits(args: {
           sourceFamily:
             row.pageTable === "tenant_entity_pages" ? "brain" : "pages",
           title: row.title,
-          snippet: "Compiled Company Brain page citing recalled memory.",
+          snippet: "Compiled ThinkWork Brain page citing recalled memory.",
           score: memoryScore + 0.15,
           scope: args.scope,
           provenance: {
-            label: "Company Brain page cited by memory",
+            label: "ThinkWork Brain page cited by memory",
             sourceId: row.pageId,
             uri: pageSourceUri(row),
             metadata: {

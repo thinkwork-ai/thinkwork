@@ -75,7 +75,7 @@ ThinkWork intentionally splits structured state from narrative context.
 | ---------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Structured state | lifecycle, permissions, status, task rows, owner/reviewer, audit-friendly indexes | Multi-player Threads need consistent state that can be queried and permissioned. |
 | Markdown files   | goal contract, progress briefing, decisions, artifacts, handoffs, local context   | Agents and operators need readable, portable context.                            |
-| Company Brain    | distilled learning from reviewed source material                                  | Completed work should improve future work.                                       |
+| ThinkWork Brain  | distilled learning from reviewed source material                                  | Completed work should improve future work.                                       |
 
 At runtime, Goal and task projections are mounted under `Thread/` as generated files such as `Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md`. `Thread/PROGRESS.md` is not a second task database. Treat it as the readable briefing that helps humans and agents understand the structured state; task changes should go through the UI or `set_task_status`.
 
@@ -117,7 +117,7 @@ Customer Onboarding is the reference workflow because it shows the full shape:
 5. The Goal Folder carries the workflow files.
 6. Humans answer missing intake questions and complete manual external steps.
 7. The reviewer confirms or requests changes.
-8. Reviewed work can become better source material for Company Brain.
+8. Reviewed work can become better source material for ThinkWork Brain.
 
 The checklist is not the whole workflow. It is one progress model inside the Goal.
 
@@ -127,4 +127,4 @@ The checklist is not the whole workflow. It is one progress model inside the Goa
 - [Best Practices](/guides/spaces/best-practices/) - examples and troubleshooting.
 - [Goals](/concepts/goals/) - formal Goal concept reference.
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder-native architecture.
-- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes Company Brain.
+- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes ThinkWork Brain.

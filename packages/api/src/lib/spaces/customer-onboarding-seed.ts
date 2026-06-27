@@ -409,7 +409,7 @@ State whether the Goal is ready for human final review and why.
       path: "goals/customer-onboarding/DECISIONS.md",
       content: `# Customer Onboarding Decisions Template
 
-Use this file for decisions that explain why onboarding proceeded a certain way. These notes are high-signal Company Brain inputs after completion.
+Use this file for decisions that explain why onboarding proceeded a certain way. These notes are high-signal ThinkWork Brain inputs after completion.
 
 ## Decision Log
 
@@ -513,7 +513,7 @@ Use this file shape when the Goal is ready for human final review.
 - Not-applicable rows with notes:
 - Remaining blockers:
 - Artifact references:
-- Decisions that should compound into Company Brain:
+- Decisions that should compound into ThinkWork Brain:
 
 ## Review Request
 

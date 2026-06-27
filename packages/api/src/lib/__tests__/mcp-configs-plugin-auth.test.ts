@@ -494,7 +494,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     mockJoinRows.mockReturnValue([
       pluginRow("brain", {
         slug: "company-brain--brain",
-        name: "Company Brain",
+        name: "ThinkWork Brain",
         url: "http://internal-cognee.example.local/mcp-server/http",
         auth_type: "none",
         auth_config: null,

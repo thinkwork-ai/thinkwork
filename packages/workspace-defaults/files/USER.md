@@ -29,7 +29,7 @@
 
 {{OPERATING_MODEL_DEPENDENCIES}}
 
-### Company Brain
+### ThinkWork Brain
 
 {{OPERATING_MODEL_KNOWLEDGE}}
 

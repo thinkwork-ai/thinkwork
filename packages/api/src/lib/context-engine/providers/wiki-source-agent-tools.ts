@@ -24,7 +24,7 @@ export function createWikiSourceAgentTools(args: {
   const searchTool: SourceAgentTool = {
     name: "company-brain.pages.search",
     description:
-      "Search active compiled Company Brain pages with lexical, prefix, alias, and typo-tolerant matching.",
+      "Search active compiled ThinkWork Brain pages with lexical, prefix, alias, and typo-tolerant matching.",
     async execute(input, context) {
       const query = stringInput(input.query) ?? context.query;
       const limit = positiveIntInput(input.limit) ?? args.defaultLimit;
@@ -63,7 +63,7 @@ export function createWikiSourceAgentTools(args: {
   const readTool: SourceAgentTool = {
     name: "company-brain.pages.read",
     description:
-      "Read one compiled Company Brain page that was already returned by company-brain.pages.search.",
+      "Read one compiled ThinkWork Brain page that was already returned by company-brain.pages.search.",
     async execute(input, context) {
       const pageId =
         stringInput(input.page_id) ??

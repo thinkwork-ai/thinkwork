@@ -299,24 +299,24 @@ export function createContextEngineExtension(
         sourceKind: Type.Optional(
           Type.String({
             description:
-              "Optional Company Brain source family hint, such as thread or document.",
+              "Optional ThinkWork Brain source family hint, such as thread or document.",
           }),
         ),
         sourceType: Type.Optional(
           Type.String({
             description:
-              "Optional Company Brain source type hint, such as thread_message.",
+              "Optional ThinkWork Brain source type hint, such as thread_message.",
           }),
         ),
         datasetId: Type.Optional(
           Type.String({
             description:
-              "Optional Company Brain dataset or dogfood fixture id.",
+              "Optional ThinkWork Brain dataset or dogfood fixture id.",
           }),
         ),
         nodeSetIds: Type.Optional(
           Type.Array(Type.String(), {
-            description: "Optional Company Brain node-set filters.",
+            description: "Optional ThinkWork Brain node-set filters.",
           }),
         ),
         topK: Type.Optional(
@@ -334,22 +334,22 @@ export function createContextEngineExtension(
         detailIds: Type.Optional(
           Type.Array(Type.String(), {
             description:
-              "Stable Company Brain hit ids from a previous shortlist to expand.",
+              "Stable ThinkWork Brain hit ids from a previous shortlist to expand.",
           }),
         ),
         detailIndexes: Type.Optional(
           Type.Array(Type.Number(), {
             description:
-              "1-based Company Brain result indexes from a previous shortlist to expand.",
+              "1-based ThinkWork Brain result indexes from a previous shortlist to expand.",
           }),
         ),
       };
 
       const queryContext: ToolDefinition = {
         name: "query_context",
-        label: "Company Brain",
+        label: "ThinkWork Brain",
         description:
-          "Search the Thinkwork Context Engine (Company Brain) across fast default " +
+          "Search the ThinkWork Context Engine (ThinkWork Brain) across fast default " +
           "providers: wiki, workspace files, knowledge bases, sub-agent providers, " +
           "and approved search-safe MCP tools. Use this first for ordinary agent " +
           "context lookup. Use query_memory_context only when user-carried or " +
@@ -443,9 +443,9 @@ export function createContextEngineExtension(
 
       const queryBrainContext: ToolDefinition = {
         name: "query_brain_context",
-        label: "Company Brain Search",
+        label: "ThinkWork Brain Search",
         description:
-          "Search only tenant-shared Company Brain business/domain context. " +
+          "Search only tenant-shared ThinkWork Brain business/domain context. " +
           "Use this for governed customers, opportunities, commitments, risks, " +
           "stakeholders, products, relationships, and cited provenance. " +
           "Use query_memory_context for user/space long-term memory and " +

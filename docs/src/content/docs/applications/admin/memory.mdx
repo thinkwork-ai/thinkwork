@@ -5,24 +5,22 @@ description: Browse, search, edit, and visualize retained memory across one agen
 
 import { Aside } from "@astrojs/starlight/components";
 
-The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/web/knowledge/). In the Cognee-first memory pass, it reports the active user + space memory mode: user memory follows the requester, while space memory belongs to the current Space. Use it when you need to inspect what was retained before agents retrieve it through Context Engine.
+The Memory page is the operator view for retained Hindsight records. It reports active user and Space memory, shows bank and scope evidence, and lets operators inspect what was retained before agents retrieve it through Context Engine.
 
-**Route:** `/knowledge/memory`
-**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/memory.tsx`
-**Tab implementation:** `apps/web/src/routes/_authed/_tenant/memory/index.tsx`
+**Route:** `/settings/memory`
+**Route wrapper:** `apps/web/src/routes/_authed/settings.memory.tsx`
+**Page implementation:** `apps/web/src/components/settings/SettingsMemory.tsx`
 
-The legacy `/memory` route redirects to this tab.
+The Knowledge Graph subview remains available at `/settings/memory/knowledge-graph` when ThinkWork Brain graph infrastructure or legacy Cognee evidence is present.
 
 ## Layout
 
-The page has four primary controls and one operator status band:
+The page has three primary controls and one operator status band:
 
-- **Memory mode** — shows the active engine. In Cognee mode, it marks user memory and space memory as enabled, and marks Hindsight as legacy if a Hindsight endpoint is still configured.
-- **Deferred layers** — company distillation and wiki projection are shown as deferred for this pass. They are follow-up work, not live proof points for user + space memory.
+- **Memory mode** — shows the active memory engine. Hindsight appears as the core memory engine; ThinkWork Brain/Cognee graph infrastructure appears only as operator diagnostic evidence.
 
-- **Agent selector** — "All Agents" plus every agent in the tenant. Scopes the view to one agent namespace or fans out across all agents.
 - **View toggle** — table / graph inspection for retained memory evidence.
-- **Search bar** — semantic search across memory content, backed by `MemorySearchQuery`.
+- **Search bar** — text search across operator-visible Hindsight memory records, backed by `memoryRecords(scope: OPERATOR)`.
 - **Refresh** — manual re-fetch.
 
 Below the controls, the page renders either a `DataTable` of memory records or an interactive 3D graph.
@@ -31,26 +29,28 @@ Below the controls, the page renders either a `DataTable` of memory records or a
 
 The table view shows:
 
-| Column | Notes                                                              |
-| ------ | ------------------------------------------------------------------ |
-| Date   | When the record was created or last updated                        |
-| Agent  | Which agent produced the record                                    |
-| Type   | Strategy badge: semantic, summary, preference, episode, reflection |
-| Memory | Truncated content preview                                          |
+| Column  | Notes                                                              |
+| ------- | ------------------------------------------------------------------ |
+| Created | When the record was created                                        |
+| Updated | When the record was last updated                                   |
+| Bank    | Hindsight bank id, such as a user or Space bank                    |
+| Scope   | Owner type/id when derivable                                       |
+| Type    | Strategy badge: semantic, summary, preference, episode, reflection |
+| Memory  | Truncated content preview                                          |
 
-Clicking a row opens a detail sheet with full content, metadata, edit controls, and delete controls. Editing depends on the backend:
+Clicking a row opens a detail sheet with full content, bank/scope metadata, and retention metadata. Operator-wide rows are read-only in this pass; cross-bank deletion is intentionally disabled until a safer scoped mutation exists.
 
-- **AgentCore managed memory** — records are immutable by default; the sheet is read-only.
-- **Cognee memory** — user and space memories are retrieved through the normalized memory contract and Context Engine. Raw Cognee details stay operator evidence, not customer setup choices.
-- **Hindsight** — legacy records can be edited or deleted through `UpdateMemoryRecordMutation` and `DeleteMemoryRecordMutation` when Hindsight is the active legacy engine.
+- **Hindsight memory** — canonical user and Space memory for this pass.
+- **AgentCore managed memory** — an explicit low-cost/development opt-out; records are immutable by default.
+- **ThinkWork Brain/Cognee graph infrastructure** — optional ontology/graph/warehouse evidence, not the user or Space memory provider.
 
 ## Graph View
 
-When a graph-backed memory engine is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). In Cognee mode, treat it as memory evidence for the user + space cutover. It is not the finished company ontology or wiki projection.
+When graph infrastructure is enabled, the graph view renders entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). Treat it as ThinkWork Brain graph diagnostics, not proof that user or Space memory is backed by Cognee.
 
 <Aside type="note">
-  The graph view is a memory-backend inspection tool. It is not the full company
-  Brain projection: company distillation, ontology processing, wiki pages,
+  The graph view is a Brain infrastructure inspection tool. It is not the full
+  ThinkWork Brain projection: distillation, ontology processing, wiki pages,
   aliases, and source citations are follow-up work.
 </Aside>
 
@@ -58,41 +58,40 @@ When a graph-backed memory engine is enabled, the graph view renders memory enti
 
 ### Audit What an Agent Remembers
 
-1. Open `/knowledge/memory`.
-2. Pick the agent from the selector.
-3. Scroll or search the record list.
-4. Click a row to read the full content.
-5. If the tenant has Hindsight enabled, edit or delete stale records from the sheet.
+1. Open `/settings/memory`.
+2. Search for a term, bank id, owner id, or record text.
+3. Click a row to read the full content and bank/scope metadata.
+4. Use the bank and scope evidence to verify whether the record belongs to a user or Space.
 
 ### Debug Memory Results
 
-1. Run the query from `/knowledge/context-engine` in the Sources tab.
-2. If a memory hit looks wrong, open `/knowledge/memory`.
-3. Search for the same term or filter to the agent.
+1. Run the query from the Context Engine tool in `/settings/tools`.
+2. If a memory hit looks wrong, open `/settings/memory`.
+3. Search for the same term, bank id, or owner id.
 4. Inspect the raw record and backend metadata.
 
 ### Delete Sensitive Memory
 
 1. Search for the sensitive term.
 2. Click into each matching record.
-3. Delete one by one from the detail sheet.
+3. Use the bank/scope metadata to prepare a reviewed backend redaction.
 
-Deletes are hard deletes. For bulk redaction, operate at the SQL layer with a reviewed script.
+Cross-bank delete is disabled in the operator table for this pass. For bulk redaction, operate at the backend layer with a reviewed script.
 
 ## Data Model
 
-- **Cognee user memory** — Cognee-backed memory keyed to the requester. It can follow the user across spaces where policy allows it.
-- **Cognee space memory** — Cognee-backed memory keyed to the current Space. It stays with the space and is available to authorized members and agents.
+- **Hindsight user memory** — Hindsight memory keyed to the requester.
+- **Hindsight Space memory** — Hindsight memory keyed to the current Space. It stays with the Space and is available to authorized members and agents.
 - **AgentCore managed memory** — Aurora `memory_records` table with strategy, namespace, content, tags, confidence, access count, and bi-temporal dates.
-- **Hindsight graph** — legacy Hindsight-managed entities, relationships, and facts surfaced through `MemoryGraphQuery` when Hindsight is active.
+- **ThinkWork Brain graph diagnostics** — optional graph infrastructure evidence surfaced when the Brain substrate is installed or legacy Cognee is available.
 - **Namespaces** — records are namespaced by strategy and agent; prefixes such as `semantic_`, `preferences_`, and `episodes_` identify the retention strategy.
 
 ## Known Limits
 
-- **All-agents graph is a client-side fan-out.** It scales to dozens of agents, not thousands.
-- **Company distillation is deferred.** This page proves Cognee user + space memory status; it does not prove company-level Brain distillation.
-- **Wiki projection is deferred.** Wiki pages remain a follow-up projection, not an upstream source of truth for this pass.
-- **AgentCore records are read-only.** Editing is only available when Hindsight is the active legacy engine.
+- **Graph diagnostics are not memory authority.** Hindsight is the user and Space memory path for this pass.
+- **ThinkWork Brain distillation is deferred.** This page proves retained-memory inspection; it does not prove Brain distillation.
+- **Wiki projection is separate.** Wiki pages are compiled context, not an upstream source of truth for retained memory.
+- **Operator rows are read-only.** Editing/deleting across Hindsight banks is intentionally disabled in this pass.
 - **Graph view lacks drill-in.** Clicking a node does not open a detail sheet.
 - **Search is semantic-only.** It can miss exact IDs or unusual strings.
 - **No bulk edit or bulk delete.** Every mutation is one record at a time.

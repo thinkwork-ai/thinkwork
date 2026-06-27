@@ -68,11 +68,11 @@ export function createWikiSourceAgentContextProvider(
   const runtimeMode = options.runtimeMode ?? "model";
   return createSubAgentContextProvider({
     id: "wiki-source-agent",
-    displayName: "Company Brain Page Agent",
+    displayName: "ThinkWork Brain Page Agent",
     sourceFamily: "pages",
     promptRef: "brain/provider/wiki-source-agent",
     prompt: {
-      title: "Company Brain wiki navigator",
+      title: "ThinkWork Brain wiki navigator",
       summary:
         "Plan search paths, repair query language, inspect compiled pages, and return cited wiki evidence.",
       instructions: [
@@ -84,7 +84,7 @@ export function createWikiSourceAgentContextProvider(
     resources: [
       {
         id: "wiki-pages",
-        label: "Compiled Company Brain pages",
+        label: "Compiled ThinkWork Brain pages",
         type: "Postgres wiki_pages",
         description:
           "Active entity, topic, and decision pages compiled from user memory and sources.",
@@ -142,7 +142,7 @@ export function createWikiSourceAgentContextProvider(
         return {
           hits: [],
           state: "skipped",
-          reason: "user scope is required for Company Brain page agent",
+          reason: "user scope is required for ThinkWork Brain page agent",
         };
       }
 
@@ -299,7 +299,7 @@ async function runDeterministicWikiSourceAgent(args: {
         score,
         scope: args.request.scope,
         provenance: {
-          label: "Company Brain page agent",
+          label: "ThinkWork Brain page agent",
           sourceId: row.page.id,
           uri: `thinkwork://wiki/${row.page.type.toLowerCase()}/${row.page.slug}`,
           metadata: {
@@ -355,7 +355,7 @@ function modelResultToHit(args: {
     score: confidence + Math.max(0, 0.05 - args.index * 0.01),
     scope: args.request.scope,
     provenance: {
-      label: "Company Brain page agent",
+      label: "ThinkWork Brain page agent",
       sourceId: args.row.page.id,
       uri: `thinkwork://wiki/${args.row.page.type.toLowerCase()}/${args.row.page.slug}`,
       metadata: {
@@ -388,8 +388,8 @@ function buildWikiSourceAgentSystemPrompt(
   config: SubAgentContextProviderConfig,
 ): string {
   return [
-    "You are a Company Brain Page Agent inspired by Scout-style source specialists.",
-    "Your job is to navigate only compiled Company Brain pages and return cited page results.",
+    "You are a ThinkWork Brain Page Agent inspired by Scout-style source specialists.",
+    "Your job is to navigate only compiled ThinkWork Brain pages and return cited page results.",
     "Use the source-local tools iteratively: search first, then read any promising page when the snippet is not enough.",
     "Repair obvious query typos before giving up. Common repairs include restarant/restraunt/resturant/restaraunt -> restaurant and favourite/fav -> favorite.",
     "Prefer pages whose title, alias, summary, body, or cited sections directly support the user's question.",

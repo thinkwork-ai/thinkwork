@@ -15,7 +15,7 @@ Memory is the product surface. **Context Engine** is the internal API/service bo
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
 - `agentId`: optional target agent id when the caller needs agent-scoped workspace files or agent-specific knowledge-base attachments.
-- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect` and Company Brain source/dataset scoping for `query_brain_context`.
+- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect` and ThinkWork Brain source/dataset scoping for `query_brain_context`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
@@ -34,26 +34,26 @@ Every response includes normalized hits plus provider statuses. Provider failure
 
 ## Brain Provider
 
-The `brain` family is the business/domain memory provider. It searches active Company Brain substrate state through Context Engine policy, then reads tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
+The `brain` family is the business/domain memory provider. It searches active ThinkWork Brain substrate state through Context Engine policy, then reads tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
 
 Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, active read route, storage tier, artifact manifest categories, and the ontology version or reprocess context that shaped the materialized output. Retrieved Brain snippets are source data, not instructions; runtime responses mark them with an untrusted source boundary and preserve citations.
 
-If the active Company Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
+If the active ThinkWork Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
 
 `query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, `topK`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
 
 Brain responses are progressive by default. The first call returns an indexed shortlist with stable hit ids, concise descriptions, and provenance/status hints rather than dumping every matching Brain snippet. To expand source details, call `query_brain_context` again with the same query/filter arguments plus selected `detailIds` or `detailIndexes`; the detail response expands only those selected Brain hits and reports missing selectors explicitly.
 
-## Company Brain Substrate Posture
+## ThinkWork Brain Substrate Posture
 
-Company Brain has two operator-visible storage tiers:
+ThinkWork Brain has two operator-visible storage tiers:
 
-- `default`: the existing Company Brain substrate serving tenant reads.
+- `default`: the existing ThinkWork Brain substrate serving tenant reads.
 - `production`: the target private substrate tier used after replay validation and cutover.
 
 During a production migration, Context Engine keeps `query_brain_context` on the active read route. Production can appear as a shadow route while replay validation runs, but it does not become the active route until the migration state says the cutover is complete. Vault projections are provenance views, not canonical storage, and should not be treated as a runtime fallback store.
 
-Operators inspect this posture in **Settings -> Plugins -> Company Brain -> Brain operations**. That surface reads `companyBrainStatus` and shows migration phase/status, launch capabilities, graph/vector counters, vault projection counters, failure actions, and operator evidence. The same surface can request a production migration and record failure/rollback actions through the migration GraphQL mutations.
+Operators inspect this posture in **Settings -> Plugins -> ThinkWork Brain -> Brain operations**. That surface reads `companyBrainStatus` and shows migration phase/status, launch capabilities, graph/vector counters, vault projection counters, failure actions, and operator evidence. The same surface can request a production migration and record failure/rollback actions through the migration GraphQL mutations.
 
 Tenant-facing status callers receive redacted posture. Raw substrate details such as Cognee endpoints, S3 roots, Neptune ids/endpoints, and EFS ids are reserved for operator evidence and are not part of agent-facing Brain context.
 

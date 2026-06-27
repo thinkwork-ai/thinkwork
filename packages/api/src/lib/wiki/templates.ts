@@ -138,7 +138,7 @@ export function describeAllPageTypes(): string {
 
 export function describeOntologyAwareWikiGuardrails(): string {
   return [
-    "Business/domain ontology is authoritative for tenant Company Brain pages.",
+    "Business/domain ontology is authoritative for tenant ThinkWork Brain pages.",
     "Use approved ontology labels, facet names, and relationship names when they are present in context.",
     "Do not invent new business entity types, facet slugs, or relationship labels in prose; describe unsupported concepts as observations instead.",
     "Owner-scoped wiki pages still use the default page templates above unless the caller supplies tenant Brain ontology context.",

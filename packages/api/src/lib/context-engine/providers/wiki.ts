@@ -12,7 +12,7 @@ export function createWikiContextProvider(): ContextProviderDescriptor {
     id: "wiki",
     family: "wiki",
     sourceFamily: "pages",
-    displayName: "Company Brain Pages",
+    displayName: "ThinkWork Brain Pages",
     defaultEnabled: true,
     supportedScopes: ["personal", "auto"],
     async query(request): Promise<ContextProviderResult> {

@@ -336,3 +336,48 @@ docs/tool copy remains U5.
   copy, then reran:
   - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
   - `pnpm --filter @thinkwork/api typecheck`
+- U4 PR merged:
+  https://github.com/thinkwork-ai/thinkwork/pull/3026
+- U4 merge commit:
+  `c69981685d17fd8be666f4d1e7d5289ffdb49901`
+- U4 CI passed before merge: CLA, lint, typecheck, test, verify, and signed
+  catalog validation.
+- U4 remote branch deleted and local U4 worktree/branch cleaned up.
+
+### 2026-06-27 - U5 objective
+
+Align docs, runtime tool descriptions, workspace defaults, and Context Engine
+provider labels with the THINK-83 product boundary: Hindsight is canonical user
+and Space memory, ThinkWork Brain is the visible Brain product, and Cognee is
+mentioned only as optional/internal graph infrastructure or legacy diagnostic
+compatibility.
+
+- Created isolated U5 branch/worktree:
+  `codex/think-83-u5-docs-tools` at
+  `/Users/ericodom/.codex/worktrees/think-83-u5`.
+- Implemented U5 docs and tool-copy updates:
+  - Updated `mcp-context-engine` and Pi extension tool names/descriptions from
+    Company Brain phrasing to ThinkWork Brain and ThinkWork Context Engine
+    phrasing.
+  - Renamed the compiled wiki Context Engine provider display name to
+    `ThinkWork Brain Pages`.
+  - Updated Context Engine admin validation, source-agent prompts/tools,
+    memory-derived page snippets, workspace defaults, onboarding seed copy, and
+    MCP fixture expectations to use ThinkWork Brain product language.
+  - Preserved internal plugin keys/routes/packages such as `company-brain`.
+  - Updated Memory, Context Engine, Space, Goal, deployment, release-manifest,
+    and Knowledge Base docs so `/settings/memory` remains the operator Memory
+    route and Hindsight remains user/Space memory authority.
+  - Reframed Cognee docs as ThinkWork Brain graph/ontology infrastructure and
+    not as the user or Space memory provider.
+- U5 verification passed:
+  - `pnpm --filter @thinkwork/api test -- src/handlers/mcp-context-engine.requester-context.test.ts src/lib/context-engine/__tests__/service.test.ts src/lib/context-engine/providers/source-agent-runtime.test.ts src/lib/context-engine/__tests__/sub-agent-provider-e2e.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/plugins/handlers/mcp.test.ts`
+  - `pnpm --filter @thinkwork/pi-extensions test -- test/capabilities.test.ts test/okf-wiki-navigator.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/pi-extensions typecheck`
+  - `pnpm --filter @thinkwork/docs build`
+  - `pnpm dlx prettier --check ...` for authored U5 files
+  - `git diff --check`
+- Note: `pnpm install` logged the same optional `canvas` native build failure
+  under Node 25 because `pkg-config` is unavailable, but exited successfully and
+  the focused package tests/typechecks ran afterward.

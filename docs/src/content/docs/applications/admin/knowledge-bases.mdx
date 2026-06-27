@@ -3,35 +3,34 @@ title: Admin — Knowledge Bases
 description: Create and manage Bedrock Knowledge Bases, upload documents via presigned S3 URLs, trigger Bedrock ingestion, and monitor sync status.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The Admin Memory page lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
 
 ## The list view
 
-**Route:** `/knowledge/knowledge-bases`
-**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/knowledge-bases.tsx`
-**Tab implementation:** `apps/web/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
+**Route:** `/settings/memory/knowledge-bases`
+**Redirect wrapper:** `apps/web/src/routes/_authed/settings.knowledge-bases.index.tsx`
+**Tab implementation:** `apps/web/src/routes/_authed/settings.memory.knowledge-bases.tsx`
 
-The legacy `/knowledge-bases` route redirects to this tab.
+The legacy `/settings/knowledge-bases` route redirects to this tab.
 
 A searchable `DataTable` with columns for:
 
-| Column | Notes |
-|---|---|
-| Name | Display name + icon |
-| Status | `creating`, `ready`, `syncing`, `error` |
-| Docs | Total document count |
-| Last Sync | Relative timestamp of the most recent Bedrock ingestion run |
-| Description | Short description |
+| Column      | Notes                                                       |
+| ----------- | ----------------------------------------------------------- |
+| Name        | Display name + icon                                         |
+| Status      | `creating`, `ready`, `syncing`, `error`                     |
+| Docs        | Total document count                                        |
+| Last Sync   | Relative timestamp of the most recent Bedrock ingestion run |
+| Description | Short description                                           |
 
 A "Create KB" button in the header fires a creation flow (not deeply visible in the current route — the empty-state CTA is the typical entry point for most operators). Clicking a row navigates to the detail page.
 
 ## The detail view
 
-**Route:** `/knowledge/knowledge-bases/:kbId`
-**Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/knowledge-bases/$kbId.tsx`
-**Detail implementation:** `apps/web/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
+**Route:** `/settings/knowledge-bases/:kbId`
+**Detail implementation:** `apps/web/src/routes/_authed/settings.knowledge-bases.$kbId.tsx`
 
 The detail page is a two-column grid: Documents on the left, Sync on the right, with a header showing the KB name, slug, status badges, and a delete confirmation flow.
 
@@ -64,7 +63,10 @@ The Sync card shows Bedrock-side state:
 A **Sync Now** button triggers `SyncKnowledgeBaseMutation`, which starts a Bedrock ingestion job. The UI polls `KnowledgeBaseDetailQuery` every 5 seconds while `status === "syncing"` to surface progress.
 
 <Aside type="caution">
-Sync is not automatic on upload. Uploading a document adds it to S3 but the new document is not searchable until the operator triggers a sync. This is deliberate — Bedrock ingestion costs tokens and takes minutes, so the admin app waits for an explicit operator action.
+  Sync is not automatic on upload. Uploading a document adds it to S3 but the
+  new document is not searchable until the operator triggers a sync. This is
+  deliberate — Bedrock ingestion costs tokens and takes minutes, so the admin
+  app waits for an explicit operator action.
 </Aside>
 
 ### Error state
@@ -81,23 +83,23 @@ POST /api/knowledge-bases/files
 
 With action dispatched through the request body:
 
-| Action | Behavior |
-|---|---|
-| `list` | Returns `{ files: [{ name, size, lastModified }] }` |
+| Action         | Behavior                                                           |
+| -------------- | ------------------------------------------------------------------ |
+| `list`         | Returns `{ files: [{ name, size, lastModified }] }`                |
 | `getUploadUrl` | Returns `{ uploadUrl }` — a presigned S3 PUT URL valid ~15 minutes |
-| `delete` | Deletes a named file from the KB's S3 bucket |
+| `delete`       | Deletes a named file from the KB's S3 bucket                       |
 
 The upload URL response is short-lived and regenerated on each upload. The URL is scoped to a specific filename and bucket prefix, so a stolen URL can only overwrite the exact file it was issued for.
 
 ## GraphQL queries
 
-| Query / Mutation | Purpose |
-|---|---|
-| `KnowledgeBasesListQuery($tenantId)` | List with summary fields |
-| `KnowledgeBaseDetailQuery($id)` | Full detail with chunking, embedding, sync metadata |
-| `UpdateKnowledgeBaseMutation` | Edit KB metadata (name, description, chunking) |
-| `DeleteKnowledgeBaseMutation($id)` | Hard delete |
-| `SyncKnowledgeBaseMutation($id)` | Trigger a Bedrock ingestion job |
+| Query / Mutation                     | Purpose                                             |
+| ------------------------------------ | --------------------------------------------------- |
+| `KnowledgeBasesListQuery($tenantId)` | List with summary fields                            |
+| `KnowledgeBaseDetailQuery($id)`      | Full detail with chunking, embedding, sync metadata |
+| `UpdateKnowledgeBaseMutation`        | Edit KB metadata (name, description, chunking)      |
+| `DeleteKnowledgeBaseMutation($id)`   | Hard delete                                         |
+| `SyncKnowledgeBaseMutation($id)`     | Trigger a Bedrock ingestion job                     |
 
 The detail query carries most of the interesting fields: `status`, `errorMessage`, `lastSyncAt`, `lastSyncStatus`, `chunkingStrategy`, `chunkSizeTokens`, `chunkOverlapPercent`, `embeddingModel`, `documentCount`.
 
