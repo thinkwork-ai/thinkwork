@@ -44,6 +44,22 @@ export interface WorkItemExternalRefSummary {
   metadata?: unknown;
 }
 
+export interface WorkItemEventSummary {
+  id: string;
+  tenantId?: string | null;
+  spaceId?: string | null;
+  workItemId: string;
+  threadId?: string | null;
+  actorUserId?: string | null;
+  actorAgentId?: string | null;
+  eventType: string;
+  previousStatusId?: string | null;
+  newStatusId?: string | null;
+  message?: string | null;
+  metadata?: unknown;
+  createdAt?: string | null;
+}
+
 export interface WorkItemLabelSummary {
   id: string;
   tenantId?: string | null;
@@ -91,6 +107,7 @@ export interface WorkItemSummary {
   metadata?: unknown;
   labels?: WorkItemLabelSummary[] | null;
   threadLinks?: WorkItemThreadLinkSummary[] | null;
+  events?: WorkItemEventSummary[] | null;
   externalRefs?: WorkItemExternalRefSummary[] | null;
   createdAt?: string | null;
   updatedAt?: string | null;
