@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-82
-status: u5-verified
+status: complete
 target_branch: main
 ---
 
@@ -131,6 +131,38 @@ target_branch: main
   branch `codex/thnk-82-u5-cross-layer-evidence` from `origin/main`
   (`86489c820`).
 - U5 implemented and locally verified.
+- U5 PR #3008 merged after green CI. Merge commit:
+  `c7a79d8293855333bbed3c238381aabfa7f92650`.
+- U5 local worktree and branch cleaned up after merge.
+- Final status-doc closeout branch created at
+  `/Users/ericodom/.codex/worktrees/thnk-82-final-status` on branch
+  `codex/thnk-82-final-status`.
+- THNK-82 implementation complete across U1-U5.
+
+## Completion Summary
+
+- Status: complete.
+- Merged implementation PRs:
+  - U1 result-list catalog contract: #3002,
+    `0198d01316f65238b37210eaf749eccccd5a0a95`
+  - U2 web result-list renderer: #3004,
+    `e0046c2847c68111c43118576b64b8d98fde5db9`
+  - U3 runtime presentation guidance: #3005,
+    `36b9526a62ddc4285ac425dbab3481b9eb8ff214`
+  - U4 workspace-default guidance: #3007,
+    `86489c820c03530163ac49d6e785903bdd9e2983`
+  - U5 cross-layer regression and evidence: #3008,
+    `c7a79d8293855333bbed3c238381aabfa7f92650`
+- Final behavior:
+  - Agents have explicit runtime and workspace-default guidance to use
+    `result.list` for structured result sets while preserving prose fallback
+    and real `ask_user_question` blocking behavior.
+  - Shared/web catalogs validate the bounded `result.list` contract and durable
+    action references.
+  - Web renders result-list rows with host-owned components and action states.
+  - Mobile receives readable fallback lines for result lists.
+  - Finalize and action dispatch preserve generated UI parts and keep durable
+    actions source-bound to persisted assistant message parts.
 
 ## Unit Log
 
@@ -271,11 +303,13 @@ target_branch: main
 - Objective: prove the new `result.list` generated UI contract survives across
   mobile fallback parsing, Pi runtime emission, finalize persistence, and
   server-validated durable action dispatch.
-- Status: verified locally; ready for PR.
+- Status: merged.
 - Branch: `codex/thnk-82-u5-cross-layer-evidence`
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-82-u5-cross-layer-evidence`
 - Base: `origin/main` at `86489c820`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3008
+- Merge commit: `c7a79d8293855333bbed3c238381aabfa7f92650`
 - Changes:
   - Added mobile fallback regression coverage for `result.list`, including
     work item, question, and review fallback lines for surfaces without the web
@@ -294,6 +328,7 @@ target_branch: main
   - `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/messages/handleJsonRenderAction.test.ts`
   - `pnpm --filter @thinkwork/pi-runtime-core typecheck`
   - `pnpm --filter @thinkwork/api typecheck`
+  - Remote PR checks: CLA, lint, supply-chain verify, typecheck, full test.
 - Notes:
   - `pnpm --filter @thinkwork/mobile typecheck` reports that the selected
     package has no `typecheck` script.
