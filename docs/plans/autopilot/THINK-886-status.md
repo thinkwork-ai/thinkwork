@@ -22,9 +22,11 @@ We are pursuing **Open Engine Native On Work Items**. The main risk being valida
 
 ## U1 Status
 
-- Status: verified locally
+- Status: merged
 - Branch: `codex/think-86-u1-open-engine-queue`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u1-open-engine-queue`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3025
+- Merge commit: `a9e2733d0207580d958a07df406e0725a659d3d9`
 - Decision: persist queue state directly on `work_items` so U2 can claim work with one conditional update against the Work Item row.
 
 ## U1 Validation Targets
@@ -50,3 +52,23 @@ We are pursuing **Open Engine Native On Work Items**. The main risk being valida
 - `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0191_open_engine_work_item_queue.sql`
 
 Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
+
+## U2 Status
+
+- Status: verified locally
+- Branch: `codex/think-86-u2-queue-claim`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u2-queue-claim`
+- Goal: add the internal queue eligibility and atomic claim service on top of U1 row-level queue state.
+
+## U2 Validation Targets
+
+- Eligibility excludes archived, completed, blocked, inapplicable, human-held, dependency-waiting, future-scheduled, and unexpired-claimed rows.
+- Expired or malformed claims can be reclaimed.
+- Claiming one item is a single conditional update with `FOR UPDATE SKIP LOCKED`.
+- Claim lease timestamps are persisted atomically with the agent claim owner.
+- No user-facing GraphQL mutation is added before U4.
+
+## U2 Verification
+
+- `pnpm --filter @thinkwork/api test -- src/lib/work-items/open-engine-queue-service.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
