@@ -205,12 +205,14 @@ export function buildMcpOAuthAuthorizeUrl({
   tenantId,
   returnTo,
   force = true,
+  response,
 }: {
   mcpServerId: string;
   userId: string;
   tenantId: string;
   returnTo: string;
   force?: boolean;
+  response?: "json";
 }): string {
   const baseUrl =
     readRuntimeEnv("VITE_API_URL") ||
@@ -223,7 +225,51 @@ export function buildMcpOAuthAuthorizeUrl({
   url.searchParams.set("tenantId", tenantId);
   url.searchParams.set("returnTo", returnTo);
   if (force) url.searchParams.set("force", "true");
+  if (response) url.searchParams.set("response", response);
   return url.toString();
+}
+
+export async function resolveMcpOAuthAuthorizeUrl(input: {
+  mcpServerId: string;
+  userId: string;
+  tenantId: string;
+  returnTo: string;
+  force?: boolean;
+}): Promise<string> {
+  const response = await fetch(
+    buildMcpOAuthAuthorizeUrl({ ...input, response: "json" }),
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    },
+  );
+  const text = await response.text();
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof body === "object" && body !== null && "error" in body
+        ? String((body as { error: unknown }).error)
+        : `MCP OAuth authorize failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof (body as { authorizeUrl?: unknown }).authorizeUrl !== "string"
+  ) {
+    throw new Error("MCP OAuth authorize response was invalid");
+  }
+
+  return (body as { authorizeUrl: string }).authorizeUrl;
 }
 
 export function isManagedMcpServer(server: McpServer): boolean {

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   saveMcpServiceCredential: vi.fn(),
   clearUserMcpToken: vi.fn(),
   buildMcpOAuthAuthorizeUrl: vi.fn(),
+  resolveMcpOAuthAuthorizeUrl: vi.fn(),
   tenantContext: {
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
@@ -70,6 +71,7 @@ vi.mock("@/lib/mcp-api", async (importOriginal) => {
     saveMcpServiceCredential: mocks.saveMcpServiceCredential,
     clearUserMcpToken: mocks.clearUserMcpToken,
     buildMcpOAuthAuthorizeUrl: mocks.buildMcpOAuthAuthorizeUrl,
+    resolveMcpOAuthAuthorizeUrl: mocks.resolveMcpOAuthAuthorizeUrl,
   };
 });
 
@@ -89,6 +91,7 @@ beforeEach(() => {
   mocks.saveMcpServiceCredential.mockReset();
   mocks.clearUserMcpToken.mockReset();
   mocks.buildMcpOAuthAuthorizeUrl.mockReset();
+  mocks.resolveMcpOAuthAuthorizeUrl.mockReset();
   mocks.tenantContext = {
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
@@ -117,6 +120,11 @@ beforeEach(() => {
     headerName: "Authorization",
     secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
   });
+  mocks.buildMcpOAuthAuthorizeUrl.mockImplementation(
+    ({ mcpServerId, userId, tenantId }: Record<string, string>) =>
+      `https://api.example.test/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServerId}&userId=${userId}&tenantId=${tenantId}`,
+  );
+  mocks.resolveMcpOAuthAuthorizeUrl.mockReturnValue(new Promise(() => {}));
   window.history.replaceState({}, "", "/settings/mcp-servers/server-1");
 });
 
@@ -145,7 +153,59 @@ describe("SettingsMcpServerDetail", () => {
     const button = await screen.findByRole("button", {
       name: /authenticate/i,
     });
-    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(mocks.resolveMcpOAuthAuthorizeUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "cognito-sub-1",
+          tenantId: "tenant-1",
+          mcpServerId: "server-1",
+        }),
+      ),
+    );
+  });
+
+  it("starts MCP OAuth through the resolved authorization URL flow", async () => {
+    mockServerState("not_connected");
+
+    render(<SettingsMcpServerDetail />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /authenticate/i,
+      }),
+    );
+
+    expect(await screen.findByText("Opening authorization...")).toBeTruthy();
+    expect(mocks.resolveMcpOAuthAuthorizeUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        tenantId: "tenant-1",
+        mcpServerId: "server-1",
+      }),
+    );
+  });
+
+  it("surfaces MCP OAuth startup failures", async () => {
+    mocks.resolveMcpOAuthAuthorizeUrl.mockRejectedValueOnce(
+      new Error("metadata unavailable"),
+    );
+    mockServerState("not_connected");
+
+    render(<SettingsMcpServerDetail />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /authenticate/i,
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Authentication failed to start: metadata unavailable",
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps managed MCP servers authenticatable but not manually removable", async () => {

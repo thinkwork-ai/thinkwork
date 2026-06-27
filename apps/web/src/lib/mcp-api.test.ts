@@ -12,6 +12,7 @@ describe("mcp-api", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("VITE_API_URL", "https://api.example.com");
+    vi.unstubAllGlobals();
   });
 
   it("builds desktop MCP OAuth authorize URLs with return targets", async () => {
@@ -34,6 +35,52 @@ describe("mcp-api", () => {
     expect(url.searchParams.get("force")).toBe("true");
     expect(url.searchParams.get("returnTo")).toBe(
       "http://localhost:5175/settings/mcp-servers/server-1",
+    );
+  });
+
+  it("can request MCP OAuth authorize URLs as JSON", async () => {
+    const { buildMcpOAuthAuthorizeUrl } = await import("./mcp-api");
+
+    const url = new URL(
+      buildMcpOAuthAuthorizeUrl({
+        mcpServerId: "server-1",
+        userId: "user-1",
+        tenantId: "tenant-1",
+        returnTo: "http://localhost:5175/settings/mcp-servers/server-1",
+        response: "json",
+      }),
+    );
+
+    expect(url.searchParams.get("response")).toBe("json");
+  });
+
+  it("resolves MCP OAuth to the final authorization URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          authorizeUrl: "https://auth.example.com/oauth2/authorize",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { resolveMcpOAuthAuthorizeUrl } = await import("./mcp-api");
+
+    await expect(
+      resolveMcpOAuthAuthorizeUrl({
+        mcpServerId: "server-1",
+        userId: "user-1",
+        tenantId: "tenant-1",
+        returnTo: "http://localhost:5175/settings/mcp-servers/server-1",
+      }),
+    ).resolves.toBe("https://auth.example.com/oauth2/authorize");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("response=json"),
+      expect.objectContaining({
+        method: "GET",
+        headers: { Accept: "application/json" },
+      }),
     );
   });
 

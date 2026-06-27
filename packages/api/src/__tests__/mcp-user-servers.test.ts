@@ -568,6 +568,48 @@ describe("service credential MCP routes", () => {
   });
 });
 
+describe("GET /api/skills/mcp-oauth/authorize", () => {
+  it("can return the final authorization URL as JSON", async () => {
+    dbState.selectQueue.push(
+      [{ id: "user-1" }],
+      [
+        {
+          url: "https://mcp.example.com/dispatch",
+          slug: "dispatch",
+          auth_config: {
+            authorize_endpoint: "https://auth.example.com/oauth2/authorize",
+            token_endpoint: "https://auth.example.com/oauth2/token",
+            client_id: "client-1",
+            oauth_resource: "https://mcp.example.com/dispatch",
+          },
+        },
+      ],
+    );
+
+    const response = await handler(
+      oauthAuthorizeEvent({
+        userId: "user-1",
+        response: "json",
+        force: "false",
+      }),
+    );
+    const body = JSON.parse(response.body ?? "{}") as {
+      authorizeUrl?: string;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.authorizeUrl).toContain(
+      "https://auth.example.com/oauth2/authorize",
+    );
+    const authorizeUrl = new URL(body.authorizeUrl ?? "");
+    expect(authorizeUrl.searchParams.get("client_id")).toBe("client-1");
+    expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
+    expect(authorizeUrl.searchParams.get("resource")).toBe(
+      "https://mcp.example.com/dispatch",
+    );
+  });
+});
+
 function managedTwentyRow(overrides: Record<string, unknown> = {}) {
   return {
     mcp_server_id: "twenty",
@@ -707,6 +749,8 @@ function oauthAuthorizeEvent(input: {
   userId: string;
   tenantId?: string;
   mcpServerId?: string;
+  response?: string;
+  force?: string;
 }): APIGatewayProxyEventV2 {
   return {
     rawPath: "/api/skills/mcp-oauth/authorize",
@@ -717,6 +761,8 @@ function oauthAuthorizeEvent(input: {
       userId: input.userId,
       tenantId: input.tenantId ?? "tenant-1",
       returnTo: "http://localhost:5174/settings/mcp-servers/mcp-1",
+      ...(input.response ? { response: input.response } : {}),
+      ...(input.force ? { force: input.force } : {}),
     },
   } as unknown as APIGatewayProxyEventV2;
 }

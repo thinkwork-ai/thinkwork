@@ -744,6 +744,7 @@ async function mcpOAuthAuthorize(
   if (!mcpServerId || !userId || !tenantId) {
     return error("mcpServerId, userId, tenantId are required", 400);
   }
+  const wantsJson = qs.response === "json";
 
   const resolvedUserId = await resolveMcpOAuthUserId(tenantId, userId);
   if (!resolvedUserId) {
@@ -926,9 +927,12 @@ async function mcpOAuthAuthorize(
   // here: `max_age=0` is literally unsatisfiable and we hit infinite
   // redirect loops the last two times we shipped it (PR #85, PR #86).
 
+  const authorizeUrlString = authorizeUrl.toString();
+  if (wantsJson) return json({ authorizeUrl: authorizeUrlString });
+
   return {
     statusCode: 302,
-    headers: { Location: authorizeUrl.toString() },
+    headers: { Location: authorizeUrlString },
     body: "",
   };
 }
