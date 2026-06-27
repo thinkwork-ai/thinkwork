@@ -21,7 +21,6 @@ import {
 import { TaskReviewCard } from "@/components/workbench/genui/components/TaskReviewCard";
 import { TaskStatusSummary } from "@/components/workbench/genui/components/TaskStatusSummary";
 import { WorkflowListPreview } from "@/components/workbench/genui/components/WorkflowListPreview";
-import { PromoteGenUIButton } from "@/components/workbench/genui/PromoteGenUIButton";
 
 import {
   threadJsonRenderCatalog,
@@ -39,7 +38,6 @@ import {
   type JsonRenderActionSuccessHandler,
   type JsonRenderActionStatus,
 } from "./use-json-render-action";
-import { usePromoteJsonRender } from "./use-promote-json-render";
 
 type ThreadJsonRenderComponentFn<
   K extends keyof Components<typeof threadJsonRenderCatalog>,
@@ -290,12 +288,6 @@ function InteractiveThreadJsonRenderRenderer({
     threadId,
     onActionSuccess,
   });
-  const promotion = usePromoteJsonRender({
-    data,
-    partId,
-    sourceMessageId,
-    threadId,
-  });
   const actions = data.durableActions ?? [];
   const actionsDisabled =
     actions.length === 0 ||
@@ -318,7 +310,7 @@ function InteractiveThreadJsonRenderRenderer({
     return generatedRegistry;
   }, [actions, actionsDisabled, statusForAction, submitAction]);
 
-  const rendered = (
+  return (
     <JSONUIProvider registry={registry}>
       <Renderer
         fallback={rendererFallback}
@@ -326,19 +318,6 @@ function InteractiveThreadJsonRenderRenderer({
         spec={data.spec as never}
       />
     </JSONUIProvider>
-  );
-
-  return (
-    <div className="group/json-render relative min-w-0 w-full">
-      <div className="absolute right-1 top-1 z-10 opacity-0 transition-opacity group-hover/json-render:opacity-100 group-focus-within/json-render:opacity-100">
-        <PromoteGenUIButton
-          disabled={!promotion.canPromote}
-          onPromote={promotion.promote}
-          status={promotion.status}
-        />
-      </div>
-      {rendered}
-    </div>
   );
 }
 

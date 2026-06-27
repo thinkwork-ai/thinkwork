@@ -61,6 +61,9 @@ describe("ThreadJsonRenderRenderer", () => {
     expect(
       screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled"),
     ).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: /save as artifact/i }),
+    ).toBeNull();
   });
 
   it("submits durable actions through the json-render action mutation", async () => {

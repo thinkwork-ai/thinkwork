@@ -99,7 +99,7 @@ export function ActionForm({
           </label>
         ))}
         {submitAction ? (
-          <div className="grid justify-items-start gap-1">
+          <div className="grid justify-items-end gap-1">
             <Button
               aria-label={submitAction.label}
               className="min-h-9 gap-1.5"

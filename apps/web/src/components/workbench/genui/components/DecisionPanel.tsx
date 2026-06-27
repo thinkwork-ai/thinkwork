@@ -26,7 +26,7 @@ export function DecisionPanel({
 
   return (
     <div
-      className="flex min-w-0 flex-wrap gap-2"
+      className="flex min-w-0 flex-wrap justify-end gap-2"
       aria-label="Generated UI actions"
     >
       {actions.map((action) => {
@@ -43,7 +43,7 @@ export function DecisionPanel({
         const isDisabled =
           disabled || action.disabled === true || isSubmitting || isSubmitted;
         return (
-          <div className="grid gap-1" key={action.id}>
+          <div className="grid justify-items-end gap-1" key={action.id}>
             <Button
               aria-label={action.label}
               className="min-h-9 gap-1.5"
