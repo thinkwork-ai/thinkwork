@@ -498,6 +498,56 @@ describe("runAgentLoop", () => {
     expect(invocation.finished_at).toBeTruthy();
   });
 
+  it("backfills extension tool invocations from transcript messages when events are missing", async () => {
+    const session = makeFakeSession({
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "memory-call-1",
+              name: "recall",
+              arguments: {
+                query: "Eric's agent-memory verification passphrase",
+                limit: 5,
+              },
+            },
+          ],
+        } as unknown as AgentMessage,
+        {
+          role: "toolResult",
+          toolCallId: "memory-call-1",
+          toolName: "recall",
+          content: [{ type: "text", text: "BLUE-LANTERN-20260627190429" }],
+          details: {
+            query: "Eric's agent-memory verification passphrase",
+            count: 1,
+          },
+          isError: false,
+        } as unknown as AgentMessage,
+        assistantMessage("done"),
+      ],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+    });
+
+    expect(result.toolsCalled).toEqual(["recall"]);
+    expect(result.toolInvocations).toHaveLength(1);
+    expect(result.toolInvocations[0]).toMatchObject({
+      id: "memory-call-1",
+      tool_name: "recall",
+      status: "ok",
+      is_error: false,
+    });
+    expect(result.toolInvocations[0].input_preview).toContain(
+      "agent-memory verification passphrase",
+    );
+    expect(result.toolInvocations[0].output_preview).toContain("count");
+  });
+
   it("records model-routed tool call metadata from tool results", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
