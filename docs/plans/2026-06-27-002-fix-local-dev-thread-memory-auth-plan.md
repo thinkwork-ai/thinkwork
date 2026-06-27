@@ -224,11 +224,11 @@ Separately, tenant agent and mention target GraphQL calls looked like resolver f
 
 ## Risk Analysis & Mitigation
 
-- **Risk:** Accepting AppSync API keys through GraphQL HTTP could broaden service access.  
+- **Risk:** Accepting AppSync API keys through GraphQL HTTP could broaden service access.
   **Mitigation:** Do not accept `GRAPHQL_API_KEY`, `APPSYNC_API_KEY`, or `getAppsyncApiKey()` values for GraphQL HTTP service auth; keep them scoped to AppSync subscriptions.
-- **Risk:** Legacy `/api/trigger-runs` alias could outlive its usefulness.  
+- **Risk:** Legacy `/api/trigger-runs` alias could outlive its usefulness.
   **Mitigation:** Keep it as rollout compatibility; remove later only after clients no longer reference it.
-- **Risk:** Auth error handling might expose too much detail.  
+- **Risk:** Auth error handling might expose too much detail.
   **Mitigation:** The message is generic (`Authentication required`) and uses a standard auth error code.
 
 ---
