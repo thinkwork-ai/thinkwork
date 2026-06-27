@@ -5,6 +5,9 @@ type MemoryRecord {
   updatedAt: AWSDateTime
   expiresAt: AWSDateTime
   namespace: String
+  bankId: String
+  ownerType: String
+  ownerId: ID
   strategyId: String
   strategy: String
   score: Float
@@ -41,6 +44,11 @@ enum MemoryStrategy {
   SUMMARIES
   EPISODES
   REFLECTIONS
+}
+
+enum MemoryRecordScope {
+  USER
+  OPERATOR
 }
 
 type MemorySearchResult {
@@ -164,6 +172,9 @@ extend type Query {
     userId: ID
     assistantId: ID
     namespace: String!
+    scope: MemoryRecordScope = USER
+    query: String
+    limit: Int
   ): [MemoryRecord!]!
   memorySearch(
     tenantId: ID

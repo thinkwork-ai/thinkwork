@@ -23,6 +23,7 @@ import type {
   RetainConversationRequest,
   RetainDailyMemoryRequest,
   RetainTurnRequest,
+  TenantInspectRequest,
   ThinkWorkMemoryRecord,
   UpsertMarkdownMemoryDocumentRequest,
 } from "./types.js";
@@ -63,6 +64,10 @@ export interface MemoryAdapter {
   ensureBankConfigured?(ownerId: string): Promise<void>;
 
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+
+  inspectTenant?(
+    request: TenantInspectRequest,
+  ): Promise<ThinkWorkMemoryRecord[]>;
 
   export(request: ExportRequest): Promise<MemoryExportBundle>;
 

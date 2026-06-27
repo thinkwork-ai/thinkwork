@@ -190,3 +190,60 @@ diagnostics rather than the canonical memory path.
     consistent with repo notes.
   - `pnpm dlx prettier --check ...` for authored U2 files
   - `git diff --check`
+- U2 PR merged:
+  https://github.com/thinkwork-ai/thinkwork/pull/3022
+- U2 merge commit:
+  `2808378a9c1adf70edef444b3478e34f2c122fde`
+- U2 CI passed before merge: CLA, lint, typecheck, test, and verify.
+- U2 remote branch deleted and local U2 worktree/branch cleaned up.
+
+### 2026-06-27 - U3 objective
+
+Keep `/settings/memory` as the operator Memory route and fix the table so it
+uses an operator-wide Hindsight inspection path instead of the requester-scoped
+memory query. Rows should include bank/date/scope/type/content evidence, and
+cross-bank destructive actions should stay disabled for this unit.
+
+- Created isolated U3 branch/worktree:
+  `codex/think-83-u3-memory-table` at
+  `/Users/ericodom/.codex/worktrees/think-83-u3`.
+- Implemented U3 Settings Memory operator table:
+  - Added explicit `MemoryRecordScope` and operator-only `memoryRecords` scope,
+    query, and limit GraphQL arguments.
+  - Added `bankId`, `ownerType`, and `ownerId` to `MemoryRecord`.
+  - Added a tenant-admin-gated resolver branch for operator memory inspection.
+  - Added normalized `inspectTenant` service/adapter contract.
+  - Implemented Hindsight tenant inspection across tenant-visible user, Space,
+    and legacy agent banks, with optional SQL text/bank/context/type search.
+  - Updated `/settings/memory` to query `scope: OPERATOR`, show Created,
+    Updated, Bank, Scope, Type, and Memory columns, and use a Hindsight
+    operator-empty state.
+  - Made the detail sheet show bank/scope metadata and disabled `Forget` for
+    operator-wide rows because cross-bank deletion is not safely scoped in this
+    unit.
+  - Regenerated AppSync schema and GraphQL codegen for CLI, web, and mobile;
+    `packages/api` has no codegen script.
+- U3 verification passed:
+  - `pnpm schema:build`
+  - `pnpm --filter thinkwork-cli codegen`
+  - `pnpm --filter @thinkwork/web codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/memory/memoryRecords.query.test.ts src/lib/memory/adapters/hindsight-adapter.test.ts`
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsMemory.render.test.tsx src/components/settings/SettingsMemory.test.tsx src/components/settings/SettingsMemoryHome.test.tsx`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --filter thinkwork-cli typecheck`
+  - `pnpm --filter @thinkwork/mobile typecheck` returned no matching script,
+    consistent with repo notes.
+  - `pnpm dlx prettier --check ...` for authored U3 files
+  - `git diff --check`
+- Browser verification:
+  - Copied `apps/web/.env` from the main checkout.
+  - Started Vite on `http://127.0.0.1:5180/`.
+  - Opening `/settings/memory` redirected to
+    `/sign-in?next=%2Fsettings%2Fmemory` in the in-app browser; no authenticated
+    session was available in that browser, so live row rendering could not be
+    inspected manually in this turn.
+  - Added `SettingsMemory.render.test.tsx` with mocked operator-visible
+    Hindsight rows to verify the rendered Bank/Scope/Updated columns, row
+    content, operator query variables, and read-only detail sheet.

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
 import { Brain, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -17,9 +17,7 @@ import {
 } from "@thinkwork/graph";
 import {
   ComputerMemoryRecordsQuery,
-  ComputerMemorySearchQuery,
   ComputerMemorySystemConfigQuery,
-  DeleteComputerMemoryRecordMutation,
 } from "@/lib/graphql-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -89,7 +87,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     query: ComputerMemorySystemConfigQuery,
   });
 
-  const [recordsResult, refetchRecords] = useQuery<{
+  const [recordsResult] = useQuery<{
     memoryRecords?: any[] | null;
   }>({
     query: ComputerMemoryRecordsQuery,
@@ -97,30 +95,15 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       tenantId: effectiveTenantId,
       userId: requesterUserId,
       namespace,
+      scope: "OPERATOR",
+      query: activeSearch || null,
+      limit: 500,
     },
-    pause: !!activeSearch || !effectiveTenantId,
+    pause: !effectiveTenantId,
   });
-
-  const [searchResult] = useQuery<{
-    memorySearch?: { records: any[] | null } | null;
-  }>({
-    query: ComputerMemorySearchQuery,
-    variables: {
-      tenantId: effectiveTenantId,
-      userId: requesterUserId,
-      query: activeSearch,
-      limit: 50,
-    },
-    pause: !activeSearch || !effectiveTenantId,
-  });
-
-  const [, deleteMemoryRecord] = useMutation(
-    DeleteComputerMemoryRecordMutation,
-  );
 
   const [selectedRecord, setSelectedRecord] = useState<MemoryRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
   const [graphNodeEdges, setGraphNodeEdges] = useState<MemoryGraphEdge[]>([]);
@@ -136,6 +119,9 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       createdAt: r.createdAt ?? null,
       updatedAt: r.updatedAt ?? null,
       namespace: r.namespace ?? null,
+      bankId: r.bankId ?? r.namespace ?? null,
+      ownerType: r.ownerType ?? null,
+      ownerId: r.ownerId ?? null,
       strategy:
         r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
       factType: r.factType ?? null,
@@ -154,9 +140,8 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   );
 
   const rawRecords: any[] = useMemo(() => {
-    if (activeSearch) return searchResult.data?.memorySearch?.records ?? [];
     return recordsResult.data?.memoryRecords ?? [];
-  }, [activeSearch, searchResult.data, recordsResult.data]);
+  }, [recordsResult.data]);
 
   const rows: MemoryRow[] = useMemo(
     () =>
@@ -188,6 +173,42 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         ),
       },
       {
+        accessorKey: "updatedAt",
+        header: "Updated",
+        size: 140,
+        cell: ({ row }) => (
+          <span
+            className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
+          >
+            {formatShortDate(row.original.updatedAt)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "bankId",
+        header: "Bank",
+        size: 180,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <span className="truncate font-mono text-xs">
+              {row.original.bankId ?? row.original.namespace ?? "-"}
+            </span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "ownerType",
+        header: "Scope",
+        size: 140,
+        cell: ({ row }) => (
+          <span className={COMPACT_TABLE_CELL}>
+            <span className="truncate text-xs">
+              {formatOwnerScope(row.original)}
+            </span>
+          </span>
+        ),
+      },
+      {
         accessorKey: "factType",
         // Wide enough for the longest strategy label ("Reflections" /
         // "Preferences") so the badge never clips under table-fixed.
@@ -214,27 +235,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     [],
   );
 
-  const handleForget = useCallback(async () => {
-    if (!selectedRecord || !effectiveTenantId) return;
-    setDeleting(true);
-    try {
-      const result = await deleteMemoryRecord({
-        tenantId: effectiveTenantId,
-        userId: requesterUserId,
-        memoryRecordId: selectedRecord.memoryRecordId,
-      });
-      if (result.error) throw result.error;
-      setSheetOpen(false);
-      setSelectedRecord(null);
-      refetchRecords({ requestPolicy: "network-only" });
-    } finally {
-      setDeleting(false);
-    }
-  }, [selectedRecord, effectiveTenantId, deleteMemoryRecord, refetchRecords]);
-
-  const isLoading = activeSearch
-    ? searchResult.fetching && !searchResult.data
-    : recordsResult.fetching && !recordsResult.data;
+  const isLoading = recordsResult.fetching && !recordsResult.data;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
@@ -248,7 +249,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search memories..."
+            placeholder="Search Hindsight records..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) =>
@@ -314,8 +315,8 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
             <Brain className="h-12 w-12 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
               {activeSearch
-                ? "No memories match your search."
-                : "No memories have been captured yet."}
+                ? "No operator-visible Hindsight records match your search."
+                : "No Hindsight records were returned for this tenant."}
             </p>
           </div>
         ) : (
@@ -327,7 +328,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
               setSheetOpen(true);
             }}
             scrollable
-            allowHorizontalScroll={false}
+            allowHorizontalScroll
             pageSize={25}
             tableClassName="table-fixed"
           />
@@ -336,11 +337,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         {selectedRecord && (
-          <MemoryDetailSheet
-            record={selectedRecord}
-            deleting={deleting}
-            onForget={handleForget}
-          />
+          <MemoryDetailSheet record={selectedRecord} canForget={false} />
         )}
       </Sheet>
 
@@ -373,6 +370,22 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       </Sheet>
     </div>
   );
+}
+
+function formatShortDate(value: string | null): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatOwnerScope(row: MemoryRow): string {
+  const type = row.ownerType ?? "unknown";
+  const id = row.ownerId ?? "";
+  return id ? `${type}:${id}` : type;
 }
 
 function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {

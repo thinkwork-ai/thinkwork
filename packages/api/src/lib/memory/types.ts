@@ -184,6 +184,12 @@ export type InspectRequest = MemoryOwnerRef & {
   limit?: number;
 };
 
+export type TenantInspectRequest = {
+  tenantId: string;
+  query?: string;
+  limit?: number;
+};
+
 export type ExportRequest = MemoryOwnerRef & {
   includeArchived?: boolean;
 };

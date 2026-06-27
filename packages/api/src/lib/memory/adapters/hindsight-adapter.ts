@@ -32,6 +32,7 @@ import type {
   RetainConversationRequest,
   RetainDailyMemoryRequest,
   RetainTurnRequest,
+  TenantInspectRequest,
   ThinkWorkMemoryRecord,
   UpsertMarkdownMemoryDocumentRequest,
 } from "../types.js";
@@ -476,6 +477,89 @@ export class HindsightAdapter implements MemoryAdapter {
 
     return (result.rows || []).map((row: any) =>
       this.mapRow(row, req, row.bank_id),
+    );
+  }
+
+  async inspectTenant(
+    req: TenantInspectRequest,
+  ): Promise<ThinkWorkMemoryRecord[]> {
+    const limit = Math.min(req.limit ?? this.inspectLimit, this.inspectLimit);
+    const query = req.query?.trim();
+    const searchPattern = query ? `%${escapeLikePattern(query)}%` : null;
+
+    let result: any;
+    try {
+      result = await this.db.execute(sql`
+        WITH tenant_banks AS (
+          SELECT DISTINCT
+            ('user_' || principal_id::text) AS bank_id,
+            'user'::text AS owner_type,
+            principal_id::text AS owner_id
+          FROM tenant_members
+          WHERE tenant_id = ${req.tenantId}
+            AND lower(principal_type) = 'user'
+            AND status = 'active'
+          UNION
+          SELECT DISTINCT
+            ('space_' || id::text) AS bank_id,
+            'space'::text AS owner_type,
+            id::text AS owner_id
+          FROM spaces
+          WHERE tenant_id = ${req.tenantId}
+          UNION
+          SELECT DISTINCT
+            id::text AS bank_id,
+            'agent'::text AS owner_type,
+            id::text AS owner_id
+          FROM agents
+          WHERE tenant_id = ${req.tenantId}
+          UNION
+          SELECT DISTINCT
+            slug::text AS bank_id,
+            'agent'::text AS owner_type,
+            id::text AS owner_id
+          FROM agents
+          WHERE tenant_id = ${req.tenantId}
+            AND slug IS NOT NULL
+            AND slug <> ''
+        )
+        SELECT
+          m.id, m.bank_id, m.text, m.context, m.fact_type,
+          m.event_date, m.occurred_start, m.occurred_end,
+          m.mentioned_at, m.tags, m.access_count, m.proof_count,
+          m.metadata, m.created_at, m.updated_at,
+          COALESCE(m.metadata->>'ownerType', b.owner_type) AS inferred_owner_type,
+          COALESCE(
+            m.metadata->>'spaceId',
+            m.metadata->>'userId',
+            m.metadata->>'agentId',
+            b.owner_id
+          ) AS inferred_owner_id
+        FROM hindsight.memory_units m
+        LEFT JOIN tenant_banks b ON b.bank_id = m.bank_id
+        WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR b.bank_id IS NOT NULL)
+          ${
+            searchPattern
+              ? sql`AND (
+                  m.text ILIKE ${searchPattern} ESCAPE '\\'
+                  OR m.bank_id ILIKE ${searchPattern} ESCAPE '\\'
+                  OR COALESCE(m.context, '') ILIKE ${searchPattern} ESCAPE '\\'
+                  OR COALESCE(m.fact_type, '') ILIKE ${searchPattern} ESCAPE '\\'
+                )`
+              : sql``
+          }
+        ORDER BY COALESCE(m.updated_at, m.created_at) DESC, m.created_at DESC
+        LIMIT ${limit}
+      `);
+    } catch (err) {
+      console.warn(
+        `[hindsight-adapter] inspectTenant SQL failed: ${(err as Error)?.message}`,
+      );
+      return [];
+    }
+
+    return (result.rows || []).map((row: any) =>
+      this.mapOperatorRow(row, req.tenantId),
     );
   }
 
@@ -977,6 +1061,30 @@ export class HindsightAdapter implements MemoryAdapter {
     }
     return this.mapUnit({ ...row, metadata: meta }, owner, bankId);
   }
+
+  private mapOperatorRow(row: any, tenantId: string): ThinkWorkMemoryRecord {
+    let meta: any = {};
+    try {
+      meta =
+        typeof row.metadata === "string"
+          ? JSON.parse(row.metadata)
+          : row.metadata || {};
+    } catch {
+      meta = {};
+    }
+    const bankId = String(row.bank_id || "");
+    const ownerType = inferOwnerType(row.inferred_owner_type, bankId);
+    const ownerId =
+      stringField(row.inferred_owner_id) ||
+      inferOwnerIdFromBank(bankId, ownerType) ||
+      bankId;
+
+    return this.mapUnit(
+      { ...row, metadata: meta },
+      { tenantId, ownerType, ownerId },
+      bankId,
+    );
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -1039,6 +1147,34 @@ function coerceCount(value: unknown): number | undefined {
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function inferOwnerType(
+  value: unknown,
+  bankId: string,
+): ThinkWorkMemoryRecord["ownerType"] {
+  if (value === "user" || value === "agent" || value === "space") {
+    return value;
+  }
+  if (bankId.startsWith("space_")) return "space";
+  return "user";
+}
+
+function inferOwnerIdFromBank(
+  bankId: string,
+  ownerType: ThinkWorkMemoryRecord["ownerType"],
+): string | undefined {
+  if (ownerType === "space" && bankId.startsWith("space_")) {
+    return bankId.slice("space_".length);
+  }
+  if (ownerType === "user" && bankId.startsWith("user_")) {
+    return bankId.slice("user_".length);
+  }
+  return undefined;
 }
 
 function hashString(input: string): string {
