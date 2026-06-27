@@ -46,6 +46,10 @@ describe("computer GraphQL queries", () => {
     for (const field of [
       "memoryRecordId",
       "createdAt",
+      "updatedAt",
+      "bankId",
+      "ownerType",
+      "ownerId",
       "strategy",
       "factType",
       "confidence",
@@ -57,6 +61,16 @@ describe("computer GraphQL queries", () => {
     ]) {
       expect(printed).toContain(field);
     }
+  });
+
+  it("memoryRecords query can drive Settings Memory operator inspection search", () => {
+    const printed = print(ComputerMemoryRecordsQuery);
+    expect(printed).toContain("$scope: MemoryRecordScope");
+    expect(printed).toContain("$query: String");
+    expect(printed).toContain("$limit: Int");
+    expect(printed).toContain("scope: $scope");
+    expect(printed).toContain("query: $query");
+    expect(printed).toContain("limit: $limit");
   });
 
   it("delete mutation operates against memoryRecordId scoped by tenant + user", () => {
