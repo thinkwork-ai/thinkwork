@@ -12,6 +12,7 @@ import { HindsightAdapter } from "./hindsight-adapter.js";
 
 const USER_ID = "4dee701a-c17b-46fe-9f38-a333d4c3fad0";
 const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
+const SPACE_ID = "c9f50dd6-5616-4812-b2ac-81b8d130f795";
 
 describe("HindsightAdapter legacy user bank reads", () => {
   beforeEach(() => {
@@ -195,6 +196,66 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("retains Space memory in the Space bank with tenant and Space metadata", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "space-memory-1",
+            text: "Use the enterprise onboarding template.",
+            created_at: "2026-06-26T19:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.retain({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      sourceType: "explicit_remember",
+      content: "Use the enterprise onboarding template.",
+      role: "user",
+      metadata: {
+        capture_source: "space_memory_capture",
+        captured_by_user_id: USER_ID,
+      },
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/memories`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      items: [
+        {
+          content: "Use the enterprise onboarding template.",
+          context: "explicit_remember",
+          metadata: {
+            tenantId: TENANT_ID,
+            ownerType: "space",
+            spaceId: SPACE_ID,
+            fact_type: "world",
+            role: "user",
+            capture_source: "space_memory_capture",
+            captured_by_user_id: USER_ID,
+          },
+        },
+      ],
+    });
+    expect(result.record).toMatchObject({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      metadata: { bankId: `space_${SPACE_ID}` },
+    });
+  });
+
   it("lists memories from the new user bank and paired legacy agent bank", async () => {
     executeMock
       .mockResolvedValueOnce({
@@ -242,6 +303,100 @@ describe("HindsightAdapter legacy user bank reads", () => {
     ]);
   });
 
+  it("inspects Space memories from the Space bank without paired user banks", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        row({
+          id: "00000000-0000-0000-0000-000000000004",
+          bank_id: `space_${SPACE_ID}`,
+          text: "space-bank memory",
+          created_at: "2026-06-26T19:00:00.000Z",
+        }),
+      ],
+    });
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const records = await adapter.inspect({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+    });
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: SPACE_ID,
+        content: { text: "space-bank memory" },
+        metadata: expect.objectContaining({ bankId: `space_${SPACE_ID}` }),
+      }),
+    ]);
+  });
+
+  it("exports Space memories from the Space bank without paired user banks", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        row({
+          id: "00000000-0000-0000-0000-000000000006",
+          bank_id: `space_${SPACE_ID}`,
+          text: "space export memory",
+          created_at: "2026-06-26T20:00:00.000Z",
+        }),
+      ],
+    });
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const bundle = await adapter.export({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+    });
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(bundle.owner).toEqual({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      threadId: undefined,
+    });
+    expect(bundle.records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: SPACE_ID,
+        content: { text: "space export memory" },
+        metadata: expect.objectContaining({ bankId: `space_${SPACE_ID}` }),
+      }),
+    ]);
+  });
+
+  it("rejects invalid Space owner ids with a Space-scoped message", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+
+    await expect(
+      adapter.retain({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: "space-slug",
+        sourceType: "explicit_remember",
+        content: "invalid owner",
+      }),
+    ).rejects.toThrow(
+      "[hindsight-adapter] space-scoped bank requires a UUID spaceId",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("feeds legacy bank rows into the wiki compile cursor", async () => {
     executeMock
       .mockResolvedValueOnce({
@@ -279,6 +434,45 @@ describe("HindsightAdapter legacy user bank reads", () => {
     expect(result?.records[0]?.metadata?.bankId).toBe("fleet-caterpillar-456");
     expect(result?.nextCursor?.recordId).toBe(
       "00000000-0000-0000-0000-000000000003",
+    );
+  });
+
+  it("lists Space memory cursor rows from the Space bank without legacy user banks", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        row({
+          id: "00000000-0000-0000-0000-000000000005",
+          bank_id: `space_${SPACE_ID}`,
+          text: "compile space memory",
+          created_at: "2026-06-26T19:00:00.000Z",
+          updated_at: "2026-06-26T19:00:00.000Z",
+          cursor_ts: "2026-06-26T19:00:00.000Z",
+        }),
+      ],
+    });
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const result = await adapter.listRecordsUpdatedSince?.({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      limit: 100,
+    });
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result?.records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: SPACE_ID,
+        content: { text: "compile space memory" },
+        metadata: expect.objectContaining({ bankId: `space_${SPACE_ID}` }),
+      }),
+    ]);
+    expect(result?.nextCursor?.recordId).toBe(
+      "00000000-0000-0000-0000-000000000005",
     );
   });
 });
