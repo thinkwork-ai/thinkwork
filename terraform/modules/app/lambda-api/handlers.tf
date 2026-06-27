@@ -1139,6 +1139,8 @@ locals {
       "ANY /api/scheduled-jobs"          = "scheduled-jobs"
       "ANY /api/thread-turns/{proxy+}"   = "scheduled-jobs"
       "ANY /api/thread-turns"            = "scheduled-jobs"
+      "ANY /api/trigger-runs/{proxy+}"   = "scheduled-jobs"
+      "ANY /api/trigger-runs"            = "scheduled-jobs"
 
       # Job Schedule Manager (EventBridge CRUD)
       "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
