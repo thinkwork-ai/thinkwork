@@ -25,7 +25,7 @@ function tabForPath(pathname: string): MemoryTab {
 }
 
 /**
- * The unified Memory settings page. Memory, Knowledge Bases, Wiki, and (when
+ * The unified Memory settings page. Memory, Brain Sources, Wiki, and (when
  * ThinkWork Brain's substrate is available) the Knowledge Graph explorer are
  * sibling tabs rendered in the AppTopBar — driven by the route so each tab is
  * deep-linkable. This page owns the page header and renders the active facet's
@@ -62,7 +62,7 @@ export function SettingsMemoryHome() {
     breadcrumbs: [{ label: "Memory" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
-      { to: KNOWLEDGE_BASES, label: "KBs" },
+      { to: KNOWLEDGE_BASES, label: "Sources" },
       ...(ontologyEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Graph" }] : []),
       { to: WIKI, label: "Wiki" },
     ],

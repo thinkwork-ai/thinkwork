@@ -139,8 +139,8 @@ describe("visibleSettingsNavItems", () => {
   });
 
   it("no longer lists standalone CRM or Knowledge Bases nav entries", () => {
-    // CRM is reached by drilling in from Applications; Knowledge Bases is a tab
-    // of the Memory page.
+    // CRM is reached by drilling in from Applications; Brain Sources is a tab
+    // of the Memory page using the legacy knowledge-base route.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === CRM)).toBe(false);
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_BASES)).toBe(
       false,

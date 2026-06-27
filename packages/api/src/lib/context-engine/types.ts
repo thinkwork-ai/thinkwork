@@ -23,9 +23,8 @@ export interface ContextEngineCaller {
   userId?: string | null;
   agentId?: string | null;
   // The thread the turn is running in, and the Space that thread belongs to.
-  // The Bedrock Knowledge Base provider unions space-bound KBs (resolved from
-  // spaceId) with the agent's tenant-wide KBs (U7). spaceId is resolved
-  // server-side from threadId in the MCP handler.
+  // Space-aware providers resolve spaceId server-side from threadId in the MCP
+  // handler. Bedrock KBs are legacy opt-in external context, not default Brain.
   threadId?: string | null;
   spaceId?: string | null;
   templateId?: string | null;
@@ -81,8 +80,10 @@ export interface ContextEngineRequest {
   caller: ContextEngineCaller;
 }
 
-export interface ContextEngineProviderRequest
-  extends Omit<ContextEngineRequest, "providers"> {
+export interface ContextEngineProviderRequest extends Omit<
+  ContextEngineRequest,
+  "providers"
+> {
   limit: number;
   mode: ContextEngineMode;
   scope: ContextEngineScope;

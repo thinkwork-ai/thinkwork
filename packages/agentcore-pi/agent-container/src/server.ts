@@ -1500,8 +1500,8 @@ export async function buildInvocationResources(
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
         agentId: args.identity.agentId,
-        // Forward the thread so query_context can scope Space-bound KBs to the
-        // thread's Space (U7).
+        // Forward the thread so Context Engine providers can scope ephemeral
+        // lookups to the current Space.
         threadId: args.identity.threadId,
         contextEngineConfig:
           typeof args.payload.context_engine_config === "object" &&
@@ -1631,13 +1631,11 @@ export async function buildInvocationResources(
   // invocations can be user-less by construction, so user-scoped memory is
   // skipped entirely when no invoking user exists.
   //
-  // Plan §004 U5 — the Hindsight path is now a Pi EXTENSION (the tracer bullet):
-  // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
-  // via the resource loader's `extensionFactories` instead of hand-assembled
-  // recall/reflect AgentTools. The managed AgentCore-Memory path stays as custom
-  // tools until the firming plan's single-engine cutover retires it. Cognee /
-  // Company Brain is exposed through plugin-owned MCP configs instead of this
-  // legacy memory-extension block, so Pi can reach the substrate directly.
+  // The hosted Brain path is Hindsight-native: a Hindsight-backed
+  // MemoryProvider wrapped by `createMemoryExtension`, loaded via the resource
+  // loader's `extensionFactories` instead of hand-assembled recall/reflect
+  // AgentTools. Managed AgentCore memory and Cognee stay explicit compatibility
+  // modes; they are not the default user/Space Brain substrate.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({

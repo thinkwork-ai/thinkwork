@@ -111,15 +111,13 @@ export function KnowledgeBaseFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit knowledge base" : "Create knowledge base"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit source" : "Create source"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {!isEdit ? (
             <p className="text-sm text-muted-foreground">
-              Create a document-backed knowledge base. Add documents and sync
-              after it provisions.
+              Create a document-backed Brain Source. Retained documents are
+              added to Hindsight Space memory.
             </p>
           ) : null}
 
@@ -139,7 +137,7 @@ export function KnowledgeBaseFormDialog({
               id="kb-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What documents are in this knowledge base?"
+              placeholder="What documents are in this source?"
               rows={2}
             />
           </div>

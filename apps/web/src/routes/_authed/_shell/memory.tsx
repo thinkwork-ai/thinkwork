@@ -8,7 +8,7 @@ export const Route = createFileRoute("/_authed/_shell/memory")({
 export const MEMORY_TABS = [
   { to: "/memory/brain", label: "Memories" },
   { to: "/memory/pages", label: "Pages" },
-  { to: "/memory/kbs", label: "KBs" },
+  { to: "/memory/kbs", label: "Sources" },
 ] as const;
 
 function MemoryLayout() {

@@ -34,6 +34,9 @@ export function createCoreContextProviders(
     createWikiContextProvider(),
     createWikiSourceAgentContextProvider(),
     createWorkspaceFilesContextProvider(),
+    // Legacy external retrieval: available only by explicit provider selection
+    // or tenant override. Hindsight Space document memory is the default Brain
+    // substrate for retained documents.
     createBedrockKnowledgeBaseContextProvider(),
     createErpCustomerContextProvider(),
     createCrmOpportunityContextProvider(),

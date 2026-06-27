@@ -481,6 +481,9 @@ describe("U7 capability extensions", () => {
     expect(getTool(tools, "query_context").description).toContain(
       "current-space long-term memory",
     );
+    expect(getTool(tools, "query_context").description).not.toContain(
+      "knowledge bases",
+    );
     expect(getTool(tools, "query_memory_context").description).toContain(
       'scope "team"',
     );

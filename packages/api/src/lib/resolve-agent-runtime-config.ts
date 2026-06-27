@@ -21,7 +21,8 @@
  *     per-skill env overrides (OAuth-resolved tokens, CURRENT_USER_EMAIL when
  *     a human invoker is known) with the template blocked-tools filter
  *     applied last
- *   - `knowledgeBasesConfig`: enabled KBs assigned to the agent
+ *   - `knowledgeBasesConfig`: legacy Bedrock KBs assigned to the agent when
+ *     explicitly enabled for compatibility
  *   - `mcpConfigs`: agent + tenant MCP servers with auth resolved
  *
  * What this helper does NOT resolve (per-turn concerns, filled by callers):
@@ -630,8 +631,10 @@ export async function resolveAgentRuntimeConfig(
     );
   const kbRows = kbRowsRaw.filter((r) => r.aws_kb_id);
 
+  const legacyAgentKnowledgeBasesEnabled =
+    process.env.ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES === "true";
   const knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined =
-    kbRows.length > 0
+    legacyAgentKnowledgeBasesEnabled && kbRows.length > 0
       ? kbRows.map((kb) => ({
           awsKbId: kb.aws_kb_id,
           name: kb.name,

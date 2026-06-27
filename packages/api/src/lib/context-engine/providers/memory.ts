@@ -16,7 +16,7 @@ const MEMORY_TIMEOUT_MS = Number(
   process.env.CONTEXT_ENGINE_MEMORY_TIMEOUT_MS || 15_000,
 );
 const MEMORY_DEFAULT_ENABLED =
-  process.env.CONTEXT_ENGINE_MEMORY_DEFAULT_ENABLED !== "false";
+  process.env.CONTEXT_ENGINE_MEMORY_DEFAULT_ENABLED === "true";
 const MEMORY_QUERY_MODE =
   process.env.CONTEXT_ENGINE_MEMORY_QUERY_MODE === "reflect"
     ? "reflect"
@@ -56,7 +56,7 @@ export function createMemoryContextProvider(
       const wantsSpaceMemory =
         (request.scope === "team" || request.scope === "auto") &&
         Boolean(request.caller.spaceId) &&
-        services.adapter.kind === "cognee";
+        (await services.adapter.capabilities()).spaceMemory === true;
       if (!wantsUserMemory && !wantsSpaceMemory) {
         return {
           hits: [],

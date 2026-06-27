@@ -149,7 +149,7 @@ describe("snapshotRuntimeEnv", () => {
     const env = snapshotRuntimeEnv({} as NodeJS.ProcessEnv);
     expect(env).toMatchObject({
       awsRegion: "us-east-1",
-      memoryEngine: "managed",
+      memoryEngine: "hindsight",
       dbName: "thinkwork",
       workspaceDir: "/workspace",
       piAgentDir: "/tmp/thinkwork-pi-agent",
@@ -173,9 +173,16 @@ describe("snapshotRuntimeEnv", () => {
     ).toBe("cognee");
   });
 
-  it("falls back to managed for any other MEMORY_ENGINE value", () => {
+  it("falls back to hindsight for any other MEMORY_ENGINE value", () => {
     expect(
       snapshotRuntimeEnv({ MEMORY_ENGINE: "weirdvalue" } as NodeJS.ProcessEnv)
+        .memoryEngine,
+    ).toBe("hindsight");
+  });
+
+  it("maps explicit agentcore memory engine to the managed compatibility path", () => {
+    expect(
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "agentcore" } as NodeJS.ProcessEnv)
         .memoryEngine,
     ).toBe("managed");
   });

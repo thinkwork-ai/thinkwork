@@ -7,8 +7,16 @@ const findPageSourcesAcrossSurfacesMock = vi.hoisted(() => vi.fn());
 vi.mock("../../memory/index.js", () => ({
   getMemoryServices: () => ({
     adapter: {
-      kind: "cognee",
+      kind: "hindsight",
       reflect: reflectMock,
+      capabilities: async () => ({
+        retain: true,
+        recall: true,
+        inspect: true,
+        export: true,
+        reflect: true,
+        spaceMemory: true,
+      }),
     },
     recall: {
       recall: recallMock,
@@ -167,6 +175,57 @@ describe("memory context provider", () => {
       snippet: "Favorite restaurant",
       provenance: {
         metadata: expect.objectContaining({ mode: "recall" }),
+      },
+    });
+  });
+
+  it("recalls Space memory whenever the active adapter supports Space banks", async () => {
+    recallMock.mockResolvedValueOnce([
+      {
+        record: {
+          id: "space-memory-1",
+          tenantId: "tenant-1",
+          ownerType: "space",
+          ownerId: "space-1",
+          kind: "semantic",
+          sourceType: "document",
+          status: "active",
+          content: {
+            summary: "Launch checklist",
+            text: "The launch checklist lives in the Space Brain.",
+          },
+          backendRefs: [{ backend: "hindsight", ref: "space_space-1" }],
+          createdAt: "2026-06-27T00:00:00.000Z",
+          metadata: {},
+        },
+        score: 0.9,
+        backend: "hindsight",
+      },
+    ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "launch checklist",
+      mode: "results",
+      scope: "team",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: { tenantId: "tenant-1", userId: "user-1", spaceId: "space-1" },
+    });
+
+    expect(recallMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerType: "space",
+        ownerId: "space-1",
+      }),
+    );
+    expect(result.hits[0]).toMatchObject({
+      id: "memory:space:space-memory-1",
+      title: "Launch checklist",
+      provenance: {
+        label: "Space Memory",
       },
     });
   });

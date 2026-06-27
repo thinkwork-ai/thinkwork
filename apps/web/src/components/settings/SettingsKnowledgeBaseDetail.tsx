@@ -39,7 +39,7 @@ import {
 } from "@/lib/kb-files-api";
 
 const ACCEPTED_FILE_TYPES = ".txt,.md,.html,.doc,.docx,.csv,.xls,.xlsx,.pdf";
-// Statuses where Bedrock work is in flight — poll until it settles.
+// Statuses where source ingestion work is in flight — poll until it settles.
 const IN_PROGRESS = new Set(["creating", "syncing", "rechunking"]);
 
 function statusVariant(
@@ -82,10 +82,10 @@ export function SettingsKnowledgeBaseDetail() {
   const [editOpen, setEditOpen] = useState(false);
 
   usePageHeaderActions({
-    title: kb?.name ?? "Knowledge Base",
+    title: kb?.name ?? "Brain Source",
     breadcrumbs: [
-      { label: "Knowledge Bases", href: "/settings/knowledge-bases" },
-      { label: kb?.name ?? "Knowledge Base" },
+      { label: "Brain Sources", href: "/settings/knowledge-bases" },
+      { label: kb?.name ?? "Brain Source" },
     ],
   });
 
@@ -141,7 +141,7 @@ export function SettingsKnowledgeBaseDetail() {
     return (
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
-          This knowledge base could not be found — it may have been removed.
+          This Brain Source could not be found. It may have been removed.
         </p>
       </div>
     );
@@ -160,7 +160,7 @@ export function SettingsKnowledgeBaseDetail() {
             <Button
               size="icon"
               variant="ghost"
-              aria-label="Edit knowledge base"
+              aria-label="Edit source"
               title="Edit name & description"
               onClick={() => setEditOpen(true)}
             >
@@ -234,7 +234,7 @@ export function SettingsKnowledgeBaseDetail() {
           {confirmDelete ? (
             <>
               <span className="text-sm text-muted-foreground">
-                Delete this knowledge base and all its documents?
+                Delete this Brain Source and all its documents?
               </span>
               <Button
                 variant="ghost"
@@ -267,7 +267,7 @@ export function SettingsKnowledgeBaseDetail() {
               variant="destructive"
               onClick={() => setConfirmDelete(true)}
             >
-              Delete knowledge base
+              Delete source
             </Button>
           )}
         </div>
@@ -616,8 +616,8 @@ function TestRetrievalSection({
       <div className="space-y-3 p-4">
         {notProvisioned ? (
           <p className="text-sm text-muted-foreground">
-            This knowledge base isn&apos;t provisioned yet — retry provisioning
-            before testing retrieval.
+            This Brain Source is not provisioned yet. Retry provisioning before
+            testing retrieval.
           </p>
         ) : (
           <>

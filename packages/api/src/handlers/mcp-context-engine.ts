@@ -28,7 +28,7 @@ const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for user-carried or current-space long-term memory.",
+      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, and approved context-safe MCP tools. Use query_memory_context for Hindsight user-carried or current-space long-term memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -45,7 +45,7 @@ const TOOLS = [
         threadId: {
           type: "string",
           description:
-            "Optional Thinkwork thread id for the current turn. Used to scope Space-bound Knowledge Bases to the thread's Space.",
+            "Optional Thinkwork thread id for the current turn. Used to scope Space-aware context providers to the thread's Space.",
         },
         providers: {
           type: "object",
@@ -620,10 +620,10 @@ function callerWithTargetArgs<T extends { agentId?: string | null }>(
 }
 
 /**
- * Resolve the Space a thread belongs to so the Bedrock KB provider can union
- * Space-bound KBs (U7). Tenant-scoped: a threadId from another tenant resolves
- * to no row, so no foreign Space identity is attached. Failures degrade to
- * threadId-only (no space scope) rather than blocking the query.
+ * Resolve the Space a thread belongs to so Context Engine providers can scope
+ * ephemeral lookups to the current Space. Tenant-scoped: a threadId from
+ * another tenant resolves to no row, so no foreign Space identity is attached.
+ * Failures degrade to threadId-only rather than blocking the query.
  */
 async function resolveThreadScope(
   threadId: string,

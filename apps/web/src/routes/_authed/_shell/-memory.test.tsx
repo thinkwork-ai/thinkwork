@@ -95,17 +95,17 @@ describe("apps/web Memory in-page tab strip", () => {
     expect(screen.queryByRole("tab", { name: "Brain" })).toBeNull();
   });
 
-  it("renders Memories | Pages | KBs in that order", () => {
+  it("renders Memories | Pages | Sources in that order", () => {
     render(<BrainPage />);
     const tabs = screen.getAllByRole("tab");
     const labels = tabs.map((el) => el.textContent ?? "");
-    expect(labels).toEqual(["Memories", "Pages", "KBs"]);
+    expect(labels).toEqual(["Memories", "Pages", "Sources"]);
   });
 
-  it("highlights the KBs tab when the pathname is a /memory/kbs/$kbId child", () => {
+  it("highlights the Sources tab when the pathname is a /memory/kbs/$kbId child", () => {
     useRouterStateMock.mockReturnValue("/memory/kbs/some-kb-id");
     render(<BrainPage />);
-    const kbsTab = screen.getByRole("tab", { name: "KBs" });
+    const kbsTab = screen.getByRole("tab", { name: "Sources" });
     expect(kbsTab.getAttribute("data-state")).toBe("active");
   });
 

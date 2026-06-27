@@ -48,16 +48,16 @@ beforeEach(() => navigateMock.mockReset());
 afterEach(cleanup);
 
 describe("SettingsKnowledgeBases", () => {
-  it("renders the tenant's knowledge bases and a create action", () => {
+  it("renders the tenant's Brain Sources and a create action", () => {
     render(<SettingsKnowledgeBases />);
     expect(screen.getByText("Company Policies")).toBeTruthy();
     expect(screen.getByText("active")).toBeTruthy();
-    expect(screen.getByText(/new knowledge base/i)).toBeTruthy();
+    expect(screen.getByText(/new source/i)).toBeTruthy();
   });
 
-  it("opens the create dialog from the new-knowledge-base action", () => {
+  it("opens the create dialog from the new-source action", () => {
     render(<SettingsKnowledgeBases />);
-    fireEvent.click(screen.getByText(/new knowledge base/i));
-    expect(screen.getByText("Create knowledge base")).toBeTruthy();
+    fireEvent.click(screen.getByText(/new source/i));
+    expect(screen.getByText("Create source")).toBeTruthy();
   });
 });

@@ -44,3 +44,29 @@ describe("dedupeKnowledgeBases (U7 union/dedup)", () => {
     expect(dedupeKnowledgeBases([])).toEqual([]);
   });
 });
+
+describe("Bedrock Knowledge Base Context Engine provider", () => {
+  it("is not a default Context Engine provider unless explicitly enabled", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    const { createBedrockKnowledgeBaseContextProvider } =
+      await import("./bedrock-knowledge-base.js");
+
+    expect(createBedrockKnowledgeBaseContextProvider()).toMatchObject({
+      id: "bedrock-knowledge-base",
+      displayName: "Bedrock Knowledge Bases (legacy)",
+      defaultEnabled: false,
+    });
+  });
+
+  it("can still be opted into for compatibility", async () => {
+    vi.resetModules();
+    vi.stubEnv("CONTEXT_ENGINE_BEDROCK_KB_DEFAULT_ENABLED", "true");
+    const { createBedrockKnowledgeBaseContextProvider } =
+      await import("./bedrock-knowledge-base.js");
+
+    expect(createBedrockKnowledgeBaseContextProvider().defaultEnabled).toBe(
+      true,
+    );
+  });
+});

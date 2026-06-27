@@ -1,11 +1,9 @@
 /**
  * MemoryProvider — the host-supplied seam for the agent's long-term memory.
  *
- * The core defines the contract; hosts decide which backend is active. In the
- * Cognee-first path, agents should prefer Context Engine memory search for
- * user-carried and space-owned memory. This provider remains the explicit
- * recall/reflect seam for legacy Hindsight mode and any future host-supplied
- * read-synthesis backend.
+ * The core defines the contract; hosted ThinkWork supplies Hindsight as the
+ * canonical user and Space Brain. Context Engine is reserved for external,
+ * lazy-loaded context; direct memory recall/reflect stays on this seam.
  *
  * Recall→reflect chain contract: a `recall` is expected to be followed by a
  * `reflect` in the same turn — recall surfaces the raw prior-memory units to

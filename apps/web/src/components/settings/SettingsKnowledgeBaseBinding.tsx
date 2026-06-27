@@ -18,13 +18,13 @@ type Space = { id: string; name: string; knowledgeBases: Binding[] };
 const FILTER_THRESHOLD = 8;
 
 /**
- * KB binding home (U11/KTD11). A KB is bound **tenant-wide** (the platform
+ * Source binding home (U11/KTD11). A source is bound **tenant-wide** (the platform
  * agent — every Space's threads) or **per-Space** (only that Space's threads).
  * The set* mutations replace the whole binding set for an agent/Space, so each
- * toggle reads the current set and writes it back with this KB added/removed.
+ * toggle reads the current set and writes it back with this source added/removed.
  *
  * Spaces are a **multi-select** checkbox list: an operator can bind/unbind this
- * KB across many Spaces in one sitting, with a search filter and select-all/
+ * source across many Spaces in one sitting, with a search filter and select-all/
  * clear affordances that scale to a tenant with many Spaces.
  */
 export function SettingsKnowledgeBaseBinding({
@@ -162,7 +162,7 @@ export function SettingsKnowledgeBaseBinding({
 
       <SettingsRow
         label="Tenant-wide"
-        description="Every Space's threads can retrieve this knowledge base."
+        description="Every Space's threads can retrieve this Brain Source."
       >
         <Switch
           checked={tenantWide}
@@ -175,7 +175,7 @@ export function SettingsKnowledgeBaseBinding({
         <div className="px-4 py-3 text-sm text-muted-foreground">Loading…</div>
       ) : spaces.length === 0 ? (
         <div className="px-4 py-3 text-sm text-muted-foreground">
-          No Spaces yet — create a Space to bind this knowledge base to it.
+          No Spaces yet. Create a Space to bind this Brain Source to it.
         </div>
       ) : (
         <div className="px-4 py-3">
