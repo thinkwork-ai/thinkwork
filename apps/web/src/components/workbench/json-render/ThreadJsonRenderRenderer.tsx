@@ -18,6 +18,7 @@ import {
   ActionForm,
   type ActionFormField,
 } from "@/components/workbench/genui/components/ActionForm";
+import { ResultListView } from "@/components/workbench/genui/components/ResultListView";
 import { TaskReviewCard } from "@/components/workbench/genui/components/TaskReviewCard";
 import { TaskStatusSummary } from "@/components/workbench/genui/components/TaskStatusSummary";
 import { WorkflowListPreview } from "@/components/workbench/genui/components/WorkflowListPreview";
@@ -107,6 +108,15 @@ function createDomainComponents(actionState: DurableActionState) {
         </p>
       </section>
     )) satisfies ThreadJsonRenderComponentFn<"analytics.display">,
+    "result.list": (({ props }) => (
+      <ResultListView
+        {...props}
+        actions={actionState.actions}
+        actionsDisabled={actionState.actionsDisabled}
+        onAction={actionState.onAction}
+        statusForAction={actionState.statusForAction}
+      />
+    )) satisfies ThreadJsonRenderComponentFn<"result.list">,
   } satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
 }
 

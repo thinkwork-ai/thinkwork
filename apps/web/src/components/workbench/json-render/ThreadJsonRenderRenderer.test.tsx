@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createPrimitiveJsonRenderFixture,
+  createResultListJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
 } from "./fixtures";
 import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
@@ -66,6 +67,55 @@ describe("ThreadJsonRenderRenderer", () => {
     ).toBeNull();
   });
 
+  it("renders result.list rows with groups, variant details, and evidence", () => {
+    const fixture = createResultListJsonRenderFixture();
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        sourceMessageId="message-1"
+        threadId="thread-1"
+      />,
+    );
+
+    expect(screen.getByTestId("genui-result-list")).toBeTruthy();
+    expect(screen.getByText("Agent handoff")).toBeTruthy();
+    expect(screen.getByText("Work items")).toBeTruthy();
+    expect(screen.getByText("User questions")).toBeTruthy();
+    expect(screen.getByText("Approval queue")).toBeTruthy();
+    expect(screen.getByText("Implement structured result list")).toBeTruthy();
+    expect(screen.getByText("Which queue should ship first?")).toBeTruthy();
+    expect(screen.getByText("Review generated UI plan")).toBeTruthy();
+    expect(screen.getByText("Workspace defaults are aligned")).toBeTruthy();
+    expect(screen.getByText("Question required")).toBeTruthy();
+    expect(
+      screen.getByText("Renderer work waits on a validated catalog entry."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Complete" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+  });
+
+  it("keeps result.list item actions disabled while rendering live/read-only output", () => {
+    const fixture = createResultListJsonRenderFixture();
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        live
+        partId={fixture.id}
+        threadId="thread-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Complete/ }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /Skip/ }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("submits durable actions through the json-render action mutation", async () => {
     const fixture = createTaskReviewJsonRenderFixture();
     const onActionSuccess = vi.fn();
@@ -109,6 +159,57 @@ describe("ThreadJsonRenderRenderer", () => {
           workItemId: "77777777-7777-7777-7777-777777777777",
           statusCategory: "DONE",
           note: "Approved from generated UI",
+        },
+      },
+    });
+    expect(onActionSuccess).toHaveBeenCalledWith({
+      action: fixture.data.durableActions![0],
+      message,
+    });
+  });
+
+  it("submits result.list durable actions through the json-render action mutation", async () => {
+    const fixture = createResultListJsonRenderFixture();
+    const onActionSuccess = vi.fn();
+    const message = {
+      id: "audit-message-2",
+      metadata: {
+        jsonRenderAction: {
+          mutation: { target: "work_item_status" },
+        },
+      },
+    };
+    mocks.executeMutation.mockResolvedValue({
+      data: { handleJsonRenderAction: message },
+    });
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        sourceMessageId="message-1"
+        threadId="thread-1"
+        onActionSuccess={onActionSuccess}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+
+    await waitFor(() => expect(mocks.executeMutation).toHaveBeenCalledTimes(1));
+    expect(mocks.executeMutation.mock.calls[0][0]).toEqual({
+      input: {
+        threadId: "thread-1",
+        sourceMessageId: "message-1",
+        partId: fixture.id,
+        actionId: "complete-work-item",
+        specHash: fixture.data.specHash,
+        idempotencyKey: expect.stringMatching(
+          /^json-render-action:json-render-fnv1a:[a-f0-9]{8}$/,
+        ),
+        params: {
+          target: "work_item_status",
+          workItemId: "77777777-7777-7777-7777-777777777777",
+          statusCategory: "DONE",
         },
       },
     });
