@@ -160,9 +160,11 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U6 Status
 
-- Status: in progress
+- Status: merged
 - Branch: `codex/think-86-u6-open-engine-verdict`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u6-open-engine-verdict`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3033
+- Merge commit: `fa3b27e33672abe5305489cdbcee5aba88d15a31`
 - Goal: publish the native-vs-Linear verdict artifact and leave implementation-ready follow-up issues for the chosen path.
 
 ## U6 Validation Targets
