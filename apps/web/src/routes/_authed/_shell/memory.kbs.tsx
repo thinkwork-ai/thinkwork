@@ -1,6 +1,7 @@
 import {
   createFileRoute,
   Link,
+  Outlet,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
@@ -38,7 +39,7 @@ interface KnowledgeBasesResult {
 }
 
 export const Route = createFileRoute("/_authed/_shell/memory/kbs")({
-  component: KbsIndexPage,
+  component: KbsRoutePage,
 });
 
 function relativeTime(iso: string | null): string {
@@ -69,6 +70,12 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function KbsRoutePage() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (pathname !== "/memory/kbs") return <Outlet />;
+  return <KbsIndexPage />;
+}
+
 function KbsIndexPage() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
@@ -78,6 +85,7 @@ function KbsIndexPage() {
       .reverse()
       .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
     "";
+
   const [search, setSearch] = useState("");
 
   const [result] = useQuery<KnowledgeBasesResult>({

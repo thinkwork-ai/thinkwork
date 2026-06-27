@@ -71,6 +71,7 @@ vi.mock("@thinkwork/graph", () => ({
 }));
 
 import { Route as BrainRoute } from "./memory.brain";
+import { Route as KbsRoute } from "./memory.kbs";
 
 beforeEach(() => {
   navigateMock.mockReset();
@@ -87,6 +88,8 @@ afterEach(cleanup);
 const BrainPage = (
   BrainRoute as unknown as { component: () => React.ReactElement }
 ).component;
+const KbsPage = (KbsRoute as unknown as { component: () => React.ReactElement })
+  .component;
 
 describe("apps/web Memory in-page tab strip", () => {
   it("renders the 'Memories' tab in-page on the Brain route, with no 'Brain' tab", () => {
@@ -114,6 +117,15 @@ describe("apps/web Memory in-page tab strip", () => {
     render(<BrainPage />);
     const memoriesTab = screen.getByRole("tab", { name: "Memories" });
     expect(memoriesTab.getAttribute("data-state")).toBe("active");
+  });
+
+  it("renders the Sources child route outlet on /memory/kbs/$kbId", () => {
+    useRouterStateMock.mockReturnValue("/memory/kbs/kb-1");
+    render(<KbsPage />);
+    expect(screen.getByTestId("outlet")).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: /search sources/i }),
+    ).toBeNull();
   });
 
   it("uses 40px table rows for memory records", async () => {
