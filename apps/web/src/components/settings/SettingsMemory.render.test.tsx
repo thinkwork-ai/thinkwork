@@ -2,6 +2,8 @@ import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
+import { SpacesQuery } from "@/lib/graphql-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { SettingsMemory } from "./SettingsMemory";
 
 vi.mock("urql", () => ({
@@ -131,7 +133,7 @@ const useQueryMock = vi.mocked(useQuery);
 
 describe("SettingsMemory render", () => {
   beforeEach(() => {
-    useQueryMock.mockImplementation(({ variables }: { variables?: any }) => {
+    useQueryMock.mockImplementation(({ query, variables }: any) => {
       if (variables?.scope === "OPERATOR") {
         return [
           {
@@ -164,6 +166,41 @@ describe("SettingsMemory render", () => {
                   strategyId: "world",
                   factType: "world",
                   accessCount: 0,
+                },
+              ],
+            },
+            fetching: false,
+          },
+        ] as any;
+      }
+
+      if (query === SpacesQuery) {
+        return [
+          {
+            data: {
+              spaces: [
+                { id: "space-1", name: "Launch Space", slug: "launch" },
+              ],
+            },
+            fetching: false,
+          },
+        ] as any;
+      }
+
+      if (query === SettingsTenantMembersQuery) {
+        return [
+          {
+            data: {
+              tenantMembers: [
+                {
+                  principalType: "USER",
+                  principalId: "user-1",
+                  user: {
+                    id: "user-1",
+                    name: "Eric Odom",
+                    email: "eric@example.com",
+                    profile: { callBy: "Eric" },
+                  },
                 },
               ],
             },
@@ -208,9 +245,11 @@ describe("SettingsMemory render", () => {
     );
     expect(screen.getByText("Bank")).toBeTruthy();
     expect(screen.getByText("Scope")).toBeTruthy();
-    expect(screen.getByText("Updated")).toBeTruthy();
-    expect(screen.getByText("space_space-1")).toBeTruthy();
-    expect(screen.getByText("space:space-1")).toBeTruthy();
+    expect(screen.queryByText("Updated")).toBeNull();
+    expect(screen.getAllByText("Launch Space").length).toBeGreaterThan(0);
+    expect(screen.getByText("Space: Launch Space")).toBeTruthy();
+    expect(screen.getAllByText("Eric").length).toBeGreaterThan(0);
+    expect(screen.getByText("User: Eric")).toBeTruthy();
     expect(screen.getByText("Space-bank memory")).toBeTruthy();
   });
 
@@ -220,9 +259,41 @@ describe("SettingsMemory render", () => {
     fireEvent.click(screen.getByTestId("memory-row-space-memory"));
 
     expect(screen.getByText("Memory Detail")).toBeTruthy();
-    expect(screen.getAllByText("space:space-1").length).toBeGreaterThanOrEqual(
-      2,
-    );
+    expect(screen.getByText("space:space-1")).toBeTruthy();
     expect(screen.queryByText("Forget")).toBeNull();
+  });
+
+  it("explains when Hindsight is available but not the active engine without naming the legacy backend", () => {
+    useQueryMock.mockImplementation(({ variables }: { variables?: any }) => {
+      if (variables?.scope === "OPERATOR") {
+        return [{ data: { memoryRecords: [] }, fetching: false }] as any;
+      }
+
+      return [
+        {
+          data: {
+            memorySystemConfig: {
+              activeEngine: "cognee",
+              hindsightEnabled: false,
+              cogneeMemoryEnabled: true,
+              userMemoryEnabled: true,
+              spaceMemoryEnabled: true,
+              legacyHindsightAvailable: true,
+            },
+          },
+          fetching: false,
+        },
+      ] as any;
+    });
+
+    render(<SettingsMemory embedded />);
+
+    expect(screen.getAllByText("Memory service update required").length).toBe(
+      1,
+    );
+    expect(screen.queryByText("Redeploy required")).toBeNull();
+    expect(screen.queryByText("Company distillation")).toBeNull();
+    expect(screen.queryByText("Wiki projection")).toBeNull();
+    expect(screen.queryByText("Cognee")).toBeNull();
   });
 });

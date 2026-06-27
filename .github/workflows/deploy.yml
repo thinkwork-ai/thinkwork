@@ -614,14 +614,14 @@ jobs:
 
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
-        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+        if: ${{ false }}
 
       - uses: docker/setup-buildx-action@v3
-        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+        if: ${{ false }}
 
-      - name: Build and push Cognee Bedrock image
+      - name: Build and push deprecated graph image
         id: cognee_image
-        if: ${{ vars.COGNEE_ENABLED == 'true' && vars.COGNEE_IMAGE_URI == '' }}
+        if: ${{ false }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -851,7 +851,7 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -f ../../../packages/database-pg/drizzle/0096_true_redteam_eval_seed_cleanup.sql
 
-      - name: Resolve Cognee deployment inputs
+      - name: Resolve deprecated graph deployment inputs
         env:
           COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
           COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
@@ -869,11 +869,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
-          if [ "$cognee_enabled" != "true" ] && [ "$cognee_enabled" != "false" ]; then
+          requested_cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
+          if [ "$requested_cognee_enabled" != "true" ] && [ "$requested_cognee_enabled" != "false" ]; then
             echo "::error::COGNEE_ENABLED must be true or false."
             exit 1
           fi
+          if [ "$requested_cognee_enabled" = "true" ]; then
+            echo "::warning::Deprecated graph memory is ignored. Deploying with enable_cognee=false."
+          fi
+          cognee_enabled="false"
 
           if [ -n "$COGNEE_IMAGE_URI_INPUT" ]; then
             cognee_image_uri="$COGNEE_IMAGE_URI_INPUT"
@@ -895,20 +899,22 @@ jobs:
           cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/moonshotai.kimi-k2.5\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
           cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
 
-          if [[ ! "$cognee_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::COGNEE_IMAGE_URI must be pinned to an immutable sha256 digest."
-            exit 1
-          fi
-          if [[ ! "$cognee_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
-            echo "::error::COGNEE_DB_USERNAME must be a valid PostgreSQL identifier."
-            exit 1
-          fi
-          if [[ ! "$cognee_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$cognee_db_name" = "thinkwork" ]; then
-            echo "::error::COGNEE_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
-            exit 1
-          fi
-          if [ "$cognee_enabled" = "true" ] && { [ "$cognee_llm_provider" = "bedrock" ] || [ "$cognee_embedding_provider" = "bedrock" ]; }; then
-            jq -e 'type == "array" and length > 0' >/dev/null <<< "$cognee_bedrock_model_resource_arns"
+          if [ "$cognee_enabled" = "true" ]; then
+            if [[ ! "$cognee_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::COGNEE_IMAGE_URI must be pinned to an immutable sha256 digest."
+              exit 1
+            fi
+            if [[ ! "$cognee_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+              echo "::error::COGNEE_DB_USERNAME must be a valid PostgreSQL identifier."
+              exit 1
+            fi
+            if [[ ! "$cognee_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$cognee_db_name" = "thinkwork" ]; then
+              echo "::error::COGNEE_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
+              exit 1
+            fi
+            if [ "$cognee_llm_provider" = "bedrock" ] || [ "$cognee_embedding_provider" = "bedrock" ]; then
+              jq -e 'type == "array" and length > 0' >/dev/null <<< "$cognee_bedrock_model_resource_arns"
+            fi
           fi
 
           {
@@ -1162,12 +1168,12 @@ jobs:
             echo "N8N_CACHE_ENGINE=$n8n_cache_engine"
           } >> "$GITHUB_ENV"
 
-      - name: Prepare Cognee database credentials
+      - name: Prepare deprecated graph database credentials
         working-directory: terraform/examples/greenfield
         run: |
           set -euo pipefail
           if [ "${COGNEE_ENABLED:-false}" != "true" ]; then
-            echo "Cognee disabled; skipping Cognee database credential preparation."
+            echo "Deprecated graph memory disabled; skipping database credential preparation."
             exit 0
           fi
           source ../../../scripts/lib/terraform-output.sh
@@ -1494,10 +1500,9 @@ jobs:
           export TF_VAR_api_auth_secret="${{ secrets.API_AUTH_SECRET }}"
           export TF_VAR_google_oauth_client_secret="${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
           export TF_VAR_mapbox_public_token="${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}"
+          # The deprecated graph memory path is disabled for all deploys.
+          # Hindsight is the authoritative user and Space memory engine.
           MEMORY_ENGINE="hindsight"
-          if [ "$COGNEE_ENABLED" = "true" ]; then
-            MEMORY_ENGINE="cognee"
-          fi
 
           TF_VAR_ARGS=(
             -var "stage=${{ env.STAGE }}"
