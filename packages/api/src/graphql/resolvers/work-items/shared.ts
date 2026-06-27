@@ -1,6 +1,9 @@
 import { snakeToCamel } from "../../utils.js";
 
-const WORK_ITEM_ENUM_FIELDS = new Set(["priority"]);
+const WORK_ITEM_ENUM_FIELDS = new Set([
+  "priority",
+  "openEngineDependencyState",
+]);
 const WORK_ITEM_STATUS_ENUM_FIELDS = new Set(["category"]);
 const WORK_ITEM_EVENT_ENUM_FIELDS = new Set(["eventType"]);
 const WORK_ITEM_LINK_ENUM_FIELDS = new Set(["relationship"]);
