@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-82
-status: u2-verified
+status: u3-verified
 target_branch: main
 ---
 
@@ -107,6 +107,14 @@ target_branch: main
   `codex/thnk-82-u2-result-list-renderer` from `origin/main`
   (`0198d0131`).
 - U2 implemented and locally verified.
+- U2 PR #3004 merged after green CI. Merge commit:
+  `e0046c2847c68111c43118576b64b8d98fde5db9`.
+- U2 local worktree and branch cleaned up after merge.
+- U3 worktree created at
+  `/Users/ericodom/.codex/worktrees/thnk-82-u3-runtime-result-guidance` on
+  branch `codex/thnk-82-u3-runtime-result-guidance` from `origin/main`
+  (`e0046c284`).
+- U3 implemented and locally verified.
 
 ## Unit Log
 
@@ -148,11 +156,13 @@ target_branch: main
 - Objective: replace the minimal typed `result.list` registry entry with a
   host-owned result-list renderer for Work Item rows, user-question rows,
   review rows, generic summaries, and item-scoped durable action states.
-- Status: verified locally; ready for PR.
+- Status: merged.
 - Branch: `codex/thnk-82-u2-result-list-renderer`
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-82-u2-result-list-renderer`
 - Base: `origin/main` at `0198d0131`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3004
+- Merge commit: `e0046c2847c68111c43118576b64b8d98fde5db9`
 - Changes:
   - Added `ResultListView` under the existing generated-UI component family.
   - Rendered grouped result-list sections, row variant badges/icons, statuses,
@@ -172,3 +182,38 @@ target_branch: main
   - Fresh worktree setup required `pnpm install`. The install completed with
     the same optional `canvas@2.11.2` native build output about missing
     `pkg-config` on Node 25. This did not block focused U2 tests or typecheck.
+
+### U3 runtime presentation guidance
+
+- Objective: update dynamic generated Thread UI guidance and runtime tool
+  descriptions so agents prefer `result.list` for structured result sets,
+  preserve prose fallback, keep sensitive/raw connector data out of generated
+  UI, and avoid replacing blocking `ask_user_question`.
+- Status: verified locally; ready for PR.
+- Branch: `codex/thnk-82-u3-runtime-result-guidance`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-82-u3-runtime-result-guidance`
+- Base: `origin/main` at `e0046c284`
+- Changes:
+  - Extended runtime tool policy with a structured-result presentation pass.
+  - Added explicit `result.list` guidance for Work Items/Linear-like issues,
+    agent-authored question collections, approval/review queues, and related
+    scan-friendly result sets.
+  - Reinforced prose fallback for tiny, narrative, unsupported, open-ended, or
+    clearer-as-text responses.
+  - Preserved `ask_user_question` for true blocking clarifications and warned
+    agents not to mimic HITL cards with generated UI.
+  - Added redaction/safety language for secrets, OAuth tokens, API keys, raw
+    connector payloads, unnecessary PII, arbitrary URLs, scripts, callbacks,
+    imports, and route instructions.
+  - Mirrored the same boundaries in the `emit_json_render_ui` tool
+    description and durable action parameter description.
+- Verification:
+  - `pnpm --filter @thinkwork/pi-extensions test -- system-prompt.test.ts`
+  - `pnpm --filter @thinkwork/pi-runtime-core test -- json-render-runtime.test.ts`
+  - `pnpm --filter @thinkwork/pi-extensions typecheck`
+  - `pnpm --filter @thinkwork/pi-runtime-core typecheck`
+- Notes:
+  - Fresh worktree setup required `pnpm install`. The install completed with
+    the same optional `canvas@2.11.2` native build output about missing
+    `pkg-config` on Node 25. This did not block focused U3 tests or typechecks.

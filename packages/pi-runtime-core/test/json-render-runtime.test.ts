@@ -197,11 +197,22 @@ describe("runtime Thread json-render helper", () => {
     const tool = buildEmitJsonRenderUiTool();
 
     expect(tool.name).toBe(EMIT_JSON_RENDER_UI_TOOL_NAME);
+    expect(tool.description).toContain("result.list collections");
+    expect(tool.description).toContain("Work Items");
+    expect(tool.description).toContain("user-question summaries");
+    expect(tool.description).toContain("blocking clarifications");
+    expect(tool.description).toContain("ask_user_question");
+    expect(tool.description).toContain("OAuth tokens");
+    expect(tool.description).toContain("raw connector payloads");
+    expect(tool.description).toContain("result.list item action ids");
     expect(tool.description).toContain("matching durableActions descriptors");
     expect(tool.description).toContain('target "work_item_status"');
-    expect(
-      tool.parameters.properties.durableActions.description,
-    ).toContain("Required for actionable approval/review UI");
+    expect(tool.parameters.properties.durableActions.description).toContain(
+      "Required for actionable approval/review/form/result-list UI",
+    );
+    expect(tool.parameters.properties.durableActions.description).toContain(
+      "raw connector payloads",
+    );
 
     const result = await tool.execute("call-1", {
       spec: fixture.data.spec,
