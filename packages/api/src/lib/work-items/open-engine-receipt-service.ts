@@ -1,6 +1,13 @@
 import { GraphQLError } from "graphql";
 
-import { and, db, eq, workItemEvents, workItems } from "../../graphql/utils.js";
+import {
+  and,
+  db,
+  eq,
+  sql,
+  workItemEvents,
+  workItems,
+} from "../../graphql/utils.js";
 
 export const OPEN_ENGINE_RECEIPT_TYPES = [
   "claimed",
@@ -34,6 +41,7 @@ export interface RecordOpenEngineReceiptInput {
   message?: string | null;
   evidence?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
+  idempotencyKey?: string | null;
   now?: Date;
 }
 
@@ -57,6 +65,23 @@ export async function recordOpenEngineReceipt(
       throw new GraphQLError("Work item not found", {
         extensions: { code: "NOT_FOUND" },
       });
+    }
+
+    const idempotencyKey = optionalTrim(input.idempotencyKey);
+    if (idempotencyKey) {
+      const [existing] = await tx
+        .select()
+        .from(workItemEvents)
+        .where(
+          and(
+            eq(workItemEvents.tenant_id, input.tenantId),
+            eq(workItemEvents.work_item_id, input.workItemId),
+            eq(workItemEvents.event_type, "agent_action"),
+            eq(workItemEvents.actor_agent_id, input.agentId),
+            sql`${workItemEvents.metadata}->>'idempotencyKey' = ${idempotencyKey}`,
+          ),
+        );
+      if (existing) return existing;
     }
 
     const stateUpdate = stateUpdateForReceipt(
@@ -92,6 +117,7 @@ export async function recordOpenEngineReceipt(
           receiptType,
           evidence: input.evidence ?? undefined,
           ...input.metadata,
+          idempotencyKey: idempotencyKey ?? undefined,
         }),
       })
       .returning();

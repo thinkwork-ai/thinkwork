@@ -98,6 +98,13 @@ vi.mock("../../graphql/utils.js", () => ({
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   db: mockDb,
   eq: vi.fn((field: unknown, value: unknown) => ({ eq: [field, value] })),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    text: strings.reduce(
+      (acc, fragment, index) =>
+        `${acc}${fragment}${index < values.length ? "?" : ""}`,
+      "",
+    ),
+  })),
   workItemEvents: tables.workItemEvents,
   workItems: tables.workItems,
 }));
@@ -163,6 +170,23 @@ describe("Open Engine Work Item receipts", () => {
         attempt: 2,
       },
     });
+  });
+
+  it("returns an existing receipt for a repeated idempotency key", async () => {
+    captures.selectQueue.push([WORK_ITEM], [{ id: "event-existing" }]);
+
+    const event = await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "progress",
+      idempotencyKey: "retry-key-1",
+      now: NOW,
+    });
+
+    expect(event).toEqual({ id: "event-existing" });
+    expect(captures.updateSet).toEqual([]);
+    expect(captures.insertValues).toEqual([]);
   });
 
   it("records a resumed receipt and clears human hold state", async () => {
