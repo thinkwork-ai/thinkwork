@@ -80,12 +80,13 @@ describe("workspace-defaults parity", () => {
     const fileNames = Object.keys(defaults);
     const combined = Object.values(defaults).join("\n");
 
-    expect(DEFAULTS_VERSION).toBe(27);
+    expect(DEFAULTS_VERSION).toBe(28);
     expect(fileNames).not.toContain("skills/json-render/SKILL.md");
     expect(fileNames).not.toContain("skills/a2ui/SKILL.md");
     expect(fileNames).not.toContain("skills/ag-ui/SKILL.md");
-    expect(combined).not.toContain("emit_json_render_ui");
     expect(combined).not.toContain("@json-render");
+    expect(combined).toContain("turn-scoped runtime policy");
+    expect(combined).toContain("`emit_json_render_ui`");
     expect(combined).toContain(
       "Upstream json-render developer skills are not runtime workspace skills",
     );

@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-82
-status: u3-verified
+status: u4-verified
 target_branch: main
 ---
 
@@ -115,6 +115,14 @@ target_branch: main
   branch `codex/thnk-82-u3-runtime-result-guidance` from `origin/main`
   (`e0046c284`).
 - U3 implemented and locally verified.
+- U3 PR #3005 merged after green CI. Merge commit:
+  `36b9526a62ddc4285ac425dbab3481b9eb8ff214`.
+- U3 local worktree and branch cleaned up after merge.
+- U4 worktree created at
+  `/Users/ericodom/.codex/worktrees/thnk-82-u4-workspace-default-guidance` on
+  branch `codex/thnk-82-u4-workspace-default-guidance` from `origin/main`
+  (`36b9526a6`).
+- U4 implemented and locally verified.
 
 ## Unit Log
 
@@ -189,11 +197,13 @@ target_branch: main
   descriptions so agents prefer `result.list` for structured result sets,
   preserve prose fallback, keep sensitive/raw connector data out of generated
   UI, and avoid replacing blocking `ask_user_question`.
-- Status: verified locally; ready for PR.
+- Status: merged.
 - Branch: `codex/thnk-82-u3-runtime-result-guidance`
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-82-u3-runtime-result-guidance`
 - Base: `origin/main` at `e0046c284`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3005
+- Merge commit: `36b9526a62ddc4285ac425dbab3481b9eb8ff214`
 - Changes:
   - Extended runtime tool policy with a structured-result presentation pass.
   - Added explicit `result.list` guidance for Work Items/Linear-like issues,
@@ -217,3 +227,27 @@ target_branch: main
   - Fresh worktree setup required `pnpm install`. The install completed with
     the same optional `canvas@2.11.2` native build output about missing
     `pkg-config` on Node 25. This did not block focused U3 tests or typechecks.
+
+### U4 workspace-default guidance
+
+- Objective: align static workspace defaults with the turn-scoped runtime
+  generated-UI policy and keep the inline defaults mirror/parity tests green.
+- Status: verified locally; ready for PR.
+- Branch: `codex/thnk-82-u4-workspace-default-guidance`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-82-u4-workspace-default-guidance`
+- Base: `origin/main` at `36b9526a6`
+- Changes:
+  - Reworded default `AGENTS.md` Tool Response Handling so it no longer claims
+    structured tool data is always automatically rendered as rich UI.
+  - Added static guidance that generated UI is turn-scoped and should follow
+    dynamic runtime policy only when a platform-owned generated-UI tool such as
+    `emit_json_render_ui` is available.
+  - Preserved the boundary that upstream json-render developer skills are not
+    runtime workspace skills.
+  - Mirrored `files/AGENTS.md` into the inline `AGENTS_MD` constant.
+  - Bumped `DEFAULTS_VERSION` from 27 to 28 and updated the parity test to
+    allow the runtime tool mention without materializing json-render skills.
+- Verification:
+  - `pnpm --filter @thinkwork/workspace-defaults test -- parity.test.ts`
+  - `pnpm --filter @thinkwork/workspace-defaults typecheck`
