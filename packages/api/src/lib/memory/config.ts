@@ -4,8 +4,9 @@
  * Resolves the active long-term memory engine and its feature flags from
  * process env. Exactly one engine is selected per deployment via
  * `MEMORY_ENGINE`; the selected engine's required env vars
- * (`HINDSIGHT_ENDPOINT`, `AGENTCORE_MEMORY_ID`, `COGNEE_ENDPOINT`) must be
- * present or {@link loadMemoryConfig} throws.
+ * (`HINDSIGHT_ENDPOINT`, `AGENTCORE_MEMORY_ID`, `COGNEE_ENDPOINT`, or the
+ * compact `COGNEE` status document for Cognee) must be present or
+ * {@link loadMemoryConfig} throws.
  *
  * `sessionSource` is fixed to `"thread_db"` in v1: Aurora thread messages
  * remain the short-term/session context source. Long-term engines must not
@@ -78,6 +79,31 @@ function parseInt10(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+export function resolveCogneeEndpoint(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const explicit =
+    (env.COGNEE_ENDPOINT ?? getConfig("COGNEE_ENDPOINT"))?.trim() || null;
+  if (explicit) return explicit;
+
+  const raw = env.COGNEE ?? getConfig("COGNEE") ?? env.COGNEE_STATUS;
+  if (!raw) return null;
+
+  const separatorIndex = raw.indexOf("|");
+  if (separatorIndex >= 0) {
+    return raw.slice(separatorIndex + 1).trim() || null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { endpoint?: unknown };
+    return typeof parsed.endpoint === "string" && parsed.endpoint.trim()
+      ? parsed.endpoint.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function loadMemoryConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): MemoryConfig {
@@ -91,8 +117,7 @@ export function loadMemoryConfig(
   const agentcoreMemoryId =
     (env.AGENTCORE_MEMORY_ID ?? getConfig("AGENTCORE_MEMORY_ID"))?.trim() ||
     null;
-  const cogneeEndpoint =
-    (env.COGNEE_ENDPOINT ?? getConfig("COGNEE_ENDPOINT"))?.trim() || null;
+  const cogneeEndpoint = resolveCogneeEndpoint(env);
   const awsRegion = env.AWS_REGION || "us-east-1";
 
   if (enabled) {
