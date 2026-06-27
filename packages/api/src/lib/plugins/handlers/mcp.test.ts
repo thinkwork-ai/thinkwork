@@ -15,12 +15,18 @@ const {
   updateCalls,
   deleteCalls,
   mockDb,
+  cogneeStatus,
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
   const returningQueue: unknown[][] = [];
   const insertCalls: Array<Record<string, unknown>> = [];
   const updateCalls: Array<Record<string, unknown>> = [];
   const deleteCalls: unknown[] = [];
+  const cogneeStatus = {
+    enabled: false,
+    endpoint: null as string | null,
+    backendMode: null as string | null,
+  };
   const mockDb = {
     select: vi.fn(() => {
       const chain: any = {
@@ -70,10 +76,14 @@ const {
     updateCalls,
     deleteCalls,
     mockDb,
+    cogneeStatus,
   };
 });
 
 vi.mock("../../../graphql/utils.js", () => ({ db: mockDb }));
+vi.mock("../../../graphql/resolvers/core/managedApplications.js", () => ({
+  readCogneeStatus: () => cogneeStatus,
+}));
 
 import { tenantMcpServers, userMcpTokens } from "@thinkwork/database-pg/schema";
 import type { McpServerComponent } from "@thinkwork/plugin-catalog";
@@ -102,6 +112,9 @@ beforeEach(() => {
   insertCalls.length = 0;
   updateCalls.length = 0;
   deleteCalls.length = 0;
+  cogneeStatus.enabled = false;
+  cogneeStatus.endpoint = null;
+  cogneeStatus.backendMode = null;
 });
 
 describe("provisionPluginMcpComponent", () => {
@@ -551,6 +564,32 @@ describe("endpointFrom resolution (U10)", () => {
       }),
     ).rejects.toThrow(/managed application "twenty" has no row/);
     expect(insertCalls).toHaveLength(0);
+  });
+
+  it("resolves Cognee endpointFrom from deployed runtime status when no managed app row exists", async () => {
+    cogneeStatus.enabled = true;
+    cogneeStatus.endpoint = "http://internal-cognee.example.local";
+    selectQueue.push([]); // no managed_applications row
+
+    const resolved = await resolvePluginMcpEndpoint({
+      tenantId: "tenant-1",
+      component: {
+        type: "mcp-server",
+        key: "brain",
+        displayName: "Company Brain",
+        endpointFrom: {
+          managedApp: "cognee",
+          configKey: "cogneeEndpoint",
+          path: "/mcp-server/http",
+        },
+        auth: { mode: "none" },
+      },
+      db: mockDb as never,
+    });
+
+    expect(resolved).toBe(
+      "http://internal-cognee.example.local/mcp-server/http",
+    );
   });
 
   it("fails with a readable error when desired_config lacks the configKey", async () => {

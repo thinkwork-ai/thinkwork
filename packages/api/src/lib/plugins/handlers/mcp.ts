@@ -63,6 +63,7 @@ import type {
   McpServerComponent,
 } from "@thinkwork/plugin-catalog";
 import { db as defaultDb } from "../../../graphql/utils.js";
+import { readCogneeStatus } from "../../../graphql/resolvers/core/managedApplications.js";
 import { computeMcpUrlHash } from "../../mcp-server-hash.js";
 
 type DbLike = typeof defaultDb;
@@ -223,6 +224,17 @@ function browserBaseUrlFromPublicUrl(url: URL): string | undefined {
   return undefined;
 }
 
+function cogneeEndpointFallback(
+  endpointFrom: NonNullable<McpServerComponent["endpointFrom"]>,
+): Record<string, unknown> | null {
+  if (endpointFrom.managedApp !== "cognee") return null;
+  const cognee = readCogneeStatus();
+  if (!cognee.enabled || !cognee.endpoint) return null;
+  return {
+    [endpointFrom.configKey]: cognee.endpoint,
+  };
+}
+
 function pluginMcpRuntimeMetadata(
   component: McpServerComponent,
   resolvedEndpoint: ResolvedPluginMcpEndpoint,
@@ -276,12 +288,17 @@ async function resolvePluginMcpEndpointContext(args: {
       ),
     )
     .limit(1)) as { desired_config: unknown }[];
-  if (!row) {
+
+  const fallbackConfig = cogneeEndpointFallback(endpointFrom);
+  if (!row && !fallbackConfig) {
     throw new Error(
       `MCP component "${component.key}": managed application "${endpointFrom.managedApp}" has no row for this tenant yet — retry after its infrastructure component is configured and deployed`,
     );
   }
-  const desiredConfig = (row.desired_config ?? {}) as Record<string, unknown>;
+  const desiredConfig = {
+    ...(fallbackConfig ?? {}),
+    ...((row?.desired_config ?? {}) as Record<string, unknown>),
+  };
   const baseUrl = desiredConfig[endpointFrom.configKey];
   if (typeof baseUrl !== "string" || baseUrl.trim() === "") {
     throw new Error(
