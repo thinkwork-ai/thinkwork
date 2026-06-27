@@ -19,7 +19,7 @@ For practical operator and end-user guidance, see [Goals and Files](/guides/spac
 
 ## Why Goals exist
 
-ThinkWork has always had durable Threads, Space context, folder-native agent behavior, and Company Brain. Goals connect those pieces into an operating system for repeatable work.
+ThinkWork has always had durable Threads, Space context, folder-native agent behavior, and ThinkWork Brain. Goals connect those pieces into an operating system for repeatable work.
 
 Without a Goal, a Thread can answer questions, investigate, draft, and coordinate. With a Goal, the same Thread has an explicit contract:
 
@@ -53,7 +53,7 @@ Goals are the middle of the ThinkWork maturity path:
 2. **Use context and tools.** The agent reads Space files, User context, memory, knowledge, skills, and tools.
 3. **Promote repeated work into Goals.** The Thread gains outcome, owner, mode, progress, completion, and review semantics.
 4. **Template the operating pattern.** Operators keep reusable Goal templates in Space-owned markdown folders.
-5. **Compound completed work.** Reviewed Goal folders become high-signal source material for Company Brain.
+5. **Compound completed work.** Reviewed Goal folders become high-signal source material for ThinkWork Brain.
 
 The ladder matters because ThinkWork should not force every conversation into a workflow. Start loose, then promote the work that benefits from accountability.
 
@@ -92,11 +92,11 @@ These files are readable by agents and operators. They should also degrade grace
 
 Goals use two stores on purpose:
 
-| Layer         | Owns                                                                                                             | Why                                                                                   |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Aurora        | Goal lifecycle, owner/reviewer, completion state, permissions, structured checklist rows, audit-friendly indexes | Multi-player Threads need consistent, queryable, permissioned workflow state.         |
-| S3 markdown   | Portable narrative execution context: goal contract, progress briefing, decisions, artifacts, handoffs           | Folder-native work should be inspectable, movable, and readable by agents.            |
-| Company Brain | Distilled reusable learning from reviewed source material                                                        | Completed work should improve future work without making raw Threads the only source. |
+| Layer           | Owns                                                                                                             | Why                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Aurora          | Goal lifecycle, owner/reviewer, completion state, permissions, structured checklist rows, audit-friendly indexes | Multi-player Threads need consistent, queryable, permissioned workflow state.         |
+| S3 markdown     | Portable narrative execution context: goal contract, progress briefing, decisions, artifacts, handoffs           | Folder-native work should be inspectable, movable, and readable by agents.            |
+| ThinkWork Brain | Distilled reusable learning from reviewed source material                                                        | Completed work should improve future work without making raw Threads the only source. |
 
 `PROGRESS.md` is not a second task database. It is a rendered briefing from the structured state. When structured task rows change, ThinkWork refreshes the Goal folder.
 
@@ -118,7 +118,7 @@ tenants/{tenantSlug}/spaces/customer/source/
 
 When a closed-won opportunity starts onboarding, ThinkWork creates a Thread, linked tasks, a Goal row, and the Thread Goal folder. The side panel shows the outcome, mode, review state, progress, decisions, handoffs, and artifacts. When required tasks are complete, the Goal moves to review instead of silently closing. An authorized owner, reviewer, Space admin, or tenant admin can confirm completion or request changes.
 
-The finished folder then gives Company Brain a better source than scattered chat messages: it has the outcome, final progress, decisions, handoffs, artifacts, and provenance.
+The finished folder then gives ThinkWork Brain a better source than scattered chat messages: it has the outcome, final progress, decisions, handoffs, artifacts, and provenance.
 
 ## Placement rules
 
@@ -133,7 +133,7 @@ Use this table when deciding where something belongs:
 | Goal            | A promoted workflow outcome with owner, mode, progress, completion rule, and review policy.          |
 | Goal folder     | Portable narrative execution state for the promoted workflow.                                        |
 | Aurora          | Structured state that must be queryable, permissioned, audited, or shared by multiple users.         |
-| Company Brain   | Reviewed reusable knowledge distilled from completed work.                                           |
+| ThinkWork Brain | Reviewed reusable knowledge distilled from completed work.                                           |
 
 ## Operator best practices
 
@@ -143,7 +143,7 @@ Use this table when deciding where something belongs:
 - Keep Goal templates in Space source files so the workflow can travel with the Space.
 - Use structured task rows for status and ownership; use markdown for context, rationale, and handoffs.
 - Require human review for workflows with customer, credit, pricing, legal, or operational risk.
-- Treat completed Goal folders as source material, not automatic truth. Let Company Brain distill them through provenance and review.
+- Treat completed Goal folders as source material, not automatic truth. Let ThinkWork Brain distill them through provenance and review.
 
 ## End-user best practices
 
@@ -172,4 +172,4 @@ That means an export path can be added without re-architecting the system. The f
 - [Spaces and Threads](/concepts/spaces/spaces-and-threads/) - how Threads remain the durable record.
 - [Folder Is the Agent](/concepts/agents/folder-is-the-agent/) - folder-native behavior boundaries.
 - [Workspace Composition](/concepts/agents/workspace-composition/) - how agent, Space, User, and Goal context resolve.
-- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes Company Brain.
+- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) - how reviewed source material becomes ThinkWork Brain.

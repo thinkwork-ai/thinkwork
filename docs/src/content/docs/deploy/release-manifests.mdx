@@ -21,7 +21,7 @@ The manifest includes:
 - Terraform module or bundle references
 - deployment runner/build image reference
 - deployment runner script path, SHA-256, and size metadata
-- managed-app descriptors for Cognee, Twenty, and n8n
+- managed-app descriptors for ThinkWork Brain/Cognee, Twenty, and n8n
 - smoke contracts
 - deployment profile schema version
 - key id and detached signature metadata when the release is signed
@@ -83,17 +83,18 @@ non-deployable instead of presenting an old manifest digest with newer assets.
 Managed-app descriptors and runtime images are one contract. If a release
 manifest advertises a managed app with `requiredImages`, every required image
 name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
-publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty and
-n8n image URIs from repository variables so the controller can fail before
-Terraform when an optional app cannot be deployed from the selected release.
+publisher builds the ThinkWork-owned Cognee image for ThinkWork Brain graph
+infrastructure and reads pinned Twenty and n8n image URIs from repository
+variables so the controller can fail before Terraform when an optional app
+cannot be deployed from the selected release.
 
 The default release manifest currently advertises:
 
-| Managed app | Required runtime image | Smoke contract                                             |
-| ----------- | ---------------------- | ---------------------------------------------------------- |
-| Cognee      | `cognee`               | `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` |
-| Twenty CRM  | `twenty`               | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`        |
-| n8n         | `n8n`                  | `plugins/n8n/smoke/n8n-managed-app-smoke.mjs`              |
+| Managed app            | Required runtime image | Smoke contract                                             |
+| ---------------------- | ---------------------- | ---------------------------------------------------------- |
+| ThinkWork Brain/Cognee | `cognee`               | `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` |
+| Twenty CRM             | `twenty`               | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`        |
+| n8n                    | `n8n`                  | `plugins/n8n/smoke/n8n-managed-app-smoke.mjs`              |
 
 Desktop assets may be published by a separate workflow, but operators should see
 one coordinated release version. The human-facing release should contain

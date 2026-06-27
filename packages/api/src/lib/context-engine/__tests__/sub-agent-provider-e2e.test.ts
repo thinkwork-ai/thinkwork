@@ -107,7 +107,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
     ]);
   });
 
-  it("runs the Company Brain page agent through the wiki retrieval seam", async () => {
+  it("runs the ThinkWork Brain page agent through the wiki retrieval path", async () => {
     const seen: Array<{ tenantId: string; userId: string; query: string }> = [];
     const provider = createWikiSourceAgentContextProvider({
       runtimeMode: "deterministic",
@@ -219,7 +219,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
     });
   });
 
-  it("runs the Company Brain page agent as a model-backed source-agent loop with cited pages", async () => {
+  it("runs the ThinkWork Brain page agent as a model-backed source-agent loop with cited pages", async () => {
     const seen: Array<{ tenantId: string; userId: string; query: string }> = [];
     const modelTurns = [
       JSON.stringify({

@@ -69,7 +69,7 @@ describe("ContextEngineService", () => {
           id: "brain",
           family: "brain",
           sourceFamily: "brain",
-          displayName: "Company Brain",
+          displayName: "ThinkWork Brain",
           defaultEnabled: true,
           query: async () => ({
             hits: [

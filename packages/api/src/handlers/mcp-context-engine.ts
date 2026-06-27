@@ -187,7 +187,7 @@ const TOOLS = [
   {
     name: "query_brain_context",
     description:
-      "Search only tenant-shared ontology-shaped Company Brain pages and facets. Use this for business/domain context such as customers, opportunities, commitments, risks, relationships, and cited provenance.",
+      "Search only tenant-shared ontology-shaped ThinkWork Brain pages and facets. Use this for business/domain context such as customers, opportunities, commitments, risks, relationships, and cited provenance.",
     inputSchema: {
       type: "object",
       properties: {
@@ -232,7 +232,7 @@ const TOOLS = [
   {
     name: "list_context_providers",
     description:
-      "List Company Brain source families available through ThinkWork Brain.",
+      "List ThinkWork Brain source families available through Context Engine.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -242,7 +242,7 @@ const TOOLS = [
   {
     name: "get_agent_context_policy",
     description:
-      "Admin-only read model explaining the effective Company Brain policy for one Thinkwork agent.",
+      "Admin-only read model explaining the effective ThinkWork Brain policy for one ThinkWork agent.",
     inputSchema: {
       type: "object",
       properties: {
@@ -255,7 +255,7 @@ const TOOLS = [
   {
     name: "update_context_provider_setting",
     description:
-      "Admin-only update for tenant built-in Company Brain source eligibility, defaults, and provider-specific config.",
+      "Admin-only update for tenant built-in ThinkWork Brain source eligibility, defaults, and provider-specific config.",
     inputSchema: {
       type: "object",
       properties: {
@@ -477,8 +477,8 @@ async function handleToolCall(
           {
             type: "text",
             text: policy.enabled
-              ? `Company Brain uses ${policy.finalProviders.length} provider(s).`
-              : "Company Brain is disabled for this agent.",
+              ? `ThinkWork Brain uses ${policy.finalProviders.length} provider(s).`
+              : "ThinkWork Brain is disabled for this agent.",
           },
         ],
       });
@@ -1025,9 +1025,9 @@ function formatBrainProgressiveResponse(result: ContextEngineResponse): string {
   const lines: string[] = [];
   const entries = result.progressive?.entries ?? [];
   if (entries.length === 0) {
-    lines.push("No matching Company Brain context found.");
+    lines.push("No matching ThinkWork Brain context found.");
   } else {
-    lines.push("Company Brain results");
+    lines.push("ThinkWork Brain results");
     for (const entry of entries) {
       const provenance = [
         entry.provenance?.label,
@@ -1053,9 +1053,9 @@ function formatBrainDetailResponse(result: ContextEngineResponse): string {
     (status) => status.state === "found",
   );
   if (result.hits.length === 0) {
-    lines.push("No selected Company Brain details found.");
+    lines.push("No selected ThinkWork Brain details found.");
   } else {
-    lines.push("Selected Company Brain details");
+    lines.push("Selected ThinkWork Brain details");
     for (const [index, hit] of result.hits.entries()) {
       const originalIndex = found?.[index]?.index ?? index + 1;
       lines.push(
@@ -1114,7 +1114,7 @@ function brainHitDescription(hit: ContextHit): string {
     if (typeof value === "string" && value.trim())
       return trimDescription(value);
   }
-  return "Matched governed Company Brain source data. Expand this result for source details and citations.";
+  return "Matched governed ThinkWork Brain source data. Expand this result for source details and citations.";
 }
 
 function trimDescription(value: string): string {

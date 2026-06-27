@@ -149,7 +149,7 @@ export async function upsertTenantContextProviderSetting(
     );
   }
   if (input.defaultEnabled && !input.enabled) {
-    throw new Error("Disabled Company Brain sources cannot be defaults");
+    throw new Error("Disabled ThinkWork Brain sources cannot be defaults");
   }
 
   const config = normalizeProviderConfig(input.providerId, input.config ?? {});

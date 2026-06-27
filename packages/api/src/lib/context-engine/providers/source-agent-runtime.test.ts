@@ -45,7 +45,7 @@ describe("source agent runtime", () => {
     });
     const searchTool: SourceAgentTool = {
       name: "company-brain.pages.search",
-      description: "Search compiled Company Brain pages.",
+      description: "Search compiled ThinkWork Brain pages.",
       async execute(input, context) {
         context.rememberSource("page-auberge-bressane", {
           title: "Auberge Bressane",
@@ -67,7 +67,7 @@ describe("source agent runtime", () => {
     };
 
     const result = await runSourceAgent({
-      name: "Company Brain Page Agent",
+      name: "ThinkWork Brain Page Agent",
       system: "You are a source-specific wiki navigator.",
       query: "favorite restarant in Paris",
       tools: [searchTool],
@@ -108,7 +108,7 @@ describe("source agent runtime", () => {
 
   it("rejects tools outside the allowlist before execution", async () => {
     const result = await runSourceAgent({
-      name: "Company Brain Page Agent",
+      name: "ThinkWork Brain Page Agent",
       system: "Use allowed tools only.",
       query: "favorite restaurant",
       tools: [
@@ -144,7 +144,7 @@ describe("source agent runtime", () => {
   it("accepts raw function-call arrays returned by Converse models", async () => {
     let executed = false;
     const result = await runSourceAgent({
-      name: "Company Brain Page Agent",
+      name: "ThinkWork Brain Page Agent",
       system: "Use allowed tools only.",
       query: "favorite restaurant",
       tools: [
@@ -176,7 +176,7 @@ describe("source agent runtime", () => {
 
   it("returns an error trace when the model never produces final citations", async () => {
     const result = await runSourceAgent({
-      name: "Company Brain Page Agent",
+      name: "ThinkWork Brain Page Agent",
       system: "Use tools then cite sources.",
       query: "favorite restaurant",
       tools: [
@@ -212,7 +212,7 @@ describe("source agent runtime", () => {
     let turn = 0;
 
     const result = await runSourceAgent({
-      name: "Company Brain Page Agent",
+      name: "ThinkWork Brain Page Agent",
       system: "Inspect pages without flooding the context.",
       query: "favorite restaurant",
       tools: [

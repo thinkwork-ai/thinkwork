@@ -576,7 +576,7 @@ describe("endpointFrom resolution (U10)", () => {
       component: {
         type: "mcp-server",
         key: "brain",
-        displayName: "Company Brain",
+        displayName: "ThinkWork Brain",
         endpointFrom: {
           managedApp: "cognee",
           configKey: "cogneeEndpoint",

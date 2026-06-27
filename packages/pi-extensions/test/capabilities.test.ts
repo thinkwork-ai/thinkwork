@@ -549,7 +549,7 @@ describe("U7 capability extensions", () => {
     )(api);
 
     const tool = getTool(tools, "query_brain_context");
-    expect(tool.description).toContain("tenant-shared Company Brain");
+    expect(tool.description).toContain("tenant-shared ThinkWork Brain");
     expect(tool.description).toContain("query_memory_context");
     expect(tool.description).toContain("detailIds");
 
@@ -632,7 +632,7 @@ describe("U7 capability extensions", () => {
             providers: [
               {
                 providerId: "wiki",
-                displayName: "Company Brain Pages",
+                displayName: "ThinkWork Brain Pages",
                 state: "ok",
                 hitCount: 1,
                 durationMs: 12,
