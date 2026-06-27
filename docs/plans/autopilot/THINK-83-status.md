@@ -381,3 +381,41 @@ compatibility.
 - Note: `pnpm install` logged the same optional `canvas` native build failure
   under Node 25 because `pkg-config` is unavailable, but exited successfully and
   the focused package tests/typechecks ran afterward.
+- U5 PR merged:
+  https://github.com/thinkwork-ai/thinkwork/pull/3029
+- U5 merge commit:
+  `0f8c924f811730a5ff206985c75ad2f7d43cc605`
+- U5 CI passed before merge on the updated branch: CLA, lint, typecheck, test,
+  and verify.
+- U5 remote branch deleted and local U5 worktree/branch cleaned up.
+
+### 2026-06-27 - U7 objective
+
+Close the rollout loop by recording final compatibility boundaries,
+implementation evidence, and Linear handoff state. This unit does not change
+runtime behavior; it updates current handoff docs so reviewers can see what
+changed, what intentionally stayed stable, and which PRs/CI runs prove the
+pivot.
+
+- Created isolated U7 branch/worktree:
+  `codex/think-83-u7-rollout-handoff` at
+  `/Users/ericodom/.codex/worktrees/think-83-u7`.
+- Implemented U7 rollout/handoff documentation:
+  - Marked the THINK-83 plan as implemented.
+  - Added a rollout evidence table linking U0-U6/U5 PRs, merge commits, and
+    proof points.
+  - Recorded the final compatibility boundary: Hindsight owns user and Space
+    memory; Cognee remains ThinkWork Brain graph/ontology/warehouse
+    infrastructure or legacy diagnostics; internal `company-*` keys stay
+    stable; `/settings/memory` remains the operator Memory route for this pass.
+  - Corrected stale plan text that implied Memory should move out of Settings
+    in this pass.
+  - Updated current Memory concept/admin docs to point operators at
+    `/settings/memory`.
+- U7 verification passed:
+  - `pnpm --filter @thinkwork/docs build`
+  - `pnpm dlx prettier --check docs/plans/2026-06-27-001-feat-thinkwork-brain-hindsight-memory-plan.md docs/plans/autopilot/THINK-83-status.md docs/src/content/docs/concepts/knowledge.mdx docs/src/content/docs/applications/admin/memory.mdx`
+  - `git diff --check`
+- Note: `pnpm install` logged the same optional `canvas` native build failure
+  under Node 25 because `pkg-config` is unavailable, but exited successfully and
+  the docs build ran afterward.

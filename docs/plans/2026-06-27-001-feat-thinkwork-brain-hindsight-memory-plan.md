@@ -1,17 +1,17 @@
 ---
 title: "feat: Pivot Memory to Hindsight in ThinkWork Brain"
 type: feat
-status: active
+status: implemented
 date: 2026-06-27
 origin: docs/brainstorms/2026-06-27-thnk-83-hindsight-thinkwork-brain-boundary-requirements.md
-linear: THNK-83
+linear: THINK-83
 ---
 
 # feat: Pivot Memory to Hindsight in ThinkWork Brain
 
 ## Overview
 
-THNK-83 pivots ThinkWork user and Space memory back to Hindsight while keeping
+THINK-83 pivots ThinkWork user and Space memory back to Hindsight while keeping
 Cognee available only as the optional ThinkWork Brain ontology/knowledge-graph
 upgrade. The implementation should make Hindsight the canonical core provider
 for user and Space memory, stop presenting it as legacy, keep the current
@@ -24,13 +24,38 @@ The plan intentionally keeps existing internal plugin keys and slugs such as
 user-facing product language changes now; storage keys, Terraform variables,
 and historical docs can move later only if they become a real product problem.
 
+## Rollout Evidence
+
+Implementation was delivered in independently reviewable units against `main`:
+
+| Unit                           | PR                                                           | Merge commit                               | Evidence                                                                       |
+| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------ |
+| U0 Deployment boundary         | [#3020](https://github.com/thinkwork-ai/thinkwork/pull/3020) | `d46d878b3887905fb83762e03f5dcaa6f589fc13` | Hindsight default/full-install boundary, Cognee plugin infrastructure boundary |
+| U1 Hindsight owner-aware banks | [#3021](https://github.com/thinkwork-ai/thinkwork/pull/3021) | `4daa634c18199abbaf63212d0ec8e854e84de3ab` | User and Space bank routing tests                                              |
+| U2 GraphQL memory pivot        | [#3022](https://github.com/thinkwork-ai/thinkwork/pull/3022) | `2808378a9c1adf70edef444b3478e34f2c122fde` | Hindsight-backed user/Space resolver semantics and codegen                     |
+| U3 Settings Memory table       | [#3023](https://github.com/thinkwork-ai/thinkwork/pull/3023) | `ee6a5d81fdc1d9a12e9f13ed5e8b30aa3bc9277b` | Operator `memoryRecords(scope: OPERATOR)` table and read-only detail evidence  |
+| U6 Isolation verification      | [#3024](https://github.com/thinkwork-ai/thinkwork/pull/3024) | `50f884e2f971332734202dedf83c0fc48ce21839` | Hindsight user/Space A/Space B isolation smoke and resolver tests              |
+| U4 Product rebrand             | [#3026](https://github.com/thinkwork-ai/thinkwork/pull/3026) | `c69981685d17fd8be666f4d1e7d5289ffdb49901` | ThinkWork Brain/Data Warehouse/ETL display names with stable internal keys     |
+| U5 Docs and tool copy          | [#3029](https://github.com/thinkwork-ai/thinkwork/pull/3029) | `0f8c924f811730a5ff206985c75ad2f7d43cc605` | Context Engine, Pi extension, docs, and workspace default copy alignment       |
+
+The compatibility boundary after rollout is:
+
+- Hindsight owns user and Space memory capture, recall, and operator inspection.
+- Cognee may remain as ThinkWork Brain graph/ontology/warehouse
+  infrastructure or legacy diagnostic evidence, but it is not the user or
+  Space memory proof path.
+- Internal `company-*` plugin keys, package names, and compatibility slugs stay
+  stable in this pass.
+- Memory remains under `/settings/memory` for this pass; current docs should
+  point operators there.
+
 ---
 
 ## Problem Frame
 
 The current code has exactly one active memory adapter, but recent Cognee-first
 work made user and Space memory dependent on Cognee-specific assumptions.
-THNK-79 validation found scope bleed under Cognee graph-completion recall and
+THINK-79 validation found scope bleed under Cognee graph-completion recall and
 no trustworthy per-user/per-Space Cognee inspector. The product decision in the
 origin requirements is therefore to choose one memory provider for user and
 Space memory now: Hindsight (see origin:
@@ -55,7 +80,7 @@ core memory, not the base memory inspection table.
 - R4. Space memory writes and reads isolated Hindsight Space banks.
 - R5. User+Space combined recall remains an explicit product policy path, not
   accidental backend fan-in.
-- R6. Cognee is not the canonical user or Space memory provider for THNK-83.
+- R6. Cognee is not the canonical user or Space memory provider for THINK-83.
 - R7. Cognee can remain internal ThinkWork Brain graph, ontology, warehouse, or
   wiki projection infrastructure where deliberately scoped.
 - R8. Customers and normal users do not get a backend picker for Hindsight vs.
@@ -784,7 +809,7 @@ scopes.
   user memory, Space A, and Space B, then verifies each query only returns the
   intended scope.
 - Retire or clearly relabel Cognee cutover smoke as diagnostic evidence only.
-  It should not be the success path for THNK-83 user/Space memory.
+  It should not be the success path for THINK-83 user/Space memory.
 - Include UI-level verification for `/settings/memory` so an operator can
   inspect/search the same isolation evidence from the current Settings surface.
 - Keep smoke inputs tenant-safe and obvious: deterministic labels, explicit
@@ -813,8 +838,8 @@ scopes.
 **Verification:**
 
 - Automated tests cover the isolation contract.
-- The smoke script gives THNK-83 reviewers a concrete deployed-stack
-  verification path before moving the issue to Ready to Work.
+- The smoke script gives THINK-83 reviewers a concrete deployed-stack
+  verification path for final review and closure.
 
 ---
 
@@ -834,7 +859,7 @@ Company Brain artifacts for the new product contract.
   only if implementation uncovers a requirement correction.
 - Create or modify: `docs/src/content/docs/applications/admin/memory.mdx`
 - Create or modify: `docs/src/content/docs/concepts/knowledge.mdx`
-- Update: Linear issue `THNK-83` with plan, implementation status, and
+- Update: Linear issue `THINK-83` with plan, implementation status, and
   verification evidence.
 
 **Approach:**
@@ -842,7 +867,7 @@ Company Brain artifacts for the new product contract.
 - Record the compatibility boundary in docs and issue comments: internal
   `company-*` keys remain stable, Hindsight owns user/Space memory, and Cognee
   is no longer the user/Space memory proof path.
-- In Linear, attach this plan and keep THNK-83 in planning/review until the
+- In Linear, attach this plan and keep THINK-83 in planning/review until the
   implementation PR has automated tests and deployed-stack isolation evidence.
 - If implementation discovers a product-level change, update the requirements
   document before changing the plan, rather than silently changing scope.
@@ -861,8 +886,8 @@ Company Brain artifacts for the new product contract.
 
 **Verification:**
 
-- Linear THNK-83 has the repo-local plan path, attached plan copy, summary, and
-  Ready-to-Work criteria.
+- Linear THINK-83 has the repo-local plan path, attached plan copy, summary, and
+  final verification evidence.
 - The final implementation PR description can point to automated tests and
   deployed-stack smoke evidence.
 
@@ -878,9 +903,10 @@ Company Brain artifacts for the new product contract.
 - Rename all internal `company-*` identifiers immediately. Rejected because it
   creates migration and routing churn without improving the immediate product
   boundary.
-- Leave Memory under Settings and only update copy. Rejected because memory is
-  core product behavior and should not remain an operator-only settings
-  surface.
+- Move Memory out of Settings in this pass. Rejected by the later Linear
+  correction because the current scope is to keep `/settings/memory` stable and
+  make the operator Hindsight table correct before revisiting information
+  architecture.
 
 ---
 
@@ -891,10 +917,10 @@ Company Brain artifacts for the new product contract.
   shows a false empty state when Hindsight has records.
 - Product-facing surfaces use ThinkWork Brain, ThinkWork Data Warehouse, and
   ThinkWork ETL names while internal slugs remain stable.
-- A reviewer can read THNK-83 and understand Cognee's remaining role without
+- A reviewer can read THINK-83 and understand Cognee's remaining role without
   seeing it offered as the canonical memory provider.
-- Linear THNK-83 has plan, review state, and verification evidence before it is
-  moved to Ready to Work.
+- Linear THINK-83 has plan, review state, and verification evidence before it is
+  closed.
 
 ---
 
@@ -944,8 +970,8 @@ Company Brain artifacts for the new product contract.
   current product guidance.
 - The deployed verification story should prove the ThinkWork install/UI path,
   not just local adapter unit tests.
-- Linear THNK-83 should move to Plan Review after this plan is attached; it
-  should not move to Ready to Work until human review accepts the plan.
+- Linear THINK-83 should retain the final implementation and verification
+  evidence before closure.
 
 ---
 
@@ -973,7 +999,7 @@ Company Brain artifacts for the new product contract.
 ## Sources & References
 
 - **Origin document:** `docs/brainstorms/2026-06-27-thnk-83-hindsight-thinkwork-brain-boundary-requirements.md`
-- **Linear issue:** THNK-83
+- **Linear issue:** THINK-83
 - **Related code:** `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
 - **Related code:** `packages/api/src/graphql/resolvers/memory/spaceMemorySearch.query.ts`
 - **Related code:** `packages/api/src/graphql/resolvers/memory/memorySystemConfig.query.ts`

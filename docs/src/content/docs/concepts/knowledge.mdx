@@ -118,18 +118,21 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 
 ## Admin Surface
 
-In Admin, Memory lives at `/knowledge` and has four tabs:
+In Admin, the operator Memory surface lives at `/settings/memory` and has four
+views:
 
-| Tab             | Purpose                                                         |
-| --------------- | --------------------------------------------------------------- |
-| Memory          | Browse, search, edit, and visualize retained memory records     |
-| Pages           | Inspect compiled pages and graph/search output                  |
-| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status           |
-| Sources         | Configure and verify the provider layer used by `query_context` |
+| View            | Purpose                                                                        |
+| --------------- | ------------------------------------------------------------------------------ |
+| Memory          | Browse and search operator-visible Hindsight memory records with bank evidence |
+| Wiki            | Inspect compiled pages and page search output                                  |
+| Knowledge Bases | Manage Bedrock KBs, document uploads, and sync status                          |
+| Knowledge Graph | Inspect ThinkWork Brain graph diagnostics when graph infrastructure is present |
 
 Ontology Studio lives under **Manage → Ontology** because it governs tenant-level business vocabulary rather than one source family. Operators use it to scan for suggestions, review change sets, approve definitions, and monitor reprocess jobs.
 
-The route path still says `/knowledge` for compatibility, but the visible module name is Memory.
+Older paths and implementation names may still use `knowledge` for
+compatibility, but the canonical operator route for this pass is
+`/settings/memory`.
 
 ## Related Pages
 
@@ -141,4 +144,4 @@ The route path still says `/knowledge` for compatibility, but the visible module
 - [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
 - [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how `query_context` assembles source hits
-- [Admin — Memory](/applications/admin/knowledge/) — operator workflows
+- [Admin — Memory](/applications/admin/memory/) — operator workflows
