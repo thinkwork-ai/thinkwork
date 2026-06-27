@@ -110,13 +110,13 @@ export function SettingsKnowledgeBases({
   return (
     <>
       <SettingsTablePane
-        title="Knowledge Bases"
-        description="Manage the knowledge bases your agents can search and cite."
+        title="Brain Sources"
+        description="Manage retained Space document sources for the Hindsight Brain."
         embedded={embedded}
         loading={result.fetching && !result.data}
         toolbar={
           <Input
-            placeholder="Search knowledge bases…"
+            placeholder="Search sources..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-56"
@@ -128,7 +128,7 @@ export function SettingsKnowledgeBases({
             className={settingsLinkActionClassName}
             onClick={() => setCreateOpen(true)}
           >
-            + New knowledge base
+            + New source
           </button>
         }
       >
@@ -149,7 +149,7 @@ export function SettingsKnowledgeBases({
           }
           emptyState={
             <div className="py-10 text-center text-sm text-muted-foreground">
-              No knowledge bases yet.
+              No Brain Sources yet.
             </div>
           }
         />

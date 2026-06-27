@@ -229,9 +229,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -343,9 +342,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1012,7 +1010,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     trustedSkillIds.has(skill.skillId),
   );
 
-  // Look up agent's assigned knowledge bases (PRD-13)
+  // Look up legacy native Bedrock KBs for explicitly opted-in compatibility
+  // only. Hindsight Space document memory is the default retained Brain path.
   const kbRows = await db
     .select({
       aws_kb_id: knowledgeBases.aws_kb_id,
@@ -1033,8 +1032,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     )
     .then((rows) => rows.filter((r) => r.aws_kb_id));
 
+  const legacyAgentKnowledgeBasesEnabled =
+    process.env.ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES === "true";
   const knowledgeBasesConfig =
-    kbRows.length > 0
+    legacyAgentKnowledgeBasesEnabled && kbRows.length > 0
       ? kbRows.map((kb) => ({
           awsKbId: kb.aws_kb_id,
           name: kb.name,
@@ -1269,15 +1270,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -2901,9 +2899,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

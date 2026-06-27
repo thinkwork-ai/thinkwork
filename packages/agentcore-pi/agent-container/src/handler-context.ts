@@ -164,13 +164,17 @@ export interface RuntimeEnvSnapshot {
 export function snapshotRuntimeEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeEnvSnapshot {
-  const memoryEngineRaw = (env.MEMORY_ENGINE || "managed").toLowerCase().trim();
+  const memoryEngineRaw = (env.MEMORY_ENGINE || "hindsight")
+    .toLowerCase()
+    .trim();
   const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
     memoryEngineRaw === "hindsight"
       ? "hindsight"
       : memoryEngineRaw === "cognee"
         ? "cognee"
-        : "managed";
+        : memoryEngineRaw === "managed" || memoryEngineRaw === "agentcore"
+          ? "managed"
+          : "hindsight";
 
   return {
     awsRegion: env.AWS_REGION || "us-east-1",

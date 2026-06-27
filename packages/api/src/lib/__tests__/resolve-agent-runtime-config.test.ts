@@ -428,6 +428,60 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.sendEmailConfig).not.toHaveProperty("agentEmailAddress");
   });
 
+  it("suppresses legacy native Bedrock KB payloads unless explicitly enabled", async () => {
+    stageAgentRow();
+    stageTemplateRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([
+      {
+        aws_kb_id: "aws-kb-1",
+        name: "Policies",
+        description: "Legacy AWS KB",
+        search_config: { topK: 4 },
+      },
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.knowledgeBasesConfig).toBeUndefined();
+  });
+
+  it("keeps legacy native Bedrock KB payloads available behind an opt-in flag", async () => {
+    vi.stubEnv("ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES", "true");
+    stageAgentRow();
+    stageTemplateRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([
+      {
+        aws_kb_id: "aws-kb-1",
+        name: "Policies",
+        description: "Legacy AWS KB",
+        search_config: { topK: 4 },
+      },
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.knowledgeBasesConfig).toEqual([
+      {
+        awsKbId: "aws-kb-1",
+        name: "Policies",
+        description: "Legacy AWS KB",
+        searchConfig: { topK: 4 },
+      },
+    ]);
+  });
+
   it("filters default runtime skills that have not passed the trust pipeline", async () => {
     stageAgentRow();
     stageTenantSlug("acme");

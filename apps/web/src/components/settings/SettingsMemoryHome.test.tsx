@@ -25,7 +25,7 @@ describe("SettingsMemoryHome", () => {
   it("publishes the Memory tabs into the page header", () => {
     expect(source).toContain("tabs: [");
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
-    expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
+    expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "Sources" }');
     expect(source).toContain('{ to: WIKI, label: "Wiki" }');
   });
 

@@ -17,13 +17,15 @@ import type {
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+const BEDROCK_KB_DEFAULT_ENABLED =
+  process.env.CONTEXT_ENGINE_BEDROCK_KB_DEFAULT_ENABLED === "true";
 
 export function createBedrockKnowledgeBaseContextProvider(): ContextProviderDescriptor {
   return {
     id: "bedrock-knowledge-base",
     family: "knowledge-base",
-    displayName: "Bedrock Knowledge Bases",
-    defaultEnabled: true,
+    displayName: "Bedrock Knowledge Bases (legacy)",
+    defaultEnabled: BEDROCK_KB_DEFAULT_ENABLED,
     supportedScopes: ["team", "auto"],
     timeoutMs: 8_000,
     async query(request): Promise<ContextProviderResult> {
@@ -118,11 +120,15 @@ export function createBedrockKnowledgeBaseContextProvider(): ContextProviderDesc
 type KbRow = { id: string; name: string; awsKbId: string | null };
 
 /**
- * Union the agent's (tenant-wide) KBs with the thread's Space-bound KBs (U7).
+ * Union the agent's (tenant-wide) legacy KBs with the thread's Space-bound
+ * legacy KBs.
  *
  * In the single-agent-per-tenant model, agentId is the tenant's platform agent
  * (tenant-wide KBs) and spaceId scopes additional KBs to one Space. The two are
  * unioned and deduped so a KB bound at both scopes contributes once (AE2).
+ *
+ * This provider is opt-in compatibility. Hindsight Space document memory is
+ * the hosted Brain default for retained documents.
  *
  * Both queries are tenant-scoped — the space query filters
  * `space_knowledge_bases.tenant_id`, so a thread whose Space belongs to another

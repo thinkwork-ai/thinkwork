@@ -117,7 +117,7 @@ function KbDetailPage() {
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Knowledge Bases
+          Back to Sources
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
@@ -204,7 +204,7 @@ function KbDetailPage() {
             <p className="text-sm text-muted-foreground">{docsError}</p>
           ) : docs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No documents in this knowledge base yet.
+              No documents in this source yet.
             </p>
           ) : (
             <ul className="divide-y divide-border/60 text-sm">

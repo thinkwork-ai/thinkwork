@@ -169,7 +169,7 @@ function KbsIndexPage() {
     <div className="flex h-full min-w-0 flex-col">
       <div className="relative flex shrink-0 items-center gap-3 px-4 py-3">
         <Input
-          placeholder="Search knowledge bases..."
+          placeholder="Search sources..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-fit min-w-56 max-w-full"
@@ -204,8 +204,8 @@ function KbsIndexPage() {
             <BookOpen className="h-12 w-12 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground max-w-sm">
               {search
-                ? "No knowledge bases match your search."
-                : "Your tenant has no knowledge bases yet — ask your operator to create one."}
+                ? "No sources match your search."
+                : "Your tenant has no Brain Sources yet."}
             </p>
           </div>
         ) : (

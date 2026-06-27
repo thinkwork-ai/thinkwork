@@ -20,7 +20,7 @@ export interface ContextEngineExtensionOptions {
   agentId: string;
   threadTurnId?: string;
   // The thread this turn runs in. Forwarded as a query_context argument so the
-  // backend can scope Space-bound Knowledge Bases to the thread's Space (U7).
+  // backend can scope ephemeral context providers to the thread's Space.
   threadId?: string;
   contextEngineConfig?: Record<string, unknown>;
   fetchImpl?: FetchLike;
@@ -350,7 +350,7 @@ export function createContextEngineExtension(
         label: "ThinkWork Brain",
         description:
           "Search the ThinkWork Context Engine (ThinkWork Brain) across fast default " +
-          "providers: wiki, workspace files, knowledge bases, sub-agent providers, " +
+          "providers: wiki, workspace files, sub-agent providers, " +
           "and approved search-safe MCP tools. Use this first for ordinary agent " +
           "context lookup. Use query_memory_context only when user-carried or " +
           "current-space long-term memory is specifically needed.",
