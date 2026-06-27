@@ -1676,6 +1676,7 @@ export async function buildInvocationResources(
         endpoint: args.env.hindsightEndpoint,
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
+        spaceId: args.identity.spaceId,
       });
       // Keep long-term memory available as an explicit tool, but do not
       // proactively recall on every turn. Requester profile facts are already
