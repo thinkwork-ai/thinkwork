@@ -183,7 +183,7 @@ output "agentcore_memory_id" {
 }
 
 output "hindsight_enabled" {
-  description = "Whether the Hindsight add-on is enabled"
+  description = "Whether Hindsight canonical memory is enabled"
   value       = local.hindsight_enabled
 }
 

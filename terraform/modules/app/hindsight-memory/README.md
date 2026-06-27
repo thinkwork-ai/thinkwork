@@ -1,18 +1,18 @@
-# Hindsight Memory Module (optional add-on)
+# Hindsight Memory Module (canonical user and Space memory)
 
-Thinkwork has two long-term memory systems. **AgentCore managed memory is
-always on** — every agent gets automatic per-turn retention out of the box
-with zero configuration. **Hindsight is an optional add-on** you can layer
-on top for advanced semantic + entity-graph retrieval.
+Thinkwork provisions AgentCore managed memory as an AWS platform primitive, but
+full ThinkWork installs use **Hindsight** as the canonical user and Space memory
+provider. AgentCore-only memory remains available as an explicit
+low-cost/development opt-out.
 
 ## Memory layers
 
-| Layer | Backend | Always on | What it stores |
-|-------|---------|-----------|----------------|
-| 1. Workspace files | S3 per-agent | Yes | Scratchpad, working files |
-| 2. Thread history | Aurora `messages` table | Yes | Last 30 turns per thread |
-| 3a. Managed long-term | AgentCore Memory | **Yes** | Semantic facts, preferences, summaries, episodes — extracted automatically from every turn |
-| 3b. Hindsight long-term | Hindsight ECS service | **Optional** | Same purpose as 3a, plus entity graph + BM25 + cross-encoder reranking |
+| Layer                 | Backend                 | Always on                     | What it stores                                                                 |
+| --------------------- | ----------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| 1. Workspace files    | S3 per-agent            | Yes                           | Scratchpad, working files                                                      |
+| 2. Thread history     | Aurora `messages` table | Yes                           | Last 30 turns per thread                                                       |
+| 3a. Managed long-term | AgentCore Memory        | **Yes**                       | AWS platform memory primitive and low-cost/development fallback                |
+| 3b. Product long-term | Hindsight ECS service   | **Default for full installs** | Canonical user/Space memory with entity graph + BM25 + cross-encoder reranking |
 
 ## How retention works
 
@@ -37,35 +37,36 @@ so explicit memories land in both systems.
 
 ## Usage
 
-### Default — managed memory only (zero config)
+### Default — Hindsight canonical memory
 
 ```hcl
 module "thinkwork" {
   source = "thinkwork-ai/thinkwork/aws"
 
   stage = "prod"
-  # enable_hindsight defaults to false — nothing else to set
+  # enable_hindsight defaults to true
 }
 ```
 
-The `terraform/modules/app/agentcore-memory` module is always instantiated
-and provisions the AgentCore Memory resource with the four strategies.
+The `terraform/modules/app/agentcore-memory` module is still instantiated, but
+the active user/Space memory engine resolves to Hindsight.
 
-### With the Hindsight add-on
+### Low-cost/development AgentCore-only opt-out
 
 ```hcl
 module "thinkwork" {
   source = "thinkwork-ai/thinkwork/aws"
 
   stage            = "prod"
-  enable_hindsight = true
+  enable_hindsight = false
+  memory_engine    = "agentcore"
 
-  # Optional: pin the Hindsight image version
-  # hindsight_image_tag = "0.5.0"
+  # This is not the full product memory path.
 }
 ```
 
 When `enable_hindsight = true`, Terraform creates:
+
 - ECS Fargate cluster + service (ARM64, 2 vCPU, 4 GB)
 - Application Load Balancer
 - Security groups (ALB → Hindsight → Aurora ingress)
@@ -73,15 +74,16 @@ When `enable_hindsight = true`, Terraform creates:
 
 Cost: ~$75/mo (ARM64 Fargate + ALB hours).
 
-## Turning the add-on on/off
+## Turning Hindsight on/off
 
 Toggling `enable_hindsight` and re-running `thinkwork deploy`:
 
 - **false → true**: creates the ECS + ALB infra. Agents gain the three
-  `hindsight_*` tools on their next invoke. Managed retention continues
-  running unchanged.
+  `hindsight_*` tools on their next invoke. The active memory engine resolves
+  to Hindsight when `memory_engine` is empty.
 - **true → false**: destroys the ECS + ALB infra. Agents lose the
-  `hindsight_*` tools. Managed memory keeps working as before.
+  `hindsight_*` tools. This should be paired with `memory_engine = "agentcore"`
+  for explicit low-cost/development deployments.
 
 Memory data is not migrated between backends. Hindsight records and
 AgentCore records live in separate stores.

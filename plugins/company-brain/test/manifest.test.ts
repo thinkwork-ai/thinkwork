@@ -63,7 +63,10 @@ describe("Company Brain plugin manifest", () => {
       },
       auth: { mode: "none" },
     });
-    expect(component.toolNotes?.join("\n")).toMatch(/direct MCP\/API access/i);
+    const toolNotes = component.toolNotes?.join("\n") ?? "";
+    expect(toolNotes).toMatch(/Brain substrate operations/i);
+    expect(toolNotes).toMatch(/Hindsight-backed ThinkWork memory APIs/i);
+    expect(toolNotes).not.toMatch(/user and Space memory provider/i);
   });
 
   it("does not declare Full Brain runtime, skills, or rendered UI surfaces in v1", () => {
@@ -80,9 +83,8 @@ describe("Company Brain plugin manifest", () => {
       companyBrainManifest.description,
       companyBrainManifest.premium?.installKeyPrompt,
       ...Object.values(
-        (
-          latestVersion.components[0] as InfrastructureComponent
-        ).terraformInputs,
+        (latestVersion.components[0] as InfrastructureComponent)
+          .terraformInputs,
       ).map((spec) => spec.description),
     ].join("\n");
 

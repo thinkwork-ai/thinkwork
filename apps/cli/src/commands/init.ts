@@ -83,8 +83,8 @@ function buildTfvars(config: Record<string, string>): string {
     `db_password     = "${config.db_password}"`,
     ``,
     `# ── Memory ────────────────────────────────────────────────────────`,
-    `# AgentCore managed memory is always on (automatic retention).`,
-    `# Set memory_engine = "cognee" when Cognee should own user/Space memory.`,
+    `# Hindsight is the canonical user and Space memory provider for full installs.`,
+    `# Set memory_engine = "agentcore" only for explicit low-cost/development mode.`,
     `enable_hindsight = ${config.enable_hindsight === "true"}`,
     `memory_engine    = ""`,
     ``,
@@ -230,7 +230,7 @@ export function registerInitCommand(program: Command): void {
           config.region =
             identity.region !== "unknown" ? identity.region : "us-east-1";
           config.database_engine = "aurora-serverless";
-          config.enable_hindsight = "false";
+          config.enable_hindsight = "true";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
@@ -254,23 +254,19 @@ export function registerInitCommand(program: Command): void {
           console.log(chalk.dim("  ── Memory ──"));
           console.log(
             chalk.dim(
-              "  AgentCore managed memory is always on (automatic retention).",
+              "  Hindsight is the canonical user and Space memory provider.",
             ),
           );
           console.log(
-            chalk.dim(
-              "  Hindsight is an optional add-on: ECS Fargate service for",
-            ),
+            chalk.dim("  AgentCore managed memory is available as an explicit"),
           );
-          console.log(
-            chalk.dim("  semantic + entity-graph retrieval (~$75/mo)."),
-          );
+          console.log(chalk.dim("  low-cost/development opt-out."));
           const hindsightAnswer = await ask(
-            "Enable Hindsight long-term memory add-on? (y/N)",
-            "N",
+            "Enable Hindsight long-term memory? (Y/n)",
+            "Y",
           );
           config.enable_hindsight =
-            hindsightAnswer.toLowerCase() === "y" ? "true" : "false";
+            hindsightAnswer.toLowerCase() === "n" ? "false" : "true";
 
           console.log("");
           console.log(chalk.dim("  ── Auth ──"));
@@ -409,7 +405,7 @@ variable "database_engine" {
 
 variable "enable_hindsight" {
   type    = bool
-  default = false
+  default = true
 }
 
 variable "enable_cognee" {
@@ -802,7 +798,7 @@ output "agentcore_memory_id" {
           `  ${chalk.bold("Database:")}        ${config.database_engine}`,
         );
         console.log(
-          `  ${chalk.bold("Memory:")}          managed (always on)${config.enable_hindsight === "true" ? " + hindsight" : ""}`,
+          `  ${chalk.bold("Memory:")}          ${config.enable_hindsight === "true" ? "hindsight" : "agentcore managed"}`,
         );
         console.log(
           `  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`,

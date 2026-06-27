@@ -94,19 +94,19 @@ variable "database_engine" {
 }
 
 variable "enable_hindsight" {
-  description = "Optional Hindsight add-on alongside the always-on managed memory (ECS+ALB for semantic + graph retrieval)"
+  description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine. Use 'cognee' when enable_cognee = true and Company Brain should own user/Space memory."
+  description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments; 'cognee' is legacy diagnostic compatibility, not the supported user/Space memory path."
   type        = string
   default     = ""
 }
 
 variable "enable_cognee" {
-  description = "Enable Cognee as the Company Brain substrate. Disabled by default."
+  description = "Enable Cognee as optional ThinkWork Brain ontology/knowledge-graph infrastructure. Disabled by default."
   type        = bool
   default     = false
 }
@@ -1290,7 +1290,7 @@ output "database_name" {
 }
 
 output "hindsight_enabled" {
-  description = "Whether the Hindsight add-on is enabled"
+  description = "Whether Hindsight canonical memory is enabled"
   value       = module.thinkwork.hindsight_enabled
 }
 

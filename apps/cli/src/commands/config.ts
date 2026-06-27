@@ -90,7 +90,7 @@ export function registerConfigCommand(program: Command): void {
           `  ${chalk.bold("Database:")}        ${env.databaseEngine}`,
         );
         console.log(
-          `  ${chalk.bold("Memory:")}          managed (always on)${env.enableHindsight ? " + hindsight" : ""}`,
+          `  ${chalk.bold("Memory:")}          ${env.enableHindsight ? "hindsight" : "agentcore managed"}`,
         );
         console.log(`  ${chalk.bold("Terraform dir:")}   ${env.terraformDir}`);
         console.log(`  ${chalk.bold("Created:")}         ${env.createdAt}`);
@@ -241,6 +241,10 @@ export function registerConfigCommand(program: Command): void {
               "memory_engine value 'managed' is deprecated — storing it as 'agentcore'.",
             );
             tfValue = "agentcore";
+          } else if (value === "cognee") {
+            printWarning(
+              "memory_engine value 'cognee' is legacy diagnostic compatibility. Hindsight is the supported user/Space memory provider; Cognee should be enabled through ThinkWork Brain infrastructure when needed.",
+            );
           }
         }
 

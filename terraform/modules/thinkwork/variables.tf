@@ -348,13 +348,13 @@ variable "database_engine" {
 }
 
 variable "enable_hindsight" {
-  description = "Enable Hindsight long-term memory as an optional add-on alongside the always-on AgentCore managed memory. When true, deploys an ECS+ALB service for semantic/entity-graph/cross-encoder retrieval. Default false."
+  description = "Enable Hindsight long-term memory. Full ThinkWork installs default this on because Hindsight is the canonical user and Space memory provider; set false only for explicit low-cost/development AgentCore-only deployments."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Accepted values: 'hindsight' (requires enable_hindsight = true), 'agentcore' (uses the always-on AgentCore managed memory), or 'cognee' (requires enable_cognee = true). Legacy value 'managed' maps to 'agentcore'. Empty = auto-select: 'hindsight' when enable_hindsight = true, otherwise 'agentcore'."
+  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Empty auto-selects Hindsight for full installs. Accepted values: 'hindsight' (requires enable_hindsight = true), 'agentcore' (explicit low-cost/development managed-memory mode), or legacy diagnostic 'cognee' (requires enable_cognee = true and is not the supported user/Space memory path). Legacy value 'managed' maps to 'agentcore'."
   type        = string
   default     = ""
 
@@ -370,13 +370,13 @@ variable "memory_engine" {
 }
 
 variable "hindsight_image_tag" {
-  description = "Hindsight Docker image tag (only used when enable_hindsight = true)"
+  description = "Hindsight Docker image tag (used when enable_hindsight = true)"
   type        = string
   default     = "0.5.0"
 }
 
 variable "hindsight_enable_auto_consolidation" {
-  description = "Run Hindsight's observation consolidation engine automatically after retain (only used when enable_hindsight = true)."
+  description = "Run Hindsight's observation consolidation engine automatically after retain (used when enable_hindsight = true)."
   type        = bool
   default     = true
 }
@@ -394,7 +394,7 @@ variable "hindsight_observations_mission" {
 }
 
 variable "enable_cognee" {
-  description = "Enable Cognee as the Company Brain substrate. Set memory_engine = 'cognee' to make it canonical for user and Space memory."
+  description = "Enable Cognee as optional ThinkWork Brain ontology/knowledge-graph infrastructure. Cognee is plugin-managed Brain substrate infrastructure, not the supported user/Space memory provider."
   type        = bool
   default     = false
 }
