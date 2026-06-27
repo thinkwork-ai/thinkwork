@@ -141,6 +141,7 @@ export interface AgentLoopWakeupPayload {
   message: string;
   threadId?: string | null;
   spaceId?: string | null;
+  inputSummary?: Record<string, unknown> | null;
   goalMode: {
     enabled: true;
     action: "start" | "resume";
@@ -242,6 +243,7 @@ export function buildAgentLoopWakeupPayload(input: {
     message: input.version.goalSpec.objective,
     threadId: input.trigger.threadId ?? null,
     spaceId: input.trigger.spaceId ?? null,
+    inputSummary: input.trigger.inputSummary ?? null,
     goalMode: {
       enabled: true,
       action: input.goalModeAction ?? "start",

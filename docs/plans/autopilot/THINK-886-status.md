@@ -99,10 +99,11 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U4 Status
 
-- Status: PR open / Verification
+- Status: merged
 - Branch: `codex/think-86-u4-open-engine-api`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u4-open-engine-api`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/3030
+- Merge commit: `164d9fcb65957f7c33010f81e1c24a09b0b244f4`
 - Goal: expose a minimal GraphQL contract for Open Engine queue list, claim, and receipt operations.
 
 ## U4 Validation Targets
@@ -127,3 +128,30 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 - Local structured review found that the initial GraphQL queue resolvers were tenant-scoped but not admin/service-gated like other internal automation surfaces.
 - Fix applied before PR: `openEngineEligibleWorkItems`, `claimNextOpenEngineWorkItem`, and `recordOpenEngineWorkItemReceipt` now require `requireAdminOrServiceCaller` with operation-specific allowlist names, and resolver tests cover the rejection path before claim.
+
+## U5 Status
+
+- Status: verified locally
+- Branch: `codex/think-86-u5-open-engine-runner-smoke`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u5-open-engine-runner-smoke`
+- Goal: prove the Open Engine queue contract can be consumed by the existing AgentLoop dispatch ledger by claiming one Work Item and enqueueing exactly one runner action.
+
+## U5 Validation Targets
+
+- One eligible Work Item results in one claim, one claimed receipt, and one AgentLoop wakeup with Work Item context.
+- No eligible Work Item results in no claim and no wakeup.
+- Human-held or otherwise ineligible Work Items are not re-enqueued by a second runner scan.
+- Dispatch failure records a failed receipt so the claim is released visibly.
+- Dispatch idempotency prevents duplicate wakeups for the same Work Item claim.
+
+## U5 Verification
+
+- `pnpm --filter @thinkwork/api test -- src/lib/work-items/open-engine-runner.test.ts`
+- `pnpm --filter @thinkwork/agent-loops-core test -- src/dispatcher.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/agent-loops-core typecheck`
+
+## U5 Review Notes
+
+- Local structured review found that adding a new AgentLoop trigger family would violate the existing database check constraint on `agent_loop_runs.trigger_family`.
+- Fix applied before PR: U5 uses the existing `api` trigger family with `triggerSource: "open_engine_queue"` and carries Open Engine identity in the run/wakeup input summary, avoiding a schema/migration expansion in the runner-smoke slice.
