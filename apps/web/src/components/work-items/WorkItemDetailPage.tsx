@@ -2,15 +2,21 @@ import type React from "react";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  AlertTriangle,
+  Bot,
   CalendarDays,
   ChevronDown,
+  CheckCircle2,
   CircleDot,
+  Clock,
   ExternalLink,
   FileText,
   GitBranch,
   Link2,
+  LockOpen,
   MessageSquareText,
   MoreHorizontal,
+  PauseCircle,
   UserRound,
 } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
@@ -18,6 +24,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { Response } from "@/components/ai-elements/response";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  RecordOpenEngineHumanActionMutation,
   SpacesQuery,
   WorkItemDocumentQuery,
   WorkItemDocumentsQuery,
@@ -25,7 +32,7 @@ import {
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { cn } from "@/lib/utils";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import type {
   WorkItemAssigneeSummary,
   WorkItemDocumentSummary,
@@ -75,6 +82,14 @@ interface TenantMembersResult {
   tenantMembers?: TenantMemberSummary[] | null;
 }
 
+type OpenEngineHumanActionType =
+  | "ANSWER_BLOCKER"
+  | "RELEASE_HOLD"
+  | "REQUEST_REVIEW"
+  | "MARK_REVIEWED"
+  | "MARK_BLOCKED"
+  | "MARK_FAILED";
+
 export function WorkItemDetailPage({
   tenantId,
   workItemId,
@@ -115,6 +130,10 @@ export function WorkItemDetailPage({
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [{ fetching: humanActionSaving }, executeHumanAction] = useMutation(
+    RecordOpenEngineHumanActionMutation,
+  );
+  const [humanActionError, setHumanActionError] = useState<string | null>(null);
 
   const item = data?.workItem ?? null;
   const itemKey = item ? workItemKey(item) : "Work Item";
@@ -162,6 +181,28 @@ export function WorkItemDetailPage({
   const events = [...(item.events ?? [])].sort(
     (left, right) => dateTime(right.createdAt) - dateTime(left.createdAt),
   );
+  const handleOpenEngineHumanAction = async (
+    actionType: OpenEngineHumanActionType,
+    message: string,
+  ) => {
+    if (!tenantId || !item) return false;
+    setHumanActionError(null);
+    const result = await executeHumanAction({
+      input: {
+        tenantId,
+        workItemId: item.id,
+        actionType,
+        message: message.trim() || undefined,
+        idempotencyKey: `open-engine-human:${item.id}:${actionType}:${Date.now()}`,
+      },
+    });
+    if (result.error) {
+      setHumanActionError(result.error.message);
+      return false;
+    }
+    reexecuteWorkItem({ requestPolicy: "network-only" });
+    return true;
+  };
 
   return (
     <main className="h-full w-full overflow-auto bg-background">
@@ -227,6 +268,15 @@ export function WorkItemDetailPage({
                 value={workItemSpaceLabel(item.spaceId, spaces)}
               />
             </RailSection>
+
+            <OpenEngineRailSection
+              item={item}
+              events={events}
+              documents={documents}
+              saving={humanActionSaving}
+              error={humanActionError}
+              onAction={handleOpenEngineHumanAction}
+            />
 
             <RailSection title="Labels">
               {item.labels?.length ? (
@@ -681,6 +731,280 @@ function PropertyRow({
   );
 }
 
+function OpenEngineRailSection({
+  item,
+  events,
+  documents,
+  saving,
+  error,
+  onAction,
+}: {
+  item: WorkItemSummary;
+  events: WorkItemEventSummary[];
+  documents: WorkItemDocumentSummary[];
+  saving: boolean;
+  error: string | null;
+  onAction: (
+    actionType: OpenEngineHumanActionType,
+    message: string,
+  ) => Promise<boolean>;
+}) {
+  const state = openEngineState(item);
+  const latestReceipt = latestOpenEngineEvent(events);
+  const latestLedger = latestOpenEngineStatusLedger(documents);
+
+  return (
+    <RailSection title="OpenEngine">
+      <div className="flex items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 dark:bg-background/50">
+        <span className={cn("text-muted-foreground", state.tone)}>
+          {state.icon}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">
+            {state.label}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {state.detail}
+          </p>
+        </div>
+      </div>
+
+      <PropertyRow
+        icon={<Bot className="size-4" />}
+        label="Queue"
+        value={item.openEngineQueueKey || "Default"}
+      />
+      <PropertyRow
+        icon={<Bot className="size-4" />}
+        label="Agent"
+        value={truncateMiddle(item.openEngineClaimedByAgentId) || "None"}
+      />
+      <PropertyRow
+        icon={<Clock className="size-4" />}
+        label="Claimed"
+        value={relativeDate(item.openEngineClaimedAt) || "None"}
+      />
+      <PropertyRow
+        icon={<Clock className="size-4" />}
+        label="Lease"
+        value={relativeDate(item.openEngineClaimExpiresAt) || "None"}
+      />
+
+      {item.openEngineHumanHoldReason ? (
+        <div className="rounded-md border bg-background/50 px-2.5 py-2 text-xs leading-5 text-muted-foreground dark:bg-background/50">
+          <span className="font-medium text-foreground">Hold reason: </span>
+          {item.openEngineHumanHoldReason}
+        </div>
+      ) : null}
+
+      {latestReceipt ? (
+        <div className="rounded-md border bg-background/50 px-2.5 py-2 dark:bg-background/50">
+          <p className="text-xs font-medium text-muted-foreground">
+            Latest receipt
+          </p>
+          <p className="mt-1 line-clamp-3 text-xs leading-5 text-foreground">
+            {latestReceipt.message || eventLabel(latestReceipt.eventType)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {relativeDate(latestReceipt.createdAt)}
+          </p>
+        </div>
+      ) : null}
+
+      {latestLedger ? (
+        <Link
+          to="/work-items/$workItemId/documents/$documentId"
+          params={{ workItemId: item.id, documentId: latestLedger.id }}
+          className="flex items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 text-xs text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-background/50"
+        >
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">{latestLedger.title}</span>
+          <span className="shrink-0 text-muted-foreground">
+            {relativeDate(latestLedger.updatedAt ?? latestLedger.createdAt)}
+          </span>
+        </Link>
+      ) : null}
+
+      <OpenEngineHumanActionControls
+        item={item}
+        saving={saving}
+        error={error}
+        onAction={onAction}
+      />
+    </RailSection>
+  );
+}
+
+function OpenEngineHumanActionControls({
+  item,
+  saving,
+  error,
+  onAction,
+}: {
+  item: WorkItemSummary;
+  saving: boolean;
+  error: string | null;
+  onAction: (
+    actionType: OpenEngineHumanActionType,
+    message: string,
+  ) => Promise<boolean>;
+}) {
+  const [message, setMessage] = useState("");
+  const submit = async (actionType: OpenEngineHumanActionType) => {
+    const didSave = await onAction(actionType, message);
+    if (didSave) {
+      setMessage("");
+    }
+  };
+  const isHeld = Boolean(item.blocked || item.openEngineHumanHold);
+
+  return (
+    <div className="space-y-2 pt-1">
+      <textarea
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        placeholder="Human response or reason..."
+        className="min-h-20 w-full resize-y rounded-md border bg-background/60 px-2.5 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 dark:bg-background/60"
+      />
+      <div className="grid grid-cols-2 gap-1.5">
+        <OpenEngineActionButton
+          disabled={saving || !isHeld}
+          onClick={() => submit("ANSWER_BLOCKER")}
+        >
+          Answer
+        </OpenEngineActionButton>
+        <OpenEngineActionButton
+          disabled={saving || !isHeld}
+          onClick={() => submit("RELEASE_HOLD")}
+        >
+          Resume
+        </OpenEngineActionButton>
+        <OpenEngineActionButton
+          disabled={saving}
+          onClick={() => submit("REQUEST_REVIEW")}
+        >
+          Review
+        </OpenEngineActionButton>
+        <OpenEngineActionButton
+          disabled={saving}
+          onClick={() => submit("MARK_REVIEWED")}
+        >
+          Reviewed
+        </OpenEngineActionButton>
+        <OpenEngineActionButton
+          disabled={saving}
+          onClick={() => submit("MARK_BLOCKED")}
+        >
+          Block
+        </OpenEngineActionButton>
+        <OpenEngineActionButton
+          disabled={saving}
+          onClick={() => submit("MARK_FAILED")}
+        >
+          Fail
+        </OpenEngineActionButton>
+      </div>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function OpenEngineActionButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="h-8 rounded-md border bg-background/60 px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-background/60"
+    >
+      {children}
+    </button>
+  );
+}
+
+function openEngineState(item: WorkItemSummary) {
+  if (!item.openEngineEnabled) {
+    return {
+      label: "Not enabled",
+      detail: "Not in the OpenEngine queue",
+      icon: <CircleDot className="size-4" />,
+      tone: "text-muted-foreground",
+    };
+  }
+  if (item.completedAt) {
+    return {
+      label: "Done",
+      detail: "Completed",
+      icon: <CheckCircle2 className="size-4" />,
+      tone: "text-emerald-500",
+    };
+  }
+  if (item.blocked || item.openEngineHumanHold) {
+    return {
+      label: item.blocked ? "Blocked" : "Human hold",
+      detail: item.openEngineHumanHoldReason || "Waiting on a human",
+      icon: <PauseCircle className="size-4" />,
+      tone: item.blocked ? "text-red-500" : "text-amber-500",
+    };
+  }
+  if (item.openEngineClaimedByAgentId) {
+    return {
+      label: "Claimed",
+      detail: truncateMiddle(item.openEngineClaimedByAgentId) || "Agent active",
+      icon: <Bot className="size-4" />,
+      tone: "text-blue-500",
+    };
+  }
+  if (isFutureDate(item.openEngineScheduledAt)) {
+    return {
+      label: "Scheduled",
+      detail: formatDate(item.openEngineScheduledAt),
+      icon: <Clock className="size-4" />,
+      tone: "text-muted-foreground",
+    };
+  }
+  if (item.openEngineDependencyState === "WAITING") {
+    return {
+      label: "Waiting",
+      detail: "Dependency not ready",
+      icon: <AlertTriangle className="size-4" />,
+      tone: "text-amber-500",
+    };
+  }
+  return {
+    label: "Ready",
+    detail: "Eligible for pickup",
+    icon: <LockOpen className="size-4" />,
+    tone: "text-emerald-500",
+  };
+}
+
+function latestOpenEngineEvent(events: WorkItemEventSummary[]) {
+  return events.find((event) => {
+    const metadata = objectRecord(event.metadata);
+    return (
+      event.actorAgentId ||
+      metadata.source === "open_engine" ||
+      metadata.source === "open_engine_human_action"
+    );
+  });
+}
+
+function latestOpenEngineStatusLedger(documents: WorkItemDocumentSummary[]) {
+  return documents.find((document) => {
+    const metadata = objectRecord(document.metadata);
+    return metadata.openEngineStatusLedger === true;
+  });
+}
+
 function workItemAssigneesFromMembers(
   members: TenantMemberSummary[],
 ): WorkItemAssigneeSummary[] {
@@ -744,6 +1068,18 @@ function relativeDate(value?: string | null) {
   if (diffMs < day) return `${Math.round(diffMs / hour)}h ago`;
   if (diffMs < 7 * day) return `${Math.round(diffMs / day)}d ago`;
   return formatDate(value);
+}
+
+function isFutureDate(value?: string | null) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > Date.now();
+}
+
+function truncateMiddle(value?: string | null) {
+  if (!value) return "";
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
 }
 
 function dateTime(value?: string | null) {
