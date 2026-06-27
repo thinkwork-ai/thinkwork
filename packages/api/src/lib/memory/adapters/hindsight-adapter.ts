@@ -94,6 +94,7 @@ const DEEP_RECALL_MAX_TOKENS = 2_000;
 const HINDSIGHT_CAPABILITIES: MemoryCapabilities = {
   retain: true,
   recall: true,
+  spaceMemory: true,
   inspectRecords: true,
   inspectGraph: true,
   export: true,

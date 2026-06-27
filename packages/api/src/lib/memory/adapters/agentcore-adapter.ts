@@ -64,6 +64,7 @@ const NAMESPACE_PREFIXES: Array<{
 const AGENTCORE_CAPABILITIES: MemoryCapabilities = {
   retain: true,
   recall: true,
+  spaceMemory: false,
   inspectRecords: true,
   inspectGraph: false,
   export: true,

@@ -3088,30 +3088,31 @@ export enum MemoryStrategy {
 /**
  * Runtime memory system configuration exposed to the admin UI.
  * Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
- * only meaningful when Hindsight is deployed alongside managed memory).
+ * only meaningful when the active engine supports graph inspection).
  */
 export type MemorySystemConfig = {
   __typename?: "MemorySystemConfig";
   /** Active long-term memory engine selected by MEMORY_ENGINE. */
   activeEngine: Scalars["String"]["output"];
   /**
-   * True when Cognee is the active long-term memory engine for the user and
-   * space memory cutover.
+   * True when Cognee is explicitly selected as the active memory engine.
+   * This is a compatibility/diagnostic signal; Hindsight is the canonical
+   * user and Space memory engine for this pass.
    */
   cogneeMemoryEnabled: Scalars["Boolean"]["output"];
   /**
-   * Company-level distillation is intentionally deferred from the Cognee user +
-   * space memory proof.
+   * ThinkWork Brain distillation is intentionally deferred from this memory
+   * provider pivot.
    */
   companyDistillationEnabled: Scalars["Boolean"]["output"];
   /**
-   * True when Hindsight is the active long-term memory engine. Cognee-backed
-   * graph inspection must not set this flag.
+   * True when Hindsight is the active long-term memory engine for canonical
+   * user and Space memory.
    */
   hindsightEnabled: Scalars["Boolean"]["output"];
   /**
-   * True when a Hindsight endpoint is still configured while another engine is
-   * active. Operators should treat it as legacy in Cognee mode.
+   * True when a Hindsight endpoint is configured while another engine is
+   * active. Operators should treat it as non-canonical diagnostic evidence.
    */
   legacyHindsightAvailable: Scalars["Boolean"]["output"];
   /**
@@ -3125,8 +3126,8 @@ export type MemorySystemConfig = {
   /** True when the active engine supports user-carried memory capture and recall. */
   userMemoryEnabled: Scalars["Boolean"]["output"];
   /**
-   * Wiki projection from Cognee-backed company memory is intentionally deferred
-   * from this pass.
+   * Wiki projection from ThinkWork Brain memory is intentionally deferred from
+   * this pass.
    */
   wikiProjectionEnabled: Scalars["Boolean"]["output"];
 };

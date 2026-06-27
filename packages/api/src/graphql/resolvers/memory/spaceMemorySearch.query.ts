@@ -25,8 +25,11 @@ export const spaceMemorySearch = async (
   const limit = args.limit ?? 10;
 
   const { adapter, recall: recallService } = getMemoryServices();
-  if (adapter.kind !== "cognee") {
-    throw new Error("Space memory requires the Cognee memory engine");
+  const capabilities = await adapter.capabilities();
+  if (!capabilities.spaceMemory || !capabilities.recall) {
+    throw new Error(
+      "Active memory engine does not support Space memory search",
+    );
   }
   const hits = await recallService.recall({
     tenantId,

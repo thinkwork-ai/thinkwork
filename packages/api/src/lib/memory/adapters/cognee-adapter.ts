@@ -41,6 +41,7 @@ export type CogneeAdapterOptions = {
 const COGNEE_CAPABILITIES: MemoryCapabilities = {
   retain: true,
   recall: true,
+  spaceMemory: true,
   inspectRecords: false,
   inspectGraph: true,
   export: false,
@@ -85,10 +86,7 @@ export class CogneeAdapter implements MemoryAdapter {
         endpoint: opts.endpoint,
         token: opts.token,
         fetchFn: opts.fetchFn,
-        mode:
-          opts.ingestMode ??
-          cogneeIngestModeFromConfig() ??
-          undefined,
+        mode: opts.ingestMode ?? cogneeIngestModeFromConfig() ?? undefined,
         indexPollMs: positiveIntConfig("COGNEE_INDEX_POLL_MS"),
         indexTimeoutMs: positiveIntConfig("COGNEE_INDEX_TIMEOUT_MS"),
       });
@@ -455,8 +453,7 @@ function requiredOwnerNodeSets(args: {
   request: RecallRequest;
   nodeSets: string[];
 }): string[] {
-  const ownerPrefix =
-    args.request.ownerType === "space" ? "space_" : "user_";
+  const ownerPrefix = args.request.ownerType === "space" ? "space_" : "user_";
   const ownerNodeSet = args.nodeSets.find((nodeSet) =>
     nodeSet.startsWith(ownerPrefix),
   );

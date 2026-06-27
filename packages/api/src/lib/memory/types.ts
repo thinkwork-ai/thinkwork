@@ -191,6 +191,7 @@ export type ExportRequest = MemoryOwnerRef & {
 export type MemoryCapabilities = {
   retain: boolean;
   recall: boolean;
+  spaceMemory: boolean;
   inspectRecords: boolean;
   inspectGraph: boolean;
   export: boolean;
