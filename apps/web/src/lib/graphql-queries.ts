@@ -1092,9 +1092,42 @@ export const WorkItemsQuery = gql`
   ${WorkItemFieldsFragment}
 `;
 
+export const WorkItemQuery = gql`
+  query WorkItem($tenantId: ID, $id: ID!) {
+    workItem(tenantId: $tenantId, id: $id) {
+      ...WorkItemFields
+      events {
+        id
+        tenantId
+        spaceId
+        workItemId
+        threadId
+        actorUserId
+        actorAgentId
+        eventType
+        previousStatusId
+        newStatusId
+        message
+        metadata
+        createdAt
+      }
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
 export const WorkItemDocumentsQuery = gql`
   query WorkItemDocuments($input: WorkItemDocumentsInput!) {
     workItemDocuments(input: $input) {
+      ...WorkItemDocumentFields
+    }
+  }
+  ${WorkItemDocumentFieldsFragment}
+`;
+
+export const WorkItemDocumentQuery = gql`
+  query WorkItemDocument($input: WorkItemDocumentInput!) {
+    workItemDocument(input: $input) {
       ...WorkItemDocumentFields
     }
   }

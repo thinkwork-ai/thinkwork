@@ -91,6 +91,7 @@ interface WorkItemsPageProps {
   userId?: string | null;
   state: WorkItemRouteSearch;
   onStateChange: (next: WorkItemRouteSearch) => void;
+  onItemOpen?: (item: WorkItemSummary) => void;
 }
 
 export function WorkItemsPage({
@@ -98,6 +99,7 @@ export function WorkItemsPage({
   userId,
   state,
   onStateChange,
+  onItemOpen,
 }: WorkItemsPageProps) {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [newWorkItemOpen, setNewWorkItemOpen] = useState(false);
@@ -441,7 +443,9 @@ export function WorkItemsPage({
               sequenceNumbers={sequenceNumbers}
               onStatusChange={handleStatusChange}
               onItemUpdate={handleWorkItemUpdate}
-              onItemOpen={(item) => setDetailItemId(item.id)}
+              onItemOpen={(item) =>
+                onItemOpen ? onItemOpen(item) : setDetailItemId(item.id)
+              }
             />
           )}
         </div>

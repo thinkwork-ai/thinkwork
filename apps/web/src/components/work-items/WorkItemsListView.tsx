@@ -198,7 +198,10 @@ export function WorkItemsListView({
             getRowId={(item) => item.id}
             data-testid="work-items-list"
             className="min-h-0"
-            rowClassName="px-1 py-0"
+            groupCountPlacement="inline"
+            groupLabelClassName="text-foreground"
+            groupCountClassName="text-muted-foreground"
+            rowClassName="min-h-10 px-1 py-0"
             emptyState={<EmptyWorkItemsState />}
             renderRow={(item) => (
               <WorkItemListRow
