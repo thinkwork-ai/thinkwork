@@ -7,10 +7,13 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  CreateWorkItemDocumentMutation,
   CreateWorkItemMutation,
   SpacesQuery,
+  UpdateWorkItemDocumentMutation,
   UpdateWorkItemMutation,
   UpdateWorkItemStatusMutation,
+  WorkItemDocumentsQuery,
   WorkItemLabelsQuery,
   WorkItemStatusesQuery,
   WorkItemsQuery,
@@ -24,6 +27,8 @@ import {
   isWorkItemOpen,
   sortWorkItemStatuses,
   type WorkItemAssigneeSummary,
+  type WorkItemDocumentKind,
+  type WorkItemDocumentSummary,
   type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
@@ -56,6 +61,10 @@ interface WorkItemStatusesResult {
 
 interface WorkItemLabelsResult {
   workItemLabels?: WorkItemLabelSummary[] | null;
+}
+
+interface WorkItemDocumentsResult {
+  workItemDocuments?: WorkItemDocumentSummary[] | null;
 }
 
 interface SpacesResult {
@@ -130,6 +139,22 @@ export function WorkItemsPage({
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [
+    { data: documentsData, fetching: documentsFetching },
+    reexecuteDocuments,
+  ] = useQuery<WorkItemDocumentsResult>({
+    query: WorkItemDocumentsQuery,
+    variables: {
+      input: {
+        tenantId: tenantId ?? "",
+        workItemId: detailItemId ?? "",
+        includeContent: true,
+        limit: 50,
+      },
+    },
+    pause: !tenantId || !detailItemId,
+    requestPolicy: "cache-and-network",
+  });
   const [{ fetching: statusUpdating }, executeStatusUpdate] = useMutation(
     UpdateWorkItemStatusMutation,
   );
@@ -138,6 +163,12 @@ export function WorkItemsPage({
   );
   const [{ fetching: creatingWorkItem }, executeCreateWorkItem] = useMutation(
     CreateWorkItemMutation,
+  );
+  const [{ fetching: documentCreating }, executeCreateDocument] = useMutation(
+    CreateWorkItemDocumentMutation,
+  );
+  const [{ fetching: documentUpdating }, executeUpdateDocument] = useMutation(
+    UpdateWorkItemDocumentMutation,
   );
 
   useEffect(() => {
@@ -167,6 +198,7 @@ export function WorkItemsPage({
     [membersData?.tenantMembers],
   );
   const detailItem = workItems.find((item) => item.id === detailItemId) ?? null;
+  const detailDocuments = documentsData?.workItemDocuments ?? [];
   const statuses = useMemo(() => {
     const spaceStatuses = sortWorkItemStatuses(
       statusesData?.workItemStatuses ?? [],
@@ -246,6 +278,60 @@ export function WorkItemsPage({
       return true;
     },
     [creatingWorkItem, executeCreateWorkItem, reexecuteItems, tenantId],
+  );
+
+  const handleCreateDocument = useCallback(
+    async (input: {
+      title: string;
+      kind: WorkItemDocumentKind;
+      content: string;
+    }) => {
+      if (!tenantId || !detailItemId || documentCreating) return false;
+      const result = await executeCreateDocument({
+        input: {
+          tenantId,
+          workItemId: detailItemId,
+          title: input.title,
+          kind: input.kind,
+          content: input.content,
+          contentType: "text/markdown",
+        },
+      });
+      if (result.error) {
+        toast.error(`Couldn't create document: ${result.error.message}`);
+        return false;
+      }
+      toast.success("Document added");
+      reexecuteDocuments({ requestPolicy: "network-only" });
+      return true;
+    },
+    [
+      detailItemId,
+      documentCreating,
+      executeCreateDocument,
+      reexecuteDocuments,
+      tenantId,
+    ],
+  );
+
+  const handleArchiveDocument = useCallback(
+    async (document: WorkItemDocumentSummary) => {
+      if (!tenantId || documentUpdating) return;
+      const result = await executeUpdateDocument({
+        input: {
+          tenantId,
+          id: document.id,
+          archived: true,
+        },
+      });
+      if (result.error) {
+        toast.error(`Couldn't archive document: ${result.error.message}`);
+        return;
+      }
+      toast.success("Document archived");
+      reexecuteDocuments({ requestPolicy: "network-only" });
+    },
+    [documentUpdating, executeUpdateDocument, reexecuteDocuments, tenantId],
   );
 
   const updateState = useCallback(
@@ -373,6 +459,9 @@ export function WorkItemsPage({
         labels={labels}
         statuses={statuses}
         assignees={assignees}
+        documents={detailDocuments}
+        documentsLoading={documentsFetching}
+        documentSaving={documentCreating || documentUpdating}
         updating={Boolean(detailItem && updatingItemId === detailItem.id)}
         open={Boolean(detailItemId)}
         onOpenChange={(open) => {
@@ -380,6 +469,8 @@ export function WorkItemsPage({
         }}
         onStatusChange={handleStatusChange}
         onItemUpdate={handleWorkItemUpdate}
+        onDocumentCreate={handleCreateDocument}
+        onDocumentArchive={handleArchiveDocument}
       />
     </main>
   );

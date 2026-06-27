@@ -90,6 +90,16 @@ export const WORK_ITEM_DOGFOOD_LABELS = [
   "blocked",
 ] as const;
 
+export const WORK_ITEM_DOCUMENT_KINDS = [
+  "plan",
+  "progress",
+  "spec",
+  "evidence",
+  "handoff",
+  "note",
+  "other",
+] as const;
+
 export const workItemStatuses = pgTable(
   "work_item_statuses",
   {
@@ -352,6 +362,59 @@ export const workItemLabelAssignments = pgTable(
   ],
 );
 
+export const workItemDocuments = pgTable(
+  "work_item_documents",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    work_item_id: uuid("work_item_id")
+      .references(() => workItems.id, { onDelete: "cascade" })
+      .notNull(),
+    kind: text("kind").notNull().default("note"),
+    title: text("title").notNull(),
+    content_type: text("content_type").notNull().default("text/markdown"),
+    s3_key: text("s3_key").notNull(),
+    size_bytes: integer("size_bytes").notNull().default(0),
+    checksum_sha256: text("checksum_sha256"),
+    metadata: jsonb("metadata"),
+    created_by_user_id: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    created_by_agent_id: uuid("created_by_agent_id").references(
+      () => agents.id,
+      { onDelete: "set null" },
+    ),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    archived_at: timestamp("archived_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_work_item_documents_item_active").on(
+      table.tenant_id,
+      table.work_item_id,
+      table.archived_at,
+      table.updated_at,
+    ),
+    index("idx_work_item_documents_tenant_kind").on(
+      table.tenant_id,
+      table.kind,
+      table.archived_at,
+    ),
+    check(
+      "work_item_documents_kind_allowed",
+      sql`${table.kind} IN ('plan','progress','spec','evidence','handoff','note','other')`,
+    ),
+  ],
+);
+
 export const workItemThreadLinks = pgTable(
   "work_item_thread_links",
   {
@@ -592,6 +655,7 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   events: many(workItemEvents),
   externalRefs: many(workItemExternalRefs),
   labelAssignments: many(workItemLabelAssignments),
+  documents: many(workItemDocuments),
 }));
 
 export const workItemLabelsRelations = relations(
@@ -627,6 +691,28 @@ export const workItemLabelAssignmentsRelations = relations(
     createdByUser: one(users, {
       fields: [workItemLabelAssignments.created_by_user_id],
       references: [users.id],
+    }),
+  }),
+);
+
+export const workItemDocumentsRelations = relations(
+  workItemDocuments,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [workItemDocuments.tenant_id],
+      references: [tenants.id],
+    }),
+    workItem: one(workItems, {
+      fields: [workItemDocuments.work_item_id],
+      references: [workItems.id],
+    }),
+    createdByUser: one(users, {
+      fields: [workItemDocuments.created_by_user_id],
+      references: [users.id],
+    }),
+    createdByAgent: one(agents, {
+      fields: [workItemDocuments.created_by_agent_id],
+      references: [agents.id],
     }),
   }),
 );

@@ -7,6 +7,14 @@ export type WorkItemStatusCategory =
 
 export type WorkItemPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type WorkItemViewType = "LIST" | "BOARD";
+export type WorkItemDocumentKind =
+  | "PLAN"
+  | "PROGRESS"
+  | "SPEC"
+  | "EVIDENCE"
+  | "HANDOFF"
+  | "NOTE"
+  | "OTHER";
 
 export interface WorkItemStatusSummary {
   id: string;
@@ -43,6 +51,24 @@ export interface WorkItemLabelSummary {
   slug: string;
   color?: string | null;
   description?: string | null;
+  archivedAt?: string | null;
+}
+
+export interface WorkItemDocumentSummary {
+  id: string;
+  tenantId?: string | null;
+  workItemId: string;
+  kind: WorkItemDocumentKind;
+  title: string;
+  content?: string | null;
+  contentType: string;
+  sizeBytes: number;
+  checksumSha256?: string | null;
+  metadata?: unknown;
+  createdByUserId?: string | null;
+  createdByAgentId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   archivedAt?: string | null;
 }
 
@@ -218,6 +244,32 @@ export function workItemPriorityTone(
     case "NORMAL":
     default:
       return "bg-muted text-muted-foreground";
+  }
+}
+
+export function workItemDocumentKindLabel(
+  kind?: WorkItemDocumentKind | string | null,
+) {
+  switch (
+    String(kind ?? "NOTE")
+      .trim()
+      .toUpperCase()
+  ) {
+    case "PLAN":
+      return "Plan";
+    case "PROGRESS":
+      return "Progress";
+    case "SPEC":
+      return "Spec";
+    case "EVIDENCE":
+      return "Evidence";
+    case "HANDOFF":
+      return "Handoff";
+    case "OTHER":
+      return "Other";
+    case "NOTE":
+    default:
+      return "Note";
   }
 }
 

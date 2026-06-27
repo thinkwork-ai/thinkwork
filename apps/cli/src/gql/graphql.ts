@@ -1581,10 +1581,22 @@ export type CreateWebhookInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type CreateWorkItemDocumentInput = {
+  content: Scalars["String"]["input"];
+  contentType?: InputMaybe<Scalars["String"]["input"]>;
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  title: Scalars["String"]["input"];
+  workItemId: Scalars["ID"]["input"];
+};
+
 export type CreateWorkItemInput = {
   applicable?: InputMaybe<Scalars["Boolean"]["input"]>;
   blocked?: InputMaybe<Scalars["Boolean"]["input"]>;
   dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  labelIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   notes?: InputMaybe<Scalars["String"]["input"]>;
   ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -1597,6 +1609,14 @@ export type CreateWorkItemInput = {
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
   title: Scalars["String"]["input"];
+};
+
+export type CreateWorkItemLabelInput = {
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  slug?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export enum CrmStatusHandleState {
@@ -3442,6 +3462,8 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   createWorkItem: WorkItem;
+  createWorkItemDocument: WorkItemDocument;
+  createWorkItemLabel: WorkItemLabel;
   /**
    * One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
    * MCP row to plugin ownership (management_source 'plugin' under the
@@ -3699,6 +3721,8 @@ export type Mutation = {
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
   updateWorkItem: WorkItem;
+  updateWorkItemDocument: WorkItemDocument;
+  updateWorkItemLabel: WorkItemLabel;
   updateWorkItemStatus: WorkItem;
   /**
    * Pin a new catalog version and reconcile the component diff through the
@@ -3974,6 +3998,14 @@ export type MutationCreateWebhookArgs = {
 
 export type MutationCreateWorkItemArgs = {
   input: CreateWorkItemInput;
+};
+
+export type MutationCreateWorkItemDocumentArgs = {
+  input: CreateWorkItemDocumentInput;
+};
+
+export type MutationCreateWorkItemLabelArgs = {
+  input: CreateWorkItemLabelInput;
 };
 
 export type MutationDeactivatePluginArgs = {
@@ -4844,6 +4876,14 @@ export type MutationUpdateWebhookArgs = {
 
 export type MutationUpdateWorkItemArgs = {
   input: UpdateWorkItemInput;
+};
+
+export type MutationUpdateWorkItemDocumentArgs = {
+  input: UpdateWorkItemDocumentInput;
+};
+
+export type MutationUpdateWorkItemLabelArgs = {
+  input: UpdateWorkItemLabelInput;
 };
 
 export type MutationUpdateWorkItemStatusArgs = {
@@ -5886,6 +5926,9 @@ export type Query = {
    */
   wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
+  workItemDocument?: Maybe<WorkItemDocument>;
+  workItemDocuments: Array<WorkItemDocument>;
+  workItemLabels: Array<WorkItemLabel>;
   workItemSavedViews: Array<WorkItemSavedView>;
   workItemStatuses: Array<WorkItemStatus>;
   workItems: Array<WorkItem>;
@@ -6754,6 +6797,18 @@ export type QueryWikiSearchArgs = {
 export type QueryWorkItemArgs = {
   id: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemDocumentArgs = {
+  input: WorkItemDocumentInput;
+};
+
+export type QueryWorkItemDocumentsArgs = {
+  input: WorkItemDocumentsInput;
+};
+
+export type QueryWorkItemLabelsArgs = {
+  input?: InputMaybe<WorkItemLabelsInput>;
 };
 
 export type QueryWorkItemSavedViewsArgs = {
@@ -9228,11 +9283,24 @@ export type UpdateWebhookInput = {
   targetType?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type UpdateWorkItemDocumentInput = {
+  archived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  content?: InputMaybe<Scalars["String"]["input"]>;
+  contentType?: InputMaybe<Scalars["String"]["input"]>;
+  id: Scalars["ID"]["input"];
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type UpdateWorkItemInput = {
   applicable?: InputMaybe<Scalars["Boolean"]["input"]>;
   archived?: InputMaybe<Scalars["Boolean"]["input"]>;
   blocked?: InputMaybe<Scalars["Boolean"]["input"]>;
   dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  labelIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   notes?: InputMaybe<Scalars["String"]["input"]>;
   ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -9242,6 +9310,16 @@ export type UpdateWorkItemInput = {
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   title?: InputMaybe<Scalars["String"]["input"]>;
   workItemId: Scalars["ID"]["input"];
+};
+
+export type UpdateWorkItemLabelInput = {
+  archived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  id: Scalars["ID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  slug?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type UpdateWorkItemStatusInput = {
@@ -9697,10 +9775,12 @@ export type WorkItem = {
   createdAt: Scalars["AWSDateTime"]["output"];
   createdByAgentId?: Maybe<Scalars["ID"]["output"]>;
   createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  documents: Array<WorkItemDocument>;
   dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   events: Array<WorkItemEvent>;
   externalRefs: Array<WorkItemExternalRef>;
   id: Scalars["ID"]["output"];
+  labels: Array<WorkItemLabel>;
   metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   notes?: Maybe<Scalars["String"]["output"]>;
   openEngineClaimExpiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
@@ -9725,6 +9805,49 @@ export type WorkItem = {
   threadLinks: Array<WorkItemThreadLink>;
   title: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type WorkItemDocument = {
+  __typename?: "WorkItemDocument";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  checksumSha256?: Maybe<Scalars["String"]["output"]>;
+  content?: Maybe<Scalars["String"]["output"]>;
+  contentType: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdByAgentId?: Maybe<Scalars["ID"]["output"]>;
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  id: Scalars["ID"]["output"];
+  kind: WorkItemDocumentKind;
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  sizeBytes: Scalars["Int"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  workItemId: Scalars["ID"]["output"];
+};
+
+export type WorkItemDocumentInput = {
+  id: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export enum WorkItemDocumentKind {
+  Evidence = "EVIDENCE",
+  Handoff = "HANDOFF",
+  Note = "NOTE",
+  Other = "OTHER",
+  Plan = "PLAN",
+  Progress = "PROGRESS",
+  Spec = "SPEC",
+}
+
+export type WorkItemDocumentsInput = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  includeContent?: InputMaybe<Scalars["Boolean"]["input"]>;
+  kind?: InputMaybe<WorkItemDocumentKind>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
 };
 
 export type WorkItemEvent = {
@@ -9778,6 +9901,27 @@ export enum WorkItemExternalRefProvider {
   Thinkwork = "THINKWORK",
   Twenty = "TWENTY",
 }
+
+export type WorkItemLabel = {
+  __typename?: "WorkItemLabel";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type WorkItemLabelsInput = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
 
 export enum WorkItemOpenEngineDependencyState {
   Ready = "READY",
@@ -9887,6 +10031,8 @@ export type WorkItemsInput = {
   dueAfter?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   dueBefore?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  labelIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
   ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;

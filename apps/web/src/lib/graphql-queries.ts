@@ -1063,6 +1063,26 @@ const WorkItemFieldsFragment = gql`
   }
 `;
 
+const WorkItemDocumentFieldsFragment = gql`
+  fragment WorkItemDocumentFields on WorkItemDocument {
+    id
+    tenantId
+    workItemId
+    kind
+    title
+    content
+    contentType
+    sizeBytes
+    checksumSha256
+    metadata
+    createdByUserId
+    createdByAgentId
+    createdAt
+    updatedAt
+    archivedAt
+  }
+`;
+
 export const WorkItemsQuery = gql`
   query WorkItems($input: WorkItemsInput) {
     workItems(input: $input) {
@@ -1070,6 +1090,33 @@ export const WorkItemsQuery = gql`
     }
   }
   ${WorkItemFieldsFragment}
+`;
+
+export const WorkItemDocumentsQuery = gql`
+  query WorkItemDocuments($input: WorkItemDocumentsInput!) {
+    workItemDocuments(input: $input) {
+      ...WorkItemDocumentFields
+    }
+  }
+  ${WorkItemDocumentFieldsFragment}
+`;
+
+export const CreateWorkItemDocumentMutation = gql`
+  mutation CreateWorkItemDocument($input: CreateWorkItemDocumentInput!) {
+    createWorkItemDocument(input: $input) {
+      ...WorkItemDocumentFields
+    }
+  }
+  ${WorkItemDocumentFieldsFragment}
+`;
+
+export const UpdateWorkItemDocumentMutation = gql`
+  mutation UpdateWorkItemDocument($input: UpdateWorkItemDocumentInput!) {
+    updateWorkItemDocument(input: $input) {
+      ...WorkItemDocumentFields
+    }
+  }
+  ${WorkItemDocumentFieldsFragment}
 `;
 
 export const CreateWorkItemMutation = gql`
