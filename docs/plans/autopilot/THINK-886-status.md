@@ -55,9 +55,11 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 
 ## U2 Status
 
-- Status: verified locally
+- Status: merged
 - Branch: `codex/think-86-u2-queue-claim`
 - Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u2-queue-claim`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3027
+- Merge commit: `77f0c520fe17377a7eebed67187b095f33e181f5`
 - Goal: add the internal queue eligibility and atomic claim service on top of U1 row-level queue state.
 
 ## U2 Validation Targets
@@ -71,4 +73,24 @@ Note: `@thinkwork/mobile` has no `typecheck` script in this checkout.
 ## U2 Verification
 
 - `pnpm --filter @thinkwork/api test -- src/lib/work-items/open-engine-queue-service.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+
+## U3 Status
+
+- Status: verified locally
+- Branch: `codex/think-86-u3-open-engine-receipts`
+- Worktree: `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/think-86-u3-open-engine-receipts`
+- Goal: add durable Open Engine receipt semantics on Work Item events.
+
+## U3 Validation Targets
+
+- Receipts are stored as Work Item `agent_action` events with Open Engine metadata.
+- Blocked receipts create a human hold, preserve the blocker reason, and release the claim.
+- Resumed receipts clear human hold state.
+- Failed/completed receipts release the claim.
+- Progress receipts record evidence without changing hold or claim state.
+
+## U3 Verification
+
+- `pnpm --filter @thinkwork/api test -- src/lib/work-items/open-engine-receipt-service.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
