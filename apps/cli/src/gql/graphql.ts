@@ -3590,6 +3590,7 @@ export type Mutation = {
    * the counts it would write without mutating. Returns one result per tenant.
    */
   rebuildSkillCatalogIndex: Array<SkillCatalogRebuildResult>;
+  recordOpenEngineHumanAction: WorkItemEvent;
   recordOpenEngineWorkItemReceipt: WorkItemEvent;
   /**
    * Tenant-admin: redeem a ThinkWork-provided premium plugin install key into a
@@ -4375,6 +4376,10 @@ export type MutationRebuildSkillCatalogIndexArgs = {
 
 export type MutationRecordOpenEngineWorkItemReceiptArgs = {
   input: RecordOpenEngineWorkItemReceiptInput;
+};
+
+export type MutationRecordOpenEngineHumanActionArgs = {
+  input: RecordOpenEngineHumanActionInput;
 };
 
 export type MutationRedeemPremiumPluginInstallKeyArgs = {
@@ -6928,6 +6933,17 @@ export type RecordOpenEngineWorkItemReceiptInput = {
   receiptType: WorkItemOpenEngineReceiptType;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
+export type RecordOpenEngineHumanActionInput = {
+  actionType: WorkItemOpenEngineHumanActionType;
+  evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   workItemId: Scalars["ID"]["input"];
 };
 
@@ -9979,6 +9995,15 @@ export type WorkItemLabelsInput = {
 export enum WorkItemOpenEngineDependencyState {
   Ready = "READY",
   Waiting = "WAITING",
+}
+
+export enum WorkItemOpenEngineHumanActionType {
+  AnswerBlocker = "ANSWER_BLOCKER",
+  MarkBlocked = "MARK_BLOCKED",
+  MarkFailed = "MARK_FAILED",
+  MarkReviewed = "MARK_REVIEWED",
+  ReleaseHold = "RELEASE_HOLD",
+  RequestReview = "REQUEST_REVIEW",
 }
 
 export enum WorkItemOpenEngineReceiptType {

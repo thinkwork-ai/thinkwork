@@ -64,6 +64,15 @@ enum WorkItemOpenEngineReceiptType {
   COMPLETED
 }
 
+enum WorkItemOpenEngineHumanActionType {
+  ANSWER_BLOCKER
+  RELEASE_HOLD
+  REQUEST_REVIEW
+  MARK_REVIEWED
+  MARK_BLOCKED
+  MARK_FAILED
+}
+
 enum WorkItemDocumentKind {
   PLAN
   PROGRESS
@@ -420,6 +429,17 @@ input RecordOpenEngineWorkItemReceiptInput {
   now: AWSDateTime
 }
 
+input RecordOpenEngineHumanActionInput {
+  tenantId: ID
+  workItemId: ID!
+  actionType: WorkItemOpenEngineHumanActionType!
+  message: String
+  evidence: AWSJSON
+  metadata: AWSJSON
+  idempotencyKey: String
+  now: AWSDateTime
+}
+
 extend type Query {
   workItems(input: WorkItemsInput): [WorkItem!]!
   workItem(tenantId: ID, id: ID!): WorkItem
@@ -448,6 +468,7 @@ extend type Mutation {
   recordOpenEngineWorkItemReceipt(
     input: RecordOpenEngineWorkItemReceiptInput!
   ): WorkItemEvent!
+  recordOpenEngineHumanAction(input: RecordOpenEngineHumanActionInput!): WorkItemEvent!
   saveWorkItemStatuses(input: SaveWorkItemStatusesInput!): [WorkItemStatus!]!
   saveWorkItemView(input: SaveWorkItemViewInput!): WorkItemSavedView!
   deleteWorkItemView(input: DeleteWorkItemViewInput!): Boolean!

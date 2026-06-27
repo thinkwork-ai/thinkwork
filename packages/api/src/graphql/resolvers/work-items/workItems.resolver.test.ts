@@ -33,6 +33,12 @@ const {
       "owner_agent_id",
       "archived_at",
       "updated_at",
+      "open_engine_human_hold",
+      "open_engine_human_hold_reason",
+      "open_engine_dependency_state",
+      "open_engine_claimed_by_agent_id",
+      "open_engine_claimed_at",
+      "open_engine_claim_expires_at",
     ]),
     workItemStatuses: table("work_item_statuses", [
       "id",
@@ -48,7 +54,12 @@ const {
       "work_item_id",
       "thread_id",
     ]),
-    workItemEvents: table("work_item_events", []),
+    workItemEvents: table("work_item_events", [
+      "tenant_id",
+      "work_item_id",
+      "actor_user_id",
+      "metadata",
+    ]),
     workItemLabels: table("work_item_labels", [
       "id",
       "tenant_id",
@@ -243,6 +254,7 @@ import { createWorkItemDocument } from "./createWorkItemDocument.mutation.js";
 import { updateWorkItemLabel } from "./updateWorkItemLabel.mutation.js";
 import { updateWorkItemDocument } from "./updateWorkItemDocument.mutation.js";
 import { updateWorkItemStatus } from "./updateWorkItemStatus.mutation.js";
+import { recordOpenEngineHumanAction } from "./recordOpenEngineHumanAction.mutation.js";
 import { workItemDocument } from "./workItemDocument.query.js";
 import { workItemDocuments } from "./workItemDocuments.query.js";
 import { deleteWorkItemView } from "./deleteWorkItemView.mutation.js";
@@ -740,6 +752,138 @@ describe("work item resolvers", () => {
     );
     expect(result).toEqual(
       expect.objectContaining({ id: "work-item-1", statusId: "status-done" }),
+    );
+  });
+
+  it("records a human OpenEngine blocker answer and releases the item for pickup", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      status_id: "status-blocked",
+      title: "Need tax forms",
+      priority: "high",
+      blocked: true,
+      open_engine_human_hold: true,
+      open_engine_human_hold_reason: "Need exemption form.",
+    };
+    const now = "2026-06-27T13:00:00.000Z";
+    captures.selectQueue.push([existingItem]);
+    captures.updateReturningQueue.push([
+      {
+        ...existingItem,
+        blocked: false,
+        open_engine_human_hold: false,
+        open_engine_human_hold_reason: null,
+        open_engine_dependency_state: "ready",
+      },
+    ]);
+    captures.selectQueue.push([
+      {
+        id: "event-1",
+        tenant_id: "tenant-1",
+        work_item_id: "work-item-1",
+        actor_user_id: "user-1",
+        event_type: "unblocked",
+        message: "Customer uploaded the form.",
+        metadata: {
+          source: "open_engine_human_action",
+          actionType: "answer_blocker",
+          evidence: { documentId: "doc-1" },
+        },
+      },
+    ]);
+
+    const result = await recordOpenEngineHumanAction(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          actionType: "ANSWER_BLOCKER",
+          message: "Customer uploaded the form.",
+          evidence: JSON.stringify({ documentId: "doc-1" }),
+          now,
+        },
+      },
+      ctx,
+    );
+
+    expect(captures.updateSets[0]).toEqual({
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "ready",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: new Date(now),
+    });
+    expect(captures.insertValues[0]).toEqual(
+      expect.objectContaining({
+        tenant_id: "tenant-1",
+        work_item_id: "work-item-1",
+        actor_user_id: "user-1",
+        event_type: "unblocked",
+        message: "Customer uploaded the form.",
+        metadata: {
+          source: "open_engine_human_action",
+          actionType: "answer_blocker",
+          evidence: { documentId: "doc-1" },
+        },
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: "event-1",
+        eventType: "UNBLOCKED",
+        message: "Customer uploaded the form.",
+      }),
+    );
+  });
+
+  it("does not duplicate idempotent human OpenEngine actions", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Need review",
+      priority: "normal",
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [
+        {
+          id: "event-existing",
+          tenant_id: "tenant-1",
+          work_item_id: "work-item-1",
+          actor_user_id: "user-1",
+          event_type: "status_changed",
+          message: "Already reviewed.",
+        },
+      ],
+    );
+
+    const result = await recordOpenEngineHumanAction(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          actionType: "MARK_REVIEWED",
+          idempotencyKey: "review-key-1",
+        },
+      },
+      ctx,
+    );
+
+    expect(captures.updateSets).toEqual([]);
+    expect(captures.insertValues).toEqual([]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: "event-existing",
+        eventType: "STATUS_CHANGED",
+      }),
     );
   });
 
