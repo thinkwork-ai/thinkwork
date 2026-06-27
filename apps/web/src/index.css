@@ -38,7 +38,7 @@
  * Re-tone the opaque web surfaces toward the desktop's warm dark. Scoped to
  * `:not(.desktop-vibrancy)` so the desktop build keeps its own treatment.
  */
-.dark:not(.desktop-vibrancy) {
+.dark:not(.dark-blue):not(.desktop-vibrancy) {
   --background: #1a1a1a;
   --card: #171717;
   --sidebar: #2c3032;
@@ -169,7 +169,7 @@
 
 /* Dark: a warm dark scrim (the "sidebar" material is cool/blue, so R > G > B
    takes the chill off), a softened content canvas, lighter selection overlay. */
-.desktop-vibrancy.dark {
+.desktop-vibrancy.dark:not(.dark-blue) {
   --background: oklch(0.22 0 0);
   /* Lift dropdown/popover menus off the very dark default. */
   --popover: oklch(0.26 0 0);
@@ -177,9 +177,14 @@
   --muted: oklch(0.32 0 0);
   --sidebar-accent: rgba(255, 255, 255, 0.09);
 }
-.desktop-vibrancy.dark [data-slot="sidebar-inner"],
-.desktop-vibrancy.dark .tw-vibrancy-panel {
+.desktop-vibrancy.dark:not(.dark-blue) [data-slot="sidebar-inner"],
+.desktop-vibrancy.dark:not(.dark-blue) .tw-vibrancy-panel {
   background: rgba(48, 46, 42, 0.24) !important;
+}
+
+.desktop-vibrancy.dark-blue [data-slot="sidebar-inner"],
+.desktop-vibrancy.dark-blue .tw-vibrancy-panel {
+  background: hsl(217 33% 13% / 0.82) !important;
 }
 
 /* Light: a light scrim over the material; selection reads as a subtle dark
@@ -247,4 +252,52 @@
 .desktop-app-header [data-thread-title-rename] {
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+/* Composer and info-panel surfaces that must follow the selected app theme. */
+.dark:not(.dark-blue) .tw-composer-shell,
+.dark:not(.dark-blue) .tw-thread-info-panel {
+  background: #262626 !important;
+}
+
+.dark-blue .tw-composer-shell,
+.dark-blue .tw-thread-info-panel {
+  background: hsl(217 33% 14% / 0.96) !important;
+  border-color: hsl(217 30% 24%) !important;
+  box-shadow: 0 24px 70px hsl(217 45% 6% / 0.38);
+}
+
+.dark-blue .tw-composer-surface [data-slot="input-group"]:focus-within {
+  border-color: hsl(213 94% 68% / 0.42) !important;
+  box-shadow:
+    0 18px 52px hsl(217 45% 6% / 0.32),
+    0 0 0 1px hsl(213 94% 68% / 0.16);
+}
+
+.dark-blue .tw-composer-surface .skill-token-input {
+  color: hsl(213 31% 95%) !important;
+}
+
+.dark-blue .tw-composer-surface .skill-token-input::before {
+  color: hsl(215 20% 74%) !important;
+}
+
+.dark-blue .tw-composer-surface [data-slot="input-group-addon"],
+.dark-blue .tw-composer-surface [data-slot="input-group-addon"] button,
+.dark-blue .tw-composer-surface [data-slot="select-trigger"] {
+  color: hsl(215 20% 74%) !important;
+}
+
+.dark-blue .tw-composer-surface [data-slot="input-group-addon"] button:hover,
+.dark-blue .tw-composer-surface [data-slot="select-trigger"]:hover {
+  color: hsl(213 31% 95%) !important;
+  background: hsl(217 33% 24% / 0.72) !important;
+}
+
+.dark-blue .tw-composer-surface button[aria-pressed="true"] {
+  color: hsl(213 94% 68%) !important;
+}
+
+.dark-blue .tw-thread-info-panel {
+  color: hsl(213 31% 91%) !important;
 }

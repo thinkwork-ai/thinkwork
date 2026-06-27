@@ -116,7 +116,7 @@ export function RoutineFlowCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        colorMode={theme}
+        colorMode={theme === "dark-blue" ? "dark" : theme}
         fitView
         fitViewOptions={{ padding: 0.18 }}
         minZoom={0.35}

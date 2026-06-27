@@ -98,8 +98,9 @@ describe("SpacesComposer focus styling", () => {
       <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
     );
     const cls = container.querySelector("form")?.className ?? "";
+    expect(cls).toContain("tw-composer-surface");
     expect(cls).toContain("[&_[data-slot=input-group]]:!ring-0");
-    expect(cls).toContain("[&_[data-slot=input-group]]:!bg-[#262626]");
+    expect(cls).not.toContain("#262626");
   });
 });
 
