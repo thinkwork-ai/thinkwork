@@ -3,9 +3,11 @@
  *
  * These are the canonical shapes every memory consumer (API resolvers, MCP
  * tools, inspect/export helpers, and eventually runtime recall) sees after
- * passing through a {@link MemoryAdapter}. Adapter-specific fields
- * (Hindsight `fact_type`, AgentCore namespace details, etc.) live under
- * {@link ThinkWorkMemoryRecord.metadata}, never as first-class fields.
+ * passing through a {@link MemoryAdapter}. Hindsight is the hosted canonical
+ * memory foundation, so Hindsight memory-domain concepts that affect retain
+ * quality, recall filtering, temporal grounding, or evidence are modeled below
+ * instead of being hidden in untyped metadata. Raw backend/database internals
+ * still stay encapsulated by the adapter.
  *
  * Defined per `.prds/memory-implementation-plan.md` §8–9.
  */
@@ -46,6 +48,54 @@ export type MemoryBackendRef = {
 export type RecallDepth = "quick" | "deep";
 export type HindsightRecallBudget = "low" | "mid" | "high";
 export type HindsightRecallFactType = "world" | "experience" | "observation";
+export type HindsightTagsMatch =
+  | "any"
+  | "all"
+  | "any_strict"
+  | "all_strict";
+
+export type HindsightObservationScopes =
+  | "combined"
+  | "per_tag"
+  | "all_combinations"
+  | string[][];
+
+export type HindsightRetainOptions = {
+  /**
+   * Hindsight first-class event timestamp. Use `"unset"` for timeless
+   * reference material; omit when the service should use ingestion time.
+   */
+  timestamp?: string | null;
+  /** Item-level visibility/source tags used by recall and consolidation. */
+  tags?: string[];
+  /** Request-level document grouping tags accepted by Hindsight retain. */
+  documentTags?: string[];
+  /** Observation consolidation scope strategy or explicit tag-set scopes. */
+  observationScopes?: HindsightObservationScopes | null;
+};
+
+export type HindsightTokenBudgetOptions = {
+  maxTokens?: number;
+};
+
+export type HindsightSourceFactsIncludeOptions =
+  HindsightTokenBudgetOptions & {
+    maxTokensPerObservation?: number;
+  };
+
+export type HindsightToolCallsIncludeOptions = {
+  output?: boolean;
+};
+
+export type HindsightIncludeOptions = {
+  entities?: boolean | null | HindsightTokenBudgetOptions;
+  chunks?: boolean | null | HindsightTokenBudgetOptions;
+  sourceFacts?: boolean | null | HindsightSourceFactsIncludeOptions;
+  /** Reflect-only: request `based_on` memories, mental models, and directives. */
+  facts?: boolean | null;
+  /** Reflect-only: request tool-call trace details. */
+  toolCalls?: boolean | null | HindsightToolCallsIncludeOptions;
+};
 
 export type HindsightRecallOptions = {
   budget?: HindsightRecallBudget;
@@ -59,6 +109,12 @@ export type HindsightRecallOptions = {
     isDefault?: boolean | null;
   };
   trace?: boolean;
+  queryTimestamp?: string | null;
+  tags?: string[];
+  tagsMatch?: HindsightTagsMatch;
+  tagGroups?: unknown[];
+  include?: HindsightIncludeOptions;
+  responseSchema?: Record<string, unknown> | null;
 };
 
 export type MemoryRequestContext = {
@@ -105,6 +161,37 @@ export type ThinkWorkMemoryRecord = {
   metadata?: Record<string, unknown>;
 };
 
+export type HindsightEvidenceSourceFact = {
+  id: string;
+  type?: string | null;
+  context?: string | null;
+  documentId?: string | null;
+  chunkId?: string | null;
+  tags?: string[] | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type HindsightBasedOnEvidence = {
+  memoryIds: string[];
+  mentalModelIds: string[];
+  directiveIds: string[];
+  memories?: HindsightEvidenceSourceFact[];
+  mentalModels?: HindsightEvidenceSourceFact[];
+  directives?: HindsightEvidenceSourceFact[];
+};
+
+export type HindsightEvidence = {
+  sourceFactIds?: string[];
+  sourceFacts?: HindsightEvidenceSourceFact[];
+  basedOn?: HindsightBasedOnEvidence;
+};
+
+export type HindsightRecordDetail = {
+  evidence?: HindsightEvidence;
+  trace?: unknown;
+  usage?: unknown;
+};
+
 export type RecallRequest = MemoryOwnerRef & {
   query: string;
   limit?: number;
@@ -126,6 +213,7 @@ export type RetainRequest = MemoryOwnerRef & {
   sourceType: MemorySourceType;
   content: string;
   role?: "user" | "assistant" | "system";
+  hindsight?: HindsightRetainOptions;
   metadata?: Record<string, unknown>;
 };
 
@@ -160,12 +248,14 @@ export type RetainConversationRequest = MemoryOwnerRef & {
     content: string;
     timestamp: string;
   }>;
+  hindsight?: HindsightRetainOptions;
   metadata?: Record<string, unknown>;
 };
 
 export type RetainDailyMemoryRequest = MemoryOwnerRef & {
   date: string;
   content: string;
+  hindsight?: HindsightRetainOptions;
   metadata?: Record<string, unknown>;
 };
 
@@ -175,6 +265,7 @@ export type UpsertMarkdownMemoryDocumentRequest = MemoryOwnerRef & {
   documentId: string;
   context: string;
   async?: boolean;
+  hindsight?: HindsightRetainOptions;
   metadata?: Record<string, unknown>;
 };
 

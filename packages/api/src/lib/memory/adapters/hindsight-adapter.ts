@@ -3,8 +3,10 @@
  *
  * Maps ThinkWork owner refs to Hindsight bank IDs (`user_${userId}` or
  * `space_${spaceId}`) and normalizes Hindsight memory units / recall hits into
- * {@link ThinkWorkMemoryRecord}. Hindsight-specific fields (fact_type,
- * tags, confidence, occurred_start/end) land under `metadata`.
+ * {@link ThinkWorkMemoryRecord}. Hindsight-native memory-domain fields such as
+ * retain timestamps/tags/scopes, recall source facts, and reflect `based_on`
+ * evidence are modeled explicitly at the memory boundary and normalized into
+ * redacted `metadata.hindsight` details for downstream consumers.
  *
  * Source for lifted logic:
  * - packages/api/src/graphql/resolvers/memory/memoryRecords.query.ts:239-318
@@ -25,6 +27,10 @@ import type {
   MemoryOwnerRef,
   MemoryExportBundle,
   MemoryStrategy,
+  HindsightIncludeOptions,
+  HindsightRecordDetail,
+  HindsightRetainOptions,
+  HindsightSourceFactsIncludeOptions,
   RecallRequest,
   RecallResult,
   RetainRequest,
@@ -157,9 +163,11 @@ export class HindsightAdapter implements MemoryAdapter {
       max_tokens: Math.max(1, Math.floor(maxTokens)),
       types: req.hindsight?.types ?? HINDSIGHT_FACT_TYPES,
     };
-    if (req.hindsight?.includeEntities === false || quick) {
-      body.include = { entities: null };
-    }
+    applyHindsightQueryOptions(body, req);
+    const include = buildRecallInclude(req.hindsight?.include, {
+      disableEntities: req.hindsight?.includeEntities === false || quick,
+    });
+    if (include) body.include = include;
     if (req.hindsight?.trace === true) {
       body.trace = true;
     }
@@ -197,6 +205,7 @@ export class HindsightAdapter implements MemoryAdapter {
             `[hindsight-adapter] recall returned 0 hits bank=${bankId} query=${JSON.stringify(req.query).slice(0, 200)} keys=${Object.keys(data || {}).join(",")}`,
           );
         }
+        const recallDetail = buildRecallDetail(data);
         return memories.map((m, idx): RecallResult => {
           const score =
             numberField(m.relevance_score) ??
@@ -207,7 +216,7 @@ export class HindsightAdapter implements MemoryAdapter {
             numberField(m.cross_encoder_score_normalized) ??
             Math.max(0, 1 - idx * 0.05);
           return {
-            record: this.mapUnit(m, req, bankId),
+            record: this.mapUnit(m, req, bankId, recallDetail),
             score,
             whyRecalled: m.why || undefined,
             backend: "hindsight",
@@ -278,6 +287,7 @@ export class HindsightAdapter implements MemoryAdapter {
       content: req.content,
       context: req.sourceType,
     };
+    applyHindsightRetainOptions(item, req.hindsight);
     const mergedMetadata = toHindsightMetadata({
       ...callerMetadata,
       ...ownerMetadata(req),
@@ -285,8 +295,12 @@ export class HindsightAdapter implements MemoryAdapter {
     });
     if (req.role) mergedMetadata.role = req.role;
     item.metadata = mergedMetadata;
-    const tags = toHindsightTags(callerTags);
+    const tags = uniqueStrings([
+      ...toHindsightTags(callerTags),
+      ...toHindsightTags(req.hindsight?.tags),
+    ]);
     if (tags.length > 0) item.tags = tags;
+    const documentTags = toHindsightTags(req.hindsight?.documentTags);
 
     let data: any = null;
     try {
@@ -297,6 +311,7 @@ export class HindsightAdapter implements MemoryAdapter {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             items: [item],
+            ...(documentTags.length > 0 ? { document_tags: documentTags } : {}),
             ...(retainAsync === true || retainAsync === "true"
               ? { async: true }
               : {}),
@@ -624,6 +639,12 @@ export class HindsightAdapter implements MemoryAdapter {
       budget: req.hindsight?.budget ?? (quick ? "low" : "mid"),
       max_tokens: Math.max(1, Math.floor(maxTokens)),
     };
+    applyHindsightQueryOptions(body, req);
+    if (req.hindsight?.responseSchema) {
+      body.response_schema = req.hindsight.responseSchema;
+    }
+    const include = buildReflectInclude(req.hindsight?.include);
+    if (include) body.include = include;
     if (req.hindsight?.trace === true) {
       body.trace = true;
     }
@@ -657,12 +678,19 @@ export class HindsightAdapter implements MemoryAdapter {
     const text = stringField(data?.text) ?? stringField(data?.answer);
     if (!text) return [];
 
-    const referencedIds = Array.isArray(data?.based_on)
-      ? data.based_on
-          .map((item: any) => stringField(item?.id) ?? stringField(item))
-          .filter((id: string | undefined): id is string => Boolean(id))
-      : [];
+    const basedOnEvidence = buildBasedOnEvidence(data?.based_on);
+    const referencedIds = basedOnEvidence.memoryIds;
     const idSource = `${bankId}:${req.query}:${text.slice(0, 200)}`;
+    const hindsightDetail = omitEmptyHindsightDetail({
+      evidence:
+        basedOnEvidence.memoryIds.length > 0 ||
+        basedOnEvidence.mentalModelIds.length > 0 ||
+        basedOnEvidence.directiveIds.length > 0
+          ? { basedOn: basedOnEvidence }
+          : undefined,
+      trace: data?.trace ?? null,
+      usage: data?.usage ?? null,
+    });
     const record: ThinkWorkMemoryRecord = {
       id: `hindsight-reflect:${hashString(idSource)}`,
       tenantId: req.tenantId,
@@ -680,6 +708,7 @@ export class HindsightAdapter implements MemoryAdapter {
         basedOn: referencedIds,
         structuredOutput: data?.structured_output ?? null,
         usage: data?.usage ?? null,
+        ...(hindsightDetail ? { hindsight: hindsightDetail } : {}),
       },
     };
     return [{ record, score: 1, backend: "hindsight" }];
@@ -974,6 +1003,7 @@ export class HindsightAdapter implements MemoryAdapter {
       threadId?: string;
     },
     bankId: string,
+    detail?: HindsightRecordDetail | null,
   ): ThinkWorkMemoryRecord {
     const createdAt = toISO(unit.created_at) || new Date().toISOString();
     const updatedAt = toISO(unit.updated_at) || undefined;
@@ -988,6 +1018,18 @@ export class HindsightAdapter implements MemoryAdapter {
       (typeof unit.type === "string" ? unit.type : null) ||
       (typeof metaFactType === "string" ? metaFactType : null) ||
       null;
+    const sourceFactIds = toStringArray(unit.source_fact_ids);
+    const sourceFacts = resolveSourceFacts(sourceFactIds, detail);
+    const unitDetail = omitEmptyHindsightDetail({
+      evidence:
+        sourceFactIds.length > 0 || sourceFacts.length > 0
+          ? {
+              ...(sourceFactIds.length > 0 ? { sourceFactIds } : {}),
+              ...(sourceFacts.length > 0 ? { sourceFacts } : {}),
+            }
+          : undefined,
+      trace: detail?.trace ?? null,
+    });
     return {
       id: String(unit.id || `hindsight-${bankId}-${createdAt}`),
       tenantId: owner.tenantId,
@@ -1036,6 +1078,7 @@ export class HindsightAdapter implements MemoryAdapter {
           null,
         context: unit.context ?? null,
         raw: unit.metadata ?? null,
+        ...(unitDetail ? { hindsight: unitDetail } : {}),
       },
     };
   }
@@ -1129,6 +1172,259 @@ function observationRank(result: RecallResult): number {
   return result.record.metadata?.factType === "observation" ? 0 : 1;
 }
 
+function applyHindsightQueryOptions(
+  body: Record<string, unknown>,
+  req: RecallRequest,
+): void {
+  if (req.hindsight?.queryTimestamp) {
+    body.query_timestamp = req.hindsight.queryTimestamp;
+  }
+  const tags = toHindsightTags(req.hindsight?.tags);
+  if (tags.length > 0) {
+    body.tags = tags;
+  }
+  if (req.hindsight?.tagsMatch) {
+    body.tags_match = req.hindsight.tagsMatch;
+  }
+  if (
+    Array.isArray(req.hindsight?.tagGroups) &&
+    req.hindsight.tagGroups.length > 0
+  ) {
+    body.tag_groups = req.hindsight.tagGroups;
+  }
+}
+
+function buildRecallInclude(
+  include: HindsightIncludeOptions | undefined,
+  opts: { disableEntities: boolean },
+): Record<string, unknown> | null {
+  const body: Record<string, unknown> = {};
+  const entities = include?.entities;
+  if (entities === false || entities === null || opts.disableEntities) {
+    body.entities = null;
+  } else if (isRecord(entities)) {
+    body.entities = mapMaxTokens(entities);
+  }
+  const chunks = include?.chunks;
+  if (chunks === true) {
+    body.chunks = {};
+  } else if (chunks === false || chunks === null) {
+    body.chunks = null;
+  } else if (isRecord(chunks)) {
+    body.chunks = mapMaxTokens(chunks);
+  }
+  const sourceFacts = include?.sourceFacts;
+  if (sourceFacts === true) {
+    body.source_facts = {};
+  } else if (sourceFacts === false || sourceFacts === null) {
+    body.source_facts = null;
+  } else if (isRecord(sourceFacts)) {
+    body.source_facts = mapSourceFactsInclude(sourceFacts);
+  }
+  return Object.keys(body).length > 0 ? body : null;
+}
+
+function buildReflectInclude(
+  include: HindsightIncludeOptions | undefined,
+): Record<string, unknown> | null {
+  const body: Record<string, unknown> = {};
+  if (include?.facts === true) {
+    body.facts = {};
+  } else if (include?.facts === false || include?.facts === null) {
+    body.facts = null;
+  }
+  const toolCalls = include?.toolCalls;
+  if (toolCalls === true) {
+    body.tool_calls = {};
+  } else if (toolCalls === false || toolCalls === null) {
+    body.tool_calls = null;
+  } else if (isRecord(toolCalls)) {
+    body.tool_calls = {
+      ...(typeof toolCalls.output === "boolean"
+        ? { output: toolCalls.output }
+        : {}),
+    };
+  }
+  return Object.keys(body).length > 0 ? body : null;
+}
+
+function mapMaxTokens(input: { maxTokens?: number }): Record<string, unknown> {
+  return typeof input.maxTokens === "number"
+    ? { max_tokens: input.maxTokens }
+    : {};
+}
+
+function mapSourceFactsInclude(
+  input: HindsightSourceFactsIncludeOptions,
+): Record<string, unknown> {
+  return {
+    ...(typeof input.maxTokens === "number"
+      ? { max_tokens: input.maxTokens }
+      : {}),
+    ...(typeof input.maxTokensPerObservation === "number"
+      ? { max_tokens_per_observation: input.maxTokensPerObservation }
+      : {}),
+  };
+}
+
+function applyHindsightRetainOptions(
+  item: Record<string, unknown>,
+  opts: HindsightRetainOptions | undefined,
+): void {
+  if (!opts) return;
+  if (opts.timestamp !== undefined) {
+    item.timestamp = opts.timestamp;
+  }
+  const tags = toHindsightTags(opts.tags);
+  if (tags.length > 0) {
+    item.tags = tags;
+  }
+  if (opts.observationScopes !== undefined) {
+    item.observation_scopes = opts.observationScopes;
+  }
+}
+
+function buildRecallDetail(data: any): HindsightRecordDetail | null {
+  const sourceFactsById = parseSourceFacts(data?.source_facts);
+  return omitEmptyHindsightDetail({
+    evidence:
+      sourceFactsById.size > 0
+        ? {
+            sourceFacts: [...sourceFactsById.values()],
+          }
+        : undefined,
+    trace: data?.trace ?? null,
+  });
+}
+
+function resolveSourceFacts(
+  sourceFactIds: string[],
+  detail: HindsightRecordDetail | null | undefined,
+): NonNullable<NonNullable<HindsightRecordDetail["evidence"]>["sourceFacts"]> {
+  const sourceFacts = detail?.evidence?.sourceFacts ?? [];
+  if (sourceFactIds.length === 0) return [];
+  const byId = new Map(sourceFacts.map((fact) => [fact.id, fact]));
+  return sourceFactIds
+    .map((id) => byId.get(id))
+    .filter((fact): fact is NonNullable<typeof fact> => Boolean(fact));
+}
+
+function parseSourceFacts(value: unknown): Map<string, RedactedHindsightFact> {
+  const facts = new Map<string, RedactedHindsightFact>();
+  if (!isRecord(value)) return facts;
+  for (const [id, raw] of Object.entries(value)) {
+    const descriptor = toRedactedHindsightFact(raw, id);
+    if (descriptor) facts.set(descriptor.id, descriptor);
+  }
+  return facts;
+}
+
+type RedactedHindsightFact = NonNullable<
+  NonNullable<HindsightRecordDetail["evidence"]>["sourceFacts"]
+>[number];
+
+function toRedactedHindsightFact(
+  raw: unknown,
+  fallbackId?: string,
+): RedactedHindsightFact | null {
+  if (!isRecord(raw)) {
+    return fallbackId ? { id: fallbackId } : null;
+  }
+  const id = stringField(raw.id) ?? fallbackId;
+  if (!id) return null;
+  const metadata = redactHindsightMetadata(raw.metadata);
+  return {
+    id,
+    type: stringField(raw.type) ?? stringField(raw.fact_type) ?? null,
+    context: stringField(raw.context) ?? null,
+    documentId: stringField(raw.document_id) ?? null,
+    chunkId: stringField(raw.chunk_id) ?? null,
+    tags: toStringArray(raw.tags),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
+}
+
+function buildBasedOnEvidence(
+  value: unknown,
+): NonNullable<
+  NonNullable<HindsightRecordDetail["evidence"]>["basedOn"]
+> {
+  const memories = isRecord(value)
+    ? toRedactedFactList(value.memories)
+    : toRedactedFactList(value);
+  const mentalModels = isRecord(value)
+    ? toRedactedFactList(value.mental_models)
+    : [];
+  const directives = isRecord(value) ? toRedactedFactList(value.directives) : [];
+  return {
+    memoryIds: memories.map((fact) => fact.id),
+    mentalModelIds: mentalModels.map((fact) => fact.id),
+    directiveIds: directives.map((fact) => fact.id),
+    ...(memories.length > 0 ? { memories } : {}),
+    ...(mentalModels.length > 0 ? { mentalModels } : {}),
+    ...(directives.length > 0 ? { directives } : {}),
+  };
+}
+
+function toRedactedFactList(value: unknown): RedactedHindsightFact[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => toRedactedHindsightFact(item, stringField(item)))
+    .filter((item): item is RedactedHindsightFact => Boolean(item));
+}
+
+function redactHindsightMetadata(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  const allowed = new Set([
+    "tenantId",
+    "ownerType",
+    "userId",
+    "spaceId",
+    "agentId",
+    "threadId",
+    "source",
+    "path",
+    "date",
+    "capture_source",
+    "captured_at",
+    "captured_by_user_id",
+    "client_capture_id",
+    "document_id",
+  ]);
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!allowed.has(key)) continue;
+    if (
+      typeof raw === "string" ||
+      typeof raw === "number" ||
+      typeof raw === "boolean"
+    ) {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+function omitEmptyHindsightDetail(
+  detail: HindsightRecordDetail,
+): HindsightRecordDetail | null {
+  const out: HindsightRecordDetail = {};
+  if (detail.evidence && Object.keys(detail.evidence).length > 0) {
+    out.evidence = detail.evidence;
+  }
+  if (detail.trace !== undefined && detail.trace !== null) {
+    out.trace = detail.trace;
+  }
+  if (detail.usage !== undefined && detail.usage !== null) {
+    out.usage = detail.usage;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function numberField(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
@@ -1147,6 +1443,14 @@ function coerceCount(value: unknown): number | undefined {
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
+  );
 }
 
 function escapeLikePattern(value: string): string {

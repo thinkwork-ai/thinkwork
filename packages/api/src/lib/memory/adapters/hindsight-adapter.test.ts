@@ -256,6 +256,250 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("maps Hindsight-native retain options to first-class retain item fields", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "native-retain-1",
+            text: "Remember the rollout checklist.",
+            created_at: "2026-06-27T15:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.retain({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      sourceType: "explicit_remember",
+      content: "Remember the rollout checklist.",
+      hindsight: {
+        timestamp: "2026-06-27T14:45:00.000Z",
+        tags: ["space:alpha", "source:space-memory"],
+        documentTags: ["source:space-memory"],
+        observationScopes: [["space:alpha"], ["source:space-memory"]],
+      },
+      metadata: {
+        capture_source: "space_memory_capture",
+      },
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      document_tags: ["source:space-memory"],
+      items: [
+        {
+          content: "Remember the rollout checklist.",
+          context: "explicit_remember",
+          timestamp: "2026-06-27T14:45:00.000Z",
+          tags: ["space:alpha", "source:space-memory"],
+          observation_scopes: [["space:alpha"], ["source:space-memory"]],
+          metadata: {
+            tenantId: TENANT_ID,
+            ownerType: "space",
+            spaceId: SPACE_ID,
+            fact_type: "world",
+            capture_source: "space_memory_capture",
+          },
+        },
+      ],
+    });
+  });
+
+  it("passes Hindsight-native recall options and preserves redacted source-fact evidence", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "obs-1",
+            text: "Space prefers launch reviews before public rollout.",
+            type: "observation",
+            source_fact_ids: ["fact-1"],
+            tags: ["space:alpha"],
+            metadata: {},
+          },
+        ],
+        source_facts: {
+          "fact-1": {
+            id: "fact-1",
+            text: "Raw source fact text should not be forwarded by default.",
+            type: "world",
+            context: "thinkwork_thread",
+            document_id: "thread-1",
+            chunk_id: "chunk-1",
+            tags: ["space:alpha", "source:thread"],
+            metadata: {
+              tenantId: TENANT_ID,
+              threadId: "thread-1",
+              rawDetail: "omit this",
+            },
+          },
+        },
+        trace: { query: "launch review" },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      query: "launch review",
+      hindsight: {
+        includeEntities: false,
+        queryTimestamp: "2026-06-27T15:00:00.000Z",
+        tags: ["space:alpha"],
+        tagsMatch: "any",
+        include: {
+          sourceFacts: {
+            maxTokens: 1200,
+            maxTokensPerObservation: 400,
+          },
+        },
+        trace: true,
+      },
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      query: "launch review",
+      budget: "low",
+      max_tokens: 500,
+      types: ["world", "experience", "observation"],
+      query_timestamp: "2026-06-27T15:00:00.000Z",
+      tags: ["space:alpha"],
+      tags_match: "any",
+      include: {
+        entities: null,
+        source_facts: {
+          max_tokens: 1200,
+          max_tokens_per_observation: 400,
+        },
+      },
+      trace: true,
+    });
+    expect(result[0]?.record.metadata?.hindsight).toEqual({
+      evidence: {
+        sourceFactIds: ["fact-1"],
+        sourceFacts: [
+          {
+            id: "fact-1",
+            type: "world",
+            context: "thinkwork_thread",
+            documentId: "thread-1",
+            chunkId: "chunk-1",
+            tags: ["space:alpha", "source:thread"],
+            metadata: {
+              tenantId: TENANT_ID,
+              threadId: "thread-1",
+            },
+          },
+        ],
+      },
+      trace: { query: "launch review" },
+    });
+    expect(JSON.stringify(result[0]?.record.metadata?.hindsight)).not.toContain(
+      "Raw source fact text",
+    );
+    expect(JSON.stringify(result[0]?.record.metadata?.hindsight)).not.toContain(
+      "rawDetail",
+    );
+  });
+
+  it("passes reflect include options and preserves based-on evidence descriptors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: "Run a launch review first.",
+        based_on: {
+          memories: [
+            {
+              id: "memory-1",
+              text: "Raw memory text should not be forwarded by default.",
+              type: "world",
+              context: "thinkwork_thread",
+              document_id: "thread-1",
+              tags: ["space:alpha"],
+            },
+          ],
+          mental_models: [{ id: "model-1", name: "Launch posture" }],
+          directives: [{ id: "directive-1", name: "Review first" }],
+        },
+        usage: { total_tokens: 123 },
+        trace: { tool_calls: [{ tool: "recall" }] },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    const result = await adapter.reflect({
+      tenantId: TENANT_ID,
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      query: "launch review",
+      hindsight: {
+        tags: ["space:alpha"],
+        tagsMatch: "any",
+        include: {
+          facts: true,
+          toolCalls: { output: false },
+        },
+      },
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      query: "launch review",
+      budget: "low",
+      max_tokens: 500,
+      tags: ["space:alpha"],
+      tags_match: "any",
+      include: {
+        facts: {},
+        tool_calls: { output: false },
+      },
+    });
+    expect(result[0]?.record.metadata).toMatchObject({
+      basedOn: ["memory-1"],
+      usage: { total_tokens: 123 },
+      hindsight: {
+        evidence: {
+          basedOn: {
+            memoryIds: ["memory-1"],
+            mentalModelIds: ["model-1"],
+            directiveIds: ["directive-1"],
+            memories: [
+              {
+                id: "memory-1",
+                type: "world",
+                context: "thinkwork_thread",
+                documentId: "thread-1",
+                tags: ["space:alpha"],
+              },
+            ],
+          },
+        },
+        trace: { tool_calls: [{ tool: "recall" }] },
+      },
+    });
+    expect(JSON.stringify(result[0]?.record.metadata?.hindsight)).not.toContain(
+      "Raw memory text",
+    );
+  });
+
   it("lists memories from the new user bank and paired legacy agent bank", async () => {
     executeMock
       .mockResolvedValueOnce({
