@@ -313,6 +313,49 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("drops invalid fact-type overrides with an explicit diagnostic", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "invalid-override-1",
+            text: "Remember preference-shaped text.",
+            created_at: "2026-06-27T15:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.retain({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      sourceType: "explicit_remember",
+      content: "Remember preference-shaped text.",
+      metadata: {
+        fact_type_override: "preference",
+        source: "activation",
+      },
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(body.items[0].metadata).toEqual({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      userId: USER_ID,
+      fact_type: "world",
+      ignored_fact_type_override: "preference",
+      source: "activation",
+    });
+    expect(body.items[0].metadata).not.toHaveProperty("fact_type_override");
+  });
+
   it("passes Hindsight-native recall options and preserves redacted source-fact evidence", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
