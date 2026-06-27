@@ -100,6 +100,48 @@ describe("CogneeAdapter", () => {
     );
   });
 
+  it("does not fail capture when Cognee indexing is still pending", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client: {
+        ingestDocument: vi.fn().mockResolvedValue({
+          datasetId: "dataset-pending",
+          datasetName: "thinkwork:memory:v1:tenant:tenant_1:user:user_1",
+          mode: "add_cognify",
+          pipelineRunId: "pipeline-1",
+          raw: {},
+        }),
+        waitForDatasetIndexing: vi
+          .fn()
+          .mockRejectedValue(new Error("indexing did not complete in time")),
+        search: vi.fn(),
+      },
+      ontology,
+    });
+
+    await expect(
+      adapter.upsertMarkdownMemoryDocument({
+        tenantId: "tenant-1",
+        ownerType: "user",
+        ownerId: "user-1",
+        path: "memory/MEMORY.md",
+        content: "Use concise summaries.",
+        documentId: "requester_memory:user-1:memory/MEMORY.md",
+        context: "thinkwork_requester_memory",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      "[cognee-memory] indexing still pending after capture",
+      expect.objectContaining({
+        datasetId: "dataset-pending",
+        error: "indexing did not complete in time",
+      }),
+    );
+    warn.mockRestore();
+  });
+
   it("recalls from the stable Cognee user memory dataset and node sets", async () => {
     const client = {
       ingestDocument: vi.fn(),
