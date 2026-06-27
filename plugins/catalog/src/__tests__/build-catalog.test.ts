@@ -33,13 +33,13 @@ describe("buildSignedCatalogJson", () => {
       trustedPublicKeyPem: keys.publicKeyPem,
     });
     expect(verified.plugins.map((plugin) => plugin.pluginKey)).toEqual([
-      "company-brain",
-      "company-data",
-      "company-etl",
       "lastmile",
       "n8n",
       "email-channel",
       "sendgrid",
+      "company-brain",
+      "company-data",
+      "company-etl",
       "twenty",
       "workos-auth",
     ]);

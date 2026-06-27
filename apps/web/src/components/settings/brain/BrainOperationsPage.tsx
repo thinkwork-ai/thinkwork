@@ -58,7 +58,7 @@ export function BrainOperationsPage() {
     breadcrumbs: [
       { label: "Plugins", href: "/settings/plugins" },
       {
-        label: "Company Brain",
+        label: "ThinkWork Brain",
         href: "/settings/plugins/company-brain",
       },
       { label: "Brain operations" },
@@ -71,7 +71,7 @@ export function BrainOperationsPage() {
       toast.error(`Could not request migration: ${result.error.message}`);
       return;
     }
-    toast.success("Company Brain production migration requested.");
+    toast.success("ThinkWork Brain production migration requested.");
     refreshStatus({ requestPolicy: "network-only" });
   }
 
@@ -91,7 +91,7 @@ export function BrainOperationsPage() {
       );
       return;
     }
-    toast.success("Company Brain migration marked failed.");
+    toast.success("ThinkWork Brain migration marked failed.");
     refreshStatus({ requestPolicy: "network-only" });
   }
 
@@ -108,7 +108,7 @@ export function BrainOperationsPage() {
       toast.error(`Could not mark rollback: ${result.error.message}`);
       return;
     }
-    toast.success("Company Brain migration marked rolled back.");
+    toast.success("ThinkWork Brain migration marked rolled back.");
     refreshStatus({ requestPolicy: "network-only" });
   }
 
@@ -127,7 +127,7 @@ export function BrainOperationsPage() {
       <SettingsPane className="max-w-6xl">
         <SettingsPageTitle
           title="Brain operations"
-          description="Tenant-scoped Company Brain substrate posture, migration controls, and operator evidence."
+          description="Tenant-scoped ThinkWork Brain substrate posture, migration controls, and operator evidence."
           badge={
             status ? (
               <Badge variant="outline" className={statusBadge(status.status)}>
@@ -227,7 +227,7 @@ function OperationsSummary({
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {blocking
               ? blocking.description
-              : "Context Engine reads use the active backend. This pass proves Cognee user + space memory; company distillation and wiki projection are deferred."}
+              : "Context Engine reads use the active Brain backend. Hindsight remains the user and Space memory provider; Brain distillation and wiki projection are separate substrate capabilities."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -675,7 +675,7 @@ function blockingStatus(status: CompanyBrainStatus) {
     return {
       title: "Brain substrate unavailable",
       description:
-        "Install or re-enable Company Brain before relying on Brain context.",
+        "Install or re-enable ThinkWork Brain before relying on Brain context.",
     };
   }
   return null;

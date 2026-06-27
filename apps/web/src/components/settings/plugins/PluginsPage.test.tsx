@@ -270,10 +270,10 @@ describe("PluginsPage", () => {
         Boolean(label?.startsWith("Open ") && !label.includes("application")),
       );
     expect(rowLabels).toEqual([
-      "Open Company Brain",
       "Open Docs Sync",
       "Open LastMile",
       "Open SendGrid Email",
+      "Open ThinkWork Brain",
       "Open Twenty CRM",
       "Open WorkOS Auth",
     ]);
@@ -350,7 +350,7 @@ describe("PluginsPage", () => {
     render(<PluginsPage />);
 
     const brainRow = screen.getByRole("link", {
-      name: "Open Company Brain",
+      name: "Open ThinkWork Brain",
     });
     expect(
       within(brainRow).getByText("knowledge graph substrate.", {
@@ -411,7 +411,7 @@ describe("PluginsPage", () => {
   it("opens plugin details from the full catalog row", () => {
     render(<PluginsPage />);
 
-    fireEvent.click(screen.getByRole("link", { name: "Open Company Brain" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open ThinkWork Brain" }));
 
     expect(navigateMock).toHaveBeenCalledWith({
       to: "/settings/plugins/$pluginKey",
@@ -617,7 +617,7 @@ const catalogEntries = [
   {
     __typename: "PluginCatalogEntry" as const,
     pluginKey: "company-brain",
-    displayName: "Company Brain",
+    displayName: "ThinkWork Brain",
     description: "Premium knowledge graph substrate.",
     latestVersion: "0.1.0",
     launchUrl: null,
@@ -626,7 +626,7 @@ const catalogEntries = [
       entitlementProductKey: "company-brain",
       installKeyRequired: true,
       installKeyPrompt:
-        "Enter the Company Brain install key provided by ThinkWork.",
+        "Enter the ThinkWork Brain install key provided by ThinkWork.",
     },
     entitlement: null,
     versions: [

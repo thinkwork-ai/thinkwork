@@ -7,7 +7,7 @@ type ExplorerMode = "data" | "definitions";
 
 /**
  * Ontology explorer as a tab of the unified Memory page. This is the explorer
- * half of the former standalone Knowledge Graph page. Company Brain plugin
+ * half of the former standalone Knowledge Graph page. ThinkWork Brain plugin
  * detail owns the substrate lifecycle surface, so there is no config/Info
  * toggle here.
  */

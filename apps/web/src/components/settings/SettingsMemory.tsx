@@ -400,9 +400,9 @@ function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">
               {cogneeActive
-                ? "Cognee memory"
+                ? "ThinkWork Brain diagnostic"
                 : hindsightActive
-                  ? "Hindsight legacy"
+                  ? "Hindsight memory"
                   : `${activeEngine} memory`}
             </Badge>
             <Badge
@@ -427,15 +427,15 @@ function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
             </Badge>
             {config?.legacyHindsightAvailable ? (
               <Badge variant="outline" className="text-muted-foreground">
-                Hindsight legacy available
+                Legacy Hindsight banks available
               </Badge>
             ) : null}
           </div>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
             {cogneeActive
-              ? "Cognee is the active user + space memory substrate. User memory follows the requester; space memory belongs to the current Space."
+              ? "ThinkWork Brain graph infrastructure is present for operator diagnostics. Hindsight-backed ThinkWork memory remains the user and Space memory product path for this pass."
               : hindsightActive
-                ? "Hindsight is the active legacy memory engine for this deployment."
+                ? "Hindsight is the active core memory engine for this deployment. User memory follows the requester; Space memory belongs to the current Space."
                 : "Memory status is reported by the selected deployment engine."}
           </p>
         </div>

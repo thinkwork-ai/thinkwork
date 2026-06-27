@@ -99,8 +99,8 @@ describe("buildPluginCatalog", () => {
     });
 
     expect(catalog.plugins.map((plugin) => plugin.displayName)).toEqual([
-      "Company Brain",
       "LastMile",
+      "ThinkWork Brain",
     ]);
   });
 
@@ -111,7 +111,7 @@ describe("buildPluginCatalog", () => {
       entitlementProductKey: "company-brain",
       installKeyRequired: true,
       installKeyPrompt:
-        "Enter the Company Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
+        "Enter the ThinkWork Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
     });
   });
 
