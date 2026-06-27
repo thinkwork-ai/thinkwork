@@ -37,6 +37,11 @@ export const spaceMemorySearch = async (
     ownerId: spaceId,
     query,
     limit,
+    hindsight: {
+      include: {
+        sourceFacts: true,
+      },
+    },
     requestContext: {
       contextClass: "space_memory_search",
       requesterUserId: requesterUserId ?? undefined,
