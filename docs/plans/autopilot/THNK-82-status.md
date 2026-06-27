@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-82
-status: u1-verified
+status: u2-verified
 target_branch: main
 ---
 
@@ -99,6 +99,14 @@ target_branch: main
   `result.list` renderer entry after the catalog addition so TypeScript can
   prove the catalog has a renderer for every typed domain component; fuller
   result-list UI polish remains assigned to U2.
+- U1 PR #3002 merged after green rebase CI. Merge commit:
+  `0198d01316f65238b37210eaf749eccccd5a0a95`.
+- U1 local worktree and branch cleaned up after merge.
+- U2 worktree created at
+  `/Users/ericodom/.codex/worktrees/thnk-82-u2-result-list-renderer` on branch
+  `codex/thnk-82-u2-result-list-renderer` from `origin/main`
+  (`0198d0131`).
+- U2 implemented and locally verified.
 
 ## Unit Log
 
@@ -106,10 +114,12 @@ target_branch: main
 
 - Objective: add the shared React-free `result.list` catalog contract and
   validation fixtures needed by all later THNK-82 units.
-- Status: verified locally; ready for PR.
+- Status: merged.
 - Branch: `codex/thnk-82-u1-result-list-contract`
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-82-u1-result-list-contract`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/3002
+- Merge commit: `0198d01316f65238b37210eaf749eccccd5a0a95`
 - Changes:
   - Added a strict, bounded shared `result.list` catalog component for
     `workItem`, `question`, `review`, and `genericSummary` rows.
@@ -132,3 +142,33 @@ target_branch: main
     optional `canvas@2.11.2` native build output reported a missing
     `pkg-config` fallback on Node 25. This did not block the focused U1 tests or
     typechecks.
+
+### U2 web result-list renderer
+
+- Objective: replace the minimal typed `result.list` registry entry with a
+  host-owned result-list renderer for Work Item rows, user-question rows,
+  review rows, generic summaries, and item-scoped durable action states.
+- Status: verified locally; ready for PR.
+- Branch: `codex/thnk-82-u2-result-list-renderer`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-82-u2-result-list-renderer`
+- Base: `origin/main` at `0198d0131`
+- Changes:
+  - Added `ResultListView` under the existing generated-UI component family.
+  - Rendered grouped result-list sections, row variant badges/icons, statuses,
+    metadata, variant-specific details, evidence snippets, and empty states.
+  - Routed item-level primary/secondary action IDs through `DecisionPanel` so
+    action icons, submitted/submitting/error states, disabled/read-only state,
+    and host mutation wiring stay consistent with existing generated UI
+    actions.
+  - Simplified `ThreadJsonRenderRenderer` to register the host-owned
+    `ResultListView` adapter for `result.list`.
+  - Added renderer tests for result-list row rendering, live/read-only disabled
+    state, and durable action submission.
+- Verification:
+  - `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/ThreadJsonRenderRenderer.test.tsx src/components/workbench/json-render/validation.test.ts src/components/workbench/json-render/catalog.test.ts`
+  - `pnpm --filter @thinkwork/web typecheck`
+- Notes:
+  - Fresh worktree setup required `pnpm install`. The install completed with
+    the same optional `canvas@2.11.2` native build output about missing
+    `pkg-config` on Node 25. This did not block focused U2 tests or typecheck.
