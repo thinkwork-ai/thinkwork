@@ -21,6 +21,7 @@ data "aws_caller_identity" "current" {}
 locals {
   cognee_worker_vpc_enabled = var.cognee_enabled && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0
   okf_efs_vpc_enabled       = length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  api_base_url              = var.custom_domain != "" ? "https://${var.custom_domain}" : trimsuffix(aws_apigatewayv2_stage.default.invoke_url, "/")
 }
 
 ################################################################################

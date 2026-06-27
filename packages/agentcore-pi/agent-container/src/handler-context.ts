@@ -152,6 +152,12 @@ export interface RuntimeEnvSnapshot {
    * end-of-turn auto-retain — the runtime logs and continues.
    */
   memoryRetainFnName: string;
+  /**
+   * API Lambda names used for in-account chat callbacks from the Pi runtime.
+   * Empty strings fall back to HTTP callbacks for local/debug invocations.
+   */
+  chatAgentFinalizeFnName?: string;
+  chatAgentActivityFnName?: string;
   dbClusterArn: string;
   dbSecretArn: string;
   dbName: string;
@@ -190,6 +196,8 @@ export function snapshotRuntimeEnv(
     hindsightEndpoint: env.HINDSIGHT_ENDPOINT || "",
     memoryEngine,
     memoryRetainFnName: env.MEMORY_RETAIN_FN_NAME || "",
+    chatAgentFinalizeFnName: env.CHAT_AGENT_FINALIZE_FN_NAME || "",
+    chatAgentActivityFnName: env.CHAT_AGENT_ACTIVITY_FN_NAME || "",
     dbClusterArn: env.DB_CLUSTER_ARN || "",
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",

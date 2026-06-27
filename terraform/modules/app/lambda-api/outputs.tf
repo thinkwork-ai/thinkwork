@@ -4,8 +4,8 @@ output "api_id" {
 }
 
 output "api_endpoint" {
-  description = "API Gateway V2 endpoint URL"
-  value       = aws_apigatewayv2_stage.default.invoke_url
+  description = "Public HTTP API base URL. Uses the custom domain when configured so VPC runtimes with execute-api private DNS can still call service callbacks."
+  value       = local.api_base_url
 }
 
 output "api_execution_arn" {

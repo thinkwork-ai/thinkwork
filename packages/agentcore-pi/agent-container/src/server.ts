@@ -167,6 +167,7 @@ import {
   collectLocalWorkspaceChangedFiles,
   createLocalWorkspaceBaseline,
 } from "./runtime/workspace-diff.js";
+import { createLambdaCallbackFetch } from "./runtime/callback-lambda-fetch.js";
 import { createS3SessionStore } from "./runtime/session-store.js";
 import {
   buildFileReadTool,
@@ -2166,6 +2167,26 @@ export async function handleInvocation(
   }
   const secrets = snapshotSecrets(args.payload);
   const env = snapshotRuntimeEnv();
+  const callbackLogger = (entry: Record<string, unknown>) => {
+    const level =
+      entry.level === "error" ||
+      entry.level === "warn" ||
+      entry.level === "info"
+        ? entry.level
+        : "info";
+    const event =
+      typeof entry.event === "string" ? entry.event : "lambda_callback_fetch";
+    logStructured({ ...entry, level, event } as LogFields);
+  };
+  const callbackFetchImpl =
+    deps.fetchImpl ??
+    createLambdaCallbackFetch({
+      fallbackFetch: fetchImpl,
+      lambdaClient: deps.lambdaClientFactory(env.awsRegion),
+      finalizeFunctionName: env.chatAgentFinalizeFnName || "",
+      activityFunctionName: env.chatAgentActivityFnName || "",
+      logger: callbackLogger,
+    });
   const workspaceBucket =
     env.workspaceBucket || asString(args.payload.workspace_bucket);
   const threadTurnId = asString(args.payload.thread_turn_id);
@@ -2725,7 +2746,7 @@ export async function handleInvocation(
   // mid-turn (env-shadowing guard). No-op when the host didn't opt in.
   const activityEmitter = createActivityEmitter(
     readActivityCallbackConfig(args.payload),
-    { logger: (entry) => logStructured(entry) },
+    { fetchImpl: callbackFetchImpl, logger: (entry) => logStructured(entry) },
   );
   const profileDelegationOptions = (
     parentModelId: string,
@@ -3104,7 +3125,7 @@ export async function handleInvocation(
         systemPrompt: composedSystemPrompt,
         changedFiles,
         result: { status: "error", error: runError, latencyMs },
-        fetchImpl,
+        fetchImpl: callbackFetchImpl,
         logger: logStructured,
       });
       if (finalized) {
@@ -3240,7 +3261,7 @@ export async function handleInvocation(
       systemPrompt: composedSystemPrompt,
       changedFiles,
       result: { status: "ok", runResult, latencyMs },
-      fetchImpl,
+      fetchImpl: callbackFetchImpl,
       logger: logStructured,
     });
     if (finalized) {
