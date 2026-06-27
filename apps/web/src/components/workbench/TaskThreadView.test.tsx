@@ -3714,6 +3714,28 @@ describe("TaskThreadView", () => {
     expect(rows[0]?.detail).toContain('"truncated": true');
   });
 
+  it("shows explanatory detail for legacy memory tool markers without invocation metadata", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-memory-marker-only",
+        status: "succeeded",
+        invocationSource: "chat_message",
+      },
+      {
+        tools_called: ["recall"],
+        tool_invocations: [],
+      },
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      title: "Checking memory",
+      kind: "tool",
+    });
+    expect(rows[0]?.detail).toContain("Memory was checked during this turn");
+    expect(rows[0]?.detail).toContain("detailed invocation metadata");
+  });
+
   it("surfaces an agent profile row while a mentioned profile turn is running", () => {
     const rows = actionRowsForTurn(
       {
