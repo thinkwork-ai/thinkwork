@@ -366,6 +366,25 @@ function mergeUnknownValues(values: unknown[]): unknown {
   return present.length === 1 ? present[0] : present;
 }
 
+function recallRequestBody(query: string, request: MemoryRecallRequest) {
+  const queryTimestamp = request.queryTimestamp?.trim();
+  return {
+    query,
+    budget: "low",
+    max_tokens: RECALL_MAX_TOKENS,
+    include: { entities: null, source_facts: {} },
+    types: ["world", "experience", "observation"],
+    ...(queryTimestamp ? { query_timestamp: queryTimestamp } : {}),
+  };
+}
+
+function reflectQueryWithContext(request: MemoryReflectRequest): string {
+  const query = request.query.trim();
+  const context = request.context?.trim();
+  if (!context) return query;
+  return `${query}\n\nCurrent turn context:\n${context}`;
+}
+
 /**
  * POST JSON to Hindsight with bounded retry. Returns parsed JSON on 2xx;
  * throws {@link HindsightMemoryProviderError} on terminal failure (any 4xx,
@@ -532,13 +551,7 @@ export function createHindsightMemoryProvider(
           const data = await postJson(
             options,
             `/v1/default/banks/${encodeURIComponent(target.bankId)}/memories/recall`,
-            {
-              query,
-              budget: "low",
-              max_tokens: RECALL_MAX_TOKENS,
-              include: { entities: null, source_facts: {} },
-              types: ["world", "experience", "observation"],
-            },
+            recallRequestBody(query, request),
             signal,
           );
           return {
@@ -569,12 +582,13 @@ export function createHindsightMemoryProvider(
           "reflect called with an empty query.",
         );
       }
+      const reflectQuery = reflectQueryWithContext(request);
       const batches = await Promise.all(
         targets.map(async (target) => {
           const data = await postJson(
             options,
             `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
-            { query, budget: "mid", include: { facts: {} } },
+            { query: reflectQuery, budget: "mid", include: { facts: {} } },
             signal,
           );
           return { target, data };

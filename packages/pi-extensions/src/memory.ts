@@ -126,17 +126,35 @@ export function createMemoryExtension(
               maximum: MAX_RECALL_LIMIT,
             }),
           ),
+          queryTimestamp: Type.Optional(
+            Type.String({
+              description:
+                "Optional ISO timestamp to anchor temporal recall ranking.",
+            }),
+          ),
         }),
         executionMode: "sequential",
         async execute(_toolCallId, params, signal) {
-          const { query, limit } = params as { query: string; limit?: number };
+          const { query, limit, queryTimestamp } = params as {
+            query: string;
+            limit?: number;
+            queryTimestamp?: string;
+          };
           const trimmed = (query ?? "").trim();
           if (!trimmed) {
             throw new Error("recall called with an empty query parameter.");
           }
+          const temporalAnchor = queryTimestamp?.trim();
           // Thread the turn's abort signal so a user abort / host timeout tears
           // down an in-flight Hindsight call instead of orphaning it.
-          const result = await memory.recall({ query: trimmed, limit }, signal);
+          const result = await memory.recall(
+            {
+              query: trimmed,
+              limit,
+              ...(temporalAnchor ? { queryTimestamp: temporalAnchor } : {}),
+            },
+            signal,
+          );
           return {
             content: [{ type: "text", text: formatMemories(result.memories) }],
             details: {

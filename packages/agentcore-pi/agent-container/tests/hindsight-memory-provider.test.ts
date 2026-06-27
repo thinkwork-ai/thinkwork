@@ -106,6 +106,33 @@ describe("createHindsightMemoryProvider", () => {
     expect(result.memories).toHaveLength(2);
   });
 
+  it("recall sends query_timestamp only when supplied", async () => {
+    const fetchImpl = vi.fn().mockImplementation(() =>
+      jsonResponse({
+        memory_units: [{ text: "temporal result" }],
+      }),
+    );
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    await provider.recall({
+      query: "team priorities",
+      queryTimestamp: "2026-06-27T17:00:00.000Z",
+    });
+    await provider.recall({ query: "team priorities" });
+
+    expect(
+      JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string),
+    ).toMatchObject({
+      query_timestamp: "2026-06-27T17:00:00.000Z",
+    });
+    expect(
+      JSON.parse((fetchImpl.mock.calls[1]![1] as RequestInit).body as string),
+    ).not.toHaveProperty("query_timestamp");
+  });
+
   it("recall rejects an empty query without calling fetch", async () => {
     const fetchImpl = vi.fn();
     const provider = createHindsightMemoryProvider({
@@ -139,6 +166,29 @@ describe("createHindsightMemoryProvider", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.text).toBe("a coherent answer about pi");
+  });
+
+  it("reflect composes surrounding context into the query for Hindsight", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ text: "contextual answer" }));
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    await provider.reflect({
+      query: "What should I do next?",
+      context: "The current task is preparing a launch checklist.",
+    });
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
+      query:
+        "What should I do next?\n\nCurrent turn context:\nThe current task is preparing a launch checklist.",
+      budget: "mid",
+      include: { facts: {} },
+    });
   });
 
   it("reflect rejects an empty query", async () => {

@@ -121,6 +121,34 @@ describe("createMemoryExtension", () => {
     expect(text).toContain("pi is the core runtime");
   });
 
+  it("recall tool passes a temporal anchor through to the provider", async () => {
+    const { provider, recallCalls } = makeFakeMemory();
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createMemoryExtension(), { memory: provider })(
+      api,
+    );
+
+    await getTool(tools, "recall").execute(
+      "call-temporal",
+      {
+        query: "pi",
+        limit: 3,
+        queryTimestamp: "2026-06-27T17:00:00.000Z",
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect(recallCalls).toEqual([
+      {
+        query: "pi",
+        limit: 3,
+        queryTimestamp: "2026-06-27T17:00:00.000Z",
+      },
+    ]);
+  });
+
   it("recall tool labels Space memories and carries redacted evidence in details", async () => {
     const provider: MemoryProvider = {
       recall: async () => ({
