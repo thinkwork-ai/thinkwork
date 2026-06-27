@@ -16,6 +16,7 @@ import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import type { ThinkWorkMemoryRecord } from "../../../lib/memory/index.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
+import { requireTenantAdmin } from "../core/authz.js";
 
 const TOTAL_CAP = 500;
 
@@ -26,6 +27,9 @@ interface MemoryRow {
   updatedAt: string | null;
   expiresAt: string | null;
   namespace: string;
+  bankId: string | null;
+  ownerType: string | null;
+  ownerId: string | null;
   strategyId: string | null;
   strategy: string;
   score: number | null;
@@ -46,9 +50,31 @@ interface MemoryRow {
 
 export const memoryRecords = async (
   _parent: any,
-  args: any,
+  args: {
+    tenantId?: string | null;
+    userId?: string | null;
+    assistantId?: string | null;
+    namespace: string;
+    scope?: "USER" | "OPERATOR" | null;
+    query?: string | null;
+    limit?: number | null;
+  },
   ctx: GraphQLContext,
 ) => {
+  if (args.scope === "OPERATOR") {
+    const tenantId = args.tenantId ?? ctx.auth.tenantId ?? null;
+    if (!tenantId) throw new Error("Tenant context required");
+    await requireTenantAdmin(ctx, tenantId);
+
+    const { inspect: inspectService } = getMemoryServices();
+    const records = await inspectService.inspectTenant({
+      tenantId,
+      query: args.query ?? undefined,
+      limit: Math.min(args.limit ?? TOTAL_CAP, TOTAL_CAP),
+    });
+    return toRows(records);
+  }
+
   const { tenantId, userId } = await requireMemoryUserScope(ctx, {
     ...args,
     allowTenantAdmin: true,
@@ -61,6 +87,13 @@ export const memoryRecords = async (
     ownerId: userId,
   });
 
+  return toRows(records, userId);
+};
+
+function toRows(
+  records: ThinkWorkMemoryRecord[],
+  userId?: string,
+): MemoryRow[] {
   const merged = new Map<string, MemoryRow>();
   for (const row of records.map((r) => normalizedToRow(r, userId))) {
     if (!merged.has(row.memoryRecordId)) merged.set(row.memoryRecordId, row);
@@ -68,7 +101,7 @@ export const memoryRecords = async (
   return [...merged.values()]
     .sort((a, b) => sortKey(b) - sortKey(a))
     .slice(0, TOTAL_CAP);
-};
+}
 
 function sortKey(row: MemoryRow): number {
   const t = row.createdAt ? Date.parse(row.createdAt) : 0;
@@ -77,9 +110,10 @@ function sortKey(row: MemoryRow): number {
 
 function normalizedToRow(
   record: ThinkWorkMemoryRecord,
-  userId: string,
+  userId?: string,
 ): MemoryRow {
   const meta = (record.metadata || {}) as Record<string, any>;
+  const bankId = (meta.bankId as string | undefined) ?? null;
   const factType: string | null = (meta.factType as string | null) ?? null;
   const tags: string[] | null =
     Array.isArray(meta.tags) && meta.tags.length > 0
@@ -100,8 +134,11 @@ function normalizedToRow(
     expiresAt: null,
     namespace:
       (meta.namespace as string | undefined) ||
-      (meta.bankId as string | undefined) ||
-      `user_${userId}`,
+      bankId ||
+      (userId ? `user_${userId}` : record.ownerId),
+    bankId,
+    ownerType: record.ownerType,
+    ownerId: record.ownerId,
     strategyId:
       factType ||
       (meta.memoryStrategyId as string | null | undefined) ||
@@ -109,8 +146,18 @@ function normalizedToRow(
       null,
     strategy: record.strategy || "semantic",
     score: typeof meta.confidence === "number" ? meta.confidence : score,
-    userSlug: `user_${userId}`,
-    agentSlug: `user_${userId}`,
+    userSlug:
+      record.ownerType === "user"
+        ? `user_${record.ownerId}`
+        : userId
+          ? `user_${userId}`
+          : null,
+    agentSlug:
+      record.ownerType === "agent"
+        ? record.ownerId
+        : record.ownerType === "user"
+          ? `user_${record.ownerId}`
+          : null,
     factType,
     confidence: typeof meta.confidence === "number" ? meta.confidence : null,
     eventDate: (meta.eventDate as string | null) ?? null,

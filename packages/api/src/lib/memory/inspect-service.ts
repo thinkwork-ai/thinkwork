@@ -11,11 +11,15 @@ import type { MemoryConfig } from "./config.js";
 import type {
   InspectRequest,
   MemoryCapabilities,
+  TenantInspectRequest,
   ThinkWorkMemoryRecord,
 } from "./types.js";
 
 export type NormalizedInspectService = {
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+  inspectTenant(
+    request: TenantInspectRequest,
+  ): Promise<ThinkWorkMemoryRecord[]>;
   capabilities(): Promise<MemoryCapabilities>;
 };
 
@@ -27,6 +31,15 @@ export function createInspectService(
     async inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
       if (!config.enabled) return [];
       const records = await adapter.inspect(request);
+      return [...records].sort((a, b) =>
+        (b.createdAt || "").localeCompare(a.createdAt || ""),
+      );
+    },
+    async inspectTenant(
+      request: TenantInspectRequest,
+    ): Promise<ThinkWorkMemoryRecord[]> {
+      if (!config.enabled || !adapter.inspectTenant) return [];
+      const records = await adapter.inspectTenant(request);
       return [...records].sort((a, b) =>
         (b.createdAt || "").localeCompare(a.createdAt || ""),
       );

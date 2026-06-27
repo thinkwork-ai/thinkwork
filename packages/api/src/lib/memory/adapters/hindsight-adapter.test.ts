@@ -336,6 +336,60 @@ describe("HindsightAdapter legacy user bank reads", () => {
     ]);
   });
 
+  it("inspects tenant-visible Hindsight records across user and Space banks", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        {
+          ...row({
+            id: "00000000-0000-0000-0000-000000000007",
+            bank_id: `user_${USER_ID}`,
+            text: "operator user memory",
+            created_at: "2026-06-27T10:00:00.000Z",
+          }),
+          inferred_owner_type: "user",
+          inferred_owner_id: USER_ID,
+        },
+        {
+          ...row({
+            id: "00000000-0000-0000-0000-000000000008",
+            bank_id: `space_${SPACE_ID}`,
+            text: "operator space memory",
+            created_at: "2026-06-27T11:00:00.000Z",
+          }),
+          inferred_owner_type: "space",
+          inferred_owner_id: SPACE_ID,
+        },
+      ],
+    });
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const records = await adapter.inspectTenant({
+      tenantId: TENANT_ID,
+      query: "operator",
+      limit: 50,
+    });
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "user",
+        ownerId: USER_ID,
+        content: { text: "operator user memory" },
+        metadata: expect.objectContaining({ bankId: `user_${USER_ID}` }),
+      }),
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: SPACE_ID,
+        content: { text: "operator space memory" },
+        metadata: expect.objectContaining({ bankId: `space_${SPACE_ID}` }),
+      }),
+    ]);
+  });
+
   it("exports Space memories from the Space bank without paired user banks", async () => {
     executeMock.mockResolvedValueOnce({
       rows: [

@@ -3041,6 +3041,7 @@ export type MemoryRecord = {
   accessCount?: Maybe<Scalars["Int"]["output"]>;
   /** @deprecated Use userSlug */
   agentSlug?: Maybe<Scalars["String"]["output"]>;
+  bankId?: Maybe<Scalars["String"]["output"]>;
   confidence?: Maybe<Scalars["Float"]["output"]>;
   content?: Maybe<MemoryContent>;
   context?: Maybe<Scalars["String"]["output"]>;
@@ -3053,6 +3054,8 @@ export type MemoryRecord = {
   namespace?: Maybe<Scalars["String"]["output"]>;
   occurredEnd?: Maybe<Scalars["AWSDateTime"]["output"]>;
   occurredStart?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  ownerId?: Maybe<Scalars["ID"]["output"]>;
+  ownerType?: Maybe<Scalars["String"]["output"]>;
   proofCount?: Maybe<Scalars["Int"]["output"]>;
   score?: Maybe<Scalars["Float"]["output"]>;
   strategy?: Maybe<Scalars["String"]["output"]>;
@@ -3070,6 +3073,11 @@ export type MemoryRecord = {
    */
   wikiPages: Array<WikiPage>;
 };
+
+export enum MemoryRecordScope {
+  Operator = "OPERATOR",
+  User = "USER",
+}
 
 export type MemorySearchResult = {
   __typename?: "MemorySearchResult";
@@ -6240,7 +6248,10 @@ export type QueryMemoryGraphArgs = {
 
 export type QueryMemoryRecordsArgs = {
   assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
   namespace: Scalars["String"]["input"];
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  scope?: InputMaybe<MemoryRecordScope>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };

@@ -16,6 +16,23 @@ describe("SettingsMemory", () => {
     expect(queries).toContain("legacyHindsightAvailable");
   });
 
+  it("uses the operator Hindsight record query for the settings table", () => {
+    expect(source).toContain('scope: "OPERATOR"');
+    expect(source).toContain("Search Hindsight records...");
+    expect(source).toContain("No Hindsight records were returned");
+    expect(queries).toContain("$scope: MemoryRecordScope");
+    expect(queries).toContain("bankId");
+    expect(queries).toContain("ownerType");
+    expect(queries).toContain("ownerId");
+  });
+
+  it("renders operator evidence columns and disables cross-bank forget", () => {
+    expect(source).toContain('header: "Bank"');
+    expect(source).toContain('header: "Scope"');
+    expect(source).toContain('header: "Updated"');
+    expect(source).toContain("canForget={false}");
+  });
+
   it("surfaces Cognee user and space memory without claiming company/wiki completion", () => {
     expect(source).toContain("Cognee memory");
     expect(source).toContain("User memory");

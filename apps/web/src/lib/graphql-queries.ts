@@ -1924,8 +1924,18 @@ export const ComputerMemoryRecordsQuery = gql`
     $tenantId: ID!
     $userId: ID
     $namespace: String!
+    $scope: MemoryRecordScope
+    $query: String
+    $limit: Int
   ) {
-    memoryRecords(tenantId: $tenantId, userId: $userId, namespace: $namespace) {
+    memoryRecords(
+      tenantId: $tenantId
+      userId: $userId
+      namespace: $namespace
+      scope: $scope
+      query: $query
+      limit: $limit
+    ) {
       memoryRecordId
       content {
         text
@@ -1933,6 +1943,9 @@ export const ComputerMemoryRecordsQuery = gql`
       createdAt
       updatedAt
       namespace
+      bankId
+      ownerType
+      ownerId
       strategyId
       strategy
       userSlug

@@ -29,6 +29,9 @@ export type MemoryRow = {
   createdAt: string | null;
   updatedAt: string | null;
   namespace: string | null;
+  bankId?: string | null;
+  ownerType?: string | null;
+  ownerId?: string | null;
   strategy: string | null;
   factType: string | null;
   confidence: number | null;
@@ -45,8 +48,9 @@ export type MemoryRow = {
 
 interface MemoryDetailSheetProps {
   record: MemoryRow;
-  deleting: boolean;
-  onForget: () => Promise<void>;
+  deleting?: boolean;
+  onForget?: () => Promise<void>;
+  canForget?: boolean;
 }
 
 function StrategyBadge({ strategy }: { strategy: string | null }) {
@@ -87,8 +91,9 @@ function MemoryContent({ text }: { text: string }) {
  */
 export function MemoryDetailSheet({
   record,
-  deleting,
+  deleting = false,
   onForget,
+  canForget = true,
 }: MemoryDetailSheetProps) {
   return (
     <SheetContent className="sm:max-w-lg flex flex-col">
@@ -133,6 +138,25 @@ export function MemoryDetailSheet({
 
           <div className="border-t border-muted pt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3 text-xs">
+              {record.bankId && (
+                <div>
+                  <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                    Bank
+                  </p>
+                  <p className="mt-0.5 truncate">{record.bankId}</p>
+                </div>
+              )}
+              {record.ownerType && (
+                <div>
+                  <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                    Scope
+                  </p>
+                  <p className="mt-0.5 truncate">
+                    {record.ownerType}
+                    {record.ownerId ? `:${record.ownerId}` : ""}
+                  </p>
+                </div>
+              )}
               {record.confidence != null && (
                 <div>
                   <p className="text-muted-foreground uppercase tracking-wider font-medium">
@@ -204,35 +228,37 @@ export function MemoryDetailSheet({
             )}
           </div>
 
-          <div className="border-t border-muted pt-4">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={deleting}>
-                  {deleting ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Forget
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Forget this memory?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This requester memory will no longer be recalled in future
-                    threads. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onForget}>
+          {canForget && onForget ? (
+            <div className="border-t border-muted pt-4">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={deleting}>
+                    {deleting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    )}
                     Forget
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Forget this memory?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This requester memory will no longer be recalled in future
+                      threads. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={onForget}>
+                      Forget
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : null}
         </div>
       </div>
     </SheetContent>
