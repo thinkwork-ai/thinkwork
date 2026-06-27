@@ -21,6 +21,13 @@ describe("CogneeAdapter", () => {
         pipelineRunId: null,
         raw: {},
       }),
+      waitForDatasetIndexing: vi.fn().mockResolvedValue({
+        status: "completed",
+        rawStatus: "DATASET_PROCESSING_COMPLETED",
+        attempts: 1,
+        elapsedMs: 1,
+        samples: [],
+      }),
       search: vi.fn(),
     };
     const adapter = new CogneeAdapter({
@@ -59,6 +66,38 @@ describe("CogneeAdapter", () => {
     expect(document).toContain('"thread_id":"thread-1"');
     expect(document).toContain('"evidenceMessageIds":["msg-1"]');
     expect(document).toContain("# Durable memory");
+    expect(client.waitForDatasetIndexing).toHaveBeenCalledWith("dataset-1");
+  });
+
+  it("fails memory upsert when Cognee does not return a dataset id", async () => {
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client: {
+        ingestDocument: vi.fn().mockResolvedValue({
+          datasetId: null,
+          datasetName: "thinkwork:memory:v1:tenant:tenant_1:user:user_1",
+          mode: "remember",
+          pipelineRunId: null,
+          raw: {},
+        }),
+        search: vi.fn(),
+      },
+      ontology,
+    });
+
+    await expect(
+      adapter.upsertMarkdownMemoryDocument({
+        tenantId: "tenant-1",
+        ownerType: "user",
+        ownerId: "user-1",
+        path: "memory/MEMORY.md",
+        content: "Use concise summaries.",
+        documentId: "requester_memory:user-1:memory/MEMORY.md",
+        context: "thinkwork_requester_memory",
+      }),
+    ).rejects.toThrow(
+      "Cognee memory ingest did not return a dataset id for indexing",
+    );
   });
 
   it("recalls from the stable Cognee user memory dataset and node sets", async () => {

@@ -4,6 +4,7 @@ import {
   type KnowledgeGraphOntologyExport,
 } from "@thinkwork/plugin-company-brain/api/cognee-client";
 import { buildCogneeMemoryScope } from "@thinkwork/plugin-company-brain/api/cognee-memory-scope";
+import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../adapter.js";
 import type {
   ExportRequest,
@@ -22,7 +23,9 @@ import type {
   UpsertMarkdownMemoryDocumentRequest,
 } from "../types.js";
 
-type CogneeMemoryClient = Pick<CogneeClient, "ingestDocument" | "search">;
+type CogneeMemoryClient = Pick<CogneeClient, "ingestDocument" | "search"> & {
+  waitForDatasetIndexing?: CogneeClient["waitForDatasetIndexing"];
+};
 
 export type CogneeAdapterOptions = {
   endpoint: string;
@@ -32,6 +35,7 @@ export type CogneeAdapterOptions = {
   ontology?: KnowledgeGraphOntologyExport;
   ontologyLoader?: (tenantId: string) => Promise<KnowledgeGraphOntologyExport>;
   searchType?: string;
+  ingestMode?: "remember" | "add_cognify" | null;
 };
 
 const COGNEE_CAPABILITIES: MemoryCapabilities = {
@@ -81,12 +85,19 @@ export class CogneeAdapter implements MemoryAdapter {
         endpoint: opts.endpoint,
         token: opts.token,
         fetchFn: opts.fetchFn,
+        mode:
+          opts.ingestMode ??
+          cogneeIngestModeFromConfig() ??
+          undefined,
+        indexPollMs: positiveIntConfig("COGNEE_INDEX_POLL_MS"),
+        indexTimeoutMs: positiveIntConfig("COGNEE_INDEX_TIMEOUT_MS"),
       });
     this.ontology = opts.ontology;
     this.ontologyLoader = opts.ontologyLoader;
     this.searchType =
       opts.searchType ||
       process.env.COGNEE_MEMORY_SEARCH_TYPE ||
+      getConfig("COGNEE_MEMORY_SEARCH_TYPE") ||
       "GRAPH_COMPLETION";
   }
 
@@ -218,7 +229,7 @@ export class CogneeAdapter implements MemoryAdapter {
   ): Promise<void> {
     const scope = scopeForOwner(req);
     const ontology = await this.loadOntology(req.tenantId);
-    await this.client.ingestDocument({
+    const ingest = await this.client.ingestDocument({
       tenantId: req.tenantId,
       sourceKind: scope.sourceKind,
       sourceRef: scope.sourceRef,
@@ -232,6 +243,12 @@ export class CogneeAdapter implements MemoryAdapter {
         `Document context: ${req.context}`,
       ].join("\n"),
     });
+    if (!ingest.datasetId) {
+      throw new Error(
+        "Cognee memory ingest did not return a dataset id for indexing",
+      );
+    }
+    await this.client.waitForDatasetIndexing?.(ingest.datasetId);
   }
 
   async inspect(_req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
@@ -580,4 +597,15 @@ function sortJson(value: unknown): unknown {
 
 function hashString(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 24);
+}
+
+function cogneeIngestModeFromConfig(): "remember" | "add_cognify" | null {
+  const value = getConfig("COGNEE_INGEST_MODE") || "";
+  return value === "add_cognify" || value === "remember" ? value : null;
+}
+
+function positiveIntConfig(name: string): number | undefined {
+  const value = process.env[name] || getConfig(name) || "";
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }

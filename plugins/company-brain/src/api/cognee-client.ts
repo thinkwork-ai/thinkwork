@@ -116,6 +116,8 @@ export class CogneeClient {
       mode?: "remember" | "add_cognify" | null;
       retryAttempts?: number;
       retryDelayMs?: number;
+      indexPollMs?: number;
+      indexTimeoutMs?: number;
     } = {},
   ) {
     const endpoint = opts.endpoint ?? process.env.COGNEE_ENDPOINT;
@@ -135,11 +137,11 @@ export class CogneeClient {
     this.retryDelayMs =
       opts.retryDelayMs ??
       readPositiveIntEnv("COGNEE_HTTP_RETRY_DELAY_MS", 250);
-    this.indexPollMs = readPositiveIntEnv("COGNEE_INDEX_POLL_MS", 5_000);
-    this.indexTimeoutMs = readPositiveIntEnv(
-      "COGNEE_INDEX_TIMEOUT_MS",
-      240_000,
-    );
+    this.indexPollMs =
+      opts.indexPollMs ?? readPositiveIntEnv("COGNEE_INDEX_POLL_MS", 5_000);
+    this.indexTimeoutMs =
+      opts.indexTimeoutMs ??
+      readPositiveIntEnv("COGNEE_INDEX_TIMEOUT_MS", 240_000);
   }
 
   async ingestThread(args: {
