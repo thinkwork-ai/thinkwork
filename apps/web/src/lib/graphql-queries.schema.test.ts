@@ -22,6 +22,7 @@ import {
   ThreadMentionTargetsQuery,
   ThreadWorkItemsQuery,
   UpdateWorkItemStatusMutation,
+  WorkItemLabelsQuery,
   WorkItemSavedViewsQuery,
   WorkItemStatusesQuery,
   WorkItemsQuery,
@@ -120,6 +121,7 @@ describe("work item queries vs canonical schema", () => {
   it.each([
     ["WorkItemsQuery", WorkItemsQuery],
     ["ThreadWorkItemsQuery", ThreadWorkItemsQuery],
+    ["WorkItemLabelsQuery", WorkItemLabelsQuery],
     ["WorkItemStatusesQuery", WorkItemStatusesQuery],
     ["WorkItemSavedViewsQuery", WorkItemSavedViewsQuery],
     ["UpdateWorkItemStatusMutation", UpdateWorkItemStatusMutation],

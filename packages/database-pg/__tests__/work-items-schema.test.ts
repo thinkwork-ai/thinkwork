@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   WORK_ITEM_EVENT_TYPES,
   WORK_ITEM_EXTERNAL_REF_PROVIDERS,
+  WORK_ITEM_DOGFOOD_LABELS,
   WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES,
   WORK_ITEM_PRIORITIES,
   WORK_ITEM_STATUS_CATEGORIES,
@@ -16,6 +17,8 @@ import {
   WORK_ITEM_VIEW_TYPES,
   workItemEvents,
   workItemExternalRefs,
+  workItemLabelAssignments,
+  workItemLabels,
   workItemSavedViews,
   workItemStatuses,
   workItemThreadLinks,
@@ -29,6 +32,10 @@ const migration0187 = readFileSync(
 );
 const migration0191 = readFileSync(
   join(HERE, "..", "drizzle", "0191_open_engine_work_item_queue.sql"),
+  "utf-8",
+);
+const migration0192 = readFileSync(
+  join(HERE, "..", "drizzle", "0192_work_item_labels.sql"),
   "utf-8",
 );
 
@@ -98,6 +105,25 @@ describe("Work Items schema", () => {
     );
   });
 
+  it("models tenant-scoped Work Item labels and assignments", () => {
+    const labelColumns = getTableColumns(workItemLabels);
+    const assignmentColumns = getTableColumns(workItemLabelAssignments);
+
+    expect(getTableName(workItemLabels)).toBe("work_item_labels");
+    expect(labelColumns.tenant_id.notNull).toBe(true);
+    expect(labelColumns.name.notNull).toBe(true);
+    expect(labelColumns.slug.notNull).toBe(true);
+    expect(labelColumns.color.notNull).toBe(false);
+    expect(labelColumns.archived_at.notNull).toBe(false);
+
+    expect(getTableName(workItemLabelAssignments)).toBe(
+      "work_item_label_assignments",
+    );
+    expect(assignmentColumns.tenant_id.notNull).toBe(true);
+    expect(assignmentColumns.work_item_id.notNull).toBe(true);
+    expect(assignmentColumns.label_id.notNull).toBe(true);
+  });
+
   it("declares constrained vocabularies in schema and migration", () => {
     expect(WORK_ITEM_STATUS_CATEGORIES).toEqual([
       "todo",
@@ -114,6 +140,20 @@ describe("Work Items schema", () => {
     expect(WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES).toEqual([
       "ready",
       "waiting",
+    ]);
+    expect(WORK_ITEM_DOGFOOD_LABELS).toEqual([
+      "openengine",
+      "dogfood",
+      "codex",
+      "claude",
+      "thinkwork-agent",
+      "bug",
+      "feature",
+      "docs",
+      "infra",
+      "needs-human",
+      "review",
+      "blocked",
     ]);
 
     const checks = [
@@ -204,6 +244,20 @@ describe("Work Items schema", () => {
       "creates-constraint: public.work_items.work_items_open_engine_dependency_state_allowed",
     ]) {
       expect(migration0191).toContain(`-- ${marker}`);
+    }
+  });
+
+  it("declares manual migration drift markers for Work Item labels", () => {
+    for (const marker of [
+      "creates: public.work_item_labels",
+      "creates: public.work_item_label_assignments",
+      "creates: public.uq_work_item_labels_tenant_slug",
+      "creates: public.idx_work_item_labels_tenant_active",
+      "creates: public.uq_work_item_label_assignments_pair",
+      "creates: public.idx_work_item_label_assignments_label",
+      "creates: public.idx_work_item_label_assignments_item",
+    ]) {
+      expect(migration0192).toContain(`-- ${marker}`);
     }
   });
 });

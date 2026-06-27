@@ -31,10 +31,12 @@ import {
   WORK_ITEM_PRIORITY_ORDER,
   type WorkItemPriority,
   type WorkItemAssigneeSummary,
+  type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
   workItemAssigneeLabel,
+  workItemLabels,
   workItemPriorityLabel,
   workItemSourceLabel,
   workItemSpaceLabel,
@@ -329,7 +331,7 @@ function DueDateBadgeSelector({
   );
 }
 
-function LabelsBadge({ labels }: { labels: WorkItemLabel[] }) {
+function LabelsBadge({ labels }: { labels: WorkItemLabelSummary[] }) {
   const [open, setOpen] = useState(false);
   const visibleDots = labels.slice(0, 3);
   const displayLabel =
@@ -351,7 +353,7 @@ function LabelsBadge({ labels }: { labels: WorkItemLabel[] }) {
               <span
                 key={label.id}
                 className="size-2 rounded-full"
-                style={{ backgroundColor: label.color }}
+                style={{ backgroundColor: label.color ?? "#64748b" }}
               />
             ))}
           </span>
@@ -371,7 +373,7 @@ function LabelsBadge({ labels }: { labels: WorkItemLabel[] }) {
             >
               <span
                 className="size-2 rounded-full"
-                style={{ backgroundColor: label.color }}
+                style={{ backgroundColor: label.color ?? "#64748b" }}
               />
               <span className="truncate">{label.name}</span>
             </div>
@@ -573,45 +575,6 @@ function noonIso(date: Date) {
   const next = new Date(date);
   next.setHours(12, 0, 0, 0);
   return next.toISOString();
-}
-
-interface WorkItemLabel {
-  id: string;
-  name: string;
-  color: string;
-}
-
-function workItemLabels(item: WorkItemSummary): WorkItemLabel[] {
-  const metadata = objectRecord(item.metadata);
-  const rawLabels = Array.isArray(metadata.labels)
-    ? metadata.labels
-    : Array.isArray(metadata.tags)
-      ? metadata.tags
-      : [];
-
-  return rawLabels
-    .map((label, index) => {
-      if (typeof label === "string") {
-        return {
-          id: label,
-          name: label,
-          color: labelColor(index),
-        };
-      }
-      const record = objectRecord(label);
-      const name = stringValue(record.name) || stringValue(record.label);
-      if (!name) return null;
-      return {
-        id: stringValue(record.id) || name,
-        name,
-        color: stringValue(record.color) || labelColor(index),
-      };
-    })
-    .filter((label): label is WorkItemLabel => Boolean(label));
-}
-
-function labelColor(index: number) {
-  return ["#ef4444", "#06b6d4", "#f97316", "#3b82f6", "#22c55e"][index % 5];
 }
 
 function workItemProgress(item: WorkItemSummary) {

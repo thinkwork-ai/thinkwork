@@ -22,6 +22,7 @@ describe("work item table filter adapter", () => {
       filterApplicable: false,
       filterSpace: false,
       filterOwner: false,
+      filterLabel: false,
     });
   });
 
@@ -33,7 +34,9 @@ describe("work item table filter adapter", () => {
       (column) => column.id,
     );
 
-    expect(tokenColumnIds).toEqual(Object.values(WORK_ITEM_FILTER_COLUMNS));
+    expect(new Set(tokenColumnIds)).toEqual(
+      new Set(Object.values(WORK_ITEM_FILTER_COLUMNS)),
+    );
     expect(tableColumnIds).toEqual(Object.values(WORK_ITEM_FILTER_COLUMNS));
   });
 
@@ -68,6 +71,54 @@ describe("work item table filter adapter", () => {
     expect(accessor?.(item({ ownerUserId: null }), 0)).toBe(
       WORK_ITEM_UNASSIGNED_FILTER_VALUE,
     );
+  });
+
+  it("filters items by any assigned label slug", () => {
+    const labelColumn = buildWorkItemFilterColumnDefs().find(
+      (column) => column.id === WORK_ITEM_FILTER_COLUMNS.label,
+    );
+    const accessor = (
+      labelColumn as
+        | { accessorFn?: (row: WorkItemSummary, index: number) => unknown }
+        | undefined
+    )?.accessorFn;
+    const filterFn = (
+      labelColumn as
+        | {
+            filterFn?: (
+              row: { getValue: (columnId: string) => unknown },
+              columnId: string,
+              filterValue: unknown,
+            ) => boolean;
+          }
+        | undefined
+    )?.filterFn;
+    const rowValue = accessor?.(
+      item({
+        labels: [
+          {
+            id: "label-1",
+            name: "Needs Human",
+            slug: "needs-human",
+          },
+        ],
+      }),
+      0,
+    );
+
+    expect(rowValue).toEqual(["needs-human"]);
+    expect(
+      filterFn?.({ getValue: () => rowValue }, WORK_ITEM_FILTER_COLUMNS.label, {
+        operator: "is_any_of",
+        value: ["needs-human"],
+      }),
+    ).toBe(true);
+    expect(
+      filterFn?.({ getValue: () => rowValue }, WORK_ITEM_FILTER_COLUMNS.label, {
+        operator: "is_any_of",
+        value: ["openengine"],
+      }),
+    ).toBe(false);
   });
 
   it("classifies due dates for option filters", () => {

@@ -10,6 +10,7 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Tags,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -21,11 +22,13 @@ import {
   WORK_ITEM_CATEGORY_ORDER,
   WORK_ITEM_PRIORITY_ORDER,
   type WorkItemAssigneeSummary,
+  type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemSummary,
   isWorkItemDueSoon,
   workItemAssigneeColorClass,
   workItemAssigneeLabel,
+  workItemLabels,
   workItemPriorityLabel,
   workItemSpaceLabel,
   workItemStatusCategory,
@@ -42,6 +45,7 @@ export const WORK_ITEM_FILTER_COLUMNS = {
   applicable: "filterApplicable",
   space: "filterSpace",
   owner: "filterOwner",
+  label: "filterLabel",
 } as const;
 
 export type WorkItemDueFilterValue = "overdue" | "due_soon" | "later" | "none";
@@ -58,6 +62,7 @@ export const WORK_ITEM_FILTER_COLUMN_VISIBILITY: VisibilityState =
 export function buildWorkItemTokenFilterColumns(
   spaces: WorkItemSpaceSummary[],
   assignees: WorkItemAssigneeSummary[] = [],
+  labels: WorkItemLabelSummary[] = [],
 ): DataTableTokenFilterColumn[] {
   return [
     {
@@ -127,6 +132,23 @@ export function buildWorkItemTokenFilterColumns(
         label: space.name?.trim() || "Space",
       })),
       emptyMessage: "No Spaces available.",
+    },
+    {
+      id: WORK_ITEM_FILTER_COLUMNS.label,
+      label: "Label",
+      type: "option",
+      icon: <Tags className="size-4" />,
+      options: labels.map((label) => ({
+        value: label.slug,
+        label: label.name,
+        icon: (
+          <span
+            className="inline-flex size-2.5 rounded-full"
+            style={{ backgroundColor: label.color ?? "#64748b" }}
+          />
+        ),
+      })),
+      emptyMessage: "No labels available.",
     },
     {
       id: WORK_ITEM_FILTER_COLUMNS.owner,
@@ -212,6 +234,11 @@ export function buildWorkItemFilterColumnDefs(
         item.ownerUserId ?? WORK_ITEM_UNASSIGNED_FILTER_VALUE,
       filterFn: dataTableTokenFilterFns.option,
     },
+    {
+      id: WORK_ITEM_FILTER_COLUMNS.label,
+      accessorFn: (item) => workItemLabels(item).map((label) => label.slug),
+      filterFn: workItemLabelFilterFn,
+    },
   ];
 }
 
@@ -226,6 +253,9 @@ export function workItemSearchFilterValue(
     workItemStatusCategoryLabel(workItemStatusCategory(item)),
     workItemPriorityLabel(item.priority),
     workItemAssigneeLabel(item, assignees),
+    workItemLabels(item)
+      .map((label) => label.name)
+      .join(" "),
   ]
     .filter(Boolean)
     .join(" ");
@@ -251,10 +281,7 @@ function statusIcon(category: (typeof WORK_ITEM_CATEGORY_ORDER)[number]) {
 }
 
 function assigneeInitials(value: string) {
-  const parts = value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = value.trim().split(/\s+/).filter(Boolean);
   const letters =
     parts.length >= 2
       ? `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`
@@ -264,4 +291,41 @@ function assigneeInitials(value: string) {
 
 function startOfToday(now: Date) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function workItemLabelFilterFn(
+  row: { getValue: (columnId: string) => unknown },
+  columnId: string,
+  filterValue: unknown,
+) {
+  if (!isOptionFilterValue(filterValue)) return true;
+  const rowValues = row.getValue(columnId);
+  const labelSlugs = Array.isArray(rowValues)
+    ? rowValues.map((value) => String(value))
+    : [String(rowValues ?? "")];
+  const selected = filterValueList(filterValue.value);
+  if (selected.length === 0) return true;
+  const hasMatch = selected.some((value) => labelSlugs.includes(value));
+  return filterValue.operator === "is_any_of" || filterValue.operator === "is"
+    ? hasMatch
+    : !hasMatch;
+}
+
+function isOptionFilterValue(value: unknown): value is {
+  operator: "is" | "is_not" | "is_any_of" | "is_none_of";
+  value: string | string[];
+} {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { operator?: unknown; value?: unknown };
+  return (
+    typeof candidate.operator === "string" &&
+    ["is", "is_not", "is_any_of", "is_none_of"].includes(candidate.operator) &&
+    (typeof candidate.value === "string" || Array.isArray(candidate.value))
+  );
+}
+
+function filterValueList(value: string | string[]) {
+  return (Array.isArray(value) ? value : [value])
+    .map((entry) => String(entry))
+    .filter(Boolean);
 }

@@ -11,6 +11,7 @@ import {
   SpacesQuery,
   UpdateWorkItemMutation,
   UpdateWorkItemStatusMutation,
+  WorkItemLabelsQuery,
   WorkItemStatusesQuery,
   WorkItemsQuery,
 } from "@/lib/graphql-queries";
@@ -23,6 +24,7 @@ import {
   isWorkItemOpen,
   sortWorkItemStatuses,
   type WorkItemAssigneeSummary,
+  type WorkItemLabelSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
@@ -50,6 +52,10 @@ interface WorkItemsResult {
 
 interface WorkItemStatusesResult {
   workItemStatuses?: WorkItemStatusSummary[] | null;
+}
+
+interface WorkItemLabelsResult {
+  workItemLabels?: WorkItemLabelSummary[] | null;
 }
 
 interface SpacesResult {
@@ -112,6 +118,12 @@ export function WorkItemsPage({
     pause: !tenantId || !state.spaceId,
     requestPolicy: "cache-and-network",
   });
+  const [{ data: labelsData }] = useQuery<WorkItemLabelsResult>({
+    query: WorkItemLabelsQuery,
+    variables: { input: { tenantId: tenantId ?? "", limit: 200 } },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
   const [{ data: membersData }] = useQuery<TenantMembersResult>({
     query: SettingsTenantMembersQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -144,6 +156,7 @@ export function WorkItemsPage({
   }, [reexecuteItems, tenantId]);
 
   const spaces = spacesData?.spaces ?? [];
+  const labels = labelsData?.workItemLabels ?? [];
   const workItems = data?.workItems ?? [];
   const sequenceNumbers = useMemo(
     () => buildWorkItemSequenceNumbers(workItems),
@@ -192,6 +205,7 @@ export function WorkItemsPage({
         priority?: WorkItemPriority;
         dueAt?: string | null;
         ownerUserId?: string | null;
+        labelIds?: string[];
       },
     ) => {
       if (!tenantId || workItemUpdating) return;
@@ -265,8 +279,7 @@ export function WorkItemsPage({
             size="icon"
             className={cn(
               "h-8 w-8 text-muted-foreground hover:text-foreground",
-              showDoneItems &&
-                "text-white hover:text-white [&_svg]:text-white",
+              showDoneItems && "text-white hover:text-white [&_svg]:text-white",
             )}
             aria-label={
               showDoneItems ? "Hide Done Work Items" : "Show Done Work Items"
@@ -332,6 +345,7 @@ export function WorkItemsPage({
               showDoneItems={showDoneItems}
               updatingItemId={updatingItemId}
               assignees={assignees}
+              labels={labels}
               currentUserId={userId}
               sequenceNumbers={sequenceNumbers}
               onStatusChange={handleStatusChange}
@@ -344,6 +358,7 @@ export function WorkItemsPage({
       <NewWorkItemSheet
         open={newWorkItemOpen}
         spaces={spaces}
+        labels={labels}
         defaultSpaceId={state.spaceId}
         saving={creatingWorkItem}
         onOpenChange={setNewWorkItemOpen}
@@ -355,6 +370,7 @@ export function WorkItemsPage({
           detailItem ? sequenceNumbers.get(detailItem.id) : undefined
         }
         spaces={spaces}
+        labels={labels}
         statuses={statuses}
         assignees={assignees}
         updating={Boolean(detailItem && updatingItemId === detailItem.id)}

@@ -8,6 +8,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   isNull,
   lte,
   or,
@@ -15,6 +16,8 @@ import {
   spaceMembers,
   spaces,
   workItemEvents,
+  workItemLabelAssignments,
+  workItemLabels,
   workItemStatuses,
   workItemThreadLinks,
   workItems,
@@ -61,6 +64,17 @@ export async function listWorkItems(
   }
   if (input.applicable !== undefined && input.applicable !== null) {
     conditions.push(eq(workItems.applicable, Boolean(input.applicable)));
+  }
+  if (Array.isArray(input.labelIds) && input.labelIds.length > 0) {
+    conditions.push(labelAssignmentExistsPredicate(tenantId, input.labelIds));
+  }
+  if (Array.isArray(input.labelSlugs) && input.labelSlugs.length > 0) {
+    const slugs = normalizeLabelSlugs(input.labelSlugs);
+    if (slugs.length > 0) {
+      conditions.push(
+        labelAssignmentExistsPredicate(tenantId, undefined, slugs),
+      );
+    }
   }
   if (input.priority) {
     conditions.push(
@@ -190,6 +204,14 @@ export async function createWorkItem(
       });
     }
 
+    await replaceWorkItemLabels(tx as unknown as typeof db, {
+      tenantId,
+      workItemId: created.id,
+      callerUserId,
+      labelIds: input.labelIds,
+      labelSlugs: input.labelSlugs,
+    });
+
     await tx.insert(workItemEvents).values({
       tenant_id: tenantId,
       space_id: input.spaceId,
@@ -248,6 +270,15 @@ export async function updateWorkItem(
       .set(updates)
       .where(and(eq(workItems.tenant_id, tenantId), eq(workItems.id, item.id)))
       .returning();
+    if (input.labelIds !== undefined || input.labelSlugs !== undefined) {
+      await replaceWorkItemLabels(tx as unknown as typeof db, {
+        tenantId,
+        workItemId: item.id,
+        callerUserId: await resolveCallerUserId(ctx).catch(() => null),
+        labelIds: input.labelIds,
+        labelSlugs: input.labelSlugs,
+      });
+    }
     await tx.insert(workItemEvents).values({
       tenant_id: tenantId,
       space_id: item.space_id,
@@ -259,6 +290,98 @@ export async function updateWorkItem(
     });
     return updated;
   });
+}
+
+export async function listWorkItemLabels(
+  ctx: GraphQLContext,
+  input: Record<string, any> = {},
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  if (!(await canReadTenantSpaces(ctx, tenantId))) return [];
+  const conditions: any[] = [eq(workItemLabels.tenant_id, tenantId)];
+  if (!input.includeArchived)
+    conditions.push(isNull(workItemLabels.archived_at));
+  const search = typeof input.search === "string" ? input.search.trim() : "";
+  if (search) {
+    conditions.push(
+      or(
+        sql`${workItemLabels.name} ILIKE ${`%${search}%`}`,
+        sql`${workItemLabels.slug} ILIKE ${`%${search}%`}`,
+      ),
+    );
+  }
+  return db
+    .select()
+    .from(workItemLabels)
+    .where(and(...conditions))
+    .orderBy(asc(workItemLabels.name))
+    .limit(clampLimit(input.limit));
+}
+
+export async function createWorkItemLabel(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  if (!(await canReadTenantSpaces(ctx, tenantId))) {
+    throw new GraphQLError("Not authorized for this tenant", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  const now = new Date();
+  const [created] = await db
+    .insert(workItemLabels)
+    .values({
+      tenant_id: tenantId,
+      name: requireNonEmpty(input.name, "name"),
+      slug: normalizeLabelSlug(input.slug ?? input.name),
+      color: optionalTrim(input.color),
+      description: optionalTrim(input.description),
+      created_by_user_id: await resolveCallerUserId(ctx).catch(() => null),
+      updated_at: now,
+    })
+    .returning();
+  return created;
+}
+
+export async function updateWorkItemLabel(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  if (!(await canReadTenantSpaces(ctx, tenantId))) {
+    throw new GraphQLError("Not authorized for this tenant", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  const updates: Record<string, unknown> = { updated_at: new Date() };
+  if (input.name !== undefined)
+    updates.name = requireNonEmpty(input.name, "name");
+  if (input.slug !== undefined) updates.slug = normalizeLabelSlug(input.slug);
+  if (input.color !== undefined) updates.color = optionalTrim(input.color);
+  if (input.description !== undefined) {
+    updates.description = optionalTrim(input.description);
+  }
+  if (input.archived !== undefined) {
+    updates.archived_at = input.archived ? new Date() : null;
+  }
+
+  const [updated] = await db
+    .update(workItemLabels)
+    .set(updates)
+    .where(
+      and(
+        eq(workItemLabels.tenant_id, tenantId),
+        eq(workItemLabels.id, input.id),
+      ),
+    )
+    .returning();
+  if (!updated) {
+    throw new GraphQLError("Work Item label not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  return updated;
 }
 
 export async function updateWorkItemStatus(
@@ -370,6 +493,107 @@ function visibleSpaceExistsPredicate(tenantId: string, callerUserId: string) {
   )`;
 }
 
+function labelAssignmentExistsPredicate(
+  tenantId: string,
+  labelIds?: string[],
+  labelSlugs?: string[],
+) {
+  const filterValues = labelIds?.length ? labelIds : (labelSlugs ?? []);
+  const filterColumn = labelIds?.length ? sql`wila.label_id` : sql`wil.slug`;
+  return sql`EXISTS (
+    SELECT 1
+      FROM ${workItemLabelAssignments} wila
+      JOIN ${workItemLabels} wil
+        ON wil.id = wila.label_id
+       AND wil.tenant_id = wila.tenant_id
+     WHERE wila.tenant_id = ${tenantId}
+       AND wila.work_item_id = ${workItems.id}
+       AND wil.archived_at IS NULL
+       AND ${filterColumn} IN (${sql.join(
+         filterValues.map((value) => sql`${value}`),
+         sql`, `,
+       )})
+  )`;
+}
+
+async function replaceWorkItemLabels(
+  tx: typeof db,
+  input: {
+    tenantId: string;
+    workItemId: string;
+    callerUserId: string | null;
+    labelIds?: unknown;
+    labelSlugs?: unknown;
+  },
+) {
+  if (input.labelIds === undefined && input.labelSlugs === undefined) return;
+  const labelIds = await resolveWorkItemLabelIds(tx, input);
+  await tx
+    .delete(workItemLabelAssignments)
+    .where(
+      and(
+        eq(workItemLabelAssignments.tenant_id, input.tenantId),
+        eq(workItemLabelAssignments.work_item_id, input.workItemId),
+      ),
+    );
+  if (labelIds.length === 0) return;
+  await tx
+    .insert(workItemLabelAssignments)
+    .values(
+      labelIds.map((labelId) => ({
+        tenant_id: input.tenantId,
+        work_item_id: input.workItemId,
+        label_id: labelId,
+        created_by_user_id: input.callerUserId,
+      })),
+    )
+    .onConflictDoNothing();
+}
+
+async function resolveWorkItemLabelIds(
+  tx: typeof db,
+  input: {
+    tenantId: string;
+    labelIds?: unknown;
+    labelSlugs?: unknown;
+  },
+) {
+  const requestedIds = normalizeIdList(input.labelIds);
+  const requestedSlugs = normalizeLabelSlugs(input.labelSlugs);
+  if (requestedIds.length === 0 && requestedSlugs.length === 0) return [];
+
+  const conditions: any[] = [
+    eq(workItemLabels.tenant_id, input.tenantId),
+    isNull(workItemLabels.archived_at),
+  ];
+  const disjunctions: any[] = [];
+  if (requestedIds.length > 0) {
+    disjunctions.push(inArray(workItemLabels.id, requestedIds));
+  }
+  if (requestedSlugs.length > 0) {
+    disjunctions.push(inArray(workItemLabels.slug, requestedSlugs));
+  }
+  conditions.push(
+    disjunctions.length === 1 ? disjunctions[0] : or(...disjunctions),
+  );
+
+  const rows = await tx
+    .select({ id: workItemLabels.id, slug: workItemLabels.slug })
+    .from(workItemLabels)
+    .where(and(...conditions));
+  const resolved = [...new Set(rows.map((row) => row.id))];
+  const resolvedIds = new Set(rows.map((row) => row.id));
+  const resolvedSlugs = new Set(rows.map((row) => row.slug));
+  const missingId = requestedIds.some((id) => !resolvedIds.has(id));
+  const missingSlug = requestedSlugs.some((slug) => !resolvedSlugs.has(slug));
+  if (missingId || missingSlug) {
+    throw new GraphQLError("One or more Work Item labels were not found", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return resolved;
+}
+
 export function normalizeWorkItemPriority(value: unknown): WorkItemPriority {
   const normalized = String(value ?? "")
     .trim()
@@ -435,6 +659,36 @@ function optionalTrim(value: unknown) {
   if (value === undefined || value === null) return null;
   const trimmed = String(value).trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((child) => optionalTrim(child))
+        .filter((child): child is string => Boolean(child)),
+    ),
+  ];
+}
+
+function normalizeLabelSlugs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(normalizeLabelSlug))].filter(Boolean);
+}
+
+function normalizeLabelSlug(value: unknown) {
+  const slug = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) {
+    throw new GraphQLError("Work Item label slug is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  return slug;
 }
 
 function compactObject(value: Record<string, unknown>) {

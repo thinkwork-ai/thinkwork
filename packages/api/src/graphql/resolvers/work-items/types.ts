@@ -3,14 +3,18 @@ import {
   asc,
   db,
   eq,
+  isNull,
   workItemEvents,
   workItemExternalRefs,
+  workItemLabelAssignments,
+  workItemLabels,
   workItemStatuses,
   workItemThreadLinks,
 } from "../../utils.js";
 import {
   toGraphqlWorkItemEvent,
   toGraphqlWorkItemExternalRef,
+  toGraphqlWorkItemLabel,
   toGraphqlWorkItemStatus,
   toGraphqlWorkItemThreadLink,
 } from "./shared.js";
@@ -75,5 +79,39 @@ export const workItemTypeResolvers = {
       )
       .orderBy(asc(workItemExternalRefs.created_at));
     return rows.map((row) => toGraphqlWorkItemExternalRef(row));
+  },
+  labels: async (parent: any) => {
+    const workItemId = parent.id;
+    const tenantId = parent.tenantId ?? parent.tenant_id;
+    const rows = await db
+      .select({
+        id: workItemLabels.id,
+        tenant_id: workItemLabels.tenant_id,
+        name: workItemLabels.name,
+        slug: workItemLabels.slug,
+        color: workItemLabels.color,
+        description: workItemLabels.description,
+        created_by_user_id: workItemLabels.created_by_user_id,
+        created_at: workItemLabels.created_at,
+        updated_at: workItemLabels.updated_at,
+        archived_at: workItemLabels.archived_at,
+      })
+      .from(workItemLabelAssignments)
+      .innerJoin(
+        workItemLabels,
+        and(
+          eq(workItemLabels.tenant_id, workItemLabelAssignments.tenant_id),
+          eq(workItemLabels.id, workItemLabelAssignments.label_id),
+        ),
+      )
+      .where(
+        and(
+          eq(workItemLabelAssignments.tenant_id, tenantId),
+          eq(workItemLabelAssignments.work_item_id, workItemId),
+          isNull(workItemLabels.archived_at),
+        ),
+      )
+      .orderBy(asc(workItemLabels.name));
+    return rows.map((row) => toGraphqlWorkItemLabel(row));
   },
 };

@@ -46,6 +46,10 @@ export function toGraphqlWorkItemExternalRef(row: Record<string, unknown>) {
   return result;
 }
 
+export function toGraphqlWorkItemLabel(row: Record<string, unknown>) {
+  return snakeToCamel(row);
+}
+
 function uppercaseFields(
   row: Record<string, unknown>,
   fields: ReadonlySet<string>,
