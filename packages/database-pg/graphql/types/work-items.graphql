@@ -50,6 +50,11 @@ enum WorkItemExternalRefProvider {
   TWENTY
 }
 
+enum WorkItemOpenEngineDependencyState {
+  READY
+  WAITING
+}
+
 type WorkItemStatus {
   id: ID!
   tenantId: ID!
@@ -120,6 +125,16 @@ type WorkItem {
   required: Boolean!
   applicable: Boolean!
   blocked: Boolean!
+  openEngineEnabled: Boolean!
+  openEngineQueueKey: String
+  openEngineClaimedByAgentId: ID
+  openEngineClaimedAt: AWSDateTime
+  openEngineClaimExpiresAt: AWSDateTime
+  openEngineHumanHold: Boolean!
+  openEngineHumanHoldReason: String
+  openEngineScheduledAt: AWSDateTime
+  openEngineDependencyState: WorkItemOpenEngineDependencyState!
+  openEngineRouting: AWSJSON
   completedAt: AWSDateTime
   completedByUserId: ID
   completedByAgentId: ID

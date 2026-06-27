@@ -9661,6 +9661,16 @@ export type WorkItem = {
   id: Scalars["ID"]["output"];
   metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   notes?: Maybe<Scalars["String"]["output"]>;
+  openEngineClaimExpiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  openEngineClaimedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  openEngineClaimedByAgentId?: Maybe<Scalars["ID"]["output"]>;
+  openEngineDependencyState: WorkItemOpenEngineDependencyState;
+  openEngineEnabled: Scalars["Boolean"]["output"];
+  openEngineHumanHold: Scalars["Boolean"]["output"];
+  openEngineHumanHoldReason?: Maybe<Scalars["String"]["output"]>;
+  openEngineQueueKey?: Maybe<Scalars["String"]["output"]>;
+  openEngineRouting?: Maybe<Scalars["AWSJSON"]["output"]>;
+  openEngineScheduledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   ownerAgentId?: Maybe<Scalars["ID"]["output"]>;
   ownerUserId?: Maybe<Scalars["ID"]["output"]>;
   priority: WorkItemPriority;
@@ -9725,6 +9735,11 @@ export enum WorkItemExternalRefProvider {
   Plane = "PLANE",
   Thinkwork = "THINKWORK",
   Twenty = "TWENTY",
+}
+
+export enum WorkItemOpenEngineDependencyState {
+  Ready = "READY",
+  Waiting = "WAITING",
 }
 
 export enum WorkItemPriority {

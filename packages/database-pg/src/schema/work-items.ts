@@ -70,6 +70,11 @@ export const WORK_ITEM_EXTERNAL_REF_PROVIDERS = [
   "twenty",
 ] as const;
 
+export const WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES = [
+  "ready",
+  "waiting",
+] as const;
+
 export const workItemStatuses = pgTable(
   "work_item_statuses",
   {
@@ -147,6 +152,32 @@ export const workItems = pgTable(
     required: boolean("required").notNull().default(true),
     applicable: boolean("applicable").notNull().default(true),
     blocked: boolean("blocked").notNull().default(false),
+    open_engine_enabled: boolean("open_engine_enabled")
+      .notNull()
+      .default(false),
+    open_engine_queue_key: text("open_engine_queue_key"),
+    open_engine_claimed_by_agent_id: uuid(
+      "open_engine_claimed_by_agent_id",
+    ).references(() => agents.id, {
+      onDelete: "set null",
+    }),
+    open_engine_claimed_at: timestamp("open_engine_claimed_at", {
+      withTimezone: true,
+    }),
+    open_engine_claim_expires_at: timestamp("open_engine_claim_expires_at", {
+      withTimezone: true,
+    }),
+    open_engine_human_hold: boolean("open_engine_human_hold")
+      .notNull()
+      .default(false),
+    open_engine_human_hold_reason: text("open_engine_human_hold_reason"),
+    open_engine_scheduled_at: timestamp("open_engine_scheduled_at", {
+      withTimezone: true,
+    }),
+    open_engine_dependency_state: text("open_engine_dependency_state")
+      .notNull()
+      .default("ready"),
+    open_engine_routing: jsonb("open_engine_routing"),
     completed_at: timestamp("completed_at", { withTimezone: true }),
     completed_by_user_id: uuid("completed_by_user_id").references(
       () => users.id,
@@ -201,9 +232,33 @@ export const workItems = pgTable(
       table.tenant_id,
       table.template_source_id,
     ),
+    index("idx_work_items_open_engine_ready")
+      .on(
+        table.tenant_id,
+        table.open_engine_queue_key,
+        table.open_engine_scheduled_at,
+        table.open_engine_claim_expires_at,
+        table.updated_at,
+      )
+      .where(
+        sql`${table.open_engine_enabled} = true
+          AND ${table.archived_at} IS NULL
+          AND ${table.open_engine_human_hold} = false
+          AND ${table.blocked} = false
+          AND ${table.open_engine_dependency_state} = 'ready'`,
+      ),
+    index("idx_work_items_open_engine_claim").on(
+      table.tenant_id,
+      table.open_engine_claimed_by_agent_id,
+      table.open_engine_claim_expires_at,
+    ),
     check(
       "work_items_priority_allowed",
       sql`${table.priority} IN ('low','normal','high','urgent')`,
+    ),
+    check(
+      "work_items_open_engine_dependency_state_allowed",
+      sql`${table.open_engine_dependency_state} IN ('ready','waiting')`,
     ),
   ],
 );

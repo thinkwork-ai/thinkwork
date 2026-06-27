@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   WORK_ITEM_EVENT_TYPES,
   WORK_ITEM_EXTERNAL_REF_PROVIDERS,
+  WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES,
   WORK_ITEM_PRIORITIES,
   WORK_ITEM_STATUS_CATEGORIES,
   WORK_ITEM_THREAD_RELATIONSHIPS,
@@ -24,6 +25,10 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const migration0187 = readFileSync(
   join(HERE, "..", "drizzle", "0187_native_work_items.sql"),
+  "utf-8",
+);
+const migration0191 = readFileSync(
+  join(HERE, "..", "drizzle", "0191_open_engine_work_item_queue.sql"),
   "utf-8",
 );
 
@@ -42,6 +47,22 @@ describe("Work Items schema", () => {
     expect(columns.blocked.default).toBe(false);
     expect(columns.completed_at.notNull).toBe(false);
     expect(columns.archived_at.notNull).toBe(false);
+  });
+
+  it("models Open Engine queue state on Work Items", () => {
+    const columns = getTableColumns(workItems);
+
+    expect(columns.open_engine_enabled.default).toBe(false);
+    expect(columns.open_engine_queue_key.notNull).toBe(false);
+    expect(columns.open_engine_claimed_by_agent_id.notNull).toBe(false);
+    expect(columns.open_engine_claimed_at.notNull).toBe(false);
+    expect(columns.open_engine_claim_expires_at.notNull).toBe(false);
+    expect(columns.open_engine_human_hold.default).toBe(false);
+    expect(columns.open_engine_human_hold_reason.notNull).toBe(false);
+    expect(columns.open_engine_scheduled_at.notNull).toBe(false);
+    expect(columns.open_engine_dependency_state.default).toBe("ready");
+    expect(columns.open_engine_dependency_state.notNull).toBe(true);
+    expect(columns.open_engine_routing.notNull).toBe(false);
   });
 
   it("models Space-specific statuses and saved views", () => {
@@ -90,6 +111,10 @@ describe("Work Items schema", () => {
     expect(WORK_ITEM_VIEW_TYPES).toEqual(["list", "board"]);
     expect(WORK_ITEM_THREAD_RELATIONSHIPS).toContain("evidence");
     expect(WORK_ITEM_EXTERNAL_REF_PROVIDERS).toContain("plane");
+    expect(WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES).toEqual([
+      "ready",
+      "waiting",
+    ]);
 
     const checks = [
       ...getTableConfig(workItemStatuses).checks,
@@ -109,6 +134,7 @@ describe("Work Items schema", () => {
         "work_item_saved_views_type_allowed",
         "work_item_saved_views_owner_required",
         "work_item_external_refs_provider_allowed",
+        "work_items_open_engine_dependency_state_allowed",
       ]),
     );
 
@@ -120,6 +146,25 @@ describe("Work Items schema", () => {
     ]) {
       expect(migration0187).toContain(literal);
     }
+    expect(migration0191).toContain(
+      "CHECK (open_engine_dependency_state IN ('ready', 'waiting'))",
+    );
+  });
+
+  it("declares Open Engine queue indexes for eligibility and claims", () => {
+    expect(migration0191).toContain(
+      "CREATE INDEX IF NOT EXISTS idx_work_items_open_engine_ready",
+    );
+    expect(migration0191).toContain("open_engine_queue_key");
+    expect(migration0191).toContain("open_engine_scheduled_at");
+    expect(migration0191).toContain("open_engine_claim_expires_at");
+    expect(migration0191).toContain("open_engine_human_hold = false");
+    expect(migration0191).toContain("blocked = false");
+    expect(migration0191).toContain("open_engine_dependency_state = 'ready'");
+    expect(migration0191).toContain(
+      "CREATE INDEX IF NOT EXISTS idx_work_items_open_engine_claim",
+    );
+    expect(migration0191).toContain("open_engine_claimed_by_agent_id");
   });
 
   it("declares manual migration drift markers for all Work Item objects", () => {
@@ -141,6 +186,24 @@ describe("Work Items schema", () => {
       "creates-constraint: public.work_item_saved_views.work_item_saved_views_owner_required",
     ]) {
       expect(migration0187).toContain(`-- ${marker}`);
+    }
+  });
+
+  it("declares manual migration drift markers for Open Engine queue state", () => {
+    for (const marker of [
+      "creates-column: public.work_items.open_engine_enabled",
+      "creates-column: public.work_items.open_engine_queue_key",
+      "creates-column: public.work_items.open_engine_claimed_by_agent_id",
+      "creates-column: public.work_items.open_engine_claim_expires_at",
+      "creates-column: public.work_items.open_engine_human_hold",
+      "creates-column: public.work_items.open_engine_scheduled_at",
+      "creates-column: public.work_items.open_engine_dependency_state",
+      "creates-column: public.work_items.open_engine_routing",
+      "creates: public.idx_work_items_open_engine_ready",
+      "creates: public.idx_work_items_open_engine_claim",
+      "creates-constraint: public.work_items.work_items_open_engine_dependency_state_allowed",
+    ]) {
+      expect(migration0191).toContain(`-- ${marker}`);
     }
   });
 });
