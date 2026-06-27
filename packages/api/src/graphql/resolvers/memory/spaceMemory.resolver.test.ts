@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import { requireSpaceMemoryScope } from "./space-memory-scope.js";
 import { captureSpaceMemory } from "./captureSpaceMemory.mutation.js";
+import {
+  ingestSpaceMemoryDocument,
+  spaceMemoryDocumentId,
+} from "./ingestSpaceMemoryDocument.mutation.js";
 import { spaceMemorySearch } from "./spaceMemorySearch.query.js";
 
 vi.mock("../../../lib/memory/index.js", () => ({
@@ -17,6 +21,7 @@ const requireSpaceMemoryScopeMock = vi.mocked(requireSpaceMemoryScope);
 
 describe("space memory resolvers", () => {
   const retainMock = vi.fn();
+  const upsertMarkdownMemoryDocumentMock = vi.fn();
   const recallMock = vi.fn();
   const capabilitiesMock = vi.fn();
 
@@ -48,6 +53,7 @@ describe("space memory resolvers", () => {
       },
       backend: "hindsight",
     });
+    upsertMarkdownMemoryDocumentMock.mockResolvedValue(undefined);
     recallMock.mockResolvedValue([
       {
         record: {
@@ -71,6 +77,7 @@ describe("space memory resolvers", () => {
       adapter: {
         kind: "hindsight",
         retain: retainMock,
+        upsertMarkdownMemoryDocument: upsertMarkdownMemoryDocumentMock,
         capabilities: capabilitiesMock,
       },
       recall: { recall: recallMock },
@@ -134,6 +141,120 @@ describe("space memory resolvers", () => {
       namespace: "space_space-1",
       content: { text: "Use the enterprise onboarding template." },
     });
+  });
+
+  it("ingests Space documents as stable Hindsight document memory", async () => {
+    const result = await ingestSpaceMemoryDocument(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          spaceId: "space-1",
+          path: "kb/onboarding.md",
+          title: "Onboarding Guide",
+          content: " # Onboarding\n\nUse the enterprise onboarding template. ",
+          contentType: "text/markdown",
+          sourceUrl: "https://example.com/onboarding",
+          tags: ["topic:onboarding"],
+          metadata: JSON.stringify({ sourceSystem: "kb-tab" }),
+        },
+      },
+      {} as any,
+    );
+
+    expect(requireSpaceMemoryScopeMock).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ tenantId: "tenant-1", spaceId: "space-1" }),
+    );
+    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      ownerType: "space",
+      ownerId: "space-1",
+      path: "kb/onboarding.md",
+      content: "# Onboarding\n\nUse the enterprise onboarding template.",
+      documentId: "space_document:space-1:kb/onboarding.md",
+      context: "thinkwork_space_document",
+      async: true,
+      hindsight: {
+        timestamp: "unset",
+        tags: [
+          "space:space-1",
+          "source:space-document",
+          "surface:web",
+          "surface:graphql",
+          "scope:space",
+          "scope:document",
+          "topic:onboarding",
+        ],
+        documentTags: [
+          "space:space-1",
+          "source:space-document",
+          "scope:space",
+          "scope:document",
+          "topic:onboarding",
+        ],
+        observationScopes: [
+          ["space:space-1"],
+          ["source:space-document"],
+          ["scope:space"],
+          ["scope:document"],
+        ],
+      },
+      metadata: expect.objectContaining({
+        sourceSystem: "kb-tab",
+        source: "space_memory_document",
+        sourceContext: "thinkwork_space_document",
+        documentTitle: "Onboarding Guide",
+        sourceUrl: "https://example.com/onboarding",
+        contentType: "text/markdown",
+        ingestedByUserId: "user-1",
+      }),
+    });
+    expect(result).toMatchObject({
+      documentId: "space_document:space-1:kb/onboarding.md",
+      spaceId: "space-1",
+      path: "kb/onboarding.md",
+      status: "queued",
+      processAsync: true,
+      context: "thinkwork_space_document",
+    });
+    expect(result.contentBytes).toBeGreaterThan(0);
+  });
+
+  it("uses caller timestamps and synchronous mode when ingesting Space documents", async () => {
+    await ingestSpaceMemoryDocument(
+      null,
+      {
+        input: {
+          spaceId: "space-1",
+          documentId: "vendor/plan",
+          content: "Launch plan was approved on May 1.",
+          timestamp: "2026-05-01T12:00:00.000Z",
+          processAsync: false,
+        },
+      },
+      {} as any,
+    );
+
+    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: "space_document:space-1:vendor/plan",
+        path: "documents/vendor/plan.md",
+        async: false,
+        hindsight: expect.objectContaining({
+          timestamp: "2026-05-01T12:00:00.000Z",
+        }),
+      }),
+    );
+  });
+
+  it("requires a stable Space document id or path", () => {
+    expect(() =>
+      spaceMemoryDocumentId("space-1", { documentId: " vendor spec " }),
+    ).not.toThrow();
+    expect(() => spaceMemoryDocumentId("space-1", {})).toThrow(
+      "Document id or path is required",
+    );
   });
 
   it("searches only the authorized space owner", async () => {
@@ -263,6 +384,7 @@ describe("space memory resolvers", () => {
       adapter: {
         kind: "agentcore",
         retain: retainMock,
+        upsertMarkdownMemoryDocument: undefined,
         capabilities: capabilitiesMock,
       },
       recall: { recall: recallMock },
@@ -280,6 +402,22 @@ describe("space memory resolvers", () => {
       ),
     ).rejects.toThrow(
       "Active memory engine does not support Space memory capture",
+    );
+    await expect(
+      ingestSpaceMemoryDocument(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            spaceId: "space-1",
+            path: "docs/onboarding.md",
+            content: "Use the enterprise onboarding template.",
+          },
+        },
+        {} as any,
+      ),
+    ).rejects.toThrow(
+      "Active memory engine does not support Space document memory ingest",
     );
     await expect(
       spaceMemorySearch(

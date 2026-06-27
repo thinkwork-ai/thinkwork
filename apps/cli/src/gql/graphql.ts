@@ -2455,6 +2455,38 @@ export type InboxItemStatusEvent = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type IngestSpaceMemoryDocumentInput = {
+  content: Scalars["String"]["input"];
+  contentType?: InputMaybe<Scalars["String"]["input"]>;
+  /**
+   * Stable caller document identity. When omitted, `path` is used. The resolver
+   * prefixes the final Hindsight document id with the Space id to avoid
+   * collisions inside the Space bank.
+   */
+  documentId?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  /**
+   * Stable document path/name from the source system. Required when `documentId`
+   * is omitted.
+   */
+  path?: InputMaybe<Scalars["String"]["input"]>;
+  /**
+   * Process through Hindsight async retain. Defaults to true for document-sized
+   * ingest so user-facing flows are not held open by extraction work.
+   */
+  processAsync?: InputMaybe<Scalars["Boolean"]["input"]>;
+  sourceUrl?: InputMaybe<Scalars["AWSURL"]["input"]>;
+  spaceId: Scalars["ID"]["input"];
+  tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  /**
+   * Event timestamp for temporal extraction. Omit for timeless reference
+   * material; the resolver sends Hindsight `timestamp: "unset"`.
+   */
+  timestamp?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type InstallPluginInput = {
   idempotencyKey: Scalars["String"]["input"];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -3514,6 +3546,7 @@ export type Mutation = {
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
+  ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
@@ -4160,6 +4193,10 @@ export type MutationImportN8nWorkflowDraftArgs = {
 
 export type MutationImportTenantBedrockModelsArgs = {
   input: ImportTenantBedrockModelsInput;
+};
+
+export type MutationIngestSpaceMemoryDocumentArgs = {
+  input: IngestSpaceMemoryDocumentInput;
 };
 
 export type MutationInstallManagedApplicationMcpServerArgs = {
@@ -7926,6 +7963,17 @@ export enum SpaceMemberRole {
   Owner = "OWNER",
   Viewer = "VIEWER",
 }
+
+export type SpaceMemoryDocumentIngest = {
+  __typename?: "SpaceMemoryDocumentIngest";
+  contentBytes: Scalars["Int"]["output"];
+  context: Scalars["String"]["output"];
+  documentId: Scalars["String"]["output"];
+  path: Scalars["String"]["output"];
+  processAsync: Scalars["Boolean"]["output"];
+  spaceId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+};
 
 export enum SpaceNotificationPreference {
   Mentions = "MENTIONS",

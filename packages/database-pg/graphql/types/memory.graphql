@@ -131,6 +131,48 @@ type MemorySystemConfig {
   wikiProjectionEnabled: Boolean!
 }
 
+input IngestSpaceMemoryDocumentInput {
+  tenantId: ID
+  spaceId: ID!
+  """
+  Stable caller document identity. When omitted, `path` is used. The resolver
+  prefixes the final Hindsight document id with the Space id to avoid
+  collisions inside the Space bank.
+  """
+  documentId: String
+  """
+  Stable document path/name from the source system. Required when `documentId`
+  is omitted.
+  """
+  path: String
+  title: String
+  content: String!
+  contentType: String
+  sourceUrl: AWSURL
+  """
+  Event timestamp for temporal extraction. Omit for timeless reference
+  material; the resolver sends Hindsight `timestamp: "unset"`.
+  """
+  timestamp: AWSDateTime
+  tags: [String!]
+  metadata: AWSJSON
+  """
+  Process through Hindsight async retain. Defaults to true for document-sized
+  ingest so user-facing flows are not held open by extraction work.
+  """
+  processAsync: Boolean = true
+}
+
+type SpaceMemoryDocumentIngest {
+  documentId: String!
+  spaceId: ID!
+  path: String!
+  status: String!
+  processAsync: Boolean!
+  context: String!
+  contentBytes: Int!
+}
+
 type ThreadIdleLearningChangedFile {
   path: String!
   key: String
@@ -240,6 +282,9 @@ extend type Mutation {
     metadata: AWSJSON
     clientCaptureId: ID
   ): MemoryRecord!
+  ingestSpaceMemoryDocument(
+    input: IngestSpaceMemoryDocumentInput!
+  ): SpaceMemoryDocumentIngest!
 }
 
 """
