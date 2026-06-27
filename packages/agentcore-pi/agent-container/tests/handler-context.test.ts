@@ -229,6 +229,19 @@ describe("snapshotRuntimeEnv", () => {
     );
   });
 
+  it("snapshots chat callback Lambda names", () => {
+    const env = snapshotRuntimeEnv({
+      CHAT_AGENT_FINALIZE_FN_NAME: "thinkwork-dev-api-chat-agent-finalize",
+      CHAT_AGENT_ACTIVITY_FN_NAME: "thinkwork-dev-api-chat-agent-activity",
+    } as NodeJS.ProcessEnv);
+    expect(env.chatAgentFinalizeFnName).toBe(
+      "thinkwork-dev-api-chat-agent-finalize",
+    );
+    expect(env.chatAgentActivityFnName).toBe(
+      "thinkwork-dev-api-chat-agent-activity",
+    );
+  });
+
   it("snapshots OKF wiki navigator mount settings", () => {
     const env = snapshotRuntimeEnv({
       OKF_WIKI_NAVIGATOR_ENABLED: "true",

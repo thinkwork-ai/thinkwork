@@ -71,7 +71,7 @@ locals {
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
-    THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    THINKWORK_API_URL           = local.api_base_url
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
