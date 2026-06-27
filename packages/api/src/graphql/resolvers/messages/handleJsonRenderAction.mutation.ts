@@ -21,6 +21,7 @@ import {
 } from "../../utils.js";
 import { TaskStatusToolError } from "../../../lib/task-status-tool.js";
 import { setWorkItemStatus } from "../../../lib/work-items/work-item-status-tool.js";
+import { createWorkItem as createWorkItemRow } from "../../../lib/work-items/work-item-service.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { sendMessage } from "./sendMessage.mutation.js";
@@ -67,7 +68,7 @@ export const handleJsonRenderAction = async (
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  const workItemAction = parseWorkItemStatusAction(actionParams);
+  const workItemAction = parseWorkItemAction(actionParams);
 
   const duplicate = await findDuplicateActionMessage({
     tenantId: caller.tenantId,
@@ -80,12 +81,20 @@ export const handleJsonRenderAction = async (
     input,
     action,
     workItemAction,
+    threadSpaceId: source.threadSpaceId,
   });
-  const priorEvent = await findPriorWorkItemActionEvent({
-    tenantId: caller.tenantId,
-    workItemId: workItemAction.workItemId,
-    idempotencyKey: input.idempotencyKey,
-  });
+  const priorEvent =
+    workItemAction.target === "work_item_status"
+      ? await findPriorWorkItemStatusActionEvent({
+          tenantId: caller.tenantId,
+          workItemId: workItemAction.workItemId,
+          idempotencyKey: input.idempotencyKey,
+        })
+      : await findPriorWorkItemCreateActionEvent({
+          tenantId: caller.tenantId,
+          threadId: input.threadId,
+          idempotencyKey: input.idempotencyKey,
+        });
   if (!priorEvent) {
     await assertActionRateLimit({
       tenantId: caller.tenantId,
@@ -95,12 +104,14 @@ export const handleJsonRenderAction = async (
   }
   const mutationResult = priorEvent
     ? mutationMetadataFromPriorEvent(workItemAction, priorEvent)
-    : await applyWorkItemStatusAction({
+    : await applyWorkItemAction({
         tenantId: caller.tenantId,
         userId: caller.userId,
         threadId: input.threadId,
+        threadSpaceId: source.threadSpaceId,
         action: workItemAction,
         provenance,
+        ctx,
       });
 
   const metadata = {
@@ -148,6 +159,17 @@ interface WorkItemStatusAction {
   note: string | null;
 }
 
+interface WorkItemCreateAction {
+  target: "work_item_create";
+  title: string;
+  notes: string | null;
+  priority: string | null;
+  dueAt: string | null;
+  ownerUserId: "current_user" | null;
+}
+
+type WorkItemAction = WorkItemStatusAction | WorkItemCreateAction;
+
 interface JsonRenderActionProvenance {
   source: "json_render_action";
   sourceMessageId: string;
@@ -155,15 +177,18 @@ interface JsonRenderActionProvenance {
   actionId: string;
   actionKind: ThreadJsonRenderDurableActionDescriptor["kind"];
   actionLabel: string;
-  target: "work_item_status";
-  workItemId: string;
-  statusCategory: string | null;
-  statusId: string | null;
+  target: WorkItemAction["target"];
+  workItemId?: string;
+  title?: string;
+  threadSpaceId?: string;
+  statusCategory?: string | null;
+  statusId?: string | null;
   specHash: string;
   idempotencyKey: string;
 }
 
 interface PriorWorkItemActionEvent {
+  workItemId: string;
   newStatusId: string | null;
   metadata: unknown;
 }
@@ -204,9 +229,9 @@ async function loadValidatedSourcePart(input: {
   tenantId: string;
   userId: string;
   input: HandleJsonRenderActionInput;
-}): Promise<{ part: ThreadJsonRenderPart }> {
+}): Promise<{ part: ThreadJsonRenderPart; threadSpaceId: string }> {
   const [visibleThread] = await db
-    .select({ id: threads.id })
+    .select({ id: threads.id, spaceId: threads.space_id })
     .from(threads)
     .where(
       and(
@@ -267,7 +292,7 @@ async function loadValidatedSourcePart(input: {
     });
   }
 
-  return { part: validation.part };
+  return { part: validation.part, threadSpaceId: visibleThread.spaceId };
 }
 
 function findSourcePart(parts: unknown, partId: string): unknown {
@@ -333,13 +358,14 @@ async function findDuplicateActionMessage(input: {
   return duplicate ?? null;
 }
 
-async function findPriorWorkItemActionEvent(input: {
+async function findPriorWorkItemStatusActionEvent(input: {
   tenantId: string;
   workItemId: string;
   idempotencyKey: string;
 }): Promise<PriorWorkItemActionEvent | null> {
   const [event] = await db
     .select({
+      workItemId: workItemEvents.work_item_id,
       newStatusId: workItemEvents.new_status_id,
       metadata: workItemEvents.metadata,
     })
@@ -353,6 +379,45 @@ async function findPriorWorkItemActionEvent(input: {
     )
     .limit(1);
   return event ?? null;
+}
+
+async function findPriorWorkItemCreateActionEvent(input: {
+  tenantId: string;
+  threadId: string;
+  idempotencyKey: string;
+}): Promise<PriorWorkItemActionEvent | null> {
+  const [event] = await db
+    .select({
+      workItemId: workItemEvents.work_item_id,
+      newStatusId: workItemEvents.new_status_id,
+      metadata: workItemEvents.metadata,
+    })
+    .from(workItemEvents)
+    .where(
+      and(
+        eq(workItemEvents.tenant_id, input.tenantId),
+        eq(workItemEvents.thread_id, input.threadId),
+        sql`${workItemEvents.metadata}->'inputMetadata'->'jsonRenderAction'->>'idempotencyKey' = ${input.idempotencyKey}`,
+      ),
+    )
+    .limit(1);
+  return event ?? null;
+}
+
+function parseWorkItemAction(
+  params: Record<string, ThreadJsonRenderPrimitive>,
+): WorkItemAction {
+  const target = stringParam(params.target);
+  if (target === "work_item_status") {
+    return parseWorkItemStatusAction(params);
+  }
+  if (target === "work_item_create") {
+    return parseWorkItemCreateAction(params);
+  }
+  throw new GraphQLError(
+    "Generated UI action target is not supported for server mutation",
+    { extensions: { code: "BAD_USER_INPUT" } },
+  );
 }
 
 function parseWorkItemStatusAction(
@@ -391,25 +456,110 @@ function parseWorkItemStatusAction(
   };
 }
 
+function parseWorkItemCreateAction(
+  params: Record<string, ThreadJsonRenderPrimitive>,
+): WorkItemCreateAction {
+  rejectHostOwnedParams(params, [
+    "tenantId",
+    "threadId",
+    "spaceId",
+    "senderId",
+  ]);
+  const title = stringParam(params.title);
+  if (!title) {
+    throw new GraphQLError("Generated UI action title is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  const ownerParam =
+    stringParam(params.ownerUserId) ?? stringParam(params.assignee);
+  let ownerUserId: "current_user" | null = null;
+  if (ownerParam) {
+    const normalized = ownerParam.toLowerCase();
+    if (
+      normalized === "current_user" ||
+      normalized === "me" ||
+      normalized === "current-user"
+    ) {
+      ownerUserId = "current_user";
+    } else {
+      throw new GraphQLError(
+        "Generated UI action ownerUserId must be current_user",
+        { extensions: { code: "BAD_USER_INPUT" } },
+      );
+    }
+  }
+
+  return {
+    target: "work_item_create",
+    title,
+    notes: stringParam(params.notes),
+    priority: stringParam(params.priority),
+    dueAt: stringParam(params.dueAt),
+    ownerUserId,
+  };
+}
+
 function buildJsonRenderActionProvenance(input: {
   input: HandleJsonRenderActionInput;
   action: ThreadJsonRenderDurableActionDescriptor;
-  workItemAction: WorkItemStatusAction;
+  workItemAction: WorkItemAction;
+  threadSpaceId: string;
 }): JsonRenderActionProvenance {
-  return {
-    source: "json_render_action",
+  const base = {
+    source: "json_render_action" as const,
     sourceMessageId: input.input.sourceMessageId,
     partId: input.input.partId,
     actionId: input.action.id,
     actionKind: input.action.kind,
     actionLabel: input.action.label,
     target: input.workItemAction.target,
-    workItemId: input.workItemAction.workItemId,
-    statusCategory: input.workItemAction.statusCategory,
-    statusId: input.workItemAction.statusId,
     specHash: input.input.specHash,
     idempotencyKey: input.input.idempotencyKey,
   };
+  if (input.workItemAction.target === "work_item_status") {
+    return {
+      ...base,
+      workItemId: input.workItemAction.workItemId,
+      statusCategory: input.workItemAction.statusCategory,
+      statusId: input.workItemAction.statusId,
+    };
+  }
+  return {
+    ...base,
+    title: input.workItemAction.title,
+    threadSpaceId: input.threadSpaceId,
+  };
+}
+
+async function applyWorkItemAction(input: {
+  tenantId: string;
+  userId: string;
+  threadId: string;
+  threadSpaceId: string;
+  action: WorkItemAction;
+  provenance: JsonRenderActionProvenance;
+  ctx: GraphQLContext;
+}) {
+  if (input.action.target === "work_item_create") {
+    return applyWorkItemCreateAction(input as {
+      tenantId: string;
+      userId: string;
+      threadId: string;
+      threadSpaceId: string;
+      action: WorkItemCreateAction;
+      provenance: JsonRenderActionProvenance;
+      ctx: GraphQLContext;
+    });
+  }
+  return applyWorkItemStatusAction(input as {
+    tenantId: string;
+    userId: string;
+    threadId: string;
+    action: WorkItemStatusAction;
+    provenance: JsonRenderActionProvenance;
+  });
 }
 
 async function applyWorkItemStatusAction(input: {
@@ -451,11 +601,21 @@ async function applyWorkItemStatusAction(input: {
 }
 
 function mutationMetadataFromPriorEvent(
-  action: WorkItemStatusAction,
+  action: WorkItemAction,
   event: PriorWorkItemActionEvent,
 ) {
   const manualMetadata = objectValue(objectValue(event.metadata).manualMetadata);
+  const inputMetadata = objectValue(objectValue(event.metadata).inputMetadata);
   const priorAction = objectValue(manualMetadata.jsonRenderAction);
+  const priorCreateAction = objectValue(inputMetadata.jsonRenderAction);
+  if (action.target === "work_item_create") {
+    return {
+      target: action.target,
+      workItemId: event.workItemId,
+      title: stringParam(priorCreateAction.title) ?? action.title,
+      alreadyApplied: true,
+    };
+  }
   return {
     target: action.target,
     workItemId: action.workItemId,
@@ -463,6 +623,38 @@ function mutationMetadataFromPriorEvent(
       stringParam(priorAction.statusCategory) ?? action.statusCategory,
     statusId: event.newStatusId ?? stringParam(priorAction.statusId),
     alreadyApplied: true,
+  };
+}
+
+async function applyWorkItemCreateAction(input: {
+  tenantId: string;
+  userId: string;
+  threadId: string;
+  threadSpaceId: string;
+  action: WorkItemCreateAction;
+  provenance: JsonRenderActionProvenance;
+  ctx: GraphQLContext;
+}) {
+  const row = await createWorkItemRow(input.ctx, {
+    tenantId: input.tenantId,
+    spaceId: input.threadSpaceId,
+    threadId: input.threadId,
+    title: input.action.title,
+    notes: input.action.notes,
+    priority: input.action.priority,
+    dueAt: input.action.dueAt,
+    ownerUserId:
+      input.action.ownerUserId === "current_user" ? input.userId : null,
+    metadata: {
+      jsonRenderAction: input.provenance,
+    },
+  });
+  return {
+    target: input.action.target,
+    workItemId: row.id,
+    title: row.title,
+    ownerUserId: row.owner_user_id ?? null,
+    alreadyApplied: false,
   };
 }
 
@@ -520,4 +712,18 @@ function stringParam(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function rejectHostOwnedParams(
+  params: Record<string, ThreadJsonRenderPrimitive>,
+  fields: string[],
+) {
+  for (const field of fields) {
+    if (params[field] !== undefined && params[field] !== null) {
+      throw new GraphQLError(
+        `Generated UI action ${field} is controlled by the host`,
+        { extensions: { code: "BAD_USER_INPUT" } },
+      );
+    }
+  }
 }
