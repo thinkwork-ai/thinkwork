@@ -101,6 +101,26 @@ describe("space memory resolvers", () => {
         ownerId: "space-1",
         sourceType: "explicit_remember",
         content: "Use the enterprise onboarding template.",
+        hindsight: expect.objectContaining({
+          tags: [
+            "space:space-1",
+            "source:space-memory",
+            "surface:web",
+            "surface:graphql",
+            "scope:space",
+            "scope:explicit-memory",
+          ],
+          documentTags: [
+            "space:space-1",
+            "source:space-memory",
+            "scope:space",
+          ],
+          observationScopes: [
+            ["space:space-1"],
+            ["source:space-memory"],
+            ["scope:space"],
+          ],
+        }),
         metadata: expect.objectContaining({
           topic: "onboarding",
           capture_source: "space_memory_capture",

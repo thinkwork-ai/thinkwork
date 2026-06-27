@@ -2,6 +2,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { CogneeAdapter } from "../memory/adapters/cognee-adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
+import { buildRequesterMemoryRetainOptions } from "../memory/hindsight-retain-params.js";
 import { resolveCogneeEndpoint } from "../memory/config.js";
 import {
   readRequesterMemoryFile,
@@ -72,6 +73,7 @@ export async function syncRequesterMemoryToHindsight(
         content: content ?? "",
         documentId,
         context: "thinkwork_requester_memory",
+        hindsight: buildRequesterMemoryRetainOptions({ path: file.path }),
         metadata: {
           runId: input.runId,
           threadId: input.threadId,

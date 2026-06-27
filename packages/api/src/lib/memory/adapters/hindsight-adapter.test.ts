@@ -313,6 +313,52 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("maps Hindsight-native retain options on stable conversation documents", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: null,
+    });
+    await adapter.retainConversation({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      threadId: "thread-1",
+      messages: [
+        {
+          role: "user",
+          content: "Remember the rollout checklist.",
+          timestamp: "2026-06-27T14:45:00.000Z",
+        },
+      ],
+      hindsight: {
+        timestamp: "2026-06-27T14:45:00.000Z",
+        tags: ["source:thread", "scope:thread"],
+        documentTags: ["source:thread"],
+        observationScopes: [["source:thread"], ["scope:thread"]],
+      },
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      document_tags: ["source:thread"],
+      items: [
+        expect.objectContaining({
+          document_id: "thread-1",
+          update_mode: "replace",
+          context: "thinkwork_thread",
+          timestamp: "2026-06-27T14:45:00.000Z",
+          tags: ["source:thread", "scope:thread"],
+          observation_scopes: [["source:thread"], ["scope:thread"]],
+        }),
+      ],
+    });
+  });
+
   it("drops invalid fact-type overrides with an explicit diagnostic", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

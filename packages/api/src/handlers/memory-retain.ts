@@ -19,6 +19,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
+import {
+  buildDailyMemoryRetainOptions,
+  buildThreadRetainOptions,
+} from "../lib/memory/hindsight-retain-params.js";
 import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type RetainMessage = {
@@ -115,6 +119,7 @@ export async function handler(
         ...owner,
         date: eventDate,
         content: eventContent,
+        hindsight: buildDailyMemoryRetainOptions(eventDate),
         metadata: eventMetadata,
       });
       return { ok: true, engine: config.engine };
@@ -166,6 +171,7 @@ export async function handler(
         ...owner,
         threadId: eventThreadId,
         messages: merged,
+        hindsight: buildThreadRetainOptions(merged),
         metadata: eventMetadata,
       });
 
