@@ -154,6 +154,80 @@ describe("space memory resolvers", () => {
     });
   });
 
+  it("keeps Space A and Space B search results isolated by owner", async () => {
+    recallMock.mockImplementation(async (request) => {
+      const token =
+        request.ownerId === "space-a"
+          ? "thnk-83-space-a-only"
+          : "thnk-83-space-b-only";
+      return [
+        {
+          record: {
+            id: `${request.ownerId}-hit`,
+            tenantId: request.tenantId,
+            ownerType: "space",
+            ownerId: request.ownerId,
+            kind: "unit",
+            sourceType: "explicit_remember",
+            status: "active",
+            content: { text: `Memory token ${token}` },
+            backendRefs: [{ backend: "hindsight", ref: request.ownerId }],
+            createdAt: "2026-06-27T12:00:00.000Z",
+            metadata: { bankId: `space_${request.ownerId}` },
+          },
+          score: 0.99,
+          backend: "hindsight",
+        },
+      ];
+    });
+
+    requireSpaceMemoryScopeMock
+      .mockResolvedValueOnce({
+        tenantId: "tenant-1",
+        spaceId: "space-a",
+        requesterUserId: "user-1",
+      })
+      .mockResolvedValueOnce({
+        tenantId: "tenant-1",
+        spaceId: "space-b",
+        requesterUserId: "user-1",
+      });
+
+    const spaceA = await spaceMemorySearch(
+      null,
+      {
+        tenantId: "tenant-1",
+        spaceId: "space-a",
+        query: "thnk-83-space-a-only",
+        limit: 5,
+      },
+      {} as any,
+    );
+    const spaceB = await spaceMemorySearch(
+      null,
+      {
+        tenantId: "tenant-1",
+        spaceId: "space-b",
+        query: "thnk-83-space-b-only",
+        limit: 5,
+      },
+      {} as any,
+    );
+
+    expect(recallMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ ownerId: "space-a" }),
+    );
+    expect(recallMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ ownerId: "space-b" }),
+    );
+    expect(JSON.stringify(spaceA)).toContain("thnk-83-space-a-only");
+    expect(JSON.stringify(spaceA)).not.toContain("thnk-83-space-b-only");
+    expect(JSON.stringify(spaceB)).toContain("thnk-83-space-b-only");
+    expect(JSON.stringify(spaceB)).not.toContain("thnk-83-space-a-only");
+  });
+
   it("fails closed when the active engine lacks Space memory capability", async () => {
     capabilitiesMock.mockResolvedValue({
       retain: true,

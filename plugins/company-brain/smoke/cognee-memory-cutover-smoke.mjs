@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
- * Cognee user + space memory cutover smoke (THNK-79 U6).
+ * Cognee user + space memory diagnostic smoke (THNK-79 U6 compatibility).
+ *
+ * THNK-83 makes Hindsight the canonical user + Space memory provider. Keep
+ * this script only as Cognee compatibility evidence; the success path for the
+ * product memory pivot is `hindsight-memory-isolation-smoke.mjs`.
  *
  * Dry-run is the default. Set SMOKE_ENABLE_COGNEE_MEMORY_CUTOVER=1 to run
  * live against a deployed stage. Live mode writes explicit smoke memories
@@ -78,7 +82,7 @@ if (!LIVE_ENABLED) {
           ok: true,
           skippedLive: true,
           reason:
-            "set SMOKE_ENABLE_COGNEE_MEMORY_CUTOVER=1 to run the deployed Cognee user + space memory cutover smoke",
+            "set SMOKE_ENABLE_COGNEE_MEMORY_CUTOVER=1 to run the deployed Cognee diagnostic memory smoke; THNK-83 canonical memory success uses hindsight-memory-isolation-smoke.mjs",
           dryRun: {
             requiredWhenRunning: [
               "VITE_GRAPHQL_HTTP_URL or GRAPHQL_HTTP_URL or API_GRAPHQL_URL",
@@ -96,7 +100,7 @@ if (!LIVE_ENABLED) {
               "SMOKE_REQUIRE_UNAUTHORIZED_CHECK=1 makes the unauthorized token mandatory",
             ],
             verifies: [
-              "memorySystemConfig reports Cognee as active user + space memory and Hindsight as non-active legacy",
+              "diagnostic mode only: memorySystemConfig reports Cognee as active user + space memory and Hindsight as non-active legacy",
               "captureMobileMemory writes user memory through the ThinkWork GraphQL API",
               "memorySearch recalls that user memory for the same user",
               "query_memory_context with scope personal recalls user memory from a different Space thread",

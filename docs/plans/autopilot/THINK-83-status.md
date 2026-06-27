@@ -247,3 +247,42 @@ cross-bank destructive actions should stay disabled for this unit.
   - Added `SettingsMemory.render.test.tsx` with mocked operator-visible
     Hindsight rows to verify the rendered Bank/Scope/Updated columns, row
     content, operator query variables, and read-only detail sheet.
+
+### 2026-06-27 - U6 objective
+
+Add deterministic isolation evidence for the Hindsight-backed user and Space
+memory path. The canonical smoke should prove user memory, Space A memory, and
+Space B memory remain independently searchable, while the older Cognee cutover
+smoke stays available only as a compatibility diagnostic.
+
+- Created isolated U6 branch/worktree:
+  `codex/think-83-u6-isolation-smoke` at
+  `/Users/ericodom/.codex/worktrees/think-83-u6`.
+- Implemented U6 isolation and smoke coverage:
+  - Added `hindsight-memory-isolation-smoke.mjs`, dry-run by default and live
+    only with `SMOKE_ENABLE_HINDSIGHT_MEMORY_ISOLATION=1`.
+  - The new smoke uses the deployed GraphQL API only, captures deterministic
+    user/Space A/Space B records, checks same-scope recall, rejects sibling
+    scope leakage, and verifies operator inspection through
+    `memoryRecords(scope: OPERATOR, query: ...)`.
+  - Added optional unauthorized Space-search verification with a separate
+    caller token.
+  - Relabeled the Cognee memory cutover smoke as a diagnostic compatibility
+    check and pointed canonical THINK-83 success evidence at the Hindsight
+    isolation smoke.
+  - Added API resolver coverage for Space A/B search-result isolation.
+  - Added web GraphQL query coverage for the `/settings/memory` operator
+    inspection/search variables and extended `MemoryRecord` field coverage.
+- U6 verification passed:
+  - `node --check plugins/company-brain/smoke/hindsight-memory-isolation-smoke.mjs`
+  - `node --check plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs`
+  - `node plugins/company-brain/smoke/hindsight-memory-isolation-smoke.mjs`
+  - `node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs`
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/memory/spaceMemory.resolver.test.ts src/graphql/resolvers/memory/space-memory-scope.test.ts`
+  - `pnpm --filter @thinkwork/web test -- src/lib/graphql-queries.test.ts src/components/settings/SettingsMemory.render.test.tsx src/routes/_authed/_shell/-memory.test.tsx test/memory-layout.test.tsx`
+  - `pnpm --filter @thinkwork/plugin-company-brain test`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+  - `pnpm dlx prettier --check ...` for authored U6 files
+  - `git diff --check`
