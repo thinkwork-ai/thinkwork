@@ -665,18 +665,18 @@ describe("U4 - Cognee deployment template propagation", () => {
     );
   });
 
-  it("prepares the Cognee DB secret and role before Terraform apply when enabled", () => {
+  it("prepares the deprecated graph DB secret and role before Terraform apply when enabled", () => {
     const workflow = read(DEPLOY_WORKFLOW);
     const cogneeDbPrep = workflow.slice(
-      workflow.indexOf("Prepare Cognee database credentials"),
+      workflow.indexOf("Prepare deprecated graph database credentials"),
       workflow.indexOf("Prepare Twenty CRM runtime secrets and database"),
     );
 
-    expect(workflow).toMatch(/Prepare Cognee database credentials/);
+    expect(workflow).toMatch(/Prepare deprecated graph database credentials/);
     expect(workflow).toMatch(
       /if \[ "\$\{COGNEE_ENABLED:-false\}" != "true" \]/,
     );
-    expect(workflow).toMatch(/Cognee disabled; skipping Cognee database/);
+    expect(workflow).toMatch(/Deprecated graph memory disabled; skipping/);
     expect(workflow).toMatch(/openssl rand -hex 32/);
     expect(workflow).toMatch(
       /\[\[ ! "\$cognee_password" =~ \^\[A-Za-z0-9\._~-\]\+\$ \]\]/,

@@ -1168,12 +1168,12 @@ jobs:
             echo "N8N_CACHE_ENGINE=$n8n_cache_engine"
           } >> "$GITHUB_ENV"
 
-      - name: Prepare Cognee database credentials
+      - name: Prepare deprecated graph database credentials
         working-directory: terraform/examples/greenfield
         run: |
           set -euo pipefail
           if [ "${COGNEE_ENABLED:-false}" != "true" ]; then
-            echo "Cognee disabled; skipping Cognee database credential preparation."
+            echo "Deprecated graph memory disabled; skipping database credential preparation."
             exit 0
           fi
           source ../../../scripts/lib/terraform-output.sh
