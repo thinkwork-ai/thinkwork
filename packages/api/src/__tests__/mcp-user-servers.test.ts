@@ -255,6 +255,22 @@ describe("GET /api/skills/user-mcp-servers", () => {
     );
   });
 
+  it("reports active when the web client sends the caller's Cognito principal", async () => {
+    dbState.selectQueue.push(
+      [],
+      [managedTwentyRow({ mcp_server_id: "twenty" })],
+      [{ mcp_server_id: "twenty", status: "active" }],
+    );
+
+    const response = await handler(event({ principalId: "principal-1" }));
+    const body = JSON.parse(response.body ?? "{}") as {
+      servers: Array<{ authStatus: string }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.servers[0]?.authStatus).toBe("active");
+  });
+
   it("reports active for plugin-managed OAuth servers before agent assignment", async () => {
     dbState.selectQueue.push(
       [],

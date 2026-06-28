@@ -166,6 +166,24 @@ describe("SettingsMcpServerDetail", () => {
     );
   });
 
+  it("uses the Cognito subject fallback when refreshing per-user MCP status", async () => {
+    mocks.tenantContext.userId = null;
+    mockServerState("active", {
+      name: "LastMile Dispatch",
+      slug: "lastmile-dispatch",
+      url: "https://mcp-dev.lastmile-tei.com/dispatch",
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByText("LastMile Dispatch")).toBeTruthy();
+    expect(mocks.listUserMcpServers).toHaveBeenCalledWith(
+      "tenant-1",
+      "cognito-sub-1",
+    );
+    expect(screen.getByText("Connected")).toBeTruthy();
+  });
+
   it("starts MCP OAuth through the resolved authorization URL flow", async () => {
     mockServerState("not_connected");
 

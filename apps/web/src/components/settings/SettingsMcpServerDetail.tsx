@@ -58,6 +58,7 @@ export function SettingsMcpServerDetail() {
   const { user } = useAuth();
   const { tenant, tenantId, userId } = useTenant();
   const tenantSlug = tenant?.slug ?? null;
+  const oauthUserId = userId ?? user?.sub ?? null;
   const navigate = useNavigate();
 
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -91,8 +92,8 @@ export function SettingsMcpServerDetail() {
     setError(null);
     Promise.all([
       listMcpServers(tenantSlug),
-      tenantId && userId
-        ? listUserMcpServers(tenantId, userId)
+      tenantId && oauthUserId
+        ? listUserMcpServers(tenantId, oauthUserId)
         : Promise.resolve({ servers: [] }),
     ])
       .then(([tenantResult, userResult]) => {
@@ -102,7 +103,7 @@ export function SettingsMcpServerDetail() {
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load"),
       );
-  }, [tenantId, tenantSlug, userId]);
+  }, [oauthUserId, tenantId, tenantSlug]);
 
   useEffect(() => {
     load();
@@ -386,7 +387,6 @@ export function SettingsMcpServerDetail() {
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
   const managed = isPluginInstalledMcpServer(server);
-  const oauthUserId = userId ?? user?.sub ?? null;
   const authUnavailableReason = !tenantId
     ? "Tenant identity is still loading."
     : !oauthUserId
