@@ -232,6 +232,7 @@ describe("Open Engine Work Item receipts", () => {
       blocked: false,
       open_engine_human_hold: false,
       open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "ready",
       updated_at: NOW,
     });
     expect(captures.insertValues[0]).toEqual(
@@ -244,6 +245,72 @@ describe("Open Engine Work Item receipts", () => {
         },
       }),
     );
+  });
+
+  it("accepts review aliases as applied receipts and removes the item from pickup", async () => {
+    captures.selectQueue.push([WORK_ITEM]);
+    captures.insertReturningQueue.push([{ id: "event-review" }]);
+
+    await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "AGENT REVIEW",
+      message: "Ready for human review.",
+      now: NOW,
+    });
+
+    expect(captures.updateSet[0]).toEqual({
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "waiting",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      event_type: "agent_action",
+      message: "Ready for human review.",
+      metadata: {
+        source: "open_engine",
+        receiptType: "applied",
+      },
+    });
+  });
+
+  it("parks failed receipts outside the pickup pool until resumed", async () => {
+    captures.selectQueue.push([WORK_ITEM]);
+    captures.insertReturningQueue.push([{ id: "event-failed" }]);
+
+    await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "failed",
+      message: "Tests failed after retry.",
+      now: NOW,
+    });
+
+    expect(captures.updateSet[0]).toEqual({
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "waiting",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      event_type: "agent_action",
+      message: "Tests failed after retry.",
+      metadata: {
+        source: "open_engine",
+        receiptType: "failed",
+      },
+    });
   });
 
   it("records a progress receipt without changing queue hold or claim state", async () => {

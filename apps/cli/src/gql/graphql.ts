@@ -10069,12 +10069,23 @@ export enum WorkItemOpenEngineHumanActionType {
 }
 
 export enum WorkItemOpenEngineReceiptType {
+  Applied = "APPLIED",
   Blocked = "BLOCKED",
   Claimed = "CLAIMED",
   Completed = "COMPLETED",
+  Done = "DONE",
   Failed = "FAILED",
+  FollowUp = "FOLLOW_UP",
+  HumanAnswered = "HUMAN_ANSWERED",
+  HumanHold = "HUMAN_HOLD",
   Progress = "PROGRESS",
   Resumed = "RESUMED",
+  SkillDeclined = "SKILL_DECLINED",
+  SkillInstalled = "SKILL_INSTALLED",
+  SkillSubscribed = "SKILL_SUBSCRIBED",
+  SkillUpdated = "SKILL_UPDATED",
+  Status = "STATUS",
+  Unblocked = "UNBLOCKED",
 }
 
 export enum WorkItemPriority {
