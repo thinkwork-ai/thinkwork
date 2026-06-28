@@ -162,9 +162,14 @@ export function normalizeOpenEngineReceiptType(
     normalized = normalized.slice("agent_".length);
   }
   if (normalized === "done") return "done";
+  if (normalized === "review" || normalized === "reviewed") return "applied";
+  if (normalized === "done_review" || normalized === "request_review")
+    return "applied";
   if (normalized === "complete") return "completed";
   if (normalized === "human_holded") return "human_hold";
   if (normalized === "hold") return "human_hold";
+  if (normalized === "unblock") return "unblocked";
+  if (normalized === "answer") return "human_answered";
   if (normalized === "answered") return "human_answered";
   if (normalized === "followup") return "follow_up";
   if ((OPEN_ENGINE_RECEIPT_TYPES as readonly string[]).includes(normalized)) {
@@ -201,6 +206,7 @@ function stateUpdateForReceipt(
       blocked: false,
       open_engine_human_hold: false,
       open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "ready",
       updated_at: now,
     };
   }
@@ -228,6 +234,10 @@ function stateUpdateForReceipt(
   }
   if (receiptType === "failed") {
     return {
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "waiting",
       open_engine_claimed_by_agent_id: null,
       open_engine_claimed_at: null,
       open_engine_claim_expires_at: null,

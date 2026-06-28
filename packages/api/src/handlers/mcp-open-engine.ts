@@ -326,7 +326,7 @@ const TOOLS = [
   {
     name: "open_engine_list_comments",
     description:
-      "List first-class Work Item comments for the issue timeline. Use this for human/agent discussion, not status receipts.",
+      "List first-class Work Item comments for the issue timeline, including mirrored agent narrative receipts such as AGENT CLAIMED, AGENT STATUS, AGENT REVIEW, and AGENT DONE.",
     inputSchema: {
       type: "object",
       properties: {
