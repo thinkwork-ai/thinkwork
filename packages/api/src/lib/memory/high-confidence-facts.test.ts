@@ -25,6 +25,29 @@ describe("extractHighConfidenceFacts", () => {
     ]);
   });
 
+  it("extracts named attributes for an existing pet", () => {
+    const result = extractHighConfidenceFacts({
+      messages: [
+        {
+          role: "user",
+          content:
+            "My poodle Birdie has a favorite blue rope toy named Orbit.",
+          timestamp: "2026-06-28T21:13:21.000Z",
+        },
+      ],
+    });
+
+    expect(result.rejected).toEqual([]);
+    expect(result.facts).toEqual([
+      expect.objectContaining({
+        scope: "user",
+        kind: "pet",
+        text: "User's poodle Birdie has a favorite blue rope toy named Orbit.",
+        confidence: "high",
+      }),
+    ]);
+  });
+
   it("extracts project facts into Space scope only when a Space is present", () => {
     const withoutSpace = extractHighConfidenceFacts({
       messages: [

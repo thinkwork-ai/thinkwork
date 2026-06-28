@@ -573,6 +573,10 @@ async function projectHighConfidenceFactToUserContext(input: {
   const db = getDb();
   const factLine = input.fact.text;
   if (field === "family") {
+    const replacePattern = profileReplacementPatternForFact(input.fact);
+    const currentFamily = replacePattern
+      ? sql`btrim(regexp_replace(COALESCE(user_profiles.family, ''), ${replacePattern}, '', 'g'))`
+      : sql`COALESCE(user_profiles.family, '')`;
     await db.execute(sql`
       INSERT INTO user_profiles (user_id, tenant_id, family, updated_at)
       VALUES (${input.userId}::uuid, ${input.tenantId}::uuid, ${factLine}, now())
@@ -580,9 +584,9 @@ async function projectHighConfidenceFactToUserContext(input: {
       DO UPDATE SET
         tenant_id = EXCLUDED.tenant_id,
         family = CASE
-          WHEN COALESCE(user_profiles.family, '') LIKE ${`%${input.fact.text}%`} THEN user_profiles.family
-          WHEN COALESCE(user_profiles.family, '') = '' THEN EXCLUDED.family
-          ELSE user_profiles.family || E'\n' || EXCLUDED.family
+          WHEN ${currentFamily} LIKE ${`%${input.fact.text}%`} THEN ${currentFamily}
+          WHEN ${currentFamily} = '' THEN EXCLUDED.family
+          ELSE ${currentFamily} || E'\n' || EXCLUDED.family
         END,
         updated_at = now()
     `);
@@ -605,6 +609,19 @@ async function projectHighConfidenceFactToUserContext(input: {
   await writeUserContextMdForUser(db, input.tenantId, input.userId, {
     overwrite: true,
   });
+}
+
+function profileReplacementPatternForFact(
+  fact: ExtractedHighConfidenceFact,
+): string | null {
+  if (fact.kind !== "pet") return null;
+  const match = /^(User's .+ has .+) named [^\n.]+\.?$/.exec(fact.text);
+  if (!match) return null;
+  return `(^|\\n)${escapePostgresRegex(match[1])} named [^\\n.]+\\.?`;
+}
+
+function escapePostgresRegex(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 function profileFieldForHighConfidenceFact(
