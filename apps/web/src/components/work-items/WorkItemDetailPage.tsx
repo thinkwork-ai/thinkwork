@@ -303,7 +303,6 @@ export function WorkItemDetailPage({
       labelIds?: string[];
       openEngineQueueKey?: string | null;
     },
-    successMessage = "Work Item updated",
   ) => {
     if (!tenantId || workItemSaving) return false;
     const result = await executeWorkItemUpdate({
@@ -317,7 +316,6 @@ export function WorkItemDetailPage({
       toast.error(`Couldn't update Work Item: ${result.error.message}`);
       return false;
     }
-    toast.success(successMessage);
     reexecuteWorkItem({ requestPolicy: "network-only" });
     return true;
   };
@@ -336,7 +334,6 @@ export function WorkItemDetailPage({
       toast.error(`Couldn't update status: ${result.error.message}`);
       return false;
     }
-    toast.success("Status updated");
     reexecuteWorkItem({ requestPolicy: "network-only" });
     return true;
   };
@@ -478,10 +475,7 @@ export function WorkItemDetailPage({
               queueSaving={workItemSaving}
               error={humanActionError}
               onQueueChange={(openEngineQueueKey) =>
-                handleWorkItemUpdate(
-                  { openEngineQueueKey },
-                  "OpenEngine queue updated",
-                )
+                handleWorkItemUpdate({ openEngineQueueKey })
               }
               onAction={handleOpenEngineHumanAction}
             />
