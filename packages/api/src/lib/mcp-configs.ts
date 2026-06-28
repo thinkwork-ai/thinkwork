@@ -10,16 +10,17 @@
  * Requester identity (plan 2026-06-12-001 U6): callers pass BOTH halves
  * of the dispatch identity explicitly —
  *
- *   - `humanPairId`      — the agent's paired human; resolves DIRECT
- *     `per_user_oauth` servers via user_mcp_tokens exactly as before (R16).
- *   - `requesterUserId`  — the thread-turn / job owner; resolves
- *     PLUGIN-managed OAuth MCP servers (management_source='plugin') via
- *     user_mcp_tokens for that requester and server. The plugin owns the MCP
- *     server registration/lifecycle; each user still authenticates to the MCP
- *     server individually. Plugin-managed user_headers servers continue to use
- *     user_plugin_activation_tokens. service_credential and no-auth plugin
- *     rows are tenant-owned and resolve server-side without requester
- *     activation.
+ *   - `requesterUserId`  — the thread-turn / job owner; resolves per-user
+ *     OAuth MCP servers via user_mcp_tokens for that requester and server.
+ *   - `humanPairId`      — the agent's paired human; fallback for DIRECT
+ *     `per_user_oauth` servers when no requester exists (R16 scheduled/wakeup
+ *     compatibility).
+ *
+ * The plugin owns plugin-managed MCP server registration/lifecycle; each user
+ * still authenticates to the MCP server individually. Plugin-managed
+ * user_headers servers continue to use user_plugin_activation_tokens.
+ * service_credential and no-auth plugin rows are tenant-owned and resolve
+ * server-side without requester activation.
  *
  * URL dedupe: when a plugin server and a direct server share an endpoint
  * URL, the dispatch includes the plugin entry for users whose activation
@@ -348,9 +349,10 @@ export async function buildMcpConfigs(
       mcp.auth_type === "oauth" ||
       mcp.auth_type === "per_user_oauth"
     ) {
-      if (humanPairId) {
+      const directOAuthUserId = requesterUserId ?? humanPairId;
+      if (directOAuthUserId) {
         token = await resolveUserMcpBearerToken({
-          userId: humanPairId,
+          userId: directOAuthUserId,
           mcp,
           logPrefix,
         });

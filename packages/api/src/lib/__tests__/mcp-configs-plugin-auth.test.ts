@@ -3,11 +3,11 @@
  *
  * Plugin-managed OAuth MCP servers (management_source='plugin') are registered
  * by plugin install but resolve auth from the REQUESTER's user_mcp_tokens
- * record. Direct per_user_oauth servers keep resolving user_mcp_tokens by
- * humanPairId (R16). user_headers and non-OAuth plugin servers continue to use
- * app-level activation records. Covers: the requester/human-pair split,
- * fail-closed null requester, URL-dedupe precedence, and activation-gated
- * non-OAuth/header shapes.
+ * record. Direct per_user_oauth servers also prefer the requester, with an R16
+ * fallback to humanPairId when no requester exists. user_headers and non-OAuth
+ * plugin servers continue to use app-level activation records. Covers: the
+ * requester/human-pair split, fail-closed null requester, URL-dedupe
+ * precedence, and activation-gated non-OAuth/header shapes.
  *
  * getDb() is mocked (fake query shapes); schema + drizzle are REAL; the
  * plugin auth resolver runs for real against the in-memory store +
@@ -256,10 +256,10 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     }
   });
 
-  it("plugin servers resolve by requesterUserId while a direct per_user_oauth server resolves by humanPairId", async () => {
+  it("plugin and direct per_user_oauth servers resolve by requesterUserId when present", async () => {
     mockJoinRows.mockReturnValue([pluginRow("crm"), directRow()]);
-    // Plugin OAuth rows also use user_mcp_tokens, but they are keyed by the
-    // requester. Direct rows are keyed by humanPairId.
+    // Plugin and direct OAuth rows both use user_mcp_tokens keyed by the
+    // requester when a live requester exists.
     mockUserTokenRows.mockReturnValue([
       {
         id: "tok-user-mcp",

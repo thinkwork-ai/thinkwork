@@ -489,6 +489,52 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     );
   });
 
+  it("direct per-user OAuth prefers requesterUserId over the agent human pair", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        mcp_server_id: "srv-dispatch",
+        slug: "dispatch",
+        auth_type: "per_user_oauth",
+      }),
+    ]);
+    mockRowsForUserToken.mockReturnValue([
+      {
+        id: "tok-requester",
+        secret_ref: "arn:aws:secretsmanager:us-east-1:123:secret:dispatch",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "requester-token" }),
+    );
+
+    const configs = await buildMcpConfigs("agent-1", {
+      humanPairId: "user-human-pair",
+      requesterUserId: "user-requester",
+    });
+
+    expect(configs).toEqual([
+      {
+        name: "dispatch",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "requester-token" },
+      },
+    ]);
+    const tokenLookupPredicate = mockWhereSelector.mock.calls
+      .map((call) => call[0])
+      .find((predicate) =>
+        JSON.stringify(predicate).includes("userMcpTokens.user_id"),
+      ) as { _and: unknown[] };
+    expect(JSON.stringify(tokenLookupPredicate)).toContain(
+      '"userMcpTokens.user_id","user-requester"',
+    );
+    expect(JSON.stringify(tokenLookupPredicate)).not.toContain(
+      '"userMcpTokens.user_id","user-human-pair"',
+    );
+  });
+
   it("canonical OAuth servers without an active user token are skipped", async () => {
     mockRowsForJoin.mockReturnValue([
       baseRow({
