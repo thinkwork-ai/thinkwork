@@ -56,6 +56,39 @@ type MemorySearchResult {
   totalCount: Int!
 }
 
+"""
+ThinkWork-owned ledger row for a Hindsight retain attempt.
+The retained memory record itself remains in Hindsight; this type exposes
+retry, timeout, and dead-letter state for diagnostics.
+"""
+type MemoryRetainAttempt {
+  id: ID!
+  tenantId: ID!
+  userId: ID
+  spaceId: ID
+  threadId: ID!
+  threadTurnId: ID
+  sourceEventKey: String!
+  sourceEventType: String!
+  provider: String!
+  status: String!
+  attemptCount: Int!
+  maxAttempts: Int!
+  nextRetryAt: AWSDateTime
+  lockedAt: AWSDateTime
+  lockedBy: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  backendLatencyMs: Int
+  providerDocumentId: String
+  providerResult: AWSJSON
+  errorClass: String
+  errorMessage: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
 type MemoryGraphNode {
   id: ID!
   label: String!
