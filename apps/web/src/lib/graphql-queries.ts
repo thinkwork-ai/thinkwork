@@ -1017,6 +1017,16 @@ const WorkItemFieldsFragment = gql`
     required
     applicable
     blocked
+    openEngineEnabled
+    openEngineQueueKey
+    openEngineClaimedByAgentId
+    openEngineClaimedAt
+    openEngineClaimExpiresAt
+    openEngineHumanHold
+    openEngineHumanHoldReason
+    openEngineScheduledAt
+    openEngineDependencyState
+    openEngineRouting
     completedAt
     completedByUserId
     completedByAgentId
@@ -1243,6 +1253,28 @@ export const UpdateWorkItemMutation = gql`
     }
   }
   ${WorkItemFieldsFragment}
+`;
+
+export const RecordOpenEngineHumanActionMutation = gql`
+  mutation RecordOpenEngineHumanAction(
+    $input: RecordOpenEngineHumanActionInput!
+  ) {
+    recordOpenEngineHumanAction(input: $input) {
+      id
+      tenantId
+      spaceId
+      workItemId
+      threadId
+      actorUserId
+      actorAgentId
+      eventType
+      previousStatusId
+      newStatusId
+      message
+      metadata
+      createdAt
+    }
+  }
 `;
 
 export const SaveWorkItemViewMutation = gql`

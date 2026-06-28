@@ -47,6 +47,13 @@ export type WorkItemDocumentKind =
   | "handoff"
   | "note"
   | "other";
+export type OpenEngineHumanActionType =
+  | "answer_blocker"
+  | "release_hold"
+  | "request_review"
+  | "mark_reviewed"
+  | "mark_blocked"
+  | "mark_failed";
 
 const WORK_ITEM_DOCUMENT_KINDS = new Set<WorkItemDocumentKind>([
   "plan",
@@ -747,6 +754,79 @@ export async function updateWorkItemStatus(
   });
 }
 
+export async function recordOpenEngineHumanAction(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  const item = await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
+  const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+  if (!callerUserId) {
+    throw new GraphQLError("Open Engine human actions require a user", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  const actionType = normalizeOpenEngineHumanActionType(input.actionType);
+  const now = input.now ? (optionalDate(input.now) ?? new Date()) : new Date();
+  const message = optionalTrim(input.message) ?? defaultHumanActionMessage(actionType);
+  const evidence = parseAwsJsonObject(input.evidence);
+  const metadata = parseAwsJsonObject(input.metadata);
+  const idempotencyKey = optionalTrim(input.idempotencyKey);
+
+  return db.transaction(async (tx) => {
+    if (idempotencyKey) {
+      const [existing] = await tx
+        .select()
+        .from(workItemEvents)
+        .where(
+          and(
+            eq(workItemEvents.tenant_id, tenantId),
+            eq(workItemEvents.work_item_id, item.id),
+            eq(workItemEvents.actor_user_id, callerUserId),
+            sql`${workItemEvents.metadata}->>'idempotencyKey' = ${idempotencyKey}`,
+          ),
+        );
+      if (existing) return existing;
+    }
+
+    const [updated] = await tx
+      .update(workItems)
+      .set(openEngineHumanActionUpdate(actionType, message, now))
+      .where(and(eq(workItems.tenant_id, tenantId), eq(workItems.id, item.id)))
+      .returning();
+    if (!updated) {
+      throw new GraphQLError("Work item could not be updated", {
+        extensions: { code: "INTERNAL_SERVER_ERROR" },
+      });
+    }
+
+    const [event] = await tx
+      .insert(workItemEvents)
+      .values({
+        tenant_id: tenantId,
+        space_id: item.space_id,
+        work_item_id: item.id,
+        actor_user_id: callerUserId,
+        event_type: eventTypeForHumanAction(actionType),
+        message,
+        metadata: compactObject({
+          source: "open_engine_human_action",
+          actionType,
+          evidence: evidence ?? undefined,
+          inputMetadata: metadata ?? undefined,
+          idempotencyKey: idempotencyKey ?? undefined,
+        }),
+      })
+      .returning();
+    if (!event) {
+      throw new GraphQLError("Open Engine human action could not be recorded", {
+        extensions: { code: "INTERNAL_SERVER_ERROR" },
+      });
+    }
+    return event;
+  });
+}
+
 export async function listThreadWorkItems(
   ctx: GraphQLContext,
   input: { tenantId?: string | null; threadId: string },
@@ -929,6 +1009,28 @@ function normalizeOpenEngineDependencyState(value: unknown) {
   });
 }
 
+function normalizeOpenEngineHumanActionType(
+  value: unknown,
+): OpenEngineHumanActionType {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (
+    normalized === "answer_blocker" ||
+    normalized === "release_hold" ||
+    normalized === "request_review" ||
+    normalized === "mark_reviewed" ||
+    normalized === "mark_blocked" ||
+    normalized === "mark_failed"
+  ) {
+    return normalized;
+  }
+  throw new GraphQLError(`Unsupported Open Engine human action: ${value}`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
+}
+
 function optionalDate(value: unknown) {
   if (value === undefined || value === null || value === "") return null;
   const date = value instanceof Date ? value : new Date(String(value));
@@ -938,6 +1040,79 @@ function optionalDate(value: unknown) {
     });
   }
   return date;
+}
+
+function openEngineHumanActionUpdate(
+  actionType: OpenEngineHumanActionType,
+  message: string,
+  now: Date,
+) {
+  const releaseForPickup = {
+    blocked: false,
+    open_engine_human_hold: false,
+    open_engine_human_hold_reason: null,
+    open_engine_dependency_state: "ready",
+    open_engine_claimed_by_agent_id: null,
+    open_engine_claimed_at: null,
+    open_engine_claim_expires_at: null,
+    updated_at: now,
+  };
+  if (
+    actionType === "answer_blocker" ||
+    actionType === "release_hold" ||
+    actionType === "mark_reviewed"
+  ) {
+    return releaseForPickup;
+  }
+  if (actionType === "request_review") {
+    return {
+      blocked: false,
+      open_engine_human_hold: true,
+      open_engine_human_hold_reason: message,
+      open_engine_dependency_state: "waiting",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: now,
+    };
+  }
+  return {
+    blocked: true,
+    open_engine_human_hold: true,
+    open_engine_human_hold_reason: message,
+    open_engine_dependency_state: "waiting",
+    open_engine_claimed_by_agent_id: null,
+    open_engine_claimed_at: null,
+    open_engine_claim_expires_at: null,
+    updated_at: now,
+  };
+}
+
+function eventTypeForHumanAction(actionType: OpenEngineHumanActionType) {
+  if (actionType === "answer_blocker" || actionType === "release_hold") {
+    return "unblocked";
+  }
+  if (actionType === "mark_blocked" || actionType === "mark_failed") {
+    return "blocked";
+  }
+  return "status_changed";
+}
+
+function defaultHumanActionMessage(actionType: OpenEngineHumanActionType) {
+  switch (actionType) {
+    case "answer_blocker":
+      return "Human answered the OpenEngine blocker.";
+    case "release_hold":
+      return "Human released the OpenEngine hold.";
+    case "request_review":
+      return "Human requested OpenEngine review.";
+    case "mark_reviewed":
+      return "Human marked OpenEngine work reviewed.";
+    case "mark_blocked":
+      return "Human marked OpenEngine work blocked.";
+    case "mark_failed":
+      return "Human marked OpenEngine work failed.";
+  }
 }
 
 function eventTypeForStatus(category: string) {
