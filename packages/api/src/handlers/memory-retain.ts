@@ -237,6 +237,11 @@ async function processClaimedRetainAttempt(
     ownerType: "user" as const,
     ownerId: userId,
   };
+  let highConfidenceFacts: {
+    documents: RetainedHighConfidenceFactDocument[];
+    rejected: RejectedHighConfidenceFactCandidate[];
+  } = { documents: [], rejected: [] };
+  let highConfidenceFactError: unknown = null;
 
   try {
     const eventMessages = normalizeMessages(
@@ -276,6 +281,20 @@ async function processClaimedRetainAttempt(
         );
       }
 
+      try {
+        highConfidenceFacts = await retainHighConfidenceFacts({
+          adapter,
+          attempt,
+          tenantId,
+          userId,
+          spaceId: attempt.space_id,
+          threadId: eventThreadId,
+          messages: merged,
+        });
+      } catch (err) {
+        highConfidenceFactError = err;
+      }
+
       await adapter.retainConversation({
         ...owner,
         threadId: eventThreadId,
@@ -290,15 +309,9 @@ async function processClaimedRetainAttempt(
           `event=${eventMessages.length} merged=${merged.length}`,
       );
 
-      const highConfidenceFacts = await retainHighConfidenceFacts({
-        adapter,
-        attempt,
-        tenantId,
-        userId,
-        spaceId: attempt.space_id,
-        threadId: eventThreadId,
-        messages: merged,
-      });
+      if (highConfidenceFactError) {
+        throw highConfidenceFactError;
+      }
 
       await markRetainAttemptRetained(attempt.id, {
         backendLatencyMs: Date.now() - started,
@@ -375,6 +388,8 @@ async function processClaimedRetainAttempt(
       metadata: mergeAttemptMetadata(attempt.metadata, {
         failedAt: new Date().toISOString(),
         failedStatus: classification.status,
+        highConfidenceFacts: highConfidenceFacts.documents,
+        rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
       }),
     });
     console.error(
