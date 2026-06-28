@@ -16,13 +16,19 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockJoinRows, mockUserTokenRows, mockSecretString } = vi.hoisted(
-  () => ({
-    mockJoinRows: vi.fn(),
-    mockUserTokenRows: vi.fn(),
-    mockSecretString: vi.fn(),
-  }),
-);
+const {
+  mockAgentRows,
+  mockJoinRows,
+  mockAssignmentRows,
+  mockUserTokenRows,
+  mockSecretString,
+} = vi.hoisted(() => ({
+  mockAgentRows: vi.fn(),
+  mockJoinRows: vi.fn(),
+  mockAssignmentRows: vi.fn(),
+  mockUserTokenRows: vi.fn(),
+  mockSecretString: vi.fn(),
+}));
 
 vi.mock("@thinkwork/database-pg", async (importOriginal) => {
   const actual =
@@ -31,13 +37,26 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
     ...actual,
     getDb: () => ({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => ({
           innerJoin: () => ({
             where: () => Promise.resolve(mockJoinRows()),
           }),
-          where: () => ({
-            limit: () => Promise.resolve(mockUserTokenRows()),
-          }),
+          where: () => {
+            if (table === actual.schema.agents) {
+              return {
+                limit: () => Promise.resolve(mockAgentRows()),
+              };
+            }
+            if (table === actual.schema.tenantMcpServers) {
+              return Promise.resolve(mockJoinRows());
+            }
+            if (table === actual.schema.agentMcpServers) {
+              return Promise.resolve(mockAssignmentRows());
+            }
+            return {
+              limit: () => Promise.resolve(mockUserTokenRows()),
+            };
+          },
         }),
       }),
       update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
@@ -195,6 +214,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   store = createInMemoryPluginEngineStore();
   secrets = createInMemoryPluginSecrets();
+  mockAgentRows.mockReturnValue([{ tenant_id: "tenant-1" }]);
+  mockAssignmentRows.mockReturnValue([]);
   mockUserTokenRows.mockReturnValue([]);
   mockSecretString.mockReturnValue("");
 });

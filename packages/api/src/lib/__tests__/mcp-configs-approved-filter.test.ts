@@ -16,12 +16,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockWhereSelector,
+  mockRowsForAgent,
   mockRowsForJoin,
+  mockRowsForAssignments,
   mockRowsForUserToken,
   mockSecretString,
 } = vi.hoisted(() => ({
   mockWhereSelector: vi.fn(),
+  mockRowsForAgent: vi.fn(),
   mockRowsForJoin: vi.fn(),
+  mockRowsForAssignments: vi.fn(),
   mockRowsForUserToken: vi.fn(),
   mockSecretString: vi.fn(),
 }));
@@ -29,19 +33,34 @@ const {
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
     select: () => ({
-      from: () => ({
+      from: (table: unknown) => ({
+        where: (pred: unknown) => {
+          mockWhereSelector(pred);
+          const tableRecord =
+            table && typeof table === "object"
+              ? (table as Record<string, unknown>)
+              : {};
+          if (tableRecord.id === "agents.id") {
+            return {
+              limit: () => Promise.resolve(mockRowsForAgent()),
+            };
+          }
+          if (tableRecord.id === "tenantMcpServers.id") {
+            return Promise.resolve(mockRowsForJoin());
+          }
+          if (tableRecord.mcp_server_id === "agentMcpServers.mcp_server_id") {
+            return Promise.resolve(mockRowsForAssignments());
+          }
+          return {
+            limit: () => Promise.resolve(mockRowsForUserToken()),
+          };
+        },
         innerJoin: () => ({
           where: (pred: unknown) => {
             mockWhereSelector(pred);
             return Promise.resolve(mockRowsForJoin());
           },
         }),
-        where: (pred: unknown) => {
-          mockWhereSelector(pred);
-          return {
-            limit: () => Promise.resolve(mockRowsForUserToken()),
-          };
-        },
       }),
     }),
     update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
@@ -64,6 +83,10 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     management_source: "tenantMcpServers.management_source",
     plugin_install_id: "tenantMcpServers.plugin_install_id",
     runtime_metadata: "tenantMcpServers.runtime_metadata",
+  },
+  agents: {
+    id: "agents.id",
+    tenant_id: "agents.tenant_id",
   },
   agentMcpServers: {
     mcp_server_id: "agentMcpServers.mcp_server_id",
@@ -153,6 +176,8 @@ const activePluginAuth = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRowsForAgent.mockReturnValue([{ tenant_id: "tenant-1" }]);
+  mockRowsForAssignments.mockReturnValue([]);
   mockRowsForUserToken.mockReturnValue([]);
   mockSecretString.mockReturnValue("");
 });
@@ -161,10 +186,40 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   it("SQL predicate requires status='approved' AND enabled=true", async () => {
     mockRowsForJoin.mockReturnValue([]);
     await buildMcpConfigs("agent-1", null);
-    const pred = mockWhereSelector.mock.calls[0]?.[0] as { _and: unknown[] };
+    const pred = mockWhereSelector.mock.calls[1]?.[0] as { _and: unknown[] };
     // Flatten the predicate terms to check the literal values included.
     const literals = JSON.stringify(pred);
     expect(literals).toContain('"approved"');
+  });
+
+  it("returns approved tenant MCP rows without an agent assignment", async () => {
+    mockRowsForAssignments.mockReturnValue([]);
+    mockRowsForJoin.mockReturnValue([
+      baseRow({ server_url_hash: null, auth_type: "none" }),
+    ]);
+
+    const configs = await buildMcpConfigs("agent-1", null);
+
+    expect(configs).toEqual([
+      {
+        name: "test-server",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+      },
+    ]);
+  });
+
+  it("skips an enabled tenant MCP row when the agent override disables it", async () => {
+    mockRowsForAssignments.mockReturnValue([
+      { mcp_server_id: "srv-1", enabled: false, config: null },
+    ]);
+    mockRowsForJoin.mockReturnValue([
+      baseRow({ server_url_hash: null, auth_type: "none" }),
+    ]);
+
+    const configs = await buildMcpConfigs("agent-1", null);
+
+    expect(configs).toEqual([]);
   });
 
   it("grandfathered approved rows (url_hash=null) are returned", async () => {
@@ -357,10 +412,16 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("includes cached MCP tool names so desktop Pi can enforce allowlist exclusions", async () => {
+    mockRowsForAssignments.mockReturnValue([
+      {
+        mcp_server_id: "srv-1",
+        enabled: true,
+        config: { toolAllowlist: ["opportunities_list"] },
+      },
+    ]);
     mockRowsForJoin.mockReturnValue([
       baseRow({
         auth_type: "none",
-        assignment_config: { toolAllowlist: ["opportunities_list"] },
         tools: [
           { name: "opportunities_list", description: "List opportunities" },
           { name: "accounts_list", description: "List accounts" },
@@ -412,9 +473,11 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
         auth: { type: "bearer", token: "user-scoped-token" },
       },
     ]);
-    const tokenLookupPredicate = mockWhereSelector.mock.calls[1]?.[0] as {
-      _and: unknown[];
-    };
+    const tokenLookupPredicate = mockWhereSelector.mock.calls
+      .map((call) => call[0])
+      .find((predicate) =>
+        JSON.stringify(predicate).includes("userMcpTokens.user_id"),
+      ) as { _and: unknown[] };
     expect(JSON.stringify(tokenLookupPredicate)).toContain(
       `"userMcpTokens.user_id","${userId}"`,
     );

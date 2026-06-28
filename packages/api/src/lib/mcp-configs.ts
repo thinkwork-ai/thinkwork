@@ -36,6 +36,7 @@ import {
   tenantMcpServers,
   agentMcpServers,
   userMcpTokens,
+  agents,
 } from "@thinkwork/database-pg/schema";
 import {
   SecretsManagerClient,
@@ -113,7 +114,18 @@ export async function buildMcpConfigs(
   // rejected rows, and approved rows whose fields drifted, are dropped
   // here with a log line so operators see the reason a capability
   // vanished. This is the SI-5 defensive layer.
-  const mcpRows = await db
+  const [agentRow] = await db
+    .select({ tenant_id: agents.tenant_id })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  if (!agentRow?.tenant_id) {
+    console.warn(`${logPrefix} No agent found for MCP config build: ${agentId}`);
+    return [];
+  }
+
+  const serverRows = await db
     .select({
       mcp_server_id: tenantMcpServers.id,
       name: tenantMcpServers.name,
@@ -129,22 +141,45 @@ export async function buildMcpConfigs(
       management_source: tenantMcpServers.management_source,
       plugin_install_id: tenantMcpServers.plugin_install_id,
       runtime_metadata: tenantMcpServers.runtime_metadata,
-      assignment_enabled: agentMcpServers.enabled,
-      assignment_config: agentMcpServers.config,
     })
-    .from(agentMcpServers)
-    .innerJoin(
-      tenantMcpServers,
-      eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
-    )
+    .from(tenantMcpServers)
     .where(
       and(
-        eq(agentMcpServers.agent_id, agentId),
-        eq(agentMcpServers.enabled, true),
+        eq(tenantMcpServers.tenant_id, agentRow.tenant_id),
         eq(tenantMcpServers.status, "approved"),
         eq(tenantMcpServers.enabled, true),
       ),
     );
+
+  const assignmentRows = await db
+    .select({
+      mcp_server_id: agentMcpServers.mcp_server_id,
+      enabled: agentMcpServers.enabled,
+      config: agentMcpServers.config,
+    })
+    .from(agentMcpServers)
+    .where(eq(agentMcpServers.agent_id, agentId));
+
+  const assignmentsByServerId = new Map(
+    assignmentRows.map((assignment) => [
+      assignment.mcp_server_id,
+      {
+        enabled: assignment.enabled,
+        config: assignment.config,
+      },
+    ]),
+  );
+
+  const mcpRows = serverRows
+    .map((row) => {
+      const assignment = assignmentsByServerId.get(row.mcp_server_id);
+      return {
+        ...row,
+        assignment_enabled: assignment?.enabled ?? true,
+        assignment_config: assignment?.config ?? null,
+      };
+    })
+    .filter((row) => row.assignment_enabled);
 
   // Plugin rows resolve FIRST so the URL-dedupe pass below can give the
   // plugin entry precedence over a direct entry sharing the endpoint.
