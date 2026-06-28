@@ -28,7 +28,11 @@ export function resolveUserMcpPrincipal(
     return { ok: false, status: 403, reason: "Caller has no user record" };
   }
 
-  if (!requestedUserId || requestedUserId === membership.userId) {
+  if (
+    !requestedUserId ||
+    requestedUserId === membership.userId ||
+    requestedUserId === membership.auth.principalId
+  ) {
     return { ok: true, userId: membership.userId };
   }
 

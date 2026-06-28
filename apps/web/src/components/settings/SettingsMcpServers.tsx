@@ -18,6 +18,7 @@ import {
   SelectValue,
   Switch,
 } from "@thinkwork/ui";
+import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   createMcpServer,
@@ -33,9 +34,11 @@ import {
 } from "@/components/settings/SettingsContent";
 
 export function SettingsMcpServers() {
+  const { user } = useAuth();
   const { tenant, tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const tenantSlug = tenant?.slug ?? null;
+  const oauthUserId = userId ?? user?.sub ?? null;
   const [servers, setServers] = useState<McpServer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -66,8 +69,8 @@ export function SettingsMcpServers() {
     setError(null);
     Promise.all([
       listMcpServers(tenantSlug),
-      tenantId && userId
-        ? listUserMcpServers(tenantId, userId)
+      tenantId && oauthUserId
+        ? listUserMcpServers(tenantId, oauthUserId)
         : Promise.resolve({ servers: [] }),
     ])
       .then(([tenantResult, userResult]) => {
@@ -82,7 +85,7 @@ export function SettingsMcpServers() {
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load"),
       );
-  }, [tenantId, tenantSlug, userId]);
+  }, [oauthUserId, tenantId, tenantSlug]);
 
   useEffect(() => {
     load();

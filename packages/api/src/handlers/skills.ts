@@ -744,6 +744,7 @@ async function mcpOAuthAuthorize(
   if (!mcpServerId || !userId || !tenantId) {
     return error("mcpServerId, userId, tenantId are required", 400);
   }
+  const wantsJson = qs.response === "json";
 
   const resolvedUserId = await resolveMcpOAuthUserId(tenantId, userId);
   if (!resolvedUserId) {
@@ -926,9 +927,12 @@ async function mcpOAuthAuthorize(
   // here: `max_age=0` is literally unsatisfiable and we hit infinite
   // redirect loops the last two times we shipped it (PR #85, PR #86).
 
+  const authorizeUrlString = authorizeUrl.toString();
+  if (wantsJson) return json({ authorizeUrl: authorizeUrlString });
+
   return {
     statusCode: 302,
-    headers: { Location: authorizeUrl.toString() },
+    headers: { Location: authorizeUrlString },
     body: "",
   };
 }
@@ -2745,9 +2749,10 @@ async function mcpListUserServers(
     await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
-  // availability, but managed/plugin OAuth connectors still need to be
+  // availability, but enabled tenant OAuth connectors also need to be
   // user-visible so the user can authenticate before an agent invocation needs
-  // them.
+  // them. That includes manual MCP servers from Settings, not only plugin and
+  // managed-application rows.
   const userAgents = await db
     .select({ id: agents.id, name: agents.name })
     .from(agents)
@@ -2783,7 +2788,7 @@ async function mcpListUserServers(
           .where(inArray(agentMcpServers.agent_id, agentIds))
       : [];
 
-  const managedRows = await db
+  const tenantOauthRows = await db
     .select({
       mcp_server_id: tenantMcpServers.id,
       name: tenantMcpServers.name,
@@ -2799,10 +2804,6 @@ async function mcpListUserServers(
     .where(
       and(
         eq(tenantMcpServers.tenant_id, tenantId),
-        or(
-          eq(tenantMcpServers.management_source, "managed_application"),
-          eq(tenantMcpServers.management_source, "plugin"),
-        ),
         eq(tenantMcpServers.enabled, true),
         eq(tenantMcpServers.status, "approved"),
       ),
@@ -2810,7 +2811,7 @@ async function mcpListUserServers(
 
   const rows = [
     ...assignedRows,
-    ...managedRows
+    ...tenantOauthRows
       .filter(
         (r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth",
       )

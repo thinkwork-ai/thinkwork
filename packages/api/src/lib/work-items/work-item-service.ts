@@ -37,6 +37,7 @@ import {
   findStatusForWorkItemUpdate,
   normalizeWorkItemStatusCategory,
 } from "./status-service.js";
+import { normalizeOpenEngineQueueKey } from "./open-engine-queue-service.js";
 
 export type WorkItemPriority = "low" | "normal" | "high" | "urgent";
 export type WorkItemDocumentKind =
@@ -229,7 +230,9 @@ export async function createWorkItem(
           input.openEngineEnabled ?? input.open_engine_enabled ?? false,
         ),
         open_engine_queue_key: optionalTrim(
-          input.openEngineQueueKey ?? input.open_engine_queue_key,
+          normalizeOpenEngineQueueKey(
+            input.openEngineQueueKey ?? input.open_engine_queue_key,
+          ),
         ),
         open_engine_scheduled_at: optionalDate(
           input.openEngineScheduledAt ?? input.open_engine_scheduled_at,
@@ -316,7 +319,9 @@ export async function updateWorkItem(
     updates.open_engine_enabled = Boolean(input.openEngineEnabled);
   }
   if (input.openEngineQueueKey !== undefined) {
-    updates.open_engine_queue_key = optionalTrim(input.openEngineQueueKey);
+    updates.open_engine_queue_key = normalizeOpenEngineQueueKey(
+      input.openEngineQueueKey,
+    );
   }
   if (input.openEngineScheduledAt !== undefined) {
     updates.open_engine_scheduled_at = optionalDate(

@@ -34,6 +34,8 @@ import {
   claimNextOpenEngineWorkItem,
   getOpenEngineQueueSnapshot,
   listEligibleOpenEngineWorkItems,
+  normalizeOpenEngineQueueKey,
+  routeOpenEngineWorkItem,
 } from "../lib/work-items/open-engine-queue-service.js";
 import {
   recordOpenEngineReceipt,
@@ -199,6 +201,30 @@ const TOOLS = [
         archived: { type: "boolean" },
       },
       required: ["workItemId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "open_engine_handoff_work_item",
+    description:
+      "Route or hand off an OpenEngine Work Item to another queue such as codex, claude, thinkwork-agent, or human, clearing any active claim and recording route evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workItemId: { type: "string" },
+        targetQueueKey: { type: "string" },
+        targetOwnerUserId: { type: "string" },
+        targetOwnerAgentId: { type: "string" },
+        agentId: {
+          type: "string",
+          description:
+            "Agent performing the handoff. Defaults to authenticated agent when present.",
+        },
+        message: { type: "string" },
+        metadata: { type: "object" },
+        idempotencyKey: { type: "string" },
+      },
+      required: ["workItemId", "targetQueueKey"],
       additionalProperties: false,
     },
   },
@@ -512,6 +538,9 @@ async function handleToolCall(
       case "open_engine_update_work_item":
         result = await updateWorkItemTool(ctx, caller, args);
         break;
+      case "open_engine_handoff_work_item":
+        result = await handoffWorkItemTool(ctx, caller, args);
+        break;
       case "open_engine_list_documents":
         result = await listDocumentsTool(ctx, caller, args);
         break;
@@ -575,7 +604,7 @@ async function listOpenEngineTool(
   }
   const rows = await listEligibleOpenEngineWorkItems({
     tenantId: caller.tenantId,
-    queueKey: nullableStringArg(args.queueKey),
+    queueKey: nullableQueueKeyArg(args.queueKey),
     spaceId: stringArg(args.spaceId),
     statusId: stringArg(args.statusId),
     labelSlugs: stringArrayArg(args.labelSlugs),
@@ -593,7 +622,7 @@ async function queueSnapshotTool(
 ) {
   const snapshot = await getOpenEngineQueueSnapshot({
     tenantId: caller.tenantId,
-    queueKey: nullableStringArg(args.queueKey),
+    queueKey: nullableQueueKeyArg(args.queueKey),
     spaceId: stringArg(args.spaceId),
     statusId: stringArg(args.statusId),
     labelSlugs: stringArrayArg(args.labelSlugs),
@@ -613,7 +642,7 @@ async function claimNextTool(
   const agentId = requiredStringArg(args.agentId, "agentId");
   const claimed = await claimNextOpenEngineWorkItem({
     tenantId: caller.tenantId,
-    queueKey: nullableStringArg(args.queueKey),
+    queueKey: nullableQueueKeyArg(args.queueKey),
     spaceId: stringArg(args.spaceId),
     statusId: stringArg(args.statusId),
     labelSlugs: stringArrayArg(args.labelSlugs),
@@ -710,6 +739,33 @@ async function updateWorkItemTool(
     archived: optionalBooleanArg(args.archived),
   });
   return { ok: true, workItem: formatWorkItemSummary(updated) };
+}
+
+async function handoffWorkItemTool(
+  ctx: GraphQLContext,
+  caller: McpCaller,
+  args: Record<string, unknown>,
+) {
+  const workItemId = requiredStringArg(args.workItemId, "workItemId");
+  const actorAgentId = stringArg(args.agentId) ?? caller.agentId;
+  const result = await routeOpenEngineWorkItem({
+    tenantId: caller.tenantId,
+    workItemId,
+    targetQueueKey: requiredQueueKeyArg(args.targetQueueKey, "targetQueueKey"),
+    targetOwnerUserId: optionalStringArg(args.targetOwnerUserId),
+    targetOwnerAgentId: optionalStringArg(args.targetOwnerAgentId),
+    actorUserId: caller.userId,
+    actorAgentId,
+    message: stringArg(args.message),
+    metadata: optionalRecordArg(args.metadata),
+    idempotencyKey: stringArg(args.idempotencyKey),
+  });
+  return {
+    ok: true,
+    workItem: formatWorkItemSummary(result.workItem),
+    event: formatEvent(result.event),
+    context: await buildContextPacket(ctx, caller, workItemId, DEFAULT_LIMIT),
+  };
 }
 
 async function listDocumentsTool(
@@ -1110,6 +1166,7 @@ function formatWorkItemSummary(row: Record<string, any>) {
       humanHoldReason: row.open_engine_human_hold_reason ?? null,
       dependencyState: row.open_engine_dependency_state ?? null,
       scheduledAt: iso(row.open_engine_scheduled_at),
+      routing: row.open_engine_routing ?? null,
     },
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -1163,6 +1220,16 @@ function buildClaimReceiptIdempotencyKey(
 ) {
   const claimedAt = iso(workItem.open_engine_claimed_at) ?? "unknown";
   return `open-engine-claim:${tenantId}:${workItem.id}:${agentId}:${claimedAt}`;
+}
+
+function requiredQueueKeyArg(value: unknown, name: string) {
+  const queueKey = normalizeOpenEngineQueueKey(value);
+  if (!queueKey) throw new Error(`${name} is required`);
+  return queueKey;
+}
+
+function nullableQueueKeyArg(value: unknown) {
+  return normalizeOpenEngineQueueKey(value);
 }
 
 function logOpenEngineToolCall(
@@ -1375,8 +1442,9 @@ function stringArg(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function nullableStringArg(value: unknown): string | null | undefined {
-  return value === null ? null : (stringArg(value) ?? undefined);
+function optionalStringArg(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  return stringArg(value);
 }
 
 function stringArrayArg(value: unknown): string[] {

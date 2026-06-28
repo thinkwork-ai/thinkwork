@@ -19,6 +19,11 @@ export async function claimNextOpenEngineWorkItem(
   const row = await claimNextOpenEngineWorkItemRow({
     tenantId,
     queueKey: input.queueKey ?? null,
+    spaceId: input.spaceId ?? null,
+    statusId: input.statusId ?? null,
+    labelSlugs: Array.isArray(input.labelSlugs) ? input.labelSlugs : null,
+    ownerUserId: input.ownerUserId ?? null,
+    ownerAgentId: input.ownerAgentId ?? null,
     agentId: input.agentId,
     now: input.now ? new Date(input.now) : undefined,
     leaseSeconds: input.leaseSeconds,

@@ -404,6 +404,11 @@ input DeleteWorkItemViewInput {
 input OpenEngineEligibleWorkItemsInput {
   tenantId: ID
   queueKey: String
+  spaceId: ID
+  statusId: ID
+  labelSlugs: [String!]
+  ownerUserId: ID
+  ownerAgentId: ID
   now: AWSDateTime
   limit: Int
 }
@@ -411,6 +416,11 @@ input OpenEngineEligibleWorkItemsInput {
 input ClaimNextOpenEngineWorkItemInput {
   tenantId: ID
   queueKey: String
+  spaceId: ID
+  statusId: ID
+  labelSlugs: [String!]
+  ownerUserId: ID
+  ownerAgentId: ID
   agentId: ID!
   now: AWSDateTime
   leaseSeconds: Int
@@ -435,6 +445,19 @@ input RecordOpenEngineHumanActionInput {
   actionType: WorkItemOpenEngineHumanActionType!
   message: String
   evidence: AWSJSON
+  metadata: AWSJSON
+  idempotencyKey: String
+  now: AWSDateTime
+}
+
+input RouteOpenEngineWorkItemInput {
+  tenantId: ID
+  workItemId: ID!
+  targetQueueKey: String
+  targetOwnerUserId: ID
+  targetOwnerAgentId: ID
+  agentId: ID
+  message: String
   metadata: AWSJSON
   idempotencyKey: String
   now: AWSDateTime
@@ -469,6 +492,7 @@ extend type Mutation {
     input: RecordOpenEngineWorkItemReceiptInput!
   ): WorkItemEvent!
   recordOpenEngineHumanAction(input: RecordOpenEngineHumanActionInput!): WorkItemEvent!
+  routeOpenEngineWorkItem(input: RouteOpenEngineWorkItemInput!): WorkItemEvent!
   saveWorkItemStatuses(input: SaveWorkItemStatusesInput!): [WorkItemStatus!]!
   saveWorkItemView(input: SaveWorkItemViewInput!): WorkItemSavedView!
   deleteWorkItemView(input: DeleteWorkItemViewInput!): Boolean!
