@@ -126,6 +126,15 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 
+function hasRawArrayQueryChunk(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const chunks = (value as { queryChunks?: unknown[] }).queryChunks;
+  if (!Array.isArray(chunks)) return false;
+  return chunks.some(
+    (chunk) => Array.isArray(chunk) || hasRawArrayQueryChunk(chunk),
+  );
+}
+
 describe("mergeTranscriptSuffix", () => {
   const u = (content: string) => ({
     role: "user" as const,
@@ -351,6 +360,8 @@ describe("memory-retain handler", () => {
     expect(result.ok).toBe(true);
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
     expect(executeMock).toHaveBeenCalledTimes(4);
+    expect(hasRawArrayQueryChunk(executeMock.mock.calls[1][0])).toBe(false);
+    expect(hasRawArrayQueryChunk(executeMock.mock.calls[3][0])).toBe(false);
     expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
       "attempt-1",
       expect.objectContaining({
