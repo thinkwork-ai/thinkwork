@@ -7,6 +7,7 @@
  */
 
 import { cleanup, render, screen } from "@testing-library/react";
+import { ThemeProvider } from "@thinkwork/ui";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTaskReviewJsonRenderFixture } from "./json-render/fixtures";
@@ -404,7 +405,9 @@ describe("renderTypedPart", () => {
       },
     };
 
-    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+    const { container } = render(
+      <ThemeProvider>{renderTypedPart(part, rk())}</ThemeProvider>,
+    );
 
     expect(screen.getByTestId("mcp-app-frame")).toBeTruthy();
     expect(screen.getByText("Dispatch Optimization App")).toBeTruthy();
