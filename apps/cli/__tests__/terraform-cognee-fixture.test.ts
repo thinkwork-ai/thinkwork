@@ -437,7 +437,8 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
 
     expect(vars).toMatch(/Empty auto-selects Hindsight/);
     expect(vars).toMatch(/legacy diagnostic 'cognee'/);
-    expect(vars).toMatch(/memory_engine = 'cognee' requires enable_cognee/);
+    expect(source).toMatch(/check "memory_engine_requires_enabled_backend"/);
+    expect(source).toMatch(/memory_engine = 'cognee' requires enable_cognee/);
     expect(vars).not.toMatch(/make it canonical for user and Space memory/);
     expect(source).toMatch(/var\.memory_engine == "cognee"/);
     expect(source).toMatch(/legacy diagnostic compatibility value/);

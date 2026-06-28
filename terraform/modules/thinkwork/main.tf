@@ -218,6 +218,13 @@ locals {
   ) : ""
 }
 
+check "memory_engine_requires_enabled_backend" {
+  assert {
+    condition     = var.memory_engine != "cognee" || var.enable_cognee
+    error_message = "memory_engine = 'cognee' requires enable_cognee = true."
+  }
+}
+
 ################################################################################
 # Workspace Guard
 ################################################################################
