@@ -4,7 +4,7 @@ title: Fix Hindsight memory retain timeouts and simplify user/Space memory write
 status: in-progress
 started_at: 2026-06-28
 target_branch: main
-active_branch: codex/think-103-u2-retain-worker
+active_branch: codex/think-103-u3-safe-fact-capture
 ---
 
 # THINK-103 Autopilot Status
@@ -19,8 +19,8 @@ active_branch: codex/think-103-u2-retain-worker
 ## Implementation Units
 
 - U1. Durable retain-attempt schema and canonical GraphQL type surface — merged via PR #3071
-- U2. Route `memory-retain` through the ledger and retry worker — in progress on `codex/think-103-u2-retain-worker`
-- U3. High-confidence safe user and Space fact capture during retain
+- U2. Route `memory-retain` through the ledger and retry worker — merged via PR #3075
+- U3. High-confidence safe user and Space fact capture during retain — in progress on `codex/think-103-u3-safe-fact-capture`
 - U4. Space-aware retain envelope and direct memory-question preflight
 - U5. Retain diagnostics through GraphQL and trace/activity evidence
 - U6. Memory page muted refresh action and retain status surface
@@ -54,3 +54,11 @@ active_branch: codex/think-103-u2-retain-worker
   - `pnpm --filter @thinkwork/api typecheck`
   - `bash scripts/build-lambdas.sh memory-retain`
   - `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+- 2026-06-28: U2 merged through PR #3075 after rebasing onto `main`; CI passed `cla`, `lint`, `verify`, `typecheck`, and `test`. Cleaned the U2 worktree/local branch; remote branch was deleted by GitHub.
+- 2026-06-28: Created isolated U3 worktree at `.Codex/worktrees/think-103-u3-safe-fact-capture` from updated `origin/main`.
+- 2026-06-28: Local browser test on `localhost:5180` passed for the U3 worktree web shell: copied `apps/web/.env`, installed dependencies, started `@thinkwork/web` on port 5180, authenticated via SSO, and loaded `/memory/brain` with rendered Memory rows and no browser console warnings/errors. The muted refresh icon is not present yet because that is U6.
+- 2026-06-28: U3 implementation in progress:
+  - Added deterministic high-confidence fact extraction for Birdie-style user pet facts, Space codenames/project facts, and unsafe candidate rejection.
+  - Wired `memory-retain` to write extracted facts as idempotent supplemental Hindsight markdown documents tied to the retain attempt.
+  - Extended safety filters for approval-rule/tool-send instructions and added Hindsight source labeling for `thinkwork_high_confidence_fact`.
+  - Focused tests currently pass for extractor, safety, and handler fact-write flows.

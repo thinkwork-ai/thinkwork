@@ -21,8 +21,14 @@ import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
 import {
   buildDailyMemoryRetainOptions,
+  buildHighConfidenceFactRetainOptions,
   buildThreadRetainOptions,
 } from "../lib/memory/hindsight-retain-params.js";
+import {
+  extractHighConfidenceFacts,
+  type ExtractedHighConfidenceFact,
+  type RejectedHighConfidenceFactCandidate,
+} from "../lib/memory/high-confidence-facts.js";
 import {
   buildRetainSourceEventKey,
   claimRetainAttempt,
@@ -284,6 +290,16 @@ async function processClaimedRetainAttempt(
           `event=${eventMessages.length} merged=${merged.length}`,
       );
 
+      const highConfidenceFacts = await retainHighConfidenceFacts({
+        adapter,
+        attempt,
+        tenantId,
+        userId,
+        spaceId: attempt.space_id,
+        threadId: eventThreadId,
+        messages: merged,
+      });
+
       await markRetainAttemptRetained(attempt.id, {
         backendLatencyMs: Date.now() - started,
         providerDocumentId: eventThreadId,
@@ -291,11 +307,14 @@ async function processClaimedRetainAttempt(
           engine,
           adapterKind: adapter.kind,
           messageCount: merged.length,
+          highConfidenceFactCount: highConfidenceFacts.documents.length,
         },
         metadata: mergeAttemptMetadata(attempt.metadata, {
           dbMessageCount: dbMessages.length,
           eventMessageCount: eventMessages.length,
           mergedMessageCount: merged.length,
+          highConfidenceFacts: highConfidenceFacts.documents,
+          rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
           fallbackUsed: dbMessages.length === 0 && eventMessages.length > 0,
           retainedAt: new Date().toISOString(),
         }),
@@ -409,6 +428,98 @@ async function drainDueRetainAttempts(limit = 25): Promise<MemoryRetainResult> {
   }
 
   return { ok: failed === 0, processed: retained + failed, retained, failed };
+}
+
+type RetainedHighConfidenceFactDocument = {
+  factId: string;
+  documentId: string;
+  scope: "user" | "space";
+  kind: ExtractedHighConfidenceFact["kind"];
+};
+
+async function retainHighConfidenceFacts(input: {
+  adapter: ReturnType<typeof getMemoryServices>["adapter"];
+  attempt: RetainAttemptRow;
+  tenantId: string;
+  userId: string;
+  spaceId?: string | null;
+  threadId: string;
+  messages: NormalizedMessage[];
+}): Promise<{
+  documents: RetainedHighConfidenceFactDocument[];
+  rejected: RejectedHighConfidenceFactCandidate[];
+}> {
+  const extracted = extractHighConfidenceFacts({
+    messages: input.messages,
+    spaceId: input.spaceId,
+  });
+  if (extracted.facts.length === 0) {
+    return { documents: [], rejected: extracted.rejected };
+  }
+  if (!input.adapter.upsertMarkdownMemoryDocument) {
+    throw new Error("high_confidence_fact_upsert_not_supported");
+  }
+
+  const documents: RetainedHighConfidenceFactDocument[] = [];
+  for (const fact of extracted.facts) {
+    if (fact.scope === "space" && !input.spaceId) continue;
+    const owner =
+      fact.scope === "space"
+        ? {
+            tenantId: input.tenantId,
+            ownerType: "space" as const,
+            ownerId: input.spaceId!,
+          }
+        : {
+            tenantId: input.tenantId,
+            ownerType: "user" as const,
+            ownerId: input.userId,
+          };
+    const documentId = highConfidenceFactDocumentId(input.attempt.id, fact);
+    await input.adapter.upsertMarkdownMemoryDocument({
+      ...owner,
+      path: `memory/high-confidence-facts/${input.threadId}/${fact.id}.md`,
+      content: fact.text,
+      documentId,
+      context: "thinkwork_high_confidence_fact",
+      async: false,
+      hindsight: buildHighConfidenceFactRetainOptions({
+        scope: fact.scope,
+        spaceId: input.spaceId,
+        timestamp: fact.timestamp,
+      }),
+      metadata: {
+        source: "high_confidence_fact",
+        sourceContext: "thinkwork_high_confidence_fact",
+        retainAttemptId: input.attempt.id,
+        tenantId: input.tenantId,
+        userId: input.userId,
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        factId: fact.id,
+        factScope: fact.scope,
+        factKind: fact.kind,
+        confidence: fact.confidence,
+        sourceText: fact.sourceText,
+        sourceMessageIndex: fact.sourceMessageIndex,
+      },
+    });
+    documents.push({
+      factId: fact.id,
+      documentId,
+      scope: fact.scope,
+      kind: fact.kind,
+    });
+  }
+
+  return { documents, rejected: extracted.rejected };
+}
+
+function highConfidenceFactDocumentId(
+  attemptId: string,
+  fact: ExtractedHighConfidenceFact,
+): string {
+  return `high_confidence_fact:${attemptId}:${fact.id}`;
 }
 
 /**

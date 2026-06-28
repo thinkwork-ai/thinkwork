@@ -1224,6 +1224,9 @@ function defaultMarkdownDocumentSource(context: string): string {
   if (context === "thinkwork_requester_thread_digest") {
     return "requester_thread_digest";
   }
+  if (context === "thinkwork_high_confidence_fact") {
+    return "high_confidence_fact";
+  }
   if (context === "thinkwork_space_document") {
     return "space_memory_document";
   }
