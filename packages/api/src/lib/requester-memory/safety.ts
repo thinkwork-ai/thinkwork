@@ -26,9 +26,11 @@ const PROMPT_CONTROL_PATTERNS = [
 
 const POLICY_OR_TOOL_PATTERNS = [
   /\balways approve\b/i,
+  /\bignore (?:approval|permissions?|policy|safety) rules\b/i,
   /\bwithout (?:asking for )?approval\b/i,
   /\bbypass (?:approval|permissions?|policy|safety)\b/i,
   /\b(?:run|execute|call|invoke) (?:the )?(?:tool|command|shell|bash)\b/i,
+  /\balways send (?:emails?|messages?)\b/i,
   /\bsend (?:emails?|messages?) without\b/i,
 ];
 

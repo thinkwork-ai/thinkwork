@@ -46,10 +46,7 @@ export function buildMobileCaptureRetainOptions(
       "scope:explicit-memory",
     ],
     documentTags: ["source:mobile-capture", "scope:explicit-memory"],
-    observationScopes: [
-      ["source:mobile-capture"],
-      ["scope:explicit-memory"],
-    ],
+    observationScopes: [["source:mobile-capture"], ["scope:explicit-memory"]],
   });
 }
 
@@ -121,10 +118,7 @@ export function buildMcpUserMemoryRetainOptions(input: {
       ...normalizeHindsightTags(input.callerTags),
     ],
     documentTags: ["source:mcp-user-memory", "scope:explicit-memory"],
-    observationScopes: [
-      ["source:mcp-user-memory"],
-      ["scope:explicit-memory"],
-    ],
+    observationScopes: [["source:mcp-user-memory"], ["scope:explicit-memory"]],
   });
 }
 
@@ -162,6 +156,32 @@ export function buildRequesterThreadDigestRetainOptions(): HindsightRetainOption
   });
 }
 
+export function buildHighConfidenceFactRetainOptions(input: {
+  scope: "user" | "space";
+  spaceId?: string | null;
+  timestamp?: string | null;
+}): HindsightRetainOptions {
+  const scopeTags =
+    input.scope === "space" && input.spaceId
+      ? [`space:${input.spaceId}`, "scope:space"]
+      : ["scope:personal"];
+  return retainOptions({
+    timestamp: toIsoTimestamp(input.timestamp) ?? "unset",
+    tags: [
+      "source:high-confidence-fact",
+      "surface:pi",
+      "scope:thread",
+      ...scopeTags,
+    ],
+    documentTags: ["source:high-confidence-fact", "scope:thread", ...scopeTags],
+    observationScopes: [
+      ["source:high-confidence-fact"],
+      ["scope:thread"],
+      ...scopeTags.map((tag) => [tag]),
+    ],
+  });
+}
+
 export function buildJournalImportRetainOptions(input: {
   timestamp?: unknown;
 }): HindsightRetainOptions {
@@ -169,10 +189,7 @@ export function buildJournalImportRetainOptions(input: {
     timestamp: toIsoTimestamp(input.timestamp),
     tags: ["source:journal-import", "surface:import", "scope:imported-history"],
     documentTags: ["source:journal-import", "scope:imported-history"],
-    observationScopes: [
-      ["source:journal-import"],
-      ["scope:imported-history"],
-    ],
+    observationScopes: [["source:journal-import"], ["scope:imported-history"]],
   });
 }
 

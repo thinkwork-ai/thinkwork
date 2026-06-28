@@ -259,6 +259,56 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
   });
 
+  it("upserts high-confidence fact documents with a stable source label", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example/",
+      bankConfig: null,
+    });
+    await adapter.upsertMarkdownMemoryDocument({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      path: "memory/high-confidence-facts/thread-1/user-pet.md",
+      content: "User has a poodle named Birdie.",
+      documentId: "high_confidence_fact:attempt-1:user-pet",
+      context: "thinkwork_high_confidence_fact",
+      async: false,
+      metadata: {
+        retainAttemptId: "attempt-1",
+        factScope: "user",
+        factKind: "pet",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      items: [
+        {
+          content: "User has a poodle named Birdie.",
+          document_id: "high_confidence_fact:attempt-1:user-pet",
+          update_mode: "replace",
+          context: "thinkwork_high_confidence_fact",
+          metadata: {
+            tenantId: TENANT_ID,
+            ownerType: "user",
+            userId: USER_ID,
+            path: "memory/high-confidence-facts/thread-1/user-pet.md",
+            source: "high_confidence_fact",
+            retainAttemptId: "attempt-1",
+            factScope: "user",
+            factKind: "pet",
+          },
+        },
+      ],
+    });
+  });
+
   it("retains Space memory in the Space bank with tenant and Space metadata", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
