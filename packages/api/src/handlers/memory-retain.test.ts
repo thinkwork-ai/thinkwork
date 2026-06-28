@@ -23,6 +23,7 @@ const markRetainAttemptRetainedMock = vi.hoisted(() => vi.fn());
 const markRetainAttemptFailedMock = vi.hoisted(() => vi.fn());
 const listDueRetainAttemptsMock = vi.hoisted(() => vi.fn());
 const classifyRetainErrorMock = vi.hoisted(() => vi.fn());
+const writeUserContextMdForUserMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/memory/index.js", () => ({
   getMemoryServices: getMemoryServicesMock,
@@ -40,6 +41,10 @@ vi.mock("../lib/memory/retain-attempts.js", () => ({
   markRetainAttemptFailed: markRetainAttemptFailedMock,
   listDueRetainAttempts: listDueRetainAttemptsMock,
   classifyRetainError: classifyRetainErrorMock,
+}));
+
+vi.mock("../lib/user-context-md-writer.js", () => ({
+  writeUserContextMdForUser: writeUserContextMdForUserMock,
 }));
 
 import { handler, mergeTranscriptSuffix } from "./memory-retain.js";
@@ -254,6 +259,10 @@ describe("memory-retain handler", () => {
     markRetainAttemptRetainedMock.mockReset().mockResolvedValue(undefined);
     markRetainAttemptFailedMock.mockReset().mockResolvedValue("failed_backend");
     listDueRetainAttemptsMock.mockReset().mockResolvedValue([]);
+    writeUserContextMdForUserMock.mockReset().mockResolvedValue({
+      key: "tenants/acme/users/eric/USER.md",
+      written: true,
+    });
     classifyRetainErrorMock.mockReset().mockImplementation((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -359,9 +368,15 @@ describe("memory-retain handler", () => {
 
     expect(result.ok).toBe(true);
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(4);
+    expect(executeMock).toHaveBeenCalledTimes(5);
     expect(hasRawArrayQueryChunk(executeMock.mock.calls[1][0])).toBe(false);
     expect(hasRawArrayQueryChunk(executeMock.mock.calls[3][0])).toBe(false);
+    expect(writeUserContextMdForUserMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      TENANT_A,
+      USER_ID,
+      { overwrite: true },
+    );
     expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
       "attempt-1",
       expect.objectContaining({
@@ -416,7 +431,13 @@ describe("memory-retain handler", () => {
       attemptId: "attempt-1",
     });
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(4);
+    expect(executeMock).toHaveBeenCalledTimes(5);
+    expect(writeUserContextMdForUserMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      TENANT_A,
+      USER_ID,
+      { overwrite: true },
+    );
     expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
       BASE_ATTEMPT,
       expect.objectContaining({
@@ -466,7 +487,8 @@ describe("memory-retain handler", () => {
     });
 
     await vi.waitFor(() => {
-      expect(executeMock).toHaveBeenCalledTimes(4);
+      expect(executeMock).toHaveBeenCalledTimes(5);
+      expect(writeUserContextMdForUserMock).toHaveBeenCalledTimes(1);
       expect(retainConversationMock).toHaveBeenCalledTimes(1);
     });
     expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
@@ -518,6 +540,7 @@ describe("memory-retain handler", () => {
     );
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
     expect(executeMock).toHaveBeenCalledTimes(4);
+    expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
   });
 
   it("rejects unsafe fact candidates without writing supplemental memory", async () => {
@@ -568,6 +591,7 @@ describe("memory-retain handler", () => {
 
     expect(retainConversationMock).toHaveBeenCalledTimes(1);
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
+    expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/memory unit write failed/);
     expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();

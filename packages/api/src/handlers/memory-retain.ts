@@ -40,6 +40,7 @@ import {
   upsertRetainAttempt,
   type RetainAttemptRow,
 } from "../lib/memory/retain-attempts.js";
+import { writeUserContextMdForUser } from "../lib/user-context-md-writer.js";
 import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type RetainMessage = {
@@ -543,6 +544,13 @@ async function retainHighConfidenceFacts(input: {
           : {}),
       },
     });
+    if (fact.scope === "user") {
+      await projectHighConfidenceFactToUserContext({
+        tenantId: input.tenantId,
+        userId: input.userId,
+        fact,
+      });
+    }
     documents.push({
       factId: fact.id,
       documentId,
@@ -552,6 +560,59 @@ async function retainHighConfidenceFacts(input: {
   }
 
   return { documents, rejected: extracted.rejected };
+}
+
+async function projectHighConfidenceFactToUserContext(input: {
+  tenantId: string;
+  userId: string;
+  fact: ExtractedHighConfidenceFact;
+}): Promise<void> {
+  const field = profileFieldForHighConfidenceFact(input.fact);
+  if (!field) return;
+
+  const db = getDb();
+  const factLine = input.fact.text;
+  if (field === "family") {
+    await db.execute(sql`
+      INSERT INTO user_profiles (user_id, tenant_id, family, updated_at)
+      VALUES (${input.userId}::uuid, ${input.tenantId}::uuid, ${factLine}, now())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
+        family = CASE
+          WHEN COALESCE(user_profiles.family, '') LIKE ${`%${input.fact.text}%`} THEN user_profiles.family
+          WHEN COALESCE(user_profiles.family, '') = '' THEN EXCLUDED.family
+          ELSE user_profiles.family || E'\n' || EXCLUDED.family
+        END,
+        updated_at = now()
+    `);
+  } else {
+    await db.execute(sql`
+      INSERT INTO user_profiles (user_id, tenant_id, notes, updated_at)
+      VALUES (${input.userId}::uuid, ${input.tenantId}::uuid, ${factLine}, now())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        tenant_id = EXCLUDED.tenant_id,
+        notes = CASE
+          WHEN COALESCE(user_profiles.notes, '') LIKE ${`%${input.fact.text}%`} THEN user_profiles.notes
+          WHEN COALESCE(user_profiles.notes, '') = '' THEN EXCLUDED.notes
+          ELSE user_profiles.notes || E'\n' || EXCLUDED.notes
+        END,
+        updated_at = now()
+    `);
+  }
+
+  await writeUserContextMdForUser(db, input.tenantId, input.userId, {
+    overwrite: true,
+  });
+}
+
+function profileFieldForHighConfidenceFact(
+  fact: ExtractedHighConfidenceFact,
+): "family" | "notes" | null {
+  if (fact.kind === "pet" || fact.kind === "family") return "family";
+  if (fact.kind === "allergy" || fact.kind === "preference") return "notes";
+  return null;
 }
 
 async function persistHighConfidenceFactMemoryUnit(input: {
