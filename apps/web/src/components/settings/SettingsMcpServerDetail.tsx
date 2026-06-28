@@ -14,7 +14,6 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import {
-  buildMcpOAuthAuthorizeUrl,
   callRuntimeMcpTool,
   clearUserMcpToken,
   deleteMcpServer,
@@ -23,6 +22,7 @@ import {
   listMcpServers,
   listRuntimeMcpTools,
   listUserMcpServers,
+  resolveMcpOAuthAuthorizeUrl,
   saveMcpServiceCredential,
   setMcpServerEnabled,
   type McpServer,
@@ -58,6 +58,7 @@ export function SettingsMcpServerDetail() {
   const { user } = useAuth();
   const { tenant, tenantId, userId } = useTenant();
   const tenantSlug = tenant?.slug ?? null;
+  const oauthUserId = userId ?? user?.sub ?? null;
   const navigate = useNavigate();
 
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -91,8 +92,8 @@ export function SettingsMcpServerDetail() {
     setError(null);
     Promise.all([
       listMcpServers(tenantSlug),
-      tenantId && userId
-        ? listUserMcpServers(tenantId, userId)
+      tenantId && oauthUserId
+        ? listUserMcpServers(tenantId, oauthUserId)
         : Promise.resolve({ servers: [] }),
     ])
       .then(([tenantResult, userResult]) => {
@@ -102,7 +103,7 @@ export function SettingsMcpServerDetail() {
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load"),
       );
-  }, [tenantId, tenantSlug, userId]);
+  }, [oauthUserId, tenantId, tenantSlug]);
 
   useEffect(() => {
     load();
@@ -268,23 +269,33 @@ export function SettingsMcpServerDetail() {
     }
   }
 
-  function authenticate() {
+  async function authenticate() {
     if (!tenantId || !oauthUserId || !server) return;
     setPending(true);
-    setNotice(null);
-    const returnUrl = new URL(window.location.href);
-    returnUrl.searchParams.delete("mcpOAuth");
-    returnUrl.searchParams.delete("mcpServerId");
-    returnUrl.searchParams.delete("reason");
-    returnUrl.searchParams.delete("status");
-    const authorizeUrl = buildMcpOAuthAuthorizeUrl({
-      mcpServerId: server.id,
-      userId: oauthUserId,
-      tenantId,
-      returnTo: returnUrl.toString(),
-      force: true,
-    });
-    window.location.assign(authorizeUrl);
+    setError(null);
+    setNotice("Opening authorization...");
+    try {
+      const authorizeUrl = await resolveMcpOAuthAuthorizeUrl({
+        mcpServerId: server.id,
+        userId: oauthUserId,
+        tenantId,
+        returnTo: mcpOAuthReturnTo(),
+        force: true,
+      });
+      window.location.assign(authorizeUrl);
+      window.setTimeout(() => {
+        setPending(false);
+        setNotice(null);
+      }, 1500);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `Authentication failed to start: ${e.message}`
+          : "Authentication failed to start.",
+      );
+      setNotice(null);
+      setPending(false);
+    }
   }
 
   async function clearAuthentication() {
@@ -376,7 +387,6 @@ export function SettingsMcpServerDetail() {
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
   const managed = isPluginInstalledMcpServer(server);
-  const oauthUserId = userId ?? user?.sub ?? null;
   const authUnavailableReason = !tenantId
     ? "Tenant identity is still loading."
     : !oauthUserId
@@ -693,6 +703,16 @@ function runtimeToolMatchesServer(tool: RuntimeMcpTool, server: McpServer) {
   const runtimeServer = normalizeServerKey(tool.server);
   const runtimeNamePrefix = normalizeServerKey(tool.name.split("__")[0] ?? "");
   return candidates.has(runtimeServer) || candidates.has(runtimeNamePrefix);
+}
+
+function mcpOAuthReturnTo() {
+  if (typeof window === "undefined") return "/";
+  const returnUrl = new URL(window.location.href);
+  returnUrl.searchParams.delete("mcpOAuth");
+  returnUrl.searchParams.delete("mcpServerId");
+  returnUrl.searchParams.delete("reason");
+  returnUrl.searchParams.delete("status");
+  return returnUrl.toString();
 }
 
 function normalizeServerKey(value: string) {

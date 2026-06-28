@@ -14,6 +14,16 @@ const mocks = vi.hoisted(() => ({
   listUserMcpServers: vi.fn(),
   createMcpServer: vi.fn(),
   setMcpServerEnabled: vi.fn(),
+  tenantContext: {
+    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
+    tenantId: "tenant-1",
+    userId: "user-1" as string | null,
+  },
+  authUser: {
+    email: "operator@example.com",
+    sub: "cognito-sub-1",
+    groups: [],
+  } as { email: string; sub: string; groups: string[] } | null,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -24,12 +34,14 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: mocks.setHeader,
 }));
 
-vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({
-    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
-    tenantId: "tenant-1",
-    userId: "user-1",
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({
+    user: mocks.authUser,
   }),
+}));
+
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: () => mocks.tenantContext,
 }));
 
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
@@ -52,6 +64,16 @@ beforeEach(() => {
   mocks.listUserMcpServers.mockReset();
   mocks.createMcpServer.mockReset();
   mocks.setMcpServerEnabled.mockReset();
+  mocks.tenantContext = {
+    tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
+    tenantId: "tenant-1",
+    userId: "user-1",
+  };
+  mocks.authUser = {
+    email: "operator@example.com",
+    sub: "cognito-sub-1",
+    groups: [],
+  };
 });
 
 afterEach(cleanup);
@@ -189,6 +211,37 @@ describe("SettingsMcpServers", () => {
         authType: "none",
       });
     });
+  });
+
+  it("uses the Cognito subject fallback when loading per-user MCP status", async () => {
+    mocks.tenantContext.userId = null;
+    mocks.listMcpServers.mockResolvedValue({
+      servers: [
+        {
+          id: "dispatch",
+          name: "LastMile Dispatch",
+          slug: "lastmile-dispatch",
+          url: "https://mcp-dev.lastmile-tei.com/dispatch",
+          enabled: true,
+          authType: "oauth",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+      ],
+    });
+    mocks.listUserMcpServers.mockResolvedValue({
+      servers: [{ id: "dispatch", authStatus: "active" }],
+    });
+
+    render(<SettingsMcpServers />);
+
+    expect(await screen.findByText("LastMile Dispatch")).toBeTruthy();
+    expect(mocks.listUserMcpServers).toHaveBeenCalledWith(
+      "tenant-1",
+      "cognito-sub-1",
+    );
+    expect(screen.getByText("connected")).toBeTruthy();
   });
 });
 

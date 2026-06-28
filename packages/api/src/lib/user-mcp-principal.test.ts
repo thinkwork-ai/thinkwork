@@ -30,6 +30,17 @@ describe("resolveUserMcpPrincipal", () => {
     });
   });
 
+  it("normalizes the caller's Cognito principal to the resolved DB user", () => {
+    expect(
+      resolveUserMcpPrincipal(membership({}), {
+        "x-principal-id": "principal-1",
+      }),
+    ).toEqual({
+      ok: true,
+      userId: "user-1",
+    });
+  });
+
   it("rejects a member spoofing another user's principal id", () => {
     expect(
       resolveUserMcpPrincipal(membership({}), {
