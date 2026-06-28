@@ -21,16 +21,22 @@ interface FakeClient {
     schema: unknown,
     opts?: { timeout?: number },
   ) => Promise<unknown>;
+  readResource?: (
+    args: { uri: string },
+    opts?: { timeout?: number },
+  ) => Promise<unknown>;
 }
 
 function makeFakeClient(
   tools: FakeListing["tools"],
   callResponse?: unknown,
+  resourceResponse?: unknown,
 ): {
   client: FakeClient;
   connect: ReturnType<typeof vi.fn>;
   listTools: ReturnType<typeof vi.fn>;
   callTool: ReturnType<typeof vi.fn>;
+  readResource: ReturnType<typeof vi.fn>;
 } {
   const connect = vi.fn(async () => {});
   const listTools = vi.fn(async () => ({ tools }));
@@ -40,15 +46,18 @@ function makeFakeClient(
         content: [{ type: "text", text: "ok" }],
       },
   );
+  const readResource = vi.fn(async () => resourceResponse ?? { contents: [] });
   return {
     client: {
       connect: connect as unknown as FakeClient["connect"],
       listTools: listTools as unknown as FakeClient["listTools"],
       callTool: callTool as unknown as FakeClient["callTool"],
+      readResource: readResource as unknown as FakeClient["readResource"],
     },
     connect,
     listTools,
     callTool,
+    readResource,
   };
 }
 
@@ -298,6 +307,64 @@ describe("createConnectMcpServer", () => {
           mimeType: "text/html",
           html: expect.stringContaining("<main>map</main>"),
           title: "Dispatch Optimization App",
+          serverName: "lastmile-dispatch",
+          toolName: "dispatch_optimization_app",
+        },
+      ],
+    });
+  });
+
+  it("reads openai outputTemplate resources as app descriptors", async () => {
+    const fake = makeFakeClient(
+      [{ name: "dispatch_optimization_app" }],
+      {
+        _meta: {
+          "openai/outputTemplate": "ui://lastmile-dispatch/optimization-v2",
+          "ui/resourceUri": "ui://lastmile-dispatch/optimization-v2",
+          ui: { resourceUri: "ui://lastmile-dispatch/optimization-v2" },
+        },
+        content: [{ type: "text", text: "Dispatch optimization app" }],
+        structuredContent: {
+          state: "empty",
+          message: "Select optimization inputs to preview dispatch results.",
+        },
+      },
+      {
+        contents: [
+          {
+            uri: "ui://lastmile-dispatch/optimization-v2",
+            mimeType: "text/html;profile=mcp-app",
+            text: "<!doctype html><title>Dispatch Optimization</title><main>app</main>",
+          },
+        ],
+      },
+    );
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+      readResourceTimeoutMs: 4_000,
+    });
+    const [tool] = await factory({
+      url: "https://mcp-dev.lastmile-tei.com/dispatch",
+      headers: {},
+      serverName: "lastmile-dispatch",
+    });
+
+    const result = await tool!.execute("call-1", {});
+
+    expect(fake.readResource).toHaveBeenCalledTimes(1);
+    expect(fake.readResource).toHaveBeenCalledWith(
+      { uri: "ui://lastmile-dispatch/optimization-v2" },
+      { timeout: 4_000 },
+    );
+    expect(result.details).toMatchObject({
+      mcp_apps: [
+        {
+          uri: "ui://lastmile-dispatch/optimization-v2",
+          mimeType: "text/html",
+          html: expect.stringContaining("<main>app</main>"),
+          title: "Dispatch Optimization",
           serverName: "lastmile-dispatch",
           toolName: "dispatch_optimization_app",
         },
