@@ -155,7 +155,7 @@ const TOOLS = [
   {
     name: "open_engine_get_context",
     description:
-      "Fetch a compact agent context packet for a Work Item: summary, queue state, labels, document index, recent receipts, and thread pointers.",
+      "Fetch a compact agent context packet for a Work Item, including task Work Items and standing-context Work Items: summary, queue state, labels, document index, recent receipts, and thread pointers.",
     inputSchema: {
       type: "object",
       properties: {
@@ -256,7 +256,7 @@ const TOOLS = [
   {
     name: "open_engine_list_documents",
     description:
-      "List Work Item documents without loading all content. Use fetch only for the document needed.",
+      "List Work Item documents without loading all content. Use for task documents, standing context, routing maps, and optional skill directories; fetch only the documents needed.",
     inputSchema: {
       type: "object",
       properties: {
@@ -283,7 +283,7 @@ const TOOLS = [
   {
     name: "open_engine_fetch_document",
     description:
-      "Fetch a single text/markdown/json Work Item document. Binary documents return metadata with content null.",
+      "Fetch a single text/markdown/json Work Item document, including standing context, routing-map, and optional skill-directory resources. Binary documents return metadata with content null.",
     inputSchema: {
       type: "object",
       properties: {
@@ -362,7 +362,7 @@ const TOOLS = [
   {
     name: "open_engine_record_receipt",
     description:
-      "Write a durable OpenEngine receipt such as AGENT CLAIMED, AGENT DONE, AGENT BLOCKED, AGENT HUMAN HOLD, AGENT STATUS, or AGENT FOLLOW-UP.",
+      "Write a durable OpenEngine receipt such as AGENT CLAIMED, AGENT DONE, AGENT BLOCKED, AGENT HUMAN HOLD, AGENT STATUS, AGENT FOLLOW-UP, or optional skill receipts like skill_subscribed, skill_installed, skill_updated, and skill_declined.",
     inputSchema: {
       type: "object",
       properties: {
