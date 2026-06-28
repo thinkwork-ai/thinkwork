@@ -16,6 +16,7 @@ const { captures, mockDb, tables } = vi.hoisted(() => {
       "completed_by_agent_id",
       "open_engine_human_hold",
       "open_engine_human_hold_reason",
+      "open_engine_dependency_state",
       "open_engine_claimed_by_agent_id",
       "open_engine_claimed_at",
       "open_engine_claim_expires_at",
@@ -297,6 +298,39 @@ describe("Open Engine Work Item receipts", () => {
       metadata: {
         source: "open_engine",
         receiptType: "done",
+      },
+    });
+  });
+
+  it("moves applied review receipts out of the pickup pool and releases the claim", async () => {
+    captures.selectQueue.push([WORK_ITEM]);
+    captures.insertReturningQueue.push([{ id: "event-6" }]);
+
+    await recordOpenEngineReceipt({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      agentId: "agent-1",
+      receiptType: "applied",
+      message: "Ready for human review.",
+      now: NOW,
+    });
+
+    expect(captures.updateSet[0]).toEqual({
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "waiting",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      event_type: "agent_action",
+      message: "Ready for human review.",
+      metadata: {
+        source: "open_engine",
+        receiptType: "applied",
       },
     });
   });
