@@ -67,6 +67,7 @@ function buildAdapter(config: MemoryConfig): MemoryAdapter {
     }
     return new HindsightAdapter({
       endpoint: config.backends.hindsightEndpoint,
+      timeoutMs: parsePositiveInt(process.env.HINDSIGHT_TIMEOUT_MS),
     });
   }
   if (config.engine === "agentcore") {
@@ -89,6 +90,12 @@ function buildAdapter(config: MemoryConfig): MemoryAdapter {
     });
   }
   throw new Error(`Unknown MEMORY_ENGINE: ${String(config.engine)}`);
+}
+
+function parsePositiveInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 export * from "./types.js";

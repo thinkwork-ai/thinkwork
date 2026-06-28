@@ -15,7 +15,8 @@
  * runtime callers roll forward.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
@@ -482,9 +483,7 @@ async function retainHighConfidenceFacts(input: {
   if (extracted.facts.length === 0) {
     return { documents: [], rejected: extracted.rejected };
   }
-  if (!input.adapter.upsertMarkdownMemoryDocument) {
-    throw new Error("high_confidence_fact_upsert_not_supported");
-  }
+  const canUpsertDocument = Boolean(input.adapter.upsertMarkdownMemoryDocument);
 
   const documents: RetainedHighConfidenceFactDocument[] = [];
   for (const fact of extracted.facts) {
@@ -502,34 +501,68 @@ async function retainHighConfidenceFacts(input: {
             ownerId: input.userId,
           };
     const documentId = highConfidenceFactDocumentId(input.attempt.id, fact);
-    await input.adapter.upsertMarkdownMemoryDocument({
-      ...owner,
-      path: `memory/high-confidence-facts/${input.threadId}/${fact.id}.md`,
-      content: fact.text,
+    const path = `memory/high-confidence-facts/${input.threadId}/${fact.id}.md`;
+    const retainOptions = buildHighConfidenceFactRetainOptions({
+      scope: fact.scope,
+      spaceId: input.spaceId,
+      timestamp: fact.timestamp,
+    });
+    const metadata = {
+      source: "high_confidence_fact",
+      sourceContext: "thinkwork_high_confidence_fact",
+      retainAttemptId: input.attempt.id,
+      tenantId: input.tenantId,
+      userId: input.userId,
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      factId: fact.id,
+      factScope: fact.scope,
+      factKind: fact.kind,
+      confidence: fact.confidence,
+      sourceText: fact.sourceText,
+      sourceMessageIndex: fact.sourceMessageIndex,
+    };
+    await persistHighConfidenceFactMemoryUnit({
+      bankId:
+        fact.scope === "space"
+          ? `space_${input.spaceId!}`
+          : `user_${input.userId}`,
       documentId,
-      context: "thinkwork_high_confidence_fact",
-      async: false,
-      hindsight: buildHighConfidenceFactRetainOptions({
-        scope: fact.scope,
-        spaceId: input.spaceId,
-        timestamp: fact.timestamp,
-      }),
-      metadata: {
-        source: "high_confidence_fact",
-        sourceContext: "thinkwork_high_confidence_fact",
-        retainAttemptId: input.attempt.id,
-        tenantId: input.tenantId,
-        userId: input.userId,
-        spaceId: input.spaceId,
-        threadId: input.threadId,
-        factId: fact.id,
-        factScope: fact.scope,
-        factKind: fact.kind,
-        confidence: fact.confidence,
-        sourceText: fact.sourceText,
-        sourceMessageIndex: fact.sourceMessageIndex,
+      content: fact.text,
+      path,
+      metadata,
+      eventDate: fact.timestamp,
+      tags: retainOptions.tags || [],
+      retainParams: {
+        context: "thinkwork_high_confidence_fact",
+        metadata: {
+          ...metadata,
+          ownerType: owner.ownerType,
+          path,
+        },
+        ...(retainOptions.timestamp
+          ? { event_date: retainOptions.timestamp }
+          : {}),
       },
     });
+    if (canUpsertDocument) {
+      try {
+        await input.adapter.upsertMarkdownMemoryDocument!({
+          ...owner,
+          path,
+          content: fact.text,
+          documentId,
+          context: "thinkwork_high_confidence_fact",
+          async: false,
+          hindsight: retainOptions,
+          metadata,
+        });
+      } catch (err) {
+        console.warn(
+          `[memory-retain] high-confidence Hindsight document upsert failed after deterministic memory_units write: ${(err as Error)?.message || String(err)}`,
+        );
+      }
+    }
     documents.push({
       factId: fact.id,
       documentId,
@@ -539,6 +572,86 @@ async function retainHighConfidenceFacts(input: {
   }
 
   return { documents, rejected: extracted.rejected };
+}
+
+async function persistHighConfidenceFactMemoryUnit(input: {
+  bankId: string;
+  documentId: string;
+  content: string;
+  path: string;
+  metadata: Record<string, unknown>;
+  eventDate?: string;
+  tags: string[];
+  retainParams: Record<string, unknown>;
+}): Promise<void> {
+  const db = getDb();
+  const now = new Date();
+  const contentHash = createHash("sha256").update(input.content).digest("hex");
+  await db.execute(sql`
+    INSERT INTO hindsight.banks (bank_id, name, updated_at)
+    VALUES (${input.bankId}, ${input.bankId}, ${now})
+    ON CONFLICT (bank_id)
+    DO UPDATE SET updated_at = EXCLUDED.updated_at
+  `);
+  await db.execute(sql`
+    INSERT INTO hindsight.documents (
+      id,
+      bank_id,
+      original_text,
+      content_hash,
+      retain_params,
+      tags,
+      updated_at
+    )
+    VALUES (
+      ${input.documentId},
+      ${input.bankId},
+      ${input.content},
+      ${contentHash},
+      ${JSON.stringify(input.retainParams)}::jsonb,
+      ${input.tags}::varchar[],
+      ${now}
+    )
+    ON CONFLICT (id, bank_id)
+    DO UPDATE SET
+      original_text = EXCLUDED.original_text,
+      content_hash = EXCLUDED.content_hash,
+      retain_params = EXCLUDED.retain_params,
+      tags = EXCLUDED.tags,
+      updated_at = EXCLUDED.updated_at
+  `);
+  await db.execute(sql`
+    DELETE FROM hindsight.memory_units
+    WHERE bank_id = ${input.bankId}
+      AND document_id = ${input.documentId}
+      AND context = 'thinkwork_high_confidence_fact'
+  `);
+  await db.execute(sql`
+    INSERT INTO hindsight.memory_units (
+      bank_id,
+      document_id,
+      text,
+      context,
+      fact_type,
+      event_date,
+      mentioned_at,
+      metadata,
+      tags,
+      updated_at
+    )
+    VALUES (
+      ${input.bankId},
+      ${input.documentId},
+      ${input.content},
+      'thinkwork_high_confidence_fact',
+      'observation',
+      ${input.eventDate ? new Date(input.eventDate) : now},
+      ${input.eventDate ? new Date(input.eventDate) : now},
+      ${JSON.stringify(input.metadata)}::jsonb,
+      ${input.tags}::varchar[],
+      ${now}
+    )
+  `);
 }
 
 function highConfidenceFactDocumentId(

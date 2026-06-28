@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const selectMock = vi.hoisted(() => vi.fn());
+const executeMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
     select: selectMock,
+    execute: executeMock,
   }),
 }));
 
@@ -230,6 +232,7 @@ describe("mergeTranscriptSuffix", () => {
 describe("memory-retain handler", () => {
   beforeEach(() => {
     selectMock.mockReset();
+    executeMock.mockReset().mockResolvedValue({ rows: [] });
     retainConversationMock.mockReset();
     retainTurnMock.mockReset();
     retainDailyMemoryMock.mockReset();
@@ -370,6 +373,7 @@ describe("memory-retain handler", () => {
         }),
       }),
     );
+    expect(executeMock).toHaveBeenCalledTimes(4);
     expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
       "attempt-1",
       expect.objectContaining({
@@ -437,6 +441,7 @@ describe("memory-retain handler", () => {
         }),
       }),
     );
+    expect(executeMock).toHaveBeenCalledTimes(4);
     expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
       BASE_ATTEMPT,
       expect.objectContaining({
@@ -590,12 +595,10 @@ describe("memory-retain handler", () => {
     );
   });
 
-  it("keeps the attempt retryable when a required fact write fails after conversation retain", async () => {
+  it("keeps the attempt retryable when the deterministic fact row write fails after conversation retain", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
-    upsertMarkdownMemoryDocumentMock.mockRejectedValueOnce(
-      new Error("hindsight fact 503"),
-    );
+    executeMock.mockRejectedValueOnce(new Error("memory unit write failed"));
 
     const result = await handler({
       tenantId: TENANT_A,
@@ -605,9 +608,9 @@ describe("memory-retain handler", () => {
     });
 
     expect(retainConversationMock).toHaveBeenCalledTimes(1);
-    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledTimes(1);
+    expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/hindsight fact 503/);
+    expect(result.error).toMatch(/memory unit write failed/);
     expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
     expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
       BASE_ATTEMPT,
