@@ -17,6 +17,7 @@ import { updateWorkItemStatus } from "./updateWorkItemStatus.mutation.js";
 import { claimNextOpenEngineWorkItem } from "./claimNextOpenEngineWorkItem.mutation.js";
 import { recordOpenEngineWorkItemReceipt } from "./recordOpenEngineWorkItemReceipt.mutation.js";
 import { recordOpenEngineHumanAction } from "./recordOpenEngineHumanAction.mutation.js";
+import { routeOpenEngineWorkItem } from "./routeOpenEngineWorkItem.mutation.js";
 import { saveWorkItemStatuses } from "./saveWorkItemStatuses.mutation.js";
 import { saveWorkItemView } from "./saveWorkItemView.mutation.js";
 import { deleteWorkItemView } from "./deleteWorkItemView.mutation.js";
@@ -44,6 +45,7 @@ export const workItemMutations = {
   claimNextOpenEngineWorkItem,
   recordOpenEngineWorkItemReceipt,
   recordOpenEngineHumanAction,
+  routeOpenEngineWorkItem,
   saveWorkItemStatuses,
   saveWorkItemView,
   deleteWorkItemView,

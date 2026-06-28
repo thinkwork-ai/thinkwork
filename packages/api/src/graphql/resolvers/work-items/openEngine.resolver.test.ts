@@ -5,13 +5,17 @@ const {
   mockListEligibleOpenEngineWorkItems,
   mockRecordOpenEngineReceipt,
   mockRequireAdminOrServiceCaller,
+  mockResolveCallerUserId,
   mockResolveWorkItemTenant,
+  mockRouteOpenEngineWorkItem,
 } = vi.hoisted(() => ({
   mockClaimNextOpenEngineWorkItem: vi.fn(),
   mockListEligibleOpenEngineWorkItems: vi.fn(),
   mockRecordOpenEngineReceipt: vi.fn(),
   mockRequireAdminOrServiceCaller: vi.fn(),
+  mockResolveCallerUserId: vi.fn(async () => "user-1"),
   mockResolveWorkItemTenant: vi.fn(async () => "tenant-1"),
+  mockRouteOpenEngineWorkItem: vi.fn(),
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -25,15 +29,27 @@ vi.mock("../../../lib/work-items/auth.js", () => ({
 vi.mock("../../../lib/work-items/open-engine-queue-service.js", () => ({
   claimNextOpenEngineWorkItem: mockClaimNextOpenEngineWorkItem,
   listEligibleOpenEngineWorkItems: mockListEligibleOpenEngineWorkItems,
+  normalizeOpenEngineQueueKey: (value: unknown) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || null,
+  routeOpenEngineWorkItem: mockRouteOpenEngineWorkItem,
 }));
 
 vi.mock("../../../lib/work-items/open-engine-receipt-service.js", () => ({
   recordOpenEngineReceipt: mockRecordOpenEngineReceipt,
 }));
 
+vi.mock("../core/resolve-auth-user.js", () => ({
+  resolveCallerUserId: mockResolveCallerUserId,
+}));
+
 import { claimNextOpenEngineWorkItem } from "./claimNextOpenEngineWorkItem.mutation.js";
 import { openEngineEligibleWorkItems } from "./openEngineEligibleWorkItems.query.js";
 import { recordOpenEngineWorkItemReceipt } from "./recordOpenEngineWorkItemReceipt.mutation.js";
+import { routeOpenEngineWorkItem } from "./routeOpenEngineWorkItem.mutation.js";
 
 const ctx = { auth: { authType: "service", tenantId: "tenant-1" } } as any;
 
@@ -42,7 +58,9 @@ beforeEach(() => {
   mockListEligibleOpenEngineWorkItems.mockReset();
   mockRecordOpenEngineReceipt.mockReset();
   mockRequireAdminOrServiceCaller.mockReset().mockResolvedValue(undefined);
+  mockResolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mockResolveWorkItemTenant.mockReset().mockResolvedValue("tenant-1");
+  mockRouteOpenEngineWorkItem.mockReset();
 });
 
 describe("Open Engine Work Item resolvers", () => {
@@ -61,6 +79,8 @@ describe("Open Engine Work Item resolvers", () => {
         input: {
           tenantId: "tenant-1",
           queueKey: "default",
+          ownerAgentId: "owner-agent-1",
+          labelSlugs: ["codex"],
           now: "2026-06-27T13:00:00.000Z",
           limit: 10,
         },
@@ -77,6 +97,11 @@ describe("Open Engine Work Item resolvers", () => {
     expect(mockListEligibleOpenEngineWorkItems).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       queueKey: "default",
+      spaceId: null,
+      statusId: null,
+      labelSlugs: ["codex"],
+      ownerUserId: null,
+      ownerAgentId: "owner-agent-1",
       now: new Date("2026-06-27T13:00:00.000Z"),
       limit: 10,
     });
@@ -102,6 +127,11 @@ describe("Open Engine Work Item resolvers", () => {
         input: {
           tenantId: "tenant-1",
           queueKey: "default",
+          spaceId: "space-1",
+          statusId: "status-1",
+          labelSlugs: ["codex"],
+          ownerUserId: "user-owner",
+          ownerAgentId: "owner-agent-1",
           agentId: "agent-1",
           now: "2026-06-27T13:00:00.000Z",
           leaseSeconds: 120,
@@ -118,6 +148,11 @@ describe("Open Engine Work Item resolvers", () => {
     expect(mockClaimNextOpenEngineWorkItem).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       queueKey: "default",
+      spaceId: "space-1",
+      statusId: "status-1",
+      labelSlugs: ["codex"],
+      ownerUserId: "user-owner",
+      ownerAgentId: "owner-agent-1",
       agentId: "agent-1",
       now: new Date("2026-06-27T13:00:00.000Z"),
       leaseSeconds: 120,
@@ -189,6 +224,59 @@ describe("Open Engine Work Item resolvers", () => {
     expect(result).toEqual({
       id: "event-1",
       eventType: "AGENT_ACTION",
+    });
+  });
+
+  it("routes a Work Item through the Open Engine queue service", async () => {
+    mockRouteOpenEngineWorkItem.mockResolvedValue({
+      workItem: { id: "work-item-1" },
+      event: {
+        id: "event-1",
+        event_type: "assigned",
+        message: "Hand off to Codex.",
+      },
+    });
+
+    const result = await routeOpenEngineWorkItem(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          targetQueueKey: "Codex",
+          targetOwnerUserId: "user-2",
+          agentId: "agent-router",
+          message: "Hand off to Codex.",
+          metadata: JSON.stringify({ reason: "needs-codex" }),
+          idempotencyKey: "route-key-1",
+          now: "2026-06-27T13:00:00.000Z",
+        },
+      },
+      { auth: { authType: "cognito", tenantId: "tenant-1" } } as any,
+    );
+
+    expect(mockRequireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+      "open_engine_work_items:route",
+    );
+    expect(mockRouteOpenEngineWorkItem).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      targetQueueKey: "codex",
+      targetOwnerUserId: "user-2",
+      targetOwnerAgentId: undefined,
+      actorUserId: "user-1",
+      actorAgentId: "agent-router",
+      message: "Hand off to Codex.",
+      metadata: { reason: "needs-codex" },
+      idempotencyKey: "route-key-1",
+      now: new Date("2026-06-27T13:00:00.000Z"),
+    });
+    expect(result).toEqual({
+      id: "event-1",
+      eventType: "ASSIGNED",
+      message: "Hand off to Codex.",
     });
   });
 

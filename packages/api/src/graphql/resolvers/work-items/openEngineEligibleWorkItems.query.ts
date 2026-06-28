@@ -19,6 +19,11 @@ export async function openEngineEligibleWorkItems(
   const rows = await listEligibleOpenEngineWorkItems({
     tenantId,
     queueKey: input.queueKey ?? null,
+    spaceId: input.spaceId ?? null,
+    statusId: input.statusId ?? null,
+    labelSlugs: Array.isArray(input.labelSlugs) ? input.labelSlugs : null,
+    ownerUserId: input.ownerUserId ?? null,
+    ownerAgentId: input.ownerAgentId ?? null,
     now: input.now ? new Date(input.now) : undefined,
     limit: input.limit,
   });
