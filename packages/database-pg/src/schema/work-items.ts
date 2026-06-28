@@ -51,6 +51,7 @@ export const WORK_ITEM_EVENT_TYPES = [
   "applicability_changed",
   "linked_thread",
   "agent_action",
+  "comment_added",
 ] as const;
 
 export const WORK_ITEM_VIEW_TYPES = ["list", "board"] as const;
@@ -506,7 +507,55 @@ export const workItemEvents = pgTable(
     index("idx_work_item_events_thread").on(table.tenant_id, table.thread_id),
     check(
       "work_item_events_type_allowed",
-      sql`${table.event_type} IN ('created','updated','status_changed','completed','blocked','unblocked','assigned','due_date_changed','applicability_changed','linked_thread','agent_action')`,
+      sql`${table.event_type} IN ('created','updated','status_changed','completed','blocked','unblocked','assigned','due_date_changed','applicability_changed','linked_thread','agent_action','comment_added')`,
+    ),
+  ],
+);
+
+export const workItemComments = pgTable(
+  "work_item_comments",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    space_id: uuid("space_id")
+      .references(() => spaces.id, { onDelete: "cascade" })
+      .notNull(),
+    work_item_id: uuid("work_item_id")
+      .references(() => workItems.id, { onDelete: "cascade" })
+      .notNull(),
+    thread_id: uuid("thread_id").references(() => threads.id, {
+      onDelete: "set null",
+    }),
+    author_user_id: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    author_agent_id: uuid("author_agent_id").references(() => agents.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    metadata: jsonb("metadata"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    archived_at: timestamp("archived_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_work_item_comments_item_created").on(
+      table.tenant_id,
+      table.work_item_id,
+      table.created_at,
+    ),
+    index("idx_work_item_comments_thread").on(table.tenant_id, table.thread_id),
+    check(
+      "work_item_comments_author_required",
+      sql`${table.author_user_id} IS NOT NULL OR ${table.author_agent_id} IS NOT NULL`,
     ),
   ],
 );
@@ -656,6 +705,7 @@ export const workItemsRelations = relations(workItems, ({ one, many }) => ({
   externalRefs: many(workItemExternalRefs),
   labelAssignments: many(workItemLabelAssignments),
   documents: many(workItemDocuments),
+  comments: many(workItemComments),
 }));
 
 export const workItemLabelsRelations = relations(
@@ -712,6 +762,36 @@ export const workItemDocumentsRelations = relations(
     }),
     createdByAgent: one(agents, {
       fields: [workItemDocuments.created_by_agent_id],
+      references: [agents.id],
+    }),
+  }),
+);
+
+export const workItemCommentsRelations = relations(
+  workItemComments,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [workItemComments.tenant_id],
+      references: [tenants.id],
+    }),
+    space: one(spaces, {
+      fields: [workItemComments.space_id],
+      references: [spaces.id],
+    }),
+    workItem: one(workItems, {
+      fields: [workItemComments.work_item_id],
+      references: [workItems.id],
+    }),
+    thread: one(threads, {
+      fields: [workItemComments.thread_id],
+      references: [threads.id],
+    }),
+    authorUser: one(users, {
+      fields: [workItemComments.author_user_id],
+      references: [users.id],
+    }),
+    authorAgent: one(agents, {
+      fields: [workItemComments.author_agent_id],
       references: [agents.id],
     }),
   }),

@@ -32,6 +32,16 @@ const { captures, mockDb, tables } = vi.hoisted(() => {
       "message",
       "metadata",
     ]),
+    workItemComments: table("work_item_comments", [
+      "tenant_id",
+      "space_id",
+      "work_item_id",
+      "thread_id",
+      "author_agent_id",
+      "body",
+      "metadata",
+      "updated_at",
+    ]),
   };
 
   const captures = {
@@ -107,6 +117,7 @@ vi.mock("../../graphql/utils.js", () => ({
     ),
   })),
   workItemEvents: tables.workItemEvents,
+  workItemComments: tables.workItemComments,
   workItems: tables.workItems,
 }));
 
@@ -170,6 +181,21 @@ describe("Open Engine Work Item receipts", () => {
         evidence: { questionId: "q-1" },
         attempt: 2,
       },
+    });
+    expect(captures.insertValues[1]).toEqual({
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      work_item_id: "work-item-1",
+      thread_id: "thread-1",
+      author_agent_id: "agent-1",
+      body: "Need the customer EIN.",
+      metadata: {
+        source: "open_engine_receipt",
+        receiptId: "event-1",
+        receiptType: "blocked",
+        evidence: { questionId: "q-1" },
+      },
+      updated_at: NOW,
     });
   });
 

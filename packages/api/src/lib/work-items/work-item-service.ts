@@ -22,6 +22,7 @@ import {
   sql,
   spaceMembers,
   spaces,
+  workItemComments,
   workItemDocuments,
   workItemEvents,
   workItemLabelAssignments,
@@ -491,6 +492,29 @@ export async function listWorkItemDocuments(
   return Promise.all(rows.map((row) => hydrateWorkItemDocumentContent(row)));
 }
 
+export async function listWorkItemComments(
+  ctx: GraphQLContext,
+  input: Record<string, any> = {},
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
+
+  const conditions: any[] = [
+    eq(workItemComments.tenant_id, tenantId),
+    eq(workItemComments.work_item_id, input.workItemId),
+  ];
+  if (!input.includeArchived) {
+    conditions.push(isNull(workItemComments.archived_at));
+  }
+
+  return db
+    .select()
+    .from(workItemComments)
+    .where(and(...conditions))
+    .orderBy(desc(workItemComments.created_at))
+    .limit(clampLimit(input.limit));
+}
+
 export async function getWorkItemDocument(
   ctx: GraphQLContext,
   input: { tenantId?: string | null; id: string },
@@ -508,6 +532,59 @@ export async function getWorkItemDocument(
   if (!document) return null;
   await loadAuthorizedWorkItem(ctx, tenantId, document.work_item_id);
   return hydrateWorkItemDocumentContent(document);
+}
+
+export async function createWorkItemComment(
+  ctx: GraphQLContext,
+  input: Record<string, any>,
+) {
+  const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
+  const item = await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
+  const callerUserId =
+    (await resolveCallerUserId(ctx).catch(() => null)) ??
+    optionalTrim(input.authorUserId);
+  const authorAgentId = optionalTrim(input.authorAgentId);
+  if (!callerUserId && !authorAgentId) {
+    throw new GraphQLError("Work Item comments require a user or agent author", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  const body = requireNonEmpty(input.body, "body");
+  const now = new Date();
+
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(workItemComments)
+      .values({
+        tenant_id: tenantId,
+        space_id: item.space_id,
+        work_item_id: item.id,
+        thread_id: input.threadId ?? null,
+        author_user_id: callerUserId,
+        author_agent_id: authorAgentId ?? null,
+        body,
+        metadata: parseAwsJsonObject(input.metadata),
+        updated_at: now,
+      })
+      .returning();
+
+    await tx.insert(workItemEvents).values({
+      tenant_id: tenantId,
+      space_id: item.space_id,
+      work_item_id: item.id,
+      thread_id: input.threadId ?? null,
+      actor_user_id: callerUserId,
+      actor_agent_id: authorAgentId ?? null,
+      event_type: "comment_added",
+      message: "Comment added.",
+      metadata: compactObject({
+        source: input.source ?? "graphql",
+        commentId: created.id,
+      }),
+    });
+
+    return created;
+  });
 }
 
 export async function createWorkItemDocument(

@@ -1574,6 +1574,14 @@ export type CreateWebhookInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type CreateWorkItemCommentInput = {
+  body: Scalars['String']['input'];
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+  workItemId: Scalars['ID']['input'];
+};
+
 export type CreateWorkItemDocumentInput = {
   content?: InputMaybe<Scalars['String']['input']>;
   contentBase64?: InputMaybe<Scalars['String']['input']>;
@@ -3523,6 +3531,7 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   createWorkItem: WorkItem;
+  createWorkItemComment: WorkItemComment;
   createWorkItemDocument: WorkItemDocument;
   createWorkItemLabel: WorkItemLabel;
   /**
@@ -4118,6 +4127,11 @@ export type MutationCreateWebhookArgs = {
 
 export type MutationCreateWorkItemArgs = {
   input: CreateWorkItemInput;
+};
+
+
+export type MutationCreateWorkItemCommentArgs = {
+  input: CreateWorkItemCommentInput;
 };
 
 
@@ -6256,6 +6270,7 @@ export type Query = {
    */
   wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
+  workItemComments: Array<WorkItemComment>;
   workItemDocument?: Maybe<WorkItemDocument>;
   workItemDocuments: Array<WorkItemDocument>;
   workItemLabels: Array<WorkItemLabel>;
@@ -7284,6 +7299,11 @@ export type QueryWikiSearchArgs = {
 export type QueryWorkItemArgs = {
   id: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryWorkItemCommentsArgs = {
+  input: WorkItemCommentsInput;
 };
 
 
@@ -9851,6 +9871,7 @@ export type UpdateWorkItemInput = {
   labelSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   notes?: InputMaybe<Scalars['String']['input']>;
+  openEngineQueueKey?: InputMaybe<Scalars['String']['input']>;
   ownerAgentId?: InputMaybe<Scalars['ID']['input']>;
   ownerUserId?: InputMaybe<Scalars['ID']['input']>;
   priority?: InputMaybe<WorkItemPriority>;
@@ -10319,6 +10340,7 @@ export type WorkItem = {
   applicable: Scalars['Boolean']['output'];
   archivedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   blocked: Scalars['Boolean']['output'];
+  comments: Array<WorkItemComment>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   completedByAgentId?: Maybe<Scalars['ID']['output']>;
   completedByUserId?: Maybe<Scalars['ID']['output']>;
@@ -10355,6 +10377,29 @@ export type WorkItem = {
   threadLinks: Array<WorkItemThreadLink>;
   title: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type WorkItemComment = {
+  __typename?: 'WorkItemComment';
+  archivedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  authorAgentId?: Maybe<Scalars['ID']['output']>;
+  authorUserId?: Maybe<Scalars['ID']['output']>;
+  body: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workItemId: Scalars['ID']['output'];
+};
+
+export type WorkItemCommentsInput = {
+  includeArchived?: InputMaybe<Scalars['Boolean']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  workItemId: Scalars['ID']['input'];
 };
 
 export type WorkItemDocument = {
@@ -10422,6 +10467,7 @@ export enum WorkItemEventType {
   ApplicabilityChanged = 'APPLICABILITY_CHANGED',
   Assigned = 'ASSIGNED',
   Blocked = 'BLOCKED',
+  CommentAdded = 'COMMENT_ADDED',
   Completed = 'COMPLETED',
   Created = 'CREATED',
   DueDateChanged = 'DUE_DATE_CHANGED',

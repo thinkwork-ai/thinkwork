@@ -23,9 +23,11 @@ import {
 } from "../graphql/utils.js";
 import {
   createWorkItem,
+  createWorkItemComment,
   createWorkItemDocument,
   getWorkItem,
   getWorkItemDocument,
+  listWorkItemComments,
   listWorkItemDocuments,
   listWorkItems,
   updateWorkItem,
@@ -322,6 +324,42 @@ const TOOLS = [
     },
   },
   {
+    name: "open_engine_list_comments",
+    description:
+      "List first-class Work Item comments for the issue timeline. Use this for human/agent discussion, not status receipts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workItemId: { type: "string" },
+        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+        includeArchived: { type: "boolean" },
+      },
+      required: ["workItemId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "open_engine_create_comment",
+    description:
+      "Add a first-class Work Item timeline comment from an agent or authenticated user.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workItemId: { type: "string" },
+        agentId: {
+          type: "string",
+          description:
+            "Agent author identity. Defaults to authenticated agent when present.",
+        },
+        threadId: { type: "string" },
+        body: { type: "string" },
+        metadata: { type: "object" },
+      },
+      required: ["workItemId", "body"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "open_engine_record_receipt",
     description:
       "Write a durable OpenEngine receipt such as AGENT CLAIMED, AGENT DONE, AGENT BLOCKED, AGENT HUMAN HOLD, AGENT STATUS, or AGENT FOLLOW-UP.",
@@ -578,6 +616,12 @@ async function handleToolCall(
         break;
       case "open_engine_update_document":
         result = await updateDocumentTool(ctx, caller, args);
+        break;
+      case "open_engine_list_comments":
+        result = await listCommentsTool(ctx, caller, args);
+        break;
+      case "open_engine_create_comment":
+        result = await createCommentTool(ctx, caller, args);
         break;
       case "open_engine_record_receipt":
         result = await recordReceiptTool(caller, args);
@@ -918,6 +962,46 @@ async function updateDocumentTool(
   return { ok: true, document: formatDocument(updated) };
 }
 
+async function listCommentsTool(
+  ctx: GraphQLContext,
+  caller: McpCaller,
+  args: Record<string, unknown>,
+) {
+  const comments = await listWorkItemComments(ctx, {
+    tenantId: caller.tenantId,
+    workItemId: requiredStringArg(args.workItemId, "workItemId"),
+    includeArchived: booleanArg(args.includeArchived) === true,
+    limit: limitArg(args.limit),
+  });
+  return {
+    ok: true,
+    comments: comments.map(formatComment),
+  };
+}
+
+async function createCommentTool(
+  ctx: GraphQLContext,
+  caller: McpCaller,
+  args: Record<string, unknown>,
+) {
+  const agentId =
+    (await optionalResolvedAgentId(caller, args.agentId)) ?? caller.agentId;
+  const created = await createWorkItemComment(ctx, {
+    tenantId: caller.tenantId,
+    workItemId: requiredStringArg(args.workItemId, "workItemId"),
+    threadId: stringArg(args.threadId),
+    authorUserId: agentId ? undefined : caller.userId,
+    authorAgentId: agentId,
+    body: requiredStringArg(args.body, "body"),
+    metadata: {
+      sourceTool: "open_engine_create_comment",
+      ...(optionalRecordArg(args.metadata) ?? {}),
+    },
+    source: "open_engine_mcp",
+  });
+  return { ok: true, comment: formatComment(created) };
+}
+
 async function recordReceiptTool(
   caller: McpCaller,
   args: Record<string, unknown>,
@@ -1066,12 +1150,18 @@ async function buildContextPacket(
     id: workItemId,
   });
   if (!workItem) return { ok: false, error: "work_item_not_found" };
-  const [labels, documents, receipts] = await Promise.all([
+  const [labels, documents, comments, receipts] = await Promise.all([
     loadLabels(caller.tenantId, workItemId),
     listWorkItemDocuments(ctx, {
       tenantId: caller.tenantId,
       workItemId,
       includeContent: false,
+      limit: MAX_LIMIT,
+    }),
+    listWorkItemComments(ctx, {
+      tenantId: caller.tenantId,
+      workItemId,
+      includeArchived: false,
       limit: MAX_LIMIT,
     }),
     loadReceipts(caller.tenantId, workItemId, receiptLimit ?? DEFAULT_LIMIT),
@@ -1094,10 +1184,13 @@ async function buildContextPacket(
     },
     labels,
     documents: documents.map(formatDocumentPointer),
+    comments: comments.map(formatComment),
     receipts: receipts.map(formatEvent),
     progressiveFetch: {
       listDocumentsTool: "open_engine_list_documents",
       fetchDocumentTool: "open_engine_fetch_document",
+      listCommentsTool: "open_engine_list_comments",
+      createCommentTool: "open_engine_create_comment",
     },
   };
 }
@@ -1306,6 +1399,21 @@ function formatEvent(row: Record<string, any>) {
   };
 }
 
+function formatComment(row: Record<string, any>) {
+  return {
+    id: row.id,
+    workItemId: row.work_item_id,
+    threadId: row.thread_id ?? null,
+    authorUserId: row.author_user_id ?? null,
+    authorAgentId: row.author_agent_id ?? null,
+    body: row.body,
+    metadata: row.metadata ?? null,
+    archivedAt: iso(row.archived_at),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
 function formatAgentIdentity(row: Record<string, any>) {
   return {
     id: row.id,
@@ -1454,6 +1562,7 @@ function summarizeToolResult(result: Record<string, unknown>) {
   const claimed = isRecord(result.claimed) ? result.claimed : null;
   const workItems = Array.isArray(result.workItems) ? result.workItems : null;
   const documents = Array.isArray(result.documents) ? result.documents : null;
+  const comments = Array.isArray(result.comments) ? result.comments : null;
   const snapshot = isRecord(result.snapshot) ? result.snapshot : null;
   return {
     ok: result.ok,
@@ -1465,8 +1574,10 @@ function summarizeToolResult(result: Record<string, unknown>) {
     claimedWorkItemId: stringFromRecord(claimed, "id"),
     receiptId: stringFromRecord(result.receipt, "id"),
     documentId: stringFromRecord(result.document, "id"),
+    commentId: stringFromRecord(result.comment, "id"),
     workItemCount: workItems?.length,
     documentCount: documents?.length,
+    commentCount: comments?.length,
     queueCounts: snapshot?.counts,
     error: typeof result.error === "string" ? result.error : undefined,
   };

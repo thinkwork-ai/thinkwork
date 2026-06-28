@@ -18,6 +18,7 @@ import {
   WORK_ITEM_VIEW_TYPES,
   workItemEvents,
   workItemExternalRefs,
+  workItemComments,
   workItemDocuments,
   workItemLabelAssignments,
   workItemLabels,
@@ -42,6 +43,10 @@ const migration0192 = readFileSync(
 );
 const migration0193 = readFileSync(
   join(HERE, "..", "drizzle", "0193_work_item_documents.sql"),
+  "utf-8",
+);
+const migration0194 = readFileSync(
+  join(HERE, "..", "drizzle", "0194_work_item_comments.sql"),
   "utf-8",
 );
 
@@ -109,6 +114,17 @@ describe("Work Items schema", () => {
     expect(getTableColumns(workItemExternalRefs).external_id.notNull).toBe(
       true,
     );
+
+    const commentColumns = getTableColumns(workItemComments);
+    expect(getTableName(workItemComments)).toBe("work_item_comments");
+    expect(commentColumns.tenant_id.notNull).toBe(true);
+    expect(commentColumns.space_id.notNull).toBe(true);
+    expect(commentColumns.work_item_id.notNull).toBe(true);
+    expect(commentColumns.thread_id.notNull).toBe(false);
+    expect(commentColumns.author_user_id.notNull).toBe(false);
+    expect(commentColumns.author_agent_id.notNull).toBe(false);
+    expect(commentColumns.body.notNull).toBe(true);
+    expect(commentColumns.archived_at.notNull).toBe(false);
   });
 
   it("models tenant-scoped Work Item labels and assignments", () => {
@@ -155,6 +171,7 @@ describe("Work Items schema", () => {
     ]);
     expect(WORK_ITEM_PRIORITIES).toEqual(["low", "normal", "high", "urgent"]);
     expect(WORK_ITEM_EVENT_TYPES).toContain("agent_action");
+    expect(WORK_ITEM_EVENT_TYPES).toContain("comment_added");
     expect(WORK_ITEM_VIEW_TYPES).toEqual(["list", "board"]);
     expect(WORK_ITEM_THREAD_RELATIONSHIPS).toContain("evidence");
     expect(WORK_ITEM_EXTERNAL_REF_PROVIDERS).toContain("plane");
@@ -190,6 +207,7 @@ describe("Work Items schema", () => {
       ...getTableConfig(workItemStatuses).checks,
       ...getTableConfig(workItems).checks,
       ...getTableConfig(workItemDocuments).checks,
+      ...getTableConfig(workItemComments).checks,
       ...getTableConfig(workItemThreadLinks).checks,
       ...getTableConfig(workItemEvents).checks,
       ...getTableConfig(workItemSavedViews).checks,
@@ -207,6 +225,7 @@ describe("Work Items schema", () => {
         "work_item_external_refs_provider_allowed",
         "work_items_open_engine_dependency_state_allowed",
         "work_item_documents_kind_allowed",
+        "work_item_comments_author_required",
       ]),
     );
 
@@ -224,6 +243,7 @@ describe("Work Items schema", () => {
     expect(migration0193).toContain(
       "CHECK (kind IN ('plan','progress','spec','evidence','handoff','note','other'))",
     );
+    expect(migration0194).toContain("'comment_added'");
   });
 
   it("declares Open Engine queue indexes for eligibility and claims", () => {
@@ -304,6 +324,17 @@ describe("Work Items schema", () => {
       "creates-constraint: public.work_item_documents.work_item_documents_kind_allowed",
     ]) {
       expect(migration0193).toContain(`-- ${marker}`);
+    }
+  });
+
+  it("declares manual migration drift markers for Work Item comments", () => {
+    for (const marker of [
+      "creates: public.work_item_comments",
+      "creates: public.idx_work_item_comments_item_created",
+      "creates: public.idx_work_item_comments_thread",
+      "creates-constraint: public.work_item_comments.work_item_comments_author_required",
+    ]) {
+      expect(migration0194).toContain(`-- ${marker}`);
     }
   });
 });

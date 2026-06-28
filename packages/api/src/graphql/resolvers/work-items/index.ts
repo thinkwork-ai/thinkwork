@@ -5,10 +5,12 @@ import { openEngineEligibleWorkItems } from "./openEngineEligibleWorkItems.query
 import { workItemLabels } from "./workItemLabels.query.js";
 import { workItemDocuments } from "./workItemDocuments.query.js";
 import { workItemDocument } from "./workItemDocument.query.js";
+import { workItemComments } from "./workItemComments.query.js";
 import { workItemStatuses } from "./workItemStatuses.query.js";
 import { workItemSavedViews } from "./workItemSavedViews.query.js";
 import { createWorkItem } from "./createWorkItem.mutation.js";
 import { createWorkItemDocument } from "./createWorkItemDocument.mutation.js";
+import { createWorkItemComment } from "./createWorkItemComment.mutation.js";
 import { createWorkItemLabel } from "./createWorkItemLabel.mutation.js";
 import { updateWorkItem } from "./updateWorkItem.mutation.js";
 import { updateWorkItemDocument } from "./updateWorkItemDocument.mutation.js";
@@ -30,6 +32,7 @@ export const workItemQueries = {
   workItemLabels,
   workItemDocuments,
   workItemDocument,
+  workItemComments,
   workItemStatuses,
   workItemSavedViews,
 };
@@ -37,6 +40,7 @@ export const workItemQueries = {
 export const workItemMutations = {
   createWorkItem,
   createWorkItemDocument,
+  createWorkItemComment,
   createWorkItemLabel,
   updateWorkItem,
   updateWorkItemDocument,

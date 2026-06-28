@@ -1093,6 +1093,23 @@ const WorkItemDocumentFieldsFragment = gql`
   }
 `;
 
+const WorkItemCommentFieldsFragment = gql`
+  fragment WorkItemCommentFields on WorkItemComment {
+    id
+    tenantId
+    spaceId
+    workItemId
+    threadId
+    authorUserId
+    authorAgentId
+    body
+    metadata
+    createdAt
+    updatedAt
+    archivedAt
+  }
+`;
+
 export const WorkItemsQuery = gql`
   query WorkItems($input: WorkItemsInput) {
     workItems(input: $input) {
@@ -1135,6 +1152,15 @@ export const WorkItemDocumentsQuery = gql`
   ${WorkItemDocumentFieldsFragment}
 `;
 
+export const WorkItemCommentsQuery = gql`
+  query WorkItemComments($input: WorkItemCommentsInput!) {
+    workItemComments(input: $input) {
+      ...WorkItemCommentFields
+    }
+  }
+  ${WorkItemCommentFieldsFragment}
+`;
+
 export const WorkItemDocumentQuery = gql`
   query WorkItemDocument($input: WorkItemDocumentInput!) {
     workItemDocument(input: $input) {
@@ -1160,6 +1186,15 @@ export const UpdateWorkItemDocumentMutation = gql`
     }
   }
   ${WorkItemDocumentFieldsFragment}
+`;
+
+export const CreateWorkItemCommentMutation = gql`
+  mutation CreateWorkItemComment($input: CreateWorkItemCommentInput!) {
+    createWorkItemComment(input: $input) {
+      ...WorkItemCommentFields
+    }
+  }
+  ${WorkItemCommentFieldsFragment}
 `;
 
 export const CreateWorkItemMutation = gql`
