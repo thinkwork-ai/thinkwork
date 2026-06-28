@@ -42,6 +42,8 @@ contract.
 
 - `2026-06-28`: `THINK-102` moved from `Brainstorming` to `In Progress` when
   implementation work began.
+- `2026-06-28`: `THINK-102` moved from `In Progress` to `Verification` when
+  implementation PR `#3070` opened.
 
 ## Implementation Units
 
@@ -78,3 +80,5 @@ Deferred:
 - `2026-06-28`: Web typecheck passed:
   `corepack pnpm --filter @thinkwork/web typecheck`.
 - `2026-06-28`: `git diff --check` passed.
+- `2026-06-28`: Opened implementation PR `#3070`:
+  `https://github.com/thinkwork-ai/thinkwork/pull/3070`.
