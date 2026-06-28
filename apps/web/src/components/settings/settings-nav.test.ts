@@ -16,6 +16,7 @@ const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
 const EVALUATIONS = "/settings/evaluations";
 const AUTOMATIONS = "/settings/automations";
+const ARTIFACTS = "/settings/artifacts";
 
 describe("visibleSettingsNavItems", () => {
   it("no longer lists a standalone Main Agent entry (editor lives on Agents)", () => {
@@ -54,6 +55,13 @@ describe("visibleSettingsNavItems", () => {
   it("does not list Billing in navigation (route kept, hidden from sidebar)", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === BILLING)).toBe(false);
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Billing")).toBe(false);
+  });
+
+  it("does not list Artifacts in navigation while the surface is being rethought", () => {
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === ARTIFACTS)).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Artifacts")).toBe(
+      false,
+    );
   });
 
   it("shows Agents to operators and hides it for members", () => {

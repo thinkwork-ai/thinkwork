@@ -107,15 +107,16 @@ interface DroppedEdgeSample {
 
 export function KnowledgeGraphExplorer({
   mode,
-  threadSheetOpen,
-  onThreadSheetOpenChange,
+  threadSheetOpen = false,
+  onThreadSheetOpenChange = () => {},
 }: {
   mode: ExplorerMode;
-  threadSheetOpen: boolean;
-  onThreadSheetOpenChange: (open: boolean) => void;
+  threadSheetOpen?: boolean;
+  onThreadSheetOpenChange?: (open: boolean) => void;
 }) {
   const { tenantId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
+  const dataMode = mode === "data";
   const [view, setView] = useState<ExplorerView>("table");
   const [ontologyView, setOntologyView] = useState<OntologyView>("entities");
   const [threadQuery, setThreadQuery] = useState("");
@@ -144,7 +145,7 @@ export function KnowledgeGraphExplorer({
       query: threadQuery.trim() || null,
       limit: 50,
     },
-    pause: !effectiveTenantId,
+    pause: !dataMode || !effectiveTenantId,
   });
 
   const candidates = threadResult.data?.knowledgeGraphThreadCandidates ?? [];
@@ -163,7 +164,7 @@ export function KnowledgeGraphExplorer({
   const [entityResult, refetchEntities] = useQuery({
     query: SettingsKnowledgeGraphEntitiesQuery,
     variables: entityVariables,
-    pause: !effectiveTenantId,
+    pause: !dataMode || !effectiveTenantId,
   });
 
   const [ontologyResult] = useQuery({
@@ -184,7 +185,7 @@ export function KnowledgeGraphExplorer({
       provenanceStatus: null,
       limit: 500,
     },
-    pause: !effectiveTenantId || !selectedRun,
+    pause: !dataMode || !effectiveTenantId || !selectedRun,
   });
 
   const [ingestState, startIngest] = useMutation(
@@ -377,15 +378,17 @@ export function KnowledgeGraphExplorer({
             </ToggleGroup>
           </>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={() => onThreadSheetOpenChange(!threadSheetOpen)}
-        >
-          Threads
-        </Button>
+        {dataMode ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => onThreadSheetOpenChange(!threadSheetOpen)}
+          >
+            Threads
+          </Button>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1">
@@ -434,48 +437,52 @@ export function KnowledgeGraphExplorer({
         )}
       </div>
 
-      <Sheet open={threadSheetOpen} onOpenChange={onThreadSheetOpenChange}>
-        <SheetContent className="flex flex-col gap-4 sm:max-w-3xl">
-          <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
-            <SheetTitle>
-              {selectedThread ? "Thread Detail" : "Thread Ingest"}
-            </SheetTitle>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-            {selectedThread ? (
-              <ThreadIngestDetailView
-                tenantId={effectiveTenantId}
-                run={selectedRun ?? selectedThread.lastIngestRun ?? null}
-                thread={selectedThread}
-                entities={runEntityResult.data?.knowledgeGraphEntities ?? []}
-                fetching={runEntityResult.fetching}
-                error={runEntityResult.error?.message ?? null}
-                ingesting={ingestState.fetching}
-                onBack={() => {
-                  setSelectedThread(null);
-                  setSelectedRun(null);
-                }}
-                onIngest={() => void ingestThread(selectedThread)}
-                onEntityClick={(entity) => openEntity(entity.id, entity.label)}
-              />
-            ) : (
-              <div className="grid gap-4">
-                <KnowledgeGraphIngestControls
-                  query={threadQuery}
-                  candidates={candidates}
-                  fetching={threadResult.fetching && !threadResult.data}
-                  error={threadResult.error?.message ?? null}
-                  onQueryChange={setThreadQuery}
-                  onSelectThread={(thread: ThreadCandidate) => {
-                    setSelectedThread(thread);
-                    setSelectedRun(thread.lastIngestRun ?? null);
+      {dataMode ? (
+        <Sheet open={threadSheetOpen} onOpenChange={onThreadSheetOpenChange}>
+          <SheetContent className="flex flex-col gap-4 sm:max-w-3xl">
+            <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
+              <SheetTitle>
+                {selectedThread ? "Thread Detail" : "Thread Ingest"}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+              {selectedThread ? (
+                <ThreadIngestDetailView
+                  tenantId={effectiveTenantId}
+                  run={selectedRun ?? selectedThread.lastIngestRun ?? null}
+                  thread={selectedThread}
+                  entities={runEntityResult.data?.knowledgeGraphEntities ?? []}
+                  fetching={runEntityResult.fetching}
+                  error={runEntityResult.error?.message ?? null}
+                  ingesting={ingestState.fetching}
+                  onBack={() => {
+                    setSelectedThread(null);
+                    setSelectedRun(null);
                   }}
+                  onIngest={() => void ingestThread(selectedThread)}
+                  onEntityClick={(entity) =>
+                    openEntity(entity.id, entity.label)
+                  }
                 />
-              </div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+              ) : (
+                <div className="grid gap-4">
+                  <KnowledgeGraphIngestControls
+                    query={threadQuery}
+                    candidates={candidates}
+                    fetching={threadResult.fetching && !threadResult.data}
+                    error={threadResult.error?.message ?? null}
+                    onQueryChange={setThreadQuery}
+                    onSelectThread={(thread: ThreadCandidate) => {
+                      setSelectedThread(thread);
+                      setSelectedRun(thread.lastIngestRun ?? null);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="flex flex-col sm:max-w-lg">

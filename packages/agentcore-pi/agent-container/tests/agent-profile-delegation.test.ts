@@ -276,6 +276,29 @@ describe("agent profile delegation", () => {
     });
   });
 
+  it("rejects explicit memory retrieval delegation when the profile has no memory tools", async () => {
+    const runLoop = vi.fn(async () => ({
+      content: "should not run",
+      modelId: "anthropic/claude-haiku-4-5",
+      toolsCalled: [],
+      toolInvocations: [],
+      toolCosts: [],
+    }));
+
+    await expect(
+      executeAgentProfileDelegation({
+        options: await options({
+          runLoop,
+          extensionToolNames: ["web_search", "web_extract", "recall", "reflect"],
+        }),
+        profileSlug: "research",
+        task: "Recall my user memory verification passphrase and General Space launch codename.",
+      }),
+    ).rejects.toThrow(/cannot perform explicit user or Space memory retrieval/);
+
+    expect(runLoop).not.toHaveBeenCalled();
+  });
+
   it("passes bounded parent conversation history into profile child loops", async () => {
     let captured:
       | Parameters<NonNullable<ProfileDelegationToolOptions["runLoop"]>>[0]

@@ -343,6 +343,24 @@ function childToolSurface(input: {
 
 export const AGENT_PROFILE_TOOL_NAME = "delegate_to_agent_profile";
 
+const MEMORY_RETRIEVAL_TASK_PATTERN =
+  /\b(user memory|space memory|long[- ]term memory|memory recall|recall .*memor|search .*memor|retrieve .*memor|query .*memor|memory facts?|memory verification|passphrase|launch codename)\b/i;
+
+function isExplicitMemoryRetrievalTask(task: string): boolean {
+  return MEMORY_RETRIEVAL_TASK_PATTERN.test(task);
+}
+
+function profileHasMemoryRetrievalTool(
+  request: CompiledAgentProfileRunRequest,
+): boolean {
+  const tools = new Set(request.tools);
+  return (
+    tools.has("recall") ||
+    tools.has("reflect") ||
+    tools.has("query_memory_context")
+  );
+}
+
 export function createProfileChildRunner(
   options: ProfileDelegationToolOptions,
 ): ProfileChildRunner {
@@ -533,6 +551,14 @@ export async function executeAgentProfileDelegation(input: {
     requestedOverrides: input.requestedOverrides,
     now: input.options.now,
   });
+  if (
+    isExplicitMemoryRetrievalTask(input.task) &&
+    !profileHasMemoryRetrievalTool(request)
+  ) {
+    throw new Error(
+      `Agent profile "${profile.name}" cannot perform explicit user or Space memory retrieval because its tool policy does not include recall, reflect, or query_memory_context. Use the parent agent memory tools directly.`,
+    );
+  }
   return runCompiledAgentProfile({
     request,
     runner: createProfileChildRunner(input.options),
@@ -754,7 +780,7 @@ export function buildAgentProfileDelegationTool(
     name: AGENT_PROFILE_TOOL_NAME,
     label: "Agent Profile",
     description:
-      "Delegate a bounded subtask to an enabled ThinkWork Agent Profile such as Research, Coding, Analyst, or Reviewer. Use this for specialized subtasks that should run with the profile's configured model and capabilities.",
+      "Delegate a bounded subtask to an enabled ThinkWork Agent Profile such as Research, Coding, Analyst, or Reviewer. Use this for specialized subtasks that should run with the profile's configured model and capabilities. Do not use this for explicit user memory, Space memory, or long-term memory retrieval unless the selected profile is configured with memory tools.",
     parameters: Type.Object({
       profileSlug: Type.String({
         description: "Slug of the available Agent Profile to run.",
