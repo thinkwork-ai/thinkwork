@@ -589,7 +589,7 @@ async function persistHighConfidenceFactMemoryUnit(input: {
       ${input.content},
       ${contentHash},
       ${JSON.stringify(input.retainParams)}::jsonb,
-      ${input.tags}::varchar[],
+      ${varcharArraySql(input.tags)},
       ${now}
     )
     ON CONFLICT (id, bank_id)
@@ -628,10 +628,18 @@ async function persistHighConfidenceFactMemoryUnit(input: {
       ${input.eventDate ? new Date(input.eventDate) : now},
       ${input.eventDate ? new Date(input.eventDate) : now},
       ${JSON.stringify(input.metadata)}::jsonb,
-      ${input.tags}::varchar[],
+      ${varcharArraySql(input.tags)},
       ${now}
     )
   `);
+}
+
+function varcharArraySql(values: string[]) {
+  if (values.length === 0) return sql`ARRAY[]::varchar[]`;
+  return sql`ARRAY[${sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  )}]::varchar[]`;
 }
 
 function highConfidenceFactDocumentId(
