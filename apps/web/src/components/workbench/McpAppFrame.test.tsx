@@ -12,7 +12,7 @@ import {
   MCP_APP_INITIALIZE_METHOD,
   MCP_APP_INITIALIZED_METHOD,
 } from "./mcp-app-frame-bridge";
-import { McpAppFrame } from "./McpAppFrame";
+import { McpAppFrame, withMcpAppHostContextBootstrap } from "./McpAppFrame";
 
 afterEach(() => {
   cleanup();
@@ -53,6 +53,12 @@ describe("McpAppFrame", () => {
     expect(screen.getByText("Dispatch")).toBeTruthy();
     expect(screen.getByText("ui://dispatch/optimization")).toBeTruthy();
     expect(iframe.getAttribute("srcdoc")).toContain("<main>map</main>");
+    expect(iframe.getAttribute("srcdoc")).toContain(
+      "data-thinkwork-mcp-host-context",
+    );
+    expect(iframe.getAttribute("srcdoc")).toContain(
+      "window.__mcpHostContext",
+    );
     expect(iframe.getAttribute("sandbox")).toContain("allow-scripts");
     expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
   });
@@ -147,3 +153,20 @@ function ThemeHarness() {
     </>
   );
 }
+
+describe("withMcpAppHostContextBootstrap", () => {
+  it("injects host context before existing app scripts", () => {
+    const srcDoc = withMcpAppHostContextBootstrap(
+      "<!doctype html><html><head><script data-app>window.seen=window.__mcpHostContext</script></head><body /></html>",
+      {
+        theme: "dark",
+        styles: { variables: { "--color-background-primary": "#001122" } },
+      },
+    );
+
+    expect(srcDoc.indexOf("data-thinkwork-mcp-host-context")).toBeLessThan(
+      srcDoc.indexOf("data-app"),
+    );
+    expect(srcDoc).toContain("--color-background-primary");
+  });
+});

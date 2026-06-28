@@ -185,7 +185,7 @@ function mcpAppsFromContent(input: {
       if (
         typeof uri !== "string" ||
         typeof html !== "string" ||
-        mimeType !== "text/html"
+        !isHtmlMimeType(mimeType)
       ) {
         return null;
       }
@@ -199,6 +199,16 @@ function mcpAppsFromContent(input: {
       };
     })
     .filter((app): app is NonNullable<typeof app> => app !== null);
+}
+
+function isHtmlMimeType(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    value
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase() === "text/html"
+  );
 }
 
 function titleFromHtml(html: string): string | undefined {

@@ -5313,6 +5313,43 @@ describe("normalizePersistedParts", () => {
       },
     });
   });
+
+  it("derives MCP app parts from finalized metadata tool invocations with html MIME parameters", () => {
+    const parts = normalizePersistedParts([], undefined, {
+      tool_invocations: [
+        {
+          name: "mcp_lastmile-dispatch_dispatch_optimization_app",
+          result: {
+            details: {
+              raw: {
+                content: [
+                  { type: "text", text: "Dispatch optimization app" },
+                  {
+                    type: "resource",
+                    resource: {
+                      uri: "ui://lastmile-dispatch/optimization",
+                      mimeType: "text/html;profile=mcp-app",
+                      text: "<!doctype html><title>Dispatch Optimization App</title><main data-dispatch-host-context-runtime>map</main>",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({
+      type: "data-mcp-app",
+      data: {
+        uri: "ui://lastmile-dispatch/optimization",
+        mimeType: "text/html",
+        html: expect.stringContaining("data-dispatch-host-context-runtime"),
+      },
+    });
+  });
 });
 
 describe("flag-for-evaluation affordance (Trust Core U7)", () => {

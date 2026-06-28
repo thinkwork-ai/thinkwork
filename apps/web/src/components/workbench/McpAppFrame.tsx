@@ -1,6 +1,9 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { useTheme } from "@thinkwork/ui";
-import { buildMcpAppHostContext } from "./mcp-app-host-context";
+import {
+  buildMcpAppHostContext,
+  type McpAppHostContext,
+} from "./mcp-app-host-context";
 import { McpAppFrameBridge } from "./mcp-app-frame-bridge";
 
 export interface McpAppFrameProps {
@@ -16,6 +19,7 @@ export function McpAppFrame({ html, title, uri }: McpAppFrameProps) {
   const channelId = useId();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const hostContext = useMemo(() => buildMcpAppHostContext(theme), [theme]);
 
   useEffect(() => {
     const bridge = new McpAppFrameBridge({
@@ -33,8 +37,9 @@ export function McpAppFrame({ html, title, uri }: McpAppFrameProps) {
   }, [channelId]);
 
   useEffect(() => {
-    bridgeRef.current?.notifyHostContextChanged(buildMcpAppHostContext(theme));
-  }, [theme]);
+    bridgeRef.current?.syncHostContext(hostContext);
+    bridgeRef.current?.notifyHostContextChanged(hostContext);
+  }, [hostContext]);
 
   return (
     <div
@@ -54,10 +59,28 @@ export function McpAppFrame({ html, title, uri }: McpAppFrameProps) {
       <iframe
         ref={iframeRef}
         title={title}
-        srcDoc={html}
+        srcDoc={withMcpAppHostContextBootstrap(html, hostContext)}
+        onLoad={() => {
+          bridgeRef.current?.syncHostContext(hostContext);
+        }}
         sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
         className="block h-[560px] w-full bg-background"
       />
     </div>
   );
+}
+
+export function withMcpAppHostContextBootstrap(
+  html: string,
+  hostContext: McpAppHostContext,
+): string {
+  const script = `<script data-thinkwork-mcp-host-context>window.__mcpHostContext=${safeJsonForScript(hostContext)};window.mcpHostContext=window.__mcpHostContext;</script>`;
+  const headMatch = html.match(/<head(?:\s[^>]*)?>/i);
+  if (headMatch?.index == null) return `${script}${html}`;
+  const insertAt = headMatch.index + headMatch[0].length;
+  return `${html.slice(0, insertAt)}${script}${html.slice(insertAt)}`;
+}
+
+function safeJsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
 }

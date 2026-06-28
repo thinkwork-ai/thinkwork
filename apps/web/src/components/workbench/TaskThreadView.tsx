@@ -2037,7 +2037,7 @@ function mapTurnsToUserMessages(
     const ta = parseEventTimestamp(a.startedAt ?? null);
     const tb = parseEventTimestamp(b.startedAt ?? null);
     if (ta !== tb) return ta - tb;
-    return (a.id ?? "").localeCompare(b.id ?? "");
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
   });
 
   // Causal pairing needs user-message timestamps. Older/synthetic threads omit
@@ -2617,6 +2617,7 @@ function MessageAttachmentList({
 export function normalizePersistedParts(
   value: unknown,
   toolResults?: unknown,
+  metadata?: unknown,
 ): AccumulatedPart[] {
   const rawParts = parseArray(value);
   const parts: AccumulatedPart[] = [];
@@ -2659,16 +2660,27 @@ export function normalizePersistedParts(
       });
     }
   }
-  return [...parts, ...mcpAppPartsFromToolResults(toolResults, parts.length)];
+  return [
+    ...parts,
+    ...mcpAppPartsFromToolResults(
+      persistedMcpAppSources(toolResults, metadata),
+      parts.length,
+      existingMcpAppKeys(parts),
+    ),
+  ];
 }
 
 function mcpAppPartsFromToolResults(
   value: unknown,
   startIndex: number,
+  existingKeys = new Set<string>(),
 ): AccumulatedPart[] {
   const parts: AccumulatedPart[] = [];
   for (const result of parseArray(value)) {
     for (const app of mcpAppsFromToolResult(result)) {
+      const key = mcpAppKey(app);
+      if (existingKeys.has(key)) continue;
+      existingKeys.add(key);
       parts.push({
         type: "data-mcp-app",
         id: `mcp-app:${sanitizePartId(app.uri)}:${startIndex + parts.length}`,
@@ -2677,6 +2689,33 @@ function mcpAppPartsFromToolResults(
     }
   }
   return parts;
+}
+
+function persistedMcpAppSources(
+  toolResults: unknown,
+  metadata: unknown,
+): unknown[] {
+  const sources = [...parseArray(toolResults)];
+  const metadataRecord = parseRecord(metadata);
+  sources.push(...parseArray(metadataRecord.tool_invocations));
+  sources.push(...parseArray(metadataRecord.toolInvocations));
+  return sources;
+}
+
+function existingMcpAppKeys(parts: AccumulatedPart[]): Set<string> {
+  const keys = new Set<string>();
+  for (const part of parts) {
+    if (part.type !== "data-mcp-app") continue;
+    const data = parseRecord(part.data);
+    const uri = stringValue(data.uri);
+    const html = stringValue(data.html);
+    if (uri && html) keys.add(`${uri}\0${html}`);
+  }
+  return keys;
+}
+
+function mcpAppKey(app: McpAppData): string {
+  return `${app.uri}\0${app.html}`;
 }
 
 function mcpAppsFromToolResult(value: unknown): McpAppData[] {
@@ -2701,7 +2740,7 @@ function mcpAppsFromDetails(details: Record<string, unknown>): McpAppData[] {
       const uri = stringValue(record.uri);
       const html = stringValue(record.html);
       const mimeType = stringValue(record.mimeType);
-      if (!uri || !html || mimeType !== "text/html") return null;
+      if (!uri || !html || !isHtmlMimeType(mimeType)) return null;
       return mcpAppData({
         uri,
         html,
@@ -2724,7 +2763,7 @@ function mcpAppsFromRawMcpResponse(raw: Record<string, unknown>): McpAppData[] {
       const uri = stringValue(candidate.uri);
       const html = stringValue(candidate.text);
       const mimeType = stringValue(candidate.mimeType);
-      if (!uri || !html || mimeType !== "text/html") return null;
+      if (!uri || !html || !isHtmlMimeType(mimeType)) return null;
       return mcpAppData({
         uri,
         html,
@@ -2761,6 +2800,16 @@ function mcpAppData(input: {
 
 function titleFromHtml(html: string): string | null {
   return html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+}
+
+function isHtmlMimeType(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    value
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase() === "text/html"
+  );
 }
 
 function sanitizePartId(value: string): string {
@@ -3986,7 +4035,7 @@ export function actionRowsForTurn(
     const ta = parseEventTimestamp(a.createdAt);
     const tb = parseEventTimestamp(b.createdAt);
     if (ta !== tb) return ta - tb;
-    return (a.id ?? "").localeCompare(b.id ?? "");
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
   });
   const profileEventChildren = profileChildRowsByProfileKey(sortedEvents);
 

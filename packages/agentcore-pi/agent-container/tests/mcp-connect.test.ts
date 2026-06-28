@@ -272,7 +272,7 @@ describe("createConnectMcpServer", () => {
           type: "resource",
           resource: {
             uri: "ui://lastmile-dispatch/optimization",
-            mimeType: "text/html",
+            mimeType: "text/html;profile=mcp-app",
             text: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
           },
         },

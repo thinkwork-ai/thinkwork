@@ -932,7 +932,7 @@ describe("runAgentLoop", () => {
               mcp_apps: [
                 {
                   uri: "ui://lastmile-dispatch/optimization",
-                  mimeType: "text/html",
+                  mimeType: "text/html;profile=mcp-app",
                   title: "Dispatch Optimization App",
                   html: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
                   serverName: "lastmile-dispatch",
