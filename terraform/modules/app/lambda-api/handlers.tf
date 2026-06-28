@@ -903,6 +903,32 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   maximum_event_age_in_seconds = 3600
 }
 
+# Product-owned retry path for memory-retain. Lambda async retries remain
+# disabled above; this scheduled drain claims due rows from
+# memory_retain_attempts and replays bounded retry payloads idempotently.
+resource "aws_scheduler_schedule" "memory_retain_retry_drainer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-memory-retain-retry-drainer"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["memory-retain"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ kind = "drain_due", limit = 25 })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Phase 3 U4: compliance-outbox-drainer DLQ + async retry config
 #

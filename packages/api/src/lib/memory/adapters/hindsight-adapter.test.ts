@@ -8,7 +8,7 @@ vi.mock("@thinkwork/database-pg", () => ({
   }),
 }));
 
-import { HindsightAdapter } from "./hindsight-adapter.js";
+import { HindsightAdapter, HindsightRetainError } from "./hindsight-adapter.js";
 
 const USER_ID = "4dee701a-c17b-46fe-9f38-a333d4c3fad0";
 const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
@@ -1049,6 +1049,46 @@ describe("HindsightAdapter bank configuration", () => {
 
     const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
     expect(methods).toEqual(["GET", "PUT", "POST"]);
+  });
+
+  it("throws structured retryable retain errors for Hindsight 5xx writes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockResolvedValueOnce(jsonResponse({ error: "busy" }, false, 503));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+
+    await expect(
+      adapter.retainConversation(retainConversationArgs()),
+    ).rejects.toMatchObject({
+      name: "HindsightRetainError",
+      statusCode: 503,
+      retryable: true,
+    });
+  });
+
+  it("throws structured retryable retain errors for aborts/timeouts", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
+      .mockRejectedValueOnce(
+        new DOMException("The operation was aborted", "AbortError"),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+      bankConfig: DESIRED,
+    });
+
+    await expect(
+      adapter.retainConversation(retainConversationArgs()),
+    ).rejects.toBeInstanceOf(HindsightRetainError);
   });
 
   it("proceeds with the write on config failure; cooldown skips immediate re-GET", async () => {
