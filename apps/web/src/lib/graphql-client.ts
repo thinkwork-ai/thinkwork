@@ -101,10 +101,6 @@ export function buildGraphqlAuthHeaders(): Record<string, string> {
   if (currentTenantId) {
     headers["x-tenant-id"] = currentTenantId;
   }
-  const apiKey = graphqlApiKey();
-  if (apiKey) {
-    headers["x-api-key"] = apiKey;
-  }
   if (cachedToken && !isExpiredJwt(cachedToken)) {
     headers.Authorization = cachedToken;
     return headers;

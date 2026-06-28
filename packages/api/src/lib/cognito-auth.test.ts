@@ -2,17 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const {
   cognitoVerifierCreateMock,
+  getApiAuthSecretMock,
   getConfigMock,
   primeRuntimeConfigMock,
   verifyMock,
 } = vi.hoisted(() => ({
   cognitoVerifierCreateMock: vi.fn(),
+  getApiAuthSecretMock: vi.fn(),
   getConfigMock: vi.fn(),
   primeRuntimeConfigMock: vi.fn(),
   verifyMock: vi.fn(),
 }));
 
 vi.mock("@thinkwork/runtime-config", () => ({
+  getApiAuthSecret: getApiAuthSecretMock,
   getConfig: getConfigMock,
   primeRuntimeConfig: primeRuntimeConfigMock,
 }));
@@ -31,9 +34,11 @@ describe("authenticate — apikey path", () => {
   beforeEach(() => {
     process.env.API_AUTH_SECRET = "tw-test-secret";
     cognitoVerifierCreateMock.mockReset();
+    getApiAuthSecretMock.mockReset();
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    getApiAuthSecretMock.mockReturnValue("");
     getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
@@ -69,6 +74,39 @@ describe("authenticate — apikey path", () => {
     });
   });
 
+  it("accepts the runtime-config-backed service secret as an x-api-key", async () => {
+    process.env.API_AUTH_SECRET = "";
+    getApiAuthSecretMock.mockReturnValue("runtime-secret");
+
+    const auth = await authenticate({
+      "x-api-key": "runtime-secret",
+      "x-tenant-id": "tenant-abc",
+    });
+
+    expect(auth).toMatchObject({
+      tenantId: "tenant-abc",
+      authType: "service",
+    });
+  });
+
+  it("does not accept public AppSync API keys as GraphQL HTTP service auth", async () => {
+    process.env.API_AUTH_SECRET = "";
+    process.env.GRAPHQL_API_KEY = "public-appsync-key";
+    process.env.APPSYNC_API_KEY = "public-appsync-key";
+
+    try {
+      expect(
+        await authenticate({
+          "x-api-key": "public-appsync-key",
+          "x-tenant-id": "tenant-abc",
+        }),
+      ).toBeNull();
+    } finally {
+      delete process.env.GRAPHQL_API_KEY;
+      delete process.env.APPSYNC_API_KEY;
+    }
+  });
+
   it("returns email=null when x-principal-email is absent", async () => {
     const auth = await authenticate({ "x-api-key": "tw-test-secret" });
     expect(auth).not.toBeNull();
@@ -82,9 +120,11 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
   beforeEach(() => {
     process.env.API_AUTH_SECRET = "tw-test-secret";
     cognitoVerifierCreateMock.mockReset();
+    getApiAuthSecretMock.mockReset();
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    getApiAuthSecretMock.mockReturnValue("");
     getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
@@ -109,6 +149,21 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
     expect(auth).not.toBeNull();
     expect(auth!.authType).toBe("service");
     expect(auth!.tenantId).toBe("tenant-abc");
+  });
+
+  it("accepts the runtime-config-backed service secret as a bearer token", async () => {
+    process.env.API_AUTH_SECRET = "";
+    getApiAuthSecretMock.mockReturnValue("runtime-secret");
+
+    const auth = await authenticate({
+      authorization: "Bearer runtime-secret",
+      "x-tenant-id": "tenant-abc",
+    });
+
+    expect(auth).toMatchObject({
+      tenantId: "tenant-abc",
+      authType: "service",
+    });
   });
 
   it("accepts the uppercase Authorization header too (still `service` when bearer-only)", async () => {
@@ -160,9 +215,11 @@ describe("authenticate — Cognito JWT path", () => {
   beforeEach(() => {
     process.env.API_AUTH_SECRET = "";
     cognitoVerifierCreateMock.mockReset();
+    getApiAuthSecretMock.mockReset();
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    getApiAuthSecretMock.mockReturnValue("");
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
   });

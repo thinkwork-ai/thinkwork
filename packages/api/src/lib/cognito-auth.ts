@@ -5,7 +5,11 @@
  * Supports both Cognito JWT and API key authentication.
  */
 
-import { getConfig, primeRuntimeConfig } from "@thinkwork/runtime-config";
+import {
+  getApiAuthSecret,
+  getConfig,
+  primeRuntimeConfig,
+} from "@thinkwork/runtime-config";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 function userPoolId(): string {
@@ -21,22 +25,20 @@ function clientIds(): string[] {
  *
  * `API_AUTH_SECRET` / `THINKWORK_API_SECRET` are the canonical service
  * secret (Secrets Manager; injected into every backend Lambda + the
- * agentcore-runtime container's invoke payload). `GRAPHQL_API_KEY` is the
- * AppSync API key — historically the only value accepted here, kept for
- * backward compatibility.
+ * agentcore-runtime container's invoke payload). Do not accept AppSync API
+ * keys here: those are public subscription credentials and must not grant
+ * GraphQL HTTP service privileges.
  *
  * Read lazily so tests can override process.env after module load.
  */
 function acceptedApiKeys(): string[] {
   const out: string[] = [];
-  for (const name of [
-    "API_AUTH_SECRET",
-    "THINKWORK_API_SECRET",
-    "GRAPHQL_API_KEY",
-  ]) {
+  for (const name of ["API_AUTH_SECRET", "THINKWORK_API_SECRET"]) {
     const v = process.env[name];
     if (v) out.push(v);
   }
+  const apiAuthSecret = getApiAuthSecret();
+  if (apiAuthSecret) out.push(apiAuthSecret);
   return out;
 }
 

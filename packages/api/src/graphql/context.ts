@@ -6,6 +6,7 @@
  */
 
 import type { YogaInitialContext } from "graphql-yoga";
+import { GraphQLError } from "graphql";
 import { authenticate, type AuthResult } from "../lib/cognito-auth.js";
 import { db } from "./utils.js";
 import { createLoaders, type DataLoaders } from "./dataloaders.js";
@@ -27,7 +28,9 @@ export async function createContext(
 
   const auth = await authenticate(headers);
   if (!auth) {
-    throw new Error("Unauthorized");
+    throw new GraphQLError("Authentication required", {
+      extensions: { code: "UNAUTHENTICATED" },
+    });
   }
 
   return { auth, db, loaders: createLoaders(), headers };
