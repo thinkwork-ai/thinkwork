@@ -30,8 +30,7 @@ describe("extractHighConfidenceFacts", () => {
       messages: [
         {
           role: "user",
-          content:
-            "My poodle Birdie has a favorite blue rope toy named Orbit.",
+          content: "My poodle Birdie has a favorite blue rope toy named Orbit.",
           timestamp: "2026-06-28T21:13:21.000Z",
         },
       ],
@@ -43,6 +42,35 @@ describe("extractHighConfidenceFacts", () => {
         scope: "user",
         kind: "pet",
         text: "User's poodle Birdie has a favorite blue rope toy named Orbit.",
+        confidence: "high",
+      }),
+    ]);
+  });
+
+  it("extracts possessive pet attributes from a fresh retain statement", () => {
+    const result = extractHighConfidenceFacts({
+      messages: [
+        {
+          role: "user",
+          content:
+            "Memory verification: We brought home a poodle named Birdie. Birdie's favorite blue rope toy is named Lumen6392.",
+          timestamp: "2026-06-28T22:17:36.568Z",
+        },
+      ],
+    });
+
+    expect(result.rejected).toEqual([]);
+    expect(result.facts).toEqual([
+      expect.objectContaining({
+        scope: "user",
+        kind: "pet",
+        text: "User has a poodle named Birdie.",
+        confidence: "high",
+      }),
+      expect.objectContaining({
+        scope: "user",
+        kind: "pet",
+        text: "User's poodle Birdie has a favorite blue rope toy named Lumen6392.",
         confidence: "high",
       }),
     ]);

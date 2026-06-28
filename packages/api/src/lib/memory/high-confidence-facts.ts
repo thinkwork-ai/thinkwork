@@ -58,8 +58,16 @@ const NAMED_PET = new RegExp(
   `\\b(?:my|our)\\s+((?:new\\s+)?${PET_DESCRIPTOR_WORDS})\\b[^.?!]{0,80}?\\b(?:is\\s+named|name\\s+is|called|named)\\s+([A-Z][A-Za-z'-]{1,40})\\b`,
   "i",
 );
+const BROUGHT_HOME_NAMED_PET = new RegExp(
+  `\\b(?:we|i)\\s+(?:brought\\s+home|got|adopted)\\s+(?:a|an)\\s+((?:new\\s+)?${PET_DESCRIPTOR_WORDS})\\b[^.?!]{0,80}?\\b(?:is\\s+named|name\\s+is|called|named)\\s+([A-Z][A-Za-z'-]{1,40})\\b`,
+  "i",
+);
 const NAMED_PET_ATTRIBUTE = new RegExp(
   `\\b(?:my|our)\\s+((?:new\\s+)?${PET_DESCRIPTOR_WORDS})\\s+([A-Z][A-Za-z'-]{1,40})\\s+has\\s+((?:(?:a|an|the|her|his|their)\\s+)?[A-Za-z][A-Za-z0-9 ,/&'-]{1,100}?)\\s+(?:named|called)\\s+([A-Z][A-Za-z0-9'-]{1,40})\\b`,
+  "i",
+);
+const POSSESSIVE_PET_ATTRIBUTE = new RegExp(
+  `\\b([A-Z][A-Za-z'-]{1,40})(?:'s|’s)\\s+((?:(?:a|an|the|her|his|their)\\s+)?[A-Za-z][A-Za-z0-9 ,/&'-]{1,100}?)\\s+is\\s+(?:named|called)\\s+([A-Z][A-Za-z0-9'-]{1,40})\\b`,
   "i",
 );
 const GOT_PET = new RegExp(
@@ -131,6 +139,25 @@ function extractUserFact(
       kind: "pet",
       text: `User's ${pet} ${petName} has ${attribute} named ${attributeName}.`,
     };
+  }
+
+  const possessivePetAttribute = POSSESSIVE_PET_ATTRIBUTE.exec(sentence.text);
+  if (possessivePetAttribute) {
+    const petName = cleanName(possessivePetAttribute[1]);
+    const pet = petNounFromPrevious(previous, petName) ?? "pet";
+    const attribute = cleanPetAttribute(possessivePetAttribute[2]);
+    const attributeName = cleanName(possessivePetAttribute[3]);
+    return {
+      kind: "pet",
+      text: `User's ${pet} ${petName} has ${attribute} named ${attributeName}.`,
+    };
+  }
+
+  const broughtHomeNamedPet = BROUGHT_HOME_NAMED_PET.exec(sentence.text);
+  if (broughtHomeNamedPet) {
+    const pet = petNoun(broughtHomeNamedPet[1]);
+    const name = cleanName(broughtHomeNamedPet[2]);
+    return { kind: "pet", text: `User has a ${pet} named ${name}.` };
   }
 
   const namedPet = NAMED_PET.exec(sentence.text);
@@ -261,6 +288,28 @@ function petNoun(value: string): string {
   if (noun === "puppy") return "dog";
   if (noun === "kitten") return "cat";
   return noun || "pet";
+}
+
+function petNounFromPrevious(
+  previous: Sentence | null,
+  petName: string,
+): string | null {
+  if (!previous) return null;
+  const broughtHome = BROUGHT_HOME_NAMED_PET.exec(previous.text);
+  if (broughtHome && cleanName(broughtHome[2]) === petName) {
+    return petNoun(broughtHome[1]);
+  }
+  const named = NAMED_PET.exec(previous.text);
+  if (named && cleanName(named[2]) === petName) {
+    return petNoun(named[1]);
+  }
+  return null;
+}
+
+function cleanPetAttribute(value: string): string {
+  const attribute = cleanPhrase(value);
+  if (/^(?:a|an|the|her|his|their)\s+/i.test(attribute)) return attribute;
+  return `a ${attribute}`;
 }
 
 function cleanName(value: string): string {
