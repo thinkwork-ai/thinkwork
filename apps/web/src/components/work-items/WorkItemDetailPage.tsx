@@ -20,13 +20,18 @@ import {
   UserRound,
 } from "lucide-react";
 import {
-  Badge,
   Button,
+  Checkbox,
+  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  Textarea,
 } from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Response } from "@/components/ai-elements/response";
@@ -34,21 +39,34 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   RecordOpenEngineHumanActionMutation,
   SpacesQuery,
+  CreateWorkItemCommentMutation,
+  UpdateWorkItemMutation,
+  UpdateWorkItemStatusMutation,
   WorkItemDocumentQuery,
   WorkItemDocumentsQuery,
+  WorkItemCommentsQuery,
+  WorkItemLabelsQuery,
   WorkItemQuery,
+  WorkItemStatusesQuery,
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import type {
   WorkItemAssigneeSummary,
+  WorkItemCommentSummary,
   WorkItemDocumentSummary,
   WorkItemEventSummary,
+  WorkItemLabelSummary,
+  WorkItemPriority,
   WorkItemSpaceSummary,
+  WorkItemStatusSummary,
   WorkItemSummary,
 } from "./work-item-display";
 import {
+  categoryStatuses,
+  sortWorkItemStatuses,
   workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemSpaceLabel,
@@ -71,8 +89,20 @@ interface WorkItemDocumentResult {
   workItemDocument?: WorkItemDocumentSummary | null;
 }
 
+interface WorkItemCommentsResult {
+  workItemComments?: WorkItemCommentSummary[] | null;
+}
+
 interface SpacesResult {
   spaces?: WorkItemSpaceSummary[] | null;
+}
+
+interface WorkItemStatusesResult {
+  workItemStatuses?: WorkItemStatusSummary[] | null;
+}
+
+interface WorkItemLabelsResult {
+  workItemLabels?: WorkItemLabelSummary[] | null;
 }
 
 interface TenantMemberSummary {
@@ -97,6 +127,20 @@ type OpenEngineHumanActionType =
   | "MARK_REVIEWED"
   | "MARK_BLOCKED"
   | "MARK_FAILED";
+
+type WorkItemActivityItem =
+  | {
+      kind: "comment";
+      id: string;
+      createdAt?: string | null;
+      comment: WorkItemCommentSummary;
+    }
+  | {
+      kind: "event";
+      id: string;
+      createdAt?: string | null;
+      event: WorkItemEventSummary;
+    };
 
 export function WorkItemDetailPage({
   tenantId,
@@ -126,6 +170,19 @@ export function WorkItemDetailPage({
       pause: !tenantId,
       requestPolicy: "cache-and-network",
     });
+  const [{ data: commentsData, error: commentsError }, reexecuteComments] =
+    useQuery<WorkItemCommentsResult>({
+      query: WorkItemCommentsQuery,
+      variables: {
+        input: {
+          tenantId: tenantId ?? "",
+          workItemId,
+          limit: 100,
+        },
+      },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
   const [{ data: spacesData }] = useQuery<SpacesResult>({
     query: SpacesQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -138,12 +195,33 @@ export function WorkItemDetailPage({
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const item = data?.workItem ?? null;
+  const [{ data: statusesData }] = useQuery<WorkItemStatusesResult>({
+    query: WorkItemStatusesQuery,
+    variables: { tenantId: tenantId ?? "", spaceId: item?.spaceId ?? "" },
+    pause: !tenantId || !item?.spaceId,
+    requestPolicy: "cache-and-network",
+  });
+  const [{ data: labelsData }] = useQuery<WorkItemLabelsResult>({
+    query: WorkItemLabelsQuery,
+    variables: { input: { tenantId: tenantId ?? "", limit: 200 } },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+  const [{ fetching: workItemSaving }, executeWorkItemUpdate] = useMutation(
+    UpdateWorkItemMutation,
+  );
+  const [{ fetching: statusSaving }, executeStatusUpdate] = useMutation(
+    UpdateWorkItemStatusMutation,
+  );
   const [{ fetching: humanActionSaving }, executeHumanAction] = useMutation(
     RecordOpenEngineHumanActionMutation,
   );
+  const [{ fetching: commentSaving }, executeCreateComment] = useMutation(
+    CreateWorkItemCommentMutation,
+  );
   const [humanActionError, setHumanActionError] = useState<string | null>(null);
 
-  const item = data?.workItem ?? null;
   const itemKey = item ? workItemKey(item) : "Work Item";
   usePageHeaderActions({
     title: item?.title ?? "Work Item",
@@ -185,10 +263,83 @@ export function WorkItemDetailPage({
   const assignees = workItemAssigneesFromMembers(
     membersData?.tenantMembers ?? [],
   );
+  const statuses = sortWorkItemStatuses(
+    statusesData?.workItemStatuses ?? [],
+  );
+  const statusOptions = statuses.length > 0 ? statuses : categoryStatuses();
+  const labels = labelsData?.workItemLabels ?? [];
   const documents = documentsData?.workItemDocuments ?? [];
-  const events = [...(item.events ?? [])].sort(
+  const events = [...(item.events ?? [])].filter(
+    (event) =>
+      normalizeEventType(event.eventType) !== "comment_added" &&
+      !isMirroredOpenEngineReceiptEvent(event),
+  );
+  const comments = commentsData?.workItemComments ?? item.comments ?? [];
+  const activityItems = buildActivityItems(comments, events);
+  const handleCreateComment = async (body: string) => {
+    if (!tenantId || commentSaving || commentsError) return false;
+    const result = await executeCreateComment({
+      input: {
+        tenantId,
+        workItemId: item.id,
+        body,
+      },
+    });
+    if (result.error) {
+      toast.error(`Couldn't add comment: ${result.error.message}`);
+      return false;
+    }
+    reexecuteWorkItem({ requestPolicy: "network-only" });
+    reexecuteComments({ requestPolicy: "network-only" });
+    return true;
+  };
+  const sortedEvents = [...events].sort(
     (left, right) => dateTime(right.createdAt) - dateTime(left.createdAt),
   );
+  const handleWorkItemUpdate = async (
+    patch: {
+      priority?: WorkItemPriority;
+      ownerUserId?: string | null;
+      labelIds?: string[];
+      openEngineQueueKey?: string | null;
+    },
+    successMessage = "Work Item updated",
+  ) => {
+    if (!tenantId || workItemSaving) return false;
+    const result = await executeWorkItemUpdate({
+      input: {
+        tenantId,
+        workItemId: item.id,
+        ...patch,
+      },
+    });
+    if (result.error) {
+      toast.error(`Couldn't update Work Item: ${result.error.message}`);
+      return false;
+    }
+    toast.success(successMessage);
+    reexecuteWorkItem({ requestPolicy: "network-only" });
+    return true;
+  };
+  const handleStatusChange = async (statusId: string) => {
+    const nextStatus = statusOptions.find((status) => status.id === statusId);
+    if (!tenantId || !nextStatus || statusSaving) return false;
+    const result = await executeStatusUpdate({
+      input: {
+        tenantId,
+        workItemId: item.id,
+        statusId: nextStatus.spaceId ? nextStatus.id : undefined,
+        statusCategory: nextStatus.spaceId ? undefined : nextStatus.category,
+      },
+    });
+    if (result.error) {
+      toast.error(`Couldn't update status: ${result.error.message}`);
+      return false;
+    }
+    toast.success("Status updated");
+    reexecuteWorkItem({ requestPolicy: "network-only" });
+    return true;
+  };
   const handleOpenEngineHumanAction = async (
     actionType: OpenEngineHumanActionType,
     message: string,
@@ -234,31 +385,66 @@ export function WorkItemDetailPage({
             />
 
             <ActivitySection
-              events={events}
+              item={item}
+              activityItems={activityItems}
               assignees={assignees}
+              commentSaving={commentSaving}
+              commentsUnavailable={Boolean(commentsError)}
+              onCreateComment={handleCreateComment}
               onRefresh={reexecuteWorkItem}
             />
           </div>
 
           <aside className="space-y-3 lg:sticky lg:top-5 lg:self-start">
             <RailSection title="Properties">
-              <PropertyRow
+              <EditablePropertyRow
                 icon={<CircleDot className="size-4" />}
                 label="Status"
                 value={
-                  item.status?.name ??
-                  workItemStatusCategoryLabel(item.status?.category)
+                  item.statusId ??
+                  statusOptions.find(
+                    (status) => status.category === item.status?.category,
+                  )?.id ??
+                  ""
                 }
+                options={statusOptions.map((status) => ({
+                  value: status.id,
+                  label:
+                    status.name ?? workItemStatusCategoryLabel(status.category),
+                  color: status.color,
+                }))}
+                disabled={statusSaving}
+                onChange={handleStatusChange}
               />
-              <PropertyRow
+              <EditablePropertyRow
                 icon={<GitBranch className="size-4" />}
                 label="Priority"
-                value={workItemPriorityLabel(item.priority)}
+                value={item.priority}
+                options={WORK_ITEM_PRIORITY_OPTIONS}
+                disabled={workItemSaving}
+                onChange={(priority) =>
+                  handleWorkItemUpdate({
+                    priority: priority as WorkItemPriority,
+                  })
+                }
               />
-              <PropertyRow
+              <EditablePropertyRow
                 icon={<UserRound className="size-4" />}
                 label="Assignee"
-                value={workItemAssigneeLabel(item, assignees)}
+                value={item.ownerUserId ?? ""}
+                options={[
+                  { value: "", label: "Unassigned" },
+                  ...assignees.map((assignee) => ({
+                    value: assignee.id,
+                    label: assignee.name,
+                  })),
+                ]}
+                disabled={workItemSaving}
+                onChange={(ownerUserId) =>
+                  handleWorkItemUpdate({
+                    ownerUserId: ownerUserId || null,
+                  })
+                }
               />
               <PropertyRow
                 icon={<CalendarDays className="size-4" />}
@@ -277,36 +463,28 @@ export function WorkItemDetailPage({
               />
             </RailSection>
 
-            <OpenEngineRailSection
+            <LabelsRailSection
               item={item}
-              events={events}
-              documents={documents}
-              saving={humanActionSaving}
-              error={humanActionError}
-              onAction={handleOpenEngineHumanAction}
+              labels={labels}
+              disabled={workItemSaving}
+              onChange={(labelIds) => handleWorkItemUpdate({ labelIds })}
             />
 
-            <RailSection title="Labels">
-              {item.labels?.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {item.labels.map((label) => (
-                    <Badge
-                      key={label.id}
-                      variant="outline"
-                      className="h-6 gap-1.5 rounded-full bg-muted/10 px-2 text-xs"
-                    >
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ backgroundColor: label.color ?? "#64748b" }}
-                      />
-                      {label.name}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No labels</p>
-              )}
-            </RailSection>
+            <OpenEngineRailSection
+              item={item}
+              events={sortedEvents}
+              documents={documents}
+              saving={humanActionSaving}
+              queueSaving={workItemSaving}
+              error={humanActionError}
+              onQueueChange={(openEngineQueueKey) =>
+                handleWorkItemUpdate(
+                  { openEngineQueueKey },
+                  "OpenEngine queue updated",
+                )
+              }
+              onAction={handleOpenEngineHumanAction}
+            />
           </aside>
         </div>
       </div>
@@ -595,79 +773,249 @@ function ResourceDate({
 }
 
 function ActivitySection({
-  events,
+  item,
+  activityItems,
   assignees,
+  commentSaving,
+  commentsUnavailable,
+  onCreateComment,
   onRefresh,
 }: {
-  events: WorkItemEventSummary[];
+  item: WorkItemSummary;
+  activityItems: WorkItemActivityItem[];
   assignees: WorkItemAssigneeSummary[];
+  commentSaving: boolean;
+  commentsUnavailable: boolean;
+  onCreateComment: (body: string) => Promise<boolean>;
   onRefresh: (opts?: { requestPolicy?: "network-only" }) => void;
 }) {
+  const [expanded, setExpanded] = useState(true);
+  const [commentBody, setCommentBody] = useState("");
+  const submitComment = async () => {
+    const body = commentBody.trim();
+    if (!body || commentSaving || commentsUnavailable) return;
+    const created = await onCreateComment(body);
+    if (created) setCommentBody("");
+  };
+
   return (
-    <section className="space-y-3">
-      <SectionHeader title="Activity" detail={`${events.length}`} />
-      {events.length === 0 ? (
-        <p className="rounded-md border px-3 py-3 text-sm text-muted-foreground">
-          No activity recorded yet.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {events.map((event) => (
-            <article
-              key={event.id}
-              className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40"
-            >
-              <header className="flex min-w-0 items-center gap-1.5">
-                <ActivityAvatar event={event} assignees={assignees} />
-                <span className="truncate text-xs font-semibold text-foreground">
-                  {eventActor(event, assignees)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {eventLabel(event.eventType).toLowerCase()}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {relativeDate(event.createdAt)}
-                </span>
-              </header>
-              <ActivityMarkdown
-                content={event.message}
-                empty="No message recorded."
-              />
-            </article>
-          ))}
-        </div>
+    <section className="space-y-3 border-t border-border pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-left text-sm font-semibold text-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              !expanded && "-rotate-90",
+            )}
+          />
+          <span>Activity</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            {activityItems.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => onRefresh({ requestPolicy: "network-only" })}
+        >
+          Refresh activity
+        </button>
+      </div>
+      {!expanded ? null : (
+        <>
+          {activityItems.length === 0 ? (
+            <p className="rounded-md border px-3 py-3 text-sm text-muted-foreground">
+              No activity recorded yet.
+            </p>
+          ) : (
+            <ol className="space-y-1">
+              {activityItems.map((activityItem, index) =>
+                activityItem.kind === "comment" ? (
+                  <ActivityCommentRow
+                    key={`comment:${activityItem.id}`}
+                    comment={activityItem.comment}
+                    assignees={assignees}
+                  />
+                ) : (
+                  <ActivityEventRow
+                    key={`event:${activityItem.id}`}
+                    item={item}
+                    event={activityItem.event}
+                    assignees={assignees}
+                    showConnector={hasFollowingTimelineEvent(
+                      activityItems,
+                      index,
+                    )}
+                  />
+                ),
+              )}
+            </ol>
+          )}
+          <div className="rounded-md border bg-muted/40 p-3 dark:bg-muted/40">
+            <Textarea
+              value={commentBody}
+              rows={3}
+              placeholder="Leave a comment..."
+              disabled={commentSaving || commentsUnavailable}
+              title={
+                commentsUnavailable
+                  ? "Work Item comments are waiting for the API deployment."
+                  : undefined
+              }
+              onChange={(event) => setCommentBody(event.target.value)}
+              className="min-h-20 resize-y bg-background/35 px-3 py-2 shadow-none focus-visible:ring-1"
+            />
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  !commentBody.trim() || commentSaving || commentsUnavailable
+                }
+                onClick={submitComment}
+              >
+                Comment
+              </Button>
+            </div>
+            {commentsUnavailable ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Comments are waiting for the Work Item comments API deployment.
+              </p>
+            ) : null}
+          </div>
+        </>
       )}
-      <button
-        type="button"
-        className="text-xs font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => onRefresh({ requestPolicy: "network-only" })}
-      >
-        Refresh activity
-      </button>
     </section>
   );
 }
 
-function ActivityAvatar({
-  event,
+function ActivityCommentRow({
+  comment,
   assignees,
 }: {
-  event: WorkItemEventSummary;
+  comment: WorkItemCommentSummary;
   assignees: WorkItemAssigneeSummary[];
 }) {
-  const actor = eventActor(event, assignees);
+  return (
+    <li>
+      <article className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40">
+        <header className="flex min-w-0 items-center gap-1.5">
+          <ActivityAvatar
+            actor={commentAuthor(comment, assignees)}
+            agent={Boolean(comment.authorAgentId)}
+          />
+          <span className="truncate text-xs font-semibold text-foreground">
+            {commentAuthor(comment, assignees)}
+          </span>
+          <span className="text-xs text-muted-foreground">commented</span>
+          <span
+            className="shrink-0 text-xs text-muted-foreground"
+            title={absoluteDateTime(comment.createdAt)}
+          >
+            {activityTimestamp(comment.createdAt)}
+          </span>
+        </header>
+        <ActivityMarkdown content={comment.body} empty="No comment body." />
+      </article>
+    </li>
+  );
+}
+
+function ActivityEventRow({
+  item,
+  event,
+  assignees,
+  showConnector,
+}: {
+  item: WorkItemSummary;
+  event: WorkItemEventSummary;
+  assignees: WorkItemAssigneeSummary[];
+  showConnector: boolean;
+}) {
+  return isActivityTimelineEvent(event, item) ? (
+    <li className="grid min-h-8 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2">
+      <span className="relative flex h-8 items-center justify-center">
+        {showConnector ? (
+          <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 bg-border" />
+        ) : null}
+        <ActivityAvatar
+          actor={eventActor(event, assignees)}
+          agent={Boolean(event.actorAgentId)}
+          compact
+        />
+      </span>
+      <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+        <span className="shrink-0 font-medium text-foreground">
+          {eventActor(event, assignees)}
+        </span>
+        <span className="min-w-0 truncate">
+          {activityTimelineMessage(event, item)}
+        </span>
+      </p>
+      <time
+        dateTime={event.createdAt ?? undefined}
+        title={absoluteDateTime(event.createdAt)}
+        className="shrink-0 text-xs text-muted-foreground"
+      >
+        {activityTimestamp(event.createdAt)}
+      </time>
+    </li>
+  ) : (
+    <li>
+      <article className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40">
+        <header className="flex min-w-0 items-center gap-1.5">
+          <ActivityAvatar
+            actor={eventActor(event, assignees)}
+            agent={Boolean(event.actorAgentId)}
+          />
+          <span className="truncate text-xs font-semibold text-foreground">
+            {eventActor(event, assignees)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {eventLabel(event.eventType).toLowerCase()}
+          </span>
+          <span
+            className="shrink-0 text-xs text-muted-foreground"
+            title={absoluteDateTime(event.createdAt)}
+          >
+            {activityTimestamp(event.createdAt)}
+          </span>
+        </header>
+        <ActivityMarkdown
+          content={event.message}
+          empty="No message recorded."
+        />
+      </article>
+    </li>
+  );
+}
+
+function ActivityAvatar({
+  actor,
+  agent,
+  compact,
+}: {
+  actor: string;
+  agent: boolean;
+  compact?: boolean;
+}) {
   const initials = actorInitials(actor);
-  const agent = Boolean(event.actorAgentId);
 
   return (
     <span
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white",
+        "relative z-10 flex shrink-0 items-center justify-center rounded-full font-semibold text-white",
+        compact ? "size-4 text-[9px]" : "size-5 text-[10px]",
         agent ? "bg-blue-500" : "bg-pink-500",
       )}
       aria-hidden="true"
     >
-      {initials || <MessageSquareText className="size-3" />}
+      {initials || <MessageSquareText className={compact ? "size-2.5" : "size-3"} />}
     </span>
   );
 }
@@ -711,12 +1059,25 @@ function RailSection({
   title: string;
   children: React.ReactNode;
 }) {
+  const [expanded, setExpanded] = useState(true);
+
   return (
     <section className="rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
-      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-        {title}
-      </h2>
-      <div className="space-y-2">{children}</div>
+      <button
+        type="button"
+        className="mb-3 flex w-full items-center gap-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <ChevronDown
+          className={cn(
+            "size-3.5 transition-transform",
+            !expanded && "-rotate-90",
+          )}
+        />
+        <span>{title}</span>
+      </button>
+      {expanded ? <div className="space-y-2">{children}</div> : null}
     </section>
   );
 }
@@ -739,19 +1100,415 @@ function PropertyRow({
   );
 }
 
+const WORK_ITEM_PRIORITY_OPTIONS = [
+  { value: "URGENT", label: "Urgent", color: "#ef4444" },
+  { value: "HIGH", label: "High", color: "#f97316" },
+  { value: "NORMAL", label: "Normal", color: "#3b82f6" },
+  { value: "LOW", label: "Low", color: "#64748b" },
+];
+
+const OPEN_ENGINE_QUEUE_OPTIONS = [
+  { value: "codex", label: "Codex" },
+  { value: "claude", label: "Claude" },
+  { value: "thinkwork-agent", label: "ThinkWork Agent" },
+  { value: "human", label: "Human" },
+];
+
+interface RailBadgeOption {
+  value: string;
+  label: string;
+  description?: string;
+  color?: string | null;
+  icon?: React.ReactNode;
+}
+
+function EditablePropertyRow({
+  icon,
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  options: RailBadgeOption[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <div className="grid grid-cols-[1rem_4.25rem_minmax(0,1fr)] items-center gap-2 text-sm">
+      <span className="text-muted-foreground">{icon}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <RailBadgeSelector
+        value={value}
+        displayValue={selected?.label ?? "None"}
+        options={options}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function RailBadgeSelector({
+  value,
+  displayValue,
+  options,
+  disabled,
+  placeholder = "Search...",
+  onChange,
+}: {
+  value: string;
+  displayValue: string;
+  options: RailBadgeOption[];
+  disabled?: boolean;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selected = options.find((option) => option.value === value);
+  const filteredOptions = options.filter((option) => {
+    if (!search.trim()) return true;
+    const query = search.toLowerCase();
+    return (
+      option.label.toLowerCase().includes(query) ||
+      option.description?.toLowerCase().includes(query)
+    );
+  });
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled || options.length === 0}
+          className="inline-flex h-7 max-w-full min-w-0 items-center justify-between gap-1.5 rounded-full border bg-background/50 px-2 text-sm text-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            {selected?.color ? (
+              <span
+                className="size-2 rounded-full"
+                style={{ backgroundColor: selected.color }}
+              />
+            ) : null}
+            {selected?.icon ? (
+              <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+                {selected.icon}
+              </span>
+            ) : null}
+            <span className="min-w-0 truncate">{displayValue}</span>
+          </span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-[var(--radix-popover-trigger-width)] min-w-44 max-w-64 gap-0 p-0"
+      >
+        <div className="border-b p-2">
+          <Input
+            autoFocus
+            value={search}
+            placeholder={placeholder}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8"
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto p-1">
+          {filteredOptions.length ? (
+            filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  if (option.value !== value) onChange(option.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <CheckCircle2
+                  className={cn(
+                    "size-4 shrink-0 text-primary",
+                    value === option.value ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                {option.color ? (
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: option.color }}
+                  />
+                ) : null}
+                {option.icon ? (
+                  <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+                    {option.icon}
+                  </span>
+                ) : null}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {option.label}
+                  </span>
+                  {option.description ? (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {option.description}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="px-2 py-4 text-sm text-muted-foreground">
+              No options found.
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LabelPicker({
+  labels,
+  selectedIds,
+  disabled,
+  onChange,
+  trigger,
+}: {
+  labels: WorkItemLabelSummary[];
+  selectedIds: string[];
+  disabled?: boolean;
+  onChange: (labelIds: string[]) => void;
+  trigger?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [draftIds, setDraftIds] = useState(selectedIds);
+  const selectedLabels = labels.filter((label) =>
+    selectedIds.includes(label.id),
+  );
+  const filteredLabels = labels.filter((label) => {
+    if (!search.trim()) return true;
+    const query = search.toLowerCase();
+    return (
+      label.name.toLowerCase().includes(query) ||
+      label.slug.toLowerCase().includes(query) ||
+      label.description?.toLowerCase().includes(query)
+    );
+  });
+  const selectedDraftLabels = filteredLabels.filter((label) =>
+    draftIds.includes(label.id),
+  );
+  const remainingLabels = filteredLabels.filter(
+    (label) => !draftIds.includes(label.id),
+  );
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setDraftIds(selectedIds);
+        } else if (!disabled && !sameStringSet(draftIds, selectedIds)) {
+          onChange(draftIds);
+        }
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled || labels.length === 0}
+          className={cn(
+            "inline-flex max-w-full text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+            trigger
+              ? "min-h-0 rounded-md p-0 text-foreground hover:opacity-90"
+              : "min-h-7 items-center gap-1.5 rounded-full border bg-background/40 px-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
+        >
+          {trigger ?? "+ Label"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-72 max-w-[calc(100vw-2rem)] gap-0 p-0"
+      >
+        <div className="border-b p-2">
+          <Input
+            autoFocus
+            value={search}
+            placeholder="Search..."
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8"
+          />
+        </div>
+        <div className="max-h-72 overflow-y-auto p-1">
+          {filteredLabels.length ? (
+            <>
+              {selectedDraftLabels.length > 0 ? (
+                <div className="border-b">
+                  {selectedDraftLabels.map((label) => (
+                    <LabelPickerOption
+                      key={label.id}
+                      label={label}
+                      active
+                      onToggle={() =>
+                        setDraftIds((current) =>
+                          current.filter((id) => id !== label.id),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              ) : null}
+              <div>
+                {remainingLabels.map((label) => (
+                  <LabelPickerOption
+                    key={label.id}
+                    label={label}
+                    active={false}
+                    onToggle={() =>
+                      setDraftIds((current) => [...current, label.id])
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="px-2 py-4 text-sm text-muted-foreground">
+              No labels found.
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LabelPickerOption({
+  label,
+  active,
+  onToggle,
+}: {
+  label: WorkItemLabelSummary;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onToggle();
+        }
+      }}
+      className={cn(
+        "flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
+      <Checkbox
+        checked={active}
+        onClick={(event) => event.stopPropagation()}
+        onCheckedChange={onToggle}
+        className="size-4 shrink-0"
+      />
+      <span
+        className="size-2 rounded-full"
+        style={{ backgroundColor: label.color ?? "#64748b" }}
+      />
+      <span className="min-w-0 flex-1 truncate font-medium">{label.name}</span>
+    </div>
+  );
+}
+
+function LabelsRailSection({
+  item,
+  labels,
+  disabled,
+  onChange,
+}: {
+  item: WorkItemSummary;
+  labels: WorkItemLabelSummary[];
+  disabled?: boolean;
+  onChange: (labelIds: string[]) => void;
+}) {
+  const selectedIds = item.labels?.map((label) => label.id) ?? [];
+  const selectedLabels = item.labels ?? [];
+
+  return (
+    <RailSection title="Labels">
+      {selectedLabels.length ? (
+        <LabelPicker
+          labels={labels}
+          selectedIds={selectedIds}
+          disabled={disabled}
+          onChange={onChange}
+          trigger={
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {selectedLabels.map((label) => (
+                <span
+                  key={label.id}
+                  className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-background/45 px-2 py-1 text-xs font-medium text-foreground"
+                >
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: label.color ?? "#64748b" }}
+                  />
+                  <span className="max-w-24 truncate">{label.name}</span>
+                </span>
+              ))}
+            </span>
+          }
+        />
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className="text-sm text-muted-foreground">No labels</p>
+          <LabelPicker
+            labels={labels}
+            selectedIds={selectedIds}
+            disabled={disabled}
+            onChange={onChange}
+          />
+        </div>
+      )}
+    </RailSection>
+  );
+}
+
 function OpenEngineRailSection({
   item,
   events,
   documents,
   saving,
+  queueSaving,
   error,
+  onQueueChange,
   onAction,
 }: {
   item: WorkItemSummary;
   events: WorkItemEventSummary[];
   documents: WorkItemDocumentSummary[];
   saving: boolean;
+  queueSaving?: boolean;
   error: string | null;
+  onQueueChange: (queueKey: string) => void;
   onAction: (
     actionType: OpenEngineHumanActionType,
     message: string,
@@ -770,33 +1527,33 @@ function OpenEngineRailSection({
   return (
     <>
       <RailSection title="OpenEngine">
-        <button
-          type="button"
-          onClick={() => setSheetOpen(true)}
-          className="group flex w-full items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-background/50"
-        >
-          <span className={cn("shrink-0 text-muted-foreground", state.tone)}>
-            {state.icon}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
-              {state.label}
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {state.detail}
-            </span>
-          </span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            Details
-          </span>
-        </button>
-        <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-1 text-xs">
-          <span className="text-muted-foreground">Queue</span>
-          <span className="truncate text-foreground">
-            {item.openEngineQueueKey || "Default"}
-          </span>
-          <span className="text-muted-foreground">Receipt</span>
-          <span className="truncate text-foreground">{latestReceiptLabel}</span>
+        <div className="space-y-2 px-1">
+          <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
+            <span className="text-muted-foreground">Queue</span>
+            <OpenEngineQueueSelect
+              value={item.openEngineQueueKey || "codex"}
+              disabled={queueSaving}
+              onChange={onQueueChange}
+            />
+          </div>
+          <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
+            <span className="text-muted-foreground">State</span>
+            <button
+              type="button"
+              title={state.detail}
+              onClick={() => setSheetOpen(true)}
+              className="inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-full border bg-background/50 px-2 text-sm text-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className={cn("shrink-0 text-muted-foreground", state.tone)}>
+                {state.icon}
+              </span>
+              <span className="min-w-0 truncate">{state.label}</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
+            <span className="text-muted-foreground">Receipt</span>
+            <span className="truncate text-foreground">{latestReceiptLabel}</span>
+          </div>
         </div>
       </RailSection>
 
@@ -931,6 +1688,37 @@ function OpenEngineRailSection({
         </Sheet>
       ) : null}
     </>
+  );
+}
+
+function OpenEngineQueueSelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (queueKey: string) => void;
+}) {
+  const options = OPEN_ENGINE_QUEUE_OPTIONS.some(
+    (option) => option.value === value,
+  )
+    ? OPEN_ENGINE_QUEUE_OPTIONS
+    : [{ value, label: value }, ...OPEN_ENGINE_QUEUE_OPTIONS];
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <RailBadgeSelector
+      value={value}
+      displayValue={selected?.label ?? value}
+      options={options.map((option) => ({
+        ...option,
+        icon: <Bot className="size-3.5" />,
+      }))}
+      disabled={disabled}
+      placeholder="Search queues..."
+      onChange={onChange}
+    />
   );
 }
 
@@ -1169,6 +1957,36 @@ function relativeDate(value?: string | null) {
   return formatDate(value);
 }
 
+function activityTimestamp(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  if (isSameLocalDay(date, new Date())) return relativeDate(value);
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+  };
+  if (date.getFullYear() !== new Date().getFullYear()) {
+    options.year = "numeric";
+  }
+  return date.toLocaleDateString(undefined, options);
+}
+
+function absoluteDateTime(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString();
+}
+
+function isSameLocalDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 function isFutureDate(value?: string | null) {
   if (!value) return false;
   const time = new Date(value).getTime();
@@ -1187,6 +2005,59 @@ function dateTime(value?: string | null) {
   return Number.isNaN(time) ? 0 : time;
 }
 
+function normalizeEventType(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function isMirroredOpenEngineReceiptEvent(event: WorkItemEventSummary) {
+  if (normalizeEventType(event.eventType) !== "agent_action") return false;
+  const metadata = objectRecord(event.metadata);
+  if (metadata.source !== "open_engine") return false;
+  const receiptType = stringValue(metadata.receiptType);
+  return Boolean(receiptType && shouldMirrorReceiptAsComment(receiptType));
+}
+
+function shouldMirrorReceiptAsComment(receiptType: string) {
+  return ![
+    "skill_subscribed",
+    "skill_installed",
+    "skill_updated",
+    "skill_declined",
+  ].includes(receiptType);
+}
+
+function buildActivityItems(
+  comments: WorkItemCommentSummary[],
+  events: WorkItemEventSummary[],
+): WorkItemActivityItem[] {
+  return [
+    ...comments.map((comment) => ({
+      kind: "comment" as const,
+      id: comment.id,
+      createdAt: comment.createdAt,
+      comment,
+    })),
+    ...events.map((event) => ({
+      kind: "event" as const,
+      id: event.id,
+      createdAt: event.createdAt,
+      event,
+    })),
+  ].sort((left, right) => dateTime(right.createdAt) - dateTime(left.createdAt));
+}
+
+function hasFollowingTimelineEvent(
+  activityItems: WorkItemActivityItem[],
+  currentIndex: number,
+) {
+  const nextItem = activityItems[currentIndex + 1];
+  return (
+    nextItem?.kind === "event" && isActivityTimelineEvent(nextItem.event)
+  );
+}
+
 function eventActor(
   event: WorkItemEventSummary,
   assignees: WorkItemAssigneeSummary[],
@@ -1196,6 +2067,20 @@ function eventActor(
     return assignee?.name ?? "User";
   }
   if (event.actorAgentId) return event.actorAgentId;
+  return "System";
+}
+
+function commentAuthor(
+  comment: WorkItemCommentSummary,
+  assignees: WorkItemAssigneeSummary[],
+) {
+  if (comment.authorUserId) {
+    const assignee = assignees.find(
+      (entry) => entry.id === comment.authorUserId,
+    );
+    return assignee?.name ?? "User";
+  }
+  if (comment.authorAgentId) return comment.authorAgentId;
   return "System";
 }
 
@@ -1229,4 +2114,42 @@ function objectRecord(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function sameStringSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+
+const TIMELINE_EVENT_TYPES = new Set([
+  "created",
+  "updated",
+  "status_changed",
+  "completed",
+  "blocked",
+  "unblocked",
+  "assigned",
+  "due_date_changed",
+  "applicability_changed",
+  "linked_thread",
+  "agent_action",
+]);
+
+function isActivityTimelineEvent(
+  event: WorkItemEventSummary,
+  _item?: WorkItemSummary,
+) {
+  return TIMELINE_EVENT_TYPES.has(event.eventType.toLowerCase());
+}
+
+function activityTimelineMessage(
+  event: WorkItemEventSummary,
+  item: WorkItemSummary,
+) {
+  const message = event.message?.trim();
+  if (message) return message;
+  if (event.eventType === "created") return `created ${workItemKey(item)}.`;
+  if (event.eventType === "status_changed") return "changed the status.";
+  return eventLabel(event.eventType).toLowerCase();
 }

@@ -16,12 +16,14 @@ import {
   Badge,
   Button,
   Calendar,
+  Checkbox,
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
+  Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -55,6 +57,7 @@ interface WorkItemListRowProps {
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
   assignees?: WorkItemAssigneeSummary[];
+  labels?: WorkItemLabelSummary[];
   properties: WorkItemDisplayProperty[];
   includeSpace: boolean;
   updating: boolean;
@@ -68,6 +71,7 @@ interface WorkItemListRowProps {
       priority?: WorkItemPriority;
       dueAt?: string | null;
       ownerUserId?: string | null;
+      labelIds?: string[];
     },
   ) => void;
   onItemOpen?: (item: WorkItemSummary) => void;
@@ -79,6 +83,7 @@ export function WorkItemListRow({
   spaces,
   statuses,
   assignees = [],
+  labels: allLabels = [],
   properties,
   includeSpace,
   updating,
@@ -88,7 +93,7 @@ export function WorkItemListRow({
 }: WorkItemListRowProps) {
   const selected = new Set(properties);
   const primaryThreadId = item.threadLinks?.[0]?.threadId;
-  const labels = workItemLabels(item);
+  const itemLabels = workItemLabels(item);
   const progress = workItemProgress(item);
   const showDueAndThreadBadges = false;
 
@@ -147,7 +152,14 @@ export function WorkItemListRow({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1.5">
-        {labels.length > 0 ? <LabelsBadge labels={labels} /> : null}
+        {itemLabels.length > 0 ? (
+          <LabelsBadge
+            labels={itemLabels}
+            allLabels={allLabels}
+            disabled={updating || !onItemUpdate}
+            onChange={(labelIds) => onItemUpdate?.(item, { labelIds })}
+          />
+        ) : null}
 
         {showDueAndThreadBadges && selected.has("due") ? (
           <DueDateBadgeSelector
@@ -333,14 +345,64 @@ function DueDateBadgeSelector({
   );
 }
 
-function LabelsBadge({ labels }: { labels: WorkItemLabelSummary[] }) {
+function LabelsBadge({
+  labels,
+  allLabels,
+  disabled,
+  onChange,
+}: {
+  labels: WorkItemLabelSummary[];
+  allLabels: WorkItemLabelSummary[];
+  disabled?: boolean;
+  onChange?: (labelIds: string[]) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedIds = labels.map((label) => label.id);
+  const [draftIds, setDraftIds] = useState<string[]>(selectedIds);
+  const catalog = mergeLabelCatalog(allLabels, labels);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredLabels = catalog.filter((label) => {
+    if (!normalizedSearch) return true;
+    return (
+      label.name.toLowerCase().includes(normalizedSearch) ||
+      label.slug?.toLowerCase().includes(normalizedSearch)
+    );
+  });
+  const selectedDraftLabels = filteredLabels.filter((label) =>
+    draftIds.includes(label.id),
+  );
+  const remainingLabels = filteredLabels.filter(
+    (label) => !draftIds.includes(label.id),
+  );
   const visibleDots = labels.slice(0, 3);
   const displayLabel =
     labels.length === 1 ? labels[0].name : `${labels.length} labels`;
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setDraftIds(selectedIds);
+      setOpen(true);
+      return;
+    }
+
+    if (onChange && !disabled && !sameStringSet(selectedIds, draftIds)) {
+      onChange(draftIds);
+    }
+    setSearch("");
+    setOpen(false);
+  };
+
+  const toggleLabel = (labelId: string) => {
+    setDraftIds((current) =>
+      current.includes(labelId)
+        ? current.filter((currentId) => currentId !== labelId)
+        : [...current, labelId],
+    );
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -348,6 +410,7 @@ function LabelsBadge({ labels }: { labels: WorkItemLabelSummary[] }) {
           size="sm"
           className="h-6 shrink-0 gap-1.5 rounded-full border border-border bg-muted/10 px-2 text-xs font-medium hover:bg-muted/40"
           aria-label={`Labels: ${labels.map((label) => label.name).join(", ")}`}
+          disabled={disabled}
           onClick={stopPropagation}
         >
           <span className="flex items-center gap-1">
@@ -362,28 +425,115 @@ function LabelsBadge({ labels }: { labels: WorkItemLabelSummary[] }) {
           <span className="truncate">{displayLabel}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[220px] gap-0 rounded-lg p-0">
-        <div className="flex items-center border-b px-3 py-2">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <span className="px-2 text-sm text-muted-foreground">Labels</span>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-72 gap-0 rounded-lg p-0"
+        onClick={stopPropagation}
+      >
+        <div className="border-b p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search labels..."
+              className="h-8 rounded-md pl-8 text-sm"
+            />
+          </div>
         </div>
-        <div className="max-h-56 overflow-y-auto p-1">
-          {labels.map((label) => (
-            <div
-              key={label.id}
-              className="flex items-center gap-3 rounded-md px-2.5 py-2 text-sm"
-            >
-              <span
-                className="size-2 rounded-full"
-                style={{ backgroundColor: label.color ?? "#64748b" }}
-              />
-              <span className="truncate">{label.name}</span>
+        <div className="max-h-64 overflow-y-auto p-1">
+          {selectedDraftLabels.length > 0 ? (
+            <div>
+              {selectedDraftLabels.map((label) => (
+                <LabelBadgeOption
+                  key={label.id}
+                  label={label}
+                  checked
+                  onToggle={() => toggleLabel(label.id)}
+                />
+              ))}
             </div>
-          ))}
+          ) : null}
+          {selectedDraftLabels.length > 0 && remainingLabels.length > 0 ? (
+            <div className="border-t border-border" />
+          ) : null}
+          {remainingLabels.length > 0 ? (
+            <div>
+              {remainingLabels.map((label) => (
+                <LabelBadgeOption
+                  key={label.id}
+                  label={label}
+                  checked={false}
+                  onToggle={() => toggleLabel(label.id)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {filteredLabels.length === 0 ? (
+            <div className="px-2 py-3 text-sm text-muted-foreground">
+              No labels found.
+            </div>
+          ) : null}
         </div>
       </PopoverContent>
     </Popover>
   );
+}
+
+function LabelBadgeOption({
+  label,
+  checked,
+  onToggle,
+}: {
+  label: WorkItemLabelSummary;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-foreground hover:bg-muted/45"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      <Checkbox
+        checked={checked}
+        className="size-4 shrink-0"
+        onClick={(event) => event.stopPropagation()}
+        onCheckedChange={onToggle}
+      />
+      <span
+        className="size-2 rounded-full"
+        style={{ backgroundColor: label.color ?? "#64748b" }}
+      />
+      <span className="min-w-0 truncate">{label.name}</span>
+    </button>
+  );
+}
+
+function mergeLabelCatalog(
+  allLabels: WorkItemLabelSummary[],
+  selectedLabels: WorkItemLabelSummary[],
+) {
+  const labelsById = new Map<string, WorkItemLabelSummary>();
+  for (const label of allLabels) {
+    labelsById.set(label.id, label);
+  }
+  for (const label of selectedLabels) {
+    if (!labelsById.has(label.id)) {
+      labelsById.set(label.id, label);
+    }
+  }
+  return Array.from(labelsById.values());
+}
+
+function sameStringSet(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((value) => bSet.has(value));
 }
 
 function ThreadBadge({

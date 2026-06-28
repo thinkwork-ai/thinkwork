@@ -61,6 +61,21 @@ export interface WorkItemEventSummary {
   createdAt?: string | null;
 }
 
+export interface WorkItemCommentSummary {
+  id: string;
+  tenantId?: string | null;
+  spaceId?: string | null;
+  workItemId: string;
+  threadId?: string | null;
+  authorUserId?: string | null;
+  authorAgentId?: string | null;
+  body: string;
+  metadata?: unknown;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  archivedAt?: string | null;
+}
+
 export interface WorkItemLabelSummary {
   id: string;
   tenantId?: string | null;
@@ -119,6 +134,7 @@ export interface WorkItemSummary {
   labels?: WorkItemLabelSummary[] | null;
   threadLinks?: WorkItemThreadLinkSummary[] | null;
   events?: WorkItemEventSummary[] | null;
+  comments?: WorkItemCommentSummary[] | null;
   externalRefs?: WorkItemExternalRefSummary[] | null;
   createdAt?: string | null;
   updatedAt?: string | null;

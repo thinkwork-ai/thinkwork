@@ -28,6 +28,7 @@ enum WorkItemEventType {
   APPLICABILITY_CHANGED
   LINKED_THREAD
   AGENT_ACTION
+  COMMENT_ADDED
 }
 
 enum WorkItemViewType {
@@ -169,6 +170,21 @@ type WorkItemDocument {
   archivedAt: AWSDateTime
 }
 
+type WorkItemComment {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  workItemId: ID!
+  threadId: ID
+  authorUserId: ID
+  authorAgentId: ID
+  body: String!
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  archivedAt: AWSDateTime
+}
+
 type WorkItem {
   id: ID!
   tenantId: ID!
@@ -206,6 +222,7 @@ type WorkItem {
   externalRefs: [WorkItemExternalRef!]!
   labels: [WorkItemLabel!]!
   documents: [WorkItemDocument!]!
+  comments: [WorkItemComment!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
   archivedAt: AWSDateTime
@@ -271,6 +288,13 @@ input WorkItemDocumentInput {
   id: ID!
 }
 
+input WorkItemCommentsInput {
+  tenantId: ID
+  workItemId: ID!
+  includeArchived: Boolean
+  limit: Int
+}
+
 input CreateWorkItemInput {
   tenantId: ID
   spaceId: ID!
@@ -303,6 +327,7 @@ input UpdateWorkItemInput {
   required: Boolean
   applicable: Boolean
   blocked: Boolean
+  openEngineQueueKey: String
   labelIds: [ID!]
   labelSlugs: [String!]
   metadata: AWSJSON
@@ -350,6 +375,14 @@ input UpdateWorkItemDocumentInput {
   contentType: String
   metadata: AWSJSON
   archived: Boolean
+}
+
+input CreateWorkItemCommentInput {
+  tenantId: ID
+  workItemId: ID!
+  threadId: ID
+  body: String!
+  metadata: AWSJSON
 }
 
 input UpdateWorkItemStatusInput {
@@ -470,6 +503,7 @@ extend type Query {
   workItemLabels(input: WorkItemLabelsInput): [WorkItemLabel!]!
   workItemDocuments(input: WorkItemDocumentsInput!): [WorkItemDocument!]!
   workItemDocument(input: WorkItemDocumentInput!): WorkItemDocument
+  workItemComments(input: WorkItemCommentsInput!): [WorkItemComment!]!
   workItemStatuses(tenantId: ID, spaceId: ID!): [WorkItemStatus!]!
   workItemSavedViews(tenantId: ID, spaceId: ID): [WorkItemSavedView!]!
   openEngineEligibleWorkItems(
@@ -484,6 +518,7 @@ extend type Mutation {
   updateWorkItemLabel(input: UpdateWorkItemLabelInput!): WorkItemLabel!
   createWorkItemDocument(input: CreateWorkItemDocumentInput!): WorkItemDocument!
   updateWorkItemDocument(input: UpdateWorkItemDocumentInput!): WorkItemDocument!
+  createWorkItemComment(input: CreateWorkItemCommentInput!): WorkItemComment!
   updateWorkItemStatus(input: UpdateWorkItemStatusInput!): WorkItem!
   claimNextOpenEngineWorkItem(
     input: ClaimNextOpenEngineWorkItemInput!

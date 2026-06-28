@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   dbRows,
   mockClaimNext,
+  mockCreateComment,
   mockCreateDocument,
   mockCreateWorkItem,
   mockGetQueueSnapshot,
@@ -10,6 +11,7 @@ const {
   mockGetWorkItem,
   mockListDocuments,
   mockListEligible,
+  mockListComments,
   mockListWorkItems,
   mockRecordReceipt,
   mockRouteWorkItem,
@@ -27,6 +29,7 @@ const {
   return {
     dbRows: [] as unknown[][],
     mockClaimNext: vi.fn(),
+    mockCreateComment: vi.fn(),
     mockCreateDocument: vi.fn(),
     mockCreateWorkItem: vi.fn(),
     mockGetQueueSnapshot: vi.fn(),
@@ -34,6 +37,7 @@ const {
     mockGetWorkItem: vi.fn(),
     mockListDocuments: vi.fn(),
     mockListEligible: vi.fn(),
+    mockListComments: vi.fn(),
     mockListWorkItems: vi.fn(),
     mockRecordReceipt: vi.fn(),
     mockRouteWorkItem: vi.fn(),
@@ -133,10 +137,12 @@ vi.mock("../lib/work-items/open-engine-queue-service.js", () => ({
 }));
 
 vi.mock("../lib/work-items/work-item-service.js", () => ({
+  createWorkItemComment: mockCreateComment,
   createWorkItem: mockCreateWorkItem,
   createWorkItemDocument: mockCreateDocument,
   getWorkItem: mockGetWorkItem,
   getWorkItemDocument: mockGetDocument,
+  listWorkItemComments: mockListComments,
   listWorkItemDocuments: mockListDocuments,
   listWorkItems: mockListWorkItems,
   updateWorkItem: mockUpdateWorkItem,
@@ -154,6 +160,7 @@ beforeEach(() => {
   dbRows.length = 0;
   vi.clearAllMocks();
   mockGetWorkItem.mockResolvedValue(baseWorkItem());
+  mockListComments.mockResolvedValue([]);
   mockListDocuments.mockResolvedValue([]);
   mockRecordReceipt.mockResolvedValue({
     id: "event-1",

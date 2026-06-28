@@ -151,6 +151,7 @@ export function WorkItemsListView({
         displayProperties: display.properties,
         assignees,
         includeSpace,
+        labels,
         onItemUpdate,
         onItemOpen,
         onStatusChange,
@@ -163,6 +164,7 @@ export function WorkItemsListView({
       display.properties,
       assignees,
       includeSpace,
+      labels,
       onItemUpdate,
       onItemOpen,
       onStatusChange,
@@ -209,6 +211,7 @@ export function WorkItemsListView({
                 sequenceNumber={sequenceNumberById.get(item.id)}
                 spaces={spaces}
                 statuses={sortedStatuses}
+                labels={labels}
                 properties={display.properties}
                 includeSpace={includeSpace}
                 assignees={assignees}
@@ -385,6 +388,7 @@ function buildListColumns({
   displayProperties,
   assignees,
   includeSpace,
+  labels,
   onItemUpdate,
   onItemOpen,
   onStatusChange,
@@ -406,12 +410,14 @@ function buildListColumns({
       priority?: WorkItemPriority;
       dueAt?: string | null;
       ownerUserId?: string | null;
+      labelIds?: string[];
     },
   ) => void;
   onItemOpen?: (item: WorkItemSummary) => void;
   sequenceNumberById: Map<string, number>;
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  labels: WorkItemLabelSummary[];
   updatingItemId?: string | null;
 }): Array<ColumnDef<WorkItemSummary, unknown>> {
   const columns: Array<ColumnDef<WorkItemSummary, unknown> | false> = [
@@ -430,6 +436,7 @@ function buildListColumns({
           sequenceNumber={sequenceNumberById.get(row.original.id)}
           spaces={spaces}
           statuses={statuses}
+          labels={labels}
           properties={displayProperties}
           includeSpace={includeSpace}
           assignees={assignees}

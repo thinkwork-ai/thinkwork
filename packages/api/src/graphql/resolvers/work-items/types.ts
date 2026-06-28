@@ -5,6 +5,7 @@ import {
   eq,
   isNull,
   desc,
+  workItemComments,
   workItemDocuments,
   workItemEvents,
   workItemExternalRefs,
@@ -16,6 +17,7 @@ import {
 import {
   toGraphqlWorkItemEvent,
   toGraphqlWorkItemExternalRef,
+  toGraphqlWorkItemComment,
   toGraphqlWorkItemDocument,
   toGraphqlWorkItemLabel,
   toGraphqlWorkItemStatus,
@@ -132,5 +134,21 @@ export const workItemTypeResolvers = {
       )
       .orderBy(desc(workItemDocuments.updated_at));
     return rows.map((row) => toGraphqlWorkItemDocument(row));
+  },
+  comments: async (parent: any) => {
+    const workItemId = parent.id;
+    const tenantId = parent.tenantId ?? parent.tenant_id;
+    const rows = await db
+      .select()
+      .from(workItemComments)
+      .where(
+        and(
+          eq(workItemComments.tenant_id, tenantId),
+          eq(workItemComments.work_item_id, workItemId),
+          isNull(workItemComments.archived_at),
+        ),
+      )
+      .orderBy(asc(workItemComments.created_at));
+    return rows.map((row) => toGraphqlWorkItemComment(row));
   },
 };

@@ -5,6 +5,7 @@ import {
   db,
   eq,
   sql,
+  workItemComments,
   workItemEvents,
   workItems,
 } from "../../graphql/utils.js";
@@ -127,6 +128,25 @@ export async function recordOpenEngineReceipt(
         extensions: { code: "INTERNAL_SERVER_ERROR" },
       });
     }
+
+    if (shouldMirrorReceiptAsComment(receiptType)) {
+      await tx.insert(workItemComments).values({
+        tenant_id: input.tenantId,
+        space_id: item.space_id,
+        work_item_id: input.workItemId,
+        thread_id: input.threadId ?? null,
+        author_agent_id: input.agentId,
+        body: input.message ?? defaultReceiptMessage(receiptType),
+        metadata: compactObject({
+          source: "open_engine_receipt",
+          receiptId: event.id,
+          receiptType,
+          evidence: input.evidence ?? undefined,
+          idempotencyKey: idempotencyKey ?? undefined,
+        }),
+        updated_at: now,
+      });
+    }
     return event;
   });
 }
@@ -221,6 +241,15 @@ function stateUpdateForReceipt(
 
 function defaultReceiptMessage(receiptType: OpenEngineReceiptType) {
   return `Open Engine ${receiptType} receipt recorded.`;
+}
+
+function shouldMirrorReceiptAsComment(receiptType: OpenEngineReceiptType) {
+  return ![
+    "skill_subscribed",
+    "skill_installed",
+    "skill_updated",
+    "skill_declined",
+  ].includes(receiptType);
 }
 
 function optionalTrim(value: string | null | undefined) {
