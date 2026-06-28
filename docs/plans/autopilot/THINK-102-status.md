@@ -4,7 +4,7 @@ title: MCP Apps host theming context autopilot status
 started_at: 2026-06-28
 target_branch: main
 implementation_branch: codex/think-102-mcp-app-host-theming
-status: in_progress
+status: verification_blocked
 ---
 
 # THINK-102 Autopilot Status
@@ -64,9 +64,9 @@ Objective:
 
 Deferred:
 
-- Production Dispatch smoke depends on TEI-16 app-side consumption and deployed
-  pipeline availability. This run will record any production verification
-  blocker if TEI-16 is not ready.
+- Production visual smoke is blocked until `app.thinkwork.ai` is updated by
+  the desktop-release web deploy path. `deploy.yml` intentionally does not
+  publish `apps/web` on every merge to `main`.
 
 ## Progress Log
 
@@ -82,3 +82,26 @@ Deferred:
 - `2026-06-28`: `git diff --check` passed.
 - `2026-06-28`: Opened implementation PR `#3070`:
   `https://github.com/thinkwork-ai/thinkwork/pull/3070`.
+- `2026-06-28T14:38:53Z`: Implementation PR `#3070` merged to `main` with
+  merge commit `05b6ce3616b520734584dbe18cb210689befaa74`.
+- `2026-06-28`: TEI-16 was completed; companion Dispatch PR `#908` merged in
+  `homecareintel/web-apps`.
+- `2026-06-28`: Post-merge `main` CI passed for merge commit
+  `05b6ce3616b520734584dbe18cb210689befaa74`: lint, typecheck, test, supply
+  chain, and deploy run `28325659624`.
+- `2026-06-28`: Fresh deployed Dispatch smoke thread created at
+  `https://app.thinkwork.ai/threads/43fa4c23-8b53-46df-920a-865c989d0250`
+  (`TICK-1197`). The agent turn
+  `23bfdce6-bfd8-495d-8c26-0ac28e562c89` succeeded and invoked
+  `mcp_lastmile-dispatch_dispatch_optimization_app`.
+- `2026-06-28`: Production visual verification is blocked. The served
+  `app.thinkwork.ai` web bundle reports `VITE_RELEASE_VERSION:
+  "v0.1.0-canary.279"` and the deployed thread route chunk still contains the
+  pre-THINK-102 inline MCP iframe renderer with
+  `className: "block h-[560px] w-full bg-white"`. The merged code in
+  `05b6ce3616b520734584dbe18cb210689befaa74` contains `McpAppFrame`, but the
+  production web CDN has not shipped that release because `.github/workflows/deploy.yml`
+  explicitly leaves `apps/web` deployment to `release-desktop.yml` on a
+  `desktop-v*` tag. `THINK-102` should remain in Linear Verification until a
+  desktop-release web deploy serves the merged host bridge and the Dispatch app
+  is re-smoked across light, dark, and dark-blue themes.
