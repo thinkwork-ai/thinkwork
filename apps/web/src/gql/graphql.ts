@@ -3134,6 +3134,40 @@ export enum MemoryRecordScope {
   User = 'USER'
 }
 
+/**
+ * ThinkWork-owned ledger row for a Hindsight retain attempt.
+ * The retained memory record itself remains in Hindsight; this type exposes
+ * retry, timeout, and dead-letter state for diagnostics.
+ */
+export type MemoryRetainAttempt = {
+  __typename?: 'MemoryRetainAttempt';
+  attemptCount: Scalars['Int']['output'];
+  backendLatencyMs?: Maybe<Scalars['Int']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  errorClass?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  lockedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lockedBy?: Maybe<Scalars['String']['output']>;
+  maxAttempts: Scalars['Int']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  nextRetryAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  provider: Scalars['String']['output'];
+  providerDocumentId?: Maybe<Scalars['String']['output']>;
+  providerResult?: Maybe<Scalars['AWSJSON']['output']>;
+  sourceEventKey: Scalars['String']['output'];
+  sourceEventType: Scalars['String']['output'];
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadId: Scalars['ID']['output'];
+  threadTurnId?: Maybe<Scalars['ID']['output']>;
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type MemorySearchResult = {
   __typename?: 'MemorySearchResult';
   records: Array<MemoryRecord>;
