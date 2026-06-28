@@ -48,11 +48,18 @@ type Sentence = {
 };
 
 const PET_WORDS = "(?:dog|puppy|cat|kitten|bird|parrot|rabbit|hamster|horse)";
+const PET_DESCRIPTOR_WORDS =
+  "(?:dog|puppy|cat|kitten|bird|parrot|rabbit|hamster|horse|" +
+  "poodle|doodle|labrador|retriever|terrier|bulldog|beagle|collie|spaniel|husky|shepherd)";
 const PET_CONTEXT = new RegExp(`\\b(?:new\\s+)?${PET_WORDS}\\b`, "i");
 const PRONOUN_PET_NAME =
   /\b(?:her|his|their)\s+name\s+is\s+([A-Z][A-Za-z'-]{1,40})\b/i;
 const NAMED_PET = new RegExp(
-  `\\b(?:my|our)\\s+((?:new\\s+)?${PET_WORDS})\\b[^.?!]{0,80}?\\b(?:is\\s+named|name\\s+is|called|named)\\s+([A-Z][A-Za-z'-]{1,40})\\b`,
+  `\\b(?:my|our)\\s+((?:new\\s+)?${PET_DESCRIPTOR_WORDS})\\b[^.?!]{0,80}?\\b(?:is\\s+named|name\\s+is|called|named)\\s+([A-Z][A-Za-z'-]{1,40})\\b`,
+  "i",
+);
+const NAMED_PET_ATTRIBUTE = new RegExp(
+  `\\b(?:my|our)\\s+((?:new\\s+)?${PET_DESCRIPTOR_WORDS})\\s+([A-Z][A-Za-z'-]{1,40})\\s+has\\s+((?:(?:a|an|the|her|his|their)\\s+)?[A-Za-z][A-Za-z0-9 ,/&'-]{1,100}?)\\s+(?:named|called)\\s+([A-Z][A-Za-z0-9'-]{1,40})\\b`,
   "i",
 );
 const GOT_PET = new RegExp(
@@ -114,6 +121,18 @@ function extractUserFact(
   sentence: Sentence,
   previous: Sentence | null,
 ): { kind: HighConfidenceFactKind; text: string } | null {
+  const namedPetAttribute = NAMED_PET_ATTRIBUTE.exec(sentence.text);
+  if (namedPetAttribute) {
+    const pet = petNoun(namedPetAttribute[1]);
+    const petName = cleanName(namedPetAttribute[2]);
+    const attribute = cleanPhrase(namedPetAttribute[3]);
+    const attributeName = cleanName(namedPetAttribute[4]);
+    return {
+      kind: "pet",
+      text: `User's ${pet} ${petName} has ${attribute} named ${attributeName}.`,
+    };
+  }
+
   const namedPet = NAMED_PET.exec(sentence.text);
   if (namedPet) {
     const pet = petNoun(namedPet[1]);
