@@ -7,6 +7,7 @@ const DEFAULT_AGENT_ID = "codex";
 const DEFAULT_QUEUE_KEY = "codex";
 const DEFAULT_LEASE_SECONDS = 30 * 60;
 const DEFAULT_MAX_DOCS = 5;
+const DEFAULT_MAX_STANDING_CONTEXT_DOCS = 5;
 const DEFAULT_RECEIPT_LIMIT = 25;
 
 export class OpenEngineMcpClient {
@@ -86,11 +87,21 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     queueKey: env.OPEN_ENGINE_QUEUE_KEY ?? DEFAULT_QUEUE_KEY,
     spaceId: env.OPEN_ENGINE_SPACE_ID,
     labelSlugs: splitList(env.OPEN_ENGINE_LABEL_SLUGS),
+    standingContextWorkItemId: env.OPEN_ENGINE_STANDING_CONTEXT_WORK_ITEM_ID,
+    standingContextDocumentIds: splitList(
+      env.OPEN_ENGINE_STANDING_CONTEXT_DOCUMENT_IDS,
+    ),
+    routingMapDocumentId: env.OPEN_ENGINE_ROUTING_MAP_DOCUMENT_ID,
+    skillDirectoryDocumentId: env.OPEN_ENGINE_SKILL_DIRECTORY_DOCUMENT_ID,
     leaseSeconds: numberOrDefault(
       env.OPEN_ENGINE_LEASE_SECONDS,
       DEFAULT_LEASE_SECONDS,
     ),
     maxDocs: numberOrDefault(env.OPEN_ENGINE_MAX_DOCS, DEFAULT_MAX_DOCS),
+    maxStandingContextDocs: numberOrDefault(
+      env.OPEN_ENGINE_MAX_STANDING_CONTEXT_DOCS,
+      DEFAULT_MAX_STANDING_CONTEXT_DOCS,
+    ),
     receiptLimit: numberOrDefault(
       env.OPEN_ENGINE_RECEIPT_LIMIT,
       DEFAULT_RECEIPT_LIMIT,
@@ -143,11 +154,37 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       case "label-slugs":
         options.labelSlugs = [...options.labelSlugs, ...splitList(value)];
         break;
+      case "standing-context-work-item":
+      case "standing-context-work-item-id":
+        options.standingContextWorkItemId = value;
+        break;
+      case "standing-context-document":
+      case "standing-context-document-id":
+      case "standing-context-document-ids":
+        options.standingContextDocumentIds = [
+          ...options.standingContextDocumentIds,
+          ...splitList(value),
+        ];
+        break;
+      case "routing-map-document":
+      case "routing-map-document-id":
+        options.routingMapDocumentId = value;
+        break;
+      case "skill-directory-document":
+      case "skill-directory-document-id":
+        options.skillDirectoryDocumentId = value;
+        break;
       case "lease-seconds":
         options.leaseSeconds = numberOrDefault(value, DEFAULT_LEASE_SECONDS);
         break;
       case "max-docs":
         options.maxDocs = numberOrDefault(value, DEFAULT_MAX_DOCS);
+        break;
+      case "max-standing-context-docs":
+        options.maxStandingContextDocs = numberOrDefault(
+          value,
+          DEFAULT_MAX_STANDING_CONTEXT_DOCS,
+        );
         break;
       case "receipt-limit":
         options.receiptLimit = numberOrDefault(value, DEFAULT_RECEIPT_LIMIT);
@@ -162,6 +199,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
 
   options.mode = normalizeMode(options.mode);
   options.labelSlugs = [...new Set(options.labelSlugs)];
+  options.standingContextDocumentIds = [
+    ...new Set(options.standingContextDocumentIds),
+  ];
   return options;
 }
 
@@ -210,6 +250,7 @@ export async function runOpenEngineOneTask(input) {
       status: "verified",
       toolCount: toolNames.length,
       verify,
+      standingContext: describeStandingContextConfig(config),
     };
   }
 
@@ -223,6 +264,7 @@ export async function runOpenEngineOneTask(input) {
     "open_engine_update_status_ledger",
   ]);
 
+  const standingContext = await fetchStandingContext(client, config);
   const queueArgs = queueScopeArgs(config);
   const snapshot = await client.callTool("open_engine_queue_snapshot", {
     ...queueArgs,
@@ -238,6 +280,7 @@ export async function runOpenEngineOneTask(input) {
     return {
       status: "no_work",
       verify,
+      standingContext,
       snapshot: snapshot.snapshot ?? snapshot,
       workItems: [],
     };
@@ -253,6 +296,7 @@ export async function runOpenEngineOneTask(input) {
     return {
       status: "no_work",
       verify,
+      standingContext,
       snapshot: snapshot.snapshot ?? snapshot,
       workItems: list.workItems ?? [],
       claim,
@@ -282,6 +326,7 @@ export async function runOpenEngineOneTask(input) {
     claim,
     context,
     documents,
+    standingContext,
   });
   const ledger = await client.callTool("open_engine_update_status_ledger", {
     workItemId,
@@ -294,6 +339,14 @@ export async function runOpenEngineOneTask(input) {
       mode: config.mode,
       queueKey: config.queueKey,
       documentCount: documents.length,
+      standingContext: {
+        configured: standingContext.configured,
+        workItemId: standingContext.workItemId ?? null,
+        documentCount: standingContext.documents.length,
+        roles: standingContext.documents.map(
+          (document) => document.standingContextRole ?? "standing_context",
+        ),
+      },
       promptReady: true,
     },
     idempotencyKey: `open-engine-one-task-runner:${workItemId}:${config.agentId}:checking`,
@@ -311,6 +364,7 @@ export async function runOpenEngineOneTask(input) {
     claim,
     context,
     documents,
+    standingContext,
     ledger,
     prompt,
   };
@@ -323,6 +377,10 @@ export function buildCodexOneTaskPrompt(input) {
   const documentSummaries = input.documents
     .map((doc, index) => formatDocumentForPrompt(doc, index + 1))
     .join("\n\n");
+  const standingContext = input.standingContext ?? {
+    configured: false,
+    documents: [],
+  };
 
   return `Use the ThinkWork OpenEngine MCP runtime queue for exactly one claimed Work Item.
 
@@ -337,16 +395,25 @@ Runtime:
 Rules:
 1. Do not use Linear as the runtime queue.
 2. Do not claim another Work Item in this run.
-3. Fetch additional context only through ThinkWork OpenEngine MCP tools.
-4. Execute only the scoped Work Item.
-5. Record durable evidence before stopping.
-6. Stop after this one Work Item.
+3. Treat the Standing context section as the cold-start contract before acting.
+4. Fetch additional context only through ThinkWork OpenEngine MCP tools.
+5. Execute only the scoped Work Item.
+6. Record durable evidence before stopping.
+7. Stop after this one Work Item.
+
+Standing context contract:
+- Review standing context, routing maps, and optional skill directory material before task work.
+- Use the routing map for handoffs; if a target queue or owner is not configured, record a human hold or blocker with the exact missing setup.
+- Optional skills are discoverable context, not automatic installs.
+- Install or update optional skills only when they are subscribed/approved for the same scope.
+- For scope expansion or declined optional skills, record explicit evidence with \`skill_subscribed\`, \`skill_installed\`, \`skill_updated\`, or \`skill_declined\` receipts as appropriate.
 
 Required first MCP calls:
 1. Call \`open_engine_verify_connection\` with \`agentId: "${input.config.agentId}"\` and \`queueKey: "${input.config.queueKey}"\`.
-2. Call \`open_engine_get_context\` for \`${workItem.id}\`.
-3. Fetch only the documents you need with \`open_engine_fetch_document\`.
-4. Call \`open_engine_update_status_ledger\` with status \`checking\` before work begins.
+2. Review the standing context fetched by the runner; if more standing context is needed, fetch it through \`open_engine_get_context\` and \`open_engine_fetch_document\` before task work.
+3. Call \`open_engine_get_context\` for \`${workItem.id}\`.
+4. Fetch only the task documents you need with \`open_engine_fetch_document\`.
+5. Call \`open_engine_update_status_ledger\` with status \`checking\` before work begins.
 
 Completion paths:
 - If complete with no human review needed, call \`open_engine_update_state\` with state \`done\`, a clear AGENT DONE message, and verification evidence.
@@ -363,6 +430,9 @@ ${formatJsonForPrompt({
   recentReceipts: input.context.receipts ?? [],
 })}
 
+Standing context:
+${formatStandingContextForPrompt(standingContext)}
+
 Fetched documents:
 ${documentSummaries || "No documents were fetched by the runner."}
 `;
@@ -370,10 +440,67 @@ ${documentSummaries || "No documents were fetched by the runner."}
 
 function formatDocumentForPrompt(document, index) {
   const title = document.title ?? document.id;
+  const role = document.standingContextRole
+    ? `\n   Role: ${document.standingContextRole}`
+    : "";
   if (document.content == null) {
-    return `${index}. ${title}\n   Document ID: ${document.id}\n   Content unavailable inline; fetch or download through OpenEngine if needed.`;
+    return `${index}. ${title}\n   Document ID: ${document.id}${role}\n   Content unavailable inline; fetch or download through OpenEngine if needed.`;
   }
-  return `${index}. ${title}\n   Document ID: ${document.id}\n\n${document.content}`;
+  return `${index}. ${title}\n   Document ID: ${document.id}${role}\n\n${document.content}`;
+}
+
+async function fetchStandingContext(client, config) {
+  const directSources = standingContextDocumentSources(config);
+  const configured = Boolean(
+    config.standingContextWorkItemId || directSources.length > 0,
+  );
+  const result = {
+    configured,
+    workItemId: config.standingContextWorkItemId ?? null,
+    context: null,
+    documents: [],
+  };
+  if (!configured) return result;
+
+  if (config.standingContextWorkItemId) {
+    result.context = await client.callTool("open_engine_get_context", {
+      workItemId: config.standingContextWorkItemId,
+      receiptLimit: Math.min(
+        config.receiptLimit ?? DEFAULT_RECEIPT_LIMIT,
+        10,
+      ),
+    });
+    const documentIndex = await client.callTool("open_engine_list_documents", {
+      workItemId: config.standingContextWorkItemId,
+      limit: Math.max(
+        config.maxStandingContextDocs ?? DEFAULT_MAX_STANDING_CONTEXT_DOCS,
+        1,
+      ),
+    });
+    const documents = await fetchDocumentsProgressively(
+      client,
+      documentIndex.documents ?? [],
+      config.maxStandingContextDocs ?? DEFAULT_MAX_STANDING_CONTEXT_DOCS,
+    );
+    result.documents.push(
+      ...documents.map((document) => ({
+        ...document,
+        standingContextRole: "standing_context",
+      })),
+    );
+  }
+
+  for (const source of directSources) {
+    const fetched = await client.callTool("open_engine_fetch_document", {
+      documentId: source.documentId,
+    });
+    result.documents.push({
+      ...(fetched.document ?? { id: source.documentId }),
+      standingContextRole: source.role,
+    });
+  }
+
+  return result;
 }
 
 async function fetchDocumentsProgressively(client, documents, maxDocs) {
@@ -392,6 +519,48 @@ async function fetchDocumentsProgressively(client, documents, maxDocs) {
   return fetched;
 }
 
+function standingContextDocumentSources(config) {
+  const sources = [
+    ...(config.standingContextDocumentIds ?? []).map((documentId) => ({
+      documentId,
+      role: "standing_context",
+    })),
+    ...(config.routingMapDocumentId
+      ? [
+          {
+            documentId: config.routingMapDocumentId,
+            role: "routing_map",
+          },
+        ]
+      : []),
+    ...(config.skillDirectoryDocumentId
+      ? [
+          {
+            documentId: config.skillDirectoryDocumentId,
+            role: "skill_directory",
+          },
+        ]
+      : []),
+  ];
+  const seen = new Set();
+  return sources.filter((source) => {
+    if (seen.has(source.documentId)) return false;
+    seen.add(source.documentId);
+    return true;
+  });
+}
+
+function describeStandingContextConfig(config) {
+  return {
+    configured: Boolean(
+      config.standingContextWorkItemId ||
+        standingContextDocumentSources(config).length > 0,
+    ),
+    workItemId: config.standingContextWorkItemId ?? null,
+    documentSources: standingContextDocumentSources(config),
+  };
+}
+
 function queueScopeArgs(config) {
   return {
     queueKey: config.queueKey,
@@ -405,6 +574,29 @@ function requireTools(toolNames, names) {
   if (missing.length > 0) {
     throw new Error(`OpenEngine MCP is missing tools: ${missing.join(", ")}`);
   }
+}
+
+function formatStandingContextForPrompt(standingContext) {
+  if (!standingContext.configured) {
+    return "No standing context sources were configured for this run.";
+  }
+  const contextSummary = standingContext.context
+    ? formatJsonForPrompt({
+        workItem: standingContext.context.workItem ?? null,
+        labels: standingContext.context.labels ?? [],
+        queue: standingContext.context.queue ?? null,
+      })
+    : "No standing context Work Item was configured.";
+  const documents = standingContext.documents
+    .map((document, index) => formatDocumentForPrompt(document, index + 1))
+    .join("\n\n");
+  return `Standing context Work Item: ${standingContext.workItemId ?? "none"}
+
+Standing context snapshot:
+${contextSummary}
+
+Standing context documents:
+${documents || "No standing context documents were fetched."}`;
 }
 
 function normalizeMode(value) {
@@ -450,6 +642,15 @@ Options:
   --queue codex              OpenEngine queue key
   --label slug[,slug]        optional label filters
   --space-id UUID            optional Space filter
+  --standing-context-work-item-id UUID
+                            Work Item that holds standing context documents
+  --standing-context-document ID
+                            standing context document ID; repeatable or comma-separated
+  --routing-map-document ID  routing/owner map document ID
+  --skill-directory-document ID
+                            optional skills directory document ID
+  --max-standing-context-docs N
+                            max docs fetched from standing context Work Item
   --prompt-file PATH         write the generated Codex prompt to a file
   --json                     print JSON instead of the human summary
 `;
