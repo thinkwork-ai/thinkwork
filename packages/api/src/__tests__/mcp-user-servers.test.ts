@@ -306,7 +306,43 @@ describe("GET /api/skills/user-mcp-servers", () => {
         runtimeAssigned: false,
       }),
     ]);
-    expect(JSON.stringify(dbState.predicates)).toContain("plugin");
+  });
+
+  it("reports active for manual OAuth servers before agent assignment", async () => {
+    dbState.selectQueue.push(
+      [],
+      [
+        managedTwentyRow({
+          mcp_server_id: "lastmile-dispatch",
+          name: "LastMile Dispatch",
+          slug: "lastmile-dispatch",
+          url: "https://mcp-dev.lastmile-tei.com/dispatch",
+          management_source: "manual",
+          managed_application_key: null,
+        }),
+      ],
+      [{ mcp_server_id: "lastmile-dispatch", status: "active" }],
+    );
+
+    const response = await handler(event({ principalId: "principal-1" }));
+    const body = JSON.parse(response.body ?? "{}") as {
+      servers: Array<{
+        id: string;
+        authStatus: string;
+        managementSource: string;
+        runtimeAssigned: boolean;
+      }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.servers).toEqual([
+      expect.objectContaining({
+        id: "lastmile-dispatch",
+        authStatus: "active",
+        managementSource: "manual",
+        runtimeAssigned: false,
+      }),
+    ]);
   });
 
   it("does not expose managed tenant API key servers as user-auth connectors without an agent assignment", async () => {
