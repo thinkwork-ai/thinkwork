@@ -833,7 +833,7 @@ function ActivitySection({
               No activity recorded yet.
             </p>
           ) : (
-            <ol className="space-y-1">
+            <ol>
               {activityItems.map((activityItem, index) =>
                 activityItem.kind === "comment" ? (
                   <ActivityCommentRow
@@ -902,7 +902,7 @@ function ActivityCommentRow({
   assignees: WorkItemAssigneeSummary[];
 }) {
   return (
-    <li>
+    <li className="mt-3 first:mt-0">
       <article className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40">
         <header className="flex min-w-0 items-center gap-1.5">
           <ActivityAvatar
