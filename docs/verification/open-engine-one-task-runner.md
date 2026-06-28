@@ -87,6 +87,17 @@ prompt files, or local MCP client config.
 - The coding agent must still record the final `done`, `review`, `blocked`,
   `human_hold`, or `failed` state through MCP after it performs the task.
 
+## Work Item Timeline Model
+
+The Work Item timeline separates narrative comments from lower-level activity.
+Agent-facing receipts such as `AGENT CLAIMED`, `AGENT STATUS`, `AGENT REVIEW`,
+blockers, and `AGENT DONE` should render as comments so humans can read the
+handoff in order. Work Item property, resource, and status changes remain
+activity events.
+
+Status ledger documents stay machine-readable evidence. They should be linked
+from the OpenEngine state surface rather than replacing the comment timeline.
+
 ## Codex Recurring Prompt
 
 Use this prompt as the recurring job body after running the helper in `prepare`
@@ -132,7 +143,7 @@ surface to Work Items:
 | Private setup issue                                          | Work Item documents and repo-local agent bootstrap docs.                     |
 | Status comment updated in place                              | Per-Work Item status ledger document.                                        |
 | Runner checks holds, blockers, delegated work, then one task | MCP queue snapshot, Work Item state, receipts, handoff, and one-task prompt. |
-| Receipts in comments                                         | Durable Work Item activity/events and status ledger documents.               |
+| Receipts in comments                                         | Narrative agent receipts render as comments; property changes stay events.   |
 | Smoke test issue                                             | Real ThinkWork Work Item dogfood via `/mcp/open-engine`.                     |
 | Team routing                                                 | OpenEngine queue keys and `open_engine_handoff_work_item`.                   |
 
