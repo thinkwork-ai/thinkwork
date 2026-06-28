@@ -57,13 +57,22 @@ export interface RetainPayloadInput {
   message?: unknown;
   /** Prior turn history; filtered to user/assistant entries with non-empty string content. */
   messages_history?: unknown;
+  /** Active thread_turns.id for this invocation. Used as the retain ledger source key. */
+  thread_turn_id?: unknown;
 }
 
 export interface MemoryRetainRequest {
   tenantId: string;
   userId: string;
   threadId: string;
+  threadTurnId?: string;
+  spaceId?: string;
   transcript: RetainTranscriptEntry[];
+  metadata?: {
+    threadTurnId?: string;
+    spaceId?: string;
+    sourceEventKey?: string;
+  };
 }
 
 export interface RetainConversationResult {
@@ -118,11 +127,26 @@ export function buildMemoryRetainRequest(
   identity: IdentitySnapshot,
   assistantContent: string,
 ): MemoryRetainRequest {
+  const threadTurnId =
+    typeof payload.thread_turn_id === "string"
+      ? payload.thread_turn_id.trim()
+      : "";
+  const spaceId = identity.spaceId?.trim() || "";
+  const metadata: MemoryRetainRequest["metadata"] = {};
+  if (threadTurnId) {
+    metadata.threadTurnId = threadTurnId;
+    metadata.sourceEventKey = `thread-turn:${threadTurnId}`;
+  }
+  if (spaceId) metadata.spaceId = spaceId;
+
   return {
     tenantId: identity.tenantId,
     userId: identity.userId,
     threadId: identity.threadId,
+    ...(threadTurnId ? { threadTurnId } : {}),
+    ...(spaceId ? { spaceId } : {}),
     transcript: buildRetainTranscript(payload, assistantContent),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
 
