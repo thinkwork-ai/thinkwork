@@ -16,6 +16,7 @@ import {
   CreateWorkItemDocumentMutation,
   DeleteComputerMemoryRecordMutation,
   PromoteDraftAppletMutation,
+  RecordOpenEngineHumanActionMutation,
   SpaceQuery,
   SpaceThreadCollaborationQuery,
   SpacesQuery,
@@ -176,6 +177,7 @@ describe("computer GraphQL queries", () => {
     expect(list).toContain("status {");
     expect(list).toContain("labels {");
     expect(list).toContain("threadLinks");
+    expect(list).toContain("openEngineHumanHoldReason");
     expect(print(WorkItemLabelsQuery)).toContain(
       "workItemLabels(input: $input)",
     );
@@ -196,6 +198,9 @@ describe("computer GraphQL queries", () => {
     expect(savedViews).toContain("viewConfig");
     expect(print(UpdateWorkItemStatusMutation)).toContain(
       "updateWorkItemStatus",
+    );
+    expect(print(RecordOpenEngineHumanActionMutation)).toContain(
+      "recordOpenEngineHumanAction",
     );
     expect(print(SaveWorkItemViewMutation)).toContain("saveWorkItemView");
     expect(print(DeleteWorkItemViewMutation)).toContain("deleteWorkItemView");

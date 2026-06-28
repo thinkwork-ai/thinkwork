@@ -47,6 +47,19 @@ import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
+const THREAD_TURN_ROUTE_PREFIX =
+  String.raw`^\/api\/(?:thread-turns|trigger-runs)`;
+
+export function matchThreadTurnRoute(
+  path: string,
+  suffixPattern: string,
+): RegExpMatchArray | null {
+  return path.match(new RegExp(`${THREAD_TURN_ROUTE_PREFIX}${suffixPattern}`));
+}
+
+export function isThreadTurnListRoute(path: string): boolean {
+  return path === "/api/thread-turns" || path === "/api/trigger-runs";
+}
 
 function isInternalScheduledJob(row: {
   trigger_type?: string | null;
@@ -306,7 +319,10 @@ export async function handler(
     // --- Trigger Runs ---
 
     // POST /api/thread-turns/wakeup/:agentId — on-demand wakeup (admin-SPA, NOT scheduler callback)
-    const wakeupMatch = path.match(/^\/api\/trigger-runs\/wakeup\/([^/]+)$/);
+    const wakeupMatch = matchThreadTurnRoute(
+      path,
+      String.raw`\/wakeup\/([^/]+)$`,
+    );
     if (wakeupMatch) {
       if (method !== "POST") return error("Method not allowed", 405);
       const check = await checkMembership(event, method);
@@ -315,7 +331,10 @@ export async function handler(
     }
 
     // GET /api/thread-turns/:id/events
-    const eventsMatch = path.match(/^\/api\/trigger-runs\/([^/]+)\/events$/);
+    const eventsMatch = matchThreadTurnRoute(
+      path,
+      String.raw`\/([^/]+)\/events$`,
+    );
     if (eventsMatch) {
       if (method !== "GET") return error("Method not allowed", 405);
       const check = await checkMembership(event, method);
@@ -324,7 +343,10 @@ export async function handler(
     }
 
     // POST /api/thread-turns/:id/cancel
-    const cancelMatch = path.match(/^\/api\/trigger-runs\/([^/]+)\/cancel$/);
+    const cancelMatch = matchThreadTurnRoute(
+      path,
+      String.raw`\/([^/]+)\/cancel$`,
+    );
     if (cancelMatch) {
       if (method !== "POST") return error("Method not allowed", 405);
       const check = await checkMembership(event, method);
@@ -333,7 +355,7 @@ export async function handler(
     }
 
     // GET /api/thread-turns/:id
-    const runIdMatch = path.match(/^\/api\/trigger-runs\/([^/]+)$/);
+    const runIdMatch = matchThreadTurnRoute(path, String.raw`\/([^/]+)$`);
     if (runIdMatch) {
       if (method !== "GET") return error("Method not allowed", 405);
       const check = await checkMembership(event, method);
@@ -342,7 +364,7 @@ export async function handler(
     }
 
     // GET /api/thread-turns
-    if (path === "/api/thread-turns") {
+    if (isThreadTurnListRoute(path)) {
       if (method !== "GET") return error("Method not allowed", 405);
       const check = await checkMembership(event, method);
       if (!check.ok) return check.response;

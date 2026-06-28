@@ -1823,7 +1823,7 @@ describe("SpacesThreadDetailRoute", () => {
       ],
     };
     apiFetchMock.apiFetch.mockImplementation(async (path: string) => {
-      if (path === "/api/trigger-runs/turn-agent-profile/events?limit=500") {
+      if (path === "/api/thread-turns/turn-agent-profile/events?limit=500") {
         return [
           {
             id: "event-agent-profile-completed",
@@ -1857,7 +1857,7 @@ describe("SpacesThreadDetailRoute", () => {
       expect(within(activity).getByText("1 in / 2.0K out")).toBeTruthy();
       expect(within(activity).getByText("$0.0343")).toBeTruthy();
       expect(apiFetchMock.apiFetch).toHaveBeenCalledWith(
-        "/api/trigger-runs/turn-agent-profile/events?limit=500",
+        "/api/thread-turns/turn-agent-profile/events?limit=500",
         { extraHeaders: { "x-tenant-id": "tenant-1" } },
       );
     });

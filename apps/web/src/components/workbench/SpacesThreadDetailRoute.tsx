@@ -851,7 +851,7 @@ export function SpacesThreadDetailRoute({
       visibleRows.map(async (row) => {
         try {
           const events = await apiFetch<ThreadTurnEventRow[]>(
-            `/api/trigger-runs/${encodeURIComponent(row.id)}/events?limit=500`,
+            `/api/thread-turns/${encodeURIComponent(row.id)}/events?limit=500`,
             { extraHeaders: { "x-tenant-id": tenantId } },
           );
           return [row.id, events.map(taskThreadEventFromRow)] as const;

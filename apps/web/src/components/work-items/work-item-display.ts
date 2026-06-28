@@ -15,6 +15,7 @@ export type WorkItemDocumentKind =
   | "HANDOFF"
   | "NOTE"
   | "OTHER";
+export type WorkItemOpenEngineDependencyState = "READY" | "WAITING";
 
 export interface WorkItemStatusSummary {
   id: string;
@@ -103,6 +104,16 @@ export interface WorkItemSummary {
   required: boolean;
   applicable: boolean;
   blocked: boolean;
+  openEngineEnabled?: boolean | null;
+  openEngineQueueKey?: string | null;
+  openEngineClaimedByAgentId?: string | null;
+  openEngineClaimedAt?: string | null;
+  openEngineClaimExpiresAt?: string | null;
+  openEngineHumanHold?: boolean | null;
+  openEngineHumanHoldReason?: string | null;
+  openEngineScheduledAt?: string | null;
+  openEngineDependencyState?: WorkItemOpenEngineDependencyState | null;
+  openEngineRouting?: unknown;
   completedAt?: string | null;
   metadata?: unknown;
   labels?: WorkItemLabelSummary[] | null;

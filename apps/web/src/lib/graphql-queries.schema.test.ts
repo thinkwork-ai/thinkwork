@@ -26,6 +26,7 @@ import {
   UpdateWorkItemStatusMutation,
   WorkItemDocumentsQuery,
   WorkItemLabelsQuery,
+  RecordOpenEngineHumanActionMutation,
   WorkItemSavedViewsQuery,
   WorkItemStatusesQuery,
   WorkItemsQuery,
@@ -131,6 +132,10 @@ describe("work item queries vs canonical schema", () => {
     ["CreateWorkItemDocumentMutation", CreateWorkItemDocumentMutation],
     ["UpdateWorkItemDocumentMutation", UpdateWorkItemDocumentMutation],
     ["UpdateWorkItemStatusMutation", UpdateWorkItemStatusMutation],
+    [
+      "RecordOpenEngineHumanActionMutation",
+      RecordOpenEngineHumanActionMutation,
+    ],
     ["SaveWorkItemViewMutation", SaveWorkItemViewMutation],
     ["DeleteWorkItemViewMutation", DeleteWorkItemViewMutation],
   ] as const)("%s validates against the schema", (_name, doc) => {

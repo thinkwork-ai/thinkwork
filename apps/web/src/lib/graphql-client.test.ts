@@ -11,6 +11,7 @@ import {
   startTokenRefresh,
   stopTokenRefresh,
 } from "./graphql-client";
+import { setRuntimeConfigForTest } from "./runtime-config";
 
 function decodedHeader(url: string) {
   const encoded = new URL(url).searchParams.get("header");
@@ -32,6 +33,7 @@ beforeEach(() => {
   setAuthToken(null);
   setGraphqlTenantId(null);
   setTokenProvider(null);
+  setRuntimeConfigForTest({});
   stopTokenRefresh();
 });
 
@@ -92,6 +94,12 @@ describe("AppSync realtime URL wiring", () => {
 });
 
 describe("GraphQL auth headers", () => {
+  it("does not send the public AppSync API key on HTTP GraphQL requests", () => {
+    setRuntimeConfigForTest({ VITE_GRAPHQL_API_KEY: "public-appsync-key" });
+
+    expect(buildGraphqlAuthHeaders()).not.toHaveProperty("x-api-key");
+  });
+
   it("keeps sending a cached token inside the refresh-skew window", () => {
     const token = jwtWithExp(Math.floor(Date.now() / 1000) + 20);
 
