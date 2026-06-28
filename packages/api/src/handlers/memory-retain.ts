@@ -23,6 +23,16 @@ import {
   buildDailyMemoryRetainOptions,
   buildThreadRetainOptions,
 } from "../lib/memory/hindsight-retain-params.js";
+import {
+  buildRetainSourceEventKey,
+  claimRetainAttempt,
+  classifyRetainError,
+  listDueRetainAttempts,
+  markRetainAttemptFailed,
+  markRetainAttemptRetained,
+  upsertRetainAttempt,
+  type RetainAttemptRow,
+} from "../lib/memory/retain-attempts.js";
 import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type RetainMessage = {
@@ -36,11 +46,14 @@ type MemoryRetainEvent = {
   userId?: string;
   agentId?: string;
   threadId?: string;
+  threadTurnId?: string;
+  spaceId?: string;
   messages?: RetainMessage[];
   transcript?: RetainMessage[];
   kind?: string;
   date?: string;
   content?: string;
+  limit?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -48,6 +61,10 @@ type MemoryRetainResult = {
   ok: boolean;
   engine?: string;
   error?: string;
+  processed?: number;
+  retained?: number;
+  failed?: number;
+  attemptId?: string;
 };
 
 type NormalizedMessage = {
@@ -59,6 +76,10 @@ type NormalizedMessage = {
 export async function handler(
   event: MemoryRetainEvent,
 ): Promise<MemoryRetainResult> {
+  if (event?.kind === "drain_due") {
+    return drainDueRetainAttempts(event.limit);
+  }
+
   if (!event?.tenantId) {
     console.warn("[memory-retain] MISSING_USER_CONTEXT missing tenantId");
     return { ok: false, error: "MISSING_USER_CONTEXT" };
@@ -76,6 +97,9 @@ export async function handler(
   const eventTranscript = event.transcript;
   const eventLegacyMessages = event.messages;
   const eventAgentId = event.agentId;
+  const eventThreadTurnId =
+    event.threadTurnId || stringField(eventMetadata?.threadTurnId);
+  const eventSpaceId = event.spaceId || stringField(eventMetadata?.spaceId);
 
   try {
     const userId =
@@ -130,6 +154,85 @@ export async function handler(
       return { ok: false, error: "MISSING_DOCUMENT_ID" };
     }
 
+    const sourceEventKey = buildRetainSourceEventKey({
+      tenantId,
+      userId,
+      threadId: eventThreadId,
+      kind: eventKind,
+      date: eventDate,
+      content: eventContent,
+      transcript: eventTranscript || eventLegacyMessages || [],
+      metadata: eventMetadata,
+    });
+    const attempt = await upsertRetainAttempt({
+      tenantId,
+      userId,
+      spaceId: eventSpaceId || null,
+      threadId: eventThreadId,
+      threadTurnId: eventThreadTurnId || null,
+      sourceEventKey,
+      sourceEventType: "thread_turn",
+      provider: adapter.kind,
+      metadata: buildAttemptMetadata(event, {
+        userId,
+        sourceEventKey,
+        retryPayload: buildRetryPayload(event, userId),
+      }),
+    });
+    const claimed = await claimRetainAttempt(attempt.id);
+    if (!claimed) {
+      return { ok: true, engine: "skipped", attemptId: attempt.id };
+    }
+
+    return processClaimedRetainAttempt(event, claimed, {
+      tenantId,
+      userId,
+      engine: config.engine,
+      adapter,
+      eventThreadId,
+      eventMetadata,
+      eventTranscript,
+      eventLegacyMessages,
+    });
+  } catch (err) {
+    const msg = (err as Error)?.message || String(err);
+    console.error(`[memory-retain] failed: ${msg}`);
+    return { ok: false, error: msg };
+  }
+}
+
+async function processClaimedRetainAttempt(
+  event: MemoryRetainEvent,
+  attempt: RetainAttemptRow,
+  context: {
+    tenantId: string;
+    userId: string;
+    engine: string;
+    adapter: ReturnType<typeof getMemoryServices>["adapter"];
+    eventThreadId: string;
+    eventMetadata?: Record<string, unknown>;
+    eventTranscript?: RetainMessage[];
+    eventLegacyMessages?: RetainMessage[];
+  },
+): Promise<MemoryRetainResult> {
+  const started = Date.now();
+  const {
+    tenantId,
+    userId,
+    engine,
+    adapter,
+    eventThreadId,
+    eventMetadata,
+    eventTranscript,
+    eventLegacyMessages,
+  } = context;
+  const owner = {
+    tenantId,
+    ownerType: "user" as const,
+    ownerId: userId,
+  };
+
+  try {
     const eventMessages = normalizeMessages(
       eventTranscript || eventLegacyMessages || [],
     );
@@ -153,7 +256,7 @@ export async function handler(
       const merged = mergeTranscriptSuffix(dbMessages, eventMessages);
 
       if (merged.length === 0) {
-        return { ok: false, error: "no_content" };
+        throw new Error("no_content");
       }
 
       if (eventLegacyMessages && !eventTranscript) {
@@ -176,15 +279,32 @@ export async function handler(
       });
 
       console.log(
-        `[memory-retain] engine=${config.engine} tenant=${tenantId} ` +
+        `[memory-retain] engine=${engine} tenant=${tenantId} ` +
           `user=${userId} thread=${eventThreadId} db=${dbMessages.length} ` +
           `event=${eventMessages.length} merged=${merged.length}`,
       );
+
+      await markRetainAttemptRetained(attempt.id, {
+        backendLatencyMs: Date.now() - started,
+        providerDocumentId: eventThreadId,
+        providerResult: {
+          engine,
+          adapterKind: adapter.kind,
+          messageCount: merged.length,
+        },
+        metadata: mergeAttemptMetadata(attempt.metadata, {
+          dbMessageCount: dbMessages.length,
+          eventMessageCount: eventMessages.length,
+          mergedMessageCount: merged.length,
+          fallbackUsed: dbMessages.length === 0 && eventMessages.length > 0,
+          retainedAt: new Date().toISOString(),
+        }),
+      });
     } else {
       // AgentCore engine fallback: adapter without retainConversation
       // (e.g. AgentCore managed memory) keeps today's per-turn semantics.
       if (eventMessages.length === 0) {
-        return { ok: true, engine: "skipped" };
+        throw new Error("no_content");
       }
       await adapter.retainTurn({
         ...owner,
@@ -193,9 +313,22 @@ export async function handler(
         metadata: eventMetadata,
       });
       console.log(
-        `[memory-retain] engine=${config.engine} fallback retainTurn tenant=${tenantId} ` +
+        `[memory-retain] engine=${engine} fallback retainTurn tenant=${tenantId} ` +
           `user=${userId} thread=${eventThreadId} messages=${eventMessages.length}`,
       );
+      await markRetainAttemptRetained(attempt.id, {
+        backendLatencyMs: Date.now() - started,
+        providerDocumentId: eventThreadId,
+        providerResult: {
+          engine,
+          adapterKind: adapter.kind,
+          messageCount: eventMessages.length,
+        },
+        metadata: mergeAttemptMetadata(attempt.metadata, {
+          eventMessageCount: eventMessages.length,
+          retainedAt: new Date().toISOString(),
+        }),
+      });
     }
 
     const compileOutcome = await maybeEnqueuePostTurnCompile({
@@ -215,12 +348,67 @@ export async function handler(
       );
     }
 
-    return { ok: true, engine: config.engine };
+    return { ok: true, engine, attemptId: attempt.id };
   } catch (err) {
-    const msg = (err as Error)?.message || String(err);
-    console.error(`[memory-retain] failed: ${msg}`);
-    return { ok: false, error: msg };
+    const classification = classifyRetainError(err);
+    const status = await markRetainAttemptFailed(attempt, classification, {
+      backendLatencyMs: Date.now() - started,
+      metadata: mergeAttemptMetadata(attempt.metadata, {
+        failedAt: new Date().toISOString(),
+        failedStatus: classification.status,
+      }),
+    });
+    console.error(
+      `[memory-retain] attempt=${attempt.id} status=${status} failed: ${classification.errorMessage}`,
+    );
+    return {
+      ok: false,
+      engine,
+      error: classification.errorMessage,
+      attemptId: attempt.id,
+    };
   }
+}
+
+async function drainDueRetainAttempts(limit = 25): Promise<MemoryRetainResult> {
+  const due = await listDueRetainAttempts({ limit });
+  let retained = 0;
+  let failed = 0;
+  for (const row of due) {
+    const claimed = await claimRetainAttempt(row.id);
+    if (!claimed) continue;
+    const retryPayload = readRetryPayload(claimed.metadata);
+    if (!retryPayload) {
+      await markRetainAttemptFailed(
+        claimed,
+        {
+          status: "dead_lettered",
+          retryable: false,
+          errorClass: "missing_retry_payload",
+          errorMessage: "memory retain attempt missing retry payload",
+        },
+        { metadata: mergeAttemptMetadata(claimed.metadata, {}) },
+      );
+      failed += 1;
+      continue;
+    }
+
+    const { adapter, config } = getMemoryServices();
+    const result = await processClaimedRetainAttempt(retryPayload, claimed, {
+      tenantId: retryPayload.tenantId || claimed.tenant_id,
+      userId: retryPayload.userId || claimed.user_id || "",
+      engine: config.engine,
+      adapter,
+      eventThreadId: retryPayload.threadId || claimed.thread_id,
+      eventMetadata: retryPayload.metadata,
+      eventTranscript: retryPayload.transcript,
+      eventLegacyMessages: retryPayload.messages,
+    });
+    if (result.ok) retained += 1;
+    else failed += 1;
+  }
+
+  return { ok: failed === 0, processed: retained + failed, retained, failed };
 }
 
 /**
@@ -359,4 +547,90 @@ function normalizeMessages(messages: RetainMessage[]): NormalizedMessage[] {
       content: m.content!.trim(),
       timestamp: m.timestamp || now,
     }));
+}
+
+function buildAttemptMetadata(
+  event: MemoryRetainEvent,
+  input: {
+    userId: string;
+    sourceEventKey: string;
+    retryPayload: MemoryRetainEvent;
+  },
+): Record<string, unknown> {
+  const transcript = event.transcript || event.messages || [];
+  return {
+    ...(event.metadata || {}),
+    sourceEventKey: input.sourceEventKey,
+    retryPayload: input.retryPayload,
+    eventMessageCount: transcript.length,
+    eventContentBytes: transcript.reduce(
+      (sum, message) => sum + (message.content || "").length,
+      0,
+    ),
+    userId: input.userId,
+  };
+}
+
+function buildRetryPayload(
+  event: MemoryRetainEvent,
+  userId: string,
+): MemoryRetainEvent {
+  return {
+    tenantId: event.tenantId,
+    userId,
+    threadId: event.threadId,
+    threadTurnId:
+      event.threadTurnId || stringField(event.metadata?.threadTurnId),
+    spaceId: event.spaceId || stringField(event.metadata?.spaceId),
+    transcript: boundedMessages(event.transcript),
+    messages: event.transcript ? undefined : boundedMessages(event.messages),
+    metadata: event.metadata,
+  };
+}
+
+function readRetryPayload(metadata: unknown): MemoryRetainEvent | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+  const retryPayload = (metadata as { retryPayload?: unknown }).retryPayload;
+  if (
+    !retryPayload ||
+    typeof retryPayload !== "object" ||
+    Array.isArray(retryPayload)
+  ) {
+    return null;
+  }
+  const payload = retryPayload as MemoryRetainEvent;
+  if (!payload.tenantId || !payload.threadId) return null;
+  if (!payload.userId) return null;
+  return payload;
+}
+
+function mergeAttemptMetadata(
+  current: unknown,
+  next: Record<string, unknown>,
+): Record<string, unknown> {
+  const base =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+  return { ...base, ...next };
+}
+
+function boundedMessages(
+  messages: RetainMessage[] | undefined,
+): RetainMessage[] {
+  if (!messages || messages.length === 0) return [];
+  return messages.slice(-24).map((message) => ({
+    role: message.role,
+    timestamp: message.timestamp,
+    content:
+      typeof message.content === "string"
+        ? message.content.slice(0, 4000)
+        : undefined,
+  }));
+}
+
+function stringField(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
 }

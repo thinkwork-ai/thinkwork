@@ -55,6 +55,30 @@ export type HindsightAdapterOptions = {
   bankConfig?: Record<string, unknown> | null;
 };
 
+export class HindsightRetainError extends Error {
+  readonly action: string;
+  readonly statusCode?: number;
+  readonly retryable: boolean;
+
+  constructor(input: {
+    action: string;
+    message: string;
+    statusCode?: number;
+    retryable?: boolean;
+    cause?: unknown;
+  }) {
+    super(`[hindsight-adapter] ${input.action} failed: ${input.message}`);
+    this.name = "HindsightRetainError";
+    this.action = input.action;
+    this.statusCode = input.statusCode;
+    this.retryable =
+      input.retryable ?? (!input.statusCode || input.statusCode >= 500);
+    if (input.cause !== undefined) {
+      this.cause = input.cause;
+    }
+  }
+}
+
 /**
  * Per-bank Hindsight config overrides from the handler environment. Returns
  * null when no override is set — banks then inherit the service-level
@@ -998,14 +1022,24 @@ export class HindsightAdapter implements MemoryAdapter {
       );
       if (!resp.ok) {
         const body = await resp.text().catch(() => "");
-        throw new Error(
-          `hindsight ${action} ${resp.status}: ${body.slice(0, 300)}`,
-        );
+        throw new HindsightRetainError({
+          action,
+          statusCode: resp.status,
+          retryable: resp.status >= 500,
+          message: `hindsight ${action} ${resp.status}: ${body.slice(0, 300)}`,
+        });
       }
     } catch (err) {
-      throw new Error(
-        `[hindsight-adapter] ${action} failed: ${(err as Error)?.message}`,
-      );
+      if (err instanceof HindsightRetainError) {
+        throw err;
+      }
+      const message = (err as Error)?.message || String(err);
+      throw new HindsightRetainError({
+        action,
+        retryable: true,
+        message,
+        cause: err,
+      });
     }
   }
 
@@ -1374,16 +1408,16 @@ function toRedactedHindsightFact(
 
 function buildBasedOnEvidence(
   value: unknown,
-): NonNullable<
-  NonNullable<HindsightRecordDetail["evidence"]>["basedOn"]
-> {
+): NonNullable<NonNullable<HindsightRecordDetail["evidence"]>["basedOn"]> {
   const memories = isRecord(value)
     ? toRedactedFactList(value.memories)
     : toRedactedFactList(value);
   const mentalModels = isRecord(value)
     ? toRedactedFactList(value.mental_models)
     : [];
-  const directives = isRecord(value) ? toRedactedFactList(value.directives) : [];
+  const directives = isRecord(value)
+    ? toRedactedFactList(value.directives)
+    : [];
   return {
     memoryIds: memories.map((fact) => fact.id),
     mentalModelIds: mentalModels.map((fact) => fact.id),

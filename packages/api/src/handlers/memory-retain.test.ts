@@ -13,6 +13,13 @@ const retainTurnMock = vi.hoisted(() => vi.fn());
 const retainDailyMemoryMock = vi.hoisted(() => vi.fn());
 const getMemoryServicesMock = vi.hoisted(() => vi.fn());
 const maybeEnqueueMock = vi.hoisted(() => vi.fn());
+const buildRetainSourceEventKeyMock = vi.hoisted(() => vi.fn());
+const upsertRetainAttemptMock = vi.hoisted(() => vi.fn());
+const claimRetainAttemptMock = vi.hoisted(() => vi.fn());
+const markRetainAttemptRetainedMock = vi.hoisted(() => vi.fn());
+const markRetainAttemptFailedMock = vi.hoisted(() => vi.fn());
+const listDueRetainAttemptsMock = vi.hoisted(() => vi.fn());
+const classifyRetainErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/memory/index.js", () => ({
   getMemoryServices: getMemoryServicesMock,
@@ -22,12 +29,57 @@ vi.mock("../lib/wiki/enqueue.js", () => ({
   maybeEnqueuePostTurnCompile: maybeEnqueueMock,
 }));
 
+vi.mock("../lib/memory/retain-attempts.js", () => ({
+  buildRetainSourceEventKey: buildRetainSourceEventKeyMock,
+  upsertRetainAttempt: upsertRetainAttemptMock,
+  claimRetainAttempt: claimRetainAttemptMock,
+  markRetainAttemptRetained: markRetainAttemptRetainedMock,
+  markRetainAttemptFailed: markRetainAttemptFailedMock,
+  listDueRetainAttempts: listDueRetainAttemptsMock,
+  classifyRetainError: classifyRetainErrorMock,
+}));
+
 import { handler, mergeTranscriptSuffix } from "./memory-retain.js";
 
 const TENANT_A = "0015953e-aa13-4cab-8398-2e70f73dda63";
 const TENANT_B = "11119999-aaaa-bbbb-cccc-222233334444";
 const USER_ID = "4dee701a-c17b-46fe-9f38-a333d4c3fad0";
 const THREAD_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+const BASE_ATTEMPT = {
+  id: "attempt-1",
+  tenant_id: TENANT_A,
+  user_id: USER_ID,
+  space_id: null,
+  thread_id: THREAD_ID,
+  thread_turn_id: null,
+  source_event_key: "source-key",
+  source_event_type: "thread_turn",
+  provider: "hindsight",
+  status: "queued",
+  attempt_count: 1,
+  max_attempts: 5,
+  next_retry_at: null,
+  locked_at: null,
+  locked_by: null,
+  started_at: null,
+  finished_at: null,
+  backend_latency_ms: null,
+  provider_document_id: null,
+  provider_result: null,
+  error_class: null,
+  error_message: null,
+  metadata: {
+    retryPayload: {
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [{ role: "user", content: "retry me" }],
+    },
+  },
+  created_at: new Date("2026-06-28T00:00:00.000Z"),
+  updated_at: new Date("2026-06-28T00:00:00.000Z"),
+};
 
 function dbRow(role: string, content: string, ts: string, tenantId = TENANT_A) {
   return {
@@ -170,6 +222,21 @@ describe("memory-retain handler", () => {
     retainDailyMemoryMock.mockReset();
     getMemoryServicesMock.mockReset();
     maybeEnqueueMock.mockReset();
+    buildRetainSourceEventKeyMock.mockReset().mockReturnValue("source-key");
+    upsertRetainAttemptMock.mockReset().mockResolvedValue(BASE_ATTEMPT);
+    claimRetainAttemptMock.mockReset().mockResolvedValue(BASE_ATTEMPT);
+    markRetainAttemptRetainedMock.mockReset().mockResolvedValue(undefined);
+    markRetainAttemptFailedMock.mockReset().mockResolvedValue("failed_backend");
+    listDueRetainAttemptsMock.mockReset().mockResolvedValue([]);
+    classifyRetainErrorMock.mockReset().mockImplementation((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        status: "failed_backend",
+        retryable: true,
+        errorClass: message.includes("503") ? "hindsight_503" : "unknown",
+        errorMessage: message,
+      };
+    });
     maybeEnqueueMock.mockResolvedValue({ status: "skipped" });
   });
 
@@ -211,6 +278,16 @@ describe("memory-retain handler", () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(upsertRetainAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_A,
+        userId: USER_ID,
+        threadId: THREAD_ID,
+        sourceEventKey: "source-key",
+        provider: "hindsight",
+      }),
+    );
+    expect(claimRetainAttemptMock).toHaveBeenCalledWith("attempt-1");
     expect(retainConversationMock).toHaveBeenCalledTimes(1);
     const call = retainConversationMock.mock.calls[0][0];
     expect(call.threadId).toBe(THREAD_ID);
@@ -223,6 +300,37 @@ describe("memory-retain handler", () => {
       documentTags: ["source:thread", "scope:thread"],
       observationScopes: [["source:thread"], ["scope:thread"]],
     });
+    expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
+      "attempt-1",
+      expect.objectContaining({
+        providerDocumentId: THREAD_ID,
+        providerResult: expect.objectContaining({
+          engine: "hindsight",
+          adapterKind: "hindsight",
+          messageCount: 32,
+        }),
+      }),
+    );
+  });
+
+  it("idempotency: an already running or retained attempt skips provider write", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    claimRetainAttemptMock.mockResolvedValueOnce(null);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [{ role: "user", content: "duplicate" }],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      engine: "skipped",
+      attemptId: "attempt-1",
+    });
+    expect(retainConversationMock).not.toHaveBeenCalled();
   });
 
   it("merge race: DB has 30 msgs, event has new pair → merged is 32", async () => {
@@ -404,8 +512,21 @@ describe("memory-retain handler", () => {
       transcript: [],
     });
 
-    expect(result).toEqual({ ok: false, error: "no_content" });
+    expect(result).toEqual({
+      ok: false,
+      engine: "hindsight",
+      error: "no_content",
+      attemptId: "attempt-1",
+    });
     expect(retainConversationMock).not.toHaveBeenCalled();
+    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
+      BASE_ATTEMPT,
+      expect.objectContaining({
+        errorMessage: "no_content",
+        retryable: true,
+      }),
+      expect.any(Object),
+    );
   });
 
   it("error path: DB throws → catch + warning + fallback to event tail", async () => {
@@ -449,6 +570,32 @@ describe("memory-retain handler", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/hindsight 503/);
+    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
+      BASE_ATTEMPT,
+      expect.objectContaining({
+        status: "failed_backend",
+        retryable: true,
+      }),
+      expect.objectContaining({
+        backendLatencyMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("drain_due processes due attempts from their retry payload", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    listDueRetainAttemptsMock.mockResolvedValueOnce([BASE_ATTEMPT]);
+    claimRetainAttemptMock.mockResolvedValueOnce(BASE_ATTEMPT);
+
+    const result = await handler({ kind: "drain_due", limit: 1 });
+
+    expect(listDueRetainAttemptsMock).toHaveBeenCalledWith({ limit: 1 });
+    expect(result).toMatchObject({ ok: true, processed: 1, retained: 1 });
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(retainConversationMock.mock.calls[0][0].messages).toEqual([
+      expect.objectContaining({ content: "retry me" }),
+    ]);
   });
 
   it("100+ message merge does not silently cap", async () => {
