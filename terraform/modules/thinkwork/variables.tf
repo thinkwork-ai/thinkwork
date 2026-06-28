@@ -363,10 +363,6 @@ variable "memory_engine" {
     error_message = "memory_engine must be empty, 'hindsight', 'agentcore', 'cognee', or legacy 'managed'."
   }
 
-  validation {
-    condition     = var.memory_engine != "cognee" || var.enable_cognee
-    error_message = "memory_engine = 'cognee' requires enable_cognee = true."
-  }
 }
 
 variable "hindsight_image_tag" {
