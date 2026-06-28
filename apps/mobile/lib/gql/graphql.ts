@@ -1020,9 +1020,14 @@ export type CheckoutThreadInput = {
 
 export type ClaimNextOpenEngineWorkItemInput = {
   agentId: Scalars["ID"]["input"];
+  labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   leaseSeconds?: InputMaybe<Scalars["Int"]["input"]>;
   now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   queueKey?: InputMaybe<Scalars["String"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  statusId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -3649,6 +3654,7 @@ export type Mutation = {
   revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
+  routeOpenEngineWorkItem: WorkItemEvent;
   runEmailReadinessProbe: Array<EmailReadinessCheck>;
   runScheduledJob: RunScheduledJobResult;
   saveAgentLoop: AgentLoop;
@@ -4374,12 +4380,12 @@ export type MutationRebuildSkillCatalogIndexArgs = {
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-export type MutationRecordOpenEngineWorkItemReceiptArgs = {
-  input: RecordOpenEngineWorkItemReceiptInput;
-};
-
 export type MutationRecordOpenEngineHumanActionArgs = {
   input: RecordOpenEngineHumanActionInput;
+};
+
+export type MutationRecordOpenEngineWorkItemReceiptArgs = {
+  input: RecordOpenEngineWorkItemReceiptInput;
 };
 
 export type MutationRedeemPremiumPluginInstallKeyArgs = {
@@ -4542,6 +4548,10 @@ export type MutationRollbackThreadIdleLearningRunArgs = {
 
 export type MutationRotateTenantCredentialArgs = {
   input: RotateTenantCredentialInput;
+};
+
+export type MutationRouteOpenEngineWorkItemArgs = {
+  input: RouteOpenEngineWorkItemInput;
 };
 
 export type MutationRunEmailReadinessProbeArgs = {
@@ -5394,9 +5404,14 @@ export type OntologyVersion = {
 };
 
 export type OpenEngineEligibleWorkItemsInput = {
+  labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   queueKey?: InputMaybe<Scalars["String"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  statusId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -6923,6 +6938,17 @@ export type Recipe = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type RecordOpenEngineHumanActionInput = {
+  actionType: WorkItemOpenEngineHumanActionType;
+  evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
 export type RecordOpenEngineWorkItemReceiptInput = {
   agentId: Scalars["ID"]["input"];
   evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
@@ -6933,17 +6959,6 @@ export type RecordOpenEngineWorkItemReceiptInput = {
   receiptType: WorkItemOpenEngineReceiptType;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
-  workItemId: Scalars["ID"]["input"];
-};
-
-export type RecordOpenEngineHumanActionInput = {
-  actionType: WorkItemOpenEngineHumanActionType;
-  evidence?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
-  message?: InputMaybe<Scalars["String"]["input"]>;
-  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
-  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   workItemId: Scalars["ID"]["input"];
 };
 
@@ -7130,6 +7145,19 @@ export type RevokePremiumPluginInstallKeyResult = {
 export type RotateTenantCredentialInput = {
   id: Scalars["ID"]["input"];
   secretJson: Scalars["AWSJSON"]["input"];
+};
+
+export type RouteOpenEngineWorkItemInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  now?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  targetOwnerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  targetOwnerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  targetQueueKey?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
 };
 
 export type Routine = {

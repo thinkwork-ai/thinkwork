@@ -12,6 +12,7 @@ const {
   mockListEligible,
   mockListWorkItems,
   mockRecordReceipt,
+  mockRouteWorkItem,
   mockUpdateDocument,
   mockUpdateStatus,
   mockUpdateWorkItem,
@@ -35,6 +36,7 @@ const {
     mockListEligible: vi.fn(),
     mockListWorkItems: vi.fn(),
     mockRecordReceipt: vi.fn(),
+    mockRouteWorkItem: vi.fn(),
     mockUpdateDocument: vi.fn(),
     mockUpdateStatus: vi.fn(),
     mockUpdateWorkItem: vi.fn(),
@@ -105,6 +107,13 @@ vi.mock("../lib/work-items/open-engine-queue-service.js", () => ({
   claimNextOpenEngineWorkItem: mockClaimNext,
   getOpenEngineQueueSnapshot: mockGetQueueSnapshot,
   listEligibleOpenEngineWorkItems: mockListEligible,
+  normalizeOpenEngineQueueKey: (value: unknown) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || null,
+  routeOpenEngineWorkItem: mockRouteWorkItem,
 }));
 
 vi.mock("../lib/work-items/work-item-service.js", () => ({
@@ -137,6 +146,17 @@ beforeEach(() => {
     message: "ok",
     metadata: { receiptType: "claimed" },
     created_at: new Date("2026-06-27T12:00:00Z"),
+  });
+  mockRouteWorkItem.mockResolvedValue({
+    workItem: { ...baseWorkItem(), open_engine_queue_key: "codex" },
+    event: {
+      id: "route-event-1",
+      work_item_id: "work-item-1",
+      event_type: "assigned",
+      message: "Hand off to Codex",
+      metadata: { source: "open_engine_route" },
+      created_at: new Date("2026-06-27T12:00:00Z"),
+    },
   });
   mockGetQueueSnapshot.mockResolvedValue({
     tenantId: "tenant-1",
@@ -237,6 +257,37 @@ describe("OpenEngine MCP handler", () => {
       }),
     );
     expect(body.result.structuredContent.claimed.id).toBe("work-item-1");
+  });
+
+  it("hands off a Work Item to another OpenEngine queue", async () => {
+    dbRows.push([], []);
+
+    const response = await callTool("open_engine_handoff_work_item", {
+      workItemId: "work-item-1",
+      targetQueueKey: "Codex",
+      targetOwnerUserId: "user-2",
+      agentId: "agent-router",
+      message: "Hand off to Codex",
+      idempotencyKey: "route-key-1",
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(mockRouteWorkItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        workItemId: "work-item-1",
+        targetQueueKey: "codex",
+        targetOwnerUserId: "user-2",
+        actorUserId: null,
+        actorAgentId: "agent-router",
+        message: "Hand off to Codex",
+        idempotencyKey: "route-key-1",
+      }),
+    );
+    expect(body.result.structuredContent.workItem.openEngine.queueKey).toBe(
+      "codex",
+    );
+    expect(body.result.structuredContent.event.id).toBe("route-event-1");
   });
 
   it("returns an OpenEngine queue snapshot for operational visibility", async () => {

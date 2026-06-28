@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
+const {
+  buildInsertChainForTest,
+  buildSelectChainForTest,
+  buildUpdateChainForTest,
+  captures,
+  mockDb,
+  renderSqlValue,
+  tables,
+} = vi.hoisted(() => {
   const table = (name: string, fields: string[]) =>
     Object.fromEntries([
       ["__table__", name],
@@ -11,6 +19,7 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
     workItems: table("work_items", [
       "id",
       "tenant_id",
+      "space_id",
       "priority",
       "applicable",
       "blocked",
@@ -26,6 +35,19 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
       "open_engine_human_hold",
       "open_engine_scheduled_at",
       "open_engine_dependency_state",
+      "open_engine_routing",
+      "owner_user_id",
+      "owner_agent_id",
+    ]),
+    workItemEvents: table("work_item_events", [
+      "tenant_id",
+      "space_id",
+      "work_item_id",
+      "actor_user_id",
+      "actor_agent_id",
+      "event_type",
+      "message",
+      "metadata",
     ]),
   };
 
@@ -37,6 +59,8 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
     updateSet: [] as Record<string, unknown>[],
     updateWhere: [] as Array<{ text: string }>,
     updateReturningQueue: [] as unknown[][],
+    insertValues: [] as Record<string, unknown>[],
+    insertReturningQueue: [] as unknown[][],
   };
 
   const buildSelectChain = () => {
@@ -54,6 +78,11 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
         captures.selectLimit.push(limit);
         return captures.selectQueue.shift() ?? [];
       }),
+      then: (resolve: any, reject: any) =>
+        Promise.resolve(captures.selectQueue.shift() ?? []).then(
+          resolve,
+          reject,
+        ),
     };
     return chain;
   };
@@ -72,13 +101,23 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
     };
     return chain;
   };
+  const buildInsertChain = () => {
+    const chain: any = {
+      values: vi.fn((values: Record<string, unknown>) => {
+        captures.insertValues.push(values);
+        return chain;
+      }),
+      returning: vi.fn(async () => captures.insertReturningQueue.shift() ?? []),
+    };
+    return chain;
+  };
 
   return {
     captures,
-    mockDb: {
-      select: vi.fn(() => buildSelectChain()),
-      update: vi.fn(() => buildUpdateChain()),
-    },
+    buildInsertChainForTest: buildInsertChain,
+    buildSelectChainForTest: buildSelectChain,
+    buildUpdateChainForTest: buildUpdateChain,
+    mockDb: {} as any,
     renderSqlValue(value: unknown): string {
       if (value && typeof value === "object" && "text" in value) {
         return (value as { text: string }).text;
@@ -100,9 +139,15 @@ const { captures, mockDb, renderSqlValue, tables } = vi.hoisted(() => {
 });
 
 vi.mock("../../graphql/utils.js", () => ({
+  and: vi.fn((...conditions: unknown[]) => ({
+    text: conditions.map(renderSqlValue).join(" AND "),
+  })),
   db: mockDb,
   asc: vi.fn((column: unknown) => ({ asc: column })),
   desc: vi.fn((column: unknown) => ({ desc: column })),
+  eq: vi.fn((field: unknown, value: unknown) => ({
+    text: `${renderSqlValue(field)} = ${renderSqlValue(value)}`,
+  })),
   sql: Object.assign(
     vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
       text: strings.reduce((acc, fragment, index) => {
@@ -118,6 +163,7 @@ vi.mock("../../graphql/utils.js", () => ({
     },
   ),
   workItems: tables.workItems,
+  workItemEvents: tables.workItemEvents,
 }));
 
 import {
@@ -126,12 +172,17 @@ import {
   classifyOpenEngineQueueState,
   listEligibleOpenEngineWorkItems,
   openEngineEligibilityPredicate,
+  routeOpenEngineWorkItem,
 } from "./open-engine-queue-service.js";
 
 const NOW = new Date("2026-06-27T12:00:00Z");
 type CapturedSql = { text: string };
 
 beforeEach(() => {
+  mockDb.select = vi.fn(() => buildSelectChainForTest());
+  mockDb.update = vi.fn(() => buildUpdateChainForTest());
+  mockDb.insert = vi.fn(() => buildInsertChainForTest());
+  mockDb.transaction = vi.fn((fn: any) => fn(mockDb));
   captures.selectWhere.length = 0;
   captures.selectOrderBy.length = 0;
   captures.selectLimit.length = 0;
@@ -139,6 +190,8 @@ beforeEach(() => {
   captures.updateSet.length = 0;
   captures.updateWhere.length = 0;
   captures.updateReturningQueue.length = 0;
+  captures.insertValues.length = 0;
+  captures.insertReturningQueue.length = 0;
   vi.clearAllMocks();
 });
 
@@ -166,6 +219,33 @@ describe("Open Engine Work Item queue service", () => {
     expect(predicate.text).toContain("work_items.open_engine_scheduled_at <=");
     expect(predicate.text).toContain(
       "work_items.open_engine_claim_expires_at <=",
+    );
+  });
+
+  it("does not treat claimant agentId as an owner-agent routing filter", () => {
+    const predicate = openEngineEligibilityPredicate(
+      { tenantId: "tenant-1", queueKey: "codex", agentId: "agent-1" },
+      NOW,
+    ) as unknown as CapturedSql;
+
+    expect(predicate.text).toContain(
+      "work_items.open_engine_queue_key IS NOT DISTINCT FROM codex",
+    );
+    expect(predicate.text).not.toContain("work_items.owner_agent_id = agent-1");
+  });
+
+  it("still supports explicit owner-agent filters when requested", () => {
+    const predicate = openEngineEligibilityPredicate(
+      {
+        tenantId: "tenant-1",
+        queueKey: "codex",
+        ownerAgentId: "agent-owner",
+      },
+      NOW,
+    ) as unknown as CapturedSql;
+
+    expect(predicate.text).toContain(
+      "work_items.owner_agent_id = agent-owner",
     );
   });
 
@@ -254,6 +334,84 @@ describe("Open Engine Work Item queue service", () => {
     expect([first, second].filter((value) => value === null)).toHaveLength(1);
     expect(captures.updateWhere[0]!.text).toContain("FOR UPDATE SKIP LOCKED");
     expect(captures.updateWhere[1]!.text).toContain("FOR UPDATE SKIP LOCKED");
+  });
+
+  it("routes a Work Item to another OpenEngine queue and clears active claim fields", async () => {
+    captures.selectQueue.push([
+      {
+        id: "work-item-1",
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        title: "Route me",
+        open_engine_queue_key: "claude",
+        owner_user_id: "user-1",
+        owner_agent_id: null,
+        open_engine_routing: { queueKey: "claude" },
+      },
+    ]);
+    captures.updateReturningQueue.push([
+      {
+        id: "work-item-1",
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        open_engine_queue_key: "codex",
+        owner_user_id: "user-2",
+        owner_agent_id: null,
+      },
+    ]);
+    captures.insertReturningQueue.push([
+      {
+        id: "event-1",
+        tenant_id: "tenant-1",
+        work_item_id: "work-item-1",
+        event_type: "assigned",
+        message: "Hand off to Codex",
+      },
+    ]);
+
+    const result = await routeOpenEngineWorkItem({
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      targetQueueKey: "Codex",
+      targetOwnerUserId: "user-2",
+      actorAgentId: "agent-router",
+      message: "Hand off to Codex",
+      idempotencyKey: "route-key-1",
+      now: NOW,
+    });
+
+    expect(result.workItem).toMatchObject({
+      id: "work-item-1",
+      open_engine_queue_key: "codex",
+    });
+    expect(captures.updateSet[0]).toMatchObject({
+      open_engine_enabled: true,
+      open_engine_queue_key: "codex",
+      owner_user_id: "user-2",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: NOW,
+    });
+    expect(captures.updateSet[0]!.open_engine_routing).toMatchObject({
+      queueKey: "codex",
+      lastRoute: expect.objectContaining({
+        fromQueueKey: "claude",
+        toQueueKey: "codex",
+      }),
+    });
+    expect(captures.insertValues[0]).toMatchObject({
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      work_item_id: "work-item-1",
+      actor_agent_id: "agent-router",
+      event_type: "assigned",
+      message: "Hand off to Codex",
+    });
+    expect(captures.insertValues[0]!.metadata).toMatchObject({
+      source: "open_engine_route",
+      idempotencyKey: "route-key-1",
+    });
   });
 
   it("rejects invalid claim lease windows", async () => {
