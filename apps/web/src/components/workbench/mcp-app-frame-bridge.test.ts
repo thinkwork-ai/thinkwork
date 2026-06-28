@@ -120,6 +120,33 @@ describe("McpAppFrameBridge", () => {
     );
   });
 
+  it("can push host context to passive apps that do not initialize", () => {
+    const frame = createFrameWindow();
+    const bridge = bridgeFor(frame, "dark");
+
+    bridge.syncHostContext();
+
+    expect(frame.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: MCP_APP_HOST_CONTEXT_CHANGED_METHOD,
+        params: expect.objectContaining({ theme: "dark" }),
+      }),
+      "*",
+    );
+    expect(frame.postMessage).toHaveBeenCalledWith(
+      {
+        type: "mcp:host-context-changed",
+        hostContext: {
+          theme: "dark",
+          styles: {
+            variables: { "--color-background-primary": "#111111" },
+          },
+        },
+      },
+      "*",
+    );
+  });
+
   it("does not include secret-shaped fields in outbound payloads", () => {
     const frame = createFrameWindow();
     const bridge = bridgeFor(frame);

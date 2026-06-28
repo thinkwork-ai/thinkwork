@@ -2658,7 +2658,11 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       role: node.role,
       content: node.content,
       sender: node.sender,
-      parts: normalizePersistedParts(node.parts, node.toolResults),
+      parts: normalizePersistedParts(
+        node.parts,
+        node.toolResults,
+        node.metadata,
+      ),
       createdAt: node.createdAt,
       metadata: node.metadata,
       mentions: node.mentions,
@@ -2845,7 +2849,7 @@ function mergeTaskThreadEvents(
     const ta = eventTimestamp(a.createdAt);
     const tb = eventTimestamp(b.createdAt);
     if (ta !== tb) return ta - tb;
-    return a.id.localeCompare(b.id);
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
   });
 }
 

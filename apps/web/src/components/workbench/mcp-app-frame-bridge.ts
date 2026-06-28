@@ -48,6 +48,18 @@ export class McpAppFrameBridge {
     });
   }
 
+  syncHostContext(hostContext = this.options.getHostContext()) {
+    this.post({
+      jsonrpc: "2.0",
+      method: MCP_APP_HOST_CONTEXT_CHANGED_METHOD,
+      params: hostContext,
+    });
+    this.post({
+      type: "mcp:host-context-changed",
+      hostContext,
+    });
+  }
+
   private replyToInitialize(message: Record<string, unknown>) {
     const id = message.id;
     if (!isJsonRpcId(id)) return;

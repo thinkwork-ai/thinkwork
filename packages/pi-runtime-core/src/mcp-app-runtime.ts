@@ -90,7 +90,7 @@ export function validateMcpAppPart(
     !uri ||
     !html ||
     html.length > MAX_MCP_APP_HTML_LENGTH ||
-    mimeType !== "text/html"
+    !isHtmlMimeType(mimeType)
   ) {
     return { ok: false };
   }
@@ -165,7 +165,7 @@ function descriptorsFromUnknown(value: unknown): McpAppDescriptor[] {
       const uri = stringValue(record?.uri);
       const html = stringValue(record?.html);
       const mimeType = stringValue(record?.mimeType);
-      if (!uri || !html || mimeType !== "text/html") return null;
+      if (!uri || !html || !isHtmlMimeType(mimeType)) return null;
       return {
         uri,
         html,
@@ -192,6 +192,16 @@ function recordValue(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isHtmlMimeType(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    value
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase() === "text/html"
+  );
 }
 
 function shortHash(value: string): string {
