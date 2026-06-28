@@ -64,6 +64,15 @@ The transitional bridge between legacy `linked_tasks` rows and native Work Items
 
 ## Flagged ambiguities
 
+## MCP Apps
+
+### MCP App Host Context
+The portable runtime context ThinkWork supplies to an embedded MCP App view
+through the MCP Apps host bridge, including the current host theme and
+standardized style variables. Host context is the source of truth for embedded
+app readability; app-specific configuration can provide fallbacks or domain
+defaults but must not replace the host's theme contract.
+
 ## Customer Domain Namespace
 
 ### Namespace Claim
