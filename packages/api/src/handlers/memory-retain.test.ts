@@ -378,6 +378,76 @@ describe("memory-retain handler", () => {
     );
   });
 
+  it("still writes high-confidence facts when the conversation retain times out", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    retainConversationMock.mockRejectedValueOnce(
+      new Error(
+        "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
+      ),
+    );
+    classifyRetainErrorMock.mockReturnValueOnce({
+      status: "failed_timeout",
+      retryable: true,
+      errorClass: "timeout",
+      errorMessage:
+        "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
+    });
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        {
+          role: "user",
+          content:
+            "We got a new puppy yesterday. Her name is Birdie and she's a poodle.",
+          timestamp: "2026-06-28T15:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      engine: "hindsight",
+      attemptId: "attempt-1",
+    });
+    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerType: "user",
+        ownerId: USER_ID,
+        content: "User has a poodle named Birdie.",
+        context: "thinkwork_high_confidence_fact",
+        metadata: expect.objectContaining({
+          retainAttemptId: "attempt-1",
+          threadId: THREAD_ID,
+          factScope: "user",
+          factKind: "pet",
+        }),
+      }),
+    );
+    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
+      BASE_ATTEMPT,
+      expect.objectContaining({
+        status: "failed_timeout",
+        retryable: true,
+      }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          failedStatus: "failed_timeout",
+          highConfidenceFacts: [
+            expect.objectContaining({
+              scope: "user",
+              kind: "pet",
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
+  });
+
   it("captures Space facts into the Space owner when the retain attempt is Space-scoped", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
