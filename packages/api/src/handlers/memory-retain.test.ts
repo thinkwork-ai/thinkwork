@@ -330,7 +330,7 @@ describe("memory-retain handler", () => {
     );
   });
 
-  it("captures a Birdie-style user fact as an idempotent supplemental document", async () => {
+  it("captures a Birdie-style user fact as an idempotent bank-visible memory row", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
 
@@ -349,30 +349,7 @@ describe("memory-retain handler", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT_A,
-        ownerType: "user",
-        ownerId: USER_ID,
-        content: "User has a poodle named Birdie.",
-        documentId: expect.stringMatching(/^high_confidence_fact:attempt-1:/),
-        context: "thinkwork_high_confidence_fact",
-        async: false,
-        hindsight: expect.objectContaining({
-          tags: expect.arrayContaining([
-            "source:high-confidence-fact",
-            "scope:personal",
-          ]),
-        }),
-        metadata: expect.objectContaining({
-          retainAttemptId: "attempt-1",
-          threadId: THREAD_ID,
-          factScope: "user",
-          factKind: "pet",
-          source: "high_confidence_fact",
-        }),
-      }),
-    );
+    expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
     expect(executeMock).toHaveBeenCalledTimes(4);
     expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
       "attempt-1",
@@ -427,20 +404,7 @@ describe("memory-retain handler", () => {
       engine: "hindsight",
       attemptId: "attempt-1",
     });
-    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ownerType: "user",
-        ownerId: USER_ID,
-        content: "User has a poodle named Birdie.",
-        context: "thinkwork_high_confidence_fact",
-        metadata: expect.objectContaining({
-          retainAttemptId: "attempt-1",
-          threadId: THREAD_ID,
-          factScope: "user",
-          factKind: "pet",
-        }),
-      }),
-    );
+    expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
     expect(executeMock).toHaveBeenCalledTimes(4);
     expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
       BASE_ATTEMPT,
@@ -463,12 +427,10 @@ describe("memory-retain handler", () => {
     expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
   });
 
-  it("starts fact and conversation writes in the same provider wait window", async () => {
+  it("starts conversation retain after the deterministic fact row write", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
-    const factWrite = deferred();
     const conversationWrite = deferred();
-    upsertMarkdownMemoryDocumentMock.mockReturnValueOnce(factWrite.promise);
     retainConversationMock.mockReturnValueOnce(conversationWrite.promise);
     classifyRetainErrorMock.mockReturnValueOnce({
       status: "failed_timeout",
@@ -493,12 +455,11 @@ describe("memory-retain handler", () => {
     });
 
     await vi.waitFor(() => {
-      expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledTimes(1);
+      expect(executeMock).toHaveBeenCalledTimes(4);
       expect(retainConversationMock).toHaveBeenCalledTimes(1);
     });
     expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
 
-    factWrite.reject(new Error("hindsight fact timeout"));
     conversationWrite.reject(
       new Error(
         "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
@@ -544,21 +505,8 @@ describe("memory-retain handler", () => {
         spaceId: SPACE_ID,
       }),
     );
-    expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ownerType: "space",
-        ownerId: SPACE_ID,
-        content: "The launch codename is SILVER-HARBOR-20260627190429.",
-        hindsight: expect.objectContaining({
-          tags: expect.arrayContaining([`space:${SPACE_ID}`, "scope:space"]),
-        }),
-        metadata: expect.objectContaining({
-          factScope: "space",
-          factKind: "space_context",
-          spaceId: SPACE_ID,
-        }),
-      }),
-    );
+    expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
+    expect(executeMock).toHaveBeenCalledTimes(4);
   });
 
   it("rejects unsafe fact candidates without writing supplemental memory", async () => {

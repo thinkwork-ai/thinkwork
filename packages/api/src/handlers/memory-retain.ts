@@ -483,8 +483,6 @@ async function retainHighConfidenceFacts(input: {
   if (extracted.facts.length === 0) {
     return { documents: [], rejected: extracted.rejected };
   }
-  const canUpsertDocument = Boolean(input.adapter.upsertMarkdownMemoryDocument);
-
   const documents: RetainedHighConfidenceFactDocument[] = [];
   for (const fact of extracted.facts) {
     if (fact.scope === "space" && !input.spaceId) continue;
@@ -545,24 +543,6 @@ async function retainHighConfidenceFacts(input: {
           : {}),
       },
     });
-    if (canUpsertDocument) {
-      try {
-        await input.adapter.upsertMarkdownMemoryDocument!({
-          ...owner,
-          path,
-          content: fact.text,
-          documentId,
-          context: "thinkwork_high_confidence_fact",
-          async: false,
-          hindsight: retainOptions,
-          metadata,
-        });
-      } catch (err) {
-        console.warn(
-          `[memory-retain] high-confidence Hindsight document upsert failed after deterministic memory_units write: ${(err as Error)?.message || String(err)}`,
-        );
-      }
-    }
     documents.push({
       factId: fact.id,
       documentId,
