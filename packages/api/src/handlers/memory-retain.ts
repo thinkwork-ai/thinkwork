@@ -508,7 +508,7 @@ async function retainHighConfidenceFacts(input: {
       content: fact.text,
       documentId,
       context: "thinkwork_high_confidence_fact",
-      async: true,
+      async: false,
       hindsight: buildHighConfidenceFactRetainOptions({
         scope: fact.scope,
         spaceId: input.spaceId,

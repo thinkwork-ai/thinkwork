@@ -354,7 +354,7 @@ describe("memory-retain handler", () => {
         content: "User has a poodle named Birdie.",
         documentId: expect.stringMatching(/^high_confidence_fact:attempt-1:/),
         context: "thinkwork_high_confidence_fact",
-        async: true,
+        async: false,
         hindsight: expect.objectContaining({
           tags: expect.arrayContaining([
             "source:high-confidence-fact",
