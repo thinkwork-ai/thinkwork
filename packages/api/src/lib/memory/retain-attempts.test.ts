@@ -4,6 +4,7 @@ import {
   buildRetainSourceEventKey,
   classifyRetainError,
   nextRetryAt,
+  runningAttemptStaleBefore,
 } from "./retain-attempts.js";
 
 describe("retain-attempts helpers", () => {
@@ -78,5 +79,15 @@ describe("retain-attempts helpers", () => {
     expect(nextRetryAt(1, now).toISOString()).toBe("2026-06-28T00:00:30.000Z");
     expect(nextRetryAt(2, now).toISOString()).toBe("2026-06-28T00:02:00.000Z");
     expect(nextRetryAt(9, now).toISOString()).toBe("2026-06-28T00:30:00.000Z");
+  });
+
+  it("derives the stale running lease cutoff from the current time", () => {
+    const now = new Date("2026-06-28T00:05:00.000Z");
+    expect(runningAttemptStaleBefore(now).toISOString()).toBe(
+      "2026-06-28T00:03:00.000Z",
+    );
+    expect(runningAttemptStaleBefore(now, 30_000).toISOString()).toBe(
+      "2026-06-28T00:04:30.000Z",
+    );
   });
 });

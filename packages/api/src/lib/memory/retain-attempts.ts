@@ -39,6 +39,7 @@ const RETRYABLE_STATUSES = [
 
 const DEFAULT_MAX_ATTEMPTS = 5;
 const MAX_ERROR_MESSAGE_CHARS = 500;
+export const DEFAULT_RUNNING_ATTEMPT_STALE_AFTER_MS = 2 * 60 * 1000;
 
 export function buildRetainSourceEventKey(input: {
   tenantId: string;
@@ -190,9 +191,13 @@ export async function upsertRetainAttempt(
 
 export async function claimRetainAttempt(
   attemptId: string,
-  options: { lockedBy?: string; now?: Date } = {},
+  options: { lockedBy?: string; now?: Date; staleAfterMs?: number } = {},
 ): Promise<RetainAttemptRow | null> {
   const now = options.now ?? new Date();
+  const staleRunningBefore = runningAttemptStaleBefore(
+    now,
+    options.staleAfterMs,
+  );
   const rows = await getDb()
     .update(memoryRetainAttempts)
     .set({
@@ -206,10 +211,18 @@ export async function claimRetainAttempt(
     .where(
       and(
         eq(memoryRetainAttempts.id, attemptId),
-        inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
         or(
-          isNull(memoryRetainAttempts.next_retry_at),
-          lte(memoryRetainAttempts.next_retry_at, now),
+          and(
+            inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
+            or(
+              isNull(memoryRetainAttempts.next_retry_at),
+              lte(memoryRetainAttempts.next_retry_at, now),
+            ),
+          ),
+          and(
+            eq(memoryRetainAttempts.status, "running"),
+            lte(memoryRetainAttempts.locked_at, staleRunningBefore),
+          ),
         ),
         sql`${memoryRetainAttempts.attempt_count} < ${memoryRetainAttempts.max_attempts}`,
       ),
@@ -220,24 +233,43 @@ export async function claimRetainAttempt(
 }
 
 export async function listDueRetainAttempts(
-  options: { limit?: number; now?: Date } = {},
+  options: { limit?: number; now?: Date; staleAfterMs?: number } = {},
 ): Promise<RetainAttemptRow[]> {
   const now = options.now ?? new Date();
+  const staleRunningBefore = runningAttemptStaleBefore(
+    now,
+    options.staleAfterMs,
+  );
   return getDb()
     .select()
     .from(memoryRetainAttempts)
     .where(
       and(
-        inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
         or(
-          isNull(memoryRetainAttempts.next_retry_at),
-          lte(memoryRetainAttempts.next_retry_at, now),
+          and(
+            inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
+            or(
+              isNull(memoryRetainAttempts.next_retry_at),
+              lte(memoryRetainAttempts.next_retry_at, now),
+            ),
+          ),
+          and(
+            eq(memoryRetainAttempts.status, "running"),
+            lte(memoryRetainAttempts.locked_at, staleRunningBefore),
+          ),
         ),
         sql`${memoryRetainAttempts.attempt_count} < ${memoryRetainAttempts.max_attempts}`,
       ),
     )
     .orderBy(asc(memoryRetainAttempts.next_retry_at))
     .limit(options.limit ?? 25);
+}
+
+export function runningAttemptStaleBefore(
+  now: Date,
+  staleAfterMs: number = DEFAULT_RUNNING_ATTEMPT_STALE_AFTER_MS,
+): Date {
+  return new Date(now.getTime() - staleAfterMs);
 }
 
 export async function markRetainAttemptRetained(

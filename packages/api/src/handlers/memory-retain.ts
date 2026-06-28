@@ -281,27 +281,38 @@ async function processClaimedRetainAttempt(
         );
       }
 
-      try {
-        highConfidenceFacts = await retainHighConfidenceFacts({
-          adapter,
-          attempt,
-          tenantId,
-          userId,
-          spaceId: attempt.space_id,
-          threadId: eventThreadId,
-          messages: merged,
-        });
-      } catch (err) {
-        highConfidenceFactError = err;
-      }
-
-      await adapter.retainConversation({
+      const highConfidenceFactPromise = retainHighConfidenceFacts({
+        adapter,
+        attempt,
+        tenantId,
+        userId,
+        spaceId: attempt.space_id,
+        threadId: eventThreadId,
+        messages: merged,
+      });
+      const conversationPromise = adapter.retainConversation({
         ...owner,
         threadId: eventThreadId,
         messages: merged,
         hindsight: buildThreadRetainOptions(merged),
         metadata: eventMetadata,
       });
+
+      const [highConfidenceFactResult, conversationResult] =
+        await Promise.allSettled([
+          highConfidenceFactPromise,
+          conversationPromise,
+        ]);
+
+      if (highConfidenceFactResult.status === "fulfilled") {
+        highConfidenceFacts = highConfidenceFactResult.value;
+      } else {
+        highConfidenceFactError = highConfidenceFactResult.reason;
+      }
+
+      if (conversationResult.status === "rejected") {
+        throw conversationResult.reason;
+      }
 
       console.log(
         `[memory-retain] engine=${engine} tenant=${tenantId} ` +
@@ -497,7 +508,7 @@ async function retainHighConfidenceFacts(input: {
       content: fact.text,
       documentId,
       context: "thinkwork_high_confidence_fact",
-      async: false,
+      async: true,
       hindsight: buildHighConfidenceFactRetainOptions({
         scope: fact.scope,
         spaceId: input.spaceId,
