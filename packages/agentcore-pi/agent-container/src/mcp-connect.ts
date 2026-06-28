@@ -39,6 +39,7 @@ import { enrichMcpRecordLinks } from "./mcp-record-links.js";
 /** Default per-RPC timeout; matches the legacy pi-mono MCP implementation. */
 const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TOOL_TIMEOUT_MS = 60_000;
+const DEFAULT_READ_RESOURCE_TIMEOUT_MS = 30_000;
 const MAX_EXPOSED_TOOL_NAME_LENGTH = 48;
 const TRUNCATED_TOOL_NAME_HASH_LENGTH = 8;
 
@@ -49,6 +50,8 @@ export interface CreateConnectMcpServerOptions {
   listToolsTimeoutMs?: number;
   /** Override `callTool` timeout (default 60s). */
   callToolTimeoutMs?: number;
+  /** Override MCP App resource-read timeout (default 30s). */
+  readResourceTimeoutMs?: number;
   /**
    * U16 — fetch interceptor used at MCP egress. Trusted-handler builds
    * one bound to the per-invocation `HandleStore` and bearer-scrubber
@@ -154,18 +157,20 @@ function textFromMcpContent(content: unknown): string {
     .join("\n");
 }
 
-function mcpAppsFromContent(input: {
-  content: unknown;
-  serverName: string;
-  toolName: string;
-}): Array<{
+type McpAppDescriptor = {
   uri: string;
   mimeType: "text/html";
   html: string;
   title?: string;
   serverName: string;
   toolName: string;
-}> {
+};
+
+function mcpAppsFromContent(input: {
+  content: unknown;
+  serverName: string;
+  toolName: string;
+}): McpAppDescriptor[] {
   if (!Array.isArray(input.content)) return [];
   return input.content
     .map((item) => {
@@ -201,6 +206,101 @@ function mcpAppsFromContent(input: {
     .filter((app): app is NonNullable<typeof app> => app !== null);
 }
 
+function mcpAppsFromReadResource(input: {
+  response: unknown;
+  serverName: string;
+  toolName: string;
+}): McpAppDescriptor[] {
+  const record =
+    input.response && typeof input.response === "object"
+      ? (input.response as Record<string, unknown>)
+      : null;
+  const contents = Array.isArray(record?.contents) ? record.contents : [];
+  return contents
+    .map((item) => {
+      const resource =
+        item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : null;
+      if (!resource) return null;
+      const uri = resource.uri;
+      const mimeType = resource.mimeType;
+      const html = resource.text;
+      if (
+        typeof uri !== "string" ||
+        typeof html !== "string" ||
+        !isHtmlMimeType(mimeType)
+      ) {
+        return null;
+      }
+      return {
+        uri,
+        mimeType: "text/html" as const,
+        html,
+        title: titleFromHtml(html) ?? input.toolName,
+        serverName: input.serverName,
+        toolName: input.toolName,
+      };
+    })
+    .filter((app): app is NonNullable<typeof app> => app !== null);
+}
+
+function mcpAppTemplateUris(response: unknown): string[] {
+  const record =
+    response && typeof response === "object"
+      ? (response as Record<string, unknown>)
+      : {};
+  const meta =
+    record._meta && typeof record._meta === "object"
+      ? (record._meta as Record<string, unknown>)
+      : {};
+  const ui =
+    meta.ui && typeof meta.ui === "object"
+      ? (meta.ui as Record<string, unknown>)
+      : {};
+  const candidates = [
+    meta["openai/outputTemplate"],
+    meta["ui/resourceUri"],
+    ui.resourceUri,
+  ];
+  const uris: string[] = [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !candidate.trim()) continue;
+    if (uris.includes(candidate)) continue;
+    uris.push(candidate);
+  }
+  return uris;
+}
+
+async function mcpAppsFromTemplateResources(input: {
+  client: Client;
+  response: unknown;
+  serverName: string;
+  toolName: string;
+  timeoutMs: number;
+}): Promise<McpAppDescriptor[]> {
+  const apps: McpAppDescriptor[] = [];
+  for (const uri of mcpAppTemplateUris(input.response)) {
+    try {
+      const resource = await input.client.readResource(
+        { uri },
+        { timeout: input.timeoutMs },
+      );
+      apps.push(
+        ...mcpAppsFromReadResource({
+          response: resource,
+          serverName: input.serverName,
+          toolName: input.toolName,
+        }),
+      );
+    } catch {
+      // Tool calls remain useful even when a server advertises a stale or
+      // unavailable MCP App resource URI.
+    }
+  }
+  return apps;
+}
+
 function isHtmlMimeType(value: unknown): boolean {
   return (
     typeof value === "string" &&
@@ -232,6 +332,8 @@ export function createConnectMcpServer(
     options.listToolsTimeoutMs ?? DEFAULT_LIST_TOOLS_TIMEOUT_MS;
   const callToolTimeoutMs =
     options.callToolTimeoutMs ?? DEFAULT_CALL_TOOL_TIMEOUT_MS;
+  const readResourceTimeoutMs =
+    options.readResourceTimeoutMs ?? DEFAULT_READ_RESOURCE_TIMEOUT_MS;
   const transportFactory = options.transportFactory ?? defaultTransportFactory;
   const clientFactory = options.clientFactory ?? defaultClientFactory;
   const customFetch = options.fetch;
@@ -308,6 +410,15 @@ export function createConnectMcpServer(
               serverName: args.serverName,
               toolName: tool.name,
             });
+            mcpApps.push(
+              ...(await mcpAppsFromTemplateResources({
+                client,
+                response,
+                serverName: args.serverName,
+                toolName: tool.name,
+                timeoutMs: readResourceTimeoutMs,
+              })),
+            );
             if ("isError" in response && response.isError) {
               throw new Error(text || `MCP tool ${tool.name} returned isError`);
             }
