@@ -114,6 +114,16 @@ function buildRetainConversationServices() {
   });
 }
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("mergeTranscriptSuffix", () => {
   const u = (content: string) => ({
     role: "user" as const,
@@ -344,7 +354,7 @@ describe("memory-retain handler", () => {
         content: "User has a poodle named Birdie.",
         documentId: expect.stringMatching(/^high_confidence_fact:attempt-1:/),
         context: "thinkwork_high_confidence_fact",
-        async: false,
+        async: true,
         hindsight: expect.objectContaining({
           tags: expect.arrayContaining([
             "source:high-confidence-fact",
@@ -446,6 +456,61 @@ describe("memory-retain handler", () => {
       }),
     );
     expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
+  });
+
+  it("starts fact and conversation writes in the same provider wait window", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    const factWrite = deferred();
+    const conversationWrite = deferred();
+    upsertMarkdownMemoryDocumentMock.mockReturnValueOnce(factWrite.promise);
+    retainConversationMock.mockReturnValueOnce(conversationWrite.promise);
+    classifyRetainErrorMock.mockReturnValueOnce({
+      status: "failed_timeout",
+      retryable: true,
+      errorClass: "timeout",
+      errorMessage:
+        "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
+    });
+
+    const resultPromise = handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        {
+          role: "user",
+          content:
+            "We got a new puppy yesterday. Her name is Birdie and she's a poodle.",
+          timestamp: "2026-06-28T15:00:00.000Z",
+        },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(upsertMarkdownMemoryDocumentMock).toHaveBeenCalledTimes(1);
+      expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    });
+    expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
+
+    factWrite.reject(new Error("hindsight fact timeout"));
+    conversationWrite.reject(
+      new Error(
+        "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
+      ),
+    );
+
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(false);
+    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
+      BASE_ATTEMPT,
+      expect.objectContaining({
+        status: "failed_timeout",
+        retryable: true,
+      }),
+      expect.any(Object),
+    );
   });
 
   it("captures Space facts into the Space owner when the retain attempt is Space-scoped", async () => {
