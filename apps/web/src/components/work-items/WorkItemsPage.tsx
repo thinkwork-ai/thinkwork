@@ -226,7 +226,6 @@ export function WorkItemsPage({
         toast.error(`Couldn't update status: ${result.error.message}`);
         return;
       }
-      toast.success("Work Item updated");
       reexecuteItems({ requestPolicy: "network-only" });
     },
     [executeStatusUpdate, reexecuteItems, statusUpdating, tenantId],
@@ -256,7 +255,6 @@ export function WorkItemsPage({
         toast.error(`Couldn't update Work Item: ${result.error.message}`);
         return;
       }
-      toast.success("Work Item updated");
       reexecuteItems({ requestPolicy: "network-only" });
     },
     [executeWorkItemUpdate, reexecuteItems, tenantId, workItemUpdating],
