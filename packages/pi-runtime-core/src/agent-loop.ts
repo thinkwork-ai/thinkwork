@@ -23,9 +23,13 @@ import {
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   extractEmitJsonRenderToolPart,
-  mergeFinalThreadJsonRenderParts,
   threadJsonRenderActivityEvent,
 } from "./json-render-runtime.js";
+import {
+  extractMcpAppPartsFromToolResult,
+  mcpAppActivityEvent,
+  mergeFinalUiMessageParts,
+} from "./mcp-app-runtime.js";
 import { textFromAssistant } from "./history.js";
 import {
   OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
@@ -928,13 +932,25 @@ export async function runAgentLoop(
             ? extractEmitJsonRenderToolPart(event.result)
             : null;
         if (jsonRenderPart) {
-          uiMessageParts = mergeFinalThreadJsonRenderParts(uiMessageParts, [
+          uiMessageParts = mergeFinalUiMessageParts(uiMessageParts, [
             jsonRenderPart,
           ]);
           emitActivitySafely(
             deps,
             threadJsonRenderActivityEvent(jsonRenderPart),
           );
+        }
+        if (!event.isError) {
+          const mcpAppParts = extractMcpAppPartsFromToolResult(event.result);
+          if (mcpAppParts.length > 0) {
+            uiMessageParts = mergeFinalUiMessageParts(
+              uiMessageParts,
+              mcpAppParts,
+            );
+            for (const part of mcpAppParts) {
+              emitActivitySafely(deps, mcpAppActivityEvent(part));
+            }
+          }
         }
         // ask_user_question turn-end (U5): the tool result is recorded above;
         // now stop the run deterministically. The sentinel result itself

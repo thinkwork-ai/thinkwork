@@ -2276,6 +2276,40 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
     );
   });
 
+  it("forwards MCP app UI message parts into assistant message persistence", async () => {
+    const persistedPart = {
+      type: "data-mcp-app",
+      id: "mcp-app:dispatch",
+      data: {
+        schemaVersion: "thinkwork-mcp-app/v1",
+        status: "ready",
+        uri: "ui://lastmile-dispatch/optimization",
+        mimeType: "text/html",
+        title: "Dispatch Optimization App",
+        html: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
+      },
+    };
+
+    await processFinalize({
+      ...askingPayload,
+      response: {
+        content: "Here is the Dispatch app.",
+        tools_called: ["mcp_lastmile_dispatch_dispatch_optimization_app"],
+        ui_message_parts: [persistedPart],
+      },
+    });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "Here is the Dispatch app.",
+      expect.any(Array),
+      [persistedPart],
+      undefined,
+    );
+  });
+
   it("preserves result.list UI message parts during finalize", async () => {
     const part = createResultListJsonRenderFixture();
     const persistedPart = part as unknown as Record<string, unknown>;

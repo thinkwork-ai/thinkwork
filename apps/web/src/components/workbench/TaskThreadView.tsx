@@ -2614,7 +2614,10 @@ function MessageAttachmentList({
   );
 }
 
-export function normalizePersistedParts(value: unknown): AccumulatedPart[] {
+export function normalizePersistedParts(
+  value: unknown,
+  toolResults?: unknown,
+): AccumulatedPart[] {
   const rawParts = parseArray(value);
   const parts: AccumulatedPart[] = [];
   for (const rawPart of rawParts) {
@@ -2656,7 +2659,112 @@ export function normalizePersistedParts(value: unknown): AccumulatedPart[] {
       });
     }
   }
+  return [...parts, ...mcpAppPartsFromToolResults(toolResults, parts.length)];
+}
+
+function mcpAppPartsFromToolResults(
+  value: unknown,
+  startIndex: number,
+): AccumulatedPart[] {
+  const parts: AccumulatedPart[] = [];
+  for (const result of parseArray(value)) {
+    for (const app of mcpAppsFromToolResult(result)) {
+      parts.push({
+        type: "data-mcp-app",
+        id: `mcp-app:${sanitizePartId(app.uri)}:${startIndex + parts.length}`,
+        data: app,
+      });
+    }
+  }
   return parts;
+}
+
+function mcpAppsFromToolResult(value: unknown): McpAppData[] {
+  const record = parseRecord(value);
+  const directApps = mcpAppsFromDetails(parseRecord(record.details));
+  if (directApps.length > 0) return directApps;
+
+  const result = parseRecord(record.result);
+  const resultApps = mcpAppsFromDetails(parseRecord(result.details));
+  if (resultApps.length > 0) return resultApps;
+
+  return [
+    ...mcpAppsFromRawMcpResponse(parseRecord(record.raw)),
+    ...mcpAppsFromRawMcpResponse(parseRecord(result.raw)),
+  ];
+}
+
+function mcpAppsFromDetails(details: Record<string, unknown>): McpAppData[] {
+  const declaredApps = parseArray(details.mcp_apps)
+    .map((app) => {
+      const record = parseRecord(app);
+      const uri = stringValue(record.uri);
+      const html = stringValue(record.html);
+      const mimeType = stringValue(record.mimeType);
+      if (!uri || !html || mimeType !== "text/html") return null;
+      return mcpAppData({
+        uri,
+        html,
+        title: stringValue(record.title),
+        serverName: stringValue(record.serverName),
+        toolName: stringValue(record.toolName),
+      });
+    })
+    .filter((app): app is McpAppData => app !== null);
+  if (declaredApps.length > 0) return declaredApps;
+  return mcpAppsFromRawMcpResponse(parseRecord(details.raw));
+}
+
+function mcpAppsFromRawMcpResponse(raw: Record<string, unknown>): McpAppData[] {
+  return parseArray(raw.content)
+    .map((item) => {
+      const record = parseRecord(item);
+      const resource = parseRecord(record.resource);
+      const candidate = Object.keys(resource).length > 0 ? resource : record;
+      const uri = stringValue(candidate.uri);
+      const html = stringValue(candidate.text);
+      const mimeType = stringValue(candidate.mimeType);
+      if (!uri || !html || mimeType !== "text/html") return null;
+      return mcpAppData({
+        uri,
+        html,
+        title: titleFromHtml(html),
+      });
+    })
+    .filter((app): app is McpAppData => app !== null);
+}
+
+type McpAppData = Record<string, unknown> & {
+  uri: string;
+  html: string;
+  mimeType: "text/html";
+};
+
+function mcpAppData(input: {
+  uri: string;
+  html: string;
+  title?: string | null;
+  serverName?: string | null;
+  toolName?: string | null;
+}): McpAppData {
+  return {
+    schemaVersion: "thinkwork-mcp-app/v1",
+    status: "ready",
+    uri: input.uri,
+    mimeType: "text/html",
+    html: input.html,
+    ...(input.title ? { title: input.title } : {}),
+    ...(input.serverName ? { serverName: input.serverName } : {}),
+    ...(input.toolName ? { toolName: input.toolName } : {}),
+  };
+}
+
+function titleFromHtml(html: string): string | null {
+  return html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+}
+
+function sanitizePartId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 64);
 }
 
 /**

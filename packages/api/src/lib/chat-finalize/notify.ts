@@ -15,6 +15,7 @@
 import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
+import { validateMcpAppPart } from "@thinkwork/pi-runtime-core";
 import { validateThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 
 const db = getDb();
@@ -110,9 +111,21 @@ export function normalizeThreadJsonRenderParts(
   if (!Array.isArray(parts) || parts.length === 0) return null;
   const byId = new Map<string, Record<string, unknown>>();
   for (const part of parts) {
-    const result = validateThreadJsonRenderPart(part);
-    if (!result.ok) continue;
-    byId.set(result.part.id, result.part as unknown as Record<string, unknown>);
+    const jsonRenderResult = validateThreadJsonRenderPart(part);
+    if (jsonRenderResult.ok) {
+      byId.set(
+        jsonRenderResult.part.id,
+        jsonRenderResult.part as unknown as Record<string, unknown>,
+      );
+      continue;
+    }
+    const mcpAppResult = validateMcpAppPart(part);
+    if (mcpAppResult.ok) {
+      byId.set(
+        mcpAppResult.part.id,
+        mcpAppResult.part as unknown as Record<string, unknown>,
+      );
+    }
   }
   return byId.size > 0 ? [...byId.values()] : null;
 }

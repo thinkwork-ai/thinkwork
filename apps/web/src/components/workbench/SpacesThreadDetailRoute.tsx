@@ -2658,7 +2658,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
       role: node.role,
       content: node.content,
       sender: node.sender,
-      parts: normalizePersistedParts(node.parts),
+      parts: normalizePersistedParts(node.parts, node.toolResults),
       createdAt: node.createdAt,
       metadata: node.metadata,
       mentions: node.mentions,
@@ -2864,7 +2864,13 @@ function latestLiveStreamState(
 function uiMessageChunkFromThreadTurnPayload(payload: unknown): unknown | null {
   const record = metadataObject(payload);
   if (!record) return null;
-  if (record.kind !== "thread_genui.ui_message_chunk") return null;
+  if (
+    record.kind !== "thread_genui.ui_message_chunk" &&
+    record.kind !== "thread_json_render.ui_message_chunk" &&
+    record.kind !== "thinkwork_mcp_app.ui_message_chunk"
+  ) {
+    return null;
+  }
   return record.chunk ?? null;
 }
 

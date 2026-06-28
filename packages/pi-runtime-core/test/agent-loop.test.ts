@@ -918,6 +918,66 @@ describe("runAgentLoop", () => {
     expect(result.uiMessageParts).toBeUndefined();
   });
 
+  it("emits MCP app resources from arbitrary successful tool results", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "mcp_lastmile_dispatch_dispatch_optimization_app",
+          result: {
+            content: [{ type: "text", text: "Dispatch optimization app" }],
+            details: {
+              mcp_apps: [
+                {
+                  uri: "ui://lastmile-dispatch/optimization",
+                  mimeType: "text/html",
+                  title: "Dispatch Optimization App",
+                  html: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
+                  serverName: "lastmile-dispatch",
+                  toolName: "dispatch_optimization_app",
+                },
+              ],
+            },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const emitted: Array<{
+      eventType: string;
+      stream?: string;
+      payload?: unknown;
+    }> = [];
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      emitActivity: (event) => emitted.push(event),
+    });
+
+    expect(result.uiMessageParts).toEqual([
+      expect.objectContaining({
+        type: "data-mcp-app",
+        id: expect.stringMatching(/^mcp-app:/),
+        data: expect.objectContaining({
+          uri: "ui://lastmile-dispatch/optimization",
+          html: expect.stringContaining("<main>map</main>"),
+          title: "Dispatch Optimization App",
+        }),
+      }),
+    ]);
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        eventType: "ui_message_chunk",
+        stream: "ui",
+        payload: expect.objectContaining({
+          kind: "thinkwork_mcp_app.ui_message_chunk",
+        }),
+      }),
+    );
+  });
+
   it("never lets a throwing emitActivity break the turn (best-effort, D1)", async () => {
     const session = makeFakeSession({
       messages: [assistantMessage("done")],

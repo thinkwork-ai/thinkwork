@@ -154,6 +154,58 @@ function textFromMcpContent(content: unknown): string {
     .join("\n");
 }
 
+function mcpAppsFromContent(input: {
+  content: unknown;
+  serverName: string;
+  toolName: string;
+}): Array<{
+  uri: string;
+  mimeType: "text/html";
+  html: string;
+  title?: string;
+  serverName: string;
+  toolName: string;
+}> {
+  if (!Array.isArray(input.content)) return [];
+  return input.content
+    .map((item) => {
+      const record =
+        item && typeof item === "object"
+          ? (item as Record<string, unknown>)
+          : null;
+      const resource = record?.resource;
+      const resourceRecord =
+        resource && typeof resource === "object"
+          ? (resource as Record<string, unknown>)
+          : record;
+      if (!resourceRecord) return null;
+      const uri = resourceRecord.uri;
+      const mimeType = resourceRecord.mimeType;
+      const html = resourceRecord.text;
+      if (
+        typeof uri !== "string" ||
+        typeof html !== "string" ||
+        mimeType !== "text/html"
+      ) {
+        return null;
+      }
+      return {
+        uri,
+        mimeType: "text/html" as const,
+        html,
+        title: titleFromHtml(html) ?? input.toolName,
+        serverName: input.serverName,
+        toolName: input.toolName,
+      };
+    })
+    .filter((app): app is NonNullable<typeof app> => app !== null);
+}
+
+function titleFromHtml(html: string): string | undefined {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  return match?.[1]?.trim() || undefined;
+}
+
 /**
  * Build a `ConnectMcpServerFn` that the trusted handler injects into
  * `buildMcpTools`. The resulting function is a thin adapter — given
@@ -241,6 +293,11 @@ export function createConnectMcpServer(
             const content =
               "content" in response ? response.content : response.toolResult;
             const text = textFromMcpContent(content);
+            const mcpApps = mcpAppsFromContent({
+              content,
+              serverName: args.serverName,
+              toolName: tool.name,
+            });
             if ("isError" in response && response.isError) {
               throw new Error(text || `MCP tool ${tool.name} returned isError`);
             }
@@ -260,6 +317,7 @@ export function createConnectMcpServer(
                 ...(enriched.recordLinks.length > 0
                   ? { recordLinks: enriched.recordLinks }
                   : {}),
+                ...(mcpApps.length > 0 ? { mcp_apps: mcpApps } : {}),
                 raw: response,
               },
             };
