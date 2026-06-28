@@ -83,6 +83,31 @@ function makeFakeExtensionApi() {
   return { api, tools };
 }
 
+function makeFakeExtensionApiWithEvents() {
+  const tools: RegisteredTool[] = [];
+  const handlers = new Map<string, Array<() => Promise<void> | void>>();
+  const api = {
+    registerTool: (tool: unknown) => {
+      tools.push(tool as RegisteredTool);
+    },
+    registerCommand: vi.fn(),
+    on: vi.fn((event: string, handler: () => Promise<void> | void) => {
+      const list = handlers.get(event) ?? [];
+      list.push(handler);
+      handlers.set(event, list);
+    }),
+  };
+  return {
+    api,
+    tools,
+    async emit(event: string) {
+      for (const handler of handlers.get(event) ?? []) {
+        await handler();
+      }
+    },
+  };
+}
+
 function getTool(tools: RegisteredTool[], name: string): RegisteredTool {
   const tool = tools.find((candidate) => candidate.name === name);
   if (!tool) throw new Error(`tool ${name} not registered`);
@@ -2763,6 +2788,116 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain(
       "hindsight_recall",
     );
+  });
+
+  it("grounds direct memory questions through Hindsight session_start recall", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ memories: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const bundle = await buildInvocationResources({
+      payload: { message: "what is this space's launch codename again?" },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        spaceId: "space-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "https://hindsight.dev.example.com",
+        memoryEngine: "hindsight",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+    const { api, emit } = makeFakeExtensionApiWithEvents();
+
+    for (const factory of bundle.extensionFactories) {
+      await factory(api as never);
+    }
+    await emit("session_start");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/recall",
+      expect.any(Object),
+    );
+  });
+
+  it("does not proactively ground ordinary prompts", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ memories: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const bundle = await buildInvocationResources({
+      payload: { message: "Write a short release note for the deploy." },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "https://hindsight.dev.example.com",
+        memoryEngine: "hindsight",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+    const { api, emit } = makeFakeExtensionApiWithEvents();
+
+    for (const factory of bundle.extensionFactories) {
+      await factory(api as never);
+    }
+    await emit("session_start");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("uses Context Engine memory tools instead of legacy direct tools on the cognee engine", async () => {

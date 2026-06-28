@@ -153,6 +153,7 @@ import {
 } from "./runtime/pi-goal-adapter.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
+import { directMemoryGroundingQuery } from "./runtime/memory-question.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
@@ -1679,12 +1680,14 @@ export async function buildInvocationResources(
         userId: args.identity.userId,
         spaceId: args.identity.spaceId,
       });
-      // Keep long-term memory available as an explicit tool, but do not
-      // proactively recall on every turn. Requester profile facts are already
-      // mounted as `/workspace/User/USER.md` and injected into the system
-      // prompt; proactive grounding made those simple turns take the expensive
-      // recall/reflect path anyway.
+      const groundingQuery = directMemoryGroundingQuery(args.payload.message);
+      // Keep long-term memory available as an explicit tool, and only run
+      // proactive grounding for direct memory questions. Requester profile
+      // facts are already mounted as `/workspace/User/USER.md`; this focused
+      // preflight covers questions like "what's my dog's name?" without making
+      // ordinary turns pay the recall cost.
       const memoryExtension = createMemoryExtension({
+        ...(groundingQuery ? { groundingQuery } : {}),
         onError: (error, { phase }) =>
           logStructured({
             level: "warn",
