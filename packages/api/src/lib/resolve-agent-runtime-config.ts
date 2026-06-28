@@ -703,11 +703,12 @@ export async function resolveAgentRuntimeConfig(
 
   // --- MCP configs ---------------------------------------------------------
 
-  // Dispatch identity (plan 2026-06-12-001 U6): direct per_user_oauth
-  // servers resolve by the agent's human pair (R16); plugin-managed
-  // servers resolve by the REQUESTING user — the thread turn's invoker
-  // (`opts.currentUserId`, resolved by chat-agent-invoke's identity
-  // step). No invoker → plugin servers are excluded (fail closed).
+  // Dispatch identity (plan 2026-06-12-001 U6): per-user OAuth servers
+  // resolve by the REQUESTING user — the thread turn's invoker
+  // (`opts.currentUserId`, resolved by chat-agent-invoke's identity step).
+  // Direct servers fall back to the agent's human pair when there is no
+  // requester (R16 scheduled/wakeup compatibility). No invoker → plugin
+  // servers are excluded (fail closed).
   const mcpConfigs = await buildMcpConfigs(
     opts.agentId,
     {
