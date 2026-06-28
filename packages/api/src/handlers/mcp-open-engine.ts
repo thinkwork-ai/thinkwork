@@ -10,11 +10,13 @@ import type { GraphQLContext } from "../graphql/context.js";
 import { createLoaders } from "../graphql/dataloaders.js";
 import {
   and,
+  agents,
   asc,
   db,
   desc,
   eq,
   isNull,
+  sql,
   workItemEvents,
   workItemLabelAssignments,
   workItemLabels,
@@ -51,6 +53,28 @@ const REQUIRED_SCOPE = "open_engine:work_items";
 const STATUS_LEDGER_DOCUMENT_KIND = "progress";
 
 const TOOLS = [
+  {
+    name: "open_engine_verify_connection",
+    description:
+      "Verify OpenEngine MCP auth, tenant scope, agent identity, and queue visibility before polling work.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: {
+          type: "string",
+          description:
+            "Optional ThinkWork agent UUID or friendly identity such as agent slug/name/workspace folder.",
+        },
+        queueKey: {
+          type: "string",
+          description:
+            "Optional OpenEngine queue key to validate visibility and backlog counts.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+      },
+      additionalProperties: false,
+    },
+  },
   {
     name: "open_engine_list_work_items",
     description:
@@ -91,7 +115,6 @@ const TOOLS = [
         message: { type: "string" },
         idempotencyKey: { type: "string" },
       },
-      required: ["agentId"],
       additionalProperties: false,
     },
   },
@@ -314,7 +337,7 @@ const TOOLS = [
         metadata: { type: "object" },
         idempotencyKey: { type: "string" },
       },
-      required: ["workItemId", "agentId", "receiptType"],
+      required: ["workItemId", "receiptType"],
       additionalProperties: false,
     },
   },
@@ -347,7 +370,7 @@ const TOOLS = [
           enum: ["todo", "active", "blocked", "done", "skipped"],
         },
       },
-      required: ["workItemId", "agentId", "state"],
+      required: ["workItemId", "state"],
       additionalProperties: false,
     },
   },
@@ -376,7 +399,7 @@ const TOOLS = [
         queueResult: { type: "object" },
         idempotencyKey: { type: "string" },
       },
-      required: ["workItemId", "agentId", "status"],
+      required: ["workItemId", "status"],
       additionalProperties: false,
     },
   },
@@ -520,6 +543,9 @@ async function handleToolCall(
       case "open_engine_list_work_items":
         result = await listOpenEngineTool(ctx, caller, args);
         break;
+      case "open_engine_verify_connection":
+        result = await verifyConnectionTool(caller, claims, args);
+        break;
       case "open_engine_claim_next":
         result = await claimNextTool(ctx, caller, args);
         break;
@@ -616,10 +642,59 @@ async function listOpenEngineTool(
   return { ok: true, workItems: rows.map(formatWorkItemSummary) };
 }
 
+async function verifyConnectionTool(
+  caller: McpCaller,
+  claims: Record<string, unknown>,
+  args: Record<string, unknown>,
+) {
+  const queueKey = nullableQueueKeyArg(args.queueKey);
+  const requestedAgent = stringArg(args.agentId) ?? caller.agentId;
+  const agent = requestedAgent
+    ? await resolveAgentIdentity(caller.tenantId, requestedAgent)
+    : null;
+  const snapshot = queueKey
+    ? await getOpenEngineQueueSnapshot({
+        tenantId: caller.tenantId,
+        queueKey,
+        agentId: agent?.id ?? requestedAgent,
+        limit: limitArg(args.limit),
+      })
+    : null;
+  const availableAgents = await listOpenEngineAgents(caller.tenantId);
+  return {
+    ok: true,
+    server: { name: SERVER_NAME, version: SERVER_VERSION },
+    auth: {
+      kind: stringClaim(claims["tw:auth_kind"]) ?? "unknown",
+      requiredScope: REQUIRED_SCOPE,
+      scopePresent: hasScope(claims, REQUIRED_SCOPE),
+    },
+    tenant: { id: caller.tenantId },
+    user: { id: caller.userId },
+    agent: agent ? formatAgentIdentity(agent) : requestedAgent ? null : null,
+    agentResolution: requestedAgent
+      ? agent
+        ? "resolved"
+        : "not_found"
+      : caller.agentId
+        ? "caller_agent_unresolved"
+        : "not_requested",
+    queue: {
+      key: queueKey,
+      snapshot,
+    },
+    availableAgents: availableAgents.map(formatAgentIdentity),
+    nextStep: agent
+      ? "Use this agent id for OpenEngine claim, receipt, state, and status ledger calls."
+      : "Pass agentId as a ThinkWork agent UUID, slug, name, or workspace folder. Use availableAgents to pick a valid tenant-scoped identity.",
+  };
+}
+
 async function queueSnapshotTool(
   caller: McpCaller,
   args: Record<string, unknown>,
 ) {
+  const agentId = await optionalResolvedAgentId(caller, args.agentId);
   const snapshot = await getOpenEngineQueueSnapshot({
     tenantId: caller.tenantId,
     queueKey: nullableQueueKeyArg(args.queueKey),
@@ -628,7 +703,7 @@ async function queueSnapshotTool(
     labelSlugs: stringArrayArg(args.labelSlugs),
     ownerUserId: stringArg(args.ownerUserId),
     ownerAgentId: stringArg(args.ownerAgentId),
-    agentId: stringArg(args.agentId),
+    agentId,
     limit: limitArg(args.limit),
   });
   return { ok: true, snapshot };
@@ -639,7 +714,11 @@ async function claimNextTool(
   caller: McpCaller,
   args: Record<string, unknown>,
 ) {
-  const agentId = requiredStringArg(args.agentId, "agentId");
+  const agentId = await requiredResolvedAgentId(
+    caller,
+    args.agentId,
+    "agentId",
+  );
   const claimed = await claimNextOpenEngineWorkItem({
     tenantId: caller.tenantId,
     queueKey: nullableQueueKeyArg(args.queueKey),
@@ -747,7 +826,8 @@ async function handoffWorkItemTool(
   args: Record<string, unknown>,
 ) {
   const workItemId = requiredStringArg(args.workItemId, "workItemId");
-  const actorAgentId = stringArg(args.agentId) ?? caller.agentId;
+  const actorAgentId =
+    (await optionalResolvedAgentId(caller, args.agentId)) ?? caller.agentId;
   const result = await routeOpenEngineWorkItem({
     tenantId: caller.tenantId,
     workItemId,
@@ -842,10 +922,15 @@ async function recordReceiptTool(
   caller: McpCaller,
   args: Record<string, unknown>,
 ) {
+  const agentId = await requiredResolvedAgentId(
+    caller,
+    args.agentId,
+    "agentId",
+  );
   const event = await recordOpenEngineReceipt({
     tenantId: caller.tenantId,
     workItemId: requiredStringArg(args.workItemId, "workItemId"),
-    agentId: requiredStringArg(args.agentId, "agentId"),
+    agentId,
     receiptType: requiredStringArg(args.receiptType, "receiptType"),
     threadId: stringArg(args.threadId),
     message: stringArg(args.message),
@@ -863,10 +948,15 @@ async function updateStateTool(
 ) {
   const state = requiredStringArg(args.state, "state");
   const receiptType = receiptTypeForState(state);
+  const agentId = await requiredResolvedAgentId(
+    caller,
+    args.agentId,
+    "agentId",
+  );
   const receipt = await recordOpenEngineReceipt({
     tenantId: caller.tenantId,
     workItemId: requiredStringArg(args.workItemId, "workItemId"),
-    agentId: requiredStringArg(args.agentId, "agentId"),
+    agentId,
     receiptType,
     message: stringArg(args.message),
     evidence: optionalRecordArg(args.evidence) ?? null,
@@ -903,7 +993,11 @@ async function updateStatusLedgerTool(
   args: Record<string, unknown>,
 ) {
   const workItemId = requiredStringArg(args.workItemId, "workItemId");
-  const agentId = requiredStringArg(args.agentId, "agentId");
+  const agentId = await requiredResolvedAgentId(
+    caller,
+    args.agentId,
+    "agentId",
+  );
   const status = requiredStringArg(args.status, "status");
   const content = JSON.stringify(
     {
@@ -1124,9 +1218,8 @@ async function resolveCaller(
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -1211,6 +1304,109 @@ function formatEvent(row: Record<string, any>) {
     metadata: row.metadata ?? null,
     createdAt: iso(row.created_at),
   };
+}
+
+function formatAgentIdentity(row: Record<string, any>) {
+  return {
+    id: row.id,
+    name: row.name ?? null,
+    slug: row.slug ?? null,
+    workspaceFolderName: row.workspace_folder_name ?? null,
+    type: row.type ?? null,
+    status: row.status ?? null,
+  };
+}
+
+async function requiredResolvedAgentId(
+  caller: McpCaller,
+  value: unknown,
+  field: string,
+) {
+  const raw = stringArg(value) ?? caller.agentId;
+  if (!raw) {
+    throw new Error(
+      `${field} is required. Pass a ThinkWork agent UUID, slug, name, or workspace folder. Run open_engine_verify_connection to discover valid agent identities.`,
+    );
+  }
+  const resolved = await resolveAgentIdentity(caller.tenantId, raw);
+  if (!resolved) {
+    throw new Error(
+      `Could not resolve OpenEngine agent identity "${raw}" for tenant ${caller.tenantId}. Run open_engine_verify_connection and use one of the returned availableAgents ids or slugs.`,
+    );
+  }
+  return resolved.id;
+}
+
+async function optionalResolvedAgentId(caller: McpCaller, value: unknown) {
+  const raw = stringArg(value);
+  if (!raw) return null;
+  const resolved = await resolveAgentIdentity(caller.tenantId, raw);
+  if (!resolved) {
+    throw new Error(
+      `Could not resolve OpenEngine agent identity "${raw}" for tenant ${caller.tenantId}. Run open_engine_verify_connection and use one of the returned availableAgents ids or slugs.`,
+    );
+  }
+  return resolved.id;
+}
+
+async function resolveAgentIdentity(tenantId: string, identity: string) {
+  const trimmed = identity.trim();
+  if (!trimmed) return null;
+  const normalized = normalizeAgentIdentityKey(trimmed);
+  const rows = await db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      slug: agents.slug,
+      workspace_folder_name: agents.workspace_folder_name,
+      type: agents.type,
+      status: agents.status,
+    })
+    .from(agents)
+    .where(
+      sql`${agents.tenant_id} = ${tenantId}
+        AND ${agents.status} <> 'archived'
+        AND (
+          ${agents.id}::text = ${trimmed}
+          OR lower(coalesce(${agents.slug}, '')) = ${normalized}
+          OR lower(coalesce(${agents.workspace_folder_name}, '')) = ${normalized}
+          OR lower(regexp_replace(${agents.name}, '[^a-zA-Z0-9._-]+', '-', 'g')) = ${normalized}
+          OR lower(${agents.name}) = ${trimmed.toLowerCase()}
+        )`,
+    )
+    .limit(2);
+  if (rows.length > 1) {
+    throw new Error(
+      `OpenEngine agent identity "${identity}" matched multiple agents. Use a specific agent id from open_engine_verify_connection.`,
+    );
+  }
+  return rows[0] ?? null;
+}
+
+async function listOpenEngineAgents(tenantId: string) {
+  return db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      slug: agents.slug,
+      workspace_folder_name: agents.workspace_folder_name,
+      type: agents.type,
+      status: agents.status,
+    })
+    .from(agents)
+    .where(
+      sql`${agents.tenant_id} = ${tenantId} AND ${agents.status} <> 'archived'`,
+    )
+    .orderBy(asc(agents.name))
+    .limit(25);
+}
+
+function normalizeAgentIdentityKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function buildClaimReceiptIdempotencyKey(

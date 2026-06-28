@@ -60,6 +60,15 @@ const {
         "color",
         "archived_at",
       ]),
+      agents: table("agents", [
+        "id",
+        "tenant_id",
+        "name",
+        "slug",
+        "workspace_folder_name",
+        "type",
+        "status",
+      ]),
     },
   };
 });
@@ -97,6 +106,13 @@ vi.mock("../graphql/utils.js", () => {
     desc: vi.fn((field: unknown) => ({ desc: field })),
     eq: vi.fn((field: unknown, value: unknown) => ({ eq: [field, value] })),
     isNull: vi.fn((field: unknown) => ({ isNull: field })),
+    sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+      text: strings.reduce((acc, fragment, index) => {
+        const value = index < values.length ? String(values[index]) : "";
+        return `${acc}${fragment}${value}`;
+      }, ""),
+    })),
+    agents: tables.agents,
     workItemEvents: tables.workItemEvents,
     workItemLabelAssignments: tables.workItemLabelAssignments,
     workItemLabels: tables.workItemLabels,
@@ -228,12 +244,40 @@ describe("OpenEngine MCP handler", () => {
     expect(body.result.structuredContent.workItems[0].id).toBe("work-item-1");
   });
 
+  it("verifies auth, tenant, agent identity, and queue visibility", async () => {
+    dbRows.push([baseAgent()], [baseAgent()]);
+
+    const response = await callTool("open_engine_verify_connection", {
+      agentId: "codex",
+      queueKey: "codex",
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(mockGetQueueSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        queueKey: "codex",
+        agentId: "agent-1",
+      }),
+    );
+    expect(body.result.structuredContent.auth).toMatchObject({
+      kind: "service",
+      requiredScope: "open_engine:work_items",
+      scopePresent: true,
+    });
+    expect(body.result.structuredContent.agent).toMatchObject({
+      id: "agent-1",
+      slug: "codex",
+    });
+    expect(body.result.structuredContent.availableAgents[0].id).toBe("agent-1");
+  });
+
   it("claims one Work Item and records an AGENT CLAIMED receipt", async () => {
     mockClaimNext.mockResolvedValue(baseWorkItem());
-    dbRows.push([], []);
+    dbRows.push([baseAgent()], [], []);
 
     const response = await callTool("open_engine_claim_next", {
-      agentId: "agent-1",
+      agentId: "codex",
       queueKey: "codex",
       leaseSeconds: 120,
     });
@@ -259,14 +303,46 @@ describe("OpenEngine MCP handler", () => {
     expect(body.result.structuredContent.claimed.id).toBe("work-item-1");
   });
 
+  it("uses the authenticated caller agent when tool args omit agentId", async () => {
+    mockClaimNext.mockResolvedValue(baseWorkItem());
+    dbRows.push([baseAgent()], [], []);
+
+    const response = await handler(
+      event(
+        "tools/call",
+        {
+          name: "open_engine_claim_next",
+          arguments: { queueKey: "codex" },
+        },
+        { agentId: "codex" },
+      ),
+    );
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(mockClaimNext).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: "agent-1" }),
+    );
+    expect(body.result.structuredContent.claimed.id).toBe("work-item-1");
+  });
+
+  it("explains how to discover an agent when none is provided", async () => {
+    const response = await callTool("open_engine_claim_next", {
+      queueKey: "codex",
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(body.error.message).toContain("agentId is required");
+    expect(body.error.message).toContain("open_engine_verify_connection");
+  });
+
   it("hands off a Work Item to another OpenEngine queue", async () => {
-    dbRows.push([], []);
+    dbRows.push([baseAgent({ id: "agent-router", slug: "router" })], [], []);
 
     const response = await callTool("open_engine_handoff_work_item", {
       workItemId: "work-item-1",
       targetQueueKey: "Codex",
       targetOwnerUserId: "user-2",
-      agentId: "agent-router",
+      agentId: "router",
       message: "Hand off to Codex",
       idempotencyKey: "route-key-1",
     });
@@ -291,10 +367,12 @@ describe("OpenEngine MCP handler", () => {
   });
 
   it("returns an OpenEngine queue snapshot for operational visibility", async () => {
+    dbRows.push([baseAgent()]);
+
     const response = await callTool("open_engine_queue_snapshot", {
       queueKey: "codex",
       labelSlugs: ["Codex"],
-      agentId: "agent-1",
+      agentId: "codex",
       limit: 10,
     });
     const body = JSON.parse(response.body ?? "{}");
@@ -311,6 +389,22 @@ describe("OpenEngine MCP handler", () => {
       limit: 10,
     });
     expect(body.result.structuredContent.snapshot.counts.eligible).toBe(1);
+  });
+
+  it("returns actionable errors for unknown agent identities", async () => {
+    dbRows.push([]);
+
+    const response = await callTool("open_engine_claim_next", {
+      agentId: "missing-agent",
+      queueKey: "codex",
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(response.statusCode).toBe(200);
+    expect(body.error.message).toContain(
+      'Could not resolve OpenEngine agent identity "missing-agent"',
+    );
+    expect(body.error.message).toContain("open_engine_verify_connection");
   });
 
   it("creates OpenEngine-enabled Work Items by default", async () => {
@@ -372,6 +466,7 @@ describe("OpenEngine MCP handler", () => {
   });
 
   it("updates an existing status ledger document instead of creating heartbeat clutter", async () => {
+    dbRows.push([baseAgent()]);
     mockListDocuments.mockResolvedValue([
       {
         id: "ledger-1",
@@ -436,7 +531,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
 function event(
   method: string,
   params: Record<string, unknown> = {},
-  options: { bearer?: string | null } = {},
+  options: { bearer?: string | null; agentId?: string } = {},
 ): any {
   const bearer =
     options.bearer === undefined ? "service-secret" : options.bearer;
@@ -447,6 +542,7 @@ function event(
       host: "api.example.com",
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
       "x-tenant-id": "tenant-1",
+      ...(options.agentId ? { "x-agent-id": options.agentId } : {}),
     },
     requestContext: {
       domainName: "api.example.com",
@@ -490,5 +586,17 @@ function baseWorkItem() {
     open_engine_scheduled_at: null,
     created_at: new Date("2026-06-27T12:00:00Z"),
     updated_at: new Date("2026-06-27T12:00:00Z"),
+  };
+}
+
+function baseAgent(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "agent-1",
+    name: "Codex",
+    slug: "codex",
+    workspace_folder_name: "codex",
+    type: "agent",
+    status: "idle",
+    ...overrides,
   };
 }
