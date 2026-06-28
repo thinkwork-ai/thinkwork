@@ -194,6 +194,18 @@ function stateUpdateForReceipt(
       updated_at: now,
     };
   }
+  if (receiptType === "applied") {
+    return {
+      blocked: false,
+      open_engine_human_hold: false,
+      open_engine_human_hold_reason: null,
+      open_engine_dependency_state: "waiting",
+      open_engine_claimed_by_agent_id: null,
+      open_engine_claimed_at: null,
+      open_engine_claim_expires_at: null,
+      updated_at: now,
+    };
+  }
   if (receiptType === "failed") {
     return {
       open_engine_claimed_by_agent_id: null,
