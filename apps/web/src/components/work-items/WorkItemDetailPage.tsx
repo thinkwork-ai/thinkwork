@@ -799,7 +799,7 @@ function ActivitySection({
   };
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-3 border-t border-border pt-4">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
