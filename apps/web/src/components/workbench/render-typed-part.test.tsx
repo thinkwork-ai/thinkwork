@@ -390,6 +390,29 @@ describe("renderTypedPart", () => {
     expect(container.textContent).toContain("data-future-shape");
   });
 
+  it("renders MCP app data parts in a sandboxed iframe", () => {
+    const part: AccumulatedPart = {
+      type: "data-mcp-app",
+      id: "mcp-app:dispatch",
+      data: {
+        schemaVersion: "thinkwork-mcp-app/v1",
+        status: "ready",
+        uri: "ui://lastmile-dispatch/optimization",
+        mimeType: "text/html",
+        title: "Dispatch Optimization App",
+        html: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
+      },
+    };
+
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("mcp-app-frame")).toBeTruthy();
+    expect(screen.getByText("Dispatch Optimization App")).toBeTruthy();
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("srcdoc")).toContain("<main>map</main>");
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-scripts");
+  });
+
   it("renders nothing surprising for an unsupported part type (defensive return null)", () => {
     // A theoretical unknown part shape should not crash — the helper
     // returns null and React renders nothing.

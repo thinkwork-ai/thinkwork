@@ -8,6 +8,7 @@ export * from "./history.js";
 export * from "./json-render-runtime.js";
 export * from "./knowledge-graph-provider.js";
 export * from "./memory-provider.js";
+export * from "./mcp-app-runtime.js";
 export * from "./model-provider.js";
 export * from "./model-routing-policy.js";
 export * from "./okf-wiki-navigator.js";

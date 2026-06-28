@@ -229,6 +229,42 @@ export function renderTypedPart(
       const goalRun = normalizeGoalRunEvidence(part.data);
       return goalRun ? <GoalRunCard key={key} goalRun={goalRun} /> : null;
     }
+    if (part.type === "data-mcp-app") {
+      const data = recordData(part.data);
+      const html = typeof data.html === "string" ? data.html : "";
+      const title =
+        typeof data.title === "string" && data.title.trim()
+          ? data.title.trim()
+          : "MCP App";
+      const uri = typeof data.uri === "string" ? data.uri : undefined;
+      if (!html) return null;
+      return (
+        <div
+          key={key}
+          className="not-prose overflow-hidden rounded-lg border border-border bg-background"
+          data-testid="mcp-app-frame"
+        >
+          <div className="flex min-w-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground">
+                {title}
+              </div>
+              {uri ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  {uri}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <iframe
+            title={title}
+            srcDoc={html}
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+            className="block h-[560px] w-full bg-white"
+          />
+        </div>
+      );
+    }
     if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.
       // Rendering it here duplicates the same task list in the transcript.

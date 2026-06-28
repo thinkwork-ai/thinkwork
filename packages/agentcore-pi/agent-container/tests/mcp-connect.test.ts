@@ -264,6 +264,47 @@ describe("createConnectMcpServer", () => {
     await expect(tool!.execute("call-1", {})).rejects.toThrow(/boom/);
   });
 
+  it("preserves text/html MCP resources as app descriptors", async () => {
+    const fake = makeFakeClient([{ name: "dispatch_optimization_app" }], {
+      content: [
+        { type: "text", text: "Dispatch optimization app" },
+        {
+          type: "resource",
+          resource: {
+            uri: "ui://lastmile-dispatch/optimization",
+            mimeType: "text/html",
+            text: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
+          },
+        },
+      ],
+    });
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const [tool] = await factory({
+      url: "https://mcp-dev.lastmile-tei.com/dispatch",
+      headers: {},
+      serverName: "lastmile-dispatch",
+    });
+
+    const result = await tool!.execute("call-1", {});
+
+    expect(result.details).toMatchObject({
+      mcp_apps: [
+        {
+          uri: "ui://lastmile-dispatch/optimization",
+          mimeType: "text/html",
+          html: expect.stringContaining("<main>map</main>"),
+          title: "Dispatch Optimization App",
+          serverName: "lastmile-dispatch",
+          toolName: "dispatch_optimization_app",
+        },
+      ],
+    });
+  });
+
   it("adds record links to successful supported MCP results", async () => {
     const fake = makeFakeClient([{ name: "find_many_opportunities" }], {
       content: [

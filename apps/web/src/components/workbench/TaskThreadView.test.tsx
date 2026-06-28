@@ -5275,6 +5275,44 @@ describe("normalizePersistedParts", () => {
     const part = parts[0] as { data?: Record<string, unknown> };
     expect(part.data?.questionId).toBe("q-2");
   });
+
+  it("derives MCP app parts from persisted tool result resources", () => {
+    const parts = normalizePersistedParts(
+      [],
+      [
+        {
+          result: {
+            details: {
+              raw: {
+                content: [
+                  { type: "text", text: "Dispatch optimization app" },
+                  {
+                    type: "resource",
+                    resource: {
+                      uri: "ui://lastmile-dispatch/optimization",
+                      mimeType: "text/html",
+                      text: "<!doctype html><title>Dispatch Optimization App</title><main>map</main>",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    );
+
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({
+      type: "data-mcp-app",
+      data: {
+        uri: "ui://lastmile-dispatch/optimization",
+        mimeType: "text/html",
+        title: "Dispatch Optimization App",
+        html: expect.stringContaining("<main>map</main>"),
+      },
+    });
+  });
 });
 
 describe("flag-for-evaluation affordance (Trust Core U7)", () => {
