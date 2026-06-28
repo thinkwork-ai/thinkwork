@@ -84,6 +84,24 @@ describe("mcp-api", () => {
     );
   });
 
+  it("falls back to direct authorize navigation when JSON resolution cannot be fetched", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { resolveMcpOAuthAuthorizeUrl } = await import("./mcp-api");
+
+    const resolved = await resolveMcpOAuthAuthorizeUrl({
+      mcpServerId: "server-1",
+      userId: "user-1",
+      tenantId: "tenant-1",
+      returnTo: "http://localhost:5175/settings/mcp-servers/server-1",
+    });
+
+    const url = new URL(resolved);
+    expect(url.origin).toBe("https://api.example.com");
+    expect(url.pathname).toBe("/api/skills/mcp-oauth/authorize");
+    expect(url.searchParams.get("response")).toBeNull();
+  });
+
   it("lists runtime MCP tools through the proxy endpoint", async () => {
     const { apiFetch } = await import("@/lib/api-fetch");
     const { listRuntimeMcpTools } = await import("./mcp-api");

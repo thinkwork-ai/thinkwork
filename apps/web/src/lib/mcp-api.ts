@@ -236,13 +236,18 @@ export async function resolveMcpOAuthAuthorizeUrl(input: {
   returnTo: string;
   force?: boolean;
 }): Promise<string> {
-  const response = await fetch(
-    buildMcpOAuthAuthorizeUrl({ ...input, response: "json" }),
-    {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      buildMcpOAuthAuthorizeUrl({ ...input, response: "json" }),
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      },
+    );
+  } catch {
+    return buildMcpOAuthAuthorizeUrl(input);
+  }
   const text = await response.text();
   let body: unknown = null;
   if (text) {
