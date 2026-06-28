@@ -36,6 +36,21 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 
 🚧 **Pre-release.** See the [thinkwork-cli npm releases](https://www.npmjs.com/package/thinkwork-cli) for the current version and the [roadmap](https://docs.thinkwork.ai/roadmap/) for what's landed vs. planned.
 
+## OpenEngine one-task runner
+
+Codex and Claude automation work is routed through ThinkWork OpenEngine Work
+Items, not Linear. The one-task runner at
+[`scripts/open-engine-one-task-runner.mjs`](./scripts/open-engine-one-task-runner.mjs)
+verifies `/mcp/open-engine`, inspects the routed queue, claims at most one
+eligible Work Item, fetches its handoff documents, writes status ledger evidence,
+and emits the execution prompt for that single task.
+
+Use the runner's verification runbook at
+[`docs/verification/open-engine-one-task-runner.md`](./docs/verification/open-engine-one-task-runner.md)
+when operating or debugging recurring agent pickups. Runtime evidence for these
+runs lives on the Work Item itself: documents provide handoff context, receipts
+record durable actions, and the status ledger records the current agent state.
+
 ## What ships in v1
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
