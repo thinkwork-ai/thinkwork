@@ -19,7 +19,15 @@ import {
   PauseCircle,
   UserRound,
 } from "lucide-react";
-import { Badge } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Response } from "@/components/ai-elements/response";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -197,7 +205,7 @@ export function WorkItemDetailPage({
       },
     });
     if (result.error) {
-      setHumanActionError(result.error.message);
+      setHumanActionError(formatOpenEngineActionError(result.error.message));
       return false;
     }
     reexecuteWorkItem({ requestPolicy: "network-only" });
@@ -749,93 +757,184 @@ function OpenEngineRailSection({
     message: string,
   ) => Promise<boolean>;
 }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [ledgerSheetOpen, setLedgerSheetOpen] = useState(false);
   const state = openEngineState(item);
   const latestReceipt = latestOpenEngineEvent(events);
   const latestLedger = latestOpenEngineStatusLedger(documents);
+  const needsHumanResponse = Boolean(item.blocked || item.openEngineHumanHold);
+  const latestReceiptLabel = latestReceipt
+    ? relativeDate(latestReceipt.createdAt)
+    : "No receipts yet";
 
   return (
-    <RailSection title="OpenEngine">
-      <div className="flex items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 dark:bg-background/50">
-        <span className={cn("text-muted-foreground", state.tone)}>
-          {state.icon}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">
-            {state.label}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {state.detail}
-          </p>
+    <>
+      <RailSection title="OpenEngine">
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="group flex w-full items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-background/50"
+        >
+          <span className={cn("shrink-0 text-muted-foreground", state.tone)}>
+            {state.icon}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {state.label}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {state.detail}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            Details
+          </span>
+        </button>
+        <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-x-2 gap-y-1 px-1 text-xs">
+          <span className="text-muted-foreground">Queue</span>
+          <span className="truncate text-foreground">
+            {item.openEngineQueueKey || "Default"}
+          </span>
+          <span className="text-muted-foreground">Receipt</span>
+          <span className="truncate text-foreground">{latestReceiptLabel}</span>
         </div>
-      </div>
+      </RailSection>
 
-      <PropertyRow
-        icon={<Bot className="size-4" />}
-        label="Queue"
-        value={item.openEngineQueueKey || "Default"}
-      />
-      <PropertyRow
-        icon={<Bot className="size-4" />}
-        label="Agent"
-        value={truncateMiddle(item.openEngineClaimedByAgentId) || "None"}
-      />
-      <PropertyRow
-        icon={<Clock className="size-4" />}
-        label="Claimed"
-        value={relativeDate(item.openEngineClaimedAt) || "None"}
-      />
-      <PropertyRow
-        icon={<Clock className="size-4" />}
-        label="Lease"
-        value={relativeDate(item.openEngineClaimExpiresAt) || "None"}
-      />
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
+          <SheetHeader className="space-y-2 pb-2">
+            <SheetTitle>OpenEngine</SheetTitle>
+            <SheetDescription>
+              Queue state and agent receipts for {workItemKey(item)}.
+            </SheetDescription>
+          </SheetHeader>
 
-      {item.openEngineHumanHoldReason ? (
-        <div className="rounded-md border bg-background/50 px-2.5 py-2 text-xs leading-5 text-muted-foreground dark:bg-background/50">
-          <span className="font-medium text-foreground">Hold reason: </span>
-          {item.openEngineHumanHoldReason}
-        </div>
-      ) : null}
+          <div className="space-y-4 px-4 pb-6 sm:px-6">
+            <div className="flex items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 dark:bg-muted/35">
+              <span className={cn("text-muted-foreground", state.tone)}>
+                {state.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {state.label}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {state.detail}
+                </p>
+              </div>
+            </div>
 
-      {latestReceipt ? (
-        <div className="rounded-md border bg-background/50 px-2.5 py-2 dark:bg-background/50">
-          <p className="text-xs font-medium text-muted-foreground">
-            Latest receipt
-          </p>
-          <p className="mt-1 line-clamp-3 text-xs leading-5 text-foreground">
-            {latestReceipt.message || eventLabel(latestReceipt.eventType)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {relativeDate(latestReceipt.createdAt)}
-          </p>
-        </div>
-      ) : null}
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">Queue</h3>
+              <div className="space-y-2 rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
+                <PropertyRow
+                  icon={<Bot className="size-4" />}
+                  label="Queue"
+                  value={item.openEngineQueueKey || "Default"}
+                />
+                <PropertyRow
+                  icon={<Bot className="size-4" />}
+                  label="Agent"
+                  value={truncateMiddle(item.openEngineClaimedByAgentId) || "None"}
+                />
+                <PropertyRow
+                  icon={<Clock className="size-4" />}
+                  label="Claimed"
+                  value={relativeDate(item.openEngineClaimedAt) || "None"}
+                />
+                <PropertyRow
+                  icon={<Clock className="size-4" />}
+                  label="Lease"
+                  value={relativeDate(item.openEngineClaimExpiresAt) || "None"}
+                />
+              </div>
+            </section>
+
+            {item.openEngineHumanHoldReason ? (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium text-foreground">
+                  Hold reason
+                </h3>
+                <p className="rounded-md border bg-muted/35 p-3 text-sm leading-6 text-muted-foreground dark:bg-muted/35">
+                  {item.openEngineHumanHoldReason}
+                </p>
+              </section>
+            ) : null}
+
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">
+                Latest receipt
+              </h3>
+              {latestReceipt ? (
+                <div className="rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
+                  <p className="text-sm leading-6 text-foreground">
+                    {latestReceipt.message || eventLabel(latestReceipt.eventType)}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {relativeDate(latestReceipt.createdAt)}
+                  </p>
+                </div>
+              ) : (
+                <p className="rounded-md border bg-muted/35 p-3 text-sm text-muted-foreground dark:bg-muted/35">
+                  No OpenEngine receipts yet.
+                </p>
+              )}
+            </section>
+
+            {latestLedger ? (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium text-foreground">
+                  Status ledger
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setLedgerSheetOpen(true)}
+                  className="flex w-full items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-muted/35"
+                >
+                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {latestLedger.title}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {relativeDate(latestLedger.updatedAt ?? latestLedger.createdAt)}
+                  </span>
+                </button>
+              </section>
+            ) : null}
+
+            {needsHumanResponse ? (
+              <OpenEngineBlockerResolution
+                item={item}
+                saving={saving}
+                error={error}
+                onAction={onAction}
+              />
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {latestLedger ? (
-        <Link
-          to="/work-items/$workItemId/documents/$documentId"
-          params={{ workItemId: item.id, documentId: latestLedger.id }}
-          className="flex items-center gap-2 rounded-md border bg-background/50 px-2.5 py-2 text-xs text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-background/50"
-        >
-          <FileText className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{latestLedger.title}</span>
-          <span className="shrink-0 text-muted-foreground">
-            {relativeDate(latestLedger.updatedAt ?? latestLedger.createdAt)}
-          </span>
-        </Link>
+        <Sheet open={ledgerSheetOpen} onOpenChange={setLedgerSheetOpen}>
+          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
+            <SheetHeader className="space-y-2 pb-2">
+              <SheetTitle>{latestLedger.title}</SheetTitle>
+              <SheetDescription>
+                {latestLedger.kind.toLowerCase()} · {latestLedger.contentType} ·{" "}
+                {formatBytes(latestLedger.sizeBytes)}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="px-4 pb-6 sm:px-6">
+              <DocumentViewer document={latestLedger} />
+            </div>
+          </SheetContent>
+        </Sheet>
       ) : null}
-
-      <OpenEngineHumanActionControls
-        item={item}
-        saving={saving}
-        error={error}
-        onAction={onAction}
-      />
-    </RailSection>
+    </>
   );
 }
 
-function OpenEngineHumanActionControls({
+function OpenEngineBlockerResolution({
   item,
   saving,
   error,
@@ -850,62 +949,50 @@ function OpenEngineHumanActionControls({
   ) => Promise<boolean>;
 }) {
   const [message, setMessage] = useState("");
-  const submit = async (actionType: OpenEngineHumanActionType) => {
-    const didSave = await onAction(actionType, message);
+  const submit = async (
+    actionType: "ANSWER_BLOCKER" | "RELEASE_HOLD",
+    messageOverride?: string,
+  ) => {
+    const didSave = await onAction(actionType, messageOverride ?? message);
     if (didSave) {
       setMessage("");
     }
   };
-  const isHeld = Boolean(item.blocked || item.openEngineHumanHold);
+  const holdLabel = item.blocked ? "Blocked" : "Human hold";
 
   return (
-    <div className="space-y-2 pt-1">
+    <section className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium text-foreground">
+          Resolve blocker
+        </h3>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {holdLabel}: add the answer the agent needs, then resume queue
+          pickup.
+        </p>
+      </div>
       <textarea
         value={message}
         onChange={(event) => setMessage(event.target.value)}
-        placeholder="Human response or reason..."
-        className="min-h-20 w-full resize-y rounded-md border bg-background/60 px-2.5 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 dark:bg-background/60"
+        placeholder="Answer for the agent..."
+        className="min-h-20 w-full resize-y rounded-md border bg-background/70 px-2.5 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 dark:bg-background/70"
       />
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <OpenEngineActionButton
-          disabled={saving || !isHeld}
+          disabled={saving || !message.trim()}
           onClick={() => submit("ANSWER_BLOCKER")}
         >
-          Answer
-        </OpenEngineActionButton>
-        <OpenEngineActionButton
-          disabled={saving || !isHeld}
-          onClick={() => submit("RELEASE_HOLD")}
-        >
-          Resume
+          Save answer and resume
         </OpenEngineActionButton>
         <OpenEngineActionButton
           disabled={saving}
-          onClick={() => submit("REQUEST_REVIEW")}
+          onClick={() => submit("RELEASE_HOLD", "Released by human operator.")}
         >
-          Review
-        </OpenEngineActionButton>
-        <OpenEngineActionButton
-          disabled={saving}
-          onClick={() => submit("MARK_REVIEWED")}
-        >
-          Reviewed
-        </OpenEngineActionButton>
-        <OpenEngineActionButton
-          disabled={saving}
-          onClick={() => submit("MARK_BLOCKED")}
-        >
-          Block
-        </OpenEngineActionButton>
-        <OpenEngineActionButton
-          disabled={saving}
-          onClick={() => submit("MARK_FAILED")}
-        >
-          Fail
+          Resume without answer
         </OpenEngineActionButton>
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
+    </section>
   );
 }
 
@@ -919,15 +1006,27 @@ function OpenEngineActionButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       disabled={disabled}
       onClick={onClick}
-      className="h-8 rounded-md border bg-background/60 px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-background/60"
+      className="h-8 justify-center bg-background/60 px-2 text-xs dark:bg-background/60"
     >
       {children}
-    </button>
+    </Button>
   );
+}
+
+function formatOpenEngineActionError(message: string) {
+  if (
+    message.includes("RecordOpenEngineHumanActionInput") ||
+    message.includes("recordOpenEngineHumanAction")
+  ) {
+    return "OpenEngine actions are not available from the connected API yet. Try again after the API deploy finishes.";
+  }
+  return message;
 }
 
 function openEngineState(item: WorkItemSummary) {
