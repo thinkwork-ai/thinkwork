@@ -84,13 +84,21 @@ describe("KnowledgeGraphExplorer", () => {
     expect(sheetSource).toContain("messageId");
   });
 
-  it("exposes thread search, selection, and manual ingest controls", () => {
-    // The Ontology tab is titled "Ontology" with a Data/Definitions toggle.
+  it("mounts Ontology as definitions only", () => {
     expect(settingsSource).toContain("Ontology");
-    expect(settingsSource).toContain("Definitions");
+    expect(settingsSource).toContain('mode="definitions"');
+    expect(settingsSource).toContain("approved ontology terms");
+    expect(settingsSource).not.toContain("Cognee");
+    expect(settingsSource).not.toContain("Data");
+    expect(settingsSource).not.toContain("Definitions");
+  });
+
+  it("exposes thread search, selection, and manual ingest controls only in the data branch", () => {
     // Thread ingest opens from a right-aligned "Threads" link in the explorer
     // toolbar.
     expect(explorerSource).toContain("Threads");
+    expect(explorerSource).toContain("dataMode ? (");
+    expect(explorerSource).toContain("!dataMode || !effectiveTenantId");
     expect(explorerSource).toContain("onThreadSheetOpenChange");
     expect(explorerSource).toContain("threadSheetOpen");
     expect(explorerSource).toContain("Thread Ingest");

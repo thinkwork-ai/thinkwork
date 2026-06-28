@@ -104,6 +104,10 @@ function buildRuntimeToolPolicy(
   const sendEmailAvailable = tools.has("send_email");
   const askUserQuestionAvailable = tools.has("ask_user_question");
   const jsonRenderAvailable = tools.has("emit_json_render_ui");
+  const memoryAvailable =
+    tools.has("recall") ||
+    tools.has("reflect") ||
+    tools.has("query_memory_context");
   const mcpAvailable =
     tools.has("mcp") || [...tools].some((name) => name.startsWith("mcp."));
 
@@ -169,6 +173,14 @@ function buildRuntimeToolPolicy(
     ...askUserQuestionPolicy,
     ...jsonRenderPolicy,
     "",
+    "### Memory",
+    memoryAvailable
+      ? "- Memory tools are available in the parent agent. For explicit requests to recall, search, prove, or retrieve user memory, Space memory, or long-term memory, use the parent memory tools directly before answering."
+      : "- Parent memory tools are not available for this turn. Do not claim to have searched user memory, Space memory, or long-term memory unless those facts are already present in the loaded context.",
+    memoryAvailable
+      ? "- Do not delegate explicit memory-retrieval tasks to Agent Profiles unless the user explicitly names that profile and the delegated profile is known to have memory tools."
+      : "",
+    "",
     "### Connected services",
     mcpAvailable
       ? "- MCP-backed connected services are available through the tool surface for this turn. Use them only when they help complete the user's request."
@@ -225,6 +237,7 @@ function buildAgentProfileRoutingPolicy(
     "",
     "The `delegate_to_agent_profile` tool is available for specialized subtasks. Use it when a bounded part of the user's request matches an Agent Profile's routing guidance or expertise, including research, source finding, coding, implementation, testing, data analysis, spreadsheets, CRM, or quantitative review.",
     "Delegate only the bounded subtask. After the profile returns, use its handoff summary to answer the user. Do not delegate when the user only needs a direct answer that you can complete with the parent agent's current context and tools.",
+    "Do not delegate explicit user memory, Space memory, or long-term-memory retrieval tasks. Those are parent-agent memory tasks unless the user explicitly names a profile that is configured with memory tools.",
     "",
     "Available Agent Profiles:",
     ...profileLines,

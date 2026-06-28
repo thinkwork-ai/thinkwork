@@ -33,6 +33,13 @@ describe("SettingsMemory", () => {
     expect(source).toContain("canForget={false}");
   });
 
+  it("keeps fixed evidence columns compact and lets Memory fill the row", () => {
+    expect(source).toContain("allowHorizontalScroll={false}");
+    expect(source).toContain("No explicit size");
+    expect(source).toContain('accessorKey: "text"');
+    expect(source).toContain('<span className="truncate">');
+  });
+
   it("keeps diagnostics out of the primary memory table", () => {
     expect(source).not.toContain("<MemoryModeStatus");
     expect(source).not.toContain("Memory engine:");

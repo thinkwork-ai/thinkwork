@@ -174,9 +174,9 @@ describe("AccountUsageSection", () => {
     render(<AccountUsageSection tenantId="tenant-1" userId="user-1" />);
 
     expect(screen.getByText("Account Usage")).toBeTruthy();
-    expect(screen.getByText("Total Spend")).toBeTruthy();
+    expect(screen.getByText("Total")).toBeTruthy();
     expect(screen.getByText("$8.00")).toBeTruthy();
-    expect(screen.getByText("Verified Spend")).toBeTruthy();
+    expect(screen.getByText("Verified")).toBeTruthy();
     expect(screen.getByText("$4.75")).toBeTruthy();
     expect(screen.getByText("Review")).toBeTruthy();
     expect(screen.getAllByText("$0.75")[0]).toBeTruthy();
@@ -215,7 +215,10 @@ describe("AccountUsageSection", () => {
     const sonnet = screen.getByText("Claude 3.5 Sonnet");
     const haiku = screen.getByText("Haiku");
     expect(screen.getAllByTestId("model-row")[0].className).toContain(
-      "grid-cols-[minmax(12rem,1fr)_8rem_7rem_7rem_5rem]",
+      "grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_5rem]",
+    );
+    expect(screen.getAllByTestId("model-row")[0].className).toContain(
+      "min-w-full",
     );
     expect(
       sonnet.compareDocumentPosition(haiku) & Node.DOCUMENT_POSITION_FOLLOWING,

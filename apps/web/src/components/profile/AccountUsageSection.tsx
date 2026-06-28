@@ -128,12 +128,12 @@ export function AccountUsageSection({
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <UsageMetric
             icon={<Coins className="size-4" />}
-            label="Total Spend"
+            label="Total"
             value={formatUsd(summary?.totalUsd ?? 0)}
           />
           <UsageMetric
             icon={<ShieldCheck className="size-4" />}
-            label="Verified Spend"
+            label="Verified"
             value={formatUsd(summary?.enforcedUsd ?? 0)}
           />
           <UsageMetric
@@ -153,7 +153,7 @@ export function AccountUsageSection({
           />
           <UsageMetric
             icon={<Cpu className="size-4" />}
-            label="Active Days"
+            label="Days"
             value={formatInteger(activeDayCount)}
           />
         </div>
@@ -181,8 +181,8 @@ function UsageMetric({
 }) {
   return (
     <div className="rounded-lg border border-border bg-background px-3 py-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon}
+      <div className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
+        <span className="shrink-0">{icon}</span>
         <span>{label}</span>
       </div>
       <p className="mt-2 text-lg font-semibold tabular-nums text-foreground">
@@ -316,13 +316,13 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
           No model usage in this period.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="w-full overflow-x-auto rounded-lg border border-border">
           {sorted.map((model) => {
             const name = model.displayName || shortenModelId(model.model);
             const totalTokens = model.inputTokens + model.outputTokens;
             return (
               <div
-                className="grid min-w-[45rem] grid-cols-[minmax(12rem,1fr)_8rem_7rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
+                className="grid min-w-full grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
                 data-testid="model-row"
                 key={model.model}
               >

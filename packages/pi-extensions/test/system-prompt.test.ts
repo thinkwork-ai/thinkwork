@@ -268,13 +268,24 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
         ],
       },
       workspaceDir: "/ws",
-      availableToolNames: ["delegate_to_agent_profile", "web_search"],
+      availableToolNames: [
+        "delegate_to_agent_profile",
+        "web_search",
+        "recall",
+        "reflect",
+      ],
       now: FIXED_NOW,
       fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
     });
 
     expect(prompt).toContain("## Agent Profile Delegation");
     expect(prompt).toContain("`delegate_to_agent_profile` tool is available");
+    expect(prompt).toContain(
+      "Memory tools are available in the parent agent",
+    );
+    expect(prompt).toContain(
+      "Do not delegate explicit user memory, Space memory, or long-term-memory retrieval tasks.",
+    );
     expect(prompt).toContain(
       "- Research (#research, model moonshotai.kimi-k2.5): Delegates focused research and source finding. Routing guidance: Use for source-backed research subtasks.",
     );

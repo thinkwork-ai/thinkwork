@@ -1,6 +1,5 @@
 import type { ComponentType } from "react";
 import {
-  AppWindow,
   Bot,
   Brain,
   Clock,
@@ -95,12 +94,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Activity",
     to: "/settings/activity",
     icon: History,
-  },
-  {
-    label: "Artifacts",
-    to: "/settings/artifacts",
-    icon: AppWindow,
-    operatorOnly: true,
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
   {

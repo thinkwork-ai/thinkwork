@@ -199,7 +199,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       {
         accessorKey: "createdAt",
         header: "Date",
-        size: 140,
+        size: 112,
         cell: ({ row }) => (
           <span
             className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
@@ -218,7 +218,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       {
         accessorKey: "bankId",
         header: "Bank",
-        size: 180,
+        size: 132,
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
             <span className="truncate text-xs">
@@ -230,7 +230,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       {
         accessorKey: "ownerType",
         header: "Scope",
-        size: 140,
+        size: 164,
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
             <span className="truncate text-xs">
@@ -244,7 +244,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         // Wide enough for the longest strategy label ("Reflections" /
         // "Preferences") so the badge never clips under table-fixed.
         header: "Type",
-        size: 132,
+        size: 124,
         cell: ({ row }) => (
           <span className={COMPACT_TABLE_CELL}>
             <StrategyBadge strategy={row.original.strategy} />
@@ -252,6 +252,8 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         ),
       },
       {
+        // No explicit size: under table-fixed this flexes into the remaining
+        // width while the cell content truncates on one line.
         accessorKey: "text",
         header: "Memory",
         cell: ({ row }) => (
@@ -354,7 +356,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
               setSheetOpen(true);
             }}
             scrollable
-            allowHorizontalScroll
+            allowHorizontalScroll={false}
             pageSize={25}
             tableClassName="table-fixed"
           />
