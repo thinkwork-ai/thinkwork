@@ -1,0 +1,42 @@
+"""
+Installed plugin app surfaces.
+
+These are trusted, first-party plugin apps declared by launchable `ui-surface`
+components in installed plugin manifests. The launch contract is identity and
+route metadata only; browser clients never receive plugin credentials or
+runtime code from this surface.
+"""
+type InstalledPluginAppReadiness {
+  """
+  ready | install_in_progress | operator_setup_required |
+  component_unavailable | activation_required
+  """
+  state: String!
+  message: String!
+  "Optional product-action hint for the web shell."
+  nextAction: String
+}
+
+type InstalledPluginApp {
+  "Stable install/surface identity."
+  id: ID!
+  pluginInstallId: ID!
+  pluginKey: String!
+  pluginDisplayName: String!
+  pluginVersion: String!
+  surfaceKey: String!
+  displayName: String!
+  appKey: String!
+  routeSegment: String!
+  mount: String!
+  runtime: String!
+  description: String
+  icon: String
+  entitlementProductKey: String
+  readiness: InstalledPluginAppReadiness!
+}
+
+extend type Query {
+  "Launchable plugin apps available to the current tenant/user."
+  installedPluginApps: [InstalledPluginApp!]!
+}

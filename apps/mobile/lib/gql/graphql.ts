@@ -1586,6 +1586,14 @@ export type CreateWebhookInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type CreateWorkItemCommentInput = {
+  body: Scalars["String"]["input"];
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
 export type CreateWorkItemDocumentInput = {
   content?: InputMaybe<Scalars["String"]["input"]>;
   contentBase64?: InputMaybe<Scalars["String"]["input"]>;
@@ -2499,6 +2507,46 @@ export type InstallPluginInput = {
   pluginKey: Scalars["String"]["input"];
   /** Catalog version to pin; defaults to the latest published version. */
   version?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type InstalledPluginApp = {
+  __typename?: "InstalledPluginApp";
+  appKey: Scalars["String"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  displayName: Scalars["String"]["output"];
+  entitlementProductKey?: Maybe<Scalars["String"]["output"]>;
+  icon?: Maybe<Scalars["String"]["output"]>;
+  /** Stable install/surface identity. */
+  id: Scalars["ID"]["output"];
+  mount: Scalars["String"]["output"];
+  pluginDisplayName: Scalars["String"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  pluginKey: Scalars["String"]["output"];
+  pluginVersion: Scalars["String"]["output"];
+  readiness: InstalledPluginAppReadiness;
+  routeSegment: Scalars["String"]["output"];
+  runtime: Scalars["String"]["output"];
+  surfaceKey: Scalars["String"]["output"];
+};
+
+/**
+ * Installed plugin app surfaces.
+ *
+ * These are trusted, first-party plugin apps declared by launchable `ui-surface`
+ * components in installed plugin manifests. The launch contract is identity and
+ * route metadata only; browser clients never receive plugin credentials or
+ * runtime code from this surface.
+ */
+export type InstalledPluginAppReadiness = {
+  __typename?: "InstalledPluginAppReadiness";
+  message: Scalars["String"]["output"];
+  /** Optional product-action hint for the web shell. */
+  nextAction?: Maybe<Scalars["String"]["output"]>;
+  /**
+   * ready | install_in_progress | operator_setup_required |
+   * component_unavailable | activation_required
+   */
+  state: Scalars["String"]["output"];
 };
 
 export type InviteMemberInput = {
@@ -3535,6 +3583,7 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   createWorkItem: WorkItem;
+  createWorkItemComment: WorkItemComment;
   createWorkItemDocument: WorkItemDocument;
   createWorkItemLabel: WorkItemLabel;
   /**
@@ -4074,6 +4123,10 @@ export type MutationCreateWebhookArgs = {
 
 export type MutationCreateWorkItemArgs = {
   input: CreateWorkItemInput;
+};
+
+export type MutationCreateWorkItemCommentArgs = {
+  input: CreateWorkItemCommentInput;
 };
 
 export type MutationCreateWorkItemDocumentArgs = {
@@ -5817,6 +5870,8 @@ export type Query = {
   flaggedTurnSkillCandidates: SkillAttributionCandidates;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
+  /** Launchable plugin apps available to the current tenant/user. */
+  installedPluginApps: Array<InstalledPluginApp>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
   knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
@@ -5832,6 +5887,7 @@ export type Query = {
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
+  memoryRetainAttempts: Array<MemoryRetainAttempt>;
   memorySearch: MemorySearchResult;
   memorySystemConfig: MemorySystemConfig;
   messages: MessageConnection;
@@ -6019,6 +6075,7 @@ export type Query = {
    */
   wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
+  workItemComments: Array<WorkItemComment>;
   workItemDocument?: Maybe<WorkItemDocument>;
   workItemDocuments: Array<WorkItemDocument>;
   workItemLabels: Array<WorkItemLabel>;
@@ -6415,6 +6472,15 @@ export type QueryMemoryRecordsArgs = {
   query?: InputMaybe<Scalars["String"]["input"]>;
   scope?: InputMaybe<MemoryRecordScope>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryMemoryRetainAttemptsArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -6890,6 +6956,10 @@ export type QueryWikiSearchArgs = {
 export type QueryWorkItemArgs = {
   id: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemCommentsArgs = {
+  input: WorkItemCommentsInput;
 };
 
 export type QueryWorkItemDocumentArgs = {
@@ -9434,6 +9504,7 @@ export type UpdateWorkItemInput = {
   labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   notes?: InputMaybe<Scalars["String"]["input"]>;
+  openEngineQueueKey?: InputMaybe<Scalars["String"]["input"]>;
   ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
   ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   priority?: InputMaybe<WorkItemPriority>;
@@ -9900,6 +9971,7 @@ export type WorkItem = {
   applicable: Scalars["Boolean"]["output"];
   archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   blocked: Scalars["Boolean"]["output"];
+  comments: Array<WorkItemComment>;
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   completedByAgentId?: Maybe<Scalars["ID"]["output"]>;
   completedByUserId?: Maybe<Scalars["ID"]["output"]>;
@@ -9936,6 +10008,29 @@ export type WorkItem = {
   threadLinks: Array<WorkItemThreadLink>;
   title: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type WorkItemComment = {
+  __typename?: "WorkItemComment";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  authorAgentId?: Maybe<Scalars["ID"]["output"]>;
+  authorUserId?: Maybe<Scalars["ID"]["output"]>;
+  body: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  workItemId: Scalars["ID"]["output"];
+};
+
+export type WorkItemCommentsInput = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
 };
 
 export type WorkItemDocument = {
@@ -10003,6 +10098,7 @@ export enum WorkItemEventType {
   ApplicabilityChanged = "APPLICABILITY_CHANGED",
   Assigned = "ASSIGNED",
   Blocked = "BLOCKED",
+  CommentAdded = "COMMENT_ADDED",
   Completed = "COMPLETED",
   Created = "CREATED",
   DueDateChanged = "DUE_DATE_CHANGED",
