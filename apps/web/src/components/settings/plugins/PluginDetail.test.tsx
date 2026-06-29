@@ -957,7 +957,7 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("Premium access")).toBeNull();
     expect(screen.queryByText("Install key required")).toBeNull();
     expect(
-      screen.getByText("knowledge graph substrate.", { exact: false }),
+      screen.getByText("private context substrate.", { exact: false }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /enter key/i }));
 
@@ -986,7 +986,7 @@ describe("PluginDetail", () => {
     });
   });
 
-  it("shows ThinkWork Brain operations, workspace, and adoption evidence once entitled", () => {
+  it("shows ThinkWork Brain context diagnostics and adoption evidence once entitled", () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
       install: companyBrainInstall,
@@ -998,14 +998,14 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("Premium access")).toBeNull();
     expect(screen.queryByText("Entitled")).toBeNull();
     expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
-    const operations = screen.getByRole("link", { name: /open operations/i });
-    expect(operations.getAttribute("href")).toBe("/settings/brain-operations");
-    expect(screen.getByText("Memory graph")).toBeTruthy();
-    expect(
-      screen.getByText(/ontology and graph infrastructure evidence/i),
-    ).toBeTruthy();
-    const link = screen.getByRole("link", { name: /open graph/i });
-    expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
+    const diagnostics = screen.getByRole("link", {
+      name: /open diagnostics/i,
+    });
+    expect(diagnostics.getAttribute("href")).toBe(
+      "/settings/context-diagnostics",
+    );
+    expect(screen.queryByText("Memory graph")).toBeNull();
+    expect(screen.queryByRole("link", { name: /open graph/i })).toBeNull();
   });
 
   it("renders n8n package settings only for installed operator plugins", () => {
@@ -1500,7 +1500,7 @@ const companyBrainEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "company-brain",
   displayName: "ThinkWork Brain",
-  description: "Premium knowledge graph substrate.",
+  description: "Premium private context substrate.",
   latestVersion: "0.1.0",
   updateAvailable: false,
   premium: {

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import { Button, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsMemory,
@@ -12,7 +12,7 @@ import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/Knowled
 
 const MEMORY = "/settings/memory";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
-const ONTOLOGY = "/settings/memory/knowledge-graph";
+const ONTOLOGY = "/settings/memory/ontology";
 
 type MemoryTab = "memory" | "knowledge-bases" | "ontology";
 
@@ -23,8 +23,8 @@ function tabForPath(pathname: string): MemoryTab {
 }
 
 /**
- * The unified Memory settings page. Memory, KBs, and Ontology are sibling
- * tabs rendered in the AppTopBar — driven by the route so each tab is
+ * The unified Memory settings page. Memory records, KBs, and Ontology are
+ * sibling tabs rendered in the AppTopBar and driven by the route so each tab is
  * deep-linkable.
  */
 export function SettingsMemoryHome() {
@@ -32,6 +32,7 @@ export function SettingsMemoryHome() {
   const activeTab = tabForPath(pathname);
   const [refreshController, setRefreshController] =
     useState<MemoryRefreshController | null>(null);
+  const [refreshPending, setRefreshPending] = useState(false);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
@@ -40,23 +41,38 @@ export function SettingsMemoryHome() {
     [],
   );
 
+  const refreshing =
+    refreshPending || (refreshController?.isRefreshing ?? false);
+  const refreshDisabled = refreshController?.disabled ?? true;
+  const refreshMemory = useCallback(async () => {
+    if (!refreshController || refreshDisabled || refreshPending) return;
+    setRefreshPending(true);
+    try {
+      await Promise.all([
+        refreshController.refresh(),
+        new Promise((resolve) => window.setTimeout(resolve, 450)),
+      ]);
+    } finally {
+      setRefreshPending(false);
+    }
+  }, [refreshController, refreshDisabled, refreshPending]);
+
   const refreshAction =
     activeTab === "memory" ? (
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground hover:text-foreground"
+        className={cn(
+          "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+          refreshing && "bg-primary/10 text-primary hover:text-primary",
+        )}
         aria-label="Refresh memory records"
         title="Refresh memory records"
-        disabled={refreshController?.disabled ?? true}
-        onClick={() => {
-          void refreshController?.refresh();
-        }}
+        disabled={refreshDisabled}
+        onClick={() => void refreshMemory()}
       >
-        <RefreshCw
-          className={`size-4 ${refreshController?.isRefreshing ? "animate-spin" : ""}`}
-        />
+        <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
       </Button>
     ) : null;
 
@@ -69,7 +85,7 @@ export function SettingsMemoryHome() {
       { to: ONTOLOGY, label: "Ontology" },
     ],
     action: refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshController?.disabled ? "disabled" : "enabled"}:${refreshController?.isRefreshing ? "refreshing" : "idle"}`,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}`,
   });
 
   return (

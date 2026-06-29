@@ -275,7 +275,7 @@ export function KnowledgeGraphExplorer({
       return;
     }
 
-    toast.success("Knowledge Graph ingest queued");
+      toast.success("Ontology ingest queued");
     const run = result.data?.startKnowledgeGraphThreadIngest;
     if (run) {
       setSelectedRun(run as IngestRun);
@@ -1111,8 +1111,8 @@ function IngestDropDiagnostics({
         <p className="text-sm font-medium">Ontology gate diagnostics</p>
         <p className="text-xs leading-5 text-muted-foreground">
           {hasRawGraph
-            ? `Cognee returned ${metrics.cogneeNodeCount} raw nodes and ${metrics.cogneeEdgeCount} raw links, but none became approved ThinkWork ontology entities.`
-            : "Cognee did not return a raw graph for this ingest."}
+            ? `The backend returned ${metrics.cogneeNodeCount} raw nodes and ${metrics.cogneeEdgeCount} raw links, but none became approved ThinkWork ontology entities.`
+            : "The backend did not return a raw graph for this ingest."}
         </p>
       </div>
 

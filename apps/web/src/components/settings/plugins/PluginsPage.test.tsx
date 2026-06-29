@@ -353,7 +353,7 @@ describe("PluginsPage", () => {
       name: "Open ThinkWork Brain",
     });
     expect(
-      within(brainRow).getByText("knowledge graph substrate.", {
+      within(brainRow).getByText("private context substrate.", {
         exact: false,
       }),
     ).toBeTruthy();
@@ -618,7 +618,7 @@ const catalogEntries = [
     __typename: "PluginCatalogEntry" as const,
     pluginKey: "company-brain",
     displayName: "ThinkWork Brain",
-    description: "Premium knowledge graph substrate.",
+    description: "Premium private context substrate.",
     latestVersion: "0.1.0",
     launchUrl: null,
     updateAvailable: false,

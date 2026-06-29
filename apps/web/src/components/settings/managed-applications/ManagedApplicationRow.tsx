@@ -80,7 +80,7 @@ function managedAppDescription(key: ManagedAppKey): string {
   if (key === "n8n") {
     return "Self-hosted workflow automation runtime with queue workers, retained workflow data, and native MCP integration.";
   }
-  return "ThinkWork Brain knowledge graph substrate with dedicated graph/vector storage and provider credentials.";
+  return "ThinkWork Brain private context substrate with dedicated graph/vector storage and provider credentials.";
 }
 
 function statusBadgeClassName(status: string) {

@@ -27,7 +27,7 @@ export function KnowledgeGraphConfigPanel() {
       <SettingsSection label="Deployment">
         {result.error ? (
           <div className="p-4 text-sm text-muted-foreground">
-            Knowledge Graph status unavailable.
+            Ontology status unavailable.
           </div>
         ) : (
           <>
@@ -75,7 +75,7 @@ export function KnowledgeGraphConfigPanel() {
           />
           <SettingsRow
             label="Connection test"
-            description="Probe the private Cognee /health endpoint through the Thinkwork API."
+            description="Probe the private backend health endpoint through the Thinkwork API."
           >
             <Button
               type="button"

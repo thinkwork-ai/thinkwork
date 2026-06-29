@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { BrainOperationsPage } from "@/components/settings/brain/BrainOperationsPage";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/brain-operations")({
-  component: () => (
-    <OperatorGuard>
-      <BrainOperationsPage />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/context-diagnostics", replace: true });
+  },
 });

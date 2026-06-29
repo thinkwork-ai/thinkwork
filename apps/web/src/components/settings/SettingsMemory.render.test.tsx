@@ -410,35 +410,29 @@ describe("SettingsMemory render", () => {
     expect(screen.queryByText("Forget")).toBeNull();
   });
 
-  it("explains when Hindsight is available but not the active engine without naming the legacy backend", () => {
+  it("shows a neutral empty state without engine-switching instructions", () => {
     useQueryMock.mockImplementation(({ variables }: { variables?: any }) => {
       if (variables?.scope === "OPERATOR") {
         return [{ data: { memoryRecords: [] }, fetching: false }] as any;
       }
 
-      return [
-        {
-          data: {
-            memorySystemConfig: {
-              activeEngine: "cognee",
-              hindsightEnabled: false,
-              cogneeMemoryEnabled: true,
-              userMemoryEnabled: true,
-              spaceMemoryEnabled: true,
-              legacyHindsightAvailable: true,
-            },
-          },
-          fetching: false,
-        },
-      ] as any;
+      return [{ data: {}, fetching: false }] as any;
     });
 
     render(<SettingsMemory embedded />);
 
-    expect(screen.getAllByText("Memory service update required").length).toBe(
-      1,
-    );
-    expect(screen.queryByText("Redeploy required")).toBeNull();
+    expect(screen.getAllByText("No memory rows found").length).toBe(1);
+    expect(
+      screen.getByText(
+        "This tenant does not have User, Space, or agent memory rows yet.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Memory service update required")).toBeNull();
+    expect(
+      screen.queryByText(/has not switched to Hindsight/i),
+    ).toBeNull();
+    expect(screen.queryByText(/MEMORY_ENGINE/i)).toBeNull();
+    expect(screen.queryByText(/Redeploy required/i)).toBeNull();
     expect(screen.queryByText("Company distillation")).toBeNull();
     expect(screen.queryByText("Wiki projection")).toBeNull();
     expect(screen.queryByText("Cognee")).toBeNull();
