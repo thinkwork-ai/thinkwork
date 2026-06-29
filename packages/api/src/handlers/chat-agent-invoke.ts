@@ -1652,7 +1652,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
-        } catch {}
+        } catch (turnErr) {
+          console.error(
+            `[chat-agent-invoke] Failed to mark turn=${turnId} as failed:`,
+            turnErr,
+          );
+        }
       }
       const errMsg = await insertAssistantMessage(
         threadId,
