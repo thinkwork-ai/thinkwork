@@ -9,30 +9,25 @@ function renderSql(): string {
 }
 
 describe("callerVisibleThreadPredicate", () => {
-  it("gates personal threads on author OR explicit participant", () => {
+  it("gates all user-visible threads on owner OR explicit participant", () => {
     const sql = renderSql();
-    expect(sql).toContain("space_id");
-    expect(sql).toContain("IS NULL");
     expect(sql).toContain("user_id");
     expect(sql).toContain("thread_participants");
     expect(sql).toContain("participant_type");
   });
 
-  it("authorizes space-scoped threads through active public spaces or membership", () => {
+  it("does not authorize threads through Space visibility", () => {
     const sql = renderSql();
-    expect(sql).toContain("IS NOT NULL");
-    expect(sql).toContain("caller_space.status = 'active'");
-    expect(sql).toContain("space_members");
-    expect(sql).toContain("access_mode");
+    expect(sql).not.toContain("caller_space");
+    expect(sql).not.toContain("space_members");
+    expect(sql).not.toContain("access_mode");
+    expect(sql).not.toContain("space_id");
   });
 
-  it("lets an explicit participant bypass the space-membership gate", () => {
-    // Regression guard for the private-Space mention case: a user mentioned
-    // into a thread inside a private Space they don't belong to must still see
-    // that thread. The bypass is separate from Space membership, so the
-    // predicate references thread_participants more than once.
+  it("treats explicit participants as thread-level invites", () => {
     const sql = renderSql();
     const participantChecks = sql.match(/thread_participants/g) ?? [];
-    expect(participantChecks.length).toBeGreaterThanOrEqual(2);
+    expect(participantChecks.length).toBe(1);
+    expect(sql).toContain("caller_tp.user_id");
   });
 });
