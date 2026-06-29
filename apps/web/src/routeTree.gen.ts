@@ -62,6 +62,7 @@ import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_sh
 import { Route as AuthedShellCustomizeIndexRouteImport } from "./routes/_authed/_shell/customize.index";
 import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
+import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId";
 import { Route as AuthedSettingsWebhooksWebhookIdRouteImport } from "./routes/_authed/settings.webhooks.$webhookId";
@@ -98,6 +99,7 @@ import { Route as AuthedShellCustomizeWorkflowsRouteImport } from "./routes/_aut
 import { Route as AuthedShellCustomizeSkillsRouteImport } from "./routes/_authed/_shell/customize.skills";
 import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./routes/_authed/_shell/automations.$scheduledJobId";
 import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_shell/artifacts.$id";
+import { Route as AuthedShellAppsAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$appRouteSegment";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authed/_shell/activity.$threadId";
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
@@ -405,6 +407,11 @@ const AuthedShellArtifactsIndexRoute =
     path: "/artifacts/",
     getParentRoute: () => AuthedShellRoute,
   } as any);
+const AuthedShellAppsIndexRoute = AuthedShellAppsIndexRouteImport.update({
+  id: "/apps/",
+  path: "/apps/",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 const AuthedShellApprovalsIndexRoute =
   AuthedShellApprovalsIndexRouteImport.update({
     id: "/approvals/",
@@ -616,6 +623,12 @@ const AuthedShellArtifactsIdRoute = AuthedShellArtifactsIdRouteImport.update({
   path: "/artifacts/$id",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedShellAppsAppRouteSegmentRoute =
+  AuthedShellAppsAppRouteSegmentRouteImport.update({
+    id: "/apps/$appRouteSegment",
+    path: "/apps/$appRouteSegment",
+    getParentRoute: () => AuthedShellRoute,
+  } as any);
 const AuthedShellApprovalsApprovalIdRoute =
   AuthedShellApprovalsApprovalIdRouteImport.update({
     id: "/approvals/$approvalId",
@@ -764,6 +777,7 @@ export interface FileRoutesByFullPath {
   "/settings/": typeof AuthedSettingsIndexRoute;
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
+  "/apps/$appRouteSegment": typeof AuthedShellAppsAppRouteSegmentRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
@@ -800,6 +814,7 @@ export interface FileRoutesByFullPath {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
+  "/apps/": typeof AuthedShellAppsIndexRoute;
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -867,6 +882,7 @@ export interface FileRoutesByTo {
   "/settings": typeof AuthedSettingsIndexRoute;
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
+  "/apps/$appRouteSegment": typeof AuthedShellAppsAppRouteSegmentRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
@@ -903,6 +919,7 @@ export interface FileRoutesByTo {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
+  "/apps": typeof AuthedShellAppsIndexRoute;
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
   "/automations": typeof AuthedShellAutomationsIndexRoute;
   "/customize": typeof AuthedShellCustomizeIndexRoute;
@@ -978,6 +995,7 @@ export interface FileRoutesById {
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
   "/_authed/_shell/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
+  "/_authed/_shell/apps/$appRouteSegment": typeof AuthedShellAppsAppRouteSegmentRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
   "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
   "/_authed/_shell/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
@@ -1014,6 +1032,7 @@ export interface FileRoutesById {
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/_authed/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
+  "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/_authed/_shell/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -1088,6 +1107,7 @@ export interface FileRouteTypes {
     | "/settings/"
     | "/activity/$threadId"
     | "/approvals/$approvalId"
+    | "/apps/$appRouteSegment"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
     | "/customize/skills"
@@ -1124,6 +1144,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals/"
+    | "/apps/"
     | "/artifacts/"
     | "/automations/"
     | "/customize/"
@@ -1191,6 +1212,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/activity/$threadId"
     | "/approvals/$approvalId"
+    | "/apps/$appRouteSegment"
     | "/artifacts/$id"
     | "/automations/$scheduledJobId"
     | "/customize/skills"
@@ -1227,6 +1249,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals"
+    | "/apps"
     | "/artifacts"
     | "/automations"
     | "/customize"
@@ -1301,6 +1324,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/"
     | "/_authed/_shell/activity/$threadId"
     | "/_authed/_shell/approvals/$approvalId"
+    | "/_authed/_shell/apps/$appRouteSegment"
     | "/_authed/_shell/artifacts/$id"
     | "/_authed/_shell/automations/$scheduledJobId"
     | "/_authed/_shell/customize/skills"
@@ -1337,6 +1361,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/webhooks/$webhookId"
     | "/_authed/settings/workflows/$workflowId"
     | "/_authed/_shell/approvals/"
+    | "/_authed/_shell/apps/"
     | "/_authed/_shell/artifacts/"
     | "/_authed/_shell/automations/"
     | "/_authed/_shell/customize/"
@@ -1761,6 +1786,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellArtifactsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/apps/": {
+      id: "/_authed/_shell/apps/";
+      path: "/apps";
+      fullPath: "/apps/";
+      preLoaderRoute: typeof AuthedShellAppsIndexRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/approvals/": {
       id: "/_authed/_shell/approvals/";
       path: "/approvals";
@@ -2013,6 +2045,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellArtifactsIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/apps/$appRouteSegment": {
+      id: "/_authed/_shell/apps/$appRouteSegment";
+      path: "/apps/$appRouteSegment";
+      fullPath: "/apps/$appRouteSegment";
+      preLoaderRoute: typeof AuthedShellAppsAppRouteSegmentRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/approvals/$approvalId": {
       id: "/_authed/_shell/approvals/$approvalId";
       path: "/approvals/$approvalId";
@@ -2249,11 +2288,13 @@ interface AuthedShellRouteChildren {
   AuthedShellProfileRoute: typeof AuthedShellProfileRoute;
   AuthedShellActivityThreadIdRoute: typeof AuthedShellActivityThreadIdRoute;
   AuthedShellApprovalsApprovalIdRoute: typeof AuthedShellApprovalsApprovalIdRoute;
+  AuthedShellAppsAppRouteSegmentRoute: typeof AuthedShellAppsAppRouteSegmentRoute;
   AuthedShellArtifactsIdRoute: typeof AuthedShellArtifactsIdRoute;
   AuthedShellSpacesSpaceIdRoute: typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
   AuthedShellWorkItemsWorkItemIdRoute: typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
+  AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellSpacesIndexRoute: typeof AuthedShellSpacesIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
@@ -2268,12 +2309,14 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellProfileRoute: AuthedShellProfileRoute,
   AuthedShellActivityThreadIdRoute: AuthedShellActivityThreadIdRoute,
   AuthedShellApprovalsApprovalIdRoute: AuthedShellApprovalsApprovalIdRoute,
+  AuthedShellAppsAppRouteSegmentRoute: AuthedShellAppsAppRouteSegmentRoute,
   AuthedShellArtifactsIdRoute: AuthedShellArtifactsIdRoute,
   AuthedShellSpacesSpaceIdRoute: AuthedShellSpacesSpaceIdRouteWithChildren,
   AuthedShellThreadsIdRoute: AuthedShellThreadsIdRoute,
   AuthedShellWorkItemsWorkItemIdRoute:
     AuthedShellWorkItemsWorkItemIdRouteWithChildren,
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
+  AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellSpacesIndexRoute: AuthedShellSpacesIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
