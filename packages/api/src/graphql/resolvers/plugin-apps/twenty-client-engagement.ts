@@ -233,9 +233,22 @@ export async function twentyEngagementDashboard(
       }),
     ]);
     return buildDashboardPayload({
-      companies: recordsFromToolPayload(companies).map(toCompany),
-      opportunities: recordsFromToolPayload(opportunities).map(toOpportunity),
-      opportunityLayers: recordsFromToolPayload(opportunityLayers).map(toLayer),
+      companies: recordsFromToolPayload(companies, [
+        "companies",
+        "findManyCompanies",
+        "find_many_companies",
+      ]).map(toCompany),
+      opportunities: recordsFromToolPayload(opportunities, [
+        "opportunities",
+        "findManyOpportunities",
+        "find_many_opportunities",
+      ]).map(toOpportunity),
+      opportunityLayers: recordsFromToolPayload(opportunityLayers, [
+        "opportunityLayers",
+        "opportunity_layers",
+        "findManyOpportunityLayers",
+        "find_many_opportunity_layers",
+      ]).map(toLayer),
     });
   } catch (error) {
     throw safeToolError(error, {
@@ -305,7 +318,12 @@ export async function updateTwentyEngagementOpportunityLayerStatus(
         },
       );
       record =
-        recordsFromToolPayload(layersPayload).find(
+        recordsFromToolPayload(layersPayload, [
+          "opportunityLayers",
+          "opportunity_layers",
+          "findManyOpportunityLayers",
+          "find_many_opportunity_layers",
+        ]).find(
           (layer) => layer.id === args.input.layerId,
         ) ?? record;
     }
@@ -525,24 +543,67 @@ function buildDashboardPayload(input: {
   };
 }
 
-function recordsFromToolPayload(payload: unknown): Record<string, unknown>[] {
+function recordsFromToolPayload(
+  payload: unknown,
+  collectionKeys: string[] = [],
+): Record<string, unknown>[] {
   const root = recordOrNull(payload);
   const resultValue = root?.result ?? payload;
-  const result = recordOrNull(resultValue);
-  if (Array.isArray(result?.records)) {
-    return result.records.filter(isRecord);
-  }
   if (Array.isArray(resultValue)) {
     return resultValue.filter(isRecord);
   }
-  const record = recordOrNull(result?.record) ?? result;
-  return record ? [record] : [];
+  const result = recordOrNull(resultValue);
+  if (!result) return [];
+
+  const records = recordsFromKnownContainers(result, collectionKeys);
+  if (records.length > 0) return records;
+
+  // Some MCP tools return a single record object. Avoid treating arbitrary
+  // status/error wrapper objects as records; that caused wrapper payloads to
+  // fail later as "missing id" records.
+  return typeof result.id === "string" ? [result] : [];
 }
 
 function firstRecordFromToolPayload(
   payload: unknown,
 ): Record<string, unknown> | null {
   return recordsFromToolPayload(payload)[0] ?? null;
+}
+
+function recordsFromKnownContainers(
+  value: Record<string, unknown>,
+  collectionKeys: string[],
+): Record<string, unknown>[] {
+  if (Array.isArray(value.records)) return value.records.filter(isRecord);
+  if (Array.isArray(value.items)) return value.items.filter(isRecord);
+  if (Array.isArray(value.nodes)) return value.nodes.filter(isRecord);
+
+  const record = recordOrNull(value.record);
+  if (record) return [record];
+
+  for (const key of collectionKeys) {
+    const direct = value[key];
+    if (Array.isArray(direct)) return direct.filter(isRecord);
+    const directRecord = recordOrNull(direct);
+    if (directRecord) {
+      const nested = recordsFromKnownContainers(directRecord, collectionKeys);
+      if (nested.length > 0) return nested;
+    }
+  }
+
+  const data = recordOrNull(value.data);
+  if (data) {
+    const nested = recordsFromKnownContainers(data, collectionKeys);
+    if (nested.length > 0) return nested;
+  }
+
+  const result = recordOrNull(value.result);
+  if (result) {
+    const nested = recordsFromKnownContainers(result, collectionKeys);
+    if (nested.length > 0) return nested;
+  }
+
+  return [];
 }
 
 function toCompany(

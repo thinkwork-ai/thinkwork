@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertCircle, RefreshCcw } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { AccountProfile } from "./components/AccountProfile";
 import { AccountSidebar } from "./components/AccountSidebar";
 import { OpportunityDetail } from "./components/OpportunityDetail";
@@ -11,8 +12,12 @@ import { useTwentyEngagementData } from "./data/useTwentyEngagementData";
 
 export function TwentyClientEngagementApp({
   appDisplayName = "Client Engagement",
+  pluginDisplayName = "Twenty CRM",
+  pluginKey = "twenty",
 }: {
   appDisplayName?: string;
+  pluginDisplayName?: string;
+  pluginKey?: string;
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
@@ -44,15 +49,70 @@ export function TwentyClientEngagementApp({
     }
   }, [accounts, selectedAccountId]);
 
+  const headerAction = useMemo(
+    () => (
+      <div className="flex items-center gap-2">
+        {accounts.length > 0 && !data.dashboardError ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setActiveToolPageId("opportunity-pipeline")}
+          >
+            Pipeline
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={data.refreshDashboard}
+          disabled={data.dashboardFetching}
+        >
+          <RefreshCcw
+            className={`mr-2 size-3.5 ${data.dashboardFetching ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
+    ),
+    [
+      accounts.length,
+      data.dashboardError,
+      data.dashboardFetching,
+      data.refreshDashboard,
+    ],
+  );
+  usePageHeaderActions({
+    title: appDisplayName,
+    documentTitle: `${pluginDisplayName} · ${appDisplayName}`,
+    breadcrumbs: [
+      { label: pluginDisplayName, href: `/settings/plugins/${pluginKey}` },
+      { label: appDisplayName },
+    ],
+    action: headerAction,
+    actionKey: [
+      pluginDisplayName,
+      appDisplayName,
+      accounts.length,
+      data.dashboardFetching ? "fetching" : "idle",
+      data.dashboardError ? "error" : "ready",
+    ].join(":"),
+  });
+
   if (data.dashboardFetching && accounts.length === 0) {
     return (
-      <AppFrame title={appDisplayName} subtitle="Loading CRM records..." />
+      <AppFrame>
+        <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+          Loading CRM records...
+        </div>
+      </AppFrame>
     );
   }
 
   if (data.dashboardError) {
     return (
-      <AppFrame title={appDisplayName} subtitle="Twenty CRM">
+      <AppFrame>
         <div className="flex h-full items-center justify-center p-8">
           <div className="max-w-md rounded-md border border-destructive/30 bg-destructive/10 p-5 text-sm text-foreground">
             <div className="mb-2 flex items-center gap-2 font-semibold">
@@ -70,7 +130,7 @@ export function TwentyClientEngagementApp({
 
   if (accounts.length === 0) {
     return (
-      <AppFrame title={appDisplayName} subtitle="Twenty CRM">
+      <AppFrame>
         <div className="flex h-full items-center justify-center p-8 text-center">
           <div>
             <h2 className="text-lg font-semibold text-foreground">
@@ -87,31 +147,7 @@ export function TwentyClientEngagementApp({
   }
 
   return (
-    <AppFrame
-      title={appDisplayName}
-      subtitle="Twenty CRM projection"
-      action={
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setActiveToolPageId("opportunity-pipeline")}
-          >
-            Pipeline
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={data.refreshDashboard}
-          >
-            <RefreshCcw className="mr-2 size-3.5" />
-            Refresh
-          </Button>
-        </div>
-      }
-    >
+    <AppFrame>
       <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] overflow-hidden">
         <AccountSidebar
           accounts={accounts}
@@ -162,26 +198,9 @@ export function TwentyClientEngagementApp({
   );
 }
 
-function AppFrame({
-  title,
-  subtitle,
-  action,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  action?: ReactNode;
-  children?: ReactNode;
-}) {
+function AppFrame({ children }: { children?: ReactNode }) {
   return (
     <section className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{title}</h1>
-          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-        </div>
-        {action}
-      </header>
       {children ?? <div className="min-h-0 flex-1" />}
     </section>
   );

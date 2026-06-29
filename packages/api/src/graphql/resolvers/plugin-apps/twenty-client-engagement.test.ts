@@ -153,6 +153,85 @@ describe("twenty client engagement app resolvers", () => {
     ]);
   });
 
+  it("unwraps Twenty MCP data containers instead of treating wrapper objects as records", async () => {
+    callTool
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            data: {
+              companies: [
+                {
+                  id: "company-1",
+                  name: "Acme Corp",
+                  domainName: "acme.test",
+                },
+              ],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          data: {
+            findManyOpportunities: [
+              {
+                id: "opp-1",
+                name: "Board-ready demo",
+                stage: "VALUE_ALIGNMENT",
+                companyId: "company-1",
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            find_many_opportunity_layers: [
+              {
+                id: "layer-1",
+                layerType: "CORE_PROBLEM",
+                layerStatus: "IN_DISCOVERY",
+                opportunityId: "opp-1",
+              },
+            ],
+          },
+        }),
+      );
+
+    const result = await twentyEngagementDashboard(null, {} as never, CTX);
+
+    expect(result.accounts).toHaveLength(1);
+    expect(result.accounts[0]?.company).toMatchObject({
+      id: "company-1",
+      name: "Acme Corp",
+    });
+    expect(result.accounts[0]?.opportunities[0]?.opportunity).toMatchObject({
+      id: "opp-1",
+      companyName: "Acme Corp",
+    });
+    expect(result.accounts[0]?.opportunities[0]?.layers[0]).toMatchObject({
+      id: "layer-1",
+      layerStatusLabel: "In Discovery",
+    });
+  });
+
+  it("ignores non-record wrapper payloads instead of failing the dashboard", async () => {
+    callTool
+      .mockResolvedValueOnce(mcpJson({ data: { status: "ok" } }))
+      .mockResolvedValueOnce(mcpJson({ result: { records: [] } }))
+      .mockResolvedValueOnce(mcpJson({ result: { records: [] } }));
+
+    const result = await twentyEngagementDashboard(null, {} as never, CTX);
+
+    expect(result).toMatchObject({
+      accounts: [],
+      companies: [],
+      opportunities: [],
+      opportunityLayers: [],
+    });
+  });
+
   it("requires the Twenty plugin install", async () => {
     store.findInstall.mockResolvedValue(null);
 
