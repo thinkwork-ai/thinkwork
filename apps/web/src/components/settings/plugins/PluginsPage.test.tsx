@@ -408,6 +408,18 @@ describe("PluginsPage", () => {
     expect(within(twentyRow).getByText("Not installed")).toBeTruthy();
   });
 
+  it("does not launch main-shell plugin apps from Settings catalog rows", () => {
+    render(<PluginsPage />);
+
+    const twentyRow = screen.getByRole("link", { name: "Open Twenty CRM" });
+    expect(
+      within(twentyRow).queryByRole("button", {
+        name: "Open Twenty CRM application",
+      }),
+    ).toBeNull();
+    expect(within(twentyRow).getByText(/Latest v0\.3\.0/)).toBeTruthy();
+  });
+
   it("opens plugin details from the full catalog row", () => {
     render(<PluginsPage />);
 
@@ -668,15 +680,21 @@ const catalogEntries = [
     pluginKey: "twenty",
     displayName: "Twenty CRM",
     description: "Customer relationship management.",
-    latestVersion: "1.0.0",
+    latestVersion: "0.3.0",
     launchUrl: null,
     updateAvailable: false,
     versions: [
       {
-        version: "1.0.0",
+        version: "0.3.0",
         payloadSha256: "sha256:c",
         requiredOauthScopes: ["read"],
-        components: [],
+        components: [
+          {
+            key: "client-engagement",
+            type: "ui-surface",
+            displayName: "Client Engagement",
+          },
+        ],
       },
     ],
     install: null,
