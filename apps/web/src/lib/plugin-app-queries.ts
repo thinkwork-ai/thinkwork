@@ -28,3 +28,115 @@ export const InstalledPluginAppsQuery = graphql(`
     }
   }
 `);
+
+export const TwentyEngagementDashboardQuery = graphql(`
+  query TwentyEngagementDashboard {
+    twentyEngagementDashboard {
+      accounts {
+        company {
+          id
+          name
+          domainName
+          crmUrl
+        }
+        opportunities {
+          opportunity {
+            id
+            name
+            stage
+            stageLabel
+            amountMicros
+            closeDate
+            companyId
+            companyName
+            crmUrl
+          }
+          layers {
+            id
+            name
+            layerType
+            layerTypeLabel
+            instanceName
+            layerStatus
+            layerStatusLabel
+            whatWeKnow
+            openQuestions
+            businessValue
+            nextSteps
+            opportunityId
+          }
+        }
+      }
+      companies {
+        id
+        name
+        domainName
+        crmUrl
+      }
+      opportunities {
+        id
+        name
+        stage
+        stageLabel
+        amountMicros
+        closeDate
+        companyId
+        companyName
+        crmUrl
+      }
+      opportunityLayers {
+        id
+        name
+        layerType
+        layerTypeLabel
+        instanceName
+        layerStatus
+        layerStatusLabel
+        whatWeKnow
+        openQuestions
+        businessValue
+        nextSteps
+        opportunityId
+      }
+    }
+  }
+`);
+
+export const UpdateTwentyEngagementOpportunityStageMutation = graphql(`
+  mutation UpdateTwentyEngagementOpportunityStage(
+    $input: UpdateTwentyEngagementOpportunityStageInput!
+  ) {
+    updateTwentyEngagementOpportunityStage(input: $input) {
+      id
+      name
+      stage
+      stageLabel
+      amountMicros
+      closeDate
+      companyId
+      companyName
+      crmUrl
+    }
+  }
+`);
+
+export const UpdateTwentyEngagementOpportunityLayerStatusMutation = graphql(`
+  mutation UpdateTwentyEngagementOpportunityLayerStatus(
+    $input: UpdateTwentyEngagementOpportunityLayerStatusInput!
+  ) {
+    updateTwentyEngagementOpportunityLayerStatus(input: $input) {
+      id
+      name
+      layerType
+      layerTypeLabel
+      instanceName
+      layerStatus
+      layerStatusLabel
+      whatWeKnow
+      openQuestions
+      businessValue
+      nextSteps
+      opportunityId
+    }
+  }
+`);

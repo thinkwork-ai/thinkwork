@@ -3842,6 +3842,10 @@ export type Mutation = {
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
   updateThreadLabel: ThreadLabel;
+  /** Update an opportunity layer status in Twenty through the authenticated plugin MCP path. */
+  updateTwentyEngagementOpportunityLayerStatus: TwentyEngagementOpportunityLayer;
+  /** Update an opportunity stage in Twenty through the authenticated plugin MCP path. */
+  updateTwentyEngagementOpportunityStage: TwentyEngagementOpportunity;
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
@@ -5000,6 +5004,14 @@ export type MutationUpdateThreadLabelArgs = {
   input: UpdateThreadLabelInput;
 };
 
+export type MutationUpdateTwentyEngagementOpportunityLayerStatusArgs = {
+  input: UpdateTwentyEngagementOpportunityLayerStatusInput;
+};
+
+export type MutationUpdateTwentyEngagementOpportunityStageArgs = {
+  input: UpdateTwentyEngagementOpportunityStageInput;
+};
+
 export type MutationUpdateUserArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateUserInput;
@@ -6019,6 +6031,8 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
+  /** CRM-owned records for the Twenty Client Engagement app. */
+  twentyEngagementDashboard: TwentyEngagementDashboard;
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
@@ -9093,6 +9107,70 @@ export type TriggerWorkflowRunInput = {
   workflowId: Scalars["ID"]["input"];
 };
 
+export type TwentyEngagementAccount = {
+  __typename?: "TwentyEngagementAccount";
+  company: TwentyEngagementCompany;
+  opportunities: Array<TwentyEngagementOpportunityWithLayers>;
+};
+
+/**
+ * Twenty CRM records normalized for the Client Engagement plugin app.
+ *
+ * The app reads and mutates CRM-owned fields through the authenticated Twenty
+ * plugin path. Browser clients receive only app-shaped records; they never send
+ * MCP URLs, bearer tokens, or generic tool-call payloads.
+ */
+export type TwentyEngagementCompany = {
+  __typename?: "TwentyEngagementCompany";
+  crmUrl?: Maybe<Scalars["String"]["output"]>;
+  domainName?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+};
+
+export type TwentyEngagementDashboard = {
+  __typename?: "TwentyEngagementDashboard";
+  accounts: Array<TwentyEngagementAccount>;
+  companies: Array<TwentyEngagementCompany>;
+  opportunities: Array<TwentyEngagementOpportunity>;
+  opportunityLayers: Array<TwentyEngagementOpportunityLayer>;
+};
+
+export type TwentyEngagementOpportunity = {
+  __typename?: "TwentyEngagementOpportunity";
+  amountMicros?: Maybe<Scalars["Float"]["output"]>;
+  closeDate?: Maybe<Scalars["String"]["output"]>;
+  companyId?: Maybe<Scalars["ID"]["output"]>;
+  companyName?: Maybe<Scalars["String"]["output"]>;
+  crmUrl?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  stage: Scalars["String"]["output"];
+  stageLabel: Scalars["String"]["output"];
+};
+
+export type TwentyEngagementOpportunityLayer = {
+  __typename?: "TwentyEngagementOpportunityLayer";
+  businessValue?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  instanceName?: Maybe<Scalars["String"]["output"]>;
+  layerStatus: Scalars["String"]["output"];
+  layerStatusLabel: Scalars["String"]["output"];
+  layerType: Scalars["String"]["output"];
+  layerTypeLabel: Scalars["String"]["output"];
+  name?: Maybe<Scalars["String"]["output"]>;
+  nextSteps?: Maybe<Scalars["String"]["output"]>;
+  openQuestions?: Maybe<Scalars["String"]["output"]>;
+  opportunityId: Scalars["ID"]["output"];
+  whatWeKnow?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type TwentyEngagementOpportunityWithLayers = {
+  __typename?: "TwentyEngagementOpportunityWithLayers";
+  layers: Array<TwentyEngagementOpportunityLayer>;
+  opportunity: TwentyEngagementOpportunity;
+};
+
 /** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
 export type TwentyPluginCutoverResult = {
   __typename?: "TwentyPluginCutoverResult";
@@ -9442,6 +9520,16 @@ export type UpdateThreadLabelInput = {
   color?: InputMaybe<Scalars["String"]["input"]>;
   description?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type UpdateTwentyEngagementOpportunityLayerStatusInput = {
+  layerId: Scalars["ID"]["input"];
+  layerStatus: Scalars["String"]["input"];
+};
+
+export type UpdateTwentyEngagementOpportunityStageInput = {
+  opportunityId: Scalars["ID"]["input"];
+  stage: Scalars["String"]["input"];
 };
 
 export type UpdateUserInput = {

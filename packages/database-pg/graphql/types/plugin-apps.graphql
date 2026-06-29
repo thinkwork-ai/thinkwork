@@ -36,7 +36,90 @@ type InstalledPluginApp {
   readiness: InstalledPluginAppReadiness!
 }
 
+"""
+Twenty CRM records normalized for the Client Engagement plugin app.
+
+The app reads and mutates CRM-owned fields through the authenticated Twenty
+plugin path. Browser clients receive only app-shaped records; they never send
+MCP URLs, bearer tokens, or generic tool-call payloads.
+"""
+type TwentyEngagementCompany {
+  id: ID!
+  name: String!
+  domainName: String
+  crmUrl: String
+}
+
+type TwentyEngagementOpportunity {
+  id: ID!
+  name: String!
+  stage: String!
+  stageLabel: String!
+  amountMicros: Float
+  closeDate: String
+  companyId: ID
+  companyName: String
+  crmUrl: String
+}
+
+type TwentyEngagementOpportunityLayer {
+  id: ID!
+  name: String
+  layerType: String!
+  layerTypeLabel: String!
+  instanceName: String
+  layerStatus: String!
+  layerStatusLabel: String!
+  whatWeKnow: String
+  openQuestions: String
+  businessValue: String
+  nextSteps: String
+  opportunityId: ID!
+}
+
+type TwentyEngagementOpportunityWithLayers {
+  opportunity: TwentyEngagementOpportunity!
+  layers: [TwentyEngagementOpportunityLayer!]!
+}
+
+type TwentyEngagementAccount {
+  company: TwentyEngagementCompany!
+  opportunities: [TwentyEngagementOpportunityWithLayers!]!
+}
+
+type TwentyEngagementDashboard {
+  accounts: [TwentyEngagementAccount!]!
+  companies: [TwentyEngagementCompany!]!
+  opportunities: [TwentyEngagementOpportunity!]!
+  opportunityLayers: [TwentyEngagementOpportunityLayer!]!
+}
+
+input UpdateTwentyEngagementOpportunityStageInput {
+  opportunityId: ID!
+  stage: String!
+}
+
+input UpdateTwentyEngagementOpportunityLayerStatusInput {
+  layerId: ID!
+  layerStatus: String!
+}
+
 extend type Query {
   "Launchable plugin apps available to the current tenant/user."
   installedPluginApps: [InstalledPluginApp!]!
+
+  "CRM-owned records for the Twenty Client Engagement app."
+  twentyEngagementDashboard: TwentyEngagementDashboard!
+}
+
+extend type Mutation {
+  "Update an opportunity stage in Twenty through the authenticated plugin MCP path."
+  updateTwentyEngagementOpportunityStage(
+    input: UpdateTwentyEngagementOpportunityStageInput!
+  ): TwentyEngagementOpportunity!
+
+  "Update an opportunity layer status in Twenty through the authenticated plugin MCP path."
+  updateTwentyEngagementOpportunityLayerStatus(
+    input: UpdateTwentyEngagementOpportunityLayerStatusInput!
+  ): TwentyEngagementOpportunityLayer!
 }
