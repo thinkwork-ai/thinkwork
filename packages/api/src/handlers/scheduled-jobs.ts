@@ -47,8 +47,7 @@ import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
-const THREAD_TURN_ROUTE_PREFIX =
-  String.raw`^\/api\/(?:thread-turns|trigger-runs)`;
+const THREAD_TURN_ROUTE_PREFIX = String.raw`^\/api\/(?:thread-turns|trigger-runs)`;
 
 export function matchThreadTurnRoute(
   path: string,
@@ -263,8 +262,9 @@ export async function handler(
       statusCode: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "*",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, x-tenant-id, x-tenant-slug, x-thinkwork-tenant-id, x-thinkwork-tenant-slug, x-api-key, x-thinkwork-deployment-token",
       },
       body: "",
     };
