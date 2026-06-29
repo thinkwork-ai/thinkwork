@@ -63,6 +63,9 @@ importers:
       '@thinkwork/admin-ops':
         specifier: workspace:*
         version: link:../../packages/admin-ops
+      '@thinkwork/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -178,6 +181,9 @@ importers:
       '@thinkwork/react-native-sdk':
         specifier: workspace:*
         version: link:../../packages/react-native-sdk
+      '@thinkwork/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
       '@thinkwork/thread-json-render':
         specifier: workspace:*
         version: link:../../packages/thread-json-render
@@ -467,6 +473,9 @@ importers:
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
+      '@thinkwork/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
       '@thinkwork/thread-json-render':
         specifier: workspace:*
         version: link:../../packages/thread-json-render
@@ -862,6 +871,9 @@ importers:
       '@thinkwork/runtime-config':
         specifier: workspace:*
         version: link:../runtime-config
+      '@thinkwork/shared-utils':
+        specifier: workspace:*
+        version: link:../shared-utils
       '@thinkwork/thread-json-render':
         specifier: workspace:*
         version: link:../thread-json-render
@@ -1521,6 +1533,15 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.1
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+
+  packages/shared-utils:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
   packages/thread-json-render:

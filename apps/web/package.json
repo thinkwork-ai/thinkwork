@@ -53,6 +53,7 @@
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",
+    "@thinkwork/shared-utils": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@thinkwork/workspace-editor": "workspace:*",

@@ -1,3 +1,4 @@
+import { formatBytes } from "@thinkwork/shared-utils";
 import { Bot, Clock, Download, FileText, UserRound } from "lucide-react";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import { normalizePersistedParts } from "@/components/workbench/TaskThreadView";
@@ -333,15 +334,4 @@ function formatTime(value?: string | null) {
   }).format(date);
 }
 
-function formatFileSize(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "";
-  if (value < 1024) return `${value} B`;
-  const units = ["KB", "MB", "GB"];
-  let size = value / 1024;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-}
+const formatFileSize = formatBytes;

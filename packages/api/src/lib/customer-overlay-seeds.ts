@@ -1,3 +1,4 @@
+import { slugify } from "@thinkwork/shared-utils";
 import {
   CUSTOMER_OVERLAY_EVAL_SOURCE,
   type SeedAssertion,
@@ -143,13 +144,7 @@ function overlayTags(packName: string, seed: SeedTestCase): string[] {
   ].filter((tag): tag is string => Boolean(tag));
 }
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
+
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

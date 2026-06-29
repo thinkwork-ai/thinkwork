@@ -1,3 +1,4 @@
+import { slugify } from "@thinkwork/shared-utils";
 import { wikiPages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 import { and, eq } from "drizzle-orm";
@@ -45,7 +46,7 @@ export async function writeUserWikiSeed(seed: ActivationSeed): Promise<void> {
   }
   const title =
     seed.title || inferTitle(seed.summary || seed.content || seed.layer);
-  const slug = slugify(title);
+  const slug = slugifyOrDefault(title);
   const summary = seed.summary || seed.content || title;
   const [existing] = await db
     .select({ id: wikiPages.id })
@@ -89,12 +90,6 @@ function inferTitle(value: string): string {
   return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
 }
 
-function slugify(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "activation-note"
-  );
+function slugifyOrDefault(value: string): string {
+  return slugify(value) || "activation-note";
 }

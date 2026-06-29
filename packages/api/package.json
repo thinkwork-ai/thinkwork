@@ -53,6 +53,7 @@
     "@thinkwork/plugin-twenty": "workspace:*",
     "@thinkwork/release-manifest": "workspace:*",
     "@thinkwork/runtime-config": "workspace:*",
+    "@thinkwork/shared-utils": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@thinkwork/workspace-defaults": "workspace:*",

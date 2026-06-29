@@ -7,6 +7,7 @@
  * Run via: Lambda invoke, or `npx tsx packages/api/src/handlers/bootstrap-workspaces.ts`
  */
 
+import { slugify } from "@thinkwork/shared-utils";
 import { getConfig } from "@thinkwork/runtime-config";
 import { eq, and, isNotNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -25,13 +26,6 @@ const db = getDb();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-}
 
 function generateContextMd(opts: {
   name: string;
