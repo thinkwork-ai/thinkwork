@@ -1499,8 +1499,8 @@ export async function buildInvocationResources(
 
   // Knowledge Graph (plan 2026-06-09-004 U8) — `knowledge_graph_search` over
   // the API's GraphQL `knowledgeGraphSearch` query. Gated on the
-  // `knowledge_graph_enabled` payload flag (mirrors context_engine_enabled);
-  // skipped in eval mode (user-less). Identity is turn-bound: the provider
+  // `knowledge_graph_enabled` payload flag; skipped in eval mode (user-less).
+  // Identity is turn-bound: the provider
   // snapshots the thread-turn reference at entry and the API resolves the
   // tenant server-side from it (R15) — no tenant assertion travels with the
   // request. `addExtension` folds the tool name into the allowlist; omit
@@ -1713,10 +1713,7 @@ export async function buildInvocationResources(
   } else {
     logStructured({
       level: "info",
-      event:
-        args.payload.context_engine_enabled === true
-          ? "memory_cognee_plugin_mcp_mode"
-          : "memory_cognee_plugin_mcp_mode_context_engine_disabled",
+      event: "memory_cognee_plugin_mcp_mode",
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });

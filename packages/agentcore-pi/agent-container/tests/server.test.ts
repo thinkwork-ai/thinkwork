@@ -224,7 +224,7 @@ describe("handleInvocation — payload validation", () => {
     expect(toolNames).not.toContain("execute_code");
   });
 
-  it("passes U7 extension tool names through to runAgentLoop without Context Engine tools in Hindsight mode", async () => {
+  it("passes U7 extension tool names through to runAgentLoop in Hindsight mode", async () => {
     let seenExtensionToolNames: string[] = [];
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
@@ -240,7 +240,6 @@ describe("handleInvocation — payload validation", () => {
         turn_context: { spaceSlug: "finance" },
         web_search_config: { provider: "exa", apiKey: "exa-key" },
         web_extract_config: { provider: "firecrawl", apiKey: "fc-key" },
-        context_engine_enabled: true,
       }),
       deps: makeDeps({
         runAgentLoop: async ({ extensionToolNames }) => {
@@ -262,14 +261,6 @@ describe("handleInvocation — payload validation", () => {
         "send_email",
         "web_search",
         "web_extract",
-      ]),
-    );
-    expect(seenExtensionToolNames).not.toEqual(
-      expect.arrayContaining([
-        "query_context",
-        "query_memory_context",
-        "query_brain_context",
-        "query_wiki_context",
       ]),
     );
   });
@@ -2961,67 +2952,10 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not register Context Engine tools on the Pi runtime", async () => {
+  it("registers direct Hindsight memory tools when Hindsight memory is active", async () => {
     const bundle = await buildInvocationResources({
       payload: {
         message: "what does this space remember?",
-        context_engine_enabled: true,
-        thinkwork_api_url: "https://api.example.com",
-        thinkwork_api_secret: "secret",
-      },
-      identity: {
-        tenantId: "tenant-1",
-        userId: "user-1",
-        agentId: "agent-1",
-        threadId: "thread-1",
-        tenantSlug: "",
-        agentSlug: "",
-        traceId: "",
-      },
-      env: {
-        awsRegion: "us-east-1",
-        agentCoreMemoryId: "managed-memory-id",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "cognee",
-        memoryRetainFnName: "",
-        dbClusterArn: "",
-        dbSecretArn: "",
-        dbName: "thinkwork",
-        workspaceBucket: "",
-        workspaceDir: "/tmp/workspace",
-        piAgentDir: "/tmp/thinkwork-pi-agent",
-        gitSha: "test",
-      },
-      agentCoreClient: fakeAgentCoreClient() as never,
-      workspaceSkills: [],
-      connectMcpServer: noopConnect,
-      sessionStoreFactory: () => ({}) as never,
-      cleanup: [],
-      handleStore: new HandleStore(),
-      mcpJsonConfig: { directTools: [] },
-      mcpRegistry: new McpToolRegistry(),
-    });
-
-    expect(bundle.extensionToolNames).not.toEqual(
-      expect.arrayContaining([
-        "query_context",
-        "query_memory_context",
-        "query_brain_context",
-        "query_wiki_context",
-        "recall",
-        "reflect",
-      ]),
-    );
-    expect(bundle.tools.map((tool) => tool.name)).not.toEqual(
-      expect.arrayContaining(["remember", "recall"]),
-    );
-  });
-
-  it("omits Context Engine tools when Hindsight direct memory is active", async () => {
-    const bundle = await buildInvocationResources({
-      payload: {
-        message: "what does this space remember?",
-        context_engine_enabled: true,
         thinkwork_api_url: "https://api.example.com",
         thinkwork_api_secret: "secret",
       },
@@ -3059,14 +2993,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.extensionToolNames).not.toEqual(
-      expect.arrayContaining([
-        "query_context",
-        "query_memory_context",
-        "query_brain_context",
-        "query_wiki_context",
-      ]),
-    );
     expect(bundle.extensionToolNames).toEqual(
       expect.arrayContaining(["recall", "reflect"]),
     );
@@ -3200,10 +3126,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         "send_email",
         "web_search",
         "web_extract",
-        "query_context",
-        "query_memory_context",
-        "query_brain_context",
-        "query_wiki_context",
         "workspace_skill",
         "delegate_to_managed_agent",
       ]),
@@ -3260,11 +3182,10 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("send_email");
   });
 
-  it("registers web_search without Context Engine tools", async () => {
+  it("registers web_search as an extension tool", async () => {
     const bundle = await buildInvocationResources({
       payload: {
         web_search_config: { provider: "exa", apiKey: "exa-key" },
-        context_engine_enabled: true,
         thinkwork_api_url: "https://api.example.com",
         thinkwork_api_secret: "secret",
       },
@@ -3304,18 +3225,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.extensionToolNames).toEqual(
       expect.arrayContaining(["web_search"]),
     );
-    expect(bundle.extensionToolNames).not.toEqual(
-      expect.arrayContaining([
-        "query_context",
-        "query_memory_context",
-        "query_brain_context",
-        "query_wiki_context",
-      ]),
-    );
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("web_search");
-    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
-      "query_context",
-    );
   });
 
   it("registers knowledge_graph_search as an extension tool when the payload flag is on", async () => {
