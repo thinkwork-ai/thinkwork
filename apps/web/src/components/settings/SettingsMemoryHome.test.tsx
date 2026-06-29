@@ -33,7 +33,7 @@ describe("SettingsMemoryHome", () => {
 
   it("renders the active facet selected by the current route", () => {
     expect(source).toContain("tabForPath");
-    expect(source).toContain("<SettingsMemory embedded");
+    expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<SettingsKnowledgeBases embedded");
     expect(source).toContain("<KnowledgeGraphTab");
     expect(source).not.toContain("<SettingsWiki embedded");
