@@ -1053,7 +1053,7 @@ function PluginAppsNavItem({
   isActive: boolean;
 }) {
   const location = useRouterState({ select: (s) => s.location });
-  const activeRouteSegment = appRouteSegmentFromPath(location.pathname);
+  const activeAppRoute = appRouteFromPath(location.pathname);
 
   return (
     <Popover>
@@ -1078,12 +1078,17 @@ function PluginAppsNavItem({
         <div className="space-y-0.5">
           {apps.map((app) => {
             const ready = app.readiness.state === "ready";
-            const appActive = activeRouteSegment === app.routeSegment;
+            const appActive =
+              activeAppRoute?.pluginKey === app.pluginKey &&
+              activeAppRoute?.appRouteSegment === app.routeSegment;
             return (
               <Link
                 key={app.id}
-                to="/apps/$appRouteSegment"
-                params={{ appRouteSegment: app.routeSegment }}
+                to="/apps/$pluginKey/$appRouteSegment"
+                params={{
+                  pluginKey: app.pluginKey,
+                  appRouteSegment: app.routeSegment,
+                }}
                 className={cn(
                   "flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
                   appActive ? "bg-accent text-accent-foreground" : null,
@@ -2405,9 +2410,14 @@ function spaceIdFromThreadPath(pathname: string) {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-function appRouteSegmentFromPath(pathname: string) {
-  const match = /^\/apps\/([^/]+)(?:\/|$)/.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : undefined;
+function appRouteFromPath(pathname: string) {
+  const match = /^\/apps\/([^/]+)\/([^/]+)(?:\/|$)/.exec(pathname);
+  return match
+    ? {
+        pluginKey: decodeURIComponent(match[1]),
+        appRouteSegment: decodeURIComponent(match[2]),
+      }
+    : undefined;
 }
 
 function isOpenSidebarWorkItem(item: SidebarWorkItemSummary) {

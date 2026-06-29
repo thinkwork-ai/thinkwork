@@ -59,7 +59,8 @@ Operational split:
   OAuth there when readiness requires it.
 - Apps is the usage surface. When the installed Twenty plugin includes the
   provisioned `client-engagement` `ui-surface` component, the main shell shows
-  `Apps`, and selecting Client Engagement opens `/apps/client-engagement`.
+  `Apps`, and selecting Client Engagement opens
+  `/apps/twenty/client-engagement`.
 - CRM-owned records load through ThinkWork GraphQL resolvers that call the
   authenticated Twenty plugin path on the server. Browser code must not receive
   MCP bearer tokens, tenant-wide CRM credentials, or raw MCP endpoint secrets.

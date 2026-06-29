@@ -108,7 +108,12 @@ describe("PluginAppRoute", () => {
       },
     ];
 
-    render(<PluginAppRoute appRouteSegment="client-engagement" />);
+    render(
+      <PluginAppRoute
+        pluginKey="twenty"
+        appRouteSegment="client-engagement"
+      />,
+    );
 
     expect(
       screen.getByRole("heading", { name: "Client Engagement", level: 1 }),
@@ -133,7 +138,12 @@ describe("PluginAppRoute", () => {
       },
     ];
 
-    render(<PluginAppRoute appRouteSegment="client-engagement" />);
+    render(
+      <PluginAppRoute
+        pluginKey="twenty"
+        appRouteSegment="client-engagement"
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Connect plugin" }));
 
     expect(navigateMock).toHaveBeenCalledWith({
@@ -163,8 +173,11 @@ describe("PluginAppRoute", () => {
 
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith({
-        to: "/apps/$appRouteSegment",
-        params: { appRouteSegment: "client-engagement" },
+        to: "/apps/$pluginKey/$appRouteSegment",
+        params: {
+          pluginKey: "twenty",
+          appRouteSegment: "client-engagement",
+        },
         replace: true,
       }),
     );

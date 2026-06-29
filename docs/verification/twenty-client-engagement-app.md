@@ -2,7 +2,7 @@
 date: 2026-06-29
 linear: THINK-109
 feature: twenty-client-engagement-app
-status: verified-local-unauthenticated
+status: verified-local-authenticated
 ---
 
 # Twenty Client Engagement App Verification
@@ -20,7 +20,7 @@ surface and Twenty Client Engagement projection.
 - Settings remains the configuration surface. It can show the UI surface in the
   component inventory, but it does not launch the Client Engagement app.
 - Apps remains the usage surface. Installed launchable app surfaces drive the
-  main-shell Apps launcher and `/apps/client-engagement` route.
+  main-shell Apps launcher and `/apps/twenty/client-engagement` route.
 - CRM-owned data uses ThinkWork GraphQL operations backed by the authenticated
   Twenty plugin path. Browser variables are app inputs and record IDs, not MCP
   credentials.
@@ -54,8 +54,8 @@ Manual checks:
 - Sidebar hides `Apps` when `installedPluginApps` returns an empty list.
 - Sidebar shows `Apps` when the Twenty Client Engagement app is installed and
   launchable.
-- Selecting Client Engagement opens `/apps/client-engagement` in the shell main
-  content area without duplicating global chrome.
+- Selecting Client Engagement opens `/apps/twenty/client-engagement` in the
+  shell main content area without duplicating global chrome.
 - Missing plugin activation shows the reconnect/plugin settings readiness
   action.
 - The dashboard, account detail, opportunity detail, discovery tools, and
@@ -83,15 +83,12 @@ the Apps launcher can expose Client Engagement.
   sourcemap, and large-chunk warnings.
 - Local Vite server started on `http://127.0.0.1:5174/` after copying
   `apps/web/.env`.
-- Shell `curl -I http://127.0.0.1:5174/apps/client-engagement` returned
-  `HTTP/1.1 200 OK`.
 - In-app browser reached
-  `http://127.0.0.1:5174/sign-in?next=%2Fapps%2Fclient-engagement`, confirming
-  the protected route is hosted locally and preserves the app route in the
-  post-login redirect.
-
-Authenticated browser interaction was not completed in U9 because the local
-browser session was not signed in and Codex did not drive SSO/password login on
-the user's behalf. Authenticated app behavior is covered by the app route,
-sidebar, readiness, dashboard, tool workspace, pipeline, CRM data API, and
-overlay persistence tests listed above.
+  `http://localhost:5174/apps/twenty/client-engagement` in an authenticated
+  shell session.
+- The sidebar showed the `Apps` launcher and the main content area mounted the
+  Client Engagement app with the `Client Engagement` heading.
+- The authenticated local smoke reported `Client engagement data unavailable`
+  with `[GraphQL] Could not load Twenty engagement data`; route discovery,
+  shell mounting, and app selection were verified, while CRM data availability
+  remains dependent on the local Twenty plugin/backend activation state.

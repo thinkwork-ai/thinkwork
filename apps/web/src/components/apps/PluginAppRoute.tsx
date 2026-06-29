@@ -22,8 +22,11 @@ export function PluginAppsIndexRoute() {
     const firstApp = apps[0];
     if (!firstApp) return;
     void navigate({
-      to: "/apps/$appRouteSegment",
-      params: { appRouteSegment: firstApp.routeSegment },
+      to: "/apps/$pluginKey/$appRouteSegment",
+      params: {
+        pluginKey: firstApp.pluginKey,
+        appRouteSegment: firstApp.routeSegment,
+      },
       replace: true,
     });
   }, [apps, navigate]);
@@ -52,8 +55,10 @@ export function PluginAppsIndexRoute() {
 }
 
 export function PluginAppRoute({
+  pluginKey,
   appRouteSegment,
 }: {
+  pluginKey: string;
   appRouteSegment: string;
 }) {
   const [{ data, fetching, error }] = useQuery<InstalledPluginAppsQueryResult>({
@@ -62,7 +67,9 @@ export function PluginAppRoute({
   });
   const apps = data?.installedPluginApps ?? [];
   const app = apps.find(
-    (candidate) => candidate.routeSegment === appRouteSegment,
+    (candidate) =>
+      candidate.pluginKey === pluginKey &&
+      candidate.routeSegment === appRouteSegment,
   );
 
   if (fetching && !data) return <PluginAppLoading />;
