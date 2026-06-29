@@ -1443,15 +1443,16 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           ? { ...runtimeConfig.sendEmailConfig, threadId }
           : undefined,
       context_engine_enabled:
+        runtimeConfig.runtimeType !== "pi" &&
         runtimeConfig.contextEngineEnabled &&
         isAnyToolAllowed(...toolPolicyAliases("context_engine"))
           ? true
           : undefined,
-      context_engine_config: isAnyToolAllowed(
-        ...toolPolicyAliases("context_engine"),
-      )
-        ? runtimeConfig.contextEngineConfig
-        : undefined,
+      context_engine_config:
+        runtimeConfig.runtimeType !== "pi" &&
+        isAnyToolAllowed(...toolPolicyAliases("context_engine"))
+          ? runtimeConfig.contextEngineConfig
+          : undefined,
       // Plan 2026-06-09-004 U8 — knowledge-graph tool seam. Stage env flag
       // gates the rollout (inert until set); the per-agent tool policy can
       // still block it. The runtime additionally requires thread_turn_id /
@@ -1651,7 +1652,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               error: errMsgText,
             })
             .where(eq(threadTurns.id, turnId));
-        } catch {}
+        } catch (turnErr) {
+          console.error(
+            `[chat-agent-invoke] Failed to mark turn=${turnId} as failed:`,
+            turnErr,
+          );
+        }
       }
       const errMsg = await insertAssistantMessage(
         threadId,

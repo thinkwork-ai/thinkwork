@@ -1,10 +1,19 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useQuery } from "urql";
-import { SpacesQuery } from "@/lib/graphql-queries";
+import {
+  ComputerMemoryRetainAttemptsQuery,
+  SpacesQuery,
+} from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
-import { SettingsMemory } from "./SettingsMemory";
+import { SettingsMemory, type MemoryRefreshController } from "./SettingsMemory";
 
 vi.mock("urql", () => ({
   useQuery: vi.fn(),
@@ -178,9 +187,7 @@ describe("SettingsMemory render", () => {
         return [
           {
             data: {
-              spaces: [
-                { id: "space-1", name: "Launch Space", slug: "launch" },
-              ],
+              spaces: [{ id: "space-1", name: "Launch Space", slug: "launch" }],
             },
             fetching: false,
           },
@@ -204,6 +211,15 @@ describe("SettingsMemory render", () => {
                 },
               ],
             },
+            fetching: false,
+          },
+        ] as any;
+      }
+
+      if (query === ComputerMemoryRetainAttemptsQuery) {
+        return [
+          {
+            data: { memoryRetainAttempts: [] },
             fetching: false,
           },
         ] as any;
@@ -251,6 +267,137 @@ describe("SettingsMemory render", () => {
     expect(screen.getAllByText("Eric").length).toBeGreaterThan(0);
     expect(screen.getByText("User: Eric")).toBeTruthy();
     expect(screen.getByText("Space-bank memory")).toBeTruthy();
+  });
+
+  it("publishes a refresh controller that reloads records and retain diagnostics", async () => {
+    const reexecuteRecordsQuery = vi.fn();
+    const reexecuteRetainAttemptsQuery = vi.fn();
+    const reexecuteOtherQuery = vi.fn();
+
+    useQueryMock.mockImplementation(({ query, variables }: any) => {
+      if (variables?.scope === "OPERATOR") {
+        return [
+          {
+            data: { memoryRecords: [] },
+            fetching: false,
+          },
+          reexecuteRecordsQuery,
+        ] as any;
+      }
+
+      if (query === ComputerMemoryRetainAttemptsQuery) {
+        return [
+          {
+            data: { memoryRetainAttempts: [] },
+            fetching: false,
+          },
+          reexecuteRetainAttemptsQuery,
+        ] as any;
+      }
+
+      return [
+        {
+          data:
+            query === SpacesQuery
+              ? { spaces: [] }
+              : query === SettingsTenantMembersQuery
+                ? { tenantMembers: [] }
+                : {
+                    memorySystemConfig: {
+                      activeEngine: "hindsight",
+                      hindsightEnabled: true,
+                    },
+                  },
+          fetching: false,
+        },
+        reexecuteOtherQuery,
+      ] as any;
+    });
+
+    let refreshController: MemoryRefreshController | null = null;
+    render(
+      <SettingsMemory
+        embedded
+        onRefreshControllerChange={(controller) => {
+          refreshController = controller;
+        }}
+      />,
+    );
+
+    const controller = await waitFor(() => {
+      if (!refreshController) throw new Error("refresh controller missing");
+      return refreshController;
+    });
+    await controller.refresh();
+
+    expect(reexecuteRecordsQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteRetainAttemptsQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteOtherQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("surfaces retrying retain diagnostics without replacing memory rows", () => {
+    useQueryMock.mockImplementation(({ query, variables }: any) => {
+      if (variables?.scope === "OPERATOR") {
+        return [
+          {
+            data: {
+              memoryRecords: [
+                {
+                  memoryRecordId: "user-memory",
+                  content: { text: "User-bank memory" },
+                  createdAt: "2026-06-27T10:00:00.000Z",
+                  namespace: "user_user-1",
+                  bankId: "user_user-1",
+                  ownerType: "user",
+                  ownerId: "user-1",
+                  strategy: "semantic",
+                },
+              ],
+            },
+            fetching: false,
+          },
+        ] as any;
+      }
+
+      if (query === ComputerMemoryRetainAttemptsQuery) {
+        return [
+          {
+            data: {
+              memoryRetainAttempts: [
+                { id: "attempt-1", status: "failed_timeout" },
+                { id: "attempt-2", status: "dead_lettered" },
+              ],
+            },
+            fetching: false,
+          },
+        ] as any;
+      }
+
+      return [
+        {
+          data:
+            query === SettingsTenantMembersQuery
+              ? { tenantMembers: [] }
+              : query === SpacesQuery
+                ? { spaces: [] }
+                : { memorySystemConfig: { activeEngine: "hindsight" } },
+          fetching: false,
+        },
+      ] as any;
+    });
+
+    render(<SettingsMemory embedded />);
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "Memory retain status: 1 retrying, 1 dead-lettered",
+    );
+    expect(screen.getByText("User-bank memory")).toBeTruthy();
   });
 
   it("opens operator memory details without the requester forget action", () => {

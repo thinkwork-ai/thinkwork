@@ -4,7 +4,7 @@ title: Fix Hindsight memory retain timeouts and simplify user/Space memory write
 status: in-progress
 started_at: 2026-06-28
 target_branch: main
-active_branch: codex/think-103-u3-safe-fact-capture
+active_branch: codex/think-103-completion-audit
 ---
 
 # THINK-103 Autopilot Status
@@ -20,11 +20,11 @@ active_branch: codex/think-103-u3-safe-fact-capture
 
 - U1. Durable retain-attempt schema and canonical GraphQL type surface — merged via PR #3071
 - U2. Route `memory-retain` through the ledger and retry worker — merged via PR #3075
-- U3. High-confidence safe user and Space fact capture during retain — in progress on `codex/think-103-u3-safe-fact-capture`
-- U4. Space-aware retain envelope and direct memory-question preflight
-- U5. Retain diagnostics through GraphQL and trace/activity evidence
-- U6. Memory page muted refresh action and retain status surface
-- U7. User and Space memory reliability regression coverage
+- U3. High-confidence safe user and Space fact capture during retain — merged in follow-up THINK-103 PRs, including PR #3092
+- U4. Space-aware retain envelope and direct memory-question preflight — completion-audit branch adds missing direct-question preflight and tests
+- U5. Retain diagnostics through GraphQL and trace/activity evidence — present on `origin/main` with `memoryRetainAttempts` resolver
+- U6. Memory page muted refresh action and retain status surface — completion-audit branch adds header refresh, diagnostics refetch, and retry/dead-letter strip
+- U7. User and Space memory reliability regression coverage — completion-audit branch adds deployed retain/recall smoke script and runbook
 
 ## Progress Log
 
@@ -62,3 +62,25 @@ active_branch: codex/think-103-u3-safe-fact-capture
   - Wired `memory-retain` to write extracted facts as idempotent supplemental Hindsight markdown documents tied to the retain attempt.
   - Extended safety filters for approval-rule/tool-send instructions and added Hindsight source labeling for `thinkwork_high_confidence_fact`.
   - Focused tests currently pass for extractor, safety, and handler fact-write flows.
+- 2026-06-28: Completion audit created isolated worktree at `.Codex/worktrees/think-103-completion-audit` from current `origin/main`.
+- 2026-06-28: Audit found a real U4 gap: `packages/pi-extensions/src/memory.ts` supports `groundingQuery`, but Pi runtime loaded the memory extension without passing one, so direct questions such as "what's my dog's name?" still depended on the model choosing the recall tool.
+- 2026-06-28: Completion-audit U4 patch added:
+  - `packages/agentcore-pi/agent-container/src/runtime/memory-question.ts`
+  - direct-memory-question detection for user and Space memory prompts
+  - conditional `groundingQuery` wiring in `packages/agentcore-pi/agent-container/src/server.ts`
+  - regression coverage proving direct memory questions issue Hindsight session-start recall while ordinary prompts do not
+- 2026-06-28: Completion-audit U6 patch added:
+  - `ComputerMemoryRetainAttemptsQuery` in `apps/web/src/lib/graphql-queries.ts`
+  - Memory tab refresh controller that refetches memory records and retain diagnostics together
+  - muted top-right header refresh icon in `SettingsMemoryHome`
+  - compact retry/dead-letter diagnostics strip when retain attempts need attention
+- 2026-06-28: Completion-audit U7 patch added:
+  - `packages/api/src/__smoke__/memory-retain-recall-smoke.ts`
+  - `pnpm --filter @thinkwork/api memory:retain-recall-smoke`
+  - optional deploy workflow smoke step behind `workflow_dispatch` `run_smokes`
+  - `docs/runbooks/memory-retain-recall.md`
+- 2026-06-28: Completion-audit verification passed:
+  - `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/memory-question.test.ts agent-container/tests/server.test.ts`
+  - `pnpm --filter @thinkwork/agentcore-pi typecheck`
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsMemory.render.test.tsx`
+  - `pnpm --filter @thinkwork/web typecheck`

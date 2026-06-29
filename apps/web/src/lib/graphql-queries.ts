@@ -2135,6 +2135,25 @@ export const ComputerMemoryRecordsQuery = gql`
   }
 `;
 
+export const ComputerMemoryRetainAttemptsQuery = gql`
+  query ComputerMemoryRetainAttempts($tenantId: ID!, $limit: Int) {
+    memoryRetainAttempts(tenantId: $tenantId, limit: $limit) {
+      id
+      threadId
+      userId
+      spaceId
+      status
+      attemptCount
+      maxAttempts
+      nextRetryAt
+      errorClass
+      errorMessage
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 export const DeleteComputerMemoryRecordMutation = gql`
   mutation DeleteComputerMemoryRecord(
     $tenantId: ID!

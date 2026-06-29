@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
 import { Brain, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -17,6 +17,7 @@ import {
 } from "@thinkwork/graph";
 import {
   ComputerMemoryRecordsQuery,
+  ComputerMemoryRetainAttemptsQuery,
   ComputerMemorySystemConfigQuery,
   SpacesQuery,
 } from "@/lib/graphql-queries";
@@ -55,6 +56,12 @@ type MemorySystemConfig = {
   wikiProjectionEnabled?: boolean | null;
 };
 
+export interface MemoryRefreshController {
+  refresh: () => Promise<void>;
+  isRefreshing: boolean;
+  disabled: boolean;
+}
+
 // Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
 // as a child so the embedded variant can suppress it without a conditional hook.
 function MemoryHeader() {
@@ -72,7 +79,15 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
   );
 }
 
-export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
+export function SettingsMemory({
+  embedded,
+  onRefreshControllerChange,
+}: {
+  embedded?: boolean;
+  onRefreshControllerChange?: (
+    controller: MemoryRefreshController | null,
+  ) => void;
+} = {}) {
   const { tenantId } = useTenant();
   const [view, setView] = useState<BrainView>("table");
   const [searchQuery, setSearchQuery] = useState("");
@@ -83,13 +98,13 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   const requesterUserId = null;
   const namespace = "requester";
 
-  const [systemResult] = useQuery<{
+  const [systemResult, reexecuteSystemQuery] = useQuery<{
     memorySystemConfig?: MemorySystemConfig | null;
   }>({
     query: ComputerMemorySystemConfigQuery,
   });
 
-  const [spacesResult] = useQuery<{
+  const [spacesResult, reexecuteSpacesQuery] = useQuery<{
     spaces?: Array<{ id: string; name?: string | null; slug?: string | null }>;
   }>({
     query: SpacesQuery,
@@ -97,7 +112,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     pause: !effectiveTenantId,
   });
 
-  const [membersResult] = useQuery<{
+  const [membersResult, reexecuteMembersQuery] = useQuery<{
     tenantMembers?: Array<{
       principalType?: string | null;
       principalId?: string | null;
@@ -114,7 +129,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     pause: !effectiveTenantId,
   });
 
-  const [recordsResult] = useQuery<{
+  const [recordsResult, reexecuteRecordsQuery] = useQuery<{
     memoryRecords?: any[] | null;
   }>({
     query: ComputerMemoryRecordsQuery,
@@ -125,6 +140,24 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       scope: "OPERATOR",
       query: activeSearch || null,
       limit: 500,
+    },
+    pause: !effectiveTenantId,
+  });
+
+  const [retainAttemptsResult, reexecuteRetainAttemptsQuery] = useQuery<{
+    memoryRetainAttempts?: Array<{
+      id: string;
+      status?: string | null;
+      attemptCount?: number | null;
+      maxAttempts?: number | null;
+      errorClass?: string | null;
+      errorMessage?: string | null;
+    }> | null;
+  }>({
+    query: ComputerMemoryRetainAttemptsQuery,
+    variables: {
+      tenantId: effectiveTenantId ?? "",
+      limit: 25,
     },
     pause: !effectiveTenantId,
   });
@@ -188,7 +221,8 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       if (member.principalType?.toUpperCase() !== "USER") continue;
       const user = member.user;
       const userId = user?.id || member.principalId;
-      const label = user?.profile?.callBy || user?.name || user?.email || userId;
+      const label =
+        user?.profile?.callBy || user?.name || user?.email || userId;
       if (userId && label) labels.set(`user:${userId}`, label);
     }
     return labels;
@@ -269,6 +303,53 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   );
 
   const isLoading = recordsResult.fetching && !recordsResult.data;
+  const isRefreshing =
+    (recordsResult.fetching && Boolean(recordsResult.data)) ||
+    retainAttemptsResult.fetching;
+  const retainAttention = useMemo(() => {
+    const attempts = retainAttemptsResult.data?.memoryRetainAttempts ?? [];
+    let retrying = 0;
+    let deadLettered = 0;
+    for (const attempt of attempts) {
+      const status = attempt.status ?? "";
+      if (status === "dead_lettered") deadLettered += 1;
+      if (status === "failed_timeout" || status === "failed_backend") {
+        retrying += 1;
+      }
+    }
+    return { retrying, deadLettered, total: retrying + deadLettered };
+  }, [retainAttemptsResult.data]);
+
+  const refreshMemory = useCallback(async () => {
+    if (!effectiveTenantId) return;
+    reexecuteSystemQuery({ requestPolicy: "network-only" });
+    reexecuteSpacesQuery({ requestPolicy: "network-only" });
+    reexecuteMembersQuery({ requestPolicy: "network-only" });
+    reexecuteRecordsQuery({ requestPolicy: "network-only" });
+    reexecuteRetainAttemptsQuery({ requestPolicy: "network-only" });
+  }, [
+    effectiveTenantId,
+    reexecuteMembersQuery,
+    reexecuteRecordsQuery,
+    reexecuteRetainAttemptsQuery,
+    reexecuteSpacesQuery,
+    reexecuteSystemQuery,
+  ]);
+
+  useEffect(() => {
+    if (!onRefreshControllerChange) return;
+    onRefreshControllerChange({
+      refresh: refreshMemory,
+      isRefreshing,
+      disabled: !effectiveTenantId,
+    });
+    return () => onRefreshControllerChange(null);
+  }, [
+    effectiveTenantId,
+    isRefreshing,
+    onRefreshControllerChange,
+    refreshMemory,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
@@ -316,6 +397,17 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
+      {retainAttention.total > 0 ? (
+        <div
+          role="status"
+          className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+        >
+          Memory retain status: {retainAttention.retrying} retrying
+          {retainAttention.deadLettered > 0
+            ? `, ${retainAttention.deadLettered} dead-lettered`
+            : ""}
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1">
         {view === "graph" ? (
