@@ -10,6 +10,7 @@ import {
   type InfrastructureComponent,
   type McpServerComponent,
   type PluginManifest,
+  type UiSurfaceComponent,
 } from "@thinkwork/plugin-catalog/contracts";
 import { defineFirstPartyPluginPackage } from "@thinkwork/plugin-catalog/plugin-package";
 
@@ -57,6 +58,16 @@ function latestMcpComponent(m: PluginManifest): McpServerComponent {
   return component;
 }
 
+function latestUiSurfaceComponent(m: PluginManifest): UiSurfaceComponent {
+  const component = latestVersion(m).components.find(
+    (candidate) => candidate.type === "ui-surface",
+  );
+  if (component?.type !== "ui-surface") {
+    throw new Error("latest twenty manifest is missing its ui-surface");
+  }
+  return component;
+}
+
 function infrastructureComponent(): InfrastructureComponent {
   const component = latestVersion(validatedTwentyManifest).components.find(
     (candidate) => candidate.type === "infrastructure",
@@ -96,12 +107,14 @@ describe("twenty plugin manifest", () => {
     expect(validated.versions.map((version) => version.version)).toEqual([
       "0.1.0",
       "0.2.0",
+      "0.3.0",
     ]);
 
     const components = latestVersion(validated).components;
     expect(components.map((component) => component.type).sort()).toEqual([
       "infrastructure",
       "mcp-server",
+      "ui-surface",
     ]);
 
     const mcp = latestMcpComponent(validated);
@@ -114,14 +127,42 @@ describe("twenty plugin manifest", () => {
     expect(mcp.auth).toEqual({ mode: "oauth-per-instance" });
   });
 
-  it("preserves the original 0.1.0 MCP contract and publishes 0.2.0 record-link hints", () => {
+  it("preserves older MCP contracts and keeps record-link hints in launchable versions", () => {
     const validated = validatePluginManifest(twentyManifest);
     const legacyMcp = mcpComponent(validated);
+    const recordLinkVersion = validated.versions.find(
+      (version) => version.version === "0.2.0",
+    );
+    const recordLinkMcp = recordLinkVersion?.components.find(
+      (component) => component.type === "mcp-server",
+    );
     const latestMcp = latestMcpComponent(validated);
 
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(legacyMcp.recordLinkHints).toBeUndefined();
-    expect(latestVersion(validated).version).toBe("0.2.0");
+    expect(recordLinkMcp?.type).toBe("mcp-server");
+    expect(
+      recordLinkMcp?.type === "mcp-server"
+        ? recordLinkMcp.recordLinkHints
+        : undefined,
+    ).toEqual({
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId", "record.id", "opportunity.id"],
+          labelFields: [
+            "name",
+            "opportunityName",
+            "record.name",
+            "opportunity.name",
+          ],
+        },
+      ],
+    });
+    expect(latestVersion(validated).version).toBe("0.3.0");
     expect(latestMcp.recordLinkHints).toEqual({
       schemaVersion: 1,
       source: "plugin-manifest",
@@ -138,6 +179,29 @@ describe("twenty plugin manifest", () => {
           ],
         },
       ],
+    });
+  });
+
+  it("publishes a launchable Client Engagement app surface in the latest version", () => {
+    const surface = latestUiSurfaceComponent(validatedTwentyManifest);
+
+    expect(surface).toEqual({
+      type: "ui-surface",
+      key: "client-engagement",
+      displayName: "Client Engagement",
+      intendedMount: "apps.main",
+      launch: {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "twenty-client-engagement",
+        routeSegment: "client-engagement",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+        description:
+          "Account and opportunity engagement workspace for Twenty CRM records.",
+        icon: "layout-dashboard",
+        entitlementProductKey: "twenty-client-engagement",
+      },
     });
   });
 
@@ -393,7 +457,7 @@ describe("twenty plugin manifest", () => {
       validatedTwentyManifest.versions.map(
         (version) => version.requiredOauthScopes,
       ),
-    ).toEqual([[], []]);
+    ).toEqual([[], [], []]);
     expect(() => validatePluginManifest(twentyManifest)).not.toThrow();
   });
 });
