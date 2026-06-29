@@ -108,7 +108,7 @@ describe("workos-auth handler", () => {
         path: "/api/auth/workos/logout",
         method: "POST",
         headers: { authorization: "Bearer id-token" },
-        body: { return_to: "https://app.customer.example/sign-in" },
+        body: { return_to: "https://app.customer.example" },
       }),
     );
 
@@ -119,9 +119,9 @@ describe("workos-auth handler", () => {
     expect(url.pathname).toBe("/user_management/sessions/logout");
     expect(url.searchParams.get("session_id")).toBe("workos-session-123");
     expect(url.searchParams.get("return_to")).toBe(
-      "https://app.customer.example/sign-in",
+      "https://app.customer.example/",
     );
-    expect(logoutDeps.consumeActiveSession).toHaveBeenCalledWith({
+    expect(logoutDeps.findActiveSession).toHaveBeenCalledWith({
       cognitoPrincipalId: "cognito-sub-123",
       now: new Date("2026-06-19T12:00:00Z"),
     });
@@ -251,7 +251,7 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
 
 function logoutDepsForHandler(overrides: {
   auth?: Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>;
-  session?: Awaited<ReturnType<WorkosLogoutDeps["consumeActiveSession"]>>;
+  session?: Awaited<ReturnType<WorkosLogoutDeps["findActiveSession"]>>;
 } = {}): WorkosLogoutDeps {
   const defaultAuth: NonNullable<
     Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>
@@ -269,7 +269,7 @@ function logoutDepsForHandler(overrides: {
         ? overrides.auth!
         : defaultAuth,
     ),
-    consumeActiveSession: vi.fn(async () =>
+    findActiveSession: vi.fn(async () =>
       Object.prototype.hasOwnProperty.call(overrides, "session")
         ? overrides.session!
         : {

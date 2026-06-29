@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import type { TokenStorage } from "@/lib/token-storage";
 
+const ORIGINAL_LOCATION = Object.getOwnPropertyDescriptor(window, "location");
+
 vi.mock("@/lib/graphql-client", () => ({
   setAuthToken: vi.fn(),
   setTokenProvider: vi.fn(),
@@ -61,6 +63,9 @@ vi.mock("@/lib/auth-deployment-binding", () => ({
 
 afterEach(() => {
   cleanup();
+  if (ORIGINAL_LOCATION) {
+    Object.defineProperty(window, "location", ORIGINAL_LOCATION);
+  }
   vi.resetModules();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -148,6 +153,19 @@ describe("AuthProvider desktop mode", () => {
     const { AuthProvider, useAuth } = await import("./AuthContext");
     const storage = new MemoryTokenStorage(sessionItems("user@example.com"));
     const bridge = makeBridge();
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        pathname: "/new",
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "thinkwork://app/new";
+        },
+      },
+    });
 
     function Probe() {
       const { user, isLoading, signOut } = useAuth();
@@ -172,6 +190,7 @@ describe("AuthProvider desktop mode", () => {
 
     await waitFor(() => expect(button.textContent).toBe("anonymous"));
     expect(bridge.signOutCalls()).toBe(1);
+    expect(navigations).toEqual(["/sign-in"]);
   });
 
   it("refuses to restore cached auth for a different deployment profile", async () => {

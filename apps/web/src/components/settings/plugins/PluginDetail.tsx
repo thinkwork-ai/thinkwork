@@ -173,6 +173,9 @@ export function PluginDetail() {
     ),
   );
   const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
+  const workosSignOutRedirectUrl = isWorkosAuth
+    ? workosAuthSignOutRedirectUrl()
+    : null;
   const workosAccountConfigured = isWorkosAccountConfigured(
     install?.components,
   );
@@ -726,6 +729,16 @@ export function PluginDetail() {
                 label="WorkOS callback URL"
               />
             </SettingsRow>
+            <SettingsRow
+              label="Sign-out redirect"
+              description="Add this URL to the WorkOS application's Sign-out redirects list."
+              layout="stacked"
+            >
+              <CopyablePluginValue
+                value={workosSignOutRedirectUrl ?? ""}
+                label="WorkOS sign-out redirect URL"
+              />
+            </SettingsRow>
             <WorkosConfigurationRow
               configured={workosAccountConfigured}
               error={workosConfigError}
@@ -799,6 +812,7 @@ export function PluginDetail() {
             open={workosInstructionsOpen}
             onOpenChange={setWorkosInstructionsOpen}
             callbackUrl={workosCallbackUrl ?? ""}
+            signOutRedirectUrl={workosSignOutRedirectUrl ?? ""}
           />
         ) : null}
       </div>
@@ -810,10 +824,12 @@ function WorkosSetupInstructionsSheet({
   open,
   onOpenChange,
   callbackUrl,
+  signOutRedirectUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   callbackUrl: string;
+  signOutRedirectUrl: string;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -870,6 +886,13 @@ function WorkosSetupInstructionsSheet({
                 callback URL:
                 <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
                   {callbackUrl}
+                </code>
+              </li>
+              <li>
+                In the same WorkOS application, add this ThinkWork Sign-out
+                redirect:
+                <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                  {signOutRedirectUrl}
                 </code>
               </li>
               <li>
@@ -1141,6 +1164,10 @@ function WorkosConfigurationRow({
 function workosAuthCallbackUrl(): string {
   const baseUrl = deploymentApiBaseUrl() || window.location.origin;
   return `${baseUrl}/api/auth/workos/callback`;
+}
+
+function workosAuthSignOutRedirectUrl(): string {
+  return `${window.location.origin}/`;
 }
 
 function OAuthConnectionRow({
