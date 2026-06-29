@@ -3861,6 +3861,8 @@ export type Mutation = {
   upgradePlugin: PluginInstall;
   upsertBudgetPolicy: BudgetPolicy;
   upsertEmailSpacePolicy: EmailSpacePolicy;
+  /** Create or replace one ThinkWork-owned overlay section for a plugin-app record. */
+  upsertPluginAppOverlay: PluginAppOverlay;
 };
 
 export type MutationAcceptAgentWorkspaceReviewArgs = {
@@ -5056,6 +5058,10 @@ export type MutationUpsertEmailSpacePolicyArgs = {
   input: UpsertEmailSpacePolicyInput;
 };
 
+export type MutationUpsertPluginAppOverlayArgs = {
+  input: UpsertPluginAppOverlayInput;
+};
+
 export enum N8nAgentStepResumeStatus {
   Failed = "FAILED",
   NotReady = "NOT_READY",
@@ -5558,6 +5564,37 @@ export type PlanRoutineDraftInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+/**
+ * ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
+ * source-system record. Overlay payloads are tenant-shared in v1; created/updated
+ * user fields are audit metadata, not visibility scopes.
+ */
+export type PluginAppOverlay = {
+  __typename?: "PluginAppOverlay";
+  appKey: Scalars["String"]["output"];
+  appSurfaceKey: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  id: Scalars["ID"]["output"];
+  payload: Scalars["AWSJSON"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  pluginKey: Scalars["String"]["output"];
+  provider: Scalars["String"]["output"];
+  providerRecordId: Scalars["ID"]["output"];
+  providerRecordType: Scalars["String"]["output"];
+  sectionKey: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  updatedByUserId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+export type PluginAppOverlayQueryInput = {
+  appKey: Scalars["String"]["input"];
+  provider: Scalars["String"]["input"];
+  providerRecordId: Scalars["ID"]["input"];
+  providerRecordType: Scalars["String"]["input"];
+  sectionKeys?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
 /** Display summary of one manifest component for catalog browse. */
 export type PluginCatalogComponent = {
   __typename?: "PluginCatalogComponent";
@@ -5944,6 +5981,8 @@ export type Query = {
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   pinnedThreads: Array<PinnedThread>;
+  /** ThinkWork-owned overlay sections for one plugin-app record. */
+  pluginAppOverlays: Array<PluginAppOverlay>;
   /**
    * Browse the signed plugin catalog overlaid with the caller tenant's install
    * state. Fails closed (GraphQL error) on catalog signature/digest failure.
@@ -6585,6 +6624,10 @@ export type QueryPerformanceTimeSeriesArgs = {
 export type QueryPinnedThreadsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryPluginAppOverlaysArgs = {
+  input: PluginAppOverlayQueryInput;
 };
 
 export type QueryPluginInstallArgs = {
@@ -9647,6 +9690,15 @@ export type UpsertEmailSpacePolicyInput = {
   providerInstallId?: InputMaybe<Scalars["ID"]["input"]>;
   registeredUsersAllowed?: InputMaybe<Scalars["Boolean"]["input"]>;
   spaceId: Scalars["ID"]["input"];
+};
+
+export type UpsertPluginAppOverlayInput = {
+  appKey: Scalars["String"]["input"];
+  payload: Scalars["AWSJSON"]["input"];
+  provider: Scalars["String"]["input"];
+  providerRecordId: Scalars["ID"]["input"];
+  providerRecordType: Scalars["String"]["input"];
+  sectionKey: Scalars["String"]["input"];
 };
 
 export type User = {
