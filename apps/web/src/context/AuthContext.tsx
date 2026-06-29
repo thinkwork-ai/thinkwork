@@ -135,6 +135,7 @@ export function AuthProvider({
     const unsubscribeSignedOut = desktopBridge?.onSignedOut(() => {
       if (cancelled) return;
       clearSession();
+      redirectToSignIn();
     });
     const unsubscribeOAuthError = desktopBridge?.onOAuthError((event) => {
       console.error("[auth] desktop OAuth failed", event.message);
@@ -246,4 +247,9 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+function redirectToSignIn(): void {
+  if (window.location.pathname === "/sign-in") return;
+  window.location.href = "/sign-in";
 }

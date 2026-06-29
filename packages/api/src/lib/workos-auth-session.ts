@@ -36,7 +36,7 @@ export interface WorkosLogoutDeps {
   authenticate(
     headers: Record<string, string | undefined>,
   ): Promise<AuthResult | null>;
-  consumeActiveSession(args: {
+  findActiveSession(args: {
     cognitoPrincipalId: string;
     now: Date;
   }): Promise<WorkosLogoutSession | null>;
@@ -60,7 +60,7 @@ export function createDefaultWorkosLogoutDeps(
 ): WorkosLogoutDeps {
   return {
     authenticate,
-    consumeActiveSession: (args) => consumeActiveWorkosSession(args, db),
+    findActiveSession: (args) => findActiveWorkosSession(args, db),
     emitSignOutAudit: (args) => emitWorkosSignOutAudit(args, db),
     now: () => new Date(),
   };
@@ -102,7 +102,7 @@ export async function createWorkosLogoutRedirect(args: {
     throw new WorkosLogoutError("Authentication required", 401);
   }
 
-  const session = await deps.consumeActiveSession({
+  const session = await deps.findActiveSession({
     cognitoPrincipalId: auth.principalId,
     now: deps.now(),
   });
@@ -168,7 +168,7 @@ export class WorkosLogoutError extends Error {
   }
 }
 
-async function consumeActiveWorkosSession(
+async function findActiveWorkosSession(
   args: { cognitoPrincipalId: string; now: Date },
   db: DbLike,
 ): Promise<WorkosLogoutSession | null> {
@@ -192,33 +192,7 @@ async function consumeActiveWorkosSession(
     )
     .orderBy(desc(workosAuthSessions.created_at))
     .limit(1);
-
-  if (!row) return null;
-
-  const [updated] = await db
-    .update(workosAuthSessions)
-    .set({
-      status: "logged_out",
-      logged_out_at: args.now,
-      updated_at: args.now,
-    })
-    .where(
-      and(
-        eq(workosAuthSessions.id, row.id),
-        eq(workosAuthSessions.status, "active"),
-      ),
-    )
-    .returning({
-      id: workosAuthSessions.id,
-      tenantId: workosAuthSessions.tenant_id,
-      userId: workosAuthSessions.user_id,
-      tenantReferenceId: workosAuthSessions.tenant_auth_provider_reference_id,
-      authProviderResourceId: workosAuthSessions.auth_provider_resource_id,
-      workosUserId: workosAuthSessions.workos_user_id,
-      workosSessionId: workosAuthSessions.workos_session_id,
-    });
-
-  return updated ?? null;
+  return row ?? null;
 }
 
 async function emitWorkosSignOutAudit(

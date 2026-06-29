@@ -189,17 +189,24 @@ export function confirmForgotPassword(
 export async function signOut(): Promise<void> {
   const idToken = await getIdToken().catch(() => getStoredIdToken());
   const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
-  const workosLogoutUrl = idToken && authSource === "workos"
-    ? await requestWorkosLogoutUrl(idToken).catch((error) => {
-        console.error("[auth] WorkOS logout failed", error);
-        return null;
-      })
-    : null;
+  const isWorkosSession = authSource === "workos";
+  const workosLogoutUrl =
+    idToken && isWorkosSession
+      ? await requestWorkosLogoutUrl(idToken).catch((error) => {
+          console.error("[auth] WorkOS logout failed", error);
+          return null;
+        })
+      : null;
 
   clearLocalAuthSession();
 
   if (workosLogoutUrl) {
     window.location.href = workosLogoutUrl;
+    return;
+  }
+
+  if (isWorkosSession) {
+    window.location.href = "/sign-in";
     return;
   }
 
@@ -620,7 +627,7 @@ async function requestWorkosLogoutUrl(
       Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify({
-      return_to: `${window.location.origin}/sign-in`,
+      return_to: `${window.location.origin}/`,
     }),
   });
   if (!res.ok) return null;
