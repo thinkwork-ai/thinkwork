@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const {
   dashboardResultMock,
   overlayRowsMock,
+  appOverlayRowsMock,
   mutationCalls,
   upsertOverlayMock,
   updateStageMock,
@@ -80,6 +81,10 @@ const {
     sectionKey: string;
     payload: Record<string, unknown>;
   }>,
+  appOverlayRowsMock: [] as Array<{
+    sectionKey: string;
+    payload: Record<string, unknown>;
+  }>,
   mutationCalls: [] as Array<{ name: string; variables: unknown }>,
   upsertOverlayMock: vi.fn(async (variables: unknown) => {
     mutationCalls.push({ name: "upsertOverlay", variables });
@@ -107,13 +112,20 @@ vi.mock("urql", () => ({
   useQuery: ({ variables }: { variables?: Record<string, unknown> }) => {
     const input = variables?.input as
       { providerRecordType?: string; providerRecordId?: string } | undefined;
-    if (input?.providerRecordType === "opportunity") {
+    if (
+      input?.providerRecordType === "opportunity" ||
+      input?.providerRecordType === "app"
+    ) {
+      const rows =
+        input.providerRecordType === "app"
+          ? appOverlayRowsMock
+          : overlayRowsMock;
       return [
         {
           fetching: false,
           error: null,
           data: {
-            pluginAppOverlays: overlayRowsMock.map((row, index) => ({
+            pluginAppOverlays: rows.map((row, index) => ({
               __typename: "PluginAppOverlay",
               id: `overlay-${index}`,
               pluginInstallId: "install-1",
@@ -121,7 +133,7 @@ vi.mock("urql", () => ({
               appSurfaceKey: "client-engagement",
               appKey: "twenty-client-engagement",
               provider: "twenty",
-              providerRecordType: "opportunity",
+              providerRecordType: input.providerRecordType,
               providerRecordId: input.providerRecordId,
               sectionKey: row.sectionKey,
               payload: row.payload,
@@ -154,6 +166,7 @@ import { TwentyClientEngagementApp } from "./TwentyClientEngagementApp";
 afterEach(() => {
   cleanup();
   overlayRowsMock.length = 0;
+  appOverlayRowsMock.length = 0;
   mutationCalls.length = 0;
   upsertOverlayMock.mockClear();
   updateStageMock.mockClear();
@@ -238,5 +251,80 @@ describe("TwentyClientEngagementApp", () => {
       (screen.getByLabelText("Executive narrative") as HTMLTextAreaElement)
         .value,
     ).toBe("Board-ready JDE visibility story");
+  });
+
+  it("opens converted tool views from an opportunity stage action", async () => {
+    render(<TwentyClientEngagementApp />);
+    fireEvent.click(await screen.findByText("JDE AI Query Layer"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Value Alignment" }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "ThinkWork AI - Value Discovery & Alignment",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Value Discovery & Alignment Session"),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/JDE AI Query Layer/).length).toBeGreaterThan(0);
+  });
+
+  it("persists app-level opportunity pipeline edits and restores them after remount", async () => {
+    render(<TwentyClientEngagementApp />);
+    fireEvent.click(screen.getByRole("button", { name: "Pipeline" }));
+
+    fireEvent.change(await screen.findByLabelText("Pipeline client name"), {
+      target: { value: "Acme Expansion" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save use cases" }));
+
+    await waitFor(() => {
+      expect(upsertOverlayMock).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          appKey: "twenty-client-engagement",
+          provider: "twenty",
+          providerRecordType: "app",
+          providerRecordId: "twenty-client-engagement",
+          sectionKey: "use-case-pipeline",
+          payload: expect.objectContaining({
+            accounts: expect.arrayContaining([
+              expect.objectContaining({ client: "Acme Expansion" }),
+            ]),
+          }),
+        }),
+      });
+    });
+
+    cleanup();
+    appOverlayRowsMock.push({
+      sectionKey: "use-case-pipeline",
+      payload: {
+        accounts: [
+          {
+            id: "account-restored",
+            client: "Restored Account",
+            champion: "Riley",
+            dateSurfaced: "2026-06-29",
+            sourceSession: "Pipeline review",
+            urgency: "Expansion window",
+            layers: [],
+          },
+        ],
+      },
+    });
+
+    render(<TwentyClientEngagementApp />);
+    fireEvent.click(screen.getByRole("button", { name: "Pipeline" }));
+
+    expect(
+      (
+        (await screen.findByLabelText(
+          "Pipeline client name",
+        )) as HTMLInputElement
+      ).value,
+    ).toBe("Restored Account");
   });
 });

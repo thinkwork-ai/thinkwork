@@ -5,6 +5,8 @@ import { Button } from "@thinkwork/ui";
 import { AccountProfile } from "./components/AccountProfile";
 import { AccountSidebar } from "./components/AccountSidebar";
 import { OpportunityDetail } from "./components/OpportunityDetail";
+import { ToolWorkspace } from "./components/ToolWorkspace";
+import type { PrototypePageId } from "./data/model";
 import { useTwentyEngagementData } from "./data/useTwentyEngagementData";
 
 export function TwentyClientEngagementApp({
@@ -18,6 +20,8 @@ export function TwentyClientEngagementApp({
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<
     string | null
   >(null);
+  const [activeToolPageId, setActiveToolPageId] =
+    useState<PrototypePageId | null>(null);
   const data = useTwentyEngagementData(selectedOpportunityId);
 
   const accounts = data.accounts;
@@ -87,15 +91,25 @@ export function TwentyClientEngagementApp({
       title={appDisplayName}
       subtitle="Twenty CRM projection"
       action={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={data.refreshDashboard}
-        >
-          <RefreshCcw className="mr-2 size-3.5" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setActiveToolPageId("opportunity-pipeline")}
+          >
+            Pipeline
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={data.refreshDashboard}
+          >
+            <RefreshCcw className="mr-2 size-3.5" />
+            Refresh
+          </Button>
+        </div>
       }
     >
       <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] overflow-hidden">
@@ -108,7 +122,20 @@ export function TwentyClientEngagementApp({
           }}
         />
         <main className="min-w-0 overflow-auto bg-background">
-          {selectedOpportunity && selectedAccount ? (
+          {activeToolPageId ? (
+            <ToolWorkspace
+              activePageId={activeToolPageId}
+              selectedAccount={selectedAccount}
+              selectedOpportunity={selectedOpportunity}
+              appOverlayBySection={data.appOverlayBySection}
+              opportunityOverlayBySection={data.overlayBySection}
+              appOverlayError={data.appOverlayError?.message ?? null}
+              onBack={() => setActiveToolPageId(null)}
+              onPageChange={setActiveToolPageId}
+              onSaveAppOverlay={data.saveAppOverlay}
+              onSaveOpportunityOverlay={data.saveOpportunityOverlay}
+            />
+          ) : selectedOpportunity && selectedAccount ? (
             <OpportunityDetail
               account={selectedAccount}
               opportunityWithLayers={selectedOpportunity}
@@ -119,6 +146,7 @@ export function TwentyClientEngagementApp({
               onSaveOverlay={data.saveOpportunityOverlay}
               onUpdateStage={data.updateOpportunityStage}
               onUpdateLayerStatus={data.updateLayerStatus}
+              onOpenTool={setActiveToolPageId}
             />
           ) : selectedAccount ? (
             <AccountProfile
