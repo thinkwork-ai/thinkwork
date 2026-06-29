@@ -63,17 +63,17 @@ plan: docs/plans/2026-06-29-002-feat-twenty-client-engagement-app-plan.md
 
 ## Implementation Units
 
-| Unit                                                | Status  | Branch                                          | PR                                                           | Notes                                                      |
-| --------------------------------------------------- | ------- | ----------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| U1 ui-surface launch contract                       | merged  | `codex/think-109-u1-app-surface-contract`       | [#3107](https://github.com/thinkwork-ai/thinkwork/pull/3107) | Merged at `d7739fb09144b0e3c2ce302fcf42b12e3d6e7f64`.      |
-| U2 installed plugin app discovery                   | merged  | `codex/think-109-u2-installed-app-discovery`    | [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108) | Merged at `f7fdecd5d8a8c9ad6e1bbca8c7eaf540b61871ad`.      |
-| U3 shell Apps navigation                            | merged  | `codex/think-109-u3-apps-navigation`            | [#3110](https://github.com/thinkwork-ai/thinkwork/pull/3110) | Merged at `77d0a13794f22864959c368fd89ee7867a68fe44`.      |
-| U4 Twenty engagement CRM data API                   | merged  | `codex/think-109-u4-twenty-engagement-api`      | [#3111](https://github.com/thinkwork-ai/thinkwork/pull/3111) | Merged at `b6286b872321e684a9949d196faefd6d91ded752`.      |
-| U5 plugin app overlay persistence                   | merged  | `codex/think-109-u5-plugin-app-overlay-state`   | [#3113](https://github.com/thinkwork-ai/thinkwork/pull/3113) | Merged at `65925c1aff56b9d86ff647a62abc000fa28b4ac9`.      |
-| U6 prototype characterization                       | merged  | `codex/think-109-u6-prototype-characterization` | [#3114](https://github.com/thinkwork-ai/thinkwork/pull/3114) | Merged at `4739a788fe8725ace41af685b9a91ad9308120ab`.      |
-| U7 dashboard/opportunity React conversion           | active  | `codex/think-109-u7-dashboard-react`            |                                                              | Converts dashboard/account/opportunity workspace to React. |
-| U8 discovery tools/strategic pipeline conversion    | pending |                                                 |                                                              | Depends on U5, U6, U7.                                     |
-| U9 integration/generation/docs/rollout verification | pending |                                                 |                                                              | Final integration unit.                                    |
+| Unit                                                | Status  | Branch                                          | PR                                                           | Notes                                                 |
+| --------------------------------------------------- | ------- | ----------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- |
+| U1 ui-surface launch contract                       | merged  | `codex/think-109-u1-app-surface-contract`       | [#3107](https://github.com/thinkwork-ai/thinkwork/pull/3107) | Merged at `d7739fb09144b0e3c2ce302fcf42b12e3d6e7f64`. |
+| U2 installed plugin app discovery                   | merged  | `codex/think-109-u2-installed-app-discovery`    | [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108) | Merged at `f7fdecd5d8a8c9ad6e1bbca8c7eaf540b61871ad`. |
+| U3 shell Apps navigation                            | merged  | `codex/think-109-u3-apps-navigation`            | [#3110](https://github.com/thinkwork-ai/thinkwork/pull/3110) | Merged at `77d0a13794f22864959c368fd89ee7867a68fe44`. |
+| U4 Twenty engagement CRM data API                   | merged  | `codex/think-109-u4-twenty-engagement-api`      | [#3111](https://github.com/thinkwork-ai/thinkwork/pull/3111) | Merged at `b6286b872321e684a9949d196faefd6d91ded752`. |
+| U5 plugin app overlay persistence                   | merged  | `codex/think-109-u5-plugin-app-overlay-state`   | [#3113](https://github.com/thinkwork-ai/thinkwork/pull/3113) | Merged at `65925c1aff56b9d86ff647a62abc000fa28b4ac9`. |
+| U6 prototype characterization                       | merged  | `codex/think-109-u6-prototype-characterization` | [#3114](https://github.com/thinkwork-ai/thinkwork/pull/3114) | Merged at `4739a788fe8725ace41af685b9a91ad9308120ab`. |
+| U7 dashboard/opportunity React conversion           | review  | `codex/think-109-u7-dashboard-react`            | [#3115](https://github.com/thinkwork-ai/thinkwork/pull/3115) | Waiting on PR CI.                                     |
+| U8 discovery tools/strategic pipeline conversion    | pending |                                                 |                                                              | Depends on U5, U6, U7.                                |
+| U9 integration/generation/docs/rollout verification | pending |                                                 |                                                              | Final integration unit.                               |
 
 ## Discoveries
 
@@ -112,3 +112,4 @@ plan: docs/plans/2026-06-29-002-feat-twenty-client-engagement-app-plan.md
 - 2026-06-29: U6 PR [#3114](https://github.com/thinkwork-ai/thinkwork/pull/3114) passed CI after rebase and merged at `4739a788fe8725ace41af685b9a91ad9308120ab`.
 - 2026-06-29: Started U7 on branch `codex/think-109-u7-dashboard-react`. Objective: convert the main dashboard, account profile, opportunity list/detail, stage guidance, layer cards, and overlay-backed secondary tabs into a ThinkWork React app that launches from the Twenty app surface.
 - 2026-06-29: Completed U7 local implementation. Added the `TwentyClientEngagementApp` React workspace, account sidebar/profile, opportunity list/detail, layer cards, secondary tabs, and `useTwentyEngagementData` hook backed by `twentyEngagementDashboard`, CRM mutation, and plugin overlay GraphQL operations. Verification: `pnpm --filter @thinkwork/web test -- src/components/apps/PluginAppRoute.test.tsx src/components/plugin-apps/twenty-client-engagement/TwentyClientEngagementApp.test.tsx src/components/plugin-apps/twenty-client-engagement/prototype-behavior.test.ts`; `pnpm --filter @thinkwork/web typecheck`; `pnpm lint:plugin-source`; `pnpm --filter @thinkwork/web build`.
+- 2026-06-29: Opened U7 draft PR [#3115](https://github.com/thinkwork-ai/thinkwork/pull/3115) and moved `THINK-109` to Linear `Verification` for PR/CI review.
