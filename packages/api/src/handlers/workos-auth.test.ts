@@ -95,7 +95,7 @@ describe("workos-auth handler", () => {
     expect(bridgeDeps.startCognitoCustomAuth).toHaveBeenCalled();
   });
 
-  it("returns a WorkOS logout URL for authenticated WorkOS sessions", async () => {
+  it("revokes authenticated WorkOS sessions server-side", async () => {
     const logoutDeps = logoutDepsForHandler();
     const handler = createWorkosAuthHandler({
       workosAuthDeps: depsForHandler(),
@@ -113,16 +113,18 @@ describe("workos-auth handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body ?? "{}") as { logout_url: string };
-    const url = new URL(body.logout_url);
-    expect(url.origin).toBe("https://api.workos.com");
-    expect(url.pathname).toBe("/user_management/sessions/logout");
-    expect(url.searchParams.get("session_id")).toBe("workos-session-123");
-    expect(url.searchParams.get("return_to")).toBe(
-      "https://app.customer.example/",
-    );
+    expect(JSON.parse(response.body ?? "{}")).toEqual({ logout_url: null });
     expect(logoutDeps.findActiveSession).toHaveBeenCalledWith({
       cognitoPrincipalId: "cognito-sub-123",
+      now: new Date("2026-06-19T12:00:00Z"),
+    });
+    expect(logoutDeps.getSecret).toHaveBeenCalledWith("secret-ref");
+    expect(logoutDeps.revokeWorkosSession).toHaveBeenCalledWith({
+      sessionId: "workos-session-123",
+      clientSecret: "secret_123",
+    });
+    expect(logoutDeps.markSessionLoggedOut).toHaveBeenCalledWith({
+      sessionRowId: "session-row-123",
       now: new Date("2026-06-19T12:00:00Z"),
     });
     expect(logoutDeps.emitSignOutAudit).toHaveBeenCalledWith({
@@ -133,7 +135,7 @@ describe("workos-auth handler", () => {
       workosUserId: "workos-user-123",
       authProviderResourceId: "resource-123",
       tenantReferenceId: "tenant-ref-123",
-      result: "workos_logout_url_issued",
+      result: "workos_session_revoked",
     });
   });
 
@@ -280,8 +282,12 @@ function logoutDepsForHandler(overrides: {
             authProviderResourceId: "resource-123",
             workosUserId: "workos-user-123",
             workosSessionId: "workos-session-123",
+            clientSecretRef: "secret-ref",
           },
     ),
+    getSecret: vi.fn(async () => "secret_123"),
+    revokeWorkosSession: vi.fn(async () => undefined),
+    markSessionLoggedOut: vi.fn(async () => undefined),
     emitSignOutAudit: vi.fn(async () => undefined),
     now: () => new Date("2026-06-19T12:00:00Z"),
   };
