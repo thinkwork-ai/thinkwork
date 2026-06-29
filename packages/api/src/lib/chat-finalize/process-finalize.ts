@@ -795,13 +795,18 @@ export async function processFinalize(
   // 7d. Notify thread update so the home screen list re-sorts
   if (!computerThreadResponse?.responseMessageId) {
     try {
-      notifyThreadUpdate({
+      await notifyThreadUpdate({
         threadId,
         tenantId,
         status: "in_progress",
         title: "",
-      }).catch(() => {});
-    } catch {}
+      });
+    } catch (err) {
+      console.warn(
+        `[chat-finalize] Thread update notification failed for thread=${threadId}:`,
+        err,
+      );
+    }
   }
 
   // 7e. Send push notification to user devices — suppressed only when a
@@ -913,7 +918,12 @@ async function promoteDeferredWakeupSafely(
   if (!threadId) return;
   try {
     await promoteNextDeferredWakeup(tenantId, threadId);
-  } catch {}
+  } catch (err) {
+    console.warn(
+      `[chat-finalize] Failed to promote deferred wakeup for thread=${threadId}:`,
+      err,
+    );
+  }
 }
 
 async function finalizeN8nAgentStepRunSafely(
@@ -958,7 +968,12 @@ async function recordTraceEvidenceSafely(
           trace_id: input.traceId ?? input.threadTurnId,
         },
       });
-    } catch {}
+    } catch (innerErr) {
+      console.warn(
+        `[chat-finalize] Failed to record trace ledger failure event:`,
+        innerErr,
+      );
+    }
   }
 }
 

@@ -1157,7 +1157,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         .from(threadTurns)
         .where(eq(threadTurns.thread_id, runThreadId));
       turnNumber = (c?.count || 0) + 1;
-    } catch {}
+    } catch (err) {
+      console.warn(
+        `[wakeup-processor] Failed to compute turn number for thread=${runThreadId}:`,
+        err,
+      );
+    }
   }
 
   // PRD-09 §9.1.6: Skip if thread is blocked by unresolved dependencies
@@ -1637,7 +1642,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           channel: threadRow.channel,
         };
       }
-    } catch {}
+    } catch (err) {
+      console.warn(
+        `[wakeup-processor] Failed to load thread context for thread=${runThreadId}:`,
+        err,
+      );
+    }
   }
   if (runSpaceId && !runSpaceSlug) {
     try {
@@ -1652,7 +1662,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         )
         .limit(1);
       runSpaceSlug = spaceRow?.slug ?? undefined;
-    } catch {}
+    } catch (err) {
+      console.warn(
+        `[wakeup-processor] Failed to resolve space slug for space=${runSpaceId}:`,
+        err,
+      );
+    }
   }
 
   // PRD-09 Batch 4: Render prompt template if configured
@@ -2524,7 +2539,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           .update(threadTurns)
           .set({ thread_id: runThreadId, turn_number: (c?.count || 0) + 1 })
           .where(eq(threadTurns.id, run.id));
-      } catch {}
+      } catch (err) {
+        console.warn(
+          `[wakeup-processor] Failed to attach thread_turn to thread=${runThreadId} run=${run.id}:`,
+          err,
+        );
+      }
     }
 
     // 7. Record cost events (PRD-02)
@@ -2760,7 +2780,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             traceId,
             runtimeType,
           });
-        } catch {}
+        } catch (err) {
+          console.warn(
+            `[wakeup-processor] Failed to record loop cost events for wakeup=${wakeup.id} turn=${loopTurn}:`,
+            err,
+          );
+        }
 
         // Insert loop response as assistant message for chat sources
         if (
@@ -2930,7 +2955,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     if (runThreadId) {
       try {
         await promoteNextDeferredWakeup(wakeup.tenant_id, runThreadId);
-      } catch {}
+      } catch (err) {
+        console.warn(
+          `[wakeup-processor] Failed to promote deferred wakeup for thread=${runThreadId}:`,
+          err,
+        );
+      }
     }
   } catch (err) {
     const durationMs = Date.now() - startMs;
@@ -3051,7 +3081,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     if (runThreadId) {
       try {
         await promoteNextDeferredWakeup(wakeup.tenant_id, runThreadId);
-      } catch {}
+      } catch (err) {
+        console.warn(
+          `[wakeup-processor] Failed to promote deferred wakeup (on failure path) for thread=${runThreadId}:`,
+          err,
+        );
+      }
     }
   }
 }
@@ -3264,7 +3299,12 @@ async function failWakeupBeforeRun(input: {
         .from(threadTurns)
         .where(eq(threadTurns.thread_id, threadId));
       turnNumber = (countRow?.count || 0) + 1;
-    } catch {}
+    } catch (err) {
+      console.warn(
+        `[wakeup-processor] Failed to compute turn number for thread=${threadId}:`,
+        err,
+      );
+    }
 
     const [run] = await db
       .insert(threadTurns)
