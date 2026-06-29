@@ -63,17 +63,17 @@ plan: docs/plans/2026-06-29-002-feat-twenty-client-engagement-app-plan.md
 
 ## Implementation Units
 
-| Unit                                                | Status           | Branch                                       | PR                                                           | Notes                                                               |
-| --------------------------------------------------- | ---------------- | -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------- |
-| U1 ui-surface launch contract                       | merged           | `codex/think-109-u1-app-surface-contract`    | [#3107](https://github.com/thinkwork-ai/thinkwork/pull/3107) | Merged at `d7739fb09144b0e3c2ce302fcf42b12e3d6e7f64`.               |
-| U2 installed plugin app discovery                   | PR open          | `codex/think-109-u2-installed-app-discovery` | [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108) | Adds member GraphQL discovery for installed launchable plugin apps. |
-| U3 shell Apps navigation                            | pending          |                                              |                                                              | Depends on U2.                                                      |
-| U4 Twenty engagement CRM data API                   | pending          |                                              |                                                              | Depends on U2.                                                      |
-| U5 plugin app overlay persistence                   | pending          |                                              |                                                              | Depends on U2.                                                      |
-| U6 prototype characterization                       | pending          |                                              |                                                              | Can proceed independently after source extraction.                  |
-| U7 dashboard/opportunity React conversion           | pending          |                                              |                                                              | Depends on U4, U5, U6.                                              |
-| U8 discovery tools/strategic pipeline conversion    | pending          |                                              |                                                              | Depends on U5, U6, U7.                                              |
-| U9 integration/generation/docs/rollout verification | pending          |                                              |                                                              | Final integration unit.                                             |
+| Unit                                                | Status  | Branch                                       | PR                                                           | Notes                                                             |
+| --------------------------------------------------- | ------- | -------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| U1 ui-surface launch contract                       | merged  | `codex/think-109-u1-app-surface-contract`    | [#3107](https://github.com/thinkwork-ai/thinkwork/pull/3107) | Merged at `d7739fb09144b0e3c2ce302fcf42b12e3d6e7f64`.             |
+| U2 installed plugin app discovery                   | merged  | `codex/think-109-u2-installed-app-discovery` | [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108) | Merged at `f7fdecd5d8a8c9ad6e1bbca8c7eaf540b61871ad`.             |
+| U3 shell Apps navigation                            | PR open | `codex/think-109-u3-apps-navigation`         | [#3110](https://github.com/thinkwork-ai/thinkwork/pull/3110) | Adds conditional Apps nav, app selection popover, and app routes. |
+| U4 Twenty engagement CRM data API                   | pending |                                              |                                                              | Depends on U2.                                                    |
+| U5 plugin app overlay persistence                   | pending |                                              |                                                              | Depends on U2.                                                    |
+| U6 prototype characterization                       | pending |                                              |                                                              | Can proceed independently after source extraction.                |
+| U7 dashboard/opportunity React conversion           | pending |                                              |                                                              | Depends on U4, U5, U6.                                            |
+| U8 discovery tools/strategic pipeline conversion    | pending |                                              |                                                              | Depends on U5, U6, U7.                                            |
+| U9 integration/generation/docs/rollout verification | pending |                                              |                                                              | Final integration unit.                                           |
 
 ## Discoveries
 
@@ -93,3 +93,7 @@ plan: docs/plans/2026-06-29-002-feat-twenty-client-engagement-app-plan.md
 - 2026-06-29: Started U2 on branch `codex/think-109-u2-installed-app-discovery`.
 - 2026-06-29: Completed U2 local implementation. Verification: `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugin-apps/installedPluginApps.query.test.ts src/__tests__/graphql-contract.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/web typecheck`; `pnpm --filter thinkwork-cli typecheck`. Codegen refreshed for `apps/web`, `apps/mobile`, and `apps/cli`.
 - 2026-06-29: Opened U2 draft PR [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108).
+- 2026-06-29: U2 PR [#3108](https://github.com/thinkwork-ai/thinkwork/pull/3108) passed CI and merged at `f7fdecd5d8a8c9ad6e1bbca8c7eaf540b61871ad`.
+- 2026-06-29: Started U3 on branch `codex/think-109-u3-apps-navigation`.
+- 2026-06-29: Completed U3 local implementation. Verification: `pnpm --filter @thinkwork/web test -- src/components/shell/ChatSidebar.test.tsx src/components/apps/PluginAppRoute.test.tsx`; `pnpm --filter @thinkwork/web build`; `pnpm --filter @thinkwork/web typecheck`.
+- 2026-06-29: Opened U3 draft PR [#3110](https://github.com/thinkwork-ai/thinkwork/pull/3110).

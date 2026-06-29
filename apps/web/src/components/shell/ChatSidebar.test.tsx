@@ -33,6 +33,7 @@ const {
   searchThreadItemsMock,
   pinnedThreadItemsMock,
   spacesMock,
+  pluginAppsMock,
   pinnedQueryPauseValuesMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -82,6 +83,17 @@ const {
     unreadThreadCount: number;
     lastActivityAt: string;
   }>,
+  pluginAppsMock: [] as Array<{
+    id: string;
+    pluginKey: string;
+    pluginDisplayName: string;
+    displayName: string;
+    routeSegment: string;
+    readiness: {
+      state: string;
+      message: string;
+    };
+  }>,
   pinnedQueryPauseValuesMock: [] as boolean[],
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
@@ -101,6 +113,7 @@ const {
     UnpinThreadMutation: Symbol("UnpinThreadMutation"),
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
     WorkItemsQuery: Symbol("WorkItemsQuery"),
+    InstalledPluginAppsQuery: Symbol("InstalledPluginAppsQuery"),
   },
 }));
 
@@ -109,6 +122,9 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/lib/graphql-queries", () => queryDocs);
+vi.mock("@/lib/plugin-app-queries", () => ({
+  InstalledPluginAppsQuery: queryDocs.InstalledPluginAppsQuery,
+}));
 
 vi.mock("sonner", () => ({
   toast: {
@@ -135,7 +151,11 @@ vi.mock("@tanstack/react-router", () => ({
     const href = to
       .replace("$spaceId", params?.spaceId ?? "$spaceId")
       .replace("$threadId", params?.threadId ?? "$threadId")
-      .replace("$id", params?.id ?? "$id");
+      .replace("$id", params?.id ?? "$id")
+      .replace(
+        "$appRouteSegment",
+        params?.appRouteSegment ?? "$appRouteSegment",
+      );
     const query = search
       ? new URLSearchParams(
           Object.entries(search).filter((entry): entry is [string, string] =>
@@ -200,6 +220,15 @@ vi.mock("urql", () => ({
         {
           fetching: false,
           data: { workItems: [] },
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.InstalledPluginAppsQuery) {
+      return [
+        {
+          fetching: false,
+          data: { installedPluginApps: pluginAppsMock },
         },
         vi.fn(),
       ];
@@ -357,6 +386,19 @@ vi.mock("@thinkwork/ui", () => ({
   ),
   DropdownMenuSeparator: () => <hr />,
   DropdownMenuTrigger: ({
+    children,
+    asChild,
+  }: {
+    children: React.ReactNode;
+    asChild?: boolean;
+  }) => (asChild ? children : <button>{children}</button>),
+  Popover: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  PopoverTrigger: ({
     children,
     asChild,
   }: {
@@ -554,6 +596,7 @@ afterEach(() => {
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
   spacesMock.length = 0;
+  pluginAppsMock.length = 0;
   pinnedQueryPauseValuesMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
@@ -707,6 +750,7 @@ describe("ChatSidebar", () => {
     expect(
       screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
     ).toBe("/work-items");
+    expect(screen.queryByRole("button", { name: /apps/i })).toBeNull();
     expect(
       screen.getByRole("link", { name: /automations/i }).getAttribute("href"),
     ).toBe("/automations");
@@ -752,6 +796,40 @@ describe("ChatSidebar", () => {
     );
     expect(spaceThreadLink.className).not.toContain("ml-5");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
+  });
+
+  it("renders Apps navigation when launchable plugin apps are installed", () => {
+    pluginAppsMock.push({
+      id: "install-1:client-engagement",
+      pluginKey: "twenty",
+      pluginDisplayName: "Twenty CRM",
+      displayName: "Client Engagement",
+      routeSegment: "client-engagement",
+      readiness: {
+        state: "ready",
+        message: "Ready to launch.",
+      },
+    });
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({
+      pathname: "/apps/client-engagement",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByRole("button", { name: /^apps/i })).toBeTruthy();
+    const appLink = screen.getByRole("link", {
+      name: /client engagement twenty crm/i,
+    });
+    expect(appLink.getAttribute("href")).toBe("/apps/client-engagement");
+    expect(
+      screen
+        .getByRole("link", { name: /work items/i })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /^apps/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("omits the Spaces section when no Spaces have loaded", () => {

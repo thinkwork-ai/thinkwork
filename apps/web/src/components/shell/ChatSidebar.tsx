@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { useReportSidebarHealth } from "@/components/shell/sidebar-health";
 import {
   Anchor,
+  AppWindow,
   Archive,
   ArrowLeft,
   CheckCheck,
@@ -70,6 +71,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -104,6 +108,7 @@ import {
   setSectionUnreadFilter,
   useSectionUnreadFilter,
 } from "@/lib/sidebar-section-prefs";
+import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
@@ -165,6 +170,21 @@ interface WorkItemsResult {
   workItems?: SidebarWorkItemSummary[] | null;
 }
 
+interface InstalledPluginAppsResult {
+  installedPluginApps?: Array<{
+    id: string;
+    pluginKey: string;
+    pluginDisplayName: string;
+    displayName: string;
+    routeSegment: string;
+    icon?: string | null;
+    readiness: {
+      state: string;
+      message: string;
+    };
+  }> | null;
+}
+
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 const PINNED_LIMIT = 100;
@@ -192,6 +212,7 @@ export function ChatSidebar() {
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
   const isAgentLoopsRoute = location.pathname.startsWith("/automations");
+  const isAppsRoute = location.pathname.startsWith("/apps");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
@@ -289,6 +310,13 @@ export function ChatSidebar() {
       (item) => item.ownerUserId === userId && isOpenSidebarWorkItem(item),
     ).length;
   }, [userId, workItemsData?.workItems]);
+
+  const [{ data: installedAppsData }] = useQuery<InstalledPluginAppsResult>({
+    query: InstalledPluginAppsQuery,
+    pause: !tenantId || !userId,
+    requestPolicy: "cache-and-network",
+  });
+  const installedApps = installedAppsData?.installedPluginApps ?? [];
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -914,6 +942,14 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {installedApps.length > 0 ? (
+              <SidebarMenuItem>
+                <PluginAppsNavItem
+                  apps={installedApps}
+                  isActive={isAppsRoute}
+                />
+              </SidebarMenuItem>
+            ) : null}
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
@@ -1006,6 +1042,70 @@ export function ChatSidebar() {
         error={searchError?.message ?? null}
       />
     </div>
+  );
+}
+
+function PluginAppsNavItem({
+  apps,
+  isActive,
+}: {
+  apps: NonNullable<InstalledPluginAppsResult["installedPluginApps"]>;
+  isActive: boolean;
+}) {
+  const location = useRouterState({ select: (s) => s.location });
+  const activeRouteSegment = appRouteSegmentFromPath(location.pathname);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
+          <button type="button">
+            <AppWindow />
+            <span className="min-w-0 flex-1 truncate text-left">Apps</span>
+            <ChevronDown className="ml-auto size-3.5 text-sidebar-foreground/45" />
+          </button>
+        </SidebarMenuButton>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="right"
+        sideOffset={8}
+        className="z-[1000] w-72 gap-1 p-1"
+      >
+        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          Apps
+        </div>
+        <div className="space-y-0.5">
+          {apps.map((app) => {
+            const ready = app.readiness.state === "ready";
+            const appActive = activeRouteSegment === app.routeSegment;
+            return (
+              <Link
+                key={app.id}
+                to="/apps/$appRouteSegment"
+                params={{ appRouteSegment: app.routeSegment }}
+                className={cn(
+                  "flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                  appActive ? "bg-accent text-accent-foreground" : null,
+                )}
+              >
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+                  <AppWindow className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">
+                    {app.displayName}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {ready ? app.pluginDisplayName : app.readiness.message}
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -2302,6 +2402,11 @@ function threadIdFromThreadPath(pathname: string) {
 
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function appRouteSegmentFromPath(pathname: string) {
+  const match = /^\/apps\/([^/]+)(?:\/|$)/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
