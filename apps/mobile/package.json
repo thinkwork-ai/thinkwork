@@ -31,6 +31,7 @@
     "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/react-native-sdk": "workspace:*",
+    "@thinkwork/shared-utils": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*",
     "@urql/exchange-graphcache": "^8.0.0",
     "amazon-cognito-identity-js": "^6.3.14",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatBytes } from "@thinkwork/shared-utils";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { Loader2, Pencil } from "lucide-react";
@@ -50,12 +51,7 @@ function statusVariant(
   return "outline";
 }
 
-function formatBytes(bytes: number): string {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 3);
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
+
 
 export function SettingsKnowledgeBaseDetail() {
   const { kbId } = useParams({

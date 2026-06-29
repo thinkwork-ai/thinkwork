@@ -1,4 +1,5 @@
 import { View, Pressable } from "react-native";
+import { formatRelativeTime } from "@thinkwork/shared-utils";
 import { useColorScheme } from "nativewind";
 import { ChevronRight } from "lucide-react-native";
 import { Text, Muted } from "@/components/ui/typography";
@@ -51,16 +52,7 @@ interface ActiveWorkSectionProps {
   agentNames?: Record<string, string>;
 }
 
-function formatRelativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+
 
 export function ActiveWorkSection({
   threads,

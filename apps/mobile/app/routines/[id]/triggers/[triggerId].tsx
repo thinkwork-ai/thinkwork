@@ -1,4 +1,5 @@
 import { View, ScrollView, Pressable, Alert, Switch } from "react-native";
+import { formatRelativeTime } from "@thinkwork/shared-utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRoutine } from "@/lib/hooks/use-routines";
 import { ChevronRight, Copy, Trash2 } from "lucide-react-native";
@@ -22,16 +23,7 @@ function formatDate(ts: number | string): string {
   });
 }
 
-function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+
 
 function SectionHeader({ title }: { title: string }) {
   return (

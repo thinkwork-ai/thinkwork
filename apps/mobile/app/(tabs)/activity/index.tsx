@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { formatRelativeTime } from "@thinkwork/shared-utils";
 import { View, ScrollView, Pressable, RefreshControl } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
@@ -49,18 +50,7 @@ const FILTERS = [
   { id: "comments", label: "Comments", types: ["message", "commented"] },
 ] as const;
 
-function formatRelativeTime(dateStr: string): string {
-  const ms = new Date(dateStr).getTime();
-  const sec = Math.floor((Date.now() - ms) / 1000);
-  if (sec < 60) return "just now";
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
-  return new Date(ms).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
+
 
 function toTitleCase(str: string): string {
   return str.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

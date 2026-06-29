@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatBytes } from "@thinkwork/shared-utils";
 import { ChevronRight, FolderTree } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -68,18 +69,7 @@ type AgentsMdState =
   | { status: "loaded"; content: string; exact: boolean }
   | { status: "unavailable" };
 
-function formatBytes(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return "";
-  if (value < 1024) return `${value} B`;
-  const units = ["KB", "MB", "GB"];
-  let size = value / 1024;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
-}
+
 
 function formatTimestamp(value: string | null): string | null {
   if (!value) return null;
