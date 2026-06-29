@@ -49,7 +49,6 @@ import {
   createAnalyticsDisplayExtension,
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
-  createContextEngineExtension,
   createDelegationExtension,
   createFetchWorkspaceSourceExtension,
   createKnowledgeGraphExtension,
@@ -153,7 +152,10 @@ import {
 } from "./runtime/pi-goal-adapter.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
-import { directMemoryGroundingQuery } from "./runtime/memory-question.js";
+import {
+  directMemoryGroundingQuery,
+  explicitMemoryTurn,
+} from "./runtime/memory-question.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
@@ -1140,6 +1142,12 @@ const defaultDependencies: HandlerDependencies = {
 export interface InvocationResourceBundle {
   tools: AgentTool<any>[];
   /**
+   * Per-turn built-in tool surface. Explicit memory turns are Hindsight-only,
+   * so the runtime withholds file/shell built-ins instead of relying on prompt
+   * compliance to avoid USER.md/SPACE.md shortcuts.
+   */
+  builtinToolNames: string[];
+  /**
    * Plan §004 U5 — Pi extension factories loaded into the session's resource
    * loader alongside `tools`. Each is a capability from
    * `@thinkwork/pi-extensions` bound to its U3 provider bundle. Memory is the
@@ -1277,6 +1285,9 @@ export async function buildInvocationResources(
   args: BuildInvocationResourcesArgs,
 ): Promise<InvocationResourceBundle> {
   const tools: AgentTool<any>[] = [];
+  const builtinToolNames = explicitMemoryTurn(args.payload.message)
+    ? []
+    : [...BUILTIN_TOOL_NAMES];
   const cleanup = args.cleanup;
   // U16 — caller allocates the HandleStore so the scrubbing fetch
   // closure (built alongside `connectMcpServer` in handleInvocation)
@@ -1486,34 +1497,6 @@ export async function buildInvocationResources(
     );
   }
 
-  // Company Brain / Context Engine — query_context + query_memory_context +
-  // query_brain_context + query_wiki_context over the API's
-  // `/mcp/context-engine` JSON-RPC facade.
-  // Gated on `context_engine_enabled`; skipped in eval mode (user-less).
-  if (
-    args.payload.eval_mode !== true &&
-    args.payload.context_engine_enabled === true
-  ) {
-    addExtension(
-      createContextEngineExtension({
-        enabled: true,
-        apiUrl: asString(args.payload.thinkwork_api_url),
-        apiSecret: asString(args.payload.thinkwork_api_secret),
-        tenantId: args.identity.tenantId,
-        userId: args.identity.userId,
-        agentId: args.identity.agentId,
-        // Forward the thread so Context Engine providers can scope ephemeral
-        // lookups to the current Space.
-        threadId: args.identity.threadId,
-        contextEngineConfig:
-          typeof args.payload.context_engine_config === "object" &&
-          args.payload.context_engine_config
-            ? (args.payload.context_engine_config as Record<string, unknown>)
-            : {},
-      }),
-    );
-  }
-
   // Knowledge Graph (plan 2026-06-09-004 U8) — `knowledge_graph_search` over
   // the API's GraphQL `knowledgeGraphSearch` query. Gated on the
   // `knowledge_graph_enabled` payload flag (mirrors context_engine_enabled);
@@ -1688,6 +1671,15 @@ export async function buildInvocationResources(
       // ordinary turns pay the recall cost.
       const memoryExtension = createMemoryExtension({
         ...(groundingQuery ? { groundingQuery } : {}),
+        onGrounding: ({ phase, count }) =>
+          logStructured({
+            level: "info",
+            event: "memory_grounding_completed",
+            phase,
+            count,
+            tenantId: args.identity.tenantId,
+            threadId: args.identity.threadId,
+          }),
         onError: (error, { phase }) =>
           logStructured({
             level: "warn",
@@ -1848,6 +1840,7 @@ export async function buildInvocationResources(
 
   return {
     tools,
+    builtinToolNames,
     extensionFactories,
     extensionToolNames,
     cleanup,
@@ -2798,7 +2791,7 @@ export async function handleInvocation(
         payload: args.payload,
         workspaceDir: env.workspaceDir,
         availableToolNames: [
-          ...BUILTIN_TOOL_NAMES,
+          ...bundle.builtinToolNames,
           ...bundle.tools.map((tool) => tool.name),
           ...bundle.extensionToolNames,
         ],
@@ -2954,6 +2947,7 @@ export async function handleInvocation(
           identity,
           cwd: env.workspaceDir,
           agentDir: env.piAgentDir,
+          builtinToolNames: bundle.builtinToolNames,
           sessionStore,
           sessionDir: "/tmp/pi-sessions",
         },
@@ -2982,6 +2976,7 @@ export async function handleInvocation(
           identity,
           cwd: env.workspaceDir,
           agentDir: env.piAgentDir,
+          builtinToolNames: bundle.builtinToolNames,
           sessionStore,
           // Session scratch lives outside the workspace dir so the per-turn
           // workspace S3 sync (delete-extraneous) cannot reap an in-flight

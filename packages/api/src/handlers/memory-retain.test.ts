@@ -140,6 +140,35 @@ function hasRawArrayQueryChunk(value: unknown): boolean {
   );
 }
 
+function collectJsonStrings(value: unknown, seen = new WeakSet<object>()) {
+  const strings: string[] = [];
+  function visit(next: unknown) {
+    if (typeof next === "string") {
+      strings.push(next);
+      return;
+    }
+    if (!next || typeof next !== "object") return;
+    if (seen.has(next)) return;
+    seen.add(next);
+    if (Array.isArray(next)) {
+      for (const item of next) visit(item);
+      return;
+    }
+    for (const item of Object.values(next as Record<string, unknown>)) {
+      visit(item);
+    }
+  }
+  visit(value);
+  return strings.filter((value) => value.trim().startsWith("{"));
+}
+
+function parsedJsonQueryChunksContaining(key: string): unknown[] {
+  return executeMock.mock.calls
+    .flatMap(([query]) => collectJsonStrings(query))
+    .filter((value) => value.includes(key))
+    .map((value) => JSON.parse(value));
+}
+
 describe("mergeTranscriptSuffix", () => {
   const u = (content: string) => ({
     role: "user" as const,
@@ -368,9 +397,25 @@ describe("memory-retain handler", () => {
 
     expect(result.ok).toBe(true);
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(5);
+    expect(executeMock).toHaveBeenCalledTimes(6);
     expect(hasRawArrayQueryChunk(executeMock.mock.calls[1][0])).toBe(false);
-    expect(hasRawArrayQueryChunk(executeMock.mock.calls[3][0])).toBe(false);
+    expect(hasRawArrayQueryChunk(executeMock.mock.calls[4][0])).toBe(false);
+    const hindsightPayloads = parsedJsonQueryChunksContaining(
+      "sourceMessageIndex",
+    );
+    expect(hindsightPayloads).not.toEqual([]);
+    expect(
+      hindsightPayloads.every((payload) => {
+        const record = payload as {
+          sourceMessageIndex?: unknown;
+          metadata?: { sourceMessageIndex?: unknown };
+        };
+        return (
+          typeof record.sourceMessageIndex === "string" ||
+          typeof record.metadata?.sourceMessageIndex === "string"
+        );
+      }),
+    ).toBe(true);
     expect(writeUserContextMdForUserMock).toHaveBeenCalledWith(
       expect.any(Object),
       TENANT_A,
@@ -431,7 +476,7 @@ describe("memory-retain handler", () => {
       attemptId: "attempt-1",
     });
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(5);
+    expect(executeMock).toHaveBeenCalledTimes(6);
     expect(writeUserContextMdForUserMock).toHaveBeenCalledWith(
       expect.any(Object),
       TENANT_A,
@@ -457,6 +502,60 @@ describe("memory-retain handler", () => {
       }),
     );
     expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
+  });
+
+  it("writes explicit user memories without projecting them to User context", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    retainConversationMock.mockRejectedValueOnce(
+      new Error("[hindsight-adapter] retainConversation failed: hindsight_504"),
+    );
+    classifyRetainErrorMock.mockReturnValueOnce({
+      status: "failed_backend",
+      retryable: true,
+      errorClass: "hindsight_504",
+      errorMessage:
+        "[hindsight-adapter] retainConversation failed: hindsight_504",
+    });
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        {
+          role: "user",
+          content:
+            "Please remember this user memory for a future separate thread: the calibration shelf marker is UserMarker1234.",
+          timestamp: "2026-06-28T15:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      engine: "hindsight",
+      attemptId: "attempt-1",
+    });
+    expect(executeMock).toHaveBeenCalledTimes(5);
+    expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
+    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
+      BASE_ATTEMPT,
+      expect.objectContaining({
+        status: "failed_backend",
+        retryable: true,
+      }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          highConfidenceFacts: [
+            expect.objectContaining({
+              scope: "user",
+              kind: "explicit_memory",
+            }),
+          ],
+        }),
+      }),
+    );
   });
 
   it("starts conversation retain after the deterministic fact row write", async () => {
@@ -487,7 +586,7 @@ describe("memory-retain handler", () => {
     });
 
     await vi.waitFor(() => {
-      expect(executeMock).toHaveBeenCalledTimes(5);
+      expect(executeMock).toHaveBeenCalledTimes(6);
       expect(writeUserContextMdForUserMock).toHaveBeenCalledTimes(1);
       expect(retainConversationMock).toHaveBeenCalledTimes(1);
     });
@@ -539,7 +638,7 @@ describe("memory-retain handler", () => {
       }),
     );
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(4);
+    expect(executeMock).toHaveBeenCalledTimes(5);
     expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
   });
 

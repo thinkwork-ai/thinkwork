@@ -1,13 +1,17 @@
 #!/usr/bin/env tsx
+import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 interface Args {
   tenantId: string;
   agentId: string;
   senderId: string;
+  spaceId?: string;
   graphqlUrl: string;
   apiKey: string;
+  authToken?: string;
   timeoutMs: number;
   json: boolean;
 }
@@ -20,6 +24,12 @@ interface GraphQlResponse<T> {
 interface Thread {
   id: string;
   identifier?: string | null;
+}
+
+interface Space {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 interface Message {
@@ -39,6 +49,7 @@ interface ThreadTurn {
 interface MemoryRecord {
   memoryRecordId: string;
   content?: { text?: string | null } | null;
+  bankId?: string | null;
   ownerType?: string | null;
   ownerId?: string | null;
   threadId?: string | null;
@@ -52,7 +63,6 @@ interface MemoryRetainAttempt {
   errorMessage?: string | null;
 }
 
-const RETAINED_STATUSES = new Set(["retained"]);
 const TERMINAL_FAILURE_STATUSES = new Set(["dead_lettered"]);
 
 function repoRoot(): string {
@@ -77,14 +87,30 @@ function readDotEnv(path: string): Record<string, string> {
   return values;
 }
 
+function readThinkworkConfigToken(): string {
+  const path = resolve(homedir(), ".thinkwork/config.json");
+  if (!existsSync(path)) return "";
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+      defaultStage?: string;
+      sessions?: Record<string, { idToken?: string }>;
+    };
+    const stage = parsed.defaultStage || "dev";
+    return parsed.sessions?.[stage]?.idToken || "";
+  } catch {
+    return "";
+  }
+}
+
 function usage(exitCode = 2): never {
   console.error(`Usage:
   pnpm --filter @thinkwork/api memory:retain-recall-smoke -- \\
     --tenant-id <tenant-id> --agent-id <agent-id> --sender-id <user-id> \\
-    [--timeout 180000] [--json]
+    [--space-id <space-id>] [--timeout 180000] [--json]
 
 Environment:
   THINKWORK_GRAPHQL_URL / THINKWORK_GRAPHQL_API_KEY
+  optional THINKWORK_GRAPHQL_AUTH_TOKEN / SMOKE_COGNITO_ID_TOKEN
   or SMOKE_GRAPHQL_HTTP_URL / GRAPHQL_API_KEY
   or apps/web/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
   process.exit(exitCode);
@@ -102,6 +128,8 @@ function parseArgs(): Args {
     process.env.PI_SMOKE_SENDER_ID ||
     process.env.SMOKE_USER_ID ||
     "";
+  let spaceId =
+    process.env.THINKWORK_SPACE_ID || process.env.SMOKE_SPACE_ID || "";
   let timeoutMs = Number(process.env.MEMORY_SMOKE_TIMEOUT_MS || 180_000);
   let json = false;
 
@@ -112,6 +140,7 @@ function parseArgs(): Args {
     if (arg === "--tenant-id") tenantId = argv[++i] || "";
     else if (arg === "--agent-id") agentId = argv[++i] || "";
     else if (arg === "--sender-id") senderId = argv[++i] || "";
+    else if (arg === "--space-id") spaceId = argv[++i] || "";
     else if (arg === "--timeout") timeoutMs = Number(argv[++i] || timeoutMs);
     else if (arg === "--json") json = true;
     else {
@@ -132,9 +161,24 @@ function parseArgs(): Args {
     process.env.VITE_GRAPHQL_API_KEY ||
     env.VITE_GRAPHQL_API_KEY ||
     "";
+  const authToken =
+    process.env.THINKWORK_GRAPHQL_AUTH_TOKEN ||
+    process.env.SMOKE_COGNITO_ID_TOKEN ||
+    process.env.COGNITO_ID_TOKEN ||
+    readThinkworkConfigToken();
 
   if (!tenantId || !agentId || !senderId || !graphqlUrl || !apiKey) usage();
-  return { tenantId, agentId, senderId, graphqlUrl, apiKey, timeoutMs, json };
+  return {
+    tenantId,
+    agentId,
+    senderId,
+    ...(spaceId ? { spaceId } : {}),
+    graphqlUrl,
+    apiKey,
+    ...(authToken ? { authToken } : {}),
+    timeoutMs,
+    json,
+  };
 }
 
 async function gql<T>(
@@ -147,6 +191,7 @@ async function gql<T>(
     headers: {
       "content-type": "application/json",
       "x-api-key": args.apiKey,
+      ...(args.authToken ? { authorization: args.authToken } : {}),
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -159,7 +204,11 @@ async function gql<T>(
   return body.data as T;
 }
 
-async function createThread(args: Args, title: string): Promise<Thread> {
+async function createThread(
+  args: Args,
+  title: string,
+  spaceId?: string,
+): Promise<Thread> {
   const data = await gql<{ createThread: Thread }>(
     args,
     `mutation($input: CreateThreadInput!) {
@@ -172,6 +221,7 @@ async function createThread(args: Args, title: string): Promise<Thread> {
       input: {
         tenantId: args.tenantId,
         agentId: args.agentId,
+        ...(spaceId ? { spaceId } : {}),
         title,
         channel: "CHAT",
         createdByType: "user",
@@ -180,6 +230,37 @@ async function createThread(args: Args, title: string): Promise<Thread> {
     },
   );
   return data.createThread;
+}
+
+async function resolveSpaceId(args: Args): Promise<string> {
+  if (args.spaceId) return args.spaceId;
+  const data = await gql<{ spaces: Space[] }>(
+    args,
+    `query($tenantId: ID!) {
+      spaces(tenantId: $tenantId, status: ACTIVE) {
+        id
+        name
+        slug
+      }
+    }`,
+    { tenantId: args.tenantId },
+  );
+  const spaces = data.spaces ?? [];
+  const space =
+    spaces.find((candidate) => candidate.slug === "general") ??
+    spaces.find((candidate) => candidate.slug === "default") ??
+    spaces.find(
+      (candidate) =>
+        !/\b(?:e2e|onboarding|template)\b/i.test(candidate.slug) &&
+        !/\b(?:e2e|onboarding|template)\b/i.test(candidate.name),
+    ) ??
+    spaces[0];
+  if (!space) {
+    throw new Error(
+      "no active Space found; pass --space-id or set THINKWORK_SPACE_ID",
+    );
+  }
+  return space.id;
 }
 
 async function sendMessage(args: Args, threadId: string, content: string) {
@@ -274,6 +355,7 @@ async function memoryRecords(
         limit: 50
       ) {
         memoryRecordId
+        bankId
         content { text }
         ownerType
         ownerId
@@ -309,6 +391,7 @@ async function waitForRetainedMemory(
   args: Args,
   threadId: string,
   token: string,
+  owner: { ownerType: string; ownerId: string },
 ) {
   const deadline = Date.now() + args.timeoutMs;
   let latestAttempts: MemoryRetainAttempt[] = [];
@@ -317,13 +400,21 @@ async function waitForRetainedMemory(
   while (Date.now() < deadline) {
     latestAttempts = await retainAttempts(args, threadId);
     latestRecords = await memoryRecords(args, token);
-    const record = latestRecords.find((candidate) =>
-      candidate.content?.text?.toLowerCase().includes(token.toLowerCase()),
+    const record = latestRecords.find(
+      (candidate) =>
+        candidate.content?.text?.toLowerCase().includes(token.toLowerCase()) &&
+        candidate.ownerType?.toLowerCase() === owner.ownerType.toLowerCase() &&
+        candidate.ownerId === owner.ownerId,
     );
-    const retained = latestAttempts.some((attempt) =>
-      RETAINED_STATUSES.has(attempt.status),
-    );
-    if (retained && record) return { attempt: latestAttempts[0], record };
+    if (record) {
+      return {
+        attempt: latestAttempts[0] ?? {
+          id: "memory-record-visible",
+          status: "memory_record_visible",
+        },
+        record,
+      };
+    }
     const failed = latestAttempts.find((attempt) =>
       TERMINAL_FAILURE_STATUSES.has(attempt.status),
     );
@@ -336,64 +427,159 @@ async function waitForRetainedMemory(
   }
 
   throw new Error(
-    `timeout waiting for retained memory token=${token}; attempts=${JSON.stringify(
+    `timeout waiting for retained ${owner.ownerType} memory token=${token}; attempts=${JSON.stringify(
       latestAttempts,
     )}; records=${latestRecords.length}`,
   );
 }
 
-function makeToken(): { petName: string; toyName: string } {
-  const suffix = Date.now().toString().slice(-8);
+async function recallUntilMarker(
+  args: Args,
+  input: {
+    marker: string;
+    titlePrefix: string;
+    prompt: string;
+    spaceId?: string;
+    failureLabel: string;
+  },
+) {
+  const deadline = Date.now() + args.timeoutMs;
+  const failures: Array<{
+    threadId: string;
+    turnId: string;
+    answer: string;
+  }> = [];
+
+  while (Date.now() < deadline) {
+    const recallThread = await createThread(
+      args,
+      `${input.titlePrefix} ${input.marker}`,
+      input.spaceId,
+    );
+    await sendMessage(args, recallThread.id, input.prompt);
+    const recalled = await waitForTurn(args, recallThread.id);
+    const answer = recalled.assistant.content ?? "";
+    if (answer.toLowerCase().includes(input.marker.toLowerCase())) {
+      return {
+        recallThreadId: recallThread.id,
+        recallTurnId: recalled.turn.id,
+        answer,
+        attempts: failures.length + 1,
+      };
+    }
+
+    failures.push({
+      threadId: recallThread.id,
+      turnId: recalled.turn.id,
+      answer,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+
+  throw new Error(
+    `${input.failureLabel} recall answer did not include ${input.marker}; attempts=${JSON.stringify(
+      failures,
+    )}`,
+  );
+}
+
+function makeToken(prefix: string): string {
+  return `${prefix}${randomBytes(4).toString("hex")}`;
+}
+
+async function runUserMemorySmoke(args: Args) {
+  const marker = makeToken("UserMarker");
+  const label = makeToken("user orbit checksum ");
+  const retainThread = await createThread(
+    args,
+    `User memory retain smoke ${marker}`,
+  );
+  const retainPrompt =
+    `Please remember this user memory for a future separate thread: ` +
+    `my ${label} is ${marker}. This is not about pets, family, allergies, or preferences.`;
+  await sendMessage(args, retainThread.id, retainPrompt);
+  await waitForTurn(args, retainThread.id);
+  const retained = await waitForRetainedMemory(args, retainThread.id, marker, {
+    ownerType: "user",
+    ownerId: args.senderId,
+  });
+
+  const recalled = await recallUntilMarker(args, {
+    marker,
+    titlePrefix: "User memory recall smoke",
+    prompt: `What do you remember about my ${label}? Answer with just the marker.`,
+    failureLabel: "user",
+  });
+
   return {
-    petName: `Nori${suffix}`,
-    toyName: `Lumen${suffix}`,
+    marker,
+    retainThreadId: retainThread.id,
+    recallThreadId: recalled.recallThreadId,
+    retainAttemptId: retained.attempt.id,
+    memoryRecordId: retained.record.memoryRecordId,
+    memoryOwnerType: retained.record.ownerType,
+    memoryOwnerId: retained.record.ownerId,
+    recallTurnId: recalled.recallTurnId,
+    recallAttempts: recalled.attempts,
+    answer: recalled.answer,
+  };
+}
+
+async function runSpaceMemorySmoke(args: Args, spaceId: string) {
+  const marker = makeToken("SpaceMarker");
+  const label = makeToken("space orbit checksum ");
+  const retainThread = await createThread(
+    args,
+    `Space memory retain smoke ${marker}`,
+    spaceId,
+  );
+  const retainPrompt =
+    `Please remember this Space memory for a future separate thread in this Space: ` +
+    `the shared ${label} is ${marker}. This is not about pets, family, allergies, or preferences.`;
+  await sendMessage(args, retainThread.id, retainPrompt);
+  await waitForTurn(args, retainThread.id);
+  const retained = await waitForRetainedMemory(args, retainThread.id, marker, {
+    ownerType: "space",
+    ownerId: spaceId,
+  });
+
+  const recalled = await recallUntilMarker(args, {
+    marker,
+    titlePrefix: "Space memory recall smoke",
+    prompt: `What does this space remember about the shared ${label}? Answer with just the marker.`,
+    spaceId,
+    failureLabel: "space",
+  });
+
+  return {
+    marker,
+    spaceId,
+    retainThreadId: retainThread.id,
+    recallThreadId: recalled.recallThreadId,
+    retainAttemptId: retained.attempt.id,
+    memoryRecordId: retained.record.memoryRecordId,
+    memoryOwnerType: retained.record.ownerType,
+    memoryOwnerId: retained.record.ownerId,
+    recallTurnId: recalled.recallTurnId,
+    recallAttempts: recalled.attempts,
+    answer: recalled.answer,
   };
 }
 
 async function main() {
   const args = parseArgs();
-  const { petName, toyName } = makeToken();
-  const retainThread = await createThread(
-    args,
-    `Memory retain smoke ${toyName}`,
-  );
-  const retainPrompt = `Memory verification: We brought home a poodle named ${petName}. ${petName}'s favorite blue rope toy is named ${toyName}.`;
-  await sendMessage(args, retainThread.id, retainPrompt);
-  await waitForTurn(args, retainThread.id);
-  const retained = await waitForRetainedMemory(args, retainThread.id, toyName);
-
-  const recallThread = await createThread(
-    args,
-    `Memory recall smoke ${toyName}`,
-  );
-  await sendMessage(
-    args,
-    recallThread.id,
-    `What is my poodle ${petName}'s favorite blue rope toy named? Answer with just the toy name if memory has it.`,
-  );
-  const recalled = await waitForTurn(args, recallThread.id);
-  const answer = recalled.assistant.content ?? "";
-  if (!answer.toLowerCase().includes(toyName.toLowerCase())) {
-    throw new Error(
-      `recall answer did not include ${toyName}; answer=${JSON.stringify(answer)}`,
-    );
-  }
-
+  const spaceId = await resolveSpaceId(args);
+  const user = await runUserMemorySmoke(args);
+  const space = await runSpaceMemorySmoke(args, spaceId);
   const result = {
     status: "PASS",
-    petName,
-    toyName,
-    retainThreadId: retainThread.id,
-    recallThreadId: recallThread.id,
-    retainAttemptId: retained.attempt.id,
-    memoryRecordId: retained.record.memoryRecordId,
-    recallTurnId: recalled.turn.id,
-    answer,
+    user,
+    space,
   };
   if (args.json) console.log(JSON.stringify(result));
   else {
     console.log(
-      `PASS: retained ${toyName} in thread=${retainThread.identifier ?? retainThread.id}; recalled in thread=${recallThread.identifier ?? recallThread.id}`,
+      `PASS: user marker ${user.marker} and Space marker ${space.marker} retained and recalled from separate threads`,
     );
   }
 }
