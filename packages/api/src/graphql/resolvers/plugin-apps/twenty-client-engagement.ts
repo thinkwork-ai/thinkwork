@@ -233,22 +233,34 @@ export async function twentyEngagementDashboard(
       }),
     ]);
     return buildDashboardPayload({
-      companies: recordsFromToolPayload(companies, [
-        "companies",
-        "findManyCompanies",
-        "find_many_companies",
-      ]).map(toCompany),
-      opportunities: recordsFromToolPayload(opportunities, [
-        "opportunities",
-        "findManyOpportunities",
-        "find_many_opportunities",
-      ]).map(toOpportunity),
-      opportunityLayers: recordsFromToolPayload(opportunityLayers, [
-        "opportunityLayers",
-        "opportunity_layers",
-        "findManyOpportunityLayers",
-        "find_many_opportunity_layers",
-      ]).map(toLayer),
+      companies: mapValidRecords(
+        recordsFromToolPayload(companies, [
+          "companies",
+          "findManyCompanies",
+          "find_many_companies",
+        ]),
+        toCompany,
+        "company",
+      ),
+      opportunities: mapValidRecords(
+        recordsFromToolPayload(opportunities, [
+          "opportunities",
+          "findManyOpportunities",
+          "find_many_opportunities",
+        ]),
+        toOpportunity,
+        "opportunity",
+      ),
+      opportunityLayers: mapValidRecords(
+        recordsFromToolPayload(opportunityLayers, [
+          "opportunityLayers",
+          "opportunity_layers",
+          "findManyOpportunityLayers",
+          "find_many_opportunity_layers",
+        ]),
+        toLayer,
+        "opportunity layer",
+      ),
     });
   } catch (error) {
     throw safeToolError(error, {
@@ -609,7 +621,7 @@ function recordsFromKnownContainers(
 function toCompany(
   record: Record<string, unknown>,
 ): TwentyEngagementCompanyPayload {
-  const id = requiredString(record.id, "company");
+  const id = requiredRecordId(record, "company");
   return {
     id,
     name: optionalString(record.name) ?? "Unnamed company",
@@ -621,9 +633,9 @@ function toCompany(
 function toOpportunity(
   record: Record<string, unknown>,
 ): TwentyEngagementOpportunityPayload {
-  const id = requiredString(record.id, "opportunity");
+  const id = requiredRecordId(record, "opportunity");
   const stage = optionalString(record.stage) ?? "IDENTIFIED";
-  const companyId = optionalString(record.companyId);
+  const companyId = relationId(record, "companyId", "company");
   return {
     id,
     name: optionalString(record.name) ?? "Unnamed opportunity",
@@ -640,7 +652,7 @@ function toOpportunity(
 function toLayer(
   record: Record<string, unknown>,
 ): TwentyEngagementOpportunityLayerPayload {
-  const id = requiredString(record.id, "opportunity layer");
+  const id = requiredRecordId(record, "opportunity layer");
   const layerType = optionalString(record.layerType) ?? "CORE_PROBLEM";
   const layerStatus = optionalString(record.layerStatus) ?? "IDENTIFIED";
   return {
@@ -655,7 +667,10 @@ function toLayer(
     openQuestions: optionalString(record.openQuestions),
     businessValue: optionalString(record.businessValue),
     nextSteps: optionalString(record.nextSteps),
-    opportunityId: requiredString(record.opportunityId, "opportunity layer"),
+    opportunityId: requiredString(
+      relationId(record, "opportunityId", "opportunity"),
+      "opportunity layer opportunity",
+    ),
   };
 }
 
@@ -710,8 +725,68 @@ function requiredString(value: unknown, label: string): string {
   return normalized;
 }
 
+function requiredRecordId(
+  record: Record<string, unknown>,
+  label: string,
+): string {
+  const id =
+    optionalEntityId(record.id) ??
+    optionalEntityId(record.recordId) ??
+    optionalEntityId(record.objectId);
+  return requiredString(id, label);
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function optionalEntityId(value: unknown): string | null {
+  const direct = optionalString(value);
+  if (direct) return direct;
+  const record = recordOrNull(value);
+  return (
+    optionalString(record?.id) ??
+    optionalString(record?.recordId) ??
+    optionalString(record?.objectId) ??
+    optionalString(record?.value)
+  );
+}
+
+function relationId(
+  record: Record<string, unknown>,
+  idKey: string,
+  relationKey: string,
+): string | null {
+  return (
+    optionalEntityId(record[idKey]) ??
+    optionalEntityId(record[relationKey]) ??
+    optionalEntityId(record[`${relationKey}Id`])
+  );
+}
+
+function mapValidRecords<T>(
+  records: Record<string, unknown>[],
+  mapRecord: (record: Record<string, unknown>) => T,
+  label: string,
+): T[] {
+  const mapped: T[] = [];
+  for (const record of records) {
+    try {
+      mapped.push(mapRecord(record));
+    } catch (error) {
+      if (
+        error instanceof GraphQLError &&
+        error.extensions?.code === "TWENTY_CRM_RECORD_INVALID"
+      ) {
+        console.warn(`${LOG_PREFIX} Skipping malformed ${label} record`, {
+          keys: Object.keys(record),
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+  return mapped;
 }
 
 function companyUrl(id: string): string {
