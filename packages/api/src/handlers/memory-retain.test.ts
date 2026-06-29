@@ -471,7 +471,7 @@ describe("memory-retain handler", () => {
     });
 
     expect(result).toMatchObject({
-      ok: false,
+      ok: true,
       engine: "hindsight",
       attemptId: "attempt-1",
     });
@@ -483,15 +483,18 @@ describe("memory-retain handler", () => {
       USER_ID,
       { overwrite: true },
     );
-    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
-      BASE_ATTEMPT,
+    expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
+    expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
+      "attempt-1",
       expect.objectContaining({
-        status: "failed_timeout",
-        retryable: true,
-      }),
-      expect.objectContaining({
+        providerResult: expect.objectContaining({
+          highConfidenceFactCount: 1,
+          conversationRetainStatus: "failed_after_high_confidence_retained",
+          conversationRetainErrorClass: "timeout",
+        }),
         metadata: expect.objectContaining({
-          failedStatus: "failed_timeout",
+          retainedVia: "high_confidence_fact",
+          conversationRetainFailedStatus: "failed_timeout",
           highConfidenceFacts: [
             expect.objectContaining({
               scope: "user",
@@ -501,7 +504,6 @@ describe("memory-retain handler", () => {
         }),
       }),
     );
-    expect(markRetainAttemptRetainedMock).not.toHaveBeenCalled();
   });
 
   it("writes explicit user memories without projecting them to User context", async () => {
@@ -533,20 +535,24 @@ describe("memory-retain handler", () => {
     });
 
     expect(result).toMatchObject({
-      ok: false,
+      ok: true,
       engine: "hindsight",
       attemptId: "attempt-1",
     });
     expect(executeMock).toHaveBeenCalledTimes(5);
     expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
-    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
-      BASE_ATTEMPT,
+    expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
+    expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
+      "attempt-1",
       expect.objectContaining({
-        status: "failed_backend",
-        retryable: true,
-      }),
-      expect.objectContaining({
+        providerResult: expect.objectContaining({
+          highConfidenceFactCount: 1,
+          conversationRetainStatus: "failed_after_high_confidence_retained",
+          conversationRetainErrorClass: "hindsight_504",
+        }),
         metadata: expect.objectContaining({
+          retainedVia: "high_confidence_fact",
+          conversationRetainFailedStatus: "failed_backend",
           highConfidenceFacts: [
             expect.objectContaining({
               scope: "user",
@@ -600,14 +606,21 @@ describe("memory-retain handler", () => {
 
     const result = await resultPromise;
 
-    expect(result.ok).toBe(false);
-    expect(markRetainAttemptFailedMock).toHaveBeenCalledWith(
-      BASE_ATTEMPT,
+    expect(result.ok).toBe(true);
+    expect(markRetainAttemptFailedMock).not.toHaveBeenCalled();
+    expect(markRetainAttemptRetainedMock).toHaveBeenCalledWith(
+      "attempt-1",
       expect.objectContaining({
-        status: "failed_timeout",
-        retryable: true,
+        providerResult: expect.objectContaining({
+          highConfidenceFactCount: 1,
+          conversationRetainStatus: "failed_after_high_confidence_retained",
+          conversationRetainErrorClass: "timeout",
+        }),
+        metadata: expect.objectContaining({
+          retainedVia: "high_confidence_fact",
+          conversationRetainFailedStatus: "failed_timeout",
+        }),
       }),
-      expect.any(Object),
     );
   });
 

@@ -396,6 +396,36 @@ async function processClaimedRetainAttempt(
     return { ok: true, engine, attemptId: attempt.id };
   } catch (err) {
     const classification = classifyRetainError(err);
+    if (
+      highConfidenceFacts.documents.length > 0 &&
+      highConfidenceFactError === null
+    ) {
+      await markRetainAttemptRetained(attempt.id, {
+        backendLatencyMs: Date.now() - started,
+        providerDocumentId: eventThreadId,
+        providerResult: {
+          engine,
+          adapterKind: adapter.kind,
+          highConfidenceFactCount: highConfidenceFacts.documents.length,
+          conversationRetainStatus: "failed_after_high_confidence_retained",
+          conversationRetainErrorClass: classification.errorClass,
+          conversationRetainErrorMessage: classification.errorMessage,
+        },
+        metadata: mergeAttemptMetadata(attempt.metadata, {
+          retainedAt: new Date().toISOString(),
+          retainedVia: "high_confidence_fact",
+          highConfidenceFacts: highConfidenceFacts.documents,
+          rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
+          conversationRetainFailedAt: new Date().toISOString(),
+          conversationRetainFailedStatus: classification.status,
+          conversationRetainErrorClass: classification.errorClass,
+        }),
+      });
+      console.warn(
+        `[memory-retain] attempt=${attempt.id} retained via high-confidence facts after conversation retain failed: ${classification.errorMessage}`,
+      );
+      return { ok: true, engine, attemptId: attempt.id };
+    }
     const status = await markRetainAttemptFailed(attempt, classification, {
       backendLatencyMs: Date.now() - started,
       metadata: mergeAttemptMetadata(attempt.metadata, {
