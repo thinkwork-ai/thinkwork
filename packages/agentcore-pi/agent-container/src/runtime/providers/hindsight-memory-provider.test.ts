@@ -18,14 +18,24 @@ describe("createHindsightMemoryProvider", () => {
 
     await provider.recall({ query: "launch code", limit: 10 } as any);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
-      "https://hindsight.example.test/v1/default/banks/user_user-1/memories/recall",
+      "https://hindsight.example.test/v1/default/banks/user_user-1/memories/list?q=launch+code&limit=25&offset=0",
       expect.any(Object),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
+      "https://hindsight.example.test/v1/default/banks/space_space-1/memories/list?q=launch+code&limit=25&offset=0",
+      expect.any(Object),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      "https://hindsight.example.test/v1/default/banks/user_user-1/memories/recall",
+      expect.any(Object),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
       "https://hindsight.example.test/v1/default/banks/space_space-1/memories/recall",
       expect.any(Object),
     );
