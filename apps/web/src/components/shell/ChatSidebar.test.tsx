@@ -820,6 +820,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     expect(screen.getByRole("button", { name: /^apps/i })).toBeTruthy();
+    expect(document.querySelector(".tabler-icon-apps")).toBeTruthy();
     const appLink = screen.getByRole("link", {
       name: /client engagement twenty crm/i,
     });

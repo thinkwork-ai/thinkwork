@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { IconPin, IconPlanet } from "@tabler/icons-react";
+import { IconApps, IconPin, IconPlanet } from "@tabler/icons-react";
 import {
   closestCenter,
   DndContext,
@@ -1060,7 +1060,7 @@ function PluginAppsNavItem({
       <PopoverTrigger asChild>
         <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
           <button type="button">
-            <AppWindow />
+            <IconApps />
             <span className="min-w-0 flex-1 truncate text-left">Apps</span>
             <ChevronDown className="ml-auto size-3.5 text-sidebar-foreground/45" />
           </button>
