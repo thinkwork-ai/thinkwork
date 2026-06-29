@@ -48,8 +48,9 @@ beforeEach(() => navigateMock.mockReset());
 afterEach(cleanup);
 
 describe("SettingsKnowledgeBases", () => {
-  it("renders the tenant's Brain Sources and a create action", () => {
+  it("renders the tenant's Knowledge Bases and a create action", () => {
     render(<SettingsKnowledgeBases />);
+    expect(screen.getByText("Knowledge Bases")).toBeTruthy();
     expect(screen.getByText("Company Policies")).toBeTruthy();
     expect(screen.getByText("active")).toBeTruthy();
     expect(screen.getByText(/new source/i)).toBeTruthy();

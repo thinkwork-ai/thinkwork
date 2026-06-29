@@ -648,24 +648,13 @@ export function PluginDetail() {
         {isCompanyBrain && (install || hasActiveEntitlement) ? (
           <SettingsSection label="Workspace">
             <SettingsRow
-              label="Brain operations"
+              label="Context diagnostics"
               description="Inspect substrate status, migration posture, evidence, and operator actions."
             >
               <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/brain-operations">
+                <Link to="/settings/context-diagnostics">
                   <Settings2 className="size-4" />
-                  Open operations
-                </Link>
-              </Button>
-            </SettingsRow>
-            <SettingsRow
-              label="Memory graph"
-              description="Open the ThinkWork Brain graph workspace for ontology and graph infrastructure evidence."
-            >
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/memory/knowledge-graph">
-                  <Brain className="size-4" />
-                  Open graph
+                  Open diagnostics
                 </Link>
               </Button>
             </SettingsRow>

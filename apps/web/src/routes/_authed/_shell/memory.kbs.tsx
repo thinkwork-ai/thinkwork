@@ -213,7 +213,7 @@ function KbsIndexPage() {
             <p className="text-sm text-muted-foreground max-w-sm">
               {search
                 ? "No sources match your search."
-                : "Your tenant has no Brain Sources yet."}
+                : "Your tenant has no Knowledge Bases yet."}
             </p>
           </div>
         ) : (

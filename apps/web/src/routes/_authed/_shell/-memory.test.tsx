@@ -70,7 +70,9 @@ vi.mock("@thinkwork/graph", () => ({
   pageTypeLabel: (t: string) => t,
 }));
 
-import { Route as BrainRoute } from "./memory.brain";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { Route as MemoriesRoute } from "./memory.memories";
 import { Route as KbsRoute } from "./memory.kbs";
 
 beforeEach(() => {
@@ -80,26 +82,26 @@ beforeEach(() => {
   useRouterStateMock.mockReset();
 
   useQueryMock.mockReturnValue([{ data: undefined, fetching: false }, vi.fn()]);
-  useRouterStateMock.mockReturnValue("/memory/brain");
+  useRouterStateMock.mockReturnValue("/memory/memories");
 });
 
 afterEach(cleanup);
 
-const BrainPage = (
-  BrainRoute as unknown as { component: () => React.ReactElement }
+const MemoriesPage = (
+  MemoriesRoute as unknown as { component: () => React.ReactElement }
 ).component;
 const KbsPage = (KbsRoute as unknown as { component: () => React.ReactElement })
   .component;
 
 describe("apps/web Memory in-page tab strip", () => {
-  it("renders the 'Memories' tab in-page on the Brain route, with no 'Brain' tab", () => {
-    render(<BrainPage />);
+  it("renders the 'Memories' tab in-page on the Memories route, with no 'Brain' tab", () => {
+    render(<MemoriesPage />);
     expect(screen.getByRole("tab", { name: "Memories" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Brain" })).toBeNull();
   });
 
   it("renders Memories | Pages | Sources in that order", () => {
-    render(<BrainPage />);
+    render(<MemoriesPage />);
     const tabs = screen.getAllByRole("tab");
     const labels = tabs.map((el) => el.textContent ?? "");
     expect(labels).toEqual(["Memories", "Pages", "Sources"]);
@@ -107,16 +109,24 @@ describe("apps/web Memory in-page tab strip", () => {
 
   it("highlights the Sources tab when the pathname is a /memory/kbs/$kbId child", () => {
     useRouterStateMock.mockReturnValue("/memory/kbs/some-kb-id");
-    render(<BrainPage />);
+    render(<MemoriesPage />);
     const kbsTab = screen.getByRole("tab", { name: "Sources" });
     expect(kbsTab.getAttribute("data-state")).toBe("active");
   });
 
-  it("highlights the Memories tab on /memory/brain", () => {
-    useRouterStateMock.mockReturnValue("/memory/brain");
-    render(<BrainPage />);
+  it("highlights the Memories tab on /memory/memories", () => {
+    useRouterStateMock.mockReturnValue("/memory/memories");
+    render(<MemoriesPage />);
     const memoriesTab = screen.getByRole("tab", { name: "Memories" });
     expect(memoriesTab.getAttribute("data-state")).toBe("active");
+  });
+
+  it("keeps /memory/brain as a legacy redirect", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/routes/_authed/_shell/memory.brain.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('redirect({ to: "/memory/memories"');
   });
 
   it("renders the Sources child route outlet on /memory/kbs/$kbId", () => {
@@ -150,7 +160,7 @@ describe("apps/web Memory in-page tab strip", () => {
       ])
       .mockReturnValueOnce([{ data: undefined, fetching: false }]);
 
-    render(<BrainPage />);
+    render(<MemoriesPage />);
 
     const memory = await screen.findByText("A compact table fact.");
     const row = memory.closest("tr");

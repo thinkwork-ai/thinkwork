@@ -82,10 +82,10 @@ export function SettingsKnowledgeBaseDetail() {
   const [editOpen, setEditOpen] = useState(false);
 
   usePageHeaderActions({
-    title: kb?.name ?? "Brain Source",
+    title: kb?.name ?? "Knowledge Base",
     breadcrumbs: [
-      { label: "Brain Sources", href: "/settings/knowledge-bases" },
-      { label: kb?.name ?? "Brain Source" },
+      { label: "Knowledge Bases", href: "/settings/knowledge-bases" },
+      { label: kb?.name ?? "Knowledge Base" },
     ],
   });
 
@@ -141,7 +141,7 @@ export function SettingsKnowledgeBaseDetail() {
     return (
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
-          This Brain Source could not be found. It may have been removed.
+          This Knowledge Base could not be found. It may have been removed.
         </p>
       </div>
     );
@@ -234,7 +234,7 @@ export function SettingsKnowledgeBaseDetail() {
           {confirmDelete ? (
             <>
               <span className="text-sm text-muted-foreground">
-                Delete this Brain Source and all its documents?
+                Delete this Knowledge Base and all its documents?
               </span>
               <Button
                 variant="ghost"
@@ -616,7 +616,7 @@ function TestRetrievalSection({
       <div className="space-y-3 p-4">
         {notProvisioned ? (
           <p className="text-sm text-muted-foreground">
-            This Brain Source is not provisioned yet. Retry provisioning before
+            This Knowledge Base is not provisioned yet. Retry provisioning before
             testing retrieval.
           </p>
         ) : (

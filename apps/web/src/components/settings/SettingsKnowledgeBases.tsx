@@ -110,8 +110,8 @@ export function SettingsKnowledgeBases({
   return (
     <>
       <SettingsTablePane
-        title="Brain Sources"
-        description="Manage retained Space document sources for the Hindsight Brain."
+        title="Knowledge Bases"
+        description="Manage retained Space document sources for agent retrieval."
         embedded={embedded}
         loading={result.fetching && !result.data}
         toolbar={
@@ -149,7 +149,7 @@ export function SettingsKnowledgeBases({
           }
           emptyState={
             <div className="py-10 text-center text-sm text-muted-foreground">
-              No Brain Sources yet.
+              No Knowledge Bases yet.
             </div>
           }
         />

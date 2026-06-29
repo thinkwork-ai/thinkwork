@@ -54,7 +54,7 @@ export function terminalJobStatus(status: string): boolean {
 // fall back to the key itself / DESTROY <KEY>.
 export function appDisplayName(key: string): string {
   if (key === "twenty") return "Twenty CRM";
-  if (key === "cognee") return "Cognee";
+  if (key === "cognee") return "ThinkWork Brain substrate";
   if (key === "n8n") return "n8n";
   return key;
 }

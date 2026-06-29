@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Brain, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -18,7 +18,6 @@ import {
 import {
   ComputerMemoryRecordsQuery,
   ComputerMemoryRetainAttemptsQuery,
-  ComputerMemorySystemConfigQuery,
   SpacesQuery,
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
@@ -41,20 +40,8 @@ import {
   type MemoryGraphEdge,
 } from "@/components/memory/MemoryGraphNodeSheet";
 
-type BrainView = "table" | "graph";
+type MemoryView = "table" | "graph";
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
-
-type MemorySystemConfig = {
-  activeEngine?: string | null;
-  managedMemoryEnabled?: boolean | null;
-  hindsightEnabled?: boolean | null;
-  cogneeMemoryEnabled?: boolean | null;
-  userMemoryEnabled?: boolean | null;
-  spaceMemoryEnabled?: boolean | null;
-  legacyHindsightAvailable?: boolean | null;
-  companyDistillationEnabled?: boolean | null;
-  wikiProjectionEnabled?: boolean | null;
-};
 
 export interface MemoryRefreshController {
   refresh: () => Promise<void>;
@@ -89,7 +76,7 @@ export function SettingsMemory({
   ) => void;
 } = {}) {
   const { tenantId } = useTenant();
-  const [view, setView] = useState<BrainView>("table");
+  const [view, setView] = useState<MemoryView>("table");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<MemoryGraphHandle>(null);
@@ -97,12 +84,6 @@ export function SettingsMemory({
   const effectiveTenantId = tenantId ?? null;
   const requesterUserId = null;
   const namespace = "requester";
-
-  const [systemResult, reexecuteSystemQuery] = useQuery<{
-    memorySystemConfig?: MemorySystemConfig | null;
-  }>({
-    query: ComputerMemorySystemConfigQuery,
-  });
 
   const [spacesResult, reexecuteSpacesQuery] = useQuery<{
     spaces?: Array<{ id: string; name?: string | null; slug?: string | null }>;
@@ -322,7 +303,6 @@ export function SettingsMemory({
 
   const refreshMemory = useCallback(async () => {
     if (!effectiveTenantId) return;
-    reexecuteSystemQuery({ requestPolicy: "network-only" });
     reexecuteSpacesQuery({ requestPolicy: "network-only" });
     reexecuteMembersQuery({ requestPolicy: "network-only" });
     reexecuteRecordsQuery({ requestPolicy: "network-only" });
@@ -333,7 +313,6 @@ export function SettingsMemory({
     reexecuteRecordsQuery,
     reexecuteRetainAttemptsQuery,
     reexecuteSpacesQuery,
-    reexecuteSystemQuery,
   ]);
 
   useEffect(() => {
@@ -386,7 +365,7 @@ export function SettingsMemory({
         <ToggleGroup
           type="single"
           value={view}
-          onValueChange={(v) => v && setView(v as BrainView)}
+          onValueChange={(v) => v && setView(v as MemoryView)}
           variant="outline"
         >
           <ToggleGroupItem value="table" className="px-3 text-xs">
@@ -435,10 +414,7 @@ export function SettingsMemory({
             <LoadingShimmer />
           </div>
         ) : rows.length === 0 ? (
-          <MemoryEmptyState
-            activeSearch={activeSearch}
-            config={systemResult.data?.memorySystemConfig}
-          />
+          <MemoryEmptyState activeSearch={activeSearch} />
         ) : (
           <DataTable
             columns={columns}
@@ -532,33 +508,19 @@ function compactMemoryId(value: string): string {
   return `${value.slice(0, 14)}...`;
 }
 
-function MemoryEmptyState({
-  activeSearch,
-  config,
-}: {
-  activeSearch: string;
-  config?: MemorySystemConfig | null;
-}) {
-  const hindsightActive = config?.hindsightEnabled === true;
-  const hindsightAvailableButInactive =
-    !hindsightActive && config?.legacyHindsightAvailable === true;
-
+function MemoryEmptyState({ activeSearch }: { activeSearch: string }) {
   const title = activeSearch
     ? "No matching memory rows"
-    : hindsightAvailableButInactive
-      ? "Memory service update required"
-      : "No memory rows found";
+    : "No memory rows found";
 
   const detail = activeSearch
-    ? "The operator memory query returned 0 Hindsight rows for this search."
-    : hindsightAvailableButInactive
-      ? "The table reads Hindsight banks, but this deployment has not switched to Hindsight yet. Redeploy with MEMORY_ENGINE=hindsight and retain user or Space memory to populate rows."
-      : "The operator memory query returned 0 Hindsight memory_units across user, Space, and agent banks for this tenant.";
+    ? "The operator memory query returned 0 User or Space memory rows for this search."
+    : "This tenant does not have User, Space, or agent memory rows yet.";
 
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-xl px-6 text-center">
-        <Brain className="mx-auto h-11 w-11 text-muted-foreground/40" />
+        <Search className="mx-auto h-11 w-11 text-muted-foreground/40" />
         <h3 className="mt-4 text-base font-medium text-foreground">{title}</h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
       </div>
