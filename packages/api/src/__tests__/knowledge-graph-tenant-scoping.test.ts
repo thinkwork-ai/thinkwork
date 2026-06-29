@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const {
   requireAdminOrServiceCallerMock,
@@ -24,6 +25,7 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 import {
   assertCanReadKnowledgeGraphThread,
   resolveKnowledgeGraphScope,
+  threadVisibilityWhereSql,
 } from "../graphql/resolvers/knowledge-graph/auth.js";
 
 function ctx(auth: Record<string, unknown> = {}) {
@@ -119,5 +121,20 @@ describe("knowledge graph tenant scoping", () => {
     await expect(
       assertCanReadKnowledgeGraphThread(context, scope, "thread-1"),
     ).resolves.toBe(true);
+  });
+
+  it("does not authorize knowledge graph thread results through Space visibility", async () => {
+    const predicate = await threadVisibilityWhereSql({
+      tenantId: "tenant-1",
+      callerUserId: "user-1",
+      requiresUserThreadVisibility: true,
+    });
+
+    const rendered = new PgDialect().sqlToQuery(predicate).sql;
+    expect(rendered).toContain("t.user_id");
+    expect(rendered).toContain("thread_participants");
+    expect(rendered).not.toContain("caller_space");
+    expect(rendered).not.toContain("space_members");
+    expect(rendered).not.toContain("access_mode");
   });
 });

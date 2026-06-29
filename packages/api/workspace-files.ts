@@ -3308,7 +3308,14 @@ async function stageGatedSkillUpdate(
   // Candidate produced no valid cases → unrated. R9: unrated never gates —
   // archive the (empty) staging dataset and let the caller swap normally.
   if (seed.action === "skipped" || seed.bundledCaseCount === 0) {
-    await archiveSkillCandidateDataset(tenantId, slug).catch(() => {});
+    try {
+      await archiveSkillCandidateDataset(tenantId, slug);
+    } catch (err) {
+      console.warn(
+        `[skill-eval] Failed to archive empty candidate dataset for ${slug}:`,
+        err,
+      );
+    }
     return { held: false };
   }
 
