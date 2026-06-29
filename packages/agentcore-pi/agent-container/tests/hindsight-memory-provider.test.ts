@@ -241,6 +241,58 @@ describe("createHindsightMemoryProvider", () => {
     );
   });
 
+  it("reads high-confidence Hindsight fact rows before semantic recall", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        memory_units: [
+          {
+            id: "old",
+            text: "User performed a retention probe in April",
+            score: 0.95,
+          },
+        ],
+      }),
+    );
+    const send = vi.fn().mockResolvedValue({
+      records: [
+        [
+          { stringValue: "fact-row" },
+          { stringValue: "user_user-1" },
+          { stringValue: "high_confidence_fact:user:abc123" },
+          { stringValue: "thinkwork_high_confidence_fact" },
+          { stringValue: "experience" },
+          {
+            stringValue:
+              "User memory: my user orbit checksum 247ad2df is UserMarker1c716232.",
+          },
+        ],
+      ],
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      dbClusterArn: "arn:aws:rds:us-east-1:123:cluster:test",
+      dbSecretArn: "arn:aws:secretsmanager:us-east-1:123:secret:test",
+      dbName: "thinkwork",
+      rdsDataClient: { send } as never,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({
+      query: "user orbit checksum 247ad2df",
+    });
+
+    expect(send).toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.memories[0]).toMatchObject({
+      id: "fact-row",
+      content:
+        "User memory: my user orbit checksum 247ad2df is UserMarker1c716232.",
+      sourceScope: "user",
+      score: 20000,
+      factType: "experience",
+    });
+  });
+
   it("recall honors the limit", async () => {
     const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({

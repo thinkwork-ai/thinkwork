@@ -9,6 +9,12 @@ import type {
   MemoryReflectRequest,
   MemoryReflectResult,
 } from "@thinkwork/pi-runtime-core";
+import {
+  ExecuteStatementCommand,
+  RDSDataClient,
+  type ExecuteStatementCommandOutput,
+  type Field,
+} from "@aws-sdk/client-rds-data";
 
 /**
  * Plan §004 U5 — Hindsight-backed {@link MemoryProvider}.
@@ -51,6 +57,14 @@ export interface HindsightMemoryProviderOptions {
   spaceId?: string | null;
   /** Per-attempt request timeout in ms (default 30_000). */
   timeoutMs?: number;
+  /** Aurora DB cluster ARN for direct Hindsight high-confidence fact lookup. */
+  dbClusterArn?: string;
+  /** Aurora DB secret ARN for direct Hindsight high-confidence fact lookup. */
+  dbSecretArn?: string;
+  /** Aurora database name for direct Hindsight high-confidence fact lookup. */
+  dbName?: string;
+  /** Test seam: override the RDS Data API client. */
+  rdsDataClient?: Pick<RDSDataClient, "send">;
   /** Test seam: override the global fetch implementation. */
   fetchImpl?: typeof fetch;
 }
@@ -179,6 +193,48 @@ function mergeMemoryItems(...groups: MemoryItem[][]): MemoryItem[] {
     out.push(item);
   }
   return out;
+}
+
+function fieldString(field: Field | undefined): string | undefined {
+  if (!field || field.isNull) return undefined;
+  if (typeof field.stringValue === "string") return field.stringValue;
+  if (typeof field.longValue === "number") return String(field.longValue);
+  if (typeof field.doubleValue === "number") return String(field.doubleValue);
+  if (typeof field.booleanValue === "boolean") return String(field.booleanValue);
+  return undefined;
+}
+
+function highConfidenceRowsToMemoryItems(
+  output: ExecuteStatementCommandOutput,
+  target: HindsightBankTarget,
+): MemoryItem[] {
+  return (output.records ?? [])
+    .map((row, index): MemoryItem | null => {
+      const id = fieldString(row[0]) ?? `high-confidence-${index}`;
+      const text = fieldString(row[5]);
+      if (!text?.trim()) return null;
+      const factType = fieldString(row[4]);
+      return {
+        id,
+        content: text.trim(),
+        sourceScope: target.sourceScope,
+        score: 20_000 - index,
+        ...(factType ? { factType } : {}),
+        evidence: {
+          sourceFacts: [
+            {
+              id,
+              ...(fieldString(row[3]) ? { context: fieldString(row[3]) } : {}),
+              ...(fieldString(row[2])
+                ? { documentId: fieldString(row[2]) }
+                : {}),
+              ...(factType ? { type: factType } : {}),
+            },
+          ],
+        },
+      };
+    })
+    .filter((item): item is MemoryItem => item !== null);
 }
 
 function stripQuestionPreamble(query: string): string {
@@ -584,6 +640,47 @@ async function listMemoryItems(
   }
 }
 
+async function listHighConfidenceMemoryItems(
+  options: HindsightMemoryProviderOptions,
+  target: HindsightBankTarget,
+  query: string,
+): Promise<MemoryItem[]> {
+  if (
+    !options.dbClusterArn?.trim() ||
+    !options.dbSecretArn?.trim() ||
+    !query.trim()
+  ) {
+    return [];
+  }
+  const client = options.rdsDataClient ?? new RDSDataClient({});
+  const sql = `
+    SELECT id::text, bank_id, document_id, context, fact_type, text
+    FROM hindsight.memory_units
+    WHERE bank_id = :bank_id
+      AND context = 'thinkwork_high_confidence_fact'
+      AND text ILIKE :pattern
+    ORDER BY created_at DESC
+    LIMIT 10
+  `;
+  try {
+    const output = await client.send(
+      new ExecuteStatementCommand({
+        resourceArn: options.dbClusterArn,
+        secretArn: options.dbSecretArn,
+        database: options.dbName || "thinkwork",
+        sql,
+        parameters: [
+          { name: "bank_id", value: { stringValue: target.bankId } },
+          { name: "pattern", value: { stringValue: `%${query.trim()}%` } },
+        ],
+      }),
+    );
+    return highConfidenceRowsToMemoryItems(output, target);
+  } catch {
+    return [];
+  }
+}
+
 function requireScope(options: HindsightMemoryProviderOptions): void {
   if (!options.endpoint?.trim()) {
     throw new HindsightMemoryProviderError(
@@ -655,10 +752,33 @@ export function createHindsightMemoryProvider(
           "recall called with an empty query.",
         );
       }
+      const searchQueries = listSearchQueries(query);
+      const highConfidenceBatches = await Promise.all(
+        targets.map(async (target) => {
+          const highConfidenceGroups = await Promise.all(
+            searchQueries.map((listQuery) =>
+              listHighConfidenceMemoryItems(options, target, listQuery),
+            ),
+          );
+          return mergeMemoryItems(...highConfidenceGroups);
+        }),
+      );
+      const highConfidenceMemories = mergeMemoryItems(
+        ...highConfidenceBatches,
+      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      if (highConfidenceMemories.length > 0) {
+        return {
+          memories: request.limit
+            ? highConfidenceMemories.slice(0, request.limit)
+            : highConfidenceMemories,
+          usage: undefined,
+        };
+      }
+
       const listedBatches = await Promise.all(
         targets.map(async (target) => {
           const listedGroups = await Promise.all(
-            listSearchQueries(query).map((listQuery) =>
+            searchQueries.map((listQuery) =>
               listMemoryItems(options, target, listQuery, signal),
             ),
           );

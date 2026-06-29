@@ -1662,6 +1662,9 @@ export async function buildInvocationResources(
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
         spaceId: args.identity.spaceId,
+        dbClusterArn: args.env.dbClusterArn,
+        dbSecretArn: args.env.dbSecretArn,
+        dbName: args.env.dbName,
       });
       const groundingQuery = directMemoryGroundingQuery(args.payload.message);
       // Keep long-term memory available as an explicit tool, and only run
