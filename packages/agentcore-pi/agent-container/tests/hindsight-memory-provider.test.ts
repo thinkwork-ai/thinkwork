@@ -133,7 +133,8 @@ describe("createHindsightMemoryProvider", () => {
 
     expect(result.memories[0]).toEqual({
       id: "exact",
-      content: "User memory: my user orbit checksum 92102661 is UserMarker92102661.",
+      content:
+        "User memory: my user orbit checksum 92102661 is UserMarker92102661.",
       sourceScope: "user",
       score: 10000,
       factType: "world",
@@ -291,6 +292,30 @@ describe("createHindsightMemoryProvider", () => {
       score: 20000,
       factType: "experience",
     });
+  });
+
+  it("escapes ILIKE metacharacters in high-confidence fact queries", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation(() =>
+        jsonResponse({ items: [], total: 0, limit: 25, offset: 0 }),
+      );
+    const send = vi.fn().mockResolvedValue({ records: [] });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      dbClusterArn: "arn:aws:rds:us-east-1:123:cluster:test",
+      dbSecretArn: "arn:aws:secretsmanager:us-east-1:123:secret:test",
+      dbName: "thinkwork",
+      rdsDataClient: { send } as never,
+      fetchImpl,
+    });
+
+    await provider.recall({ query: "100% favorite_pet" });
+
+    const sentPattern = send.mock.calls[0]?.[0]?.input?.parameters?.find(
+      (p: { name: string }) => p.name === "pattern",
+    )?.value?.stringValue;
+    expect(sentPattern).toBe("%100\\% favorite\\_pet%");
   });
 
   it("recall honors the limit", async () => {
@@ -693,13 +718,17 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
       if (url.includes("/banks/space_space-1/")) {
         return Promise.resolve(
           jsonResponse({
-            memory_units: [{ id: "space-hit", text: "Shared rollout plan", score: 0.95 }],
+            memory_units: [
+              { id: "space-hit", text: "Shared rollout plan", score: 0.95 },
+            ],
           }),
         );
       }
       return Promise.resolve(
         jsonResponse({
-          memory_units: [{ id: "user-hit", text: "Personal preference", score: 0.7 }],
+          memory_units: [
+            { id: "user-hit", text: "Personal preference", score: 0.7 },
+          ],
         }),
       );
     });

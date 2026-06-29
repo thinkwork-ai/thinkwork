@@ -200,10 +200,16 @@ function fieldString(field: Field | undefined): string | undefined {
   if (typeof field.stringValue === "string") return field.stringValue;
   if (typeof field.longValue === "number") return String(field.longValue);
   if (typeof field.doubleValue === "number") return String(field.doubleValue);
-  if (typeof field.booleanValue === "boolean") return String(field.booleanValue);
+  if (typeof field.booleanValue === "boolean")
+    return String(field.booleanValue);
   return undefined;
 }
 
+/**
+ * Map RDS Data API rows to memory items.
+ * Column order must match the SELECT in {@link listHighConfidenceMemoryItems}:
+ * 0: id, 1: bank_id, 2: document_id, 3: context, 4: fact_type, 5: text
+ */
 function highConfidenceRowsToMemoryItems(
   output: ExecuteStatementCommandOutput,
   target: HindsightBankTarget,
@@ -255,7 +261,10 @@ function listSearchQueries(query: string): string[] {
     .trim();
   const withoutPreamble = stripQuestionPreamble(withoutAnswerDirective);
   const withoutLeadingScope = withoutPreamble
-    .replace(/^(?:my|mine|our|ours|the\s+shared|shared|this\s+space(?:'s)?|the)\s+/i, "")
+    .replace(
+      /^(?:my|mine|our|ours|the\s+shared|shared|this\s+space(?:'s)?|the)\s+/i,
+      "",
+    )
     .trim();
 
   return [
@@ -288,7 +297,9 @@ function stringArray(value: unknown): string[] {
   );
 }
 
-function parseSourceFacts(value: unknown): Map<string, MemoryEvidenceSourceFact> {
+function parseSourceFacts(
+  value: unknown,
+): Map<string, MemoryEvidenceSourceFact> {
   const facts = new Map<string, MemoryEvidenceSourceFact>();
   const entries = Array.isArray(value)
     ? value.map((fact) => {
@@ -336,8 +347,12 @@ function redactedSourceFact(
     ...(stringField(record.chunk_id)
       ? { chunkId: stringField(record.chunk_id) }
       : {}),
-    ...(stringField(record.chunkId) ? { chunkId: stringField(record.chunkId) } : {}),
-    ...(stringArray(record.tags).length > 0 ? { tags: stringArray(record.tags) } : {}),
+    ...(stringField(record.chunkId)
+      ? { chunkId: stringField(record.chunkId) }
+      : {}),
+    ...(stringArray(record.tags).length > 0
+      ? { tags: stringArray(record.tags) }
+      : {}),
     ...(redactedMetadata(record.metadata)
       ? { metadata: redactedMetadata(record.metadata) }
       : {}),
@@ -417,7 +432,10 @@ function redactedMetadata(value: unknown): Record<string, unknown> | undefined {
       raw === null
     ) {
       safe[key] = raw;
-    } else if (Array.isArray(raw) && raw.every((item) => typeof item === "string")) {
+    } else if (
+      Array.isArray(raw) &&
+      raw.every((item) => typeof item === "string")
+    ) {
       safe[key] = raw;
     }
   }
@@ -435,12 +453,12 @@ function mergeEvidence(items: MemoryEvidence[]): MemoryEvidence | undefined {
   if (basedOnItems.length === 0) return undefined;
   const basedOn: MemoryBasedOnEvidence = {
     memoryIds: dedupe(basedOnItems.flatMap((item) => item.memoryIds)),
-    mentalModelIds: dedupe(
-      basedOnItems.flatMap((item) => item.mentalModelIds),
-    ),
+    mentalModelIds: dedupe(basedOnItems.flatMap((item) => item.mentalModelIds)),
     directiveIds: dedupe(basedOnItems.flatMap((item) => item.directiveIds)),
   };
-  const memories = dedupeFacts(basedOnItems.flatMap((item) => item.memories ?? []));
+  const memories = dedupeFacts(
+    basedOnItems.flatMap((item) => item.memories ?? []),
+  );
   const mentalModels = dedupeFacts(
     basedOnItems.flatMap((item) => item.mentalModels ?? []),
   );
@@ -471,7 +489,9 @@ function dedupeFacts(
 }
 
 function mergeUnknownValues(values: unknown[]): unknown {
-  const present = values.filter((value) => value !== undefined && value !== null);
+  const present = values.filter(
+    (value) => value !== undefined && value !== null,
+  );
   if (present.length === 0) return undefined;
   return present.length === 1 ? present[0] : present;
 }
@@ -635,7 +655,11 @@ async function listMemoryItems(
       ...item,
       score: Math.max(item.score ?? 0, 10_000 - index),
     }));
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[hindsight-memory] list memory items failed:",
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
@@ -671,14 +695,27 @@ async function listHighConfidenceMemoryItems(
         sql,
         parameters: [
           { name: "bank_id", value: { stringValue: target.bankId } },
-          { name: "pattern", value: { stringValue: `%${query.trim()}%` } },
+          {
+            name: "pattern",
+            value: {
+              stringValue: `%${escapeIlikeMeta(query.trim())}%`,
+            },
+          },
         ],
       }),
     );
     return highConfidenceRowsToMemoryItems(output, target);
-  } catch {
+  } catch (err) {
+    console.warn(
+      "[hindsight-memory] high-confidence fact lookup failed:",
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
+}
+
+function escapeIlikeMeta(value: string): string {
+  return value.replace(/[%_\\]/g, "\\$&");
 }
 
 function requireScope(options: HindsightMemoryProviderOptions): void {
@@ -823,8 +860,7 @@ export function createHindsightMemoryProvider(
       );
       const memories = mergeMemoryItems(
         ...batches.map((batch) => batch.memories),
-      )
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
       if (memories.length === 0) {
         const failed = batches.find((batch) => batch.error !== undefined);
         if (failed?.error) throw failed.error;
@@ -849,10 +885,10 @@ export function createHindsightMemoryProvider(
       const batches = await Promise.all(
         targets.map(async (target) => {
           const data = await postJson(
-              options,
+            options,
             `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
             { query: reflectQuery, budget: "mid", include: { facts: {} } },
-              signal,
+            signal,
           );
           return { target, data };
         }),
