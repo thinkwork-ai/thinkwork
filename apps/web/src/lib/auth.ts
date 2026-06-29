@@ -228,8 +228,24 @@ export async function signOut(): Promise<void> {
 }
 
 export function clearLocalAuthSession(): void {
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const prefix = clientId ? `CognitoIdentityServiceProvider.${clientId}` : "";
+  const lastUser = prefix
+    ? tokenStorage.getItem(`${prefix}.LastAuthUser`)
+    : null;
+
   const pool = getUserPool();
   pool?.getCurrentUser()?.signOut();
+
+  if (prefix) {
+    if (lastUser) {
+      tokenStorage.removeItem(`${prefix}.${lastUser}.idToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.accessToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.refreshToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.clockDrift`);
+    }
+    tokenStorage.removeItem(`${prefix}.LastAuthUser`);
+  }
   tokenStorage.removeItem(AUTH_SOURCE_STORAGE_KEY);
 }
 

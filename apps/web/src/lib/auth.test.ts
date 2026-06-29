@@ -311,6 +311,45 @@ describe("Cognito token storage", () => {
     });
   });
 
+  it("clears federated tokens so logout cannot immediately restore the session", async () => {
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    const idToken = makeIdToken({
+      email: "user@example.com",
+      sub: "user-sub",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
+    window.localStorage.setItem(`${prefix}.workos-user.idToken`, idToken);
+    window.localStorage.setItem(
+      `${prefix}.workos-user.accessToken`,
+      "access-token",
+    );
+    window.localStorage.setItem(
+      `${prefix}.workos-user.refreshToken`,
+      "refresh-token",
+    );
+    window.localStorage.setItem(`${prefix}.workos-user.clockDrift`, "0");
+    window.localStorage.setItem("thinkwork:auth-source", "workos");
+
+    vi.resetModules();
+    const { clearLocalAuthSession, getIdToken } = await import("./auth");
+
+    clearLocalAuthSession();
+
+    expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.idToken`),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.accessToken`),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.refreshToken`),
+    ).toBeNull();
+    expect(window.localStorage.getItem("thinkwork:auth-source")).toBeNull();
+    await expect(getIdToken()).resolves.toBeNull();
+  });
+
   it("refreshes expired federated tokens from the stored refresh token", async () => {
     const prefix = "CognitoIdentityServiceProvider.test-client-id";
     const expiredIdToken = makeIdToken({
