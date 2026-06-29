@@ -440,6 +440,62 @@ describe("OpenEngine MCP handler", () => {
     expect(body.result.structuredContent.workItem.id).toBe("work-item-1");
   });
 
+  it("passes stable idempotency keys through OpenEngine comment creation", async () => {
+    dbRows.push([baseAgent()]);
+    mockCreateComment.mockResolvedValue({
+      id: "comment-1",
+      work_item_id: "work-item-1",
+      thread_id: null,
+      author_user_id: null,
+      author_agent_id: "agent-1",
+      body: "AGENT STATUS: ready",
+      metadata: {
+        sourceTool: "open_engine_create_comment",
+        source: "open_engine_mcp",
+        openEngine: {
+          gate: "status",
+          idempotencyKey: "runner:work-item-1:agent-1:status",
+        },
+      },
+      archived_at: null,
+      created_at: new Date("2026-06-27T12:00:00Z"),
+      updated_at: new Date("2026-06-27T12:00:00Z"),
+    });
+
+    const response = await callTool("open_engine_create_comment", {
+      workItemId: "work-item-1",
+      agentId: "codex",
+      body: "AGENT STATUS: ready",
+      metadata: { openEngine: { gate: "status" } },
+      idempotencyKey: "runner:work-item-1:agent-1:status",
+    });
+    const body = JSON.parse(response.body ?? "{}");
+
+    expect(mockCreateComment).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        workItemId: "work-item-1",
+        authorAgentId: "agent-1",
+        body: "AGENT STATUS: ready",
+        source: "open_engine_mcp",
+        idempotencyKey: "runner:work-item-1:agent-1:status",
+        metadata: {
+          sourceTool: "open_engine_create_comment",
+          openEngine: {
+            gate: "status",
+            idempotencyKey: "runner:work-item-1:agent-1:status",
+          },
+        },
+      }),
+    );
+    expect(body.result.structuredContent.comment).toMatchObject({
+      id: "comment-1",
+      authorAgentId: "agent-1",
+      body: "AGENT STATUS: ready",
+    });
+  });
+
   it("fetches binary document metadata without inline content", async () => {
     mockGetDocument.mockResolvedValue({
       id: "doc-1",

@@ -261,6 +261,7 @@ export async function runOpenEngineOneTask(input) {
     "open_engine_get_context",
     "open_engine_list_documents",
     "open_engine_fetch_document",
+    "open_engine_create_comment",
     "open_engine_update_status_ledger",
   ]);
 
@@ -374,6 +375,7 @@ export function buildCodexOneTaskPrompt(input) {
   const workItem = input.claim.claimed;
   const contextWorkItem = input.context.workItem ?? workItem;
   const queue = input.context.queue ?? workItem.openEngine ?? {};
+  const evidenceKeys = buildEvidenceGateKeys(workItem.id, input.config.agentId);
   const documentSummaries = input.documents
     .map((doc, index) => formatDocumentForPrompt(doc, index + 1))
     .join("\n\n");
@@ -398,7 +400,7 @@ Rules:
 3. Treat the Standing context section as the cold-start contract before acting.
 4. Fetch additional context only through ThinkWork OpenEngine MCP tools.
 5. Execute only the scoped Work Item.
-6. Record durable evidence before stopping.
+6. Record durable narrative evidence with \`open_engine_create_comment\` before stopping.
 7. Stop after this one Work Item.
 
 Standing context contract:
@@ -414,13 +416,28 @@ Required first MCP calls:
 3. Call \`open_engine_get_context\` for \`${workItem.id}\`.
 4. Fetch only the task documents you need with \`open_engine_fetch_document\`.
 5. Call \`open_engine_update_status_ledger\` with status \`checking\` before work begins.
+6. Call \`open_engine_create_comment\` for material narrative evidence. Always pass the matching \`idempotencyKey\` from the Evidence gate keys section so retries return the existing comment instead of adding duplicates.
+
+Evidence gate keys:
+- claimed: \`${evidenceKeys.claimed}\`
+- status: \`${evidenceKeys.status}\`
+- review: \`${evidenceKeys.review}\`
+- done: \`${evidenceKeys.done}\`
+- blocked: \`${evidenceKeys.blocked}\`
+- failed: \`${evidenceKeys.failed}\`
+
+Evidence comment contract:
+- Use \`open_engine_create_comment\` for AGENT CLAIMED, AGENT STATUS, AGENT REVIEW, AGENT DONE, AGENT BLOCKED, and AGENT FAILED narrative entries.
+- Include metadata like \`{ "openEngine": { "gate": "status" } }\` and the stable gate \`idempotencyKey\`.
+- If you retry the same evidence gate, reuse the same key. The API will return the original comment.
+- Keep \`open_engine_update_status_ledger\`, \`open_engine_record_receipt\`, and \`open_engine_update_state\` idempotent with their own stable keys.
 
 Completion paths:
-- If complete with no human review needed, call \`open_engine_update_state\` with state \`done\`, a clear AGENT DONE message, and verification evidence.
-- If complete but review/approval is needed, call \`open_engine_update_state\` with state \`review\`.
-- If blocked on a Work Item answer, ask one specific question and call \`open_engine_update_state\` with state \`blocked\`.
-- If blocked on a human/app-side answer, call \`open_engine_update_state\` with state \`human_hold\`.
-- If execution fails unexpectedly, call \`open_engine_update_state\` with state \`failed\`, including the last safe step and error.
+- If complete with no human review needed, call \`open_engine_create_comment\` with the \`done\` key, then call \`open_engine_update_state\` with state \`done\`, a clear AGENT DONE message, and verification evidence.
+- If complete but review/approval is needed, call \`open_engine_create_comment\` with the \`review\` key, then call \`open_engine_update_state\` with state \`review\`.
+- If blocked on a Work Item answer, ask one specific question, call \`open_engine_create_comment\` with the \`blocked\` key, and call \`open_engine_update_state\` with state \`blocked\`.
+- If blocked on a human/app-side answer, call \`open_engine_create_comment\` with the \`blocked\` key and call \`open_engine_update_state\` with state \`human_hold\`.
+- If execution fails unexpectedly, call \`open_engine_create_comment\` with the \`failed\` key and call \`open_engine_update_state\` with state \`failed\`, including the last safe step and error.
 
 Context snapshot:
 ${formatJsonForPrompt({
@@ -436,6 +453,18 @@ ${formatStandingContextForPrompt(standingContext)}
 Fetched documents:
 ${documentSummaries || "No documents were fetched by the runner."}
 `;
+}
+
+function buildEvidenceGateKeys(workItemId, agentId) {
+  const prefix = `open-engine-one-task-runner:${workItemId}:${agentId}`;
+  return {
+    claimed: `${prefix}:claimed`,
+    status: `${prefix}:status`,
+    review: `${prefix}:review`,
+    done: `${prefix}:done`,
+    blocked: `${prefix}:blocked`,
+    failed: `${prefix}:failed`,
+  };
 }
 
 function formatDocumentForPrompt(document, index) {
