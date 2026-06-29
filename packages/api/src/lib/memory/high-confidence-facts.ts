@@ -8,6 +8,7 @@ export type HighConfidenceFactScope = "user" | "space";
 
 export type HighConfidenceFactKind =
   | "allergy"
+  | "explicit_memory"
   | "family"
   | "pet"
   | "preference"
@@ -85,6 +86,10 @@ const SPACE_CONTEXT =
   /\b(?:the|our)\s+((?:project|workspace|space|team|client|customer|launch|release|service|repository|repo|environment|deployment|deadline|codename)[A-Za-z0-9 ,/&()'-]{0,80}?)\s+(is|are|uses|runs on|depends on)\s+(.{2,160})$/i;
 const SPACE_CODENAME =
   /\b(?:the\s+)?(?:launch|release|project|space)?\s*codename\s+is\s+([A-Z][A-Za-z0-9 -]{2,80})\b/i;
+const EXPLICIT_USER_MEMORY =
+  /\bremember\s+this\s+user\s+memory\b(?:[^:]{0,120}:)?\s+(.{3,220})$/i;
+const EXPLICIT_SPACE_MEMORY =
+  /\bremember\s+this\s+(?:space|workspace|shared)\s+memory\b(?:[^:]{0,120}:)?\s+(.{3,220})$/i;
 
 export function extractHighConfidenceFacts(input: {
   messages: HighConfidenceFactMessage[];
@@ -129,6 +134,14 @@ function extractUserFact(
   sentence: Sentence,
   previous: Sentence | null,
 ): { kind: HighConfidenceFactKind; text: string } | null {
+  const explicitMemory = EXPLICIT_USER_MEMORY.exec(sentence.text);
+  if (explicitMemory) {
+    return {
+      kind: "explicit_memory",
+      text: `User memory: ${ensureSentence(cleanPhrase(explicitMemory[1]))}`,
+    };
+  }
+
   const namedPetAttribute = NAMED_PET_ATTRIBUTE.exec(sentence.text);
   if (namedPetAttribute) {
     const pet = petNoun(namedPetAttribute[1]);
@@ -208,6 +221,10 @@ function extractSpaceFact(sentence: Sentence): string | null {
     /\b(?:my|i'm|i am|my wife|my husband|my dog|my cat)\b/i.test(sentence.text)
   ) {
     return null;
+  }
+  const explicitMemory = EXPLICIT_SPACE_MEMORY.exec(sentence.text);
+  if (explicitMemory) {
+    return `Space memory: ${ensureSentence(cleanPhrase(explicitMemory[1]))}`;
   }
   const codename = SPACE_CODENAME.exec(sentence.text);
   if (codename) {
@@ -330,4 +347,8 @@ function cleanPhrase(value: string): string {
 
 function stripTrailingPunctuation(value: string): string {
   return value.trim().replace(/[.!?]+$/g, "");
+}
+
+function ensureSentence(value: string): string {
+  return /[.!?]$/.test(value) ? value : `${value}.`;
 }

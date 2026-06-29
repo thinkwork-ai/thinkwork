@@ -83,6 +83,15 @@ if [[ -n "$ACCOUNT_ID" ]]; then
 else
   canonical_role_arn=""
 fi
+lambda_function_name="thinkwork-${STAGE}-agentcore-pi"
+
+runtime_env_json() {
+  aws lambda get-function-configuration \
+    --function-name "$lambda_function_name" \
+    --region "$REGION" \
+    --query 'Environment.Variables' \
+    --output json 2>/dev/null || echo ""
+}
 
 is_agentcore_forbidden() {
   grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$1"
@@ -107,6 +116,12 @@ create_runtime() {
   fi
 
   echo "Creating ${RUNTIME} AgentCore runtime ${runtime_name} with ${IMAGE}"
+  local env_json
+  env_json="$(runtime_env_json)"
+  local env_args=()
+  if [[ -n "$env_json" && "$env_json" != "null" ]]; then
+    env_args=(--environment-variables "$env_json")
+  fi
   runtime_id=$(aws bedrock-agentcore-control create-agent-runtime \
     --region "$REGION" \
     --agent-runtime-name "$runtime_name" \
@@ -114,6 +129,7 @@ create_runtime() {
     --role-arn "$canonical_role_arn" \
     --network-configuration "networkMode=PUBLIC" \
     --protocol-configuration "serverProtocol=HTTP" \
+    "${env_args[@]}" \
     --query agentRuntimeId \
     --output text)
   aws ssm put-parameter \
@@ -151,6 +167,12 @@ update_runtime() {
 
   echo "Updating ${RUNTIME} AgentCore runtime ${runtime_id} to ${IMAGE} with role ${role_arn}"
   local update_output
+  local env_json
+  env_json="$(runtime_env_json)"
+  local env_args=()
+  if [[ -n "$env_json" && "$env_json" != "null" ]]; then
+    env_args=(--environment-variables "$env_json")
+  fi
   update_output=$(aws bedrock-agentcore-control update-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
@@ -158,6 +180,7 @@ update_runtime() {
     --network-configuration "networkMode=$network_mode" \
     --protocol-configuration "serverProtocol=$server_protocol" \
     --agent-runtime-artifact "containerConfiguration={containerUri=$IMAGE}" \
+    "${env_args[@]}" \
     --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
     --output json 2>&1) || {
     if is_agentcore_forbidden "$update_output"; then

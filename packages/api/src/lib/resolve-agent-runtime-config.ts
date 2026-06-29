@@ -642,6 +642,7 @@ export async function resolveAgentRuntimeConfig(
           searchConfig: kb.search_config,
         }))
       : undefined;
+  const runtimeType = normalizeAgentRuntimeType(agent.runtime);
 
   // --- Per-agent Browser Automation override ------------------------------
 
@@ -680,6 +681,7 @@ export async function resolveAgentRuntimeConfig(
         }
       : undefined;
   const contextEngineEnabled =
+    runtimeType !== "pi" &&
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");
@@ -739,7 +741,7 @@ export async function resolveAgentRuntimeConfig(
     contextEngineConfig,
     guardrailId,
     guardrailConfig,
-    runtimeType: normalizeAgentRuntimeType(agent.runtime),
+    runtimeType,
     skillsConfig,
     trustedSkillIds: skillsConfig.map((skill) => skill.skillId),
     webSearchConfig,

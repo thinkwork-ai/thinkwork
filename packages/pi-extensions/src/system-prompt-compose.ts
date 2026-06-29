@@ -104,10 +104,7 @@ function buildRuntimeToolPolicy(
   const sendEmailAvailable = tools.has("send_email");
   const askUserQuestionAvailable = tools.has("ask_user_question");
   const jsonRenderAvailable = tools.has("emit_json_render_ui");
-  const memoryAvailable =
-    tools.has("recall") ||
-    tools.has("reflect") ||
-    tools.has("query_memory_context");
+  const memoryAvailable = tools.has("recall") || tools.has("reflect");
   const mcpAvailable =
     tools.has("mcp") || [...tools].some((name) => name.startsWith("mcp."));
 
@@ -177,6 +174,9 @@ function buildRuntimeToolPolicy(
     memoryAvailable
       ? "- Memory tools are available in the parent agent. For explicit requests to recall, search, prove, or retrieve user memory, Space memory, or long-term memory, use the parent memory tools directly before answering."
       : "- Parent memory tools are not available for this turn. Do not claim to have searched user memory, Space memory, or long-term memory unless those facts are already present in the loaded context.",
+    memoryAvailable
+      ? "- Do not use workspace files, shell commands, `User/USER.md`, or `SPACE.md` as a memory backend for explicit memory retrieval. Do not write `User/USER.md` or `SPACE.md` to store memory; the platform retain pipeline handles memory persistence."
+      : "",
     memoryAvailable
       ? "- Do not delegate explicit memory-retrieval tasks to Agent Profiles unless the user explicitly names that profile and the delegated profile is known to have memory tools."
       : "",
@@ -276,8 +276,8 @@ function buildRequesterProfilePolicy(includeUserMd: boolean): string {
     "",
     "The rendered workspace includes `User/USER.md` for the signed-in user who triggered this turn.",
     "For profile, preference, family, identity, contact, timezone, and personal facts, use `User/USER.md` as the first source of truth.",
-    "When `User/USER.md` contains the needed fact, answer directly from it. Do not call `recall`, `reflect`, or other memory tools to re-fetch facts already present in `User/USER.md`.",
-    "Use memory tools only when `User/USER.md` does not contain the needed fact, the user explicitly asks to search memory, or the task requires broader prior-context synthesis.",
+    "When `User/USER.md` contains the needed profile fact and the user is not asking to search memory, answer directly from it.",
+    "When the user explicitly asks to search, recall, retrieve, or prove memory, use the memory tools instead of `User/USER.md` or workspace files.",
   ].join("\n");
 }
 

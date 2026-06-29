@@ -105,6 +105,58 @@ describe("extractHighConfidenceFacts", () => {
     ]);
   });
 
+  it("extracts explicit user memory without using profile-specific kinds", () => {
+    const result = extractHighConfidenceFacts({
+      messages: [
+        {
+          role: "user",
+          content:
+            "Please remember this user memory for a future separate thread: the calibration shelf marker is UserMarker1234.",
+        },
+      ],
+    });
+
+    expect(result.rejected).toEqual([]);
+    expect(result.facts).toEqual([
+      expect.objectContaining({
+        scope: "user",
+        kind: "explicit_memory",
+        text: "User memory: the calibration shelf marker is UserMarker1234.",
+      }),
+    ]);
+  });
+
+  it("extracts explicit Space memory only when a Space is present", () => {
+    const withoutSpace = extractHighConfidenceFacts({
+      messages: [
+        {
+          role: "user",
+          content:
+            "Please remember this Space memory for a future separate thread: the calibration shelf marker is SpaceMarker1234.",
+        },
+      ],
+    });
+    expect(withoutSpace.facts).toEqual([]);
+
+    const withSpace = extractHighConfidenceFacts({
+      spaceId: "space-1",
+      messages: [
+        {
+          role: "user",
+          content:
+            "Please remember this Space memory for a future separate thread: the calibration shelf marker is SpaceMarker1234.",
+        },
+      ],
+    });
+    expect(withSpace.facts).toEqual([
+      expect.objectContaining({
+        scope: "space",
+        kind: "space_context",
+        text: "Space memory: the calibration shelf marker is SpaceMarker1234.",
+      }),
+    ]);
+  });
+
   it("rejects prompt-control and policy/tool instructions", () => {
     const result = extractHighConfidenceFacts({
       messages: [

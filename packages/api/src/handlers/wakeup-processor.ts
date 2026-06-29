@@ -1083,6 +1083,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         }
       : undefined;
   const contextEngineEnabled =
+    runtimeType !== "pi" &&
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");

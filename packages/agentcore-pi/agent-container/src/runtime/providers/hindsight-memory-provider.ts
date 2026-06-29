@@ -9,6 +9,12 @@ import type {
   MemoryReflectRequest,
   MemoryReflectResult,
 } from "@thinkwork/pi-runtime-core";
+import {
+  ExecuteStatementCommand,
+  RDSDataClient,
+  type ExecuteStatementCommandOutput,
+  type Field,
+} from "@aws-sdk/client-rds-data";
 
 /**
  * Plan §004 U5 — Hindsight-backed {@link MemoryProvider}.
@@ -51,6 +57,14 @@ export interface HindsightMemoryProviderOptions {
   spaceId?: string | null;
   /** Per-attempt request timeout in ms (default 30_000). */
   timeoutMs?: number;
+  /** Aurora DB cluster ARN for direct Hindsight high-confidence fact lookup. */
+  dbClusterArn?: string;
+  /** Aurora DB secret ARN for direct Hindsight high-confidence fact lookup. */
+  dbSecretArn?: string;
+  /** Aurora database name for direct Hindsight high-confidence fact lookup. */
+  dbName?: string;
+  /** Test seam: override the RDS Data API client. */
+  rdsDataClient?: Pick<RDSDataClient, "send">;
   /** Test seam: override the global fetch implementation. */
   fetchImpl?: typeof fetch;
 }
@@ -157,6 +171,102 @@ function toMemoryItems(
       };
     })
     .filter((item): item is MemoryItem => item !== null);
+}
+
+function toListedMemoryItems(
+  data: unknown,
+  target: HindsightBankTarget,
+): MemoryItem[] {
+  if (!data || typeof data !== "object") return [];
+  const raw = (data as Record<string, unknown>).items ?? [];
+  if (!Array.isArray(raw)) return [];
+  return toMemoryItems({ memory_units: raw }, target);
+}
+
+function mergeMemoryItems(...groups: MemoryItem[][]): MemoryItem[] {
+  const seen = new Set<string>();
+  const out: MemoryItem[] = [];
+  for (const item of groups.flat()) {
+    const key = item.id || `${item.sourceScope ?? "unknown"}:${item.content}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function fieldString(field: Field | undefined): string | undefined {
+  if (!field || field.isNull) return undefined;
+  if (typeof field.stringValue === "string") return field.stringValue;
+  if (typeof field.longValue === "number") return String(field.longValue);
+  if (typeof field.doubleValue === "number") return String(field.doubleValue);
+  if (typeof field.booleanValue === "boolean") return String(field.booleanValue);
+  return undefined;
+}
+
+function highConfidenceRowsToMemoryItems(
+  output: ExecuteStatementCommandOutput,
+  target: HindsightBankTarget,
+): MemoryItem[] {
+  return (output.records ?? [])
+    .map((row, index): MemoryItem | null => {
+      const id = fieldString(row[0]) ?? `high-confidence-${index}`;
+      const text = fieldString(row[5]);
+      if (!text?.trim()) return null;
+      const factType = fieldString(row[4]);
+      return {
+        id,
+        content: text.trim(),
+        sourceScope: target.sourceScope,
+        score: 20_000 - index,
+        ...(factType ? { factType } : {}),
+        evidence: {
+          sourceFacts: [
+            {
+              id,
+              ...(fieldString(row[3]) ? { context: fieldString(row[3]) } : {}),
+              ...(fieldString(row[2])
+                ? { documentId: fieldString(row[2]) }
+                : {}),
+              ...(factType ? { type: factType } : {}),
+            },
+          ],
+        },
+      };
+    })
+    .filter((item): item is MemoryItem => item !== null);
+}
+
+function stripQuestionPreamble(query: string): string {
+  return query
+    .replace(
+      /^\s*what\s+(?:do|does|did)\s+(?:you|this\s+space|the\s+space|we)\s+(?:remember|recall|know)\s+(?:about\s+)?/i,
+      "",
+    )
+    .replace(/^\s*(?:what\s+is|what's|who\s+is|where\s+is|when\s+is)\s+/i, "")
+    .replace(/^\s*tell\s+me(?:\s+again)?\s+(?:about\s+)?/i, "")
+    .trim();
+}
+
+function listSearchQueries(query: string): string[] {
+  const trimmed = query.trim().replace(/\s+/g, " ");
+  const withoutAnswerDirective = trimmed
+    .replace(/\s*[?!.]?\s*(?:answer|reply|respond)\b[\s\S]*$/i, "")
+    .trim();
+  const withoutPreamble = stripQuestionPreamble(withoutAnswerDirective);
+  const withoutLeadingScope = withoutPreamble
+    .replace(/^(?:my|mine|our|ours|the\s+shared|shared|this\s+space(?:'s)?|the)\s+/i, "")
+    .trim();
+
+  return [
+    trimmed,
+    withoutAnswerDirective,
+    withoutPreamble,
+    withoutLeadingScope,
+  ].filter((candidate, index, candidates) => {
+    if (candidate.length < 2) return false;
+    return candidates.findIndex((value) => value === candidate) === index;
+  });
 }
 
 /** Extract the synthesized answer from a raw Hindsight reflect response. */
@@ -475,6 +585,102 @@ async function postJson(
   );
 }
 
+async function getJson(
+  options: HindsightMemoryProviderOptions,
+  path: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const url = `${options.endpoint.replace(/\/$/, "")}${path}`;
+  const attemptSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+    : AbortSignal.timeout(timeoutMs);
+  const response = await fetchImpl(url, {
+    method: "GET",
+    signal: attemptSignal,
+  });
+  const text = await response.text();
+  if (response.ok) {
+    try {
+      return text ? JSON.parse(text) : null;
+    } catch {
+      return { text };
+    }
+  }
+  throw new HindsightMemoryProviderError(
+    `Hindsight ${response.status}: ${text.slice(0, 400)}`,
+    response.status,
+  );
+}
+
+async function listMemoryItems(
+  options: HindsightMemoryProviderOptions,
+  target: HindsightBankTarget,
+  query: string,
+  signal?: AbortSignal,
+): Promise<MemoryItem[]> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: "25",
+    offset: "0",
+  });
+  try {
+    const data = await getJson(
+      options,
+      `/v1/default/banks/${encodeURIComponent(target.bankId)}/memories/list?${params.toString()}`,
+      signal,
+    );
+    return toListedMemoryItems(data, target).map((item, index) => ({
+      ...item,
+      score: Math.max(item.score ?? 0, 10_000 - index),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function listHighConfidenceMemoryItems(
+  options: HindsightMemoryProviderOptions,
+  target: HindsightBankTarget,
+  query: string,
+): Promise<MemoryItem[]> {
+  if (
+    !options.dbClusterArn?.trim() ||
+    !options.dbSecretArn?.trim() ||
+    !query.trim()
+  ) {
+    return [];
+  }
+  const client = options.rdsDataClient ?? new RDSDataClient({});
+  const sql = `
+    SELECT id::text, bank_id, document_id, context, fact_type, text
+    FROM hindsight.memory_units
+    WHERE bank_id = :bank_id
+      AND context = 'thinkwork_high_confidence_fact'
+      AND text ILIKE :pattern
+    ORDER BY created_at DESC
+    LIMIT 10
+  `;
+  try {
+    const output = await client.send(
+      new ExecuteStatementCommand({
+        resourceArn: options.dbClusterArn,
+        secretArn: options.dbSecretArn,
+        database: options.dbName || "thinkwork",
+        sql,
+        parameters: [
+          { name: "bank_id", value: { stringValue: target.bankId } },
+          { name: "pattern", value: { stringValue: `%${query.trim()}%` } },
+        ],
+      }),
+    );
+    return highConfidenceRowsToMemoryItems(output, target);
+  } catch {
+    return [];
+  }
+}
+
 function requireScope(options: HindsightMemoryProviderOptions): void {
   if (!options.endpoint?.trim()) {
     throw new HindsightMemoryProviderError(
@@ -546,26 +752,83 @@ export function createHindsightMemoryProvider(
           "recall called with an empty query.",
         );
       }
+      const searchQueries = listSearchQueries(query);
+      const highConfidenceBatches = await Promise.all(
+        targets.map(async (target) => {
+          const highConfidenceGroups = await Promise.all(
+            searchQueries.map((listQuery) =>
+              listHighConfidenceMemoryItems(options, target, listQuery),
+            ),
+          );
+          return mergeMemoryItems(...highConfidenceGroups);
+        }),
+      );
+      const highConfidenceMemories = mergeMemoryItems(
+        ...highConfidenceBatches,
+      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      if (highConfidenceMemories.length > 0) {
+        return {
+          memories: request.limit
+            ? highConfidenceMemories.slice(0, request.limit)
+            : highConfidenceMemories,
+          usage: undefined,
+        };
+      }
+
+      const listedBatches = await Promise.all(
+        targets.map(async (target) => {
+          const listedGroups = await Promise.all(
+            searchQueries.map((listQuery) =>
+              listMemoryItems(options, target, listQuery, signal),
+            ),
+          );
+          return mergeMemoryItems(...listedGroups);
+        }),
+      );
+      const listedMemories = mergeMemoryItems(...listedBatches).sort(
+        (a, b) => (b.score ?? 0) - (a.score ?? 0),
+      );
+      if (listedMemories.length > 0) {
+        return {
+          memories: request.limit
+            ? listedMemories.slice(0, request.limit)
+            : listedMemories,
+          usage: undefined,
+        };
+      }
+
       const batches = await Promise.all(
         targets.map(async (target) => {
-          const data = await postJson(
+          return postJson(
             options,
             `/v1/default/banks/${encodeURIComponent(target.bankId)}/memories/recall`,
             recallRequestBody(query, request),
             signal,
+          ).then(
+            (data) => ({
+              memories: toMemoryItems(data, target),
+              usage:
+                data && typeof data === "object"
+                  ? (data as Record<string, unknown>).usage
+                  : undefined,
+              error: undefined,
+            }),
+            (error) => ({
+              memories: [],
+              usage: undefined,
+              error,
+            }),
           );
-          return {
-            memories: toMemoryItems(data, target),
-            usage:
-              data && typeof data === "object"
-                ? (data as Record<string, unknown>).usage
-                : undefined,
-          };
         }),
       );
-      const memories = batches
-        .flatMap((batch) => batch.memories)
+      const memories = mergeMemoryItems(
+        ...batches.map((batch) => batch.memories),
+      )
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      if (memories.length === 0) {
+        const failed = batches.find((batch) => batch.error !== undefined);
+        if (failed?.error) throw failed.error;
+      }
       return {
         memories: request.limit ? memories.slice(0, request.limit) : memories,
         usage: mergeUnknownValues(batches.map((batch) => batch.usage)),
@@ -586,10 +849,10 @@ export function createHindsightMemoryProvider(
       const batches = await Promise.all(
         targets.map(async (target) => {
           const data = await postJson(
-            options,
+              options,
             `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
             { query: reflectQuery, budget: "mid", include: { facts: {} } },
-            signal,
+              signal,
           );
           return { target, data };
         }),

@@ -411,8 +411,8 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.guardrailConfig).toBeUndefined();
     expect(cfg.browserAutomationEnabled).toBe(false);
     expect(cfg.threadJsonRenderUiEnabled).toBe(false);
-    expect(cfg.contextEngineEnabled).toBe(true);
-    expect(cfg.contextEngineConfig).toEqual({ enabled: true });
+    expect(cfg.contextEngineEnabled).toBe(false);
+    expect(cfg.contextEngineConfig).toBeUndefined();
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
     // Default script skills stay present when they have passed the same trust gate.
@@ -677,6 +677,8 @@ describe("resolveAgentRuntimeConfig", () => {
       agentId: AGENT_ID,
     });
     expect(cfg.runtimeType).toBe("pi");
+    expect(cfg.contextEngineEnabled).toBe(false);
+    expect(cfg.contextEngineConfig).toBeUndefined();
   });
 
   it("uses pi when the Agent runtime selector is missing", async () => {
@@ -856,7 +858,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.contextEngineConfig).toBeUndefined();
   });
 
-  it("returns template Context Engine adapter configuration", async () => {
+  it("does not return template Context Engine adapter configuration for Pi runtime", async () => {
     stageAgentRow();
     stageTemplateRow({
       context_engine: {
@@ -875,14 +877,11 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.contextEngineConfig).toEqual({
-      enabled: true,
-      providers: { ids: ["memory", "wiki"] },
-      providerOptions: { memory: { queryMode: "reflect" } },
-    });
+    expect(cfg.contextEngineEnabled).toBe(false);
+    expect(cfg.contextEngineConfig).toBeUndefined();
   });
 
-  it("removes tenant-disabled Context Engine adapters from runtime overrides", async () => {
+  it("does not resolve tenant Context Engine adapter overrides for Pi runtime", async () => {
     stageAgentRow();
     stageTemplateRow({
       context_engine: {
@@ -909,10 +908,8 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.contextEngineConfig).toEqual({
-      enabled: true,
-      providers: { ids: ["wiki"] },
-    });
+    expect(cfg.contextEngineEnabled).toBe(false);
+    expect(cfg.contextEngineConfig).toBeUndefined();
   });
 
   it("does not register Context Engine when blocked_tools includes query_context", async () => {

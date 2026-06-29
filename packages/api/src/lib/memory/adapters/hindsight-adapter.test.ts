@@ -836,6 +836,56 @@ describe("HindsightAdapter legacy user bank reads", () => {
     ]);
   });
 
+  it("keeps user-bank owner ids when user memories also carry Space metadata", async () => {
+    executeMock.mockResolvedValueOnce({
+      rows: [
+        {
+          ...row({
+            id: "00000000-0000-0000-0000-000000000009",
+            bank_id: `user_${USER_ID}`,
+            text: "User memory: the calibration shelf marker is UserMarker90868884.",
+            metadata: {
+              tenantId: TENANT_ID,
+              ownerType: "user",
+              userId: USER_ID,
+              spaceId: SPACE_ID,
+            },
+            created_at: "2026-06-27T12:00:00.000Z",
+          }),
+          inferred_owner_type: "user",
+          inferred_owner_id: SPACE_ID,
+        },
+      ],
+    });
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const records = await adapter.inspectTenant({
+      tenantId: TENANT_ID,
+      query: "UserMarker90868884",
+      limit: 50,
+    });
+
+    expect(records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        ownerType: "user",
+        ownerId: USER_ID,
+        content: {
+          text: "User memory: the calibration shelf marker is UserMarker90868884.",
+        },
+        metadata: expect.objectContaining({
+          bankId: `user_${USER_ID}`,
+          raw: expect.objectContaining({
+            userId: USER_ID,
+            spaceId: SPACE_ID,
+          }),
+        }),
+      }),
+    ]);
+  });
+
   it("exports Space memories from the Space bank without paired user banks", async () => {
     executeMock.mockResolvedValueOnce({
       rows: [

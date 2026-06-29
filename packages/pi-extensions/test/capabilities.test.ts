@@ -529,6 +529,33 @@ describe("U7 capability extensions", () => {
     });
   });
 
+  it("context-engine can omit memory search so direct memory tools own Hindsight recall", async () => {
+    const { api, tools } = makeFakeApi();
+    const extension = createContextEngineExtension({
+      enabled: true,
+      apiUrl: "https://api.example.com",
+      apiSecret: "secret",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      agentId: "agent-1",
+      includeMemoryContext: false,
+      fetchImpl: vi.fn(),
+    });
+    await toExtensionFactory(extension, {})(api);
+
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "query_brain_context",
+      "query_context",
+      "query_wiki_context",
+    ]);
+    expect(getTool(tools, "query_context").description).toContain(
+      "use the direct memory tools",
+    );
+    expect(getTool(tools, "query_brain_context").description).toContain(
+      "Use direct memory tools",
+    );
+  });
+
   it("context-engine forwards Brain-specific query and detail arguments", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({

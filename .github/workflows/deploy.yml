@@ -2295,6 +2295,23 @@ jobs:
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }}
 
+      - name: Memory retain/recall smoke
+        if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+        timeout-minutes: 8
+        env:
+          THINKWORK_GRAPHQL_URL: ${{ secrets.SMOKE_GRAPHQL_HTTP_URL }}
+          THINKWORK_GRAPHQL_API_KEY: ${{ secrets.GRAPHQL_API_KEY }}
+          THINKWORK_TENANT_ID: ${{ secrets.SMOKE_TENANT_ID }}
+          THINKWORK_AGENT_ID: ${{ secrets.SMOKE_AGENT_ID }}
+          THINKWORK_USER_ID: ${{ secrets.SMOKE_USER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${THINKWORK_GRAPHQL_URL:-}" ] || [ -z "${THINKWORK_GRAPHQL_API_KEY:-}" ] || [ -z "${THINKWORK_TENANT_ID:-}" ] || [ -z "${THINKWORK_AGENT_ID:-}" ] || [ -z "${THINKWORK_USER_ID:-}" ]; then
+            echo "Skipping memory retain/recall smoke because SMOKE_GRAPHQL_HTTP_URL, GRAPHQL_API_KEY, SMOKE_TENANT_ID, SMOKE_AGENT_ID, or SMOKE_USER_ID is not configured."
+            exit 0
+          fi
+          pnpm --filter @thinkwork/api memory:retain-recall-smoke -- --json
+
       - name: n8n agent-step bridge smoke
         if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
         timeout-minutes: 15

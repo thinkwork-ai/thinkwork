@@ -56,7 +56,7 @@ describe("createHindsightMemoryProvider", () => {
   });
 
   it("recall posts to the user's bank and normalizes memory units", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [
           { id: "u1", text: "pi is the core runtime", score: 0.9 },
@@ -72,8 +72,11 @@ describe("createHindsightMemoryProvider", () => {
 
     const result = await provider.recall({ query: "pi" });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0]![0]).toBe(
+      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/list?q=pi&limit=25&offset=0",
+    );
+    const [url, init] = fetchImpl.mock.calls[1]!;
     expect(url).toBe(
       "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
     );
@@ -92,8 +95,206 @@ describe("createHindsightMemoryProvider", () => {
     ]);
   });
 
+  it("merges exact list hits ahead of stale semantic recall results", async () => {
+    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes("/memories/list")) {
+        return jsonResponse({
+          items: [
+            {
+              id: "exact",
+              text: "User memory: my user orbit checksum 92102661 is UserMarker92102661.",
+              type: "world",
+            },
+          ],
+          total: 1,
+          limit: 25,
+          offset: 0,
+        });
+      }
+      return jsonResponse({
+        memory_units: [
+          {
+            id: "old",
+            text: "User performed a retention probe in April",
+            score: 0.95,
+          },
+        ],
+      });
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({
+      query: "user orbit checksum 92102661",
+    });
+
+    expect(result.memories[0]).toEqual({
+      id: "exact",
+      content: "User memory: my user orbit checksum 92102661 is UserMarker92102661.",
+      sourceScope: "user",
+      score: 10000,
+      factType: "world",
+    });
+  });
+
+  it("returns exact list hits when semantic recall times out", async () => {
+    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.endsWith("/memories/recall")) {
+        throw new DOMException(
+          "The operation was aborted due to timeout",
+          "TimeoutError",
+        );
+      }
+      if (
+        url.includes("/banks/space_space-1/") &&
+        url.includes("q=space+orbit+checksum+739b482e")
+      ) {
+        return jsonResponse({
+          items: [
+            {
+              id: "exact",
+              text: "Space memory: the shared space orbit checksum 739b482e is SpaceMarker9db597dc.",
+              type: "world",
+            },
+          ],
+          total: 1,
+          limit: 25,
+          offset: 0,
+        });
+      }
+      return jsonResponse({ items: [], total: 0, limit: 25, offset: 0 });
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      spaceId: "space-1",
+      fetchImpl,
+    });
+
+    const result = await provider.recall({
+      query: "space orbit checksum 739b482e",
+    });
+
+    expect(result.memories[0]).toEqual({
+      id: "exact",
+      content:
+        "Space memory: the shared space orbit checksum 739b482e is SpaceMarker9db597dc.",
+      sourceScope: "space",
+      score: 10000,
+      factType: "world",
+    });
+  });
+
+  it("lists cleaned direct-memory question variants so exact facts beat stale semantic hits", async () => {
+    const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.endsWith("/memories/recall")) {
+        return jsonResponse({
+          memory_units: [
+            {
+              id: "old",
+              text: "User performed a retention probe in April",
+              score: 0.95,
+            },
+          ],
+        });
+      }
+      if (url.includes("q=user+orbit+checksum+93468972")) {
+        return jsonResponse({
+          items: [
+            {
+              id: "exact",
+              text: "User memory: my user orbit checksum 93468972 is UserMarker93468972.",
+              type: "observation",
+            },
+          ],
+          total: 1,
+          limit: 25,
+          offset: 0,
+        });
+      }
+      return jsonResponse({ items: [], total: 0, limit: 25, offset: 0 });
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({
+      query:
+        "What do you remember about my user orbit checksum 93468972? Answer with just the marker.",
+    });
+
+    expect(result.memories[0]).toMatchObject({
+      id: "exact",
+      content:
+        "User memory: my user orbit checksum 93468972 is UserMarker93468972.",
+      sourceScope: "user",
+      score: 10000,
+      factType: "observation",
+    });
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toContain(
+      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/list?q=user+orbit+checksum+93468972&limit=25&offset=0",
+    );
+  });
+
+  it("reads high-confidence Hindsight fact rows before semantic recall", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        memory_units: [
+          {
+            id: "old",
+            text: "User performed a retention probe in April",
+            score: 0.95,
+          },
+        ],
+      }),
+    );
+    const send = vi.fn().mockResolvedValue({
+      records: [
+        [
+          { stringValue: "fact-row" },
+          { stringValue: "user_user-1" },
+          { stringValue: "high_confidence_fact:user:abc123" },
+          { stringValue: "thinkwork_high_confidence_fact" },
+          { stringValue: "experience" },
+          {
+            stringValue:
+              "User memory: my user orbit checksum 247ad2df is UserMarker1c716232.",
+          },
+        ],
+      ],
+    });
+    const provider = createHindsightMemoryProvider({
+      ...baseOptions,
+      dbClusterArn: "arn:aws:rds:us-east-1:123:cluster:test",
+      dbSecretArn: "arn:aws:secretsmanager:us-east-1:123:secret:test",
+      dbName: "thinkwork",
+      rdsDataClient: { send } as never,
+      fetchImpl,
+    });
+
+    const result = await provider.recall({
+      query: "user orbit checksum 247ad2df",
+    });
+
+    expect(send).toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.memories[0]).toMatchObject({
+      id: "fact-row",
+      content:
+        "User memory: my user orbit checksum 247ad2df is UserMarker1c716232.",
+      sourceScope: "user",
+      score: 20000,
+      factType: "experience",
+    });
+  });
+
   it("recall honors the limit", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [{ text: "a" }, { text: "b" }, { text: "c" }],
       }),
@@ -124,12 +325,12 @@ describe("createHindsightMemoryProvider", () => {
     await provider.recall({ query: "team priorities" });
 
     expect(
-      JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string),
+      JSON.parse((fetchImpl.mock.calls[1]![1] as RequestInit).body as string),
     ).toMatchObject({
       query_timestamp: "2026-06-27T17:00:00.000Z",
     });
     expect(
-      JSON.parse((fetchImpl.mock.calls[1]![1] as RequestInit).body as string),
+      JSON.parse((fetchImpl.mock.calls[3]![1] as RequestInit).body as string),
     ).not.toHaveProperty("query_timestamp");
   });
 
@@ -220,12 +421,18 @@ describe("createHindsightMemoryProvider", () => {
   it("retries a 5xx and succeeds on a later attempt", async () => {
     vi.useFakeTimers();
     try {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValueOnce(new Response("boom", { status: 503 }))
-        .mockResolvedValueOnce(
-          jsonResponse({ memory_units: [{ text: "ok" }] }),
-        );
+      let recallCalls = 0;
+      const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+        const url = String(input);
+        if (url.endsWith("/memories/list?q=x&limit=25&offset=0")) {
+          return jsonResponse({ items: [], total: 0, limit: 25, offset: 0 });
+        }
+        recallCalls += 1;
+        if (recallCalls === 1) {
+          return new Response("boom", { status: 503 });
+        }
+        return jsonResponse({ memory_units: [{ text: "ok" }] });
+      });
       const provider = createHindsightMemoryProvider({
         ...baseOptions,
         fetchImpl,
@@ -235,6 +442,7 @@ describe("createHindsightMemoryProvider", () => {
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await promise;
       expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(recallCalls).toBe(2);
       expect(result.memories).toEqual([
         { id: "unit-0", content: "ok", sourceScope: "user" },
       ]);
@@ -305,7 +513,7 @@ describe("createHindsightMemoryProvider", () => {
 
 describe("observation signal parsing", () => {
   it("surfaces factType, freshness, and proofCount on observation units", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [
           {
@@ -351,7 +559,7 @@ describe("observation signal parsing", () => {
   });
 
   it("tolerates units without observation fields and metadata-carried signals", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [
           { id: "plain", text: "no signals at all" },
@@ -387,7 +595,7 @@ describe("observation signal parsing", () => {
 
 describe("deployed recall wire format (Hindsight 0.5.0)", () => {
   it("parses `type` and `source_fact_ids` observation signals", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [
           {
@@ -420,7 +628,7 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
   });
 
   it("preserves redacted source-fact evidence when recall includes source_facts", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn().mockImplementation(() =>
       jsonResponse({
         memory_units: [
           {
@@ -454,7 +662,7 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
     });
 
     const result = await provider.recall({ query: "alice" });
-    const [, init] = fetchImpl.mock.calls[0]!;
+    const [, init] = fetchImpl.mock.calls[1]!;
     expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
       include: { entities: null, source_facts: {} },
     });
@@ -503,11 +711,15 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
 
     const result = await provider.recall({ query: "rollout", limit: 5 });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
-      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
-      "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/recall",
-    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual(
+      expect.arrayContaining([
+        "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
+        "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/list?q=rollout&limit=25&offset=0",
+        "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/recall",
+        "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/list?q=rollout&limit=25&offset=0",
+      ]),
+    );
     expect(result.memories).toEqual([
       {
         id: "space-hit",

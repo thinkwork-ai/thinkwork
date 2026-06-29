@@ -1,6 +1,12 @@
+import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { SettingsMemory } from "@/components/settings/SettingsMemory";
+import {
+  SettingsMemory,
+  type MemoryRefreshController,
+} from "@/components/settings/SettingsMemory";
 import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
 
@@ -24,6 +30,35 @@ function tabForPath(pathname: string): MemoryTab {
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const activeTab = tabForPath(pathname);
+  const [refreshController, setRefreshController] =
+    useState<MemoryRefreshController | null>(null);
+
+  const updateRefreshController = useCallback(
+    (controller: MemoryRefreshController | null) => {
+      setRefreshController(controller);
+    },
+    [],
+  );
+
+  const refreshAction =
+    activeTab === "memory" ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground hover:text-foreground"
+        aria-label="Refresh memory records"
+        title="Refresh memory records"
+        disabled={refreshController?.disabled ?? true}
+        onClick={() => {
+          void refreshController?.refresh();
+        }}
+      >
+        <RefreshCw
+          className={`size-4 ${refreshController?.isRefreshing ? "animate-spin" : ""}`}
+        />
+      </Button>
+    ) : null;
 
   usePageHeaderActions({
     title: "Memory",
@@ -33,11 +68,18 @@ export function SettingsMemoryHome() {
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
     ],
+    action: refreshAction,
+    actionKey: `memory-refresh:${activeTab}:${refreshController?.disabled ? "disabled" : "enabled"}:${refreshController?.isRefreshing ? "refreshing" : "idle"}`,
   });
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      {activeTab === "memory" ? <SettingsMemory embedded /> : null}
+      {activeTab === "memory" ? (
+        <SettingsMemory
+          embedded
+          onRefreshControllerChange={updateRefreshController}
+        />
+      ) : null}
       {activeTab === "knowledge-bases" ? (
         <SettingsKnowledgeBases embedded />
       ) : null}
