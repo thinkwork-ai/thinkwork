@@ -104,7 +104,7 @@ const {
       "is_default",
       "updated_at",
     ]),
-    spaces: table("spaces", ["id"]),
+    spaces: table("spaces", ["id", "tenant_id", "status", "access_mode"]),
     spaceMembers: table("space_members", ["id"]),
   };
 
@@ -325,6 +325,17 @@ describe("work item resolvers", () => {
       "wil.archived_at IS NULL",
     );
     expect(JSON.stringify(captures.selectWhere[0])).toContain("IN (?)");
+  });
+
+  it("includes caller-assigned Work Items even when Space membership is not the grant", async () => {
+    captures.selectQueue.push([]);
+
+    await workItems(null, { input: { tenantId: "tenant-1" } }, ctx);
+
+    expect(JSON.stringify(captures.selectWhere[0])).toContain(
+      "work_items.owner_user_id",
+    );
+    expect(JSON.stringify(captures.selectWhere[0])).toContain("user-1");
   });
 
   it("lists Work Item labels", async () => {

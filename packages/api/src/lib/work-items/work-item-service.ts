@@ -158,7 +158,7 @@ export async function listWorkItems(
     ctx.auth?.authType === "cognito" ? await resolveCallerUserId(ctx) : null;
   if (ctx.auth?.authType === "cognito") {
     if (!callerUserId) return [];
-    conditions.push(visibleSpaceExistsPredicate(tenantId, callerUserId));
+    conditions.push(callerCanListWorkItemPredicate(tenantId, callerUserId));
   }
 
   return db
@@ -179,9 +179,7 @@ export async function getWorkItem(
     .from(workItems)
     .where(and(eq(workItems.tenant_id, tenantId), eq(workItems.id, input.id)));
   if (!item) return null;
-  try {
-    await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
-  } catch {
+  if (!(await canAccessWorkItem(ctx, tenantId, item))) {
     return null;
   }
   return item;
@@ -966,8 +964,34 @@ async function loadAuthorizedWorkItem(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
+  if (!(await canAccessWorkItem(ctx, tenantId, item))) {
+    throw new GraphQLError("Work item not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
   return item;
+}
+
+function callerCanListWorkItemPredicate(tenantId: string, callerUserId: string) {
+  return or(
+    visibleSpaceExistsPredicate(tenantId, callerUserId),
+    eq(workItems.owner_user_id, callerUserId),
+  );
+}
+
+async function canAccessWorkItem(
+  ctx: GraphQLContext,
+  tenantId: string,
+  item: Record<string, any>,
+) {
+  try {
+    await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
+    return true;
+  } catch {
+    if (ctx.auth?.authType !== "cognito") return false;
+    const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+    return Boolean(callerUserId && item.owner_user_id === callerUserId);
+  }
 }
 
 function visibleSpaceExistsPredicate(tenantId: string, callerUserId: string) {

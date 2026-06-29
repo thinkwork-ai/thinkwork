@@ -9,6 +9,7 @@ const {
   mockRequireTenantAdmin,
   mockResolveCallerUserId,
   mockToGraphqlSpace,
+  mockOr,
   mockUserAccessibleSpacePredicate,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
@@ -17,6 +18,7 @@ const {
   mockCanManageTenantSpaces: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
+  mockOr: vi.fn((...conditions: unknown[]) => ({ type: "or", conditions })),
   mockToGraphqlSpace: vi.fn((row: Record<string, unknown>) => ({
     id: row.id,
     tenantId: row.tenant_id,
@@ -35,6 +37,7 @@ vi.mock("../../utils.js", () => ({
   and: vi.fn((...conditions: unknown[]) => ({ type: "and", conditions })),
   db: { select: mockSelect, execute: mockExecute },
   eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
+  or: mockOr,
   sql: Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => {
       const call = { text: strings.join("?"), values };
@@ -60,6 +63,12 @@ vi.mock("../../utils.js", () => ({
     tenant_id: "space_members.tenant_id",
     space_id: "space_members.space_id",
     user_id: "space_members.user_id",
+  },
+  workItems: {
+    tenant_id: "work_items.tenant_id",
+    space_id: "work_items.space_id",
+    owner_user_id: "work_items.owner_user_id",
+    archived_at: "work_items.archived_at",
   },
 }));
 
@@ -92,6 +101,7 @@ beforeEach(async () => {
   mockRequireTenantAdmin.mockRejectedValue(new Error("not admin"));
   mockResolveCallerUserId.mockReset();
   mockResolveCallerUserId.mockResolvedValue("user-1");
+  mockOr.mockClear();
   mockToGraphqlSpace.mockClear();
   mockUserAccessibleSpacePredicate.mockClear();
   sqlCalls.length = 0;
@@ -156,6 +166,13 @@ describe("spaces", () => {
     ).toBe(true);
     expect(sqlCalls.some((call) => call.text.includes("systemHidden"))).toBe(
       true,
+    );
+    expect(mockOr).toHaveBeenCalledWith(
+      { type: "accessible" },
+      expect.objectContaining({
+        type: "sql",
+        text: expect.stringContaining("owner_user_id"),
+      }),
     );
   });
 
