@@ -39,6 +39,8 @@ const OPPORTUNITY_OVERLAY_SECTIONS = [
   "check-ins",
   "executive-view",
 ];
+const APP_OVERLAY_RECORD_ID = TWENTY_CLIENT_ENGAGEMENT_APP_KEY;
+const APP_OVERLAY_SECTIONS = ["use-case-pipeline", "strategic-pipeline"];
 
 export function useTwentyEngagementData(selectedOpportunityId: string | null) {
   const [dashboardResult, reexecuteDashboard] = useQuery<
@@ -66,6 +68,22 @@ export function useTwentyEngagementData(selectedOpportunityId: string | null) {
     },
     requestPolicy: "cache-and-network",
   });
+  const [appOverlayResult, reexecuteAppOverlays] = useQuery<
+    PluginAppOverlaysQuery,
+    PluginAppOverlaysQueryVariables
+  >({
+    query: PluginAppOverlaysQueryDocument,
+    variables: {
+      input: {
+        appKey: TWENTY_CLIENT_ENGAGEMENT_APP_KEY,
+        provider: TWENTY_PROVIDER,
+        providerRecordType: "app",
+        providerRecordId: APP_OVERLAY_RECORD_ID,
+        sectionKeys: APP_OVERLAY_SECTIONS,
+      },
+    },
+    requestPolicy: "cache-and-network",
+  });
 
   const [, upsertOverlay] = useMutation<
     UpsertPluginAppOverlayMutation,
@@ -87,6 +105,13 @@ export function useTwentyEngagementData(selectedOpportunityId: string | null) {
     }
     return map;
   }, [overlayResult.data]);
+  const appOverlayBySection = useMemo(() => {
+    const map = new Map<string, Record<string, unknown>>();
+    for (const overlay of appOverlayResult.data?.pluginAppOverlays ?? []) {
+      map.set(overlay.sectionKey, objectPayload(overlay.payload));
+    }
+    return map;
+  }, [appOverlayResult.data]);
 
   return {
     accounts: dashboardResult.data?.twentyEngagementDashboard.accounts ?? [],
@@ -95,6 +120,9 @@ export function useTwentyEngagementData(selectedOpportunityId: string | null) {
     overlayFetching: overlayResult.fetching,
     overlayError: overlayResult.error,
     overlayBySection,
+    appOverlayFetching: appOverlayResult.fetching,
+    appOverlayError: appOverlayResult.error,
+    appOverlayBySection,
     refreshDashboard: () =>
       reexecuteDashboard({ requestPolicy: "network-only" }),
     saveOpportunityOverlay: async (
@@ -114,6 +142,24 @@ export function useTwentyEngagementData(selectedOpportunityId: string | null) {
       });
       if (result.error) throw result.error;
       reexecuteOverlays({ requestPolicy: "network-only" });
+      return result.data?.upsertPluginAppOverlay;
+    },
+    saveAppOverlay: async (
+      sectionKey: string,
+      payload: Record<string, unknown>,
+    ) => {
+      const result = await upsertOverlay({
+        input: {
+          appKey: TWENTY_CLIENT_ENGAGEMENT_APP_KEY,
+          provider: TWENTY_PROVIDER,
+          providerRecordType: "app",
+          providerRecordId: APP_OVERLAY_RECORD_ID,
+          sectionKey,
+          payload,
+        },
+      });
+      if (result.error) throw result.error;
+      reexecuteAppOverlays({ requestPolicy: "network-only" });
       return result.data?.upsertPluginAppOverlay;
     },
     updateOpportunityStage: async (opportunityId: string, stage: string) => {

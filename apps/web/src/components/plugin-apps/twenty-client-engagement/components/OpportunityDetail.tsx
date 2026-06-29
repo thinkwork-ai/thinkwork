@@ -12,6 +12,7 @@ import {
 } from "@thinkwork/ui";
 
 import type { OpportunityStage } from "../data/model";
+import type { PrototypePageId } from "../data/model";
 import type {
   EngagementAccount,
   EngagementOpportunityWithLayers,
@@ -26,8 +27,10 @@ import { OpportunityTabs } from "./OpportunityTabs";
 
 interface OverlayDrafts {
   executiveNarrative: string;
+  executiveHeadline: string;
   kpiBaseline: string;
   useCaseScope: string;
+  checkInSummary: string;
 }
 
 export function OpportunityDetail({
@@ -40,6 +43,7 @@ export function OpportunityDetail({
   onSaveOverlay,
   onUpdateStage,
   onUpdateLayerStatus,
+  onOpenTool,
 }: {
   account: EngagementAccount;
   opportunityWithLayers: EngagementOpportunityWithLayers;
@@ -54,6 +58,7 @@ export function OpportunityDetail({
   ) => Promise<unknown>;
   onUpdateStage: (opportunityId: string, stage: string) => Promise<unknown>;
   onUpdateLayerStatus: (layerId: string, status: string) => Promise<unknown>;
+  onOpenTool: (pageId: PrototypePageId) => void;
 }) {
   const { opportunity, layers } = opportunityWithLayers;
   const [activeTab, setActiveTab] = useState(0);
@@ -61,8 +66,10 @@ export function OpportunityDetail({
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<OverlayDrafts>({
     executiveNarrative: "",
+    executiveHeadline: "",
     kpiBaseline: "",
     useCaseScope: "",
+    checkInSummary: "",
   });
   const stage = normalizeStage(opportunity.stage);
   const guidance = STAGE_GUIDANCE.find((item) => item.stage === stage);
@@ -73,6 +80,10 @@ export function OpportunityDetail({
         overlayBySection.get("executive-view"),
         "executiveNarrative",
       ),
+      executiveHeadline: stringField(
+        overlayBySection.get("executive-view"),
+        "executiveHeadline",
+      ),
       kpiBaseline: stringField(
         overlayBySection.get("kpi-framework"),
         "kpiBaseline",
@@ -80,6 +91,10 @@ export function OpportunityDetail({
       useCaseScope: stringField(
         overlayBySection.get("use-case-scope"),
         "useCaseScope",
+      ),
+      checkInSummary: stringField(
+        overlayBySection.get("check-ins"),
+        "checkInSummary",
       ),
     });
   }, [overlayBySection, opportunity.id]);
@@ -166,7 +181,11 @@ export function OpportunityDetail({
 
       <div className="p-4">
         {activeTab === 0 ? (
-          <StageTools stage={stage} guidance={guidance} />
+          <StageTools
+            stage={stage}
+            guidance={guidance}
+            onOpenTool={onOpenTool}
+          />
         ) : null}
         {activeTab === 1 ? (
           <OpportunityLayers
@@ -248,11 +267,73 @@ export function OpportunityDetail({
           </OverlayPanel>
         ) : null}
         {activeTab === 6 || activeTab === 7 ? (
-          <div className="rounded-md border border-border p-5 text-sm text-muted-foreground">
-            {overlayFetching
-              ? "Loading overlay state..."
-              : "This tab is ready for the discovery-tools conversion unit."}
-          </div>
+          activeTab === 6 ? (
+            <OverlayPanel
+              title="30/60/90 Check-ins"
+              description="Capture check-in outcomes, KPI movement, and follow-up actions."
+              saving={saving === "check-ins"}
+              onSave={() =>
+                saveSection("check-ins", {
+                  checkInSummary: drafts.checkInSummary,
+                })
+              }
+            >
+              <Textarea
+                aria-label="Check-in summary"
+                value={drafts.checkInSummary}
+                onChange={(event) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    checkInSummary: event.target.value,
+                  }))
+                }
+                className="min-h-28"
+                placeholder="30/60/90 updates, actual KPI movement, and next actions."
+              />
+            </OverlayPanel>
+          ) : (
+            <OverlayPanel
+              title="Executive View"
+              description="Create a concise executive-ready summary for the sponsor."
+              saving={saving === "executive-view"}
+              onSave={() =>
+                saveSection("executive-view", {
+                  executiveNarrative: drafts.executiveNarrative,
+                  executiveHeadline: drafts.executiveHeadline,
+                })
+              }
+            >
+              <div className="space-y-3">
+                <Input
+                  aria-label="Executive headline"
+                  value={drafts.executiveHeadline}
+                  onChange={(event) =>
+                    setDrafts((current) => ({
+                      ...current,
+                      executiveHeadline: event.target.value,
+                    }))
+                  }
+                  placeholder="Headline KPI or sponsor-ready outcome"
+                />
+                <Textarea
+                  aria-label="Executive narrative"
+                  value={drafts.executiveNarrative}
+                  onChange={(event) =>
+                    setDrafts((current) => ({
+                      ...current,
+                      executiveNarrative: event.target.value,
+                    }))
+                  }
+                  className="min-h-28"
+                />
+              </div>
+            </OverlayPanel>
+          )
+        ) : null}
+        {overlayFetching ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Loading overlay state...
+          </p>
         ) : null}
       </div>
     </div>
@@ -262,9 +343,11 @@ export function OpportunityDetail({
 function StageTools({
   stage,
   guidance,
+  onOpenTool,
 }: {
   stage: OpportunityStage;
   guidance?: { next: string; tool: string };
+  onOpenTool: (pageId: PrototypePageId) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -317,9 +400,17 @@ function StageTools({
                 {done ? "Complete" : active ? "Current" : "Upcoming"}
               </div>
               {tool.prototypeUrl ? (
-                <div className="mt-3 text-xs font-medium text-primary">
-                  Available in app
-                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => {
+                    if (tool.pageId) onOpenTool(tool.pageId);
+                  }}
+                >
+                  Open {tool.name}
+                </Button>
               ) : (
                 <div className="mt-3 text-xs text-muted-foreground">
                   {tool.disabledReason}

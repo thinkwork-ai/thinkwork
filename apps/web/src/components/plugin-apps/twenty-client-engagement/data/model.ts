@@ -108,3 +108,36 @@ export interface PrototypePipelineSeed {
   strategicOpportunityCount: number;
   layerTitles: string[];
 }
+
+export interface PipelineLayerDraft {
+  instanceName: string;
+  status: string;
+  whatWeKnow: string;
+  openQuestions: string;
+  businessValue: string;
+  nextSteps: string;
+}
+
+export interface UseCasePipelineAccount {
+  id: string;
+  client: string;
+  champion: string;
+  dateSurfaced: string;
+  sourceSession: string;
+  urgency: string;
+  layers: PipelineLayerDraft[];
+}
+
+export interface StrategicPipelineOpportunity {
+  id: string;
+  name: string;
+  type: string;
+  company: string;
+  contact: string;
+  surfacedVia: string;
+  status: string;
+  rationale: string;
+  whatWeKnow: string;
+  whatWeNeed: string;
+  nextSteps: string;
+}
