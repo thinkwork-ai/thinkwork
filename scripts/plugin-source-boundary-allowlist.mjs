@@ -110,6 +110,11 @@ export const sharedPluginTermAllowlist = [
       "shared platform GraphQL app data API for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
   },
   {
+    pathPrefix: "apps/web/src/components/plugin-apps/twenty-client-engagement/",
+    reason:
+      "shared platform React app surface for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
+  },
+  {
     pathPrefix: "apps/web/src/components/settings/plugins/n8n/",
     reason:
       "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
