@@ -16,6 +16,7 @@ const { navigateMock, queryResultMock } = vi.hoisted(() => ({
       installedPluginApps: [] as Array<{
         id: string;
         pluginKey: string;
+        appKey: string;
         pluginDisplayName: string;
         displayName: string;
         routeSegment: string;
@@ -61,6 +62,22 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
+vi.mock(
+  "@/components/plugin-apps/twenty-client-engagement/TwentyClientEngagementApp",
+  () => ({
+    TwentyClientEngagementApp: ({
+      appDisplayName,
+    }: {
+      appDisplayName: string;
+    }) => (
+      <section>
+        <h1>{appDisplayName}</h1>
+        <p>Twenty engagement app shell</p>
+      </section>
+    ),
+  }),
+);
+
 import { PluginAppRoute, PluginAppsIndexRoute } from "./PluginAppRoute";
 
 afterEach(() => {
@@ -77,6 +94,7 @@ describe("PluginAppRoute", () => {
       {
         id: "install-1:client-engagement",
         pluginKey: "twenty",
+        appKey: "twenty-client-engagement",
         pluginDisplayName: "Twenty CRM",
         displayName: "Client Engagement",
         routeSegment: "client-engagement",
@@ -95,12 +113,7 @@ describe("PluginAppRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Client Engagement", level: 1 }),
     ).toBeTruthy();
-    expect(screen.getByText("Twenty CRM")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Account and opportunity engagement workspace for Twenty CRM records.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Twenty engagement app shell")).toBeTruthy();
   });
 
   it("offers the plugin connection action when the selected app is not activated", () => {
@@ -108,6 +121,7 @@ describe("PluginAppRoute", () => {
       {
         id: "install-1:client-engagement",
         pluginKey: "twenty",
+        appKey: "twenty-client-engagement",
         pluginDisplayName: "Twenty CRM",
         displayName: "Client Engagement",
         routeSegment: "client-engagement",
@@ -133,6 +147,7 @@ describe("PluginAppRoute", () => {
       {
         id: "install-1:client-engagement",
         pluginKey: "twenty",
+        appKey: "twenty-client-engagement",
         pluginDisplayName: "Twenty CRM",
         displayName: "Client Engagement",
         routeSegment: "client-engagement",

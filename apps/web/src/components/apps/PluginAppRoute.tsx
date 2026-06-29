@@ -5,6 +5,7 @@ import { AlertCircle, AppWindow, Loader2, PlugZap } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import type { InstalledPluginAppsQuery as InstalledPluginAppsQueryResult } from "@/gql/graphql";
+import { TwentyClientEngagementApp } from "@/components/plugin-apps/twenty-client-engagement/TwentyClientEngagementApp";
 
 type InstalledPluginApp =
   InstalledPluginAppsQueryResult["installedPluginApps"][number];
@@ -91,6 +92,10 @@ export function PluginAppRoute({
 }
 
 function PluginAppHost({ app }: { app: InstalledPluginApp }) {
+  if (app.pluginKey === "twenty" && app.appKey === "twenty-client-engagement") {
+    return <TwentyClientEngagementApp appDisplayName={app.displayName} />;
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-6">
