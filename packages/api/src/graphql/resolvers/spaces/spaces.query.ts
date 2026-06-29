@@ -1,5 +1,13 @@
 import type { GraphQLContext } from "../../context.js";
-import { and, db, eq, sql, spaces as spacesTable } from "../../utils.js";
+import {
+  and,
+  db,
+  eq,
+  or,
+  sql,
+  spaces as spacesTable,
+  workItems,
+} from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   canManageTenantSpaces,
@@ -38,7 +46,11 @@ export async function spaces(
     Boolean(args.includeAllForAdmin) &&
     (await canManageTenantSpaces(ctx, args.tenantId));
   if (ctx.auth.authType === "cognito" && callerUserId && !includeAllForAdmin) {
-    conditions.push(userAccessibleSpacePredicate(args.tenantId, callerUserId));
+    const callerSpacePredicate = or(
+      userAccessibleSpacePredicate(args.tenantId, callerUserId),
+      assignedWorkItemSpacePredicate(args.tenantId, callerUserId),
+    );
+    if (callerSpacePredicate) conditions.push(callerSpacePredicate);
   }
 
   const rows = await db
@@ -128,5 +140,16 @@ function visibleSpaceListPredicate() {
   return sql`NOT (
     ${spacesTable.template_key} = ${AUTOMATION_BUILDER_SPACE_TEMPLATE_KEY}
     AND COALESCE(${spacesTable.config}->>'visibility', '') = 'system_hidden'
+  )`;
+}
+
+function assignedWorkItemSpacePredicate(tenantId: string, callerUserId: string) {
+  return sql`EXISTS (
+    SELECT 1
+      FROM ${workItems} assigned_wi
+     WHERE assigned_wi.tenant_id = ${tenantId}
+       AND assigned_wi.space_id = ${spacesTable.id}
+       AND assigned_wi.owner_user_id = ${callerUserId}
+       AND assigned_wi.archived_at IS NULL
   )`;
 }
