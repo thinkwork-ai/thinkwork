@@ -94,6 +94,45 @@ type TwentyEngagementDashboard {
   opportunityLayers: [TwentyEngagementOpportunityLayer!]!
 }
 
+"""
+ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
+source-system record. Overlay payloads are tenant-shared in v1; created/updated
+user fields are audit metadata, not visibility scopes.
+"""
+type PluginAppOverlay {
+  id: ID!
+  pluginInstallId: ID!
+  pluginKey: String!
+  appSurfaceKey: String!
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKey: String!
+  payload: AWSJSON!
+  createdByUserId: ID
+  updatedByUserId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input PluginAppOverlayQueryInput {
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKeys: [String!]
+}
+
+input UpsertPluginAppOverlayInput {
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKey: String!
+  payload: AWSJSON!
+}
+
 input UpdateTwentyEngagementOpportunityStageInput {
   opportunityId: ID!
   stage: String!
@@ -110,9 +149,15 @@ extend type Query {
 
   "CRM-owned records for the Twenty Client Engagement app."
   twentyEngagementDashboard: TwentyEngagementDashboard!
+
+  "ThinkWork-owned overlay sections for one plugin-app record."
+  pluginAppOverlays(input: PluginAppOverlayQueryInput!): [PluginAppOverlay!]!
 }
 
 extend type Mutation {
+  "Create or replace one ThinkWork-owned overlay section for a plugin-app record."
+  upsertPluginAppOverlay(input: UpsertPluginAppOverlayInput!): PluginAppOverlay!
+
   "Update an opportunity stage in Twenty through the authenticated plugin MCP path."
   updateTwentyEngagementOpportunityStage(
     input: UpdateTwentyEngagementOpportunityStageInput!

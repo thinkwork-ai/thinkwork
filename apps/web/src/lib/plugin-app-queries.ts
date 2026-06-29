@@ -29,6 +29,48 @@ export const InstalledPluginAppsQuery = graphql(`
   }
 `);
 
+export const PluginAppOverlaysQuery = graphql(`
+  query PluginAppOverlays($input: PluginAppOverlayQueryInput!) {
+    pluginAppOverlays(input: $input) {
+      id
+      pluginInstallId
+      pluginKey
+      appSurfaceKey
+      appKey
+      provider
+      providerRecordType
+      providerRecordId
+      sectionKey
+      payload
+      createdByUserId
+      updatedByUserId
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const UpsertPluginAppOverlayMutation = graphql(`
+  mutation UpsertPluginAppOverlay($input: UpsertPluginAppOverlayInput!) {
+    upsertPluginAppOverlay(input: $input) {
+      id
+      pluginInstallId
+      pluginKey
+      appSurfaceKey
+      appKey
+      provider
+      providerRecordType
+      providerRecordId
+      sectionKey
+      payload
+      createdByUserId
+      updatedByUserId
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const TwentyEngagementDashboardQuery = graphql(`
   query TwentyEngagementDashboard {
     twentyEngagementDashboard {
