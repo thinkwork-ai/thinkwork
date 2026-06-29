@@ -90,6 +90,7 @@ describe("open-engine-one-task-runner", () => {
         { name: "open_engine_get_context" },
         { name: "open_engine_list_documents" },
         { name: "open_engine_fetch_document" },
+        { name: "open_engine_create_comment" },
         { name: "open_engine_update_status_ledger" },
       ],
       responses: {
@@ -212,6 +213,27 @@ describe("open-engine-one-task-runner", () => {
     assert.match(result.prompt, /Load private setup context before task work/);
     assert.match(result.prompt, /codex -> Codex queue/);
     assert.match(result.prompt, /Do not install optional skills unless subscribed/);
+    assert.match(result.prompt, /open_engine_create_comment/);
+    assert.match(
+      result.prompt,
+      /open-engine-one-task-runner:wi-1:codex:claimed/,
+    );
+    assert.match(
+      result.prompt,
+      /open-engine-one-task-runner:wi-1:codex:status/,
+    );
+    assert.match(
+      result.prompt,
+      /open-engine-one-task-runner:wi-1:codex:done/,
+    );
+    assert.match(
+      result.prompt,
+      /open-engine-one-task-runner:wi-1:codex:blocked/,
+    );
+    assert.match(
+      result.prompt,
+      /open-engine-one-task-runner:wi-1:codex:failed/,
+    );
     assert.deepEqual(
       client.calls.map((call) => call.name),
       [
@@ -261,6 +283,7 @@ describe("open-engine-one-task-runner", () => {
         { name: "open_engine_get_context" },
         { name: "open_engine_list_documents" },
         { name: "open_engine_fetch_document" },
+        { name: "open_engine_create_comment" },
         { name: "open_engine_update_status_ledger" },
       ],
       responses: {
@@ -326,6 +349,9 @@ describe("open-engine-one-task-runner", () => {
 
     assert.match(prompt, /Do not claim another Work Item/);
     assert.match(prompt, /open_engine_update_state/);
+    assert.match(prompt, /open_engine_create_comment/);
+    assert.match(prompt, /Evidence gate keys/);
+    assert.match(prompt, /open-engine-one-task-runner:wi-1:codex:review/);
     assert.match(prompt, /state `done`/);
     assert.match(prompt, /state `blocked`/);
     assert.match(prompt, /Stop after this one Work Item/);

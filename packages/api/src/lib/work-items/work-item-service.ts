@@ -550,9 +550,38 @@ export async function createWorkItemComment(
     });
   }
   const body = requireNonEmpty(input.body, "body");
+  const source = optionalTrim(input.source) ?? "graphql";
+  const commentMetadata = buildWorkItemCommentMetadata(input, source);
   const now = new Date();
 
   return db.transaction(async (tx) => {
+    if (commentMetadata.idempotencyKey) {
+      const duplicateConditions: any[] = [
+        eq(workItemComments.tenant_id, tenantId),
+        eq(workItemComments.work_item_id, item.id),
+        isNull(workItemComments.archived_at),
+        sql`${workItemComments.metadata}->'openEngine'->>'idempotencyKey' = ${commentMetadata.idempotencyKey}`,
+        sql`${workItemComments.metadata}->>'source' = ${source}`,
+      ];
+      if (callerUserId) {
+        duplicateConditions.push(
+          eq(workItemComments.author_user_id, callerUserId),
+        );
+      }
+      if (authorAgentId) {
+        duplicateConditions.push(
+          eq(workItemComments.author_agent_id, authorAgentId),
+        );
+      }
+      const [existing] = await tx
+        .select()
+        .from(workItemComments)
+        .where(and(...duplicateConditions))
+        .orderBy(desc(workItemComments.created_at))
+        .limit(1);
+      if (existing) return existing;
+    }
+
     const [created] = await tx
       .insert(workItemComments)
       .values({
@@ -563,7 +592,7 @@ export async function createWorkItemComment(
         author_user_id: callerUserId,
         author_agent_id: authorAgentId ?? null,
         body,
-        metadata: parseAwsJsonObject(input.metadata),
+        metadata: commentMetadata.metadata,
         updated_at: now,
       })
       .returning();
@@ -578,7 +607,7 @@ export async function createWorkItemComment(
       event_type: "comment_added",
       message: "Comment added.",
       metadata: compactObject({
-        source: input.source ?? "graphql",
+        source,
         commentId: created.id,
       }),
     });
@@ -1216,6 +1245,40 @@ function clampLimit(value: unknown) {
   const parsed = Number(value ?? 100);
   if (!Number.isFinite(parsed)) return 100;
   return Math.min(Math.max(Math.trunc(parsed), 1), 500);
+}
+
+function buildWorkItemCommentMetadata(
+  input: Record<string, any>,
+  source: string,
+) {
+  const parsed = parseAwsJsonObject(input.metadata);
+  const base = parsed && isPlainObject(parsed) ? parsed : {};
+  const openEngineMetadata = isPlainObject(base.openEngine)
+    ? base.openEngine
+    : {};
+  const idempotencyKey =
+    optionalTrim(input.idempotencyKey) ??
+    optionalTrim(openEngineMetadata.idempotencyKey);
+
+  if (!idempotencyKey) {
+    return { metadata: parsed, idempotencyKey: null };
+  }
+
+  return {
+    metadata: {
+      ...base,
+      source,
+      openEngine: {
+        ...openEngineMetadata,
+        idempotencyKey,
+      },
+    },
+    idempotencyKey,
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 export function parseAwsJsonObject(value: unknown) {

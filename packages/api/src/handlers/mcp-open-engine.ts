@@ -354,6 +354,11 @@ const TOOLS = [
         threadId: { type: "string" },
         body: { type: "string" },
         metadata: { type: "object" },
+        idempotencyKey: {
+          type: "string",
+          description:
+            "Optional stable key for idempotent OpenEngine evidence comments.",
+        },
       },
       required: ["workItemId", "body"],
       additionalProperties: false,
@@ -986,6 +991,9 @@ async function createCommentTool(
 ) {
   const agentId =
     (await optionalResolvedAgentId(caller, args.agentId)) ?? caller.agentId;
+  const metadata = optionalRecordArg(args.metadata) ?? {};
+  const openEngineMetadata = optionalRecordArg(metadata.openEngine) ?? {};
+  const idempotencyKey = stringArg(args.idempotencyKey);
   const created = await createWorkItemComment(ctx, {
     tenantId: caller.tenantId,
     workItemId: requiredStringArg(args.workItemId, "workItemId"),
@@ -995,8 +1003,17 @@ async function createCommentTool(
     body: requiredStringArg(args.body, "body"),
     metadata: {
       sourceTool: "open_engine_create_comment",
-      ...(optionalRecordArg(args.metadata) ?? {}),
+      ...metadata,
+      ...(idempotencyKey
+        ? {
+            openEngine: {
+              ...openEngineMetadata,
+              idempotencyKey,
+            },
+          }
+        : {}),
     },
+    idempotencyKey,
     source: "open_engine_mcp",
   });
   return { ok: true, comment: formatComment(created) };
