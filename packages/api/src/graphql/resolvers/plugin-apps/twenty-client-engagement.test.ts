@@ -232,6 +232,111 @@ describe("twenty client engagement app resolvers", () => {
     });
   });
 
+  it("accepts nested relation IDs returned by Twenty MCP records", async () => {
+    callTool
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              {
+                id: { value: "company-1" },
+                name: "Acme Corp",
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              {
+                id: "opp-1",
+                name: "Board-ready demo",
+                stage: "VALUE_ALIGNMENT",
+                company: { id: "company-1" },
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              {
+                id: "layer-1",
+                layerType: "CORE_PROBLEM",
+                layerStatus: "IN_DISCOVERY",
+                opportunity: { id: "opp-1" },
+              },
+            ],
+          },
+        }),
+      );
+
+    const result = await twentyEngagementDashboard(null, {} as never, CTX);
+
+    expect(result.accounts).toHaveLength(1);
+    expect(result.accounts[0]?.company.id).toBe("company-1");
+    expect(result.accounts[0]?.opportunities[0]?.opportunity.companyId).toBe(
+      "company-1",
+    );
+    expect(result.accounts[0]?.opportunities[0]?.layers[0]?.opportunityId).toBe(
+      "opp-1",
+    );
+  });
+
+  it("skips malformed CRM rows instead of failing the whole dashboard", async () => {
+    callTool
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              { id: "company-1", name: "Acme Corp" },
+              { name: "Missing id" },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              { id: "opp-1", name: "Valid opportunity", companyId: "company-1" },
+              { id: "", name: "Blank id", companyId: "company-1" },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        mcpJson({
+          result: {
+            records: [
+              { id: "layer-1", opportunityId: "opp-1" },
+              { id: "layer-invalid" },
+            ],
+          },
+        }),
+      );
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await twentyEngagementDashboard(null, {} as never, CTX);
+
+    expect(result.companies.map((company) => company.id)).toEqual([
+      "company-1",
+    ]);
+    expect(result.opportunities.map((opportunity) => opportunity.id)).toEqual([
+      "opp-1",
+    ]);
+    expect(result.opportunityLayers.map((layer) => layer.id)).toEqual([
+      "layer-1",
+    ]);
+    expect(result.accounts[0]?.opportunities[0]?.layers).toHaveLength(1);
+    expect(warnSpy).toHaveBeenCalledTimes(3);
+    warnSpy.mockRestore();
+  });
+
   it("requires the Twenty plugin install", async () => {
     store.findInstall.mockResolvedValue(null);
 
