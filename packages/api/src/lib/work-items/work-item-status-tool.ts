@@ -226,10 +226,11 @@ export async function setWorkItemStatus(
       event_type: eventTypeForStatus(previousCategory, status.category),
       previous_status_id: item.statusId,
       new_status_id: status.id,
-      message: buildStatusChangeMessage(item.title, status.name, note),
+      message: buildStatusChangeMessage(status.name, note),
       metadata: compactObject({
         source: "set_work_item_status",
         note,
+        newStatusName: status.name,
         actor: input.actor,
         threadTurnId: cleanString(input.threadTurnId),
         toolCallId: cleanString(input.toolCallId),
@@ -374,13 +375,9 @@ function eventTypeForStatus(
   return "status_changed";
 }
 
-function buildStatusChangeMessage(
-  title: string,
-  statusName: string,
-  note: string | null,
-) {
+function buildStatusChangeMessage(statusName: string, note: string | null) {
   const suffix = note ? ` Note: ${note}` : "";
-  return `${title} moved to ${statusName} by set_work_item_status.${suffix}`;
+  return `moved to ${statusName}.${suffix}`;
 }
 
 function reject(

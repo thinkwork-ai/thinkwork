@@ -251,6 +251,7 @@ import { workItems } from "./workItems.query.js";
 import { workItemLabels } from "./workItemLabels.query.js";
 import { createWorkItemLabel } from "./createWorkItemLabel.mutation.js";
 import { createWorkItemDocument } from "./createWorkItemDocument.mutation.js";
+import { updateWorkItem } from "./updateWorkItem.mutation.js";
 import { updateWorkItemLabel } from "./updateWorkItemLabel.mutation.js";
 import { updateWorkItemDocument } from "./updateWorkItemDocument.mutation.js";
 import { updateWorkItemStatus } from "./updateWorkItemStatus.mutation.js";
@@ -362,6 +363,103 @@ describe("work item resolvers", () => {
         slug: "openengine",
       }),
     ]);
+  });
+
+  it("records priority update activity with field-change metadata", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Send DocuSign package",
+      priority: "normal",
+      blocked: false,
+      required: true,
+      applicable: true,
+      archived_at: null,
+    };
+    captures.selectQueue.push([existingItem]);
+    captures.updateReturningQueue.push([{ ...existingItem, priority: "high" }]);
+
+    await updateWorkItem(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          priority: "HIGH",
+        },
+      },
+      ctx,
+    );
+
+    expect(captures.insertValues[0]).toEqual(
+      expect.objectContaining({
+        event_type: "updated",
+        message: "priority changed.",
+        metadata: expect.objectContaining({
+          source: "graphql",
+          action: "priority_changed",
+          changedFields: ["priority"],
+          fieldChanges: [
+            {
+              field: "priority",
+              previousValue: "normal",
+              newValue: "high",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("records assignment update activity as an assigned event", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Send DocuSign package",
+      priority: "normal",
+      owner_user_id: null,
+      blocked: false,
+      required: true,
+      applicable: true,
+      archived_at: null,
+    };
+    captures.selectQueue.push([existingItem]);
+    captures.updateReturningQueue.push([
+      { ...existingItem, owner_user_id: "user-eric" },
+    ]);
+
+    await updateWorkItem(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          ownerUserId: "user-eric",
+        },
+      },
+      ctx,
+    );
+
+    expect(captures.insertValues[0]).toEqual(
+      expect.objectContaining({
+        actor_user_id: "user-1",
+        event_type: "assigned",
+        message: "assignee changed.",
+        metadata: expect.objectContaining({
+          action: "assignment_changed",
+          changedFields: ["owner_user_id"],
+          fieldChanges: [
+            {
+              field: "owner_user_id",
+              previousValue: null,
+              newValue: "user-eric",
+            },
+          ],
+        }),
+      }),
+    );
   });
 
   it("creates Work Item labels with normalized slugs", async () => {
@@ -476,7 +574,11 @@ describe("work item resolvers", () => {
     expect(captures.insertValues[1]).toEqual(
       expect.objectContaining({
         event_type: "updated",
-        metadata: expect.objectContaining({ action: "document_created" }),
+        message: "document created.",
+        metadata: expect.objectContaining({
+          action: "document_created",
+          documentTitle: "Implementation plan",
+        }),
       }),
     );
     expect(result).toEqual(
@@ -690,7 +792,11 @@ describe("work item resolvers", () => {
     expect(captures.insertValues.at(-1)).toEqual(
       expect.objectContaining({
         event_type: "updated",
-        metadata: expect.objectContaining({ action: "document_archived" }),
+        message: "document archived.",
+        metadata: expect.objectContaining({
+          action: "document_archived",
+          documentTitle: "Verification",
+        }),
       }),
     );
     expect(archived).toEqual(
@@ -759,6 +865,11 @@ describe("work item resolvers", () => {
         event_type: "completed",
         previous_status_id: "status-todo",
         new_status_id: "status-done",
+        message: "moved to Done. Note: Signed.",
+        metadata: expect.objectContaining({
+          newStatusName: "Done",
+          note: "Signed.",
+        }),
       }),
     );
     expect(result).toEqual(
