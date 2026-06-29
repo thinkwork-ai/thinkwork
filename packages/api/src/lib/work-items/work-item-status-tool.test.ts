@@ -151,9 +151,11 @@ describe("setWorkItemStatus", () => {
       event_type: "completed",
       previous_status_id: "status-todo",
       new_status_id: "status-done",
+      message: "moved to Done. Note: Invoice received",
     });
     expect(store.inserts[0]?.metadata).toMatchObject({
       source: "set_work_item_status",
+      newStatusName: "Done",
       threadTurnId: "turn-1",
       toolCallId: "call-1",
     });
