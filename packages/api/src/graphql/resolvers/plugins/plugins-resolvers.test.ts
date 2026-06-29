@@ -147,6 +147,7 @@ import {
   refreshPluginCatalog,
   revokePremiumPluginInstallKey,
   uninstallPlugin,
+  upgradePlugin,
 } from "./mutations.js";
 import {
   myPluginActivations,
@@ -729,6 +730,110 @@ describe("admin gating", () => {
         userAgent: "PremiumInstallTest/1.0",
       },
     });
+  });
+
+  it("upgrades an installed plugin to a launchable app ui-surface component", async () => {
+    const oldVersion: PluginVersion = {
+      version: "0.2.0",
+      requiredOauthScopes: [],
+      components: [
+        {
+          type: "mcp-server",
+          key: "crm",
+          displayName: "Twenty CRM",
+          endpointUrl: "https://crm.example.invalid/mcp",
+          auth: {
+            mode: "oauth",
+            authDomain: "https://auth.example.invalid",
+            resourceIndicator: "https://crm.example.invalid",
+          },
+        },
+      ],
+    };
+    const newVersion: PluginVersion = {
+      version: "0.3.0",
+      requiredOauthScopes: [],
+      components: [
+        oldVersion.components[0]!,
+        {
+          type: "ui-surface",
+          key: "client-engagement",
+          displayName: "Client Engagement",
+          intendedMount: "apps.main",
+          launch: {
+            schemaVersion: 1,
+            type: "app",
+            appKey: "twenty-client-engagement",
+            routeSegment: "client-engagement",
+            mount: "main-shell",
+            runtime: "trusted-bundled-react",
+            description:
+              "Account and opportunity engagement workspace for Twenty CRM records.",
+            icon: "layout-dashboard",
+            entitlementProductKey: "twenty-client-engagement",
+          },
+        },
+      ],
+    };
+    const deps = buildDeps();
+    deps.resolveVersion = async (pluginKey, version) => {
+      if (pluginKey !== "twenty") return null;
+      const payload = version === "0.3.0" ? newVersion : oldVersion;
+      return {
+        plugin: {
+          pluginKey: "twenty",
+          displayName: "Twenty CRM",
+          description: "Customer relationship management.",
+        },
+        versionEntry: {
+          version: payload.version,
+          payloadSha256: `sha-${payload.version}`,
+          payload,
+        },
+      };
+    };
+    depsHolder.current = deps;
+
+    await installPlugin(
+      null,
+      {
+        input: {
+          pluginKey: "twenty",
+          version: "0.2.0",
+          idempotencyKey: "install-twenty",
+        },
+      },
+      CTX,
+    );
+    const installId = [...store.installs.keys()][0]!;
+
+    const result = (await upgradePlugin(
+      null,
+      {
+        input: {
+          installId,
+          version: "0.3.0",
+          idempotencyKey: "upgrade-twenty-app",
+        },
+      },
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      pluginKey: "twenty",
+      pinnedVersion: "0.3.0",
+      state: "installed",
+    });
+    expect(result.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          componentKey: "client-engagement",
+          componentType: "ui-surface",
+          state: "provisioned",
+          handlerRef: {},
+        }),
+      ]),
+    );
   });
 
   it("pluginInstalls is admin-gated", async () => {

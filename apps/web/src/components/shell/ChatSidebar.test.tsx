@@ -152,6 +152,7 @@ vi.mock("@tanstack/react-router", () => ({
       .replace("$spaceId", params?.spaceId ?? "$spaceId")
       .replace("$threadId", params?.threadId ?? "$threadId")
       .replace("$id", params?.id ?? "$id")
+      .replace("$pluginKey", params?.pluginKey ?? "$pluginKey")
       .replace(
         "$appRouteSegment",
         params?.appRouteSegment ?? "$appRouteSegment",
@@ -812,7 +813,7 @@ describe("ChatSidebar", () => {
     });
     tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
     locationMock.mockReturnValue({
-      pathname: "/apps/client-engagement",
+      pathname: "/apps/twenty/client-engagement",
       search: {},
     });
 
@@ -822,7 +823,9 @@ describe("ChatSidebar", () => {
     const appLink = screen.getByRole("link", {
       name: /client engagement twenty crm/i,
     });
-    expect(appLink.getAttribute("href")).toBe("/apps/client-engagement");
+    expect(appLink.getAttribute("href")).toBe(
+      "/apps/twenty/client-engagement",
+    );
     expect(
       screen
         .getByRole("link", { name: /work items/i })
