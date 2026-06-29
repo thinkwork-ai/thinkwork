@@ -100,7 +100,13 @@ export function PluginAppRoute({
 
 function PluginAppHost({ app }: { app: InstalledPluginApp }) {
   if (app.pluginKey === "twenty" && app.appKey === "twenty-client-engagement") {
-    return <TwentyClientEngagementApp appDisplayName={app.displayName} />;
+    return (
+      <TwentyClientEngagementApp
+        appDisplayName={app.displayName}
+        pluginDisplayName={app.pluginDisplayName}
+        pluginKey={app.pluginKey}
+      />
+    );
   }
 
   return (

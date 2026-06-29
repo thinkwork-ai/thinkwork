@@ -15,6 +15,7 @@ const {
   upsertOverlayMock,
   updateStageMock,
   updateLayerStatusMock,
+  usePageHeaderActionsMock,
 } = vi.hoisted(() => ({
   dashboardResultMock: {
     fetching: false,
@@ -106,6 +107,11 @@ const {
     mutationCalls.push({ name: "updateLayerStatus", variables });
     return { data: { updateTwentyEngagementOpportunityLayerStatus: {} } };
   }),
+  usePageHeaderActionsMock: vi.fn(),
+}));
+
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: usePageHeaderActionsMock,
 }));
 
 vi.mock("urql", () => ({
@@ -163,6 +169,18 @@ vi.mock("urql", () => ({
 
 import { TwentyClientEngagementApp } from "./TwentyClientEngagementApp";
 
+function latestHeaderActions() {
+  const actions = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
+  if (!actions) throw new Error("Expected page header actions to be published");
+  return actions;
+}
+
+function renderLatestHeaderAction() {
+  const action = latestHeaderActions().action;
+  if (!action) throw new Error("Expected page header action to be published");
+  return render(<>{action}</>);
+}
+
 afterEach(() => {
   cleanup();
   overlayRowsMock.length = 0;
@@ -171,11 +189,39 @@ afterEach(() => {
   upsertOverlayMock.mockClear();
   updateStageMock.mockClear();
   updateLayerStatusMock.mockClear();
+  usePageHeaderActionsMock.mockClear();
   dashboardResultMock.fetching = false;
   dashboardResultMock.error = null;
 });
 
 describe("TwentyClientEngagementApp", () => {
+  it("publishes the app title through the shell breadcrumb header", async () => {
+    render(
+      <TwentyClientEngagementApp
+        appDisplayName="Client Engagement"
+        pluginDisplayName="Twenty CRM"
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "McPherson Companies" }),
+    ).toBeTruthy();
+    expect(usePageHeaderActionsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Client Engagement",
+        documentTitle: "Twenty CRM · Client Engagement",
+        breadcrumbs: [
+          { label: "Twenty CRM", href: "/settings/plugins/twenty" },
+          { label: "Client Engagement" },
+        ],
+      }),
+    );
+    expect(
+      renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Twenty CRM projection")).toBeNull();
+  });
+
   it("opens account and opportunity CRM data without direct browser MCP fetches", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
@@ -274,7 +320,9 @@ describe("TwentyClientEngagementApp", () => {
 
   it("persists app-level opportunity pipeline edits and restores them after remount", async () => {
     render(<TwentyClientEngagementApp />);
-    fireEvent.click(screen.getByRole("button", { name: "Pipeline" }));
+    fireEvent.click(
+      renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
+    );
 
     fireEvent.change(await screen.findByLabelText("Pipeline client name"), {
       target: { value: "Acme Expansion" },
@@ -317,7 +365,9 @@ describe("TwentyClientEngagementApp", () => {
     });
 
     render(<TwentyClientEngagementApp />);
-    fireEvent.click(screen.getByRole("button", { name: "Pipeline" }));
+    fireEvent.click(
+      renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
+    );
 
     expect(
       (

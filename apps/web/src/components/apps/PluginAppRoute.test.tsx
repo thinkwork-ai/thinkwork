@@ -67,11 +67,14 @@ vi.mock(
   () => ({
     TwentyClientEngagementApp: ({
       appDisplayName,
+      pluginDisplayName,
     }: {
       appDisplayName: string;
+      pluginDisplayName: string;
     }) => (
       <section>
         <h1>{appDisplayName}</h1>
+        <p>{pluginDisplayName}</p>
         <p>Twenty engagement app shell</p>
       </section>
     ),
@@ -118,6 +121,7 @@ describe("PluginAppRoute", () => {
     expect(
       screen.getByRole("heading", { name: "Client Engagement", level: 1 }),
     ).toBeTruthy();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
     expect(screen.getByText("Twenty engagement app shell")).toBeTruthy();
   });
 
