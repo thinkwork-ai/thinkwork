@@ -121,26 +121,24 @@ describe("DesktopOAuthController", () => {
     expect(url.searchParams.get("prompt")).toBe("select_account");
   });
 
-  it("uses the published WorkOS auth option for desktop OAuth when available", async () => {
+  it("uses the published WorkOS authorize option for desktop OAuth when available", async () => {
     const openExternal = vi.fn(async () => undefined);
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(
-        publicAuthOptionsResponse([
-          {
-            key: "workos-sso",
-            label: "Continue with SSO",
-            icon: "sso",
-            provider: "workos",
-            providerSpecific: false,
-            cognitoIdentityProviderName: "WorkOSAuth",
-            route: {
-              type: "cognitoHostedUi",
-              identityProvider: "WorkOSAuth",
-            },
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      publicAuthOptionsResponse([
+        {
+          key: "workos-sso",
+          label: "Continue with SSO",
+          icon: "sso",
+          provider: "workos",
+          providerSpecific: false,
+          route: {
+            type: "workosAuthorize",
+            authorizePath: "/api/auth/workos/authorize",
+            prompt: "select_account",
           },
-        ]),
-      );
+        },
+      ]),
+    );
     const controller = createController({
       fetch: fetchImpl,
       shell: { openExternal },
@@ -158,8 +156,15 @@ describe("DesktopOAuthController", () => {
       },
     );
     expect(openExternal).toHaveBeenCalledWith(result.url);
-    expect(url.searchParams.get("identity_provider")).toBe("WorkOSAuth");
-    expect(url.searchParams.get("prompt")).toBeNull();
+    expect(url.origin).toBe("https://api.example.test");
+    expect(url.pathname).toBe("/api/auth/workos/authorize");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "thinkwork-dev://oauth/callback",
+    );
+    expect(url.searchParams.get("return_to")).toBe("/new");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
+    expect(url.searchParams.has("identity_provider")).toBe(false);
+    expect(controller.inFlightCount()).toBe(0);
   });
 
   it("prefers the packaged desktop scheme for canary builds pointed at dev", async () => {
@@ -226,6 +231,7 @@ describe("DesktopOAuthController", () => {
     ).toBe(authorizeUrl.searchParams.get("code_challenge"));
     const prefix = "CognitoIdentityServiceProvider.test-client-id";
     expect(storage.snapshot()).toEqual({
+      "thinkwork:auth-source": "cognito",
       [`${prefix}.LastAuthUser`]: "google_123",
       [`${prefix}.google_123.accessToken`]: "access-token",
       [`${prefix}.google_123.clockDrift`]: "0",
@@ -291,6 +297,56 @@ describe("DesktopOAuthController", () => {
     );
   });
 
+  it("exchanges a WorkOS bridge callback and stores a WorkOS-sourced Cognito session", async () => {
+    const storage = createStorage();
+    const idToken = encodeJwtPayload({
+      "cognito:username": "workos_user",
+      sub: "cognito-sub",
+    });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        id_token: idToken,
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    );
+    const controller = createController({
+      fetch: fetchImpl,
+      storage,
+    });
+
+    await expect(
+      controller.completeOAuthCallback({
+        workos_bridge: "bridge-code",
+        next: "/work-items/123",
+      }),
+    ).resolves.toEqual({
+      workos_bridge: "bridge-code",
+      next: "/work-items/123",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.example.test/api/auth/workos/bridge",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ bridge_code: "bridge-code" }),
+      },
+    );
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    expect(storage.snapshot()).toEqual({
+      "thinkwork:auth-source": "workos",
+      [`${prefix}.LastAuthUser`]: "workos_user",
+      [`${prefix}.workos_user.accessToken`]: "access-token",
+      [`${prefix}.workos_user.clockDrift`]: "0",
+      [`${prefix}.workos_user.idToken`]: idToken,
+      [`${prefix}.workos_user.refreshToken`]: "refresh-token",
+    });
+  });
+
   it("rejects a mismatched callback state without calling token exchange", async () => {
     const fetchImpl = vi.fn();
     const controller = createController({ fetch: fetchImpl });
@@ -339,7 +395,13 @@ describe("DesktopOAuthController", () => {
       logger: { error: vi.fn(), warn: vi.fn() },
     });
 
-    await expect(controller.signOut("refresh-token")).resolves.toEqual({
+    await expect(
+      controller.signOut({
+        authSource: null,
+        idToken: null,
+        refreshToken: "refresh-token",
+      }),
+    ).resolves.toEqual({
       ok: true,
       revokeFailed: true,
     });
@@ -406,6 +468,45 @@ describe("DesktopOAuthController", () => {
     await expect(
       readFile(join(userDataDir, "pending-revocations.json"), "utf8"),
     ).resolves.toBe("[]");
+  });
+
+  it("revokes the server-side WorkOS session before revoking the Cognito refresh token", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ logout_url: null }))
+      .mockResolvedValueOnce(new Response("", { status: 200 }));
+    const controller = createController({ fetch: fetchImpl });
+
+    await expect(
+      controller.signOut({
+        authSource: "workos",
+        idToken: "id-token",
+        refreshToken: "refresh-token",
+      }),
+    ).resolves.toEqual({ ok: true, revokeFailed: false });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/auth/workos/logout",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer id-token",
+        },
+        body: JSON.stringify({
+          return_to: "thinkwork-dev://oauth/callback",
+        }),
+      },
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://thinkwork-dev.auth.us-east-1.amazoncognito.com/oauth2/revoke",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
   });
 });
 
