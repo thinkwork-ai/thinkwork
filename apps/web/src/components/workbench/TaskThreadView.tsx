@@ -3248,7 +3248,7 @@ function FollowUpComposer({
               catalog={skillCatalog}
               mentions={mentions}
               onKeyDown={handleComposerKeyDown}
-              placeholder="Type @ to mention people, # for agent profiles, or / to use a skill"
+              placeholder="Ask for follow-up changes"
               disabled={disabled}
             />
           </PromptInputBody>
