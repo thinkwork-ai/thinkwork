@@ -29,12 +29,16 @@ import {
   cn,
 } from "@thinkwork/ui";
 import { AgentRuntime } from "@/gql/graphql";
+import { useFragment } from "@/gql/fragment-masking";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
 import { SettingsMainAgent } from "@/components/workspace-settings/SettingsMainAgent";
+import { SettingsAgentExtensions } from "@/components/settings/SettingsAgentExtensions";
 import {
+  SettingsPiExtensionFieldsFragment,
+  SettingsPiExtensionsQuery,
   SettingsAgentProfilesQuery,
   SettingsCreateAgentProfileMutation,
   SettingsDeleteAgentProfileMutation,
@@ -135,10 +139,7 @@ type ProfileDraft = {
 };
 
 type ExternalReviewerPolicy =
-  | "never"
-  | "explicit"
-  | "profile_required"
-  | "always";
+  "never" | "explicit" | "profile_required" | "always";
 
 type LoopFailBehavior = "return_blocker" | "best_effort_with_warning";
 
@@ -170,11 +171,24 @@ export function SettingsAgents() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [extensionsResult, refetchExtensions] = useQuery({
+    query: SettingsPiExtensionsQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
   const [, createProfile] = useMutation(SettingsCreateAgentProfileMutation);
 
   const profiles = useMemo(
     () => sortProfiles(profilesResult.data?.agentProfiles ?? []),
     [profilesResult.data?.agentProfiles],
+  );
+  const extensions = useFragment(
+    SettingsPiExtensionFieldsFragment,
+    extensionsResult.data?.piExtensions ?? [],
+  );
+  const extensionCountsByProfileId = useMemo(
+    () => enabledExtensionCountsByProfileId(extensions),
+    [extensions],
   );
   const catalog = profilesResult.data?.agentProfileEditorCatalog;
 
@@ -285,6 +299,15 @@ export function SettingsAgents() {
 
       <AgentConfigSection spaces={(catalog?.spaces ?? []) as SpaceOption[]} />
 
+      <SettingsAgentExtensions
+        tenantId={tenantId ?? ""}
+        extensions={extensions}
+        profiles={profiles}
+        fetching={extensionsResult.fetching}
+        errorMessage={extensionsResult.error?.message}
+        onChanged={() => refetchExtensions({ requestPolicy: "network-only" })}
+      />
+
       <SettingsSection
         label="Agent Profiles"
         action={
@@ -313,6 +336,7 @@ export function SettingsAgents() {
               <ProfileListItem
                 key={profile.id}
                 profile={profile}
+                extensionCount={extensionCountsByProfileId.get(profile.id) ?? 0}
                 onSelect={() =>
                   navigate({
                     to: "/settings/agents/$profileId",
@@ -704,9 +728,11 @@ function AgentConfigSection({ spaces }: { spaces: SpaceOption[] }) {
 
 function ProfileListItem({
   profile,
+  extensionCount,
   onSelect,
 }: {
   profile: AgentProfileRow;
+  extensionCount: number;
   onSelect: () => void;
 }) {
   const toolPolicy = parseJson<ToolPolicy>(profile.toolPolicy, {});
@@ -734,6 +760,7 @@ function ProfileListItem({
           <Badge variant="outline">{builtIns} Tools</Badge>
           <Badge variant="outline">{mcps} MCP</Badge>
           <Badge variant="outline">{skills} Skills</Badge>
+          <Badge variant="outline">{extensionCount} Extensions</Badge>
           <Badge variant="outline">
             {profile.spaces.length === 0
               ? "All Spaces"
@@ -747,6 +774,33 @@ function ProfileListItem({
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
     </button>
   );
+}
+
+function enabledExtensionCountsByProfileId(
+  extensions: ReadonlyArray<{
+    assignments: ReadonlyArray<{
+      targetType: string;
+      agentProfileId?: string | null;
+      enabled: boolean;
+    }>;
+  }>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const extension of extensions) {
+    for (const assignment of extension.assignments) {
+      if (
+        assignment.enabled &&
+        assignment.targetType === "AGENT_PROFILE" &&
+        assignment.agentProfileId
+      ) {
+        counts.set(
+          assignment.agentProfileId,
+          (counts.get(assignment.agentProfileId) ?? 0) + 1,
+        );
+      }
+    }
+  }
+  return counts;
 }
 
 function AgentProfileEditor({
