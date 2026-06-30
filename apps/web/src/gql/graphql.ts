@@ -845,6 +845,11 @@ export type ApproveOntologyChangeSetInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type ApprovePiExtensionVersionInput = {
+  tenantId: Scalars['ID']['input'];
+  versionId: Scalars['ID']['input'];
+};
+
 export type Artifact = {
   __typename?: 'Artifact';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -2374,6 +2379,13 @@ export type ImportN8nWorkflowDraftResult = {
   workflowVersion: WorkflowVersion;
 };
 
+export type ImportPiExtensionFromGitHubInput = {
+  manifestPath?: InputMaybe<Scalars['String']['input']>;
+  ref: Scalars['String']['input'];
+  repositoryUrl: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
 export type ImportTenantBedrockModelInput = {
   displayName?: InputMaybe<Scalars['String']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
@@ -3490,6 +3502,7 @@ export type Mutation = {
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
+  approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
   assignThreadLabel: ThreadLabelAssignment;
   /**
@@ -3621,6 +3634,7 @@ export type Mutation = {
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
+  importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
@@ -3687,6 +3701,7 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
+  rejectPiExtensionVersion: PiExtension;
   /** Tenant-operator rejection with rationale. */
   rejectSkillDraft: SkillDraft;
   releaseThread: Thread;
@@ -3807,6 +3822,7 @@ export type Mutation = {
   updateOntologyChangeSet: OntologyChangeSet;
   updateOntologyEntityType: OntologyEntityType;
   updateOntologyRelationshipType: OntologyRelationshipType;
+  updatePiExtensionAssignment: PiExtension;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
@@ -3952,6 +3968,11 @@ export type MutationApproveManagedApplicationDeploymentArgs = {
 
 export type MutationApproveOntologyChangeSetArgs = {
   input: ApproveOntologyChangeSetInput;
+};
+
+
+export type MutationApprovePiExtensionVersionArgs = {
+  input: ApprovePiExtensionVersionInput;
 };
 
 
@@ -4370,6 +4391,11 @@ export type MutationImportN8nWorkflowDraftArgs = {
 };
 
 
+export type MutationImportPiExtensionFromGitHubArgs = {
+  input: ImportPiExtensionFromGitHubInput;
+};
+
+
 export type MutationImportTenantBedrockModelsArgs = {
   input: ImportTenantBedrockModelsInput;
 };
@@ -4634,6 +4660,11 @@ export type MutationRejectManagedApplicationDeploymentArgs = {
 
 export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
+};
+
+
+export type MutationRejectPiExtensionVersionArgs = {
+  input: RejectPiExtensionVersionInput;
 };
 
 
@@ -5131,6 +5162,11 @@ export type MutationUpdateOntologyEntityTypeArgs = {
 
 export type MutationUpdateOntologyRelationshipTypeArgs = {
   input: UpdateOntologyRelationshipTypeInput;
+};
+
+
+export type MutationUpdatePiExtensionAssignmentArgs = {
+  input: UpdatePiExtensionAssignmentInput;
 };
 
 
@@ -5822,6 +5858,80 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
+export type PiExtension = {
+  __typename?: 'PiExtension';
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  approvedByUserId?: Maybe<Scalars['ID']['output']>;
+  artifactHash?: Maybe<Scalars['String']['output']>;
+  artifactUri?: Maybe<Scalars['String']['output']>;
+  assignmentSummary: PiExtensionAssignmentSummary;
+  assignments: Array<PiExtensionAssignment>;
+  commitSha?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  displayName?: Maybe<Scalars['String']['output']>;
+  executable: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  lifecycleHooks: Array<Scalars['String']['output']>;
+  manifest: Scalars['AWSJSON']['output'];
+  manifestHash?: Maybe<Scalars['String']['output']>;
+  permissionClasses: Array<Scalars['String']['output']>;
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  rejectedByUserId?: Maybe<Scalars['ID']['output']>;
+  repositoryName?: Maybe<Scalars['String']['output']>;
+  repositoryOwner?: Maybe<Scalars['String']['output']>;
+  repositoryUrl: Scalars['String']['output'];
+  reviewedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  reviewedByUserId?: Maybe<Scalars['ID']['output']>;
+  runtimeTarget?: Maybe<Scalars['String']['output']>;
+  sourceId: Scalars['ID']['output'];
+  sourceRef: Scalars['String']['output'];
+  sourceType: PiExtensionSourceType;
+  status: PiExtensionVersionStatus;
+  statusReason?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  toolNames: Array<Scalars['String']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  verificationReport: Scalars['AWSJSON']['output'];
+};
+
+export type PiExtensionAssignment = {
+  __typename?: 'PiExtensionAssignment';
+  agentProfileId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  grantedPermissions: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  targetType: PiExtensionAssignmentTargetType;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  versionId: Scalars['ID']['output'];
+};
+
+export type PiExtensionAssignmentSummary = {
+  __typename?: 'PiExtensionAssignmentSummary';
+  defaultAgentEnabled: Scalars['Boolean']['output'];
+  disabledCount: Scalars['Int']['output'];
+  enabledProfileCount: Scalars['Int']['output'];
+};
+
+export enum PiExtensionAssignmentTargetType {
+  AgentProfile = 'AGENT_PROFILE',
+  DefaultAgent = 'DEFAULT_AGENT'
+}
+
+export enum PiExtensionSourceType {
+  Github = 'GITHUB'
+}
+
+export enum PiExtensionVersionStatus {
+  Approved = 'APPROVED',
+  FailedVerification = 'FAILED_VERIFICATION',
+  Imported = 'IMPORTED',
+  NeedsReview = 'NEEDS_REVIEW',
+  Rejected = 'REJECTED'
+}
+
 export type PinnedThread = {
   __typename?: 'PinnedThread';
   pinOrder: Scalars['Int']['output'];
@@ -6253,6 +6363,7 @@ export type Query = {
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
+  piExtensions: Array<PiExtension>;
   pinnedThreads: Array<PinnedThread>;
   /** ThinkWork-owned overlay sections for one plugin-app record. */
   pluginAppOverlays: Array<PluginAppOverlay>;
@@ -6984,6 +7095,13 @@ export type QueryPerformanceTimeSeriesArgs = {
 };
 
 
+export type QueryPiExtensionsArgs = {
+  includeFailed?: InputMaybe<Scalars['Boolean']['input']>;
+  includeRejected?: InputMaybe<Scalars['Boolean']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryPinnedThreadsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
@@ -7610,6 +7728,12 @@ export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars['ID']['input'];
   reason?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+export type RejectPiExtensionVersionInput = {
+  reason: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  versionId: Scalars['ID']['input'];
 };
 
 export type RejectSkillDraftInput = {
@@ -9784,6 +9908,15 @@ export type UpdateOntologyRelationshipTypeInput = {
   sourceTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
   targetTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
+};
+
+export type UpdatePiExtensionAssignmentInput = {
+  agentProfileId?: InputMaybe<Scalars['ID']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  grantedPermissions?: InputMaybe<Scalars['AWSJSON']['input']>;
+  targetType: PiExtensionAssignmentTargetType;
+  tenantId: Scalars['ID']['input'];
+  versionId: Scalars['ID']['input'];
 };
 
 export type UpdateQuickActionInput = {
@@ -12058,6 +12191,58 @@ export type SettingsDeleteAgentProfileMutationVariables = Exact<{
 
 export type SettingsDeleteAgentProfileMutation = { __typename?: 'Mutation', deleteAgentProfile: boolean };
 
+export type SettingsPiExtensionFieldsFragment = { __typename?: 'PiExtension', id: string, tenantId: string, sourceId: string, sourceType: PiExtensionSourceType, repositoryUrl: string, repositoryOwner?: string | null, repositoryName?: string | null, displayName?: string | null, description?: string | null, sourceRef: string, commitSha?: string | null, manifestHash?: string | null, artifactHash?: string | null, artifactUri?: string | null, runtimeTarget?: string | null, status: PiExtensionVersionStatus, statusReason?: string | null, manifest: any, toolNames: Array<string>, lifecycleHooks: Array<string>, permissionClasses: Array<string>, verificationReport: any, reviewedByUserId?: string | null, reviewedAt?: any | null, approvedByUserId?: string | null, approvedAt?: any | null, rejectedByUserId?: string | null, rejectedAt?: any | null, executable: boolean, createdAt: any, updatedAt: any, assignmentSummary: { __typename?: 'PiExtensionAssignmentSummary', defaultAgentEnabled: boolean, enabledProfileCount: number, disabledCount: number }, assignments: Array<{ __typename?: 'PiExtensionAssignment', id: string, tenantId: string, versionId: string, targetType: PiExtensionAssignmentTargetType, agentProfileId?: string | null, enabled: boolean, grantedPermissions: any, createdAt: any, updatedAt: any }> } & { ' $fragmentName'?: 'SettingsPiExtensionFieldsFragment' };
+
+export type SettingsPiExtensionsQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type SettingsPiExtensionsQuery = { __typename?: 'Query', piExtensions: Array<(
+    { __typename?: 'PiExtension' }
+    & { ' $fragmentRefs'?: { 'SettingsPiExtensionFieldsFragment': SettingsPiExtensionFieldsFragment } }
+  )> };
+
+export type SettingsImportPiExtensionFromGitHubMutationVariables = Exact<{
+  input: ImportPiExtensionFromGitHubInput;
+}>;
+
+
+export type SettingsImportPiExtensionFromGitHubMutation = { __typename?: 'Mutation', importPiExtensionFromGitHub: (
+    { __typename?: 'PiExtension' }
+    & { ' $fragmentRefs'?: { 'SettingsPiExtensionFieldsFragment': SettingsPiExtensionFieldsFragment } }
+  ) };
+
+export type SettingsApprovePiExtensionVersionMutationVariables = Exact<{
+  input: ApprovePiExtensionVersionInput;
+}>;
+
+
+export type SettingsApprovePiExtensionVersionMutation = { __typename?: 'Mutation', approvePiExtensionVersion: (
+    { __typename?: 'PiExtension' }
+    & { ' $fragmentRefs'?: { 'SettingsPiExtensionFieldsFragment': SettingsPiExtensionFieldsFragment } }
+  ) };
+
+export type SettingsRejectPiExtensionVersionMutationVariables = Exact<{
+  input: RejectPiExtensionVersionInput;
+}>;
+
+
+export type SettingsRejectPiExtensionVersionMutation = { __typename?: 'Mutation', rejectPiExtensionVersion: (
+    { __typename?: 'PiExtension' }
+    & { ' $fragmentRefs'?: { 'SettingsPiExtensionFieldsFragment': SettingsPiExtensionFieldsFragment } }
+  ) };
+
+export type SettingsUpdatePiExtensionAssignmentMutationVariables = Exact<{
+  input: UpdatePiExtensionAssignmentInput;
+}>;
+
+
+export type SettingsUpdatePiExtensionAssignmentMutation = { __typename?: 'Mutation', updatePiExtensionAssignment: (
+    { __typename?: 'PiExtension' }
+    & { ' $fragmentRefs'?: { 'SettingsPiExtensionFieldsFragment': SettingsPiExtensionFieldsFragment } }
+  ) };
+
 export type SettingsMeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -12424,7 +12609,7 @@ export type OnboardingBootstrapUserMutationVariables = Exact<{ [key: string]: ne
 
 export type OnboardingBootstrapUserMutation = { __typename?: 'Mutation', bootstrapUser: { __typename?: 'BootstrapResult', tenant: { __typename?: 'Tenant', id: string, name: string, slug: string, plan: string } } };
 
-
+export const SettingsPiExtensionFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsPiExtensionFieldsFragment, unknown>;
 export const AppletStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppletState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"instanceId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appletState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"instanceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"instanceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"instanceId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppletStateQuery, AppletStateQueryVariables>;
 export const SaveAppletStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SaveAppletState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SaveAppletStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"saveAppletState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"instanceId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SaveAppletStateMutation, SaveAppletStateMutationVariables>;
 export const SpacesThreadActivityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"SpacesThreadActivity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"onThreadActivity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"threadTitle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SpacesThreadActivitySubscription, SpacesThreadActivitySubscriptionVariables>;
@@ -12549,6 +12734,11 @@ export const SettingsAgentProfilesDocument = {"kind":"Document","definitions":[{
 export const SettingsCreateAgentProfileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsCreateAgentProfile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentProfileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgentProfile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsCreateAgentProfileMutation, SettingsCreateAgentProfileMutationVariables>;
 export const SettingsUpdateAgentProfileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateAgentProfile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAgentProfileInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAgentProfile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateAgentProfileMutation, SettingsUpdateAgentProfileMutationVariables>;
 export const SettingsDeleteAgentProfileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsDeleteAgentProfile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgentProfile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<SettingsDeleteAgentProfileMutation, SettingsDeleteAgentProfileMutationVariables>;
+export const SettingsPiExtensionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsPiExtensions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"piExtensions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"SettingsPiExtensionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsPiExtensionsQuery, SettingsPiExtensionsQueryVariables>;
+export const SettingsImportPiExtensionFromGitHubDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsImportPiExtensionFromGitHub"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ImportPiExtensionFromGitHubInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"importPiExtensionFromGitHub"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"SettingsPiExtensionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsImportPiExtensionFromGitHubMutation, SettingsImportPiExtensionFromGitHubMutationVariables>;
+export const SettingsApprovePiExtensionVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsApprovePiExtensionVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ApprovePiExtensionVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approvePiExtensionVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"SettingsPiExtensionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsApprovePiExtensionVersionMutation, SettingsApprovePiExtensionVersionMutationVariables>;
+export const SettingsRejectPiExtensionVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRejectPiExtensionVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RejectPiExtensionVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rejectPiExtensionVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"SettingsPiExtensionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsRejectPiExtensionVersionMutation, SettingsRejectPiExtensionVersionMutationVariables>;
+export const SettingsUpdatePiExtensionAssignmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdatePiExtensionAssignment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdatePiExtensionAssignmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updatePiExtensionAssignment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"SettingsPiExtensionFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"SettingsPiExtensionFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PiExtension"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceType"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryUrl"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryOwner"}},{"kind":"Field","name":{"kind":"Name","value":"repositoryName"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"manifestHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactHash"}},{"kind":"Field","name":{"kind":"Name","value":"artifactUri"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeTarget"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"statusReason"}},{"kind":"Field","name":{"kind":"Name","value":"manifest"}},{"kind":"Field","name":{"kind":"Name","value":"toolNames"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleHooks"}},{"kind":"Field","name":{"kind":"Name","value":"permissionClasses"}},{"kind":"Field","name":{"kind":"Name","value":"verificationReport"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"reviewedAt"}},{"kind":"Field","name":{"kind":"Name","value":"approvedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"executable"}},{"kind":"Field","name":{"kind":"Name","value":"assignmentSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"defaultAgentEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"enabledProfileCount"}},{"kind":"Field","name":{"kind":"Name","value":"disabledCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"versionId"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"grantedPermissions"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<SettingsUpdatePiExtensionAssignmentMutation, SettingsUpdatePiExtensionAssignmentMutationVariables>;
 export const SettingsMeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsMe"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"profile"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"timezone"}},{"kind":"Field","name":{"kind":"Name","value":"pronouns"}},{"kind":"Field","name":{"kind":"Name","value":"callBy"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsMeQuery, SettingsMeQueryVariables>;
 export const SettingsTenantMembersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantMembers"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"cognitoStatus"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"profile"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"timezone"}},{"kind":"Field","name":{"kind":"Name","value":"pronouns"}},{"kind":"Field","name":{"kind":"Name","value":"callBy"}},{"kind":"Field","name":{"kind":"Name","value":"notes"}}]}}]}}]}}]}}]} as unknown as DocumentNode<SettingsTenantMembersQuery, SettingsTenantMembersQueryVariables>;
 export const SettingsUpdateUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateUserInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateUserMutation, SettingsUpdateUserMutationVariables>;

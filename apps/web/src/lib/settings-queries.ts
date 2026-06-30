@@ -1437,6 +1437,106 @@ export const SettingsDeleteAgentProfileMutation = graphql(`
   }
 `);
 
+export const SettingsPiExtensionFieldsFragment = graphql(`
+  fragment SettingsPiExtensionFields on PiExtension {
+    id
+    tenantId
+    sourceId
+    sourceType
+    repositoryUrl
+    repositoryOwner
+    repositoryName
+    displayName
+    description
+    sourceRef
+    commitSha
+    manifestHash
+    artifactHash
+    artifactUri
+    runtimeTarget
+    status
+    statusReason
+    manifest
+    toolNames
+    lifecycleHooks
+    permissionClasses
+    verificationReport
+    reviewedByUserId
+    reviewedAt
+    approvedByUserId
+    approvedAt
+    rejectedByUserId
+    rejectedAt
+    executable
+    assignmentSummary {
+      defaultAgentEnabled
+      enabledProfileCount
+      disabledCount
+    }
+    assignments {
+      id
+      tenantId
+      versionId
+      targetType
+      agentProfileId
+      enabled
+      grantedPermissions
+      createdAt
+      updatedAt
+    }
+    createdAt
+    updatedAt
+  }
+`);
+
+export const SettingsPiExtensionsQuery = graphql(`
+  query SettingsPiExtensions($tenantId: ID!) {
+    piExtensions(tenantId: $tenantId) {
+      ...SettingsPiExtensionFields
+    }
+  }
+`);
+
+export const SettingsImportPiExtensionFromGitHubMutation = graphql(`
+  mutation SettingsImportPiExtensionFromGitHub(
+    $input: ImportPiExtensionFromGitHubInput!
+  ) {
+    importPiExtensionFromGitHub(input: $input) {
+      ...SettingsPiExtensionFields
+    }
+  }
+`);
+
+export const SettingsApprovePiExtensionVersionMutation = graphql(`
+  mutation SettingsApprovePiExtensionVersion(
+    $input: ApprovePiExtensionVersionInput!
+  ) {
+    approvePiExtensionVersion(input: $input) {
+      ...SettingsPiExtensionFields
+    }
+  }
+`);
+
+export const SettingsRejectPiExtensionVersionMutation = graphql(`
+  mutation SettingsRejectPiExtensionVersion(
+    $input: RejectPiExtensionVersionInput!
+  ) {
+    rejectPiExtensionVersion(input: $input) {
+      ...SettingsPiExtensionFields
+    }
+  }
+`);
+
+export const SettingsUpdatePiExtensionAssignmentMutation = graphql(`
+  mutation SettingsUpdatePiExtensionAssignment(
+    $input: UpdatePiExtensionAssignmentInput!
+  ) {
+    updatePiExtensionAssignment(input: $input) {
+      ...SettingsPiExtensionFields
+    }
+  }
+`);
+
 // ─── Users (operator-only section) ───────────────────────────────────────
 
 export const SettingsMeQuery = graphql(`

@@ -79,6 +79,27 @@ input ImportPiExtensionFromGitHubInput {
   manifestPath: String = "pi-extension.json"
 }
 
+input ApprovePiExtensionVersionInput {
+  tenantId: ID!
+  versionId: ID!
+}
+
+input RejectPiExtensionVersionInput {
+  tenantId: ID!
+  versionId: ID!
+  reason: String!
+}
+
+input UpdatePiExtensionAssignmentInput {
+  tenantId: ID!
+  versionId: ID!
+  targetType: PiExtensionAssignmentTargetType!
+  agentProfileId: ID
+  enabled: Boolean = true
+  # Omit to grant no permission classes. Review UI should send explicit grants.
+  grantedPermissions: AWSJSON
+}
+
 extend type Query {
   piExtensions(
     tenantId: ID!
@@ -90,5 +111,14 @@ extend type Query {
 extend type Mutation {
   importPiExtensionFromGitHub(
     input: ImportPiExtensionFromGitHubInput!
+  ): PiExtension!
+  approvePiExtensionVersion(
+    input: ApprovePiExtensionVersionInput!
+  ): PiExtension!
+  rejectPiExtensionVersion(input: RejectPiExtensionVersionInput!): PiExtension!
+  # Enabling replaces older enabled assignments for the same extension source
+  # and target, while preserving other extension assignments on that target.
+  updatePiExtensionAssignment(
+    input: UpdatePiExtensionAssignmentInput!
   ): PiExtension!
 }
