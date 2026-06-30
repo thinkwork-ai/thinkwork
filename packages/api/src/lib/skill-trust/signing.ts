@@ -63,7 +63,12 @@ export async function signatureStatusForFiles(input: {
   signer: SkillTrustSigner | null;
 }): Promise<
   | {
-      status: "verified" | "present_unverified" | "stale" | "invalid";
+      status:
+        | "verified"
+        | "approved_unverified"
+        | "present_unverified"
+        | "stale"
+        | "invalid";
       signedPayloadHash?: string;
     }
   | undefined
@@ -76,6 +81,21 @@ export async function signatureStatusForFiles(input: {
   const currentPayloadHash = computeSignedPayloadHash(input.files);
   const parsed = parseSkillSignature(signatureFile.content);
   if (!input.signer) {
+    if (
+      parsed?.signedPayloadHash &&
+      parsed.signedPayloadHash !== currentPayloadHash
+    ) {
+      return { status: "stale", signedPayloadHash: currentPayloadHash };
+    }
+    if (
+      parsed?.algorithm === UNSIGNED_APPROVAL_ALGORITHM &&
+      parsed.signedPayloadHash === currentPayloadHash
+    ) {
+      return {
+        status: "approved_unverified",
+        signedPayloadHash: currentPayloadHash,
+      };
+    }
     return {
       status: "present_unverified",
       ...(parsed?.signedPayloadHash

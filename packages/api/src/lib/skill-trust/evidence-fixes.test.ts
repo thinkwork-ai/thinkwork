@@ -4,6 +4,7 @@ import {
   fixSkillTrustEvidence,
   type SkillTrustSigner,
 } from "./evidence-fixes.js";
+import { signatureStatusForFiles } from "./signing.js";
 import type { SkillTrustInputFile } from "./catalog-report.js";
 
 const skillMd = `---
@@ -167,7 +168,32 @@ describe("fixSkillTrustEvidence", () => {
       '"algorithm": "UNSIGNED-APPROVAL"',
     );
     expect(result.signedPayloadHash).toBe(computeSignedPayloadHash(files));
-    expect(result.trustReport.evidence.signature).toBe("present_unverified");
+    expect(result.trustReport.evidence.signature).toBe("approved_unverified");
+  });
+
+  it("classifies matching unsigned approval evidence as approved without a signer", async () => {
+    const files = baseFiles();
+    const signedPayloadHash = computeSignedPayloadHash(files);
+    const signature = Buffer.from(
+      `${JSON.stringify({
+        version: 1,
+        algorithm: "UNSIGNED-APPROVAL",
+        slug: "account-health-review",
+        signedPayloadHash,
+        approvedAt: "2026-06-30T14:59:57.716Z",
+      })}\n`,
+    );
+
+    await expect(
+      signatureStatusForFiles({
+        slug: "account-health-review",
+        files: [...files, { path: "skill.oms.sig", content: signature }],
+        signer: null,
+      }),
+    ).resolves.toMatchObject({
+      status: "approved_unverified",
+      signedPayloadHash,
+    });
   });
 
   it("generates a signature only when the configured signer verifies it", async () => {

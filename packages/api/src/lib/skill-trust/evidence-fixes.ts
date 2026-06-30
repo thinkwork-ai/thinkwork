@@ -385,7 +385,7 @@ async function signSkill(
         files: replaceArtifact(input.files, artifact),
         scanner: input.scanner,
         scannerFindings: input.scannerFindings,
-        signature: { status: "present_unverified", signedPayloadHash },
+        signature: { status: "approved_unverified", signedPayloadHash },
         now: input.now,
       }),
       artifactPath: artifact.path,

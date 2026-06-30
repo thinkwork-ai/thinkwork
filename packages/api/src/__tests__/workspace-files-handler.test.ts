@@ -3104,7 +3104,7 @@ description: Reviews account health signals and produces a health report.
       artifactPath: "skill.oms.sig",
       trustReport: {
         evidence: {
-          signature: "present_unverified",
+          signature: "approved_unverified",
         },
       },
     });
