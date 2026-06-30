@@ -9,6 +9,7 @@ const { navigateMock, queryResultMock } = vi.hoisted(() => ({
     data: {
       installedPluginApps: [] as Array<{
         id: string;
+        pluginInstallId?: string;
         pluginKey: string;
         appKey: string;
         pluginDisplayName: string;
@@ -133,6 +134,28 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "@/components/plugin-apps/n8n-workflows/N8nWorkflowOperationsApp",
+  () => ({
+    N8nWorkflowOperationsApp: ({
+      pluginInstallId,
+      appDisplayName,
+      pluginDisplayName,
+    }: {
+      pluginInstallId: string;
+      appDisplayName: string;
+      pluginDisplayName: string;
+    }) => (
+      <section>
+        <h1>{appDisplayName}</h1>
+        <p>{pluginDisplayName}</p>
+        <p>{pluginInstallId}</p>
+        <p>n8n workflow operations app shell</p>
+      </section>
+    ),
+  }),
+);
+
 import { PluginAppRoute, PluginAppsIndexRoute } from "./PluginAppRoute";
 
 afterEach(() => {
@@ -172,6 +195,35 @@ describe("PluginAppRoute", () => {
     ).toBeTruthy();
     expect(screen.getByText("Twenty CRM")).toBeTruthy();
     expect(screen.getByText("Twenty engagement app shell")).toBeTruthy();
+  });
+
+  it("renders the selected n8n app with the installed plugin id", () => {
+    queryResultMock.data.installedPluginApps = [
+      {
+        id: "install-n8n:workflow-operations",
+        pluginInstallId: "install-n8n",
+        pluginKey: "n8n",
+        appKey: "n8n-workflow-operations",
+        pluginDisplayName: "n8n",
+        displayName: "n8n Workflows",
+        routeSegment: "workflows",
+        description:
+          "Read-only workflow and execution operations surface for n8n.",
+        readiness: {
+          state: "ready",
+          message: "Ready to launch.",
+          nextAction: null,
+        },
+      },
+    ];
+
+    render(<PluginAppRoute pluginKey="n8n" appRouteSegment="workflows" />);
+
+    expect(
+      screen.getByRole("heading", { name: "n8n Workflows", level: 1 }),
+    ).toBeTruthy();
+    expect(screen.getByText("n8n workflow operations app shell")).toBeTruthy();
+    expect(screen.getByText("install-n8n")).toBeTruthy();
   });
 
   it("offers the plugin connection action when the selected app is not activated", () => {

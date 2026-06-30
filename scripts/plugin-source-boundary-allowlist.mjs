@@ -124,6 +124,11 @@ export const sharedPluginTermAllowlist = [
       "shared platform React app surface for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
   },
   {
+    pathPrefix: "apps/web/src/components/plugin-apps/n8n-workflows/",
+    reason:
+      "shared platform React host adapter for the n8n plugin app; reusable app runtime and manifest source remain package-owned under plugins/n8n.",
+  },
+  {
     pathPrefix: "apps/web/src/components/settings/plugins/n8n/",
     reason:
       "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
@@ -131,7 +136,7 @@ export const sharedPluginTermAllowlist = [
   {
     pathPrefix: "apps/web/src/routes/_authed/settings.plugins.n8n",
     reason:
-      "shared route-backed Plugin Detail UI shell for the n8n plugin Workflows and Settings tabs; plugin runtime source remains package-owned under plugins/n8n.",
+      "shared route-backed Plugin Detail UI shell for the n8n plugin settings route and legacy redirects; plugin runtime source remains package-owned under plugins/n8n.",
   },
   {
     pathPrefix: "packages/api/src/graphql/resolvers/workflows/",

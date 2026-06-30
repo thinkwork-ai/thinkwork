@@ -1821,6 +1821,9 @@ importers:
       '@noble/hashes':
         specifier: ^2.0.1
         version: 2.0.1
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
     devDependencies:
       '@thinkwork/deployment-runner':
         specifier: workspace:*
@@ -1831,6 +1834,9 @@ importers:
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.17
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

@@ -9,7 +9,9 @@
     "./manifest": "./src/manifest.ts",
     "./deployment/managed-app": "./src/deployment/managed-app.ts",
     "./deployment/image-build": "./src/deployment/image-build.ts",
-    "./package-config": "./src/package-config.ts"
+    "./package-config": "./src/package-config.ts",
+    "./n8n-app": "./n8n-app/src/front-components/thinkwork-workflows.front-component.tsx",
+    "./n8n-app-data": "./n8n-app/src/lib/n8n-app-data.ts"
   },
   "scripts": {
     "build": "tsc --build",
@@ -17,12 +19,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1"
+    "@noble/hashes": "^2.0.1",
+    "react": "^19.2.0"
   },
   "devDependencies": {
     "@thinkwork/deployment-runner": "workspace:*",
     "@thinkwork/plugin-catalog": "workspace:*",
     "@types/node": "^25.6.0",
+    "@types/react": "^19.2.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }
