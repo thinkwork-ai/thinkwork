@@ -21,7 +21,6 @@ import { toast } from "sonner";
 import { useReportSidebarHealth } from "@/components/shell/sidebar-health";
 import {
   Anchor,
-  AppWindow,
   Archive,
   ArrowLeft,
   CheckCheck,
@@ -72,9 +71,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -1053,65 +1049,57 @@ function PluginAppsNavItem({
   apps: NonNullable<InstalledPluginAppsResult["installedPluginApps"]>;
   isActive: boolean;
 }) {
-  const location = useRouterState({ select: (s) => s.location });
-  const activeAppRoute = appRouteFromPath(location.pathname);
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
         <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
-          <button type="button">
+          <button type="button" data-plugin-apps-trigger>
             <LayoutGrid />
             <span className="min-w-0 flex-1 truncate text-left">Apps</span>
-            <ChevronDown className="ml-auto size-3.5 text-sidebar-foreground/45" />
+            <ChevronDown
+              className={cn(
+                "ml-auto size-3.5 text-sidebar-foreground/45 transition-transform",
+                open ? "rotate-180" : null,
+              )}
+            />
           </button>
         </SidebarMenuButton>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
         side="right"
+        align="start"
         sideOffset={8}
-        className="z-[1000] w-72 gap-1 p-1"
+        className="z-[1000] w-auto min-w-0"
+        data-plugin-apps-menu
+        style={{ width: "max-content", minWidth: "max-content" }}
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
-        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-          Apps
-        </div>
-        <div className="space-y-0.5">
-          {apps.map((app) => {
-            const ready = app.readiness.state === "ready";
-            const appActive =
-              activeAppRoute?.pluginKey === app.pluginKey &&
-              activeAppRoute?.appRouteSegment === app.routeSegment;
-            return (
-              <Link
-                key={app.id}
-                to="/apps/$pluginKey/$appRouteSegment"
-                params={{
-                  pluginKey: app.pluginKey,
-                  appRouteSegment: app.routeSegment,
-                }}
-                className={cn(
-                  "flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                  appActive ? "bg-accent text-accent-foreground" : null,
-                )}
-              >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-                  <AppWindow className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
-                    {app.displayName}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {ready ? app.pluginDisplayName : app.readiness.message}
-                  </span>
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
+        {apps.map((app) => {
+          const ready = app.readiness.state === "ready";
+          return (
+            <DropdownMenuItem
+              key={app.id}
+              className="whitespace-nowrap py-2"
+              onSelect={() => {
+                setOpen(false);
+                void navigate({
+                  to: "/apps/$pluginKey/$appRouteSegment",
+                  params: {
+                    pluginKey: app.pluginKey,
+                    appRouteSegment: app.routeSegment,
+                  },
+                });
+              }}
+            >
+              {ready ? app.displayName : app.readiness.message}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

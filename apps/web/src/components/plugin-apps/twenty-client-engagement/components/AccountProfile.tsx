@@ -444,10 +444,7 @@ export function AccountProfile({
                 <DecisionCard title="Internal Advocates">
                   {(profile.advocates?.length ? profile.advocates : [{}]).map(
                     (advocate, index) => (
-                      <div
-                        key={index}
-                        className="space-y-3 border-t border-border/70 pt-3 first:border-t-0 first:pt-0"
-                      >
+                      <div key={index} className="space-y-3">
                         <EditableField
                           label="Name"
                           value={advocate.name ?? ""}
@@ -510,10 +507,7 @@ export function AccountProfile({
                     ? profile.economicDecisionMakers
                     : [{}]
                   ).map((maker, index) => (
-                    <div
-                      key={index}
-                      className="space-y-3 border-t border-border/70 pt-3 first:border-t-0 first:pt-0"
-                    >
+                    <div key={index} className="space-y-3">
                       <EditableField
                         label="Name / Title"
                         value={maker.name ?? ""}
