@@ -476,10 +476,7 @@ function isEffectiveWorkspacePolicy(
 }
 
 type ChatInvokeIdentitySource =
-  | "message_sender"
-  | "thread_creator"
-  | "computer_agent_human_pair"
-  | "none";
+  "message_sender" | "thread_creator" | "computer_agent_human_pair" | "none";
 
 export interface ChatInvokeIdentity {
   currentUserId: string;
@@ -1546,6 +1543,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         threadTurnId: turnId,
         agentProfiles: runtimeConfig.agentProfilesConfig,
+        piExtensions: runtimeConfig.piExtensions,
         modelRoutingPolicy,
         approvedModelIds,
         renderedWorkspacePrefix,

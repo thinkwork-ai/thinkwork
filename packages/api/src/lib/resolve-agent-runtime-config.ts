@@ -62,6 +62,9 @@ import {
   agentProfiles,
   agentProfileSpaceAssignments,
   tenantMcpServers,
+  piExtensionAssignments,
+  piExtensionSources,
+  piExtensionVersions,
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
@@ -103,6 +106,11 @@ import {
 } from "./agent-profile-loop-policy.js";
 import { listTenantModelCatalogByIds } from "./model-catalog/tenant-catalog.js";
 import { loadTrustedCatalogSkillIds } from "./skill-trust/runtime-gate.js";
+import {
+  piExtensionArtifactHash,
+  piExtensionArtifactUri,
+  type PiExtensionArtifactDescriptor,
+} from "./pi-extensions/artifacts.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -182,6 +190,7 @@ export interface AgentProfileRuntimeConfig {
   mcpServers: AgentProfileRuntimeMcpServer[];
   mcpToolAllowlist: Record<string, string[]>;
   skillSlugs: string[];
+  piExtensions: AgentRuntimePiExtension[];
   executionControls: {
     foreground: true;
     clarify: boolean;
@@ -194,6 +203,30 @@ export interface AgentProfileRuntimeConfig {
     maxReviewLoops?: number;
     loopPolicy: AgentLoopPolicy;
   };
+}
+
+export interface AgentRuntimePiExtension {
+  extensionId: string;
+  versionId: string;
+  assignmentId: string;
+  sourceId: string;
+  name: string | null;
+  displayName: string | null;
+  repositoryUrl: string;
+  repositoryOwner: string | null;
+  repositoryName: string | null;
+  sourceRef: string;
+  commitSha: string;
+  manifestHash: string;
+  artifactHash: string;
+  artifactUri: string;
+  runtimeTarget: "agentcore-pi";
+  targetType: "default_agent" | "agent_profile";
+  agentProfileId: string | null;
+  toolNames: string[];
+  lifecycleHooks: string[];
+  permissionClasses: string[];
+  grantedPermissionClasses: string[];
 }
 
 export interface AgentRuntimeConfig {
@@ -230,6 +263,7 @@ export interface AgentRuntimeConfig {
   sendEmailConfig?: SendEmailConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
+  piExtensions: AgentRuntimePiExtension[];
   agentProfilesConfig: AgentProfileRuntimeConfig[];
 }
 
@@ -756,6 +790,7 @@ export async function resolveAgentRuntimeConfig(
     sendEmailConfig,
     knowledgeBasesConfig,
     mcpConfigs,
+    piExtensions: [],
     agentProfilesConfig: [],
   };
 
@@ -772,7 +807,98 @@ export async function resolveAgentRuntimeConfig(
     mcpConfigs,
     logPrefix,
   });
+  const piExtensionAssignments = await loadPiExtensionRuntimeAssignments({
+    tenantId: opts.tenantId,
+    agentProfileIds: overriddenConfig.agentProfilesConfig.map(
+      (profile) => profile.id,
+    ),
+    logPrefix,
+  }).catch((err): PiExtensionRuntimeAssignments => {
+    console.error(`${logPrefix} Pi extension resolution failed:`, err);
+    return { defaultAgent: [], byAgentProfileId: new Map() };
+  });
+  overriddenConfig.piExtensions = piExtensionAssignments.defaultAgent;
+  overriddenConfig.agentProfilesConfig =
+    overriddenConfig.agentProfilesConfig.map((profile) => ({
+      ...profile,
+      piExtensions:
+        piExtensionAssignments.byAgentProfileId.get(profile.id) ?? [],
+    }));
   return overriddenConfig;
+}
+
+export interface PiExtensionRuntimeAssignments {
+  defaultAgent: AgentRuntimePiExtension[];
+  byAgentProfileId: Map<string, AgentRuntimePiExtension[]>;
+}
+
+export async function loadPiExtensionRuntimeAssignments(input: {
+  tenantId: string;
+  agentProfileIds: string[];
+  logPrefix: string;
+}): Promise<PiExtensionRuntimeAssignments> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      assignment_id: piExtensionAssignments.id,
+      assignment_tenant_id: piExtensionAssignments.tenant_id,
+      target_type: piExtensionAssignments.target_type,
+      agent_profile_id: piExtensionAssignments.agent_profile_id,
+      enabled: piExtensionAssignments.enabled,
+      granted_permissions: piExtensionAssignments.granted_permissions,
+      version_id: piExtensionVersions.id,
+      version_tenant_id: piExtensionVersions.tenant_id,
+      source_id: piExtensionVersions.source_id,
+      display_name: piExtensionVersions.display_name,
+      description: piExtensionVersions.description,
+      source_ref: piExtensionVersions.source_ref,
+      commit_sha: piExtensionVersions.commit_sha,
+      manifest_hash: piExtensionVersions.manifest_hash,
+      artifact_hash: piExtensionVersions.artifact_hash,
+      artifact_uri: piExtensionVersions.artifact_uri,
+      runtime_target: piExtensionVersions.runtime_target,
+      status: piExtensionVersions.status,
+      manifest: piExtensionVersions.manifest,
+      tool_names: piExtensionVersions.tool_names,
+      lifecycle_hooks: piExtensionVersions.lifecycle_hooks,
+      permission_classes: piExtensionVersions.permission_classes,
+      verification_report: piExtensionVersions.verification_report,
+      source_tenant_id: piExtensionSources.tenant_id,
+      repository_url: piExtensionSources.repository_url,
+      repository_owner: piExtensionSources.repository_owner,
+      repository_name: piExtensionSources.repository_name,
+      source_display_name: piExtensionSources.display_name,
+    })
+    .from(piExtensionAssignments)
+    .innerJoin(
+      piExtensionVersions,
+      eq(piExtensionAssignments.version_id, piExtensionVersions.id),
+    )
+    .innerJoin(
+      piExtensionSources,
+      eq(piExtensionVersions.source_id, piExtensionSources.id),
+    )
+    .where(eq(piExtensionAssignments.tenant_id, input.tenantId));
+
+  const defaultAgent: AgentRuntimePiExtension[] = [];
+  const byAgentProfileId = new Map<string, AgentRuntimePiExtension[]>();
+  const includedProfileIds = new Set(input.agentProfileIds);
+
+  for (const row of rows) {
+    const descriptor = toRuntimePiExtension(row, input.logPrefix);
+    if (!descriptor) continue;
+    if (descriptor.targetType === "default_agent") {
+      defaultAgent.push(descriptor);
+      continue;
+    }
+    if (!descriptor.agentProfileId) continue;
+    if (!includedProfileIds.has(descriptor.agentProfileId)) continue;
+    const list = byAgentProfileId.get(descriptor.agentProfileId) ?? [];
+    list.push(descriptor);
+    byAgentProfileId.set(descriptor.agentProfileId, list);
+  }
+
+  return { defaultAgent, byAgentProfileId };
 }
 
 /**
@@ -989,6 +1115,7 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       mcpServers,
       mcpToolAllowlist,
       skillSlugs,
+      piExtensions: [],
       executionControls,
     });
   }
@@ -999,6 +1126,191 @@ export async function loadAgentProfileRuntimeConfigs(input: {
 function normalizeRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function toRuntimePiExtension(
+  row: {
+    assignment_id: string;
+    assignment_tenant_id: string;
+    target_type: string;
+    agent_profile_id: string | null;
+    enabled: boolean;
+    granted_permissions: Record<string, unknown>;
+    version_id: string;
+    version_tenant_id: string;
+    source_id: string;
+    display_name: string | null;
+    description: string | null;
+    source_ref: string;
+    commit_sha: string | null;
+    manifest_hash: string | null;
+    artifact_hash: string | null;
+    artifact_uri: string | null;
+    runtime_target: string | null;
+    status: string;
+    manifest: Record<string, unknown>;
+    tool_names: string[];
+    lifecycle_hooks: string[];
+    permission_classes: string[];
+    verification_report: Record<string, unknown>;
+    source_tenant_id: string;
+    repository_url: string;
+    repository_owner: string | null;
+    repository_name: string | null;
+    source_display_name: string | null;
+  },
+  logPrefix: string,
+): AgentRuntimePiExtension | null {
+  const skip = (reason: string) => {
+    console.warn(
+      `${logPrefix} Pi extension assignment ${row.assignment_id} skipped: ${reason}`,
+    );
+    return null;
+  };
+  if (row.assignment_tenant_id !== row.version_tenant_id) {
+    return skip("version tenant mismatch");
+  }
+  if (row.assignment_tenant_id !== row.source_tenant_id) {
+    return skip("source tenant mismatch");
+  }
+  if (!row.enabled) return null;
+  if (row.status !== "approved") return null;
+  if (row.runtime_target !== "agentcore-pi") {
+    return skip(`unsupported runtime target ${row.runtime_target}`);
+  }
+  if (!row.commit_sha) return skip("missing commit SHA");
+  if (!row.manifest_hash) return skip("missing manifest hash");
+  if (!row.artifact_hash || !row.artifact_uri) {
+    return skip("missing artifact evidence");
+  }
+  if (normalizeRecord(row.verification_report).status !== "passed") {
+    return skip("verification report has not passed");
+  }
+  if (
+    row.target_type !== "default_agent" &&
+    row.target_type !== "agent_profile"
+  ) {
+    return skip(`unknown target type ${row.target_type}`);
+  }
+  if (row.target_type === "default_agent" && row.agent_profile_id) {
+    return skip("default_agent assignment has profile id");
+  }
+  if (row.target_type === "agent_profile" && !row.agent_profile_id) {
+    return skip("agent_profile assignment is missing profile id");
+  }
+
+  const artifactDescriptor = piExtensionArtifactDescriptor(
+    row.verification_report,
+  );
+  if (!artifactDescriptor) {
+    return skip("missing verification artifact descriptor");
+  }
+  if (artifactDescriptor.runtimeTarget !== "agentcore-pi") {
+    return skip(
+      `unsupported verification runtime target ${artifactDescriptor.runtimeTarget}`,
+    );
+  }
+  if (artifactDescriptor.commitSha !== row.commit_sha) {
+    return skip("verification source commit is stale");
+  }
+  if (artifactDescriptor.manifestHash !== row.manifest_hash) {
+    return skip("verification manifest hash is stale");
+  }
+  if (piExtensionArtifactHash(artifactDescriptor) !== row.artifact_hash) {
+    return skip("verification artifact hash is stale");
+  }
+  if (piExtensionArtifactUri(artifactDescriptor) !== row.artifact_uri) {
+    return skip("verification artifact URI is stale");
+  }
+
+  return {
+    extensionId: row.source_id,
+    versionId: row.version_id,
+    assignmentId: row.assignment_id,
+    sourceId: row.source_id,
+    name: manifestName(row.manifest),
+    displayName: row.display_name ?? row.source_display_name,
+    repositoryUrl: row.repository_url,
+    repositoryOwner: row.repository_owner,
+    repositoryName: row.repository_name,
+    sourceRef: row.source_ref,
+    commitSha: row.commit_sha,
+    manifestHash: row.manifest_hash,
+    artifactHash: row.artifact_hash,
+    artifactUri: row.artifact_uri,
+    runtimeTarget: "agentcore-pi",
+    targetType: row.target_type,
+    agentProfileId: row.agent_profile_id,
+    toolNames: normalizeStringArray(row.tool_names),
+    lifecycleHooks: normalizeStringArray(row.lifecycle_hooks),
+    permissionClasses: normalizeStringArray(row.permission_classes),
+    grantedPermissionClasses: normalizeGrantedPermissionClasses(
+      row.granted_permissions,
+      row.permission_classes,
+    ),
+  };
+}
+
+function piExtensionArtifactDescriptor(
+  report: unknown,
+): PiExtensionArtifactDescriptor | null {
+  const descriptor = normalizeRecord(report).artifactDescriptor;
+  if (
+    !descriptor ||
+    typeof descriptor !== "object" ||
+    Array.isArray(descriptor)
+  ) {
+    return null;
+  }
+  const record = descriptor as Record<string, unknown>;
+  if (
+    record.schemaVersion !== 1 ||
+    record.kind !== "github-source-snapshot" ||
+    typeof record.repositoryUrl !== "string" ||
+    typeof record.owner !== "string" ||
+    typeof record.repo !== "string" ||
+    typeof record.commitSha !== "string" ||
+    typeof record.sourceRef !== "string" ||
+    typeof record.manifestPath !== "string" ||
+    typeof record.manifestHash !== "string" ||
+    typeof record.runtimeTarget !== "string" ||
+    typeof record.tarballUrl !== "string"
+  ) {
+    return null;
+  }
+  return {
+    schemaVersion: 1,
+    kind: "github-source-snapshot",
+    repositoryUrl: record.repositoryUrl,
+    owner: record.owner,
+    repo: record.repo,
+    commitSha: record.commitSha,
+    sourceRef: record.sourceRef,
+    manifestPath: record.manifestPath,
+    manifestHash: record.manifestHash,
+    runtimeTarget: record.runtimeTarget,
+    entrypoint:
+      typeof record.entrypoint === "string" ? record.entrypoint : null,
+    tarballUrl: record.tarballUrl,
+  };
+}
+
+function manifestName(manifest: unknown): string | null {
+  const name = normalizeRecord(manifest).name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+function normalizeGrantedPermissionClasses(
+  permissions: unknown,
+  requestedPermissionClasses: unknown,
+): string[] {
+  const requested = new Set(normalizeStringArray(requestedPermissionClasses));
+  const permissionClasses = normalizeStringArray(
+    normalizeRecord(permissions).permissionClasses,
+  );
+  return permissionClasses.filter((permissionClass) =>
+    requested.has(permissionClass),
+  );
 }
 
 function normalizeStringArray(value: unknown): string[] {

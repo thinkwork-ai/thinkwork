@@ -21,7 +21,7 @@ const {
   mockListTenantModelCatalogByIds,
   mockS3Send,
 } = vi.hoisted(() => ({
-  rowsQueue: [] as unknown[][],
+  rowsQueue: [] as Array<unknown[] | Error>,
   whereCalls: [] as unknown[],
   mockBuildSkillEnvOverrides: vi.fn(),
   mockLoadTenantBuiltinTools: vi.fn(),
@@ -33,14 +33,33 @@ const {
 
 function takeRows(): unknown[] {
   const next = rowsQueue.shift();
+  if (next instanceof Error) throw next;
   if (next === undefined) return [];
   return next;
 }
 
 function rowsResult() {
   return {
-    then: (fn: (rows: unknown[]) => unknown) => Promise.resolve(fn(takeRows())),
+    then: (
+      fn: (rows: unknown[]) => unknown,
+      reject?: (err: unknown) => unknown,
+    ) => {
+      try {
+        return Promise.resolve(fn(takeRows()));
+      } catch (err) {
+        return reject ? Promise.resolve(reject(err)) : Promise.reject(err);
+      }
+    },
     limit: () => rowsResult(),
+  };
+}
+
+function joinableRowsResult() {
+  return {
+    ...rowsResult(),
+    innerJoin: () => joinableRowsResult(),
+    leftJoin: () => joinableRowsResult(),
+    where: () => rowsResult(),
   };
 }
 
@@ -59,12 +78,8 @@ vi.mock("@thinkwork/database-pg", () => ({
           }),
           // Allow direct-await forms too (for chained calls that don't use .then).
         }),
-        innerJoin: () => ({
-          where: () => rowsResult(),
-        }),
-        leftJoin: () => ({
-          where: () => rowsResult(),
-        }),
+        innerJoin: () => joinableRowsResult(),
+        leftJoin: () => joinableRowsResult(),
       }),
     }),
   }),
@@ -188,6 +203,42 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     status: "tenantMcpServers.status",
     enabled: "tenantMcpServers.enabled",
   },
+  piExtensionAssignments: {
+    id: "piExtensionAssignments.id",
+    tenant_id: "piExtensionAssignments.tenant_id",
+    version_id: "piExtensionAssignments.version_id",
+    target_type: "piExtensionAssignments.target_type",
+    agent_profile_id: "piExtensionAssignments.agent_profile_id",
+    enabled: "piExtensionAssignments.enabled",
+    granted_permissions: "piExtensionAssignments.granted_permissions",
+  },
+  piExtensionVersions: {
+    id: "piExtensionVersions.id",
+    tenant_id: "piExtensionVersions.tenant_id",
+    source_id: "piExtensionVersions.source_id",
+    display_name: "piExtensionVersions.display_name",
+    description: "piExtensionVersions.description",
+    source_ref: "piExtensionVersions.source_ref",
+    commit_sha: "piExtensionVersions.commit_sha",
+    manifest_hash: "piExtensionVersions.manifest_hash",
+    artifact_hash: "piExtensionVersions.artifact_hash",
+    artifact_uri: "piExtensionVersions.artifact_uri",
+    runtime_target: "piExtensionVersions.runtime_target",
+    status: "piExtensionVersions.status",
+    manifest: "piExtensionVersions.manifest",
+    tool_names: "piExtensionVersions.tool_names",
+    lifecycle_hooks: "piExtensionVersions.lifecycle_hooks",
+    permission_classes: "piExtensionVersions.permission_classes",
+    verification_report: "piExtensionVersions.verification_report",
+  },
+  piExtensionSources: {
+    id: "piExtensionSources.id",
+    tenant_id: "piExtensionSources.tenant_id",
+    repository_url: "piExtensionSources.repository_url",
+    repository_owner: "piExtensionSources.repository_owner",
+    repository_name: "piExtensionSources.repository_name",
+    display_name: "piExtensionSources.display_name",
+  },
 }));
 
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -236,6 +287,11 @@ import {
   loadAgentProfileRuntimeConfigs,
   resolveAgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
+import {
+  buildPiExtensionArtifactDescriptor,
+  piExtensionArtifactHash,
+  piExtensionArtifactUri,
+} from "../pi-extensions/artifacts.js";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -276,9 +332,10 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
 }
 
 function stageTemplateRow(overrides?: Record<string, unknown>) {
-  const stagedAgent = rowsQueue[rowsQueue.length - 1]?.[0] as
-    | Record<string, unknown>
-    | undefined;
+  const lastRows = rowsQueue[rowsQueue.length - 1];
+  const stagedAgent = Array.isArray(lastRows)
+    ? (lastRows[0] as Record<string, unknown> | undefined)
+    : undefined;
   if (!stagedAgent) return;
   const { runtime: _runtime, ...agentOverrides } = overrides ?? {};
   Object.assign(stagedAgent, agentOverrides);
@@ -327,6 +384,65 @@ function stageProfileRows(rows: Array<Record<string, unknown>>) {
   mockListTenantModelCatalogByIds.mockResolvedValueOnce([
     { modelId: PROFILE_MODEL_ID },
   ]);
+}
+
+function piExtensionRuntimeRow(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const sourceId = String(overrides.source_id ?? "extension-source-1");
+  const versionId = String(overrides.version_id ?? "extension-version-1");
+  const commitSha = String(overrides.commit_sha ?? "abc123def456");
+  const manifest = {
+    schemaVersion: 1,
+    name: "github_tools",
+    displayName: "GitHub Tools",
+    description: "GitHub extension",
+    runtimeTarget: "agentcore-pi",
+    entrypoint: "dist/index.js",
+    tools: [{ name: "search_issues" }],
+    lifecycleHooks: [],
+    permissionClasses: ["network"],
+  };
+  const descriptor = buildPiExtensionArtifactDescriptor({
+    repositoryUrl: "https://github.com/acme/github-tools",
+    owner: "acme",
+    repo: "github-tools",
+    commitSha,
+    sourceRef: "main",
+    manifestPath: "pi-extension.json",
+    manifest,
+  });
+  const row = {
+    assignment_id: "assignment-1",
+    assignment_tenant_id: TENANT_ID,
+    target_type: "default_agent",
+    agent_profile_id: null,
+    enabled: true,
+    granted_permissions: { permissionClasses: ["network"] },
+    version_id: versionId,
+    version_tenant_id: TENANT_ID,
+    source_id: sourceId,
+    display_name: "GitHub Tools",
+    description: "GitHub extension",
+    source_ref: "main",
+    commit_sha: commitSha,
+    manifest_hash: descriptor.manifestHash,
+    artifact_hash: piExtensionArtifactHash(descriptor),
+    artifact_uri: piExtensionArtifactUri(descriptor),
+    runtime_target: "agentcore-pi",
+    status: "approved",
+    manifest,
+    tool_names: ["search_issues"],
+    lifecycle_hooks: [],
+    permission_classes: ["network"],
+    verification_report: { status: "passed", artifactDescriptor: descriptor },
+    source_tenant_id: TENANT_ID,
+    repository_url: "https://github.com/acme/github-tools",
+    repository_owner: "acme",
+    repository_name: "github-tools",
+    source_display_name: "GitHub Tools",
+  };
+  return { ...row, ...overrides };
 }
 
 beforeEach(() => {
@@ -1174,6 +1290,205 @@ describe("resolveAgentRuntimeConfig", () => {
       { humanPairId: null, requesterUserId: null },
       expect.stringContaining("agent-runtime-config"),
     );
+  });
+
+  it("resolves approved Default Agent Pi extensions into runtime config", async () => {
+    stageAgentRow();
+    stageTemplateRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    rowsQueue.push([
+      piExtensionRuntimeRow(),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-newer-unapproved",
+        version_id: "extension-version-unapproved",
+        status: "needs_review",
+      }),
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.piExtensions).toEqual([
+      expect.objectContaining({
+        extensionId: "extension-source-1",
+        versionId: "extension-version-1",
+        assignmentId: "assignment-1",
+        displayName: "GitHub Tools",
+        repositoryUrl: "https://github.com/acme/github-tools",
+        commitSha: "abc123def456",
+        runtimeTarget: "agentcore-pi",
+        targetType: "default_agent",
+        agentProfileId: null,
+        toolNames: ["search_issues"],
+        permissionClasses: ["network"],
+        grantedPermissionClasses: ["network"],
+      }),
+    ]);
+  });
+
+  it("attaches approved profile Pi extensions only to that profile config", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([
+      {
+        id: "profile-coding",
+        slug: "coding",
+        name: "Coding",
+        description: null,
+        routing_guidance: null,
+        instructions: "Code carefully.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "coding",
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "profile-reviewer",
+        slug: "reviewer",
+        name: "Reviewer",
+        description: null,
+        routing_guidance: null,
+        instructions: "Review carefully.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "reviewer",
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+    rowsQueue.push([
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-coding",
+        target_type: "agent_profile",
+        agent_profile_id: "profile-coding",
+      }),
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.piExtensions).toEqual([]);
+    expect(
+      cfg.agentProfilesConfig.find((profile) => profile.slug === "coding")
+        ?.piExtensions,
+    ).toEqual([
+      expect.objectContaining({
+        targetType: "agent_profile",
+        agentProfileId: "profile-coding",
+        toolNames: ["search_issues"],
+      }),
+    ]);
+    expect(
+      cfg.agentProfilesConfig.find((profile) => profile.slug === "reviewer")
+        ?.piExtensions,
+    ).toEqual([]);
+  });
+
+  it("filters non-executable Pi extension assignments without crashing", async () => {
+    const stale = piExtensionRuntimeRow({
+      assignment_id: "assignment-stale",
+    });
+    stale.artifact_hash = "stale-artifact-hash";
+    const descriptorRuntimeMismatch = piExtensionRuntimeRow({
+      assignment_id: "assignment-descriptor-runtime-mismatch",
+    });
+    const descriptor = {
+      ...((
+        descriptorRuntimeMismatch.verification_report as Record<string, unknown>
+      ).artifactDescriptor as Record<string, unknown>),
+      runtimeTarget: "browser",
+    };
+    descriptorRuntimeMismatch.verification_report = {
+      status: "passed",
+      artifactDescriptor: descriptor,
+    };
+    descriptorRuntimeMismatch.artifact_hash = piExtensionArtifactHash(
+      descriptor as Parameters<typeof piExtensionArtifactHash>[0],
+    );
+
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    rowsQueue.push([
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-disabled",
+        enabled: false,
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-rejected",
+        status: "rejected",
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-wrong-tenant",
+        version_tenant_id: "tenant-other",
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-unsupported-runtime",
+        runtime_target: "browser",
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-missing-runtime",
+        runtime_target: null,
+      }),
+      descriptorRuntimeMismatch,
+      stale,
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-missing-artifact",
+        artifact_hash: null,
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-failed-verification",
+        verification_report: { status: "failed" },
+      }),
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.piExtensions).toEqual([]);
+  });
+
+  it("keeps chat runtime config available when Pi extension loading fails", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    rowsQueue.push(new Error("pi extension table unavailable"));
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.piExtensions).toEqual([]);
+    expect(cfg.agentProfilesConfig).toEqual([]);
   });
 
   it("includes an enabled global Research profile in the runtime config", async () => {

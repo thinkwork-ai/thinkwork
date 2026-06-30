@@ -100,8 +100,10 @@ import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import {
   applyAgentSkillMetadata,
   loadAgentProfileRuntimeConfigs,
+  loadPiExtensionRuntimeAssignments,
   loadWorkspaceSkillConfigs,
   type AgentProfileRuntimeConfig,
+  type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import {
@@ -810,8 +812,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
-    | { guardrailIdentifier: string; guardrailVersion: string }
-    | undefined;
+    { guardrailIdentifier: string; guardrailVersion: string } | undefined;
   if (agent.guardrail_id) {
     const [gr] = await db
       .select({
@@ -1943,6 +1944,26 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         }).then((models) => models.map((model) => model.modelId))
       : Promise.resolve(undefined),
   ]);
+  const piExtensionAssignments = await loadPiExtensionRuntimeAssignments({
+    tenantId: wakeup.tenant_id,
+    agentProfileIds: agentProfilesConfig.map((profile) => profile.id),
+    logPrefix: "[wakeup-processor]",
+  }).catch(
+    (
+      err,
+    ): {
+      defaultAgent: AgentRuntimePiExtension[];
+      byAgentProfileId: Map<string, AgentRuntimePiExtension[]>;
+    } => {
+      console.error(`[wakeup-processor] Pi extension resolution failed:`, err);
+      return { defaultAgent: [], byAgentProfileId: new Map() };
+    },
+  );
+  const piExtensions = piExtensionAssignments.defaultAgent;
+  for (const profile of agentProfilesConfig) {
+    profile.piExtensions =
+      piExtensionAssignments.byAgentProfileId.get(profile.id) ?? [];
+  }
 
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
@@ -2081,6 +2102,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         threadId: resolvedThreadId || undefined,
         threadTurnId: run.id,
         agentProfiles: agentProfilesConfig,
+        piExtensions,
         modelRoutingPolicy,
         approvedModelIds,
         renderedWorkspacePrefix,
@@ -2369,8 +2391,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     ) {
       // Route response to email thread (create or reuse based on reply token context)
       const replyTokenContextId = payload?.replyTokenContextId as
-        | string
-        | undefined;
+        string | undefined;
       const emailSubject = (payload?.subject as string) || "(no subject)";
       let emailThreadId = replyTokenContextId || "";
 
@@ -2731,6 +2752,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               threadId: resolvedThreadId || undefined,
               threadTurnId: run.id,
               agentProfiles: agentProfilesConfig,
+              piExtensions,
               modelRoutingPolicy,
               approvedModelIds,
               renderedWorkspacePrefix,

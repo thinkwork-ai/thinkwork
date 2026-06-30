@@ -66,6 +66,7 @@ const runtimeConfig: AgentRuntimeConfig = {
   },
   knowledgeBasesConfig: undefined,
   mcpConfigs: [],
+  piExtensions: [],
   agentProfilesConfig: [],
 };
 

@@ -277,6 +277,7 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     // rebuild silently drops any field not copied — pinned_skills must be
     // forwarded explicitly or the Pi runtime never sees the pin (KTD2).
     if (body.pinned_skills) payload.pinned_skills = body.pinned_skills;
+    if (body.pi_extensions) payload.pi_extensions = body.pi_extensions;
     if (body.knowledge_bases) payload.knowledge_bases = body.knowledge_bases;
     if (body.mcp_servers) payload.mcp_servers = body.mcp_servers;
     if (body.mcp_base_url) payload.mcp_base_url = body.mcp_base_url;
