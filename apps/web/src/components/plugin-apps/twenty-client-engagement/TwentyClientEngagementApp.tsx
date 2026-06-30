@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   Check,
@@ -40,6 +41,7 @@ export function TwentyClientEngagementApp({
   appDisplayName?: string;
   pluginDisplayName?: string;
 }) {
+  const navigate = useNavigate();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
   );
@@ -144,6 +146,12 @@ export function TwentyClientEngagementApp({
     title: appDisplayName,
     documentTitle: `${pluginDisplayName} · ${appDisplayName}`,
     breadcrumbs: [
+      {
+        label: "Apps",
+        onClick: () => {
+          void navigate({ to: "/apps" });
+        },
+      },
       { label: pluginDisplayName },
       {
         label: appDisplayName,
@@ -177,6 +185,7 @@ export function TwentyClientEngagementApp({
       selectedAccount?.company.id ?? "no-account",
       selectedOpportunity?.opportunity.id ?? "no-opportunity",
       crmUrl ?? "no-crm-url",
+      "apps-breadcrumb",
       data.dashboardFetching ? "fetching" : "idle",
       data.dashboardError ? "error" : "ready",
     ].join(":"),
