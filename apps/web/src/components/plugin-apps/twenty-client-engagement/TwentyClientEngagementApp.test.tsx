@@ -158,7 +158,8 @@ vi.mock("./data/twentyEngagementApi", () => ({
 vi.mock("urql", () => ({
   useQuery: ({ variables }: { variables?: Record<string, unknown> }) => {
     const input = variables?.input as
-      { providerRecordType?: string; providerRecordId?: string } | undefined;
+      | { providerRecordType?: string; providerRecordId?: string }
+      | undefined;
     if (
       input?.providerRecordType === "opportunity" ||
       input?.providerRecordType === "app"
@@ -261,18 +262,14 @@ describe("TwentyClientEngagementApp", () => {
         title: "Client Engagement",
         documentTitle: "Twenty CRM · Client Engagement",
         breadcrumbs: [
-          { label: "Twenty CRM", href: "/settings/plugins/twenty" },
+          { label: "Twenty CRM" },
           { label: "Client Engagement", onClick: undefined },
         ],
       }),
     );
     const headerAction = renderLatestHeaderAction();
-    expect(
-      headerAction.getByRole("button", { name: "Pipeline" }),
-    ).toBeTruthy();
-    expect(
-      headerAction.getByRole("button", { name: "Refresh" }),
-    ).toBeTruthy();
+    expect(headerAction.getByRole("button", { name: "Pipeline" })).toBeTruthy();
+    expect(headerAction.getByRole("button", { name: "Refresh" })).toBeTruthy();
     expect(
       headerAction.queryByRole("link", { name: "Open in CRM" }),
     ).toBeNull();
@@ -293,7 +290,7 @@ describe("TwentyClientEngagementApp", () => {
     expect(screen.getByRole("tab", { name: "Opportunities (1)" })).toBeTruthy();
     expect(screen.queryByText("1 active opportunity")).toBeNull();
     expect(latestHeaderActions().breadcrumbs).toEqual([
-      { label: "Twenty CRM", href: "/settings/plugins/twenty" },
+      { label: "Twenty CRM" },
       { label: "Client Engagement", onClick: expect.any(Function) },
       { label: "McPherson Companies" },
     ]);
@@ -335,6 +332,36 @@ describe("TwentyClientEngagementApp", () => {
         .getByRole("link", { name: "Open in CRM" })
         .getAttribute("href"),
     ).toBe("https://crm.thinkwork.ai/objects/companies/company-1");
+  });
+
+  it("saves stakeholder sheet edits with one explicit CRM mutation", async () => {
+    render(<TwentyClientEngagementApp />);
+    await openFirstAccount();
+
+    fireEvent.click(screen.getByText("Chad Logan"));
+    fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
+      target: { value: "chad.logan@mcphersonoil.com" },
+    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Stakeholder role" }));
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Internal Advocate" }),
+    );
+
+    expect(saveTwentyStakeholderMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saveTwentyStakeholderMock).toHaveBeenCalledWith({
+        stakeholderId: "person-1",
+        companyId: "company-1",
+        name: "Chad Logan",
+        title: "Operations / IT Lead",
+        department: "Operations",
+        role: "Internal Advocate",
+        email: "chad.logan@mcphersonoil.com",
+      }),
+    );
   });
 
   it("renders a useful empty state for accounts without opportunities", async () => {

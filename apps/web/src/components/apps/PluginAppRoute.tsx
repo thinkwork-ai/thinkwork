@@ -104,7 +104,6 @@ function PluginAppHost({ app }: { app: InstalledPluginApp }) {
       <TwentyClientEngagementApp
         appDisplayName={app.displayName}
         pluginDisplayName={app.pluginDisplayName}
-        pluginKey={app.pluginKey}
       />
     );
   }
