@@ -16,6 +16,7 @@ status: active
 - Linear attached document: `Plan: Add n8n integrated app`.
 - Child issues: none found. Autopilot will use plan units as implementation units.
 - Blocking issue relations: none found.
+- Current branch: `codex/think-113-u4-n8n-settings`.
 
 ## Context discovery
 
@@ -45,7 +46,7 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | --- | --- | --- | --- |
 | 2026-06-30 | Requirements located | Requirements, primary plan, and Linear attached plan document found. | Passed |
 | 2026-06-30 | Linear dependency scan | No child issues, blockers, duplicate, attachments, customer needs, or release blockers found. | Passed |
-| 2026-06-30 | Repo baseline | Worktree is detached at `038fb2a5c`; only requirements and plan artifacts are untracked. | Passed |
+| 2026-06-30 | Repo baseline | Worktree was synced from `origin/main`; only requirements and plan artifacts were untracked before U1. | Passed |
 | 2026-06-30 | Implementation started | Linear moved to `In Progress`; kickoff comment posted for U1. | Passed |
 | 2026-06-30 | U1 branch created | Created `codex/think-113-u1-n8n-app-host` from `origin/main`. | Passed |
 | 2026-06-30 | U1 package verification | `pnpm --filter @thinkwork/plugin-n8n test`; `pnpm --filter @thinkwork/plugin-n8n typecheck`. The typecheck now also runs `tsc -p n8n-app/tsconfig.json --noEmit`. | Passed |
@@ -53,7 +54,13 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | 2026-06-30 | U1 source-boundary verification | `pnpm lint:plugin-source`. | Passed |
 | 2026-06-30 | U1 review | Testing reviewer found missing `workflow-publish` contract coverage and nested app typecheck gap; correctness reviewer found manifest payload versioning risk. Both were fixed and reverified. Project-standards reviewer found no issues. | Passed |
 | 2026-06-30 | Format command check | `pnpm exec prettier --write ...` could not run because the root dependency install does not expose a `prettier` binary. | Blocked |
+| 2026-06-30 | U1 PR | Opened PR [#3135](https://github.com/thinkwork-ai/thinkwork/pull/3135), rebased after GitHub required the branch to be up to date, and waited for required checks. | Passed |
+| 2026-06-30 | U1 merge | Squash-merged PR #3135 into `main`; remote branch was deleted by the merge flow and the local branch was deleted before starting U4. | Passed |
+| 2026-06-30 | U4 branch created | Created `codex/think-113-u4-n8n-settings` from updated `origin/main`. | Passed |
+| 2026-06-30 | U4 objective restated | Simplify the n8n plugin detail to settings-only, remove the Workflows tab from the plugin surface, redirect the legacy workflows route, route catalog opens to settings, and add an install action for uninstalled n8n. | Passed |
+| 2026-06-30 | U4 web tests | `pnpm --dir apps/web exec vitest run src/components/settings/plugins/n8n/N8nPluginHome.test.tsx src/components/settings/plugins/PluginsPage.test.tsx`. | Passed |
+| 2026-06-30 | U4 typecheck | `pnpm --filter @thinkwork/web typecheck`. | Passed |
 
 ## Active unit
 
-U1 implementation is ready for PR. The branch adds package-owned `plugins/n8n/n8n-app` host/auth scaffolding, publishes a launchable `apps.main` n8n app surface in n8n plugin version `0.2.0` while preserving the legacy `0.1.0` payload, and adds package-local contract coverage.
+U4 is active. The branch removes the tabbed n8n plugin detail in favor of the Settings surface, redirects `/settings/plugins/n8n/workflows` back to `/settings/plugins/n8n`, updates the settings catalog to open n8n directly, and adds an operator-only install action when the n8n catalog entry exists but the tenant has not installed it.

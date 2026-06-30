@@ -431,14 +431,14 @@ describe("PluginsPage", () => {
     });
   });
 
-  it("opens n8n directly on its workflows tab", () => {
+  it("opens n8n directly on its settings page", () => {
     mockQueries({ catalog: [...catalogEntries, n8nCatalogEntry] });
     render(<PluginsPage />);
 
     fireEvent.click(screen.getByRole("link", { name: "Open n8n" }));
 
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/settings/plugins/n8n/workflows",
+      to: "/settings/plugins/n8n",
     });
   });
 
@@ -725,12 +725,12 @@ const n8nCatalogEntry = {
   pluginKey: "n8n",
   displayName: "n8n",
   description: "Self-hosted n8n workflow automation runtime.",
-  latestVersion: "0.1.0",
+  latestVersion: "0.2.0",
   launchUrl: null,
   updateAvailable: false,
   versions: [
     {
-      version: "0.1.0",
+      version: "0.2.0",
       payloadSha256: "sha256:n8n",
       requiredOauthScopes: [],
       components: [],
