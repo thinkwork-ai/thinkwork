@@ -1147,6 +1147,13 @@ def state_terraform_data_input(state, name):
     return {}
 
 
+def state_has_resource(state, resource_type, name):
+    for resource in state.get("resources", []) or []:
+        if resource.get("type") == resource_type and resource.get("name") == name:
+            return True
+    return False
+
+
 def state_cloudflare_zone_id(state):
     for resource in state.get("resources", []) or []:
         if resource.get("type") != "cloudflare_record":
@@ -1861,6 +1868,11 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         current_state,
         "n8n_configuration_guardrails",
     )
+    n8n_preserved_certificate_arn = (
+        ""
+        if state_has_resource(current_state, "aws_acm_certificate", "n8n")
+        else n8n_guardrails.get("n8n_certificate_arn", "")
+    )
 
     overrides = {
         "enable_cognee": bool(state_output(current_outputs, "cognee_enabled", False)),
@@ -1997,7 +2009,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "n8n_public_url",
             state_output(current_outputs, "n8n_url", ""),
         ),
-        "n8n_certificate_arn": n8n_guardrails.get("n8n_certificate_arn", ""),
+        "n8n_certificate_arn": n8n_preserved_certificate_arn,
         "n8n_main_desired_count": n8n_guardrails.get("n8n_main_desired_count", 1),
         "n8n_worker_desired_count": n8n_guardrails.get("n8n_worker_desired_count", 1),
         "n8n_worker_concurrency": n8n_guardrails.get("n8n_worker_concurrency", 10),

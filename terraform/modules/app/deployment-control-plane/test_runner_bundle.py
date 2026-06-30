@@ -1572,7 +1572,12 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
                         }
                     }
                 ],
-            }
+            },
+            {
+                "type": "aws_acm_certificate",
+                "name": "n8n",
+                "instances": [{"attributes": {}}],
+            },
         ]
     }
 
@@ -1604,6 +1609,7 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     assert overrides["n8n_image_uri"].endswith("@" + "sha256:" + "4" * 64)
     assert overrides["n8n_database_name"] == "thinkwork_n8n"
     assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
+    assert overrides["n8n_certificate_arn"] == ""
     assert overrides["n8n_main_desired_count"] == 2
     assert overrides["n8n_worker_desired_count"] == 3
     assert overrides["n8n_package_config_digest"] == "abc123"
