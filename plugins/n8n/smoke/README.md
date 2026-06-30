@@ -61,3 +61,35 @@ The smoke records the n8n workflow/execution, ThinkWork bridge run, ThinkWork
 thread, resume status, compact result fields, and evidence URI when configured.
 It never prints or persists bridge bearer tokens, n8n MCP tokens, raw resume
 URLs, or resolved IP addresses.
+
+## Integrated ThinkWork App
+
+```bash
+node plugins/n8n/smoke/n8n-integrated-app-smoke.mjs
+```
+
+Set `SMOKE_ENABLE_N8N_INTEGRATED_APP=1` after the plugin is installed and the
+managed n8n runtime is deployed. The live smoke verifies the ThinkWork-hosted
+app path:
+
+1. `installedPluginApps` returns `n8n-workflow-operations` at
+   `/apps/n8n/workflows`.
+2. `n8nAppData` returns workflow readiness and workflow table rows.
+3. `n8nAppData` returns execution readiness and bounded execution table rows.
+4. Bridge-linked execution evidence is present when
+   `SMOKE_N8N_BRIDGE_THREAD_ID` is supplied.
+
+Typical live env:
+
+```bash
+SMOKE_ENABLE_N8N_INTEGRATED_APP=1 \
+SMOKE_THINKWORK_URL=https://app.example.com \
+SMOKE_N8N_INSTALL_ID=<plugin-install-id> \
+SMOKE_COGNITO_ID_TOKEN=<operator-id-token> \
+SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-integrated-app-smoke.json \
+node plugins/n8n/smoke/n8n-integrated-app-smoke.mjs
+```
+
+The smoke records readiness states, row counts, sample workflow/execution ids,
+and bridge-linked counts. It does not print n8n API keys, bearer tokens, raw
+execution payloads, bridge credentials, or callback URLs.

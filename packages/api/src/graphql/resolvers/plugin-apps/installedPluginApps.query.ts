@@ -53,6 +53,13 @@ interface CatalogPlugin {
   }>;
 }
 
+interface LaunchableSurface {
+  surface: UiSurfaceComponent & {
+    launch: NonNullable<UiSurfaceComponent["launch"]>;
+  };
+  requireSurfaceComponent: boolean;
+}
+
 export async function installedPluginApps(
   _parent: unknown,
   _args: Record<string, never>,
@@ -91,9 +98,10 @@ export async function installedPluginApps(
     const pinned = findPinnedVersion(catalogPlugin, install.pinned_version);
     if (!pinned) continue;
 
-    const launchableSurfaces = pinned.payload.components.filter(
-      (component): component is UiSurfaceComponent =>
-        component.type === "ui-surface" && component.launch?.type === "app",
+    const launchableSurfaces = launchableAppSurfacesForInstall(
+      install,
+      catalogPlugin,
+      pinned.payload,
     );
     if (launchableSurfaces.length === 0) continue;
 
@@ -103,7 +111,7 @@ export async function installedPluginApps(
     );
     const activation = activationByInstallId.get(install.id) ?? null;
 
-    for (const surface of launchableSurfaces) {
+    for (const { surface, requireSurfaceComponent } of launchableSurfaces) {
       const launch = surface.launch!;
       apps.push({
         id: `${install.id}:${surface.key}`,
@@ -127,6 +135,7 @@ export async function installedPluginApps(
           components,
           componentByKey,
           activation,
+          requireSurfaceComponent,
         }),
       });
     }
@@ -147,6 +156,64 @@ function findPinnedVersion(plugin: CatalogPlugin, pinnedVersion: string) {
   return versions.find((version) => version.version === pinnedVersion) ?? null;
 }
 
+function launchableAppSurfacesForInstall(
+  install: PluginInstallRow,
+  catalogPlugin: CatalogPlugin,
+  manifestVersion: PluginVersion,
+): LaunchableSurface[] {
+  const pinnedSurfaces = launchableAppSurfaces(manifestVersion).map(
+    (surface) => ({
+      surface,
+      requireSurfaceComponent: true,
+    }),
+  );
+  if (pinnedSurfaces.length > 0) return pinnedSurfaces;
+
+  const compatibilitySurface = n8nWorkflowOperationsCompatibilitySurface(
+    install,
+    catalogPlugin,
+    manifestVersion,
+  );
+  return compatibilitySurface
+    ? [{ surface: compatibilitySurface, requireSurfaceComponent: false }]
+    : [];
+}
+
+function launchableAppSurfaces(version: PluginVersion) {
+  return version.components.filter(
+    (
+      component,
+    ): component is UiSurfaceComponent & {
+      launch: NonNullable<UiSurfaceComponent["launch"]>;
+    } => component.type === "ui-surface" && component.launch?.type === "app",
+  );
+}
+
+function n8nWorkflowOperationsCompatibilitySurface(
+  install: PluginInstallRow,
+  catalogPlugin: CatalogPlugin,
+  manifestVersion: PluginVersion,
+) {
+  if (install.plugin_key !== "n8n") return null;
+  const hasWorkflowOperationsSurface = launchableAppSurfaces(
+    manifestVersion,
+  ).some((surface) => surface.launch.appKey === "n8n-workflow-operations");
+  if (hasWorkflowOperationsSurface) return null;
+
+  const versions = [...catalogPlugin.versions].sort((a, b) =>
+    compareSemverDesc(a.version, b.version),
+  );
+  for (const version of versions) {
+    const surface = launchableAppSurfaces(version.payload).find(
+      (candidate) =>
+        candidate.key === "workflow-operations" &&
+        candidate.launch.appKey === "n8n-workflow-operations",
+    );
+    if (surface) return surface;
+  }
+  return null;
+}
+
 function readinessForApp({
   install,
   manifestVersion,
@@ -154,6 +221,7 @@ function readinessForApp({
   components,
   componentByKey,
   activation,
+  requireSurfaceComponent,
 }: {
   install: PluginInstallRow;
   manifestVersion: PluginVersion;
@@ -161,6 +229,7 @@ function readinessForApp({
   components: PluginComponentRow[];
   componentByKey: Map<string, PluginComponentRow>;
   activation: UserPluginActivationRow | null;
+  requireSurfaceComponent: boolean;
 }): InstalledPluginAppPayload["readiness"] {
   if (install.state === "installing" || install.state === "awaiting_approval") {
     return {
@@ -179,7 +248,7 @@ function readinessForApp({
   }
 
   const surfaceComponent = componentByKey.get(surface.key);
-  if (!componentIsProvisioned(surfaceComponent)) {
+  if (requireSurfaceComponent && !componentIsProvisioned(surfaceComponent)) {
     return {
       state: "component_unavailable",
       message: "The app surface has not been provisioned yet.",

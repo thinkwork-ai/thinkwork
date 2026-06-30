@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -12,19 +12,22 @@ import {
   Input,
 } from "@thinkwork/ui";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 import { ManagedApplicationJobTimeline } from "./ManagedApplicationJobTimeline";
 import { ManagedApplicationEvidenceLinks } from "./ManagedApplicationEvidenceLinks";
 import {
   appDisplayName,
   destructiveConfirmationFor,
   parseDataImpact,
+  terminalJobStatus,
   type ManagedApplicationJob,
 } from "./types";
 import {
   SettingsApproveManagedApplicationDeploymentMutation,
+  SettingsManagedApplicationDeploymentQuery,
   SettingsRejectManagedApplicationDeploymentMutation,
 } from "@/lib/settings-queries";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 
 export function ManagedApplicationPlanDialog({
   job,
@@ -37,6 +40,14 @@ export function ManagedApplicationPlanDialog({
   onOpenChange: (open: boolean) => void;
   onJobChanged?: (job: ManagedApplicationJob) => void;
 }) {
+  const jobId = job?.id ?? null;
+  const notifiedJobSignatureRef = useRef<string | null>(null);
+  const [jobResult, refreshJob] = useQuery({
+    query: SettingsManagedApplicationDeploymentQuery,
+    variables: { jobId: jobId ?? "" },
+    pause: !open || !jobId,
+    requestPolicy: "cache-and-network",
+  });
   const [approveState, approve] = useMutation(
     SettingsApproveManagedApplicationDeploymentMutation,
   );
@@ -45,33 +56,81 @@ export function ManagedApplicationPlanDialog({
   );
   const [ack, setAck] = useState(false);
   const [confirmation, setConfirmation] = useState("");
+  const currentJob = jobResult.data?.managedApplicationDeployment ?? job;
 
   const dataImpact = useMemo(
-    () => parseDataImpact(job?.dataImpact),
-    [job?.dataImpact],
+    () => parseDataImpact(currentJob?.dataImpact),
+    [currentJob?.dataImpact],
   );
   // Raw string key: plugin-created jobs reuse this dialog, so the key is
   // no longer coerced into the closed ManagedAppKey union.
-  const key = job?.appKey ?? "cognee";
+  const key = currentJob?.appKey ?? "cognee";
   const destructiveConfirmation = destructiveConfirmationFor(key);
-  const ready = !!job?.planDigest && job.status === "awaiting_approval";
+  const ready =
+    !!currentJob?.planDigest && currentJob.status === "awaiting_approval";
   const destructiveReady =
     !dataImpact.destructive ||
     (ack && confirmation.trim() === destructiveConfirmation);
   const approvalDisabled =
-    !job ||
+    !currentJob ||
     !ready ||
     !destructiveReady ||
     approveState.fetching ||
     rejectState.fetching;
+  const approvalLabel =
+    currentJob && !ready && !terminalJobStatus(currentJob.status)
+      ? currentJob.status === "planning"
+        ? "Preparing plan"
+        : "Waiting for approval"
+      : dataImpact.destructive
+        ? "Destroy application and data"
+        : "Deploy application";
+
+  useEffect(() => {
+    if (!open || !jobId || !currentJob || terminalJobStatus(currentJob.status)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      refreshJob({ requestPolicy: "network-only" });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [currentJob?.status, jobId, open, refreshJob]);
+
+  useEffect(() => {
+    const next = jobResult.data?.managedApplicationDeployment;
+    if (!next) return;
+    const signature = [
+      next.id,
+      next.status,
+      next.planDigest ?? "",
+      next.updatedAt,
+    ].join(":");
+    if (signature === notifiedJobSignatureRef.current) return;
+    if (
+      next.status === job?.status &&
+      next.planDigest === job.planDigest &&
+      next.updatedAt === job.updatedAt
+    ) {
+      notifiedJobSignatureRef.current = signature;
+      return;
+    }
+    notifiedJobSignatureRef.current = signature;
+    onJobChanged?.(next);
+  }, [
+    job?.planDigest,
+    job?.status,
+    job?.updatedAt,
+    jobResult.data?.managedApplicationDeployment,
+    onJobChanged,
+  ]);
 
   async function approveJob() {
-    if (!job?.planDigest) return;
+    if (!currentJob?.planDigest) return;
     const result = await approve({
       input: {
-        jobId: job.id,
-        planDigest: job.planDigest,
-        manifestDigest: job.manifestDigest,
+        jobId: currentJob.id,
+        planDigest: currentJob.planDigest,
+        manifestDigest: currentJob.manifestDigest,
         destructiveConfirmation: dataImpact.destructive
           ? destructiveConfirmation
           : null,
@@ -88,10 +147,10 @@ export function ManagedApplicationPlanDialog({
   }
 
   async function rejectJob() {
-    if (!job) return;
+    if (!currentJob) return;
     const result = await reject({
       input: {
-        jobId: job.id,
+        jobId: currentJob.id,
         reason: "Rejected from Spaces managed application plan dialog.",
       },
     });
@@ -110,8 +169,8 @@ export function ManagedApplicationPlanDialog({
       <DialogContent className="flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-none flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader className="shrink-0">
           <DialogTitle>
-            {job
-              ? `${appDisplayName(key)} ${job.operation}`
+            {currentJob
+              ? `${appDisplayName(key)} ${currentJob.operation}`
               : "Deployment plan"}
           </DialogTitle>
           <DialogDescription>
@@ -121,19 +180,28 @@ export function ManagedApplicationPlanDialog({
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto overflow-x-hidden pr-1">
-          {!job ? (
+          {!currentJob ? (
             <p className="text-sm text-muted-foreground">
               Start a managed application plan to review it here.
             </p>
           ) : (
             <div className="min-w-0 space-y-4">
               <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-                <PlanFact label="Status" value={job.status} />
-                <PlanFact label="Operation" value={job.operation} />
-                <PlanFact label="Release" value={job.releaseVersion} />
-                <PlanFact label="Config" value={job.desiredConfigVersion} />
-                <PlanFact label="Manifest digest" value={job.manifestDigest} />
-                <PlanFact label="Plan digest" value={job.planDigest ?? "..."} />
+                <PlanFact label="Status" value={currentJob.status} />
+                <PlanFact label="Operation" value={currentJob.operation} />
+                <PlanFact label="Release" value={currentJob.releaseVersion} />
+                <PlanFact
+                  label="Config"
+                  value={currentJob.desiredConfigVersion}
+                />
+                <PlanFact
+                  label="Manifest digest"
+                  value={currentJob.manifestDigest}
+                />
+                <PlanFact
+                  label="Plan digest"
+                  value={currentJob.planDigest ?? "..."}
+                />
               </div>
 
               <section className="min-w-0 rounded-md border border-border bg-muted/20 p-3">
@@ -193,7 +261,7 @@ export function ManagedApplicationPlanDialog({
                 <h3 className="mb-2 text-sm font-medium text-foreground">
                   Timeline
                 </h3>
-                <ManagedApplicationJobTimeline job={job} />
+                <ManagedApplicationJobTimeline job={currentJob} />
               </section>
 
               <section className="min-w-0">
@@ -201,9 +269,9 @@ export function ManagedApplicationPlanDialog({
                   Evidence
                 </h3>
                 <ManagedApplicationEvidenceLinks
-                  jobId={job.id}
-                  fallbackBucket={job.evidenceBucket}
-                  fallbackPrefix={job.evidencePrefix}
+                  jobId={currentJob.id}
+                  fallbackBucket={currentJob.evidenceBucket}
+                  fallbackPrefix={currentJob.evidencePrefix}
                 />
               </section>
             </div>
@@ -211,7 +279,22 @@ export function ManagedApplicationPlanDialog({
         </div>
 
         <DialogFooter className="shrink-0 border-t border-border pt-4">
-          {job?.status === "awaiting_approval" ? (
+          {currentJob ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={jobResult.fetching}
+              onClick={() => refreshJob({ requestPolicy: "network-only" })}
+            >
+              <RefreshCw
+                className={`size-4${
+                  jobResult.fetching ? " animate-spin" : ""
+                }`}
+              />
+              Refresh status
+            </Button>
+          ) : null}
+          {currentJob?.status === "awaiting_approval" ? (
             <Button
               type="button"
               variant="outline"
@@ -227,9 +310,7 @@ export function ManagedApplicationPlanDialog({
             variant={dataImpact.destructive ? "destructive" : "default"}
             onClick={() => void approveJob()}
           >
-            {dataImpact.destructive
-              ? "Destroy application and data"
-              : "Deploy application"}
+            {approvalLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

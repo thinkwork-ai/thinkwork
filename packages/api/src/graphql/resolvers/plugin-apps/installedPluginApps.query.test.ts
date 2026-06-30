@@ -130,6 +130,35 @@ function seedTwentyInstall({
   return install;
 }
 
+function seedLegacyN8nInstall() {
+  const install = store.seedInstall({
+    tenant_id: "tenant-1",
+    plugin_key: "n8n",
+    pinned_version: "0.1.0",
+    pinned_payload_sha256: "sha-n8n-0.1.0",
+    state: "installed",
+  });
+  store.seedComponent({
+    plugin_install_id: install.id,
+    component_key: "runtime",
+    component_type: "infrastructure",
+    state: "provisioned",
+  });
+  store.seedComponent({
+    plugin_install_id: install.id,
+    component_key: "workflow-management",
+    component_type: "mcp-server",
+    state: "provisioned",
+  });
+  store.seedComponent({
+    plugin_install_id: install.id,
+    component_key: "package-settings",
+    component_type: "ui-surface",
+    state: "provisioned",
+  });
+  return install;
+}
+
 describe("installedPluginApps", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -190,6 +219,37 @@ describe("installedPluginApps", () => {
     await expect(installedPluginApps(null, {} as never, CTX)).resolves.toEqual(
       [],
     );
+  });
+
+  it("keeps the n8n workflow app visible for legacy installed n8n pins", async () => {
+    const install = seedLegacyN8nInstall();
+
+    const result = await installedPluginApps(null, {} as never, CTX);
+
+    expect(result).toEqual([
+      {
+        id: `${install.id}:workflow-operations`,
+        pluginInstallId: install.id,
+        pluginKey: "n8n",
+        pluginDisplayName: "n8n",
+        pluginVersion: "0.1.0",
+        surfaceKey: "workflow-operations",
+        displayName: "n8n Workflows",
+        appKey: "n8n-workflow-operations",
+        routeSegment: "workflows",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+        description:
+          "Read-only workflow and execution operations surface for the tenant n8n runtime.",
+        icon: "workflow",
+        entitlementProductKey: "n8n-workflow-operations",
+        readiness: {
+          state: "ready",
+          message: "Ready to launch.",
+          nextAction: null,
+        },
+      },
+    ]);
   });
 
   it("keeps the app visible when the current user needs plugin activation", async () => {
