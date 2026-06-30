@@ -12,9 +12,12 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { SettingsPageTitle } from "@/components/settings/SettingsContent";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import type {
   AgentLoopDraft,
   AgentLoopRow,
@@ -43,6 +46,7 @@ export function AgentLoopForm({
   onStartBuilder,
   onConfirmBuilderDraft,
   onCancel,
+  automationsHref = "/settings/automations",
 }: {
   mode: "create" | "edit";
   tenantId: string;
@@ -67,6 +71,7 @@ export function AgentLoopForm({
     builderThreadId: string,
   ) => Promise<void>;
   onCancel: () => void;
+  automationsHref?: string;
 }) {
   const seededDraft = useMemo(
     () =>
@@ -87,6 +92,7 @@ export function AgentLoopForm({
   const [presetSheetOpen, setPresetSheetOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(mode === "edit");
   const [error, setError] = useState<string | null>(null);
+  const title = mode === "edit" ? "Edit Automation" : "New Automation";
 
   useEffect(() => {
     setDraft(seededDraft);
@@ -96,6 +102,69 @@ export function AgentLoopForm({
   }, [mode, seededDraft]);
 
   const saveDisabled = saving;
+  const headerActions =
+    mode === "create" ? (
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Open templates"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setPresetSheetOpen(true)}
+            >
+              <ClipboardList className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Templates</TooltipContent>
+        </Tooltip>
+        {onStartBuilder ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={
+                  builderStarting
+                    ? "Starting chat help"
+                    : draft.builderThreadId
+                      ? "Refresh chat draft"
+                      : "Chat help"
+                }
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => void startBuilder()}
+                disabled={builderStarting}
+              >
+                <MessageCircle className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {builderStarting
+                ? "Starting..."
+                : draft.builderThreadId
+                  ? "Refresh chat draft"
+                  : "Chat help"}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+    ) : undefined;
+
+  usePageHeaderActions({
+    title,
+    breadcrumbs: [
+      { label: "Automations", href: automationsHref },
+      { label: title },
+    ],
+    action: headerActions,
+    actionKey:
+      mode === "create"
+        ? `automation-form:${builderStarting ? "starting" : "idle"}:${draft.builderThreadId ?? "none"}:${onStartBuilder ? "builder" : "no-builder"}`
+        : undefined,
+  });
 
   async function save() {
     const invalid = validateDraft(draft);
@@ -180,46 +249,6 @@ export function AgentLoopForm({
 
   return (
     <div>
-      <SettingsPageTitle
-        title={mode === "edit" ? "Edit Automation" : "New Automation"}
-        description={
-          mode === "edit"
-            ? "Update the prompt, trigger, and advanced runtime settings."
-            : "Define when it runs, what it does, and what it can use."
-        }
-      />
-
-      <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
-        {mode === "create" ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-label="Open templates"
-            onClick={() => setPresetSheetOpen(true)}
-          >
-            <ClipboardList className="mr-2 size-4" />
-            Templates
-          </Button>
-        ) : null}
-        {mode === "create" && onStartBuilder ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void startBuilder()}
-            disabled={builderStarting}
-          >
-            <MessageCircle className="mr-2 size-4" />
-            {builderStarting
-              ? "Starting..."
-              : draft.builderThreadId
-                ? "Refresh chat draft"
-                : "Chat help"}
-          </Button>
-        ) : null}
-      </div>
-
       <AutomationEasyForm
         draft={draft}
         setDraft={setDraft}

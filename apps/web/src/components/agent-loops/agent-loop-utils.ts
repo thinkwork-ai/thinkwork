@@ -99,7 +99,7 @@ export function defaultAgentLoopDraft(
     description: "",
     lifecycleStatus: "active",
     enabled: true,
-    triggerFamily: "manual",
+    triggerFamily: "schedule",
     scheduleType: "rate",
     scheduleExpression: "rate(7 days)",
     timezone: "UTC",

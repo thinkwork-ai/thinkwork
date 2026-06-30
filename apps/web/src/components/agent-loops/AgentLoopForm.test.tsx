@@ -12,6 +12,12 @@ import type {
   AgentLoopWorkerOption,
 } from "./agent-loop-types";
 
+const pageHeaderMock = vi.hoisted(() => ({
+  actions: null as
+    | { title?: string; action?: import("react").ReactNode }
+    | null,
+}));
+
 vi.mock("@/components/schedule-picker/SchedulePicker", () => ({
   SchedulePicker: ({
     value,
@@ -61,6 +67,14 @@ vi.mock("@/components/settings/SettingsContent", () => ({
       {children}
     </div>
   ),
+}));
+
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: (
+    actions: { title?: string; action?: import("react").ReactNode } | null,
+  ) => {
+    pageHeaderMock.actions = actions;
+  },
 }));
 
 vi.mock("@thinkwork/ui", () => ({
@@ -223,6 +237,13 @@ vi.mock("@thinkwork/ui", () => ({
   Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
     <textarea {...props} />
   ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -237,7 +258,16 @@ const spaces: AgentLoopSpaceOption[] = [
   { id: "space-1", name: "Customer", slug: "customer" },
 ];
 
-afterEach(() => cleanup());
+afterEach(() => {
+  pageHeaderMock.actions = null;
+  cleanup();
+});
+
+function renderHeaderActions() {
+  if (pageHeaderMock.actions?.action) {
+    render(<>{pageHeaderMock.actions.action}</>);
+  }
+}
 
 describe("AgentLoopForm", () => {
   it("requires an instruction before saving", () => {
@@ -271,21 +301,35 @@ describe("AgentLoopForm", () => {
       />,
     );
 
+    expect(pageHeaderMock.actions?.title).toBe("New Automation");
     expect(
-      screen.getByRole("heading", { name: "New Automation" }),
-    ).toBeTruthy();
+      screen.queryByRole("heading", { name: "New Automation" }),
+    ).toBeNull();
     expect(screen.getByLabelText("Automation name")).toBeTruthy();
-    expect(screen.getByText("Triggers")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Add trigger/ })).toBeTruthy();
     expect(screen.getByText("Instructions")).toBeTruthy();
+    expect(screen.getByLabelText("Automation instruction")).toBeTruthy();
+    expect(screen.getByText("Triggers")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Schedule" })).toBeTruthy();
+    expect(screen.getByTestId("schedule-picker")).toBeTruthy();
+    expect(screen.getByText("Run in")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: /Add instruction/ }),
+      screen.getByText(
+        "Choose where this automation runs and whether it is active",
+      ),
     ).toBeTruthy();
-    expect(screen.getByText("MCPs")).toBeTruthy();
-    expect(screen.getByText("No MCPs available")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Advanced" })).toBeTruthy();
+    expect(
+      screen.getByText("Fine-tune runtime, review, and evidence settings"),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Chat" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Manual" })).toBeNull();
+    expect(screen.queryByText("Start session")).toBeNull();
+    expect(screen.queryByText("MCPs")).toBeNull();
+    expect(screen.queryByText("No MCPs available")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add trigger/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Add instruction/ }),
+    ).toBeNull();
   });
 
   it("saves the builder from instruction and default runtime settings", async () => {
@@ -314,7 +358,12 @@ describe("AgentLoopForm", () => {
         tenantId: "tenant-1",
         name: "Route Linear issues to the right worker",
         spaceId: "space-1",
-        triggerSpec: expect.objectContaining({ family: "manual" }),
+        triggerSpec: expect.objectContaining({
+          family: "schedule",
+          config: expect.objectContaining({
+            scheduleExpression: "rate(7 days)",
+          }),
+        }),
         workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
         sourceMetadata: expect.objectContaining({
           creationMode: "builder",
@@ -364,6 +413,7 @@ describe("AgentLoopForm", () => {
     );
 
     expect(onStartBuilder).not.toHaveBeenCalled();
+    renderHeaderActions();
 
     fireEvent.change(screen.getByLabelText("Automation instruction"), {
       target: {
@@ -432,6 +482,8 @@ describe("AgentLoopForm", () => {
       />,
     );
 
+    renderHeaderActions();
+
     fireEvent.change(screen.getByLabelText("Automation instruction"), {
       target: { value: "Route Linear issues to the right worker." },
     });
@@ -458,6 +510,8 @@ describe("AgentLoopForm", () => {
         onCancel={vi.fn()}
       />,
     );
+
+    renderHeaderActions();
 
     fireEvent.click(screen.getByLabelText("Open templates"));
     fireEvent.click(

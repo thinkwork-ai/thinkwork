@@ -296,6 +296,9 @@ export function AgentLoopInventory({
           workerOptions={workerOptions}
           spaceOptions={spaceOptions}
           defaultSpaceId={defaultSpaceId}
+          automationsHref={
+            routeScope === "main" ? "/automations" : "/settings/automations"
+          }
           onSubmit={createLoop}
           onStartBuilder={startBuilder}
           onConfirmBuilderDraft={confirmBuilderDraft}

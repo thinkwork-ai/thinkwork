@@ -6,5 +6,9 @@ export const Route = createFileRoute("/_authed/_shell/automations/")({
 });
 
 function AutomationsRoute() {
-  return <AgentLoopInventory routeScope="main" />;
+  return (
+    <main className="h-full min-h-0 w-full overflow-y-auto bg-background">
+      <AgentLoopInventory routeScope="main" />
+    </main>
+  );
 }
