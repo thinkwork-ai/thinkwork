@@ -1277,16 +1277,23 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         ? skillsConfig.filter(isSkillAllowedByPolicy)
         : skillsConfig;
 
-    // Force-pinned skills (composer slash-command, plan 2026-06-04-004 U3).
-    // Build an ephemeral config branch carrying the catalog s3Key for each
-    // pinned slug, then drop any the tool policy blocks — reusing the SAME
-    // `isSkillAllowedByPolicy` guardrail as installed skills so an operator pin
-    // can never override an admin blocklist (KD4). Kept SEPARATE from
-    // `effectiveSkillsConfig` so the runtime can both load uninstalled pins and
-    // emphasize all of them, without mutating the resolved/installed set.
-    const pinnedSkillSlugs = Array.isArray(event.pinnedSkills)
+    // Force-pinned skills (composer slash-command, plan 2026-06-04-004 U3)
+    // plus Agent Profile skill policies. Build an ephemeral config branch
+    // carrying the catalog s3Key for each pinned slug, then drop any the tool
+    // policy blocks — reusing the SAME `isSkillAllowedByPolicy` guardrail as
+    // installed skills so an operator/profile pin can never override an admin
+    // blocklist (KD4). Kept SEPARATE from `effectiveSkillsConfig` so the runtime
+    // can both load uninstalled pins and emphasize all of them, without mutating
+    // the resolved/installed set.
+    const messagePinnedSkillSlugs = Array.isArray(event.pinnedSkills)
       ? event.pinnedSkills
       : [];
+    const profilePinnedSkillSlugs = runtimeConfig.agentProfilesConfig.flatMap(
+      (profile) => profile.skillSlugs,
+    );
+    const pinnedSkillSlugs = [
+      ...new Set([...messagePinnedSkillSlugs, ...profilePinnedSkillSlugs]),
+    ];
     const trustedPinnedSkillIds = await loadTrustedCatalogSkillIds({
       tenantId,
       skillIds: pinnedSkillSlugs,
@@ -1300,7 +1307,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     });
     if (pinnedSkillSlugs.length > 0) {
       console.log(
-        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
+        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} message=${messagePinnedSkillSlugs.length} profiles=${profilePinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
       );
     }
     const effectiveMcpPolicy = renderedWorkspace.rendered

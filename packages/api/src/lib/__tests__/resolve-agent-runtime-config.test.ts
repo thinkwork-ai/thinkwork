@@ -505,13 +505,13 @@ describe("resolveAgentRuntimeConfig", () => {
         return {
           Contents: [
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/approve-receipt/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/approve-receipt/SKILL.md",
             },
             {
-              Key: "tenants/acme/agents/ada/workspace/workspaces/finance/skills/tag-vendor/SKILL.md",
+              Key: "tenants/acme/agents/ada/workspaces/finance/skills/tag-vendor/SKILL.md",
             },
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/web-search/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/web-search/SKILL.md",
             },
           ],
         };
@@ -542,12 +542,12 @@ describe("resolveAgentRuntimeConfig", () => {
       expect.arrayContaining([
         {
           skillId: "approve-receipt",
-          s3Key: "tenants/acme/agents/ada/workspace/skills/approve-receipt",
+          s3Key: "tenants/acme/agents/ada/skills/approve-receipt",
         },
         {
           skillId: "tag-vendor",
           s3Key:
-            "tenants/acme/agents/ada/workspace/workspaces/finance/skills/tag-vendor",
+            "tenants/acme/agents/ada/workspaces/finance/skills/tag-vendor",
         },
       ]),
     );
@@ -563,13 +563,13 @@ describe("resolveAgentRuntimeConfig", () => {
         return {
           Contents: [
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/trusted-skill/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/trusted-skill/SKILL.md",
             },
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/stale-skill/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/stale-skill/SKILL.md",
             },
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/unscanned-skill/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/unscanned-skill/SKILL.md",
             },
           ],
         };
@@ -613,7 +613,7 @@ describe("resolveAgentRuntimeConfig", () => {
         return {
           Contents: [
             {
-              Key: "tenants/acme/agents/ada/workspace/skills/github-issues/SKILL.md",
+              Key: "tenants/acme/agents/ada/skills/github-issues/SKILL.md",
             },
           ],
         };
@@ -655,7 +655,7 @@ describe("resolveAgentRuntimeConfig", () => {
     );
     expect(githubSkill).toMatchObject({
       skillId: "github-issues",
-      s3Key: "tenants/acme/agents/ada/workspace/skills/github-issues",
+      s3Key: "tenants/acme/agents/ada/skills/github-issues",
       secretRef: "secret/github",
       mcpServer: "github",
       envOverrides: { GITHUB_TOKEN: "token" },
