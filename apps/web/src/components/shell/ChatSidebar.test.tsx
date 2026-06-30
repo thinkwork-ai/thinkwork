@@ -746,7 +746,7 @@ describe("ChatSidebar", () => {
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: /detail/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^search/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
     expect(
       screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
@@ -758,13 +758,6 @@ describe("ChatSidebar", () => {
     expect(
       screen
         .getByRole("link", { name: "New thread" })
-        .compareDocumentPosition(
-          screen.getByRole("button", { name: /^search/i }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: /^search/i })
         .compareDocumentPosition(
           screen.getByRole("link", { name: /work items/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1083,7 +1076,7 @@ describe("ChatSidebar", () => {
     locationMock.mockReturnValue({ pathname: "/threads", search: {} });
 
     render(<ChatSidebar />);
-    fireEvent.click(screen.getByRole("button", { name: /^search/i }));
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeTruthy();
