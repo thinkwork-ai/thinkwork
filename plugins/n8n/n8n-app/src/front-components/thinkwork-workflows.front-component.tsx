@@ -1,4 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  type ChangeEventHandler,
+  type ReactNode,
+} from "react";
 
 import {
   bridgeThreadPath,
@@ -64,10 +69,6 @@ export function ThinkWorkN8nWorkflowsApp({
     () => filterN8nExecutions(executions, searchQuery, executionStatusFilter),
     [executionStatusFilter, executions, searchQuery],
   );
-  const bridgeLinkedExecutionCount = executions.filter(
-    (execution) => execution.bridgeRuns.length > 0,
-  ).length;
-
   if (fetching && !data) {
     return (
       <AppFrame title={appDisplayName} pluginName={pluginDisplayName}>
@@ -116,47 +117,7 @@ export function ThinkWorkN8nWorkflowsApp({
   return (
     <AppFrame title={appDisplayName} pluginName={pluginDisplayName}>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-        <div className="shrink-0 border-b border-border px-6 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold text-foreground">
-                {appDisplayName}
-              </h1>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {data.nativeBaseUrl ?? "Managed tenant n8n runtime"}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill
-                label="Workflows"
-                value={`${workflows.length}`}
-                tone={data.workflowReadinessState}
-              />
-              <StatusPill
-                label="Executions"
-                value={`${executions.length}`}
-                tone={data.executionReadinessState}
-              />
-              <StatusPill
-                label="Bridge links"
-                value={`${bridgeLinkedExecutionCount}`}
-                tone={bridgeLinkedExecutionCount > 0 ? "ready" : "unknown"}
-              />
-              {onRefresh ? (
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={onRefresh}
-                  disabled={fetching}
-                >
-                  Refresh
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-6 py-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-6 py-3">
           <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
             <ViewButton
               active={viewMode === "workflows"}
@@ -171,38 +132,34 @@ export function ThinkWorkN8nWorkflowsApp({
               Executions
             </ViewButton>
           </div>
-          <input
-            type="search"
+          <ToolbarSearch
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={setSearchQuery}
             placeholder={
               viewMode === "workflows"
                 ? "Search workflows..."
                 : "Search executions..."
             }
-            className="h-9 min-w-64 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
           />
           {viewMode === "workflows" ? (
-            <select
+            <FilterSelect
               value={readinessFilter}
               onChange={(event) =>
                 setReadinessFilter(
                   event.target.value as "all" | N8nReadinessState,
                 )
               }
-              className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
             >
               {READINESS_FILTERS.map((state) => (
                 <option key={state} value={state}>
                   {state === "all" ? "All readiness" : readinessLabel(state)}
                 </option>
               ))}
-            </select>
+            </FilterSelect>
           ) : (
-            <select
+            <FilterSelect
               value={executionStatusFilter}
               onChange={(event) => setExecutionStatusFilter(event.target.value)}
-              className="h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground"
             >
               <option value="all">All statuses</option>
               {executionStatusOptions.map((status) => (
@@ -210,7 +167,7 @@ export function ThinkWorkN8nWorkflowsApp({
                   {status}
                 </option>
               ))}
-            </select>
+            </FilterSelect>
           )}
         </div>
 
@@ -276,15 +233,13 @@ function WorkflowTable({
 
   return (
     <div className="overflow-hidden rounded-md border border-border">
-      <table className="w-full min-w-[960px] table-fixed border-collapse text-left text-sm">
+      <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <HeaderCell className="w-[30%]">Workflow</HeaderCell>
-            <HeaderCell className="w-[16%]">Workflow ID</HeaderCell>
-            <HeaderCell className="w-[16%]">Triggers</HeaderCell>
-            <HeaderCell className="w-[12%]">Link</HeaderCell>
-            <HeaderCell className="w-[12%]">Readiness</HeaderCell>
-            <HeaderCell className="w-[14%]">Last seen</HeaderCell>
+            <HeaderCell className="w-[44%]">Workflow</HeaderCell>
+            <HeaderCell className="w-[20%]">Triggers</HeaderCell>
+            <HeaderCell className="w-[18%]">Link</HeaderCell>
+            <HeaderCell className="w-[18%]">Readiness</HeaderCell>
           </tr>
         </thead>
         <tbody>
@@ -313,9 +268,6 @@ function WorkflowTable({
                 </div>
               </BodyCell>
               <BodyCell>
-                <MonoText>{workflow.externalWorkflowId}</MonoText>
-              </BodyCell>
-              <BodyCell>
                 <ChipList
                   values={
                     workflow.triggerTypes.length > 0
@@ -333,13 +285,6 @@ function WorkflowTable({
                 <Badge tone={workflow.readinessState}>
                   {readinessLabel(workflow.readinessState)}
                 </Badge>
-              </BodyCell>
-              <BodyCell>
-                <span className="text-muted-foreground">
-                  {formatDateTime(
-                    workflow.lastExecutionAt ?? workflow.lastModifiedAt,
-                  )}
-                </span>
               </BodyCell>
             </tr>
           ))}
@@ -524,20 +469,88 @@ function ViewButton({
   );
 }
 
-function StatusPill({
-  label,
+function ToolbarSearch({
   value,
-  tone,
+  onChange,
+  placeholder,
 }: {
-  label: string;
   value: string;
-  tone: N8nReadinessState;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || value.length > 0;
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+        aria-label={placeholder}
+        onClick={() => setExpanded(true)}
+      >
+        <SearchIcon className="size-4" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center">
+      <SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value.trimStart())}
+        onBlur={() => {
+          if (!value) setExpanded(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onChange("");
+            setExpanded(false);
+          }
+        }}
+        placeholder={placeholder}
+        className="h-8 w-full rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+      />
+      <button
+        type="button"
+        className="absolute right-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Clear search"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          onChange("");
+          setExpanded(false);
+        }}
+      >
+        <XIcon className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  children,
+}: {
+  value: string;
+  onChange: ChangeEventHandler<HTMLSelectElement>;
+  children: ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground">
-      {label}
-      <span className={`font-semibold ${textTone(tone)}`}>{value}</span>
-    </span>
+    <label className="relative inline-flex h-8 items-center rounded-md border border-border text-sm text-foreground hover:bg-muted/30">
+      <FilterIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+      <select
+        value={value}
+        onChange={onChange}
+        className="h-full min-w-[9.5rem] appearance-none rounded-md bg-transparent pl-8 pr-8 text-sm outline-none"
+      >
+        {children}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute right-2.5 size-4 text-muted-foreground" />
+    </label>
   );
 }
 
@@ -649,13 +662,6 @@ function statusTone(status: string): N8nReadinessState {
   return "disabled";
 }
 
-function textTone(tone: N8nReadinessState): string {
-  if (tone === "ready") return "text-emerald-500";
-  if (tone === "blocked_not_ready") return "text-amber-500";
-  if (tone === "disabled") return "text-muted-foreground";
-  return "text-sky-500";
-}
-
 function badgeTone(tone: N8nReadinessState): string {
   if (tone === "ready") {
     return "border-emerald-500/40 bg-emerald-500/10 text-emerald-500";
@@ -667,4 +673,76 @@ function badgeTone(tone: N8nReadinessState): string {
     return "border-border bg-muted/20 text-muted-foreground";
   }
   return "border-sky-500/40 bg-sky-500/10 text-sky-500";
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M3 5h18" />
+      <path d="M6 12h12" />
+      <path d="M10 19h4" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
 }
