@@ -34,20 +34,25 @@ work.
   </Card>
 </CardGrid>
 
-## Creation Modes
+## Creation Builder
 
-New Automations start from a prompt. The UI exposes 3 creation modes:
+New Automations start in a single block builder. The default page shows the
+Automation name, triggers, instructions, MCPs/connectors, Advanced, and the
+create action in one flow.
 
-1. **Chat**: the default path. A hidden builder thread asks focused questions,
-   creates a reviewable draft, and saves only after confirmation.
-2. **Manual**: the easy form. Provide a prompt, Space, and trigger; ThinkWork
-   derives the goal, self-check judge, worker, and policy defaults.
-3. **Advanced**: an inspector for operators who need explicit criteria, judge
-   settings, policy limits, evidence retention, or raw runtime metadata.
+The common path is:
 
-The prompt remains the main artifact. Advanced settings explain or override the
-system's inferred goal and judge behavior, but they should not dominate the
-default authoring flow.
+1. name the Automation;
+2. choose a supported trigger, currently manual or schedule;
+3. write a **Start session** instruction;
+4. keep the default Space or choose where the Automation runs;
+5. create it.
+
+ThinkWork derives the internal goal, self-check judge, worker, and policy
+defaults from that builder state. Advanced expands in place for explicit
+criteria, judge settings, policy limits, evidence retention, and raw runtime
+metadata. Chat help remains available as an optional setup-history helper that
+can prefill the same builder; it is not the default creation mode.
 
 ## Spaces
 
@@ -61,10 +66,10 @@ back to the Agent default Space.
 
 ## Builder Threads
 
-Chat creation uses a real setup thread, but that thread is hidden from normal
-navigation and search. ThinkWork creates or reuses a system-managed Automation
-Builder Space with hidden visibility and stores setup conversation history
-there.
+Optional chat help uses a real setup thread, but that thread is hidden from
+normal navigation and search. ThinkWork creates or reuses a system-managed
+Automation Builder Space with hidden visibility and stores setup conversation
+history there.
 
 The builder thread is not the execution thread. It is setup history. The
 Automation detail page can link back to it when operators need to understand how
@@ -72,9 +77,9 @@ the draft was produced.
 
 ## Automation Loop Designer Skill
 
-The Chat builder is seeded with an `automation-loop-designer` workspace skill.
-It helps turn a fuzzy prompt into a reviewable `AutomationDraft`: prompt, Space,
-trigger, goal, judge, policy, and source metadata.
+The optional chat helper is seeded with an `automation-loop-designer` workspace
+skill. It helps turn a fuzzy instruction into a reviewable `AutomationDraft`:
+prompt, Space, trigger, goal, judge, policy, and source metadata.
 
 The skill is adapted from Kevin Simback's
 [Looper](https://github.com/ksimback/looper) project under the MIT license. The

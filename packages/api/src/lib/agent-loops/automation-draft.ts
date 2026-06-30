@@ -5,6 +5,7 @@ import type {
 } from "@thinkwork/agent-loops-core";
 
 export const PROMPT_FIRST_CREATED_FROM = [
+  "settings.automations.builder",
   "settings.automations.chat",
   "settings.automations.easy",
   "settings.automations.manual",
@@ -48,6 +49,7 @@ export function isPromptFirstAutomationDraft(
     PROMPT_FIRST_CREATED_FROM.includes(
       createdFrom as (typeof PROMPT_FIRST_CREATED_FROM)[number],
     ) ||
+    creationMode === "builder" ||
     creationMode === "chat" ||
     creationMode === "easy" ||
     creationMode === "manual" ||

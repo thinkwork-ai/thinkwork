@@ -94,7 +94,7 @@ export function defaultAgentLoopDraft(
     workerOptions.find((candidate) => candidate.type === "agent") ??
     workerOptions[0];
   return {
-    creationMode: "chat",
+    creationMode: "builder",
     name: "",
     description: "",
     lifecycleStatus: "active",
@@ -308,7 +308,7 @@ export function validateDraft(draft: AgentLoopDraft): string | null {
   ) {
     return "Name is required.";
   }
-  if (!draft.objective.trim()) return "Goal intent is required.";
+  if (!draft.objective.trim()) return "Instruction is required.";
   if (
     draft.creationMode === "advanced" &&
     criteriaFromText(draft.completionCriteriaText).length === 0

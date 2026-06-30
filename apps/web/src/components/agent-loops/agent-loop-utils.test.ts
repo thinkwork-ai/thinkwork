@@ -31,10 +31,10 @@ describe("agent-loop-utils", () => {
     );
   });
 
-  it("allows easy prompt-only drafts and marks goal inference", () => {
+  it("allows builder prompt-only drafts and marks goal inference", () => {
     const draft = {
       ...defaultAgentLoopDraft(workers, spaces, "space-1"),
-      creationMode: "easy" as const,
+      creationMode: "builder" as const,
       name: "Escalation review",
       objective: "Review support escalations every morning.",
       completionCriteriaText: "",
@@ -56,8 +56,8 @@ describe("agent-loop-utils", () => {
       workerSpec: { type: "agent", id: "" },
       judgeSpec: { mode: "self_check", criteria: [] },
       sourceMetadata: {
-        createdFrom: "settings.automations.easy",
-        creationMode: "easy",
+        createdFrom: "settings.automations.builder",
+        creationMode: "builder",
         prompt: "Review support escalations every morning.",
         goalInference: "runtime_inferred",
       },
@@ -67,10 +67,12 @@ describe("agent-loop-utils", () => {
   it("derives an Automation name from prompt-first drafts without an explicit name", () => {
     const draft = {
       ...defaultAgentLoopDraft(workers, spaces, "space-1"),
-      creationMode: "easy" as const,
+      creationMode: "builder" as const,
       name: "",
       objective: "Route Linear issues to the right worker.",
     };
+
+    expect(draft.creationMode).toBe("builder");
 
     expect(validateDraft(draft)).toBeNull();
     expect(

@@ -20,6 +20,14 @@ external_references:
 
 # Prompt-first Automations
 
+## Supersession Note
+
+THINK-111 supersedes the creation-shape decision in this plan. New Automation no
+longer defaults to a Chat / Manual / Advanced mode picker. The primary creation
+surface is now a Devin-style single-page builder with name, triggers,
+instructions, MCPs/connectors, in-page Advanced, and create action. Chat remains
+available only as optional help that can prefill the same builder.
+
 ## Summary
 
 The AgentLoop foundation established the durable runtime object for recurring and manual agent work. The next product step is to make that foundation feel like Automations: a prompt-first product object that runs in a real Space and produces real thread activity, while advanced loop mechanics stay available but out of the user's way.
