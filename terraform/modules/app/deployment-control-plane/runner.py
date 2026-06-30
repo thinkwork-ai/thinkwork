@@ -1514,6 +1514,24 @@ def n8n_terraform_overrides(
             else n8n_guardrails.get("n8n_service_credential_secret_arn", "")
         ),
     )
+    agent_step_bridge_credential_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "agentStepBridgeCredentialSecretArn",
+        "THINKWORK_N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_ARN",
+        default=(
+            generated_secret_guardrail_default
+            if generated_secret_guardrail_default is not None
+            else first_non_empty_string(
+                n8n_guardrails.get("n8n_agent_step_bridge_credential_secret_arn", ""),
+                state_output(
+                    current_outputs,
+                    "n8n_agent_step_bridge_credential_secret_arn",
+                    "",
+                ),
+            )
+        ),
+    )
     certificate_arn = config_value(
         desired_config,
         manifest_images,
@@ -1528,6 +1546,7 @@ def n8n_terraform_overrides(
             encryption_key_secret_arn,
             operator_secret_arn,
             service_credential_secret_arn,
+            agent_step_bridge_credential_secret_arn,
         ]
     )
 
@@ -1554,6 +1573,7 @@ def n8n_terraform_overrides(
         "n8n_encryption_key_secret_arn": encryption_key_secret_arn,
         "n8n_operator_secret_arn": operator_secret_arn,
         "n8n_service_credential_secret_arn": service_credential_secret_arn,
+        "n8n_agent_step_bridge_credential_secret_arn": agent_step_bridge_credential_secret_arn,
         "n8n_storage_bucket_name": config_value(
             desired_config,
             manifest_images,
@@ -1964,6 +1984,10 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "n8n_service_credential_secret_arn": n8n_guardrails.get(
             "n8n_service_credential_secret_arn",
             "",
+        ),
+        "n8n_agent_step_bridge_credential_secret_arn": first_non_empty_string(
+            n8n_guardrails.get("n8n_agent_step_bridge_credential_secret_arn", ""),
+            state_output(current_outputs, "n8n_agent_step_bridge_credential_secret_arn", ""),
         ),
         "n8n_storage_bucket_name": n8n_guardrails.get("n8n_storage_bucket_name", ""),
         "n8n_create_storage_bucket": n8n_guardrails.get("n8n_create_storage_bucket", True),
@@ -3553,6 +3577,10 @@ variable "n8n_service_credential_secret_arn" {{
   type = string
 }}
 
+variable "n8n_agent_step_bridge_credential_secret_arn" {{
+  type = string
+}}
+
 variable "n8n_storage_bucket_name" {{
   type = string
 }}
@@ -3799,15 +3827,16 @@ module "thinkwork" {{
   n8n_database_name                = var.n8n_database_name
   n8n_encryption_key_secret_arn    = var.n8n_encryption_key_secret_arn
   n8n_operator_secret_arn          = var.n8n_operator_secret_arn
-  n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
-  n8n_storage_bucket_name          = var.n8n_storage_bucket_name
-  n8n_create_storage_bucket        = var.n8n_create_storage_bucket
-  n8n_storage_prefix               = var.n8n_storage_prefix
-  n8n_domain                       = var.n8n_domain
-  n8n_public_url                   = var.n8n_public_url
-  n8n_certificate_arn              = local.n8n_effective_certificate_arn
-  n8n_main_desired_count           = var.n8n_main_desired_count
-  n8n_worker_desired_count         = var.n8n_worker_desired_count
+  n8n_service_credential_secret_arn            = var.n8n_service_credential_secret_arn
+  n8n_agent_step_bridge_credential_secret_arn  = var.n8n_agent_step_bridge_credential_secret_arn
+  n8n_storage_bucket_name                      = var.n8n_storage_bucket_name
+  n8n_create_storage_bucket                    = var.n8n_create_storage_bucket
+  n8n_storage_prefix                           = var.n8n_storage_prefix
+  n8n_domain                                   = var.n8n_domain
+  n8n_public_url                               = var.n8n_public_url
+  n8n_certificate_arn                          = local.n8n_effective_certificate_arn
+  n8n_main_desired_count                       = var.n8n_main_desired_count
+  n8n_worker_desired_count                     = var.n8n_worker_desired_count
   n8n_worker_concurrency           = var.n8n_worker_concurrency
   n8n_container_port               = var.n8n_container_port
   n8n_queue_mode                   = var.n8n_queue_mode
@@ -3896,6 +3925,7 @@ output "n8n_storage_prefix" {{ value = module.thinkwork.n8n_storage_prefix }}
 output "n8n_image_digest" {{ value = module.thinkwork.n8n_image_digest }}
 output "n8n_package_config_digest" {{ value = module.thinkwork.n8n_package_config_digest }}
 output "n8n_service_credential_secret_arn" {{ value = module.thinkwork.n8n_service_credential_secret_arn }}
+output "n8n_agent_step_bridge_credential_secret_arn" {{ value = module.thinkwork.n8n_agent_step_bridge_credential_secret_arn }}
 output "deployment_control_plane_enabled" {{ value = module.thinkwork.deployment_control_plane_enabled }}
 output "deployment_state_machine_arn" {{ value = module.thinkwork.deployment_state_machine_arn }}
 output "deployment_state_machine_name" {{ value = module.thinkwork.deployment_state_machine_name }}

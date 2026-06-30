@@ -1352,7 +1352,8 @@ def test_n8n_managed_app_runner_writes_dns_record_and_target(
     assert 'resource "aws_acm_certificate" "n8n"' in main_tf
     assert 'resource "cloudflare_record" "n8n_acm_validation"' in main_tf
     assert 'resource "aws_acm_certificate_validation" "n8n"' in main_tf
-    assert "n8n_certificate_arn              = local.n8n_effective_certificate_arn" in main_tf
+    assert "n8n_certificate_arn" in main_tf
+    assert "local.n8n_effective_certificate_arn" in main_tf
     assert 'resource "cloudflare_record" "n8n"' in main_tf
     assert "content = module.thinkwork.n8n_alb_dns_name" in main_tf
     target_args = runner.managed_app_terraform_target_args({"appKey": "n8n"})
@@ -1465,6 +1466,7 @@ def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
     assert overrides["n8n_encryption_key_secret_arn"] == ""
     assert overrides["n8n_operator_secret_arn"] == ""
     assert overrides["n8n_service_credential_secret_arn"] == ""
+    assert overrides["n8n_agent_step_bridge_credential_secret_arn"] == ""
     assert overrides["deployment_control_plane_create_secret_placeholders"] is True
     assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
     assert overrides["n8n_domain"] == "n8n.thinkwork.ai"
@@ -1473,6 +1475,41 @@ def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
     assert overrides["n8n_storage_bucket_name"] == "thinkwork-dev-487219502366-n8n"
     assert overrides["n8n_storage_prefix"] == "managed-apps/n8n"
     assert overrides["n8n_custom_package_specs"] == []
+
+
+def test_n8n_upgrade_accepts_external_agent_step_bridge_credential() -> None:
+    runner = load_runner()
+    secret_prefix = "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n"
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "n8n",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "databaseAdminSecretArn": f"{secret_prefix}-db-admin",
+                "databaseUrlSecretArn": f"{secret_prefix}-db-url",
+                "encryptionKeySecretArn": f"{secret_prefix}-encryption-key",
+                "operatorSecretArn": f"{secret_prefix}-operator",
+                "serviceCredentialSecretArn": f"{secret_prefix}-service",
+                "agentStepBridgeCredentialSecretArn": f"{secret_prefix}-bridge",
+                "publicUrl": "https://n8n.thinkwork.ai",
+                "storageBucketName": "thinkwork-dev-n8n",
+            },
+            "manifestImages": {
+                "n8n-runtime": "487219502366.dkr.ecr.us-east-1.amazonaws.com/"
+                "thinkwork/n8n@sha256:"
+                "3333333333333333333333333333333333333333333333333333333333333333"
+            },
+        },
+        "dev",
+        "487219502366",
+        {},
+        {},
+    )
+
+    assert overrides["deployment_control_plane_create_secret_placeholders"] is False
+    assert overrides["n8n_service_credential_secret_arn"] == f"{secret_prefix}-service"
+    assert overrides["n8n_agent_step_bridge_credential_secret_arn"] == f"{secret_prefix}-bridge"
 
 
 def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> None:
@@ -1515,6 +1552,10 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
                                     "n8n_service_credential_secret_arn": (
                                         "arn:aws:secretsmanager:us-east-1:"
                                         "487219502366:secret:n8n-service"
+                                    ),
+                                    "n8n_agent_step_bridge_credential_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-bridge"
                                     ),
                                     "n8n_storage_bucket_name": "thinkwork-dev-n8n",
                                     "n8n_storage_prefix": "managed-apps/n8n",
@@ -1567,6 +1608,9 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     assert overrides["n8n_worker_desired_count"] == 3
     assert overrides["n8n_package_config_digest"] == "abc123"
     assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2"]
+    assert overrides["n8n_agent_step_bridge_credential_secret_arn"].endswith(
+        ":secret:n8n-bridge"
+    )
 
 
 def test_n8n_destroy_normalizes_legacy_binary_database_guardrail() -> None:
