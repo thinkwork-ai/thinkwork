@@ -132,6 +132,7 @@ import {
   spaceQueries,
   spaceTypeResolvers,
 } from "./spaces/index.js";
+import { piExtensionQueries } from "./pi-extensions/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -181,6 +182,7 @@ export const queryResolvers: Record<string, any> = {
   ...linkedTaskQueries,
   ...workItemQueries,
   ...agentLoopQueries,
+  ...piExtensionQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
