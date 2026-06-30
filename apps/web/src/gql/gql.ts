@@ -124,6 +124,7 @@ type Documents = {
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SettingsCreateSpaceDocument,
     "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": typeof types.SettingsSpaceDocument,
     "\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n": typeof types.SettingsUpdateSpaceDocument,
+    "\n  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {\n    deleteSpace(tenantId: $tenantId, id: $id)\n  }\n": typeof types.SettingsDeleteSpaceDocument,
     "\n  query SettingsTenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      runtime\n      runtimeConfig\n      model\n      blockedTools\n      sandbox\n      browser\n      webSearch\n      webExtract\n      sendEmail\n      contextEngine\n    }\n  }\n": typeof types.SettingsTenantAgentDocument,
     "\n  query SettingsTenantGoalBudget($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        goalDefaultTokenBudget\n        updatedAt\n      }\n    }\n  }\n": typeof types.SettingsTenantGoalBudgetDocument,
     "\n  mutation SettingsUpdateTenantGoalBudget(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      goalDefaultTokenBudget\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateTenantGoalBudgetDocument,
@@ -307,6 +308,7 @@ const documents: Documents = {
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SettingsCreateSpaceDocument,
     "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": types.SettingsSpaceDocument,
     "\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n": types.SettingsUpdateSpaceDocument,
+    "\n  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {\n    deleteSpace(tenantId: $tenantId, id: $id)\n  }\n": types.SettingsDeleteSpaceDocument,
     "\n  query SettingsTenantAgent($tenantId: ID!) {\n    agent: tenantAgent(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      runtime\n      runtimeConfig\n      model\n      blockedTools\n      sandbox\n      browser\n      webSearch\n      webExtract\n      sendEmail\n      contextEngine\n    }\n  }\n": types.SettingsTenantAgentDocument,
     "\n  query SettingsTenantGoalBudget($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        goalDefaultTokenBudget\n        updatedAt\n      }\n    }\n  }\n": types.SettingsTenantGoalBudgetDocument,
     "\n  mutation SettingsUpdateTenantGoalBudget(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      goalDefaultTokenBudget\n      updatedAt\n    }\n  }\n": types.SettingsUpdateTenantGoalBudgetDocument,
@@ -834,6 +836,10 @@ export function graphql(source: "\n  query SettingsSpace($id: ID!) {\n    space(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n"): (typeof documents)["\n  mutation SettingsUpdateSpace($input: UpdateSpaceInput!) {\n    updateSpace(input: $input) {\n      id\n      name\n      description\n      accessMode\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {\n    deleteSpace(tenantId: $tenantId, id: $id)\n  }\n"): (typeof documents)["\n  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {\n    deleteSpace(tenantId: $tenantId, id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

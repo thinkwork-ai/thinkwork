@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
 import {
-  FileText,
-  ShieldCheck,
-  Sparkles,
-  Workflow,
-  Wrench,
-} from "lucide-react";
+  Link,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
+import { FileText, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Select,
   SelectContent,
@@ -23,6 +28,7 @@ import { SpaceAccessMode } from "@/gql/graphql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  SettingsDeleteSpaceMutation,
   SettingsSpaceQuery,
   SettingsUpdateSpaceMutation,
 } from "@/lib/settings-queries";
@@ -37,6 +43,11 @@ export function SettingsSpaceConfig() {
   const { spaceId } = useParams({
     from: "/_authed/settings/spaces/$spaceId",
   });
+  const { file, view } = useSearch({
+    from: "/_authed/settings/spaces/$spaceId",
+  });
+  const navigate = useNavigate();
+  const workspaceView = view === "workspace";
 
   const [result, refetch] = useQuery({
     query: SettingsSpaceQuery,
@@ -47,37 +58,49 @@ export function SettingsSpaceConfig() {
   const spaceName =
     space?.name?.trim() || (result.fetching ? "Space" : "Space");
 
-  // Title lives in the settings header as nested breadcrumbs; the SPACE.md
-  // files shortcut sits as an icon action on the right (matching how other
-  // surfaces expose their workspace files).
-  usePageHeaderActions({
-    title: spaceName,
-    breadcrumbs: [
-      { label: "Spaces", href: "/settings/spaces" },
-      { label: spaceName },
-    ],
-    action: (
-      <Button
-        asChild
-        size="icon-sm"
-        variant="ghost"
-        title="Open SPACE.md"
-        aria-label="Open SPACE.md"
-      >
+  const viewToggle = (
+    <Button
+      asChild
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground hover:text-foreground"
+      aria-label={workspaceView ? "Space config" : "Space files"}
+      title={workspaceView ? "Space config" : "Space files"}
+    >
+      {workspaceView ? (
+        <Link to="/settings/spaces/$spaceId" params={{ spaceId }} search={{}}>
+          <SlidersHorizontal className="size-4" />
+          <span className="sr-only">Space config</span>
+        </Link>
+      ) : (
         <Link
-          to="/spaces/$spaceId"
+          to="/settings/spaces/$spaceId"
           params={{ spaceId }}
-          state={(prev) => ({
-            ...prev,
-            openSpaceFiles: true,
-            defaultOpenFile: "SPACE.md",
-          })}
+          search={{ view: "workspace" }}
         >
           <FileText className="size-4" />
+          <span className="sr-only">Space files</span>
         </Link>
-      </Button>
-    ),
-    actionKey: `space-files:${spaceId}`,
+      )}
+    </Button>
+  );
+
+  usePageHeaderActions({
+    title: spaceName,
+    breadcrumbs: workspaceView
+      ? [
+          { label: "Spaces", href: "/settings/spaces" },
+          {
+            label: spaceName,
+            href: `/settings/spaces/${spaceId}`,
+            search: {},
+          },
+          { label: "Files" },
+        ]
+      : [{ label: "Spaces", href: "/settings/spaces" }, { label: spaceName }],
+    action: viewToggle,
+    actionKey: `space-detail:${spaceId}:${workspaceView ? "workspace" : "config"}`,
   });
 
   if (result.fetching && !result.data) {
@@ -98,15 +121,46 @@ export function SettingsSpaceConfig() {
     );
   }
 
-  const manifest = readSpaceManifest(space.config);
-  const manifestDiagnostics = readSpaceManifestDiagnostics(
-    space.renderDiagnostics,
-  );
+  if (workspaceView) {
+    return (
+      <div className="h-full min-h-0">
+        <ScopedWorkspaceEditor
+          target={{ spaceId }}
+          targetKey={`space:${spaceId}`}
+          defaultOpenFile={file}
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
-        <SettingsPageTitle title={spaceName} />
+        <SpaceDeleteController
+          tenantId={space.tenantId}
+          spaceId={spaceId}
+          spaceName={space.name}
+          onDeleted={() => navigate({ to: "/settings/spaces" })}
+          renderTrigger={(open) => (
+            <SettingsPageTitle
+              title={spaceName}
+              actions={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={open}
+                >
+                  <Trash2 className="mr-2 size-4" />
+                  Delete
+                </Button>
+              }
+            />
+          )}
+        />
         <InformationSection
           spaceId={spaceId}
           tenantId={space.tenantId}
@@ -116,36 +170,8 @@ export function SettingsSpaceConfig() {
           status={space.status}
           onSaved={() => refetch({ requestPolicy: "network-only" })}
         />
-        <ManifestOverviewSection
-          manifest={manifest}
-          diagnostics={manifestDiagnostics}
-        />
-        <SpaceWorkspaceSection spaceId={spaceId} />
       </div>
     </div>
-  );
-}
-
-/**
- * Embedded file editor over this Space's workspace source (SPACE.md, GOAL.md,
- * agents/, …). The client targets `{ spaceId }` directly, so the tree lists
- * only this Space's files and edits land under its source. Replaces the
- * Spaces/<name>/ slice of the retired consolidated Settings → Workspace page.
- * Space-local agent profiles surface naturally via the `agents/` folder.
- */
-function SpaceWorkspaceSection({ spaceId }: { spaceId: string }) {
-  return (
-    <SettingsSection label="Workspace files">
-      <div className="h-[28rem]">
-        <ScopedWorkspaceEditor
-          target={{ spaceId }}
-          targetKey={`space:${spaceId}`}
-          defaultOpenFile="SPACE.md"
-          bordered={false}
-          className="h-full"
-        />
-      </div>
-    </SettingsSection>
   );
 }
 
@@ -265,176 +291,73 @@ function InformationSection({
   );
 }
 
-function ManifestOverviewSection({
-  manifest,
-  diagnostics,
+function SpaceDeleteController({
+  tenantId,
+  spaceId,
+  spaceName,
+  onDeleted,
+  renderTrigger,
 }: {
-  manifest: SpaceManifestOverview | null;
-  diagnostics: SpaceManifestDiagnostics | null;
+  tenantId: string;
+  spaceId: string;
+  spaceName: string;
+  onDeleted: () => void;
+  renderTrigger: (open: () => void) => React.ReactNode;
 }) {
-  const status = diagnostics?.status ?? (manifest ? "ok" : "warning");
-  const statusLabel =
-    status === "error"
-      ? "Needs review"
-      : status === "warning"
-        ? "Pending"
-        : "Synced";
-  const pendingFields =
-    diagnostics?.pendingFields ?? manifest?.pendingFields ?? [];
-  const workflows = manifest?.workflows ?? [];
-  const builtInTools = manifest?.tools?.builtIn ?? [];
-  const mcpTools = manifest?.tools?.mcp ?? [];
-  const skills = manifest?.skills ?? [];
-  const reviewMode = manifest?.reviewPolicy?.mode ?? "none";
-  const bashPolicy = manifest?.runtimePolicy?.bash ?? "default";
+  const [open, setOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [{ fetching }, deleteSpace] = useMutation(SettingsDeleteSpaceMutation);
+
+  async function onConfirm() {
+    setErrorMsg(null);
+    const result = await deleteSpace({ tenantId, id: spaceId });
+    if (result.error) {
+      setErrorMsg(result.error.message);
+      return;
+    }
+    toast.success("Space deleted");
+    setOpen(false);
+    onDeleted();
+  }
 
   return (
-    <SettingsSection label="SPACE.md overview">
-      <div className="divide-y divide-border">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              {manifest?.title ?? "No manifest projection"}
+    <>
+      {renderTrigger(() => setOpen(true))}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Space</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm text-muted-foreground">
+            <p>
+              This archives {spaceName}. Existing threads and workspace source
+              files are preserved, but the Space is removed from active use.
             </p>
-            {manifest?.description ? (
-              <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                {manifest.description}
-              </p>
+            {errorMsg ? (
+              <p className="text-sm text-destructive">{errorMsg}</p>
             ) : null}
           </div>
-          <Badge variant={status === "error" ? "destructive" : "secondary"}>
-            {statusLabel}
-          </Badge>
-        </div>
-
-        <OverviewGrid>
-          <OverviewPanel
-            icon={<Workflow className="size-4" />}
-            label="Workflows"
-            empty="No workflows"
-            items={workflows.map((workflow) => ({
-              key: workflow.key,
-              label: workflow.name,
-              description: workflow.description ?? workflow.source,
-            }))}
-          />
-          <OverviewPanel
-            icon={<Wrench className="size-4" />}
-            label="Tools"
-            empty="No tools"
-            items={[
-              ...builtInTools.map((tool) => ({
-                key: `built-in:${tool}`,
-                label: tool,
-                description: "Built-in",
-              })),
-              ...mcpTools.map((tool) => ({
-                key: `mcp:${tool}`,
-                label: tool,
-                description: "MCP",
-              })),
-            ]}
-          />
-          <OverviewPanel
-            icon={<Sparkles className="size-4" />}
-            label="Skills"
-            empty="No skills"
-            items={skills.map((skill) => ({
-              key: skill,
-              label: skill,
-              description: "Catalog skill",
-            }))}
-          />
-          <OverviewPanel
-            icon={<ShieldCheck className="size-4" />}
-            label="Policy"
-            empty="Default policy"
-            items={[
-              {
-                key: "review",
-                label: `Review ${reviewMode}`,
-                description: "Review policy",
-              },
-              {
-                key: "bash",
-                label: `Bash ${bashPolicy}`,
-                description: "Runtime policy",
-              },
-              ...pendingFields.map((field) => ({
-                key: `pending:${field}`,
-                label: field,
-                description: "Pending apply",
-              })),
-            ]}
-          />
-        </OverviewGrid>
-
-        {diagnostics?.diagnostics?.length ? (
-          <div className="space-y-2 px-4 py-3.5">
-            {diagnostics.diagnostics.slice(0, 4).map((diagnostic) => (
-              <div
-                key={`${diagnostic.code}:${diagnostic.path ?? diagnostic.message}`}
-                className="rounded-md border border-border bg-muted/30 px-3 py-2"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  {diagnostic.path ?? diagnostic.code}
-                </p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {diagnostic.message}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </SettingsSection>
-  );
-}
-
-function OverviewGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-      {children}
-    </div>
-  );
-}
-
-function OverviewPanel({
-  icon,
-  label,
-  empty,
-  items,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  empty: string;
-  items: Array<{ key: string; label: string; description: string }>;
-}) {
-  return (
-    <div className="min-w-0 space-y-3 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <span className="text-muted-foreground">{icon}</span>
-        <span>{label}</span>
-      </div>
-      {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <span
-              key={item.key}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs"
-              title={item.description}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={fetching}
             >
-              <span className="truncate font-medium text-foreground">
-                {item.label}
-              </span>
-              <span className="text-muted-foreground">{item.description}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void onConfirm()}
+              disabled={fetching}
+            >
+              {fetching ? "Deleting..." : "Delete Space"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

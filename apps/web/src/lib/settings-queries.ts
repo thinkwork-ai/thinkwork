@@ -1127,6 +1127,12 @@ export const SettingsUpdateSpaceMutation = graphql(`
   }
 `);
 
+export const SettingsDeleteSpaceMutation = graphql(`
+  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {
+    deleteSpace(tenantId: $tenantId, id: $id)
+  }
+`);
+
 // ─── Agent config (operator-only section) ────────────────────────────────
 
 export const SettingsTenantAgentQuery = graphql(`

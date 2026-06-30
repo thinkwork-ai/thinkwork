@@ -1,6 +1,7 @@
 import { addSpaceMember } from "./addSpaceMember.mutation.js";
 import { customerOnboardingSpace } from "./customerOnboardingSpace.query.js";
 import { createSpace } from "./createSpace.mutation.js";
+import { deleteSpace } from "./deleteSpace.mutation.js";
 import { removeSpaceMember } from "./removeSpaceMember.mutation.js";
 import {
   setSpaceEmailTriggers,
@@ -23,6 +24,7 @@ export const spaceQueries = {
 export const spaceMutations = {
   addSpaceMember,
   createSpace,
+  deleteSpace,
   removeSpaceMember,
   setSpaceEmailTriggers,
   setSpaceKnowledgeBases,

@@ -466,7 +466,13 @@ function templateRowTenantA() {
 }
 
 function spaceRowTenantA() {
-  return { id: SPACE_ID, slug: "engineering", tenant_id: TENANT_A };
+  return {
+    id: SPACE_ID,
+    slug: "engineering",
+    name: "Engineering",
+    description: "Engineering work.",
+    tenant_id: TENANT_A,
+  };
 }
 
 function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
@@ -1246,6 +1252,7 @@ describe("target selection", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.source).toBe("space");
     expect(res.body.content).toBe("# Engineering Space");
+    expect(s3Mock.commandCalls(HeadObjectCommand)).toHaveLength(0);
   });
 });
 
@@ -4128,6 +4135,45 @@ describe("agent GET / LIST", () => {
 });
 
 describe("space workspace GET / LIST", () => {
+  it("backfills missing SPACE.md when listing a Space workspace", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([spaceRowTenantA()]);
+    pushDbRows([tenantRow()]);
+
+    s3Mock
+      .on(HeadObjectCommand, {
+        Bucket: "test-bucket",
+        Key: "tenants/acme/spaces/engineering/SPACE.md",
+      })
+      .rejects(noSuchKey())
+      .on(PutObjectCommand)
+      .resolves({})
+      .on(ListObjectsV2Command)
+      .resolves({
+        Contents: [],
+      });
+
+    const res = await parse(
+      await handler(event({ action: "list", spaceId: SPACE_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
+      "SPACE.md",
+    ]);
+
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(1);
+    expect(putCalls[0].args[0].input).toMatchObject({
+      Bucket: "test-bucket",
+      Key: "tenants/acme/spaces/engineering/SPACE.md",
+      ContentType: "text/markdown; charset=utf-8",
+    });
+    expect(String(putCalls[0].args[0].input.Body)).toContain("# Engineering");
+    expect(String(putCalls[0].args[0].input.Body)).toContain("CONTEXT.md");
+  });
+
   it("LIST omits legacy source/ objects from the Space workspace root", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
@@ -4150,6 +4196,7 @@ describe("space workspace GET / LIST", () => {
     expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
       "SPACE.md",
     ]);
+    expect(s3Mock.commandCalls(HeadObjectCommand)).toHaveLength(0);
   });
 });
 
