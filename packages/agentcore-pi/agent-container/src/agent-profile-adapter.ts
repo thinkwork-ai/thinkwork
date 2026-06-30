@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { ToolInvocationRecord } from "@thinkwork/pi-runtime-core";
+import type {
+  PiExtensionRuntimeDescriptor,
+  ToolInvocationRecord,
+} from "@thinkwork/pi-runtime-core";
 import type { McpToolRegistry } from "./mcp-registry.js";
 
 export type AgentProfileRunStatus =
@@ -66,6 +69,7 @@ export interface AgentProfileConfig {
   instructions: string;
   routingGuidance?: string;
   toolPolicy?: AgentProfileToolPolicy;
+  piExtensions?: PiExtensionRuntimeDescriptor[];
   executionControls?: AgentProfileExecutionControls;
   contextPolicy?: AgentProfileContextPolicy;
 }
@@ -548,10 +552,15 @@ export function compileAgentProfileRunRequest(
   const model = cleanString(args.profile.modelId);
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
 
-  const tools = compileToolAllowlist({
-    policy: args.profile.toolPolicy,
-    availableToolNames: args.availableToolNames,
-  });
+  const tools = unique([
+    ...compileToolAllowlist({
+      policy: args.profile.toolPolicy,
+      availableToolNames: args.availableToolNames,
+    }),
+    ...(args.profile.piExtensions ?? []).flatMap(
+      (extension) => extension.toolNames,
+    ),
+  ]);
   const skills = compileSkills({
     policy: args.profile.toolPolicy,
     availableSkillNames: args.availableSkillNames,

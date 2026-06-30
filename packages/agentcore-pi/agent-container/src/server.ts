@@ -164,6 +164,7 @@ import {
   type AuroraSessionStoreOptions,
 } from "./sessionstore-aurora.js";
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
+import { loadDynamicPiExtensions } from "./runtime/dynamic-extensions.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import {
   appendFetchedFilesToWorkspaceBaseline,
@@ -2724,6 +2725,57 @@ export async function handleInvocation(
     );
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
   const profileChildExtensionFactories = [...bundle.extensionFactories];
+  const profileChildExtensionToolNames = [...bundle.extensionToolNames];
+  const dynamicDefaultExtensions = loadDynamicPiExtensions({
+    value: args.payload.pi_extensions,
+    targetType: "default_agent",
+    reservedToolNames: [
+      ...bundle.builtinToolNames,
+      ...bundle.tools.map((tool) => tool.name),
+      ...bundle.extensionToolNames,
+    ],
+    log: (event, fields) =>
+      logStructured({
+        level: fields.status === "loaded" ? "info" : "warn",
+        event,
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        ...fields,
+      }),
+  });
+  bundle.extensionFactories.push(
+    ...dynamicDefaultExtensions.extensionFactories,
+  );
+  bundle.extensionToolNames.push(
+    ...dynamicDefaultExtensions.extensionToolNames,
+  );
+  const profileExtensionFactoriesById = new Map<string, ExtensionFactory[]>();
+  const profileExtensionToolNamesById = new Map<string, string[]>();
+  for (const profile of agentProfiles) {
+    const loaded = loadDynamicPiExtensions({
+      value: profile.piExtensions,
+      targetType: "agent_profile",
+      agentProfileId: profile.id,
+      reservedToolNames: [
+        ...bundle.builtinToolNames,
+        ...bundle.tools.map((tool) => tool.name),
+        ...profileChildExtensionToolNames,
+      ],
+      log: (event, fields) =>
+        logStructured({
+          level: fields.status === "loaded" ? "info" : "warn",
+          event,
+          tenantId: identity.tenantId,
+          threadId: identity.threadId,
+          agentProfileId: profile.id,
+          ...fields,
+        }),
+    });
+    if (loaded.extensionFactories.length > 0) {
+      profileExtensionFactoriesById.set(profile.id, loaded.extensionFactories);
+      profileExtensionToolNamesById.set(profile.id, loaded.extensionToolNames);
+    }
+  }
   // The current invocation's model id is what pi-ai's Agent will use
   // to serialize history -> Bedrock for THIS turn. We use the same id on
   // synthesized AssistantMessage history entries so the metadata is
@@ -2752,7 +2804,9 @@ export async function handleInvocation(
     parentModelId,
     tools: bundle.tools,
     extensionFactories: profileChildExtensionFactories,
-    extensionToolNames: bundle.extensionToolNames,
+    extensionToolNames: profileChildExtensionToolNames,
+    profileExtensionFactoriesById,
+    profileExtensionToolNamesById,
     workspaceSkills,
     mcpRegistry,
     cwd: env.workspaceDir,
