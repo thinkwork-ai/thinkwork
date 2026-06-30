@@ -6,6 +6,10 @@ const agentsSource = readFileSync(
   join(process.cwd(), "src/components/settings/SettingsAgents.tsx"),
   "utf8",
 );
+const agentExtensionsSource = readFileSync(
+  join(process.cwd(), "src/components/settings/SettingsAgentExtensions.tsx"),
+  "utf8",
+);
 const generalSource = readFileSync(
   join(process.cwd(), "src/components/settings/SettingsGeneral.tsx"),
   "utf8",
@@ -140,9 +144,89 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("{builtIns} Tools");
     expect(agentsSource).toContain("{mcps} MCP");
     expect(agentsSource).toContain("{skills} Skills");
+    expect(agentsSource).toContain("{extensionCount} Extensions");
     expect(agentsSource).toContain("All Spaces");
     expect(agentsSource).not.toContain("{builtIns} built-ins");
     expect(agentsSource).not.toContain("all Spaces");
+  });
+
+  it("renders Pi Extensions between Default Agent and Agent Profiles", () => {
+    const defaultAgentIndex = agentsSource.indexOf("<AgentConfigSection");
+    const extensionsIndex = agentsSource.indexOf("<SettingsAgentExtensions");
+    const profilesIndex = agentsSource.indexOf('label="Agent Profiles"');
+
+    expect(defaultAgentIndex).toBeGreaterThan(-1);
+    expect(extensionsIndex).toBeGreaterThan(defaultAgentIndex);
+    expect(profilesIndex).toBeGreaterThan(extensionsIndex);
+    expect(agentsSource).toContain("SettingsPiExtensionsQuery");
+    expect(agentsSource).toContain("SettingsPiExtensionFieldsFragment");
+    expect(agentsSource).toContain("useFragment(");
+    expect(agentsSource).toContain("enabledExtensionCountsByProfileId");
+    expect(agentExtensionsSource).toContain('label="Extensions"');
+    expect(agentExtensionsSource).toContain("GitHub import");
+  });
+
+  it("keeps the full-bleed workspace view separate from Extensions", () => {
+    const workspaceReturnIndex = agentsSource.indexOf(
+      "<SettingsMainAgent defaultOpenFile={file} />",
+    );
+    const extensionsIndex = agentsSource.indexOf("<SettingsAgentExtensions");
+
+    expect(workspaceReturnIndex).toBeGreaterThan(-1);
+    expect(extensionsIndex).toBeGreaterThan(workspaceReturnIndex);
+    expect(agentsSource).toContain("if (workspaceView)");
+  });
+
+  it("wires Pi Extension import, review, and assignment mutations", () => {
+    expect(queriesSource).toContain("query SettingsPiExtensions");
+    expect(queriesSource).toContain("fragment SettingsPiExtensionFields");
+    expect(queriesSource).toContain(
+      "mutation SettingsImportPiExtensionFromGitHub",
+    );
+    expect(queriesSource).toContain(
+      "mutation SettingsApprovePiExtensionVersion",
+    );
+    expect(queriesSource).toContain(
+      "mutation SettingsRejectPiExtensionVersion",
+    );
+    expect(queriesSource).toContain(
+      "mutation SettingsUpdatePiExtensionAssignment",
+    );
+    expect(agentExtensionsSource).toContain(
+      "SettingsImportPiExtensionFromGitHubMutation",
+    );
+    expect(agentExtensionsSource).toContain(
+      "SettingsApprovePiExtensionVersionMutation",
+    );
+    expect(agentExtensionsSource).toContain(
+      "SettingsRejectPiExtensionVersionMutation",
+    );
+    expect(agentExtensionsSource).toContain(
+      "SettingsUpdatePiExtensionAssignmentMutation",
+    );
+  });
+
+  it("uses Pi extension language and disables assignments outside approved state", () => {
+    expect(agentExtensionsSource).toContain("Pi extension");
+    expect(agentExtensionsSource).toContain("Failed verification");
+    expect(agentExtensionsSource).toContain(
+      "Assignment unavailable: this Pi extension failed verification.",
+    );
+    expect(agentExtensionsSource).toContain(
+      "Assignment unavailable: this Pi extension was rejected.",
+    );
+    expect(agentExtensionsSource).toContain(
+      "Assignment unavailable until an operator approves this Pi extension.",
+    );
+    expect(agentExtensionsSource).toContain(
+      "PiExtensionVersionStatus.Approved",
+    );
+    expect(agentExtensionsSource).toContain(
+      "disabled={!approved || assigning}",
+    );
+    expect(agentExtensionsSource).not.toContain("Built-in Tools");
+    expect(agentExtensionsSource).not.toContain("MCP Servers");
+    expect(agentExtensionsSource).not.toContain("Installed skills");
   });
 
   it("saves Agent Profile loop controls into executionControls.loopPolicy", () => {
