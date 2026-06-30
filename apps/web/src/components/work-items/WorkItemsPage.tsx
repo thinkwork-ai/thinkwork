@@ -86,12 +86,34 @@ interface TenantMembersResult {
   tenantMembers?: TenantMemberSummary[] | null;
 }
 
+interface WorkItemsPageLoadingState {
+  tenantId: string | null;
+  workItemsData?: WorkItemsResult | null;
+  workItemsError?: unknown;
+  membersData?: TenantMembersResult | null;
+  membersError?: unknown;
+}
+
 interface WorkItemsPageProps {
   tenantId: string | null;
   userId?: string | null;
   state: WorkItemRouteSearch;
   onStateChange: (next: WorkItemRouteSearch) => void;
   onItemOpen?: (item: WorkItemSummary) => void;
+}
+
+export function shouldShowWorkItemsPageSkeleton({
+  tenantId,
+  workItemsData,
+  workItemsError,
+  membersData,
+  membersError,
+}: WorkItemsPageLoadingState) {
+  return (
+    !tenantId ||
+    (!workItemsData && !workItemsError) ||
+    (!membersData && !membersError)
+  );
 }
 
 export function WorkItemsPage({
@@ -109,7 +131,7 @@ export function WorkItemsPage({
     () => (tenantId ? buildWorkItemsInput(tenantId, state) : undefined),
     [state, tenantId],
   );
-  const [{ data, fetching, error }, reexecuteItems] = useQuery<WorkItemsResult>(
+  const [{ data, error }, reexecuteItems] = useQuery<WorkItemsResult>(
     {
       query: WorkItemsQuery,
       variables: { input },
@@ -135,12 +157,13 @@ export function WorkItemsPage({
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
-  const [{ data: membersData }] = useQuery<TenantMembersResult>({
-    query: SettingsTenantMembersQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
+  const [{ data: membersData, error: membersError }] =
+    useQuery<TenantMembersResult>({
+      query: SettingsTenantMembersQuery,
+      variables: { tenantId: tenantId ?? "" },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
   const [
     { data: documentsData, fetching: documentsFetching },
     reexecuteDocuments,
@@ -398,9 +421,19 @@ export function WorkItemsPage({
     ),
   });
 
-  if (!tenantId || (fetching && !data)) {
+  if (
+    shouldShowWorkItemsPageSkeleton({
+      tenantId,
+      workItemsData: data,
+      workItemsError: error,
+      membersData,
+      membersError,
+    })
+  ) {
     return <PageSkeleton />;
   }
+
+  const readyToRenderWorkItems = Boolean(data && membersData);
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
@@ -409,44 +442,46 @@ export function WorkItemsPage({
           title="Work Items"
           description="Track Space work items, blockers, and thread-linked progress."
         />
-        {error ? (
+        {error || membersError ? (
           <div className="shrink-0 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
-            {error.message}
+            {(error ?? membersError)?.message}
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-hidden">
-          {state.view === "board" ? (
-            <WorkItemsBoardView
-              items={workItems}
-              spaces={spaces}
-              statuses={statuses}
-              assignees={assignees}
-              display={state.board}
-              updatingItemId={updatingItemId}
-              onStatusChange={handleStatusChange}
-            />
-          ) : (
-            <WorkItemsListView
-              items={workItems}
-              spaces={spaces}
-              statuses={statuses}
-              display={state.list}
-              includeSpace={!state.spaceId}
-              showDoneItems={showDoneItems}
-              updatingItemId={updatingItemId}
-              assignees={assignees}
-              labels={labels}
-              currentUserId={userId}
-              sequenceNumbers={sequenceNumbers}
-              onStatusChange={handleStatusChange}
-              onItemUpdate={handleWorkItemUpdate}
-              onItemOpen={(item) =>
-                onItemOpen ? onItemOpen(item) : setDetailItemId(item.id)
-              }
-            />
-          )}
-        </div>
+        {readyToRenderWorkItems ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {state.view === "board" ? (
+              <WorkItemsBoardView
+                items={workItems}
+                spaces={spaces}
+                statuses={statuses}
+                assignees={assignees}
+                display={state.board}
+                updatingItemId={updatingItemId}
+                onStatusChange={handleStatusChange}
+              />
+            ) : (
+              <WorkItemsListView
+                items={workItems}
+                spaces={spaces}
+                statuses={statuses}
+                display={state.list}
+                includeSpace={!state.spaceId}
+                showDoneItems={showDoneItems}
+                updatingItemId={updatingItemId}
+                assignees={assignees}
+                labels={labels}
+                currentUserId={userId}
+                sequenceNumbers={sequenceNumbers}
+                onStatusChange={handleStatusChange}
+                onItemUpdate={handleWorkItemUpdate}
+                onItemOpen={(item) =>
+                  onItemOpen ? onItemOpen(item) : setDetailItemId(item.id)
+                }
+              />
+            )}
+          </div>
+        ) : null}
       </div>
       <NewWorkItemSheet
         open={newWorkItemOpen}

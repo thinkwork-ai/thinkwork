@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sortWorkItems, summarizeWorkItems } from "./WorkItemsPage";
+import {
+  shouldShowWorkItemsPageSkeleton,
+  sortWorkItems,
+  summarizeWorkItems,
+} from "./WorkItemsPage";
 import type { WorkItemSummary } from "./work-item-display";
 
 describe("WorkItemsPage helpers", () => {
@@ -42,6 +46,33 @@ describe("WorkItemsPage helpers", () => {
       "normal",
       "urgent",
     ]);
+  });
+
+  it("keeps the page skeleton visible until work items and assignees are both loaded", () => {
+    const loadedWorkItems = { workItems: [] };
+    const loadedMembers = { tenantMembers: [] };
+
+    expect(
+      shouldShowWorkItemsPageSkeleton({
+        tenantId: "tenant-1",
+        workItemsData: loadedWorkItems,
+        membersData: undefined,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowWorkItemsPageSkeleton({
+        tenantId: "tenant-1",
+        workItemsData: undefined,
+        membersData: loadedMembers,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowWorkItemsPageSkeleton({
+        tenantId: "tenant-1",
+        workItemsData: loadedWorkItems,
+        membersData: loadedMembers,
+      }),
+    ).toBe(false);
   });
 });
 
