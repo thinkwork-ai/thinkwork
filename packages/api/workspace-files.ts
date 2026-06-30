@@ -62,6 +62,7 @@ import {
   regenerateAgentsMdDerivedSections,
 } from "./src/lib/workspace-map-generator.js";
 import { spaceSourcePrefix } from "./src/lib/spaces/template-migration.js";
+import { ensureSpaceMdSourceFile } from "./src/lib/spaces/space-md-source-file.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 import {
   isPinnedWorkspacePath,
@@ -380,6 +381,8 @@ interface SpaceTarget {
   tenantSlug: string;
   spaceSlug: string;
   spaceId: string;
+  spaceName: string;
+  description: string | null;
   prefix: string;
   readPrefixes?: string[];
   key: (path: string) => string;
@@ -516,6 +519,8 @@ async function resolveSpaceTarget(
     .select({
       id: spaces.id,
       slug: spaces.slug,
+      name: spaces.name,
+      description: spaces.description,
       workspaceFolderName: spaces.workspace_folder_name,
       tenant_id: spaces.tenant_id,
     })
@@ -537,9 +542,33 @@ async function resolveSpaceTarget(
     tenantSlug: tSlug,
     spaceSlug: spaceFolderName,
     spaceId: space.id,
+    spaceName: space.name ?? space.slug,
+    description: space.description ?? null,
     prefix,
     key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
   };
+}
+
+async function ensureSpaceMinimumFiles(target: Target): Promise<boolean> {
+  if (target.kind !== "space") return false;
+  try {
+    const result = await ensureSpaceMdSourceFile({
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+      spaceSlug: target.spaceSlug,
+      spaceName: target.spaceName,
+      description: target.description,
+      overwrite: false,
+      s3Client: s3,
+    });
+    return result.written;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[workspace-files] SPACE.md minimum file check failed for ${target.tenantSlug}/${target.spaceSlug}: ${message}`,
+    );
+    return false;
+  }
 }
 
 async function resolveThreadTarget(
@@ -952,6 +981,9 @@ async function handleGet(
   // defaults / user context) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
   // source of truth.
+  if (target.kind === "space" && logicalPath === "SPACE.md") {
+    await ensureSpaceMinimumFiles(target);
+  }
   const { content } = await readWorkspaceObject(target, logicalPath);
   return json(200, {
     ok: true,
@@ -973,6 +1005,16 @@ async function handleList(
   // filtered so callers don't accidentally treat them as workspace
   // files.
   const visibleObjects = await listVisibleWorkspaceObjects(target);
+  if (
+    target.kind === "space" &&
+    !visibleObjects.some((object) => object.path === "SPACE.md") &&
+    (await ensureSpaceMinimumFiles(target))
+  ) {
+    visibleObjects.push({
+      path: "SPACE.md",
+      readKey: target.key("SPACE.md"),
+    });
+  }
   const visiblePaths = visibleObjects.map((object) => object.path);
 
   if (target.kind === "catalog") {
@@ -1932,7 +1974,9 @@ async function handleFixSkillTrustEvidence(
   });
 }
 
-function isPublishableSkillSignature(report: SkillTrustPipelineReport): boolean {
+function isPublishableSkillSignature(
+  report: SkillTrustPipelineReport,
+): boolean {
   return (
     report.evidence.signature === "verified" ||
     report.evidence.signature === "approved_unverified"

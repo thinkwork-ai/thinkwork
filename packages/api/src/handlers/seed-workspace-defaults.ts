@@ -36,6 +36,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { agentTemplates, spaces, tenants } from "@thinkwork/database-pg/schema";
 import { DEFAULTS_VERSION, loadDefaults } from "@thinkwork/workspace-defaults";
 import { ensureCustomerOnboardingSourceFiles } from "../lib/spaces/customer-onboarding-source-files.js";
+import { ensureSpaceMdSourceFile } from "../lib/spaces/space-md-source-file.js";
 import { ensureDefaultsExist } from "../lib/workspace-copy.js";
 
 const db = getDb();
@@ -63,6 +64,8 @@ type SeedSummary = {
   defaultTemplatesPatched: number;
   customerOnboardingSpacesChecked: number;
   customerOnboardingSourceFilesWritten: number;
+  spacesCheckedForSpaceMd: number;
+  spaceMdFilesWritten: number;
   results: PerTenantResult[];
 };
 
@@ -188,6 +191,48 @@ async function ensureCustomerOnboardingSpaceSources(
   return { spacesChecked: rows.length, filesWritten };
 }
 
+async function ensureActiveSpaceMdSources(
+  tenantId: string,
+  tenantSlug: string,
+): Promise<{ spacesChecked: number; filesWritten: number }> {
+  const rows = await db
+    .select({
+      slug: spaces.slug,
+      workspaceFolderName: spaces.workspace_folder_name,
+      name: spaces.name,
+      description: spaces.description,
+    })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+        isNotNull(spaces.slug),
+      ),
+    );
+
+  let filesWritten = 0;
+  for (const space of rows) {
+    if (!space.slug) continue;
+    const spaceSlug = space.workspaceFolderName ?? space.slug;
+    const result = await ensureSpaceMdSourceFile({
+      bucket: workspaceBucket(),
+      tenantSlug,
+      spaceSlug,
+      spaceName: space.name,
+      description: space.description,
+      overwrite: false,
+      s3Client: s3,
+    });
+    if (result.written) filesWritten += 1;
+    console.log(
+      `[seed-defaults] ${tenantSlug}/${spaceSlug}: SPACE.md checked (${result.written ? "written" : "existing"})`,
+    );
+  }
+
+  return { spacesChecked: rows.length, filesWritten };
+}
+
 export async function handler(): Promise<SeedSummary> {
   if (!getConfig("WORKSPACE_BUCKET")) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
@@ -211,6 +256,8 @@ export async function handler(): Promise<SeedSummary> {
   let defaultTemplatesPatched = 0;
   let customerOnboardingSpacesChecked = 0;
   let customerOnboardingSourceFilesWritten = 0;
+  let spacesCheckedForSpaceMd = 0;
+  let spaceMdFilesWritten = 0;
 
   for (const row of rows) {
     const tenantSlug = row.slug!;
@@ -245,6 +292,9 @@ export async function handler(): Promise<SeedSummary> {
       customerOnboardingSpacesChecked += customerOnboardingSeed.spacesChecked;
       customerOnboardingSourceFilesWritten +=
         customerOnboardingSeed.filesWritten;
+      const spaceMdSeed = await ensureActiveSpaceMdSources(row.id, tenantSlug);
+      spacesCheckedForSpaceMd += spaceMdSeed.spacesChecked;
+      spaceMdFilesWritten += spaceMdSeed.filesWritten;
     } catch (err) {
       errors++;
       const message = err instanceof Error ? err.message : String(err);
@@ -267,11 +317,13 @@ export async function handler(): Promise<SeedSummary> {
     defaultTemplatesPatched,
     customerOnboardingSpacesChecked,
     customerOnboardingSourceFilesWritten,
+    spacesCheckedForSpaceMd,
+    spaceMdFilesWritten,
     results,
   };
 
   console.log(
-    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${errors} error(s)`,
+    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${spacesCheckedForSpaceMd} Space(s) checked for SPACE.md, ${spaceMdFilesWritten} SPACE.md file(s) written, ${errors} error(s)`,
   );
 
   return summary;
