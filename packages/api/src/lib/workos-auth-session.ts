@@ -50,7 +50,10 @@ export interface WorkosLogoutDeps {
     sessionId: string;
     clientSecret: string;
   }): Promise<void>;
-  markSessionLoggedOut(args: { sessionRowId: string; now: Date }): Promise<void>;
+  markSessionLoggedOut(args: {
+    sessionRowId: string;
+    now: Date;
+  }): Promise<void>;
   emitSignOutAudit(args: WorkosSignOutAuditInput): Promise<void>;
   now(): Date;
 }
@@ -63,7 +66,7 @@ export interface WorkosSignOutAuditInput {
   workosUserId: string;
   authProviderResourceId: string;
   tenantReferenceId: string;
-  result: "workos_session_revoked";
+  result: "workos_logout_url_issued";
 }
 
 export function createDefaultWorkosLogoutDeps(
@@ -123,15 +126,9 @@ export async function createWorkosLogoutRedirect(args: {
   });
   if (!session) return { logout_url: null };
 
-  const secret = await deps.getSecret(session.clientSecretRef);
-  const clientSecret = parseWorkosClientSecret(secret);
-  if (!clientSecret) {
-    throw new WorkosLogoutError("WorkOS client secret is not configured", 500);
-  }
-
-  await deps.revokeWorkosSession({
+  const logoutUrl = buildWorkosLogoutUrl({
     sessionId: session.workosSessionId,
-    clientSecret,
+    returnTo: normalizeLogoutReturnTo(args.returnTo),
   });
   await deps.markSessionLoggedOut({
     sessionRowId: session.id,
@@ -145,10 +142,10 @@ export async function createWorkosLogoutRedirect(args: {
     workosUserId: session.workosUserId,
     authProviderResourceId: session.authProviderResourceId,
     tenantReferenceId: session.tenantReferenceId,
-    result: "workos_session_revoked",
+    result: "workos_logout_url_issued",
   });
 
-  return { logout_url: null };
+  return { logout_url: logoutUrl };
 }
 
 export function buildWorkosLogoutUrl(args: {
@@ -169,6 +166,10 @@ export function normalizeLogoutReturnTo(value: string | undefined): string {
   if (!value) return "https://app.thinkwork.ai/sign-in";
   try {
     const url = new URL(value);
+    if (isDesktopLogoutReturnTo(url)) {
+      url.hash = "";
+      return url.toString();
+    }
     if (
       url.protocol === "https:" ||
       (url.protocol === "http:" &&
@@ -181,6 +182,16 @@ export function normalizeLogoutReturnTo(value: string | undefined): string {
     // Fall through to safe default.
   }
   return "https://app.thinkwork.ai/sign-in";
+}
+
+function isDesktopLogoutReturnTo(url: URL): boolean {
+  return (
+    ["thinkwork:", "thinkwork-dev:", "thinkwork-canary:"].includes(
+      url.protocol,
+    ) &&
+    url.hostname === "oauth" &&
+    url.pathname === "/callback"
+  );
 }
 
 export class WorkosLogoutError extends Error {
@@ -210,7 +221,10 @@ async function findActiveWorkosSession(
     .from(workosAuthSessions)
     .innerJoin(
       authProviderResources,
-      eq(workosAuthSessions.auth_provider_resource_id, authProviderResources.id),
+      eq(
+        workosAuthSessions.auth_provider_resource_id,
+        authProviderResources.id,
+      ),
     )
     .where(
       and(

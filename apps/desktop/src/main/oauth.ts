@@ -482,6 +482,14 @@ export class DesktopOAuthController {
     if (!response.ok) {
       throw new Error(`WorkOS logout failed: ${await response.text()}`);
     }
+
+    const raw = (await response.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (typeof raw?.logout_url === "string" && raw.logout_url) {
+      await this.shell.openExternal(raw.logout_url);
+    }
   }
 
   private async revokeRefreshTokenWithRetry(
