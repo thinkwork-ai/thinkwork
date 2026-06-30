@@ -7,7 +7,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@thinkwork/ui/collapsible";
-import { ArrowDownToLine, ChevronDown, ExternalLink } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ChevronDown,
+  ExternalLink,
+  RefreshCw,
+} from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -15,6 +20,8 @@ import {
   SettingsInstallPluginMutation,
   SettingsPluginCatalogQuery,
   SettingsPluginInstallsQuery,
+  SettingsRefreshPluginCatalogMutation,
+  SettingsUpgradePluginMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsPageTitle,
@@ -23,6 +30,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import {
+  broadenedScopes,
   componentStateChipClassName,
   componentStateLabel,
   componentTypeLabel,
@@ -52,6 +60,12 @@ export function N8nPluginHome() {
   const [installMutationState, installPlugin] = useMutation(
     SettingsInstallPluginMutation,
   );
+  const [upgradeState, upgradePlugin] = useMutation(
+    SettingsUpgradePluginMutation,
+  );
+  const [refreshCatalogState, refreshRemoteCatalog] = useMutation(
+    SettingsRefreshPluginCatalogMutation,
+  );
 
   const entry =
     catalogResult.data?.pluginCatalog.find(
@@ -76,6 +90,11 @@ export function N8nPluginHome() {
   const allComponentsProvisioned =
     components.length > 0 &&
     components.every((component) => component.state === "provisioned");
+  const updateAvailable = Boolean(entry?.updateAvailable && install);
+  const newScopes =
+    updateAvailable && entry && install
+      ? broadenedScopes(entry, install.pinnedVersion, entry.latestVersion)
+      : [];
 
   function refreshAll() {
     refreshInstalls({ requestPolicy: "network-only" });
@@ -97,6 +116,40 @@ export function N8nPluginHome() {
       return;
     }
     toast.success(`Installing ${displayName}.`);
+    refreshAll();
+  }
+
+  async function installUpdate() {
+    if (!install || !entry) return;
+    const idempotencyKey = [
+      "plugins",
+      "n8n",
+      "upgrade",
+      entry.latestVersion,
+      Date.now().toString(36),
+    ].join("-");
+    const result = await upgradePlugin({
+      input: {
+        installId: install.id,
+        version: entry.latestVersion,
+        idempotencyKey,
+      },
+    });
+    if (result.error) {
+      toast.error(`Could not update ${displayName}: ${result.error.message}`);
+      return;
+    }
+    toast.success(`Updating ${displayName} to v${entry.latestVersion}.`);
+    refreshAll();
+  }
+
+  async function refreshTrustedCatalog() {
+    const result = await refreshRemoteCatalog({});
+    if (result.error) {
+      toast.error(`Could not refresh plugin catalog: ${result.error.message}`);
+      return;
+    }
+    toast.success("Plugin catalog refreshed.");
     refreshAll();
   }
 
@@ -149,24 +202,81 @@ export function N8nPluginHome() {
                 {installStateLabel(install.state)}
               </Badge>
             </span>
-          ) : null
+          ) : (
+            <Badge variant="outline">Not installed</Badge>
+          )
         }
       />
 
-      {!install && entry && showOperatorActions ? (
+      {!install && roleResolved ? (
         <SettingsSection label="Install">
           <SettingsRow
-            label={`Install ${entry.displayName}`}
-            description={`Latest version v${entry.latestVersion}.`}
+            label={`Install ${displayName}`}
+            description={
+              !isOperator
+                ? "Plugin installation is available to workspace operators."
+                : entry
+                ? `Latest version v${entry.latestVersion}.`
+                : "Installs the latest n8n version from the plugin catalog."
+            }
           >
             <Button
               type="button"
               size="sm"
-              disabled={installMutationState.fetching}
+              disabled={!isOperator || installMutationState.fetching}
               onClick={() => void installN8n()}
             >
               <ArrowDownToLine className="mr-2 size-4" />
-              Install
+              {isOperator ? "Install" : "Operator required"}
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+      ) : null}
+
+      {updateAvailable && entry && install && roleResolved ? (
+        <SettingsSection label="Update available">
+          <SettingsRow
+            label={`v${install.pinnedVersion} -> v${entry.latestVersion}`}
+            description={
+              !isOperator
+                ? "Plugin updates are available to workspace operators."
+                : newScopes.length > 0
+                ? `This update requests new permissions (${newScopes.join(", ")}). Connected users will need to reconnect.`
+                : "No re-authentication required."
+            }
+          >
+            <Button
+              type="button"
+              size="sm"
+              disabled={!isOperator || upgradeState.fetching}
+              onClick={() => void installUpdate()}
+            >
+              <ArrowDownToLine className="mr-2 size-4" />
+              {isOperator ? "Install update" : "Operator required"}
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+      ) : null}
+
+      {showOperatorActions ? (
+        <SettingsSection label="Plugin catalog">
+          <SettingsRow
+            label="Refresh n8n versions"
+            description={
+              entry
+                ? `Installed v${install?.pinnedVersion ?? "none"} · Latest v${entry.latestVersion}.`
+                : "Refresh the trusted plugin catalog before installing or updating n8n."
+            }
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={refreshCatalogState.fetching}
+              onClick={() => void refreshTrustedCatalog()}
+            >
+              <RefreshCw className="mr-2 size-4" />
+              Refresh catalog
             </Button>
           </SettingsRow>
         </SettingsSection>

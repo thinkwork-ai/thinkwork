@@ -16,7 +16,7 @@ status: active
 - Linear attached document: `Plan: Add n8n integrated app`.
 - Child issues: none found. Autopilot will use plan units as implementation units.
 - Blocking issue relations: none found.
-- Current branch: `codex/think-113-u3-n8n-app-tables`.
+- Current branch: `codex/think-113-u5-n8n-app-smoke`.
 
 ## Context discovery
 
@@ -79,7 +79,16 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | 2026-06-30 | U3 source-boundary verification | `pnpm lint:plugin-source`; added the narrow shared web-host adapter allowlist entry for the n8n app. | Passed |
 | 2026-06-30 | U3 local dev server | Started `pnpm --filter @thinkwork/web dev -- --host 0.0.0.0 --port 5174`; fresh browser context loaded `/apps/n8n/workflows`, redirected to sign-in, and reported no page errors. | Passed |
 | 2026-06-30 | U3 production web build | `pnpm --filter @thinkwork/web build`; existing route-test/sourcemap/chunk-size warnings only. | Passed |
+| 2026-06-30 | U3 Devin feedback | Devin flagged a duration rollover edge case. Fixed `formatDuration(119500)` to render `1m 59s`, added coverage, replied, and resolved the review thread. | Passed |
+| 2026-06-30 | U3 merge | PR #3141 passed required checks and was squash-merged into `main` at `d1f1cf4285b5bd617c866cbfb155b3b23259b7e0`. | Passed |
+| 2026-06-30 | U5 branch created | Created `codex/think-113-u5-n8n-app-smoke` from updated `origin/main`. | Passed |
+| 2026-06-30 | U5 objective restated | Add guarded sync/docs/smoke verification for the native n8n installed app and make the n8n install/update path discoverable from the n8n settings page. | Passed |
+| 2026-06-30 | U5 install/update fix | Added n8n settings-page install/update affordances, an operator catalog refresh row, and a legacy pinned-install compatibility projection so installed n8n tenants can see `/apps/n8n/workflows` without mutating the historical `0.1.0` manifest. | Passed |
+| 2026-06-30 | U5 script/docs guardrails | Added `plugins/n8n/scripts/sync-thinkwork-app.mjs`, `plugins/n8n/smoke/n8n-integrated-app-smoke.mjs`, the native-app install runbook, and docs updates. Dry-run mode is default and reports non-mutating prerequisites. | Passed |
+| 2026-06-30 | U5 tests | `pnpm --filter @thinkwork/plugin-n8n test`; `npx vitest run src/graphql/resolvers/plugin-apps/installedPluginApps.query.test.ts`; `npx vitest run src/components/settings/plugins/n8n/N8nPluginHome.test.tsx src/components/apps/PluginAppRoute.test.tsx`. | Passed |
+| 2026-06-30 | U5 typechecks/source-boundary | `pnpm --filter @thinkwork/plugin-n8n typecheck`; `pnpm --filter @thinkwork/web typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm lint:plugin-source`. | Passed |
+| 2026-06-30 | U5 browser verification | Worktree server on `5174` shows Settings -> Plugins -> n8n with `Update available`, `Install update`, `Plugin catalog`, and `Refresh catalog` for installed `v0.1.0 -> v0.2.0`. `/apps` still shows deployed-API behavior until the local resolver change is deployed. Port `5180` is served by a different worktree (`c64d`). | Passed |
 
 ## Active unit
 
-U3 is active. The branch builds the n8n installed app UI under `plugins/n8n/n8n-app`, registers it in the ThinkWork main-shell plugin app host, and consumes the U2 `n8nAppData(installId)` query without exposing write controls or browser-entered n8n credentials.
+U5 is active. The branch adds guarded dry-run sync and smoke verification, documents the native installed-app path, and fixes the operator-facing n8n install/update path so legacy installed tenants can refresh the catalog, install the update, and launch the native workflow app from `/apps/n8n/workflows` after the backend resolver deploys.

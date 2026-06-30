@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -182,6 +183,88 @@ describe("n8n integrated app contract", () => {
     expect(frontComponent).not.toContain("twenty-sdk");
     expect(frontComponent).not.toContain("workflow-publish");
     expect(frontComponent).not.toContain("execution-retry");
+  });
+
+  it("documents guarded app sync and smoke verification", async () => {
+    const syncScriptPath = fileURLToPath(
+      new URL("../scripts/sync-thinkwork-app.mjs", import.meta.url),
+    );
+    const smokeScriptPath = fileURLToPath(
+      new URL("../smoke/n8n-integrated-app-smoke.mjs", import.meta.url),
+    );
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+    const syncScript = await readFile(syncScriptPath, "utf8");
+    const smokeScript = await readFile(smokeScriptPath, "utf8");
+    const runbook = await readFile(
+      fileURLToPath(
+        new URL(
+          "../../../docs/runbooks/n8n-thinkwork-native-app-install.md",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const smokeReadme = await readFile(
+      fileURLToPath(new URL("../smoke/README.md", import.meta.url)),
+      "utf8",
+    );
+    const docsPage = await readFile(
+      fileURLToPath(
+        new URL(
+          "../../../docs/src/content/docs/applications/n8n.mdx",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+
+    expect(syncScript).toContain("--apply");
+    expect(syncScript).toContain("installedPluginApps");
+    expect(syncScript).toContain("n8nAppData");
+    expect(syncScript).toContain("mutates: false");
+    expect(syncScript).toContain("redact");
+    expect(smokeScript).toContain("SMOKE_ENABLE_N8N_INTEGRATED_APP");
+    expect(smokeScript).toContain("installedPluginApps");
+    expect(smokeScript).toContain("n8nAppData");
+    expect(smokeScript).toContain("bridgeLinkedExecutionCount");
+    expect(smokeScript).toContain("redact");
+    expect(runbook).toContain("/apps/n8n/workflows");
+    expect(runbook).toContain("Settings -> Plugins -> n8n");
+    expect(runbook).toContain("sync-thinkwork-app.mjs");
+    expect(smokeReadme).toContain("n8n-integrated-app-smoke.mjs");
+    expect(smokeReadme).toContain("SMOKE_N8N_BRIDGE_THREAD_ID");
+    expect(docsPage).toContain("/apps/n8n/workflows");
+    expect(docsPage).toContain("Refresh catalog");
+
+    const syncOutput = JSON.parse(
+      execFileSync("node", [syncScriptPath], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          N8N_THINKWORK_APP_SYNC_DRY_RUN: "1",
+        },
+      }),
+    );
+    expect(syncOutput.ok).toBe(true);
+    expect(syncOutput.mode).toBe("dry-run");
+    expect(syncOutput.dryRun.mutates).toBe(false);
+    expect(syncOutput.route).toBe("/apps/n8n/workflows");
+
+    const smokeOutput = JSON.parse(
+      execFileSync("node", [smokeScriptPath], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          SMOKE_ENABLE_N8N_INTEGRATED_APP: "",
+          SMOKE_EVIDENCE_FILE: "",
+        },
+      }),
+    );
+    expect(smokeOutput.ok).toBe(true);
+    expect(smokeOutput.skippedLive).toBe(true);
+    expect(smokeOutput.dryRun.route).toBe("/apps/n8n/workflows");
   });
 
   it("filters and labels workflow and execution rows without exposing write controls", () => {

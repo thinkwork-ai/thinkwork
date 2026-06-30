@@ -43,8 +43,14 @@ describe("N8nPluginHome", () => {
 
   it("keeps plugin detail settings-only with an install action", () => {
     expect(home).toContain("SettingsInstallPluginMutation");
+    expect(home).toContain("SettingsRefreshPluginCatalogMutation");
+    expect(home).toContain("SettingsUpgradePluginMutation");
     expect(home).toContain("Install");
-    expect(home).toContain("Install ${entry.displayName}");
+    expect(home).toContain("Install ${displayName}");
+    expect(home).toContain("latest n8n version");
+    expect(home).toContain("Update available");
+    expect(home).toContain("Install update");
+    expect(home).toContain("Refresh catalog");
     expect(home).not.toContain('activeTab === "workflows"');
     expect(home).not.toContain("<N8nPluginWorkflows");
     expect(home).not.toContain("Refresh n8n workflows");

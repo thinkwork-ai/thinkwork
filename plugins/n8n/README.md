@@ -55,6 +55,8 @@ catalog places it with the other first-party application plugins.
 - `src/web/` owns package-specific web contracts for Plugin Detail settings.
 - `n8n-app/` owns the native ThinkWork installed app surface for workflow and
   execution operations.
+- `scripts/sync-thinkwork-app.mjs` owns dry-run-first deployed app preflight
+  and live ThinkWork app verification.
 - `src/skills/` owns the `n8n-workflow-operator` skill source.
 - `smoke/` owns deployed validation for the managed-app, native MCP, and bridge
   paths.
@@ -122,6 +124,7 @@ with a structured `expired` result so the workflow can branch explicitly.
 
 Operator runbook details live in the docs site:
 
+- `docs/runbooks/n8n-thinkwork-native-app-install.md`
 - `docs/src/content/docs/applications/n8n.mdx`
 - `docs/src/content/docs/applications/n8n-agent-step-bridge.mdx`
 
@@ -136,6 +139,8 @@ pnpm --filter @thinkwork/plugin-catalog check:plugins
 node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
 node plugins/n8n/smoke/n8n-mcp-smoke.mjs
 node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs
+node plugins/n8n/smoke/n8n-integrated-app-smoke.mjs
+node plugins/n8n/scripts/sync-thinkwork-app.mjs
 ```
 
 Live verification must prove the ThinkWork install path after the plugin is
@@ -166,6 +171,13 @@ SMOKE_ENABLE_N8N_AGENT_STEP_BRIDGE=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-agent-step-bridge-smoke.json \
   node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs
+
+SMOKE_ENABLE_N8N_INTEGRATED_APP=1 \
+  SMOKE_THINKWORK_URL=<thinkwork-url> \
+  SMOKE_N8N_INSTALL_ID=<plugin-install-id> \
+  SMOKE_COGNITO_ID_TOKEN=<operator-id-token> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-integrated-app-smoke.json \
+  node plugins/n8n/smoke/n8n-integrated-app-smoke.mjs
 ```
 
 The managed-app smoke verifies public endpoint health plus main/worker service,
@@ -175,6 +187,9 @@ n8n tools through ThinkWork's `/api/mcp` proxy and can read a configured
 disposable workflow with `SMOKE_N8N_WORKFLOW_ID`. The bridge smoke verifies a
 disposable n8n workflow can call ThinkWork, produce bridge telemetry, create a
 visible ThinkWork thread, and resume n8n with structured terminal payload
+evidence. The integrated app smoke verifies the ThinkWork-hosted
+`/apps/n8n/workflows` route through `installedPluginApps` and `n8nAppData`,
+including workflow rows, execution rows, and optional bridge-linked execution
 evidence.
 
 ## Teardown
