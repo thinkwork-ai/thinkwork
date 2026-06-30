@@ -13,6 +13,15 @@ export interface TrustedSkillGateRow {
   trust_report_pipeline_version: string | null;
 }
 
+function hasRuntimeTrustedSignature(
+  evidence: SkillTrustPipelineReport["evidence"] | undefined,
+): boolean {
+  return (
+    evidence?.signature === "verified" ||
+    evidence?.signature === "approved_unverified"
+  );
+}
+
 export function isCurrentPassedSkillTrustReport(
   row: TrustedSkillGateRow,
 ): boolean {
@@ -29,7 +38,7 @@ export function isCurrentPassedSkillTrustReport(
       evidence?.evalDataset === "starter_generated") &&
     (evidence?.benchmark === "present" ||
       evidence?.benchmark === "starter_generated") &&
-    evidence?.signature === "verified" &&
+    hasRuntimeTrustedSignature(evidence) &&
     row.trust_report_content_sha === row.content_sha &&
     row.trust_report_pipeline_version === SKILL_TRUST_PIPELINE_VERSION
   );
