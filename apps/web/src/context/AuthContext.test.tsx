@@ -90,6 +90,7 @@ beforeEach(() => {
     async () => authMocks.storage?.getItem("idToken") ?? null,
   );
   authMocks.signOut.mockReset();
+  authMocks.signOut.mockResolvedValue(undefined);
   authMocks.clearLocalAuthSession.mockReset();
   bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReset();
   bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReturnValue(true);
@@ -191,6 +192,44 @@ describe("AuthProvider desktop mode", () => {
     await waitFor(() => expect(button.textContent).toBe("anonymous"));
     expect(bridge.signOutCalls()).toBe(1);
     expect(navigations).toEqual(["/sign-in"]);
+  });
+
+  it("does not restore stale cached auth during web sign-out", async () => {
+    const { AuthProvider, useAuth } = await import("./AuthContext");
+    const storage = new MemoryTokenStorage({
+      ...sessionItems("user@example.com"),
+      [bindingMocks.bindingKey]: "deployment-binding",
+      [bindingMocks.storageKey]: "deployment-profile",
+    });
+
+    function Probe() {
+      const { user, isLoading, signOut } = useAuth();
+      return (
+        <button onClick={signOut}>
+          {isLoading ? "loading" : (user?.email ?? "anonymous")}
+        </button>
+      );
+    }
+
+    render(
+      <AuthProvider tokenStorage={storage} desktopBridge={null}>
+        <Probe />
+      </AuthProvider>,
+    );
+    const button = await screen.findByRole("button", {
+      name: "user@example.com",
+    });
+    expect(authMocks.getIdToken).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.textContent).toBe("anonymous"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(button.textContent).toBe("anonymous");
+    expect(authMocks.signOut).toHaveBeenCalledTimes(1);
+    expect(authMocks.getIdToken).toHaveBeenCalledTimes(1);
   });
 
   it("refuses to restore cached auth for a different deployment profile", async () => {
