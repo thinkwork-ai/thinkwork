@@ -95,6 +95,28 @@ export function N8nPluginHome() {
     updateAvailable && entry && install
       ? broadenedScopes(entry, install.pinnedVersion, entry.latestVersion)
       : [];
+  const componentsHeaderAction =
+    showOperatorActions && !install ? (
+      <Button
+        type="button"
+        size="sm"
+        disabled={installMutationState.fetching}
+        onClick={() => void installN8n()}
+      >
+        <ArrowDownToLine className="mr-2 size-4" />
+        Install
+      </Button>
+    ) : showOperatorActions && updateAvailable && entry && install ? (
+      <Button
+        type="button"
+        size="sm"
+        disabled={upgradeState.fetching}
+        onClick={() => void installUpdate()}
+      >
+        <ArrowDownToLine className="mr-2 size-4" />
+        Update
+      </Button>
+    ) : null;
 
   function refreshAll() {
     refreshInstalls({ requestPolicy: "network-only" });
@@ -287,27 +309,34 @@ export function N8nPluginHome() {
         className="group/components"
       >
         <section className="mb-8">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="mb-3 flex w-full items-center gap-2 text-left text-base font-medium text-foreground"
-            >
-              <span>Components</span>
-              {components.length ? (
-                <Badge
-                  variant={allComponentsProvisioned ? "outline" : "secondary"}
-                  className={
-                    allComponentsProvisioned
-                      ? "border-emerald-500/40 text-emerald-400"
-                      : undefined
-                  }
-                >
-                  {components.length} provisioned
-                </Badge>
-              ) : null}
-              <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=closed]/components:-rotate-90" />
-            </button>
-          </CollapsibleTrigger>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex min-w-0 items-center gap-2 text-left text-base font-medium text-foreground"
+              >
+                <span>Components</span>
+                {components.length ? (
+                  <Badge
+                    variant={
+                      allComponentsProvisioned ? "outline" : "secondary"
+                    }
+                    className={
+                      allComponentsProvisioned
+                        ? "border-emerald-500/40 text-emerald-400"
+                        : undefined
+                    }
+                  >
+                    {components.length} provisioned
+                  </Badge>
+                ) : null}
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=closed]/components:-rotate-90" />
+              </button>
+            </CollapsibleTrigger>
+            {componentsHeaderAction ? (
+              <div className="shrink-0">{componentsHeaderAction}</div>
+            ) : null}
+          </div>
           <CollapsibleContent>
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               {components.map((component) => (

@@ -98,3 +98,25 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 ## Final state
 
 THINK-113 is complete. The n8n plugin settings surface is settings-only with clear install/update access, the installed native n8n app is discoverable from `/apps`, workflow and execution data are exposed through a ThinkWork-mediated read-only API, the native app tables follow the shared Bessa/Work Items interaction patterns, guarded sync/smoke tooling is documented, and PR #3145 merged the final U5 work into `main`.
+
+## Follow-up: Components header install/update action
+
+Operator feedback on 2026-06-30 showed the settings-page install/update path was
+still too easy to miss during a failed McPherson n8n install attempt because the
+action lived away from the Components status the operator was inspecting.
+
+- Branch: `codex/think-113-n8n-components-install-update`.
+- Objective: add a right-aligned `Install`/`Update` action to the n8n Components
+  header while reusing the existing standard plugin install/upgrade mutations.
+- Local verification:
+  - `corepack pnpm --dir apps/web exec vitest run src/components/settings/plugins/n8n/N8nPluginHome.test.tsx`
+  - `rm -rf packages/deployment-profile/dist packages/deployment-profile/tsconfig.tsbuildinfo && corepack pnpm --dir packages/deployment-profile exec tsc --build`
+  - `corepack pnpm --dir apps/web exec tsc --noEmit`
+  - `git diff --check`
+- Browser verification: attempted against `http://localhost:5174/settings/plugins/n8n`,
+  but the in-app browser runtime repeatedly timed out while attaching to a new
+  local page. Code-level layout review confirmed the Components label/collapse
+  control remains left-aligned and the new action renders in a shrink-wrapped
+  right column.
+- Tooling caveat: `corepack pnpm exec prettier --check ...` could not run because
+  this checkout still does not expose a `prettier` binary.
