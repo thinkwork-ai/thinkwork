@@ -253,10 +253,9 @@ export function WorkItemDetailPage({
   const [humanActionError, setHumanActionError] = useState<string | null>(null);
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
-  const itemKey = item ? workItemKey(item) : "Work Item";
   usePageHeaderActions({
     title: item?.title ?? "Work Item",
-    documentTitle: item ? `${itemKey} ${item.title}` : "Work Item",
+    documentTitle: item?.title ?? "Work Item",
     breadcrumbs: [
       {
         label: "Work Items",
@@ -266,7 +265,7 @@ export function WorkItemDetailPage({
           unknown
         >,
       },
-      { label: item ? `${itemKey} ${item.title}` : "Work Item" },
+      { label: item?.title ?? "Work Item" },
     ],
     action: item ? (
       <Button
