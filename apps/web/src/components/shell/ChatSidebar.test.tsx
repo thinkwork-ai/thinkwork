@@ -819,27 +819,31 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
-    expect(screen.getByRole("button", { name: /^apps/i })).toBeTruthy();
+    const appsButton = screen.getByRole("button", { name: /^apps/i });
+    expect(appsButton).toBeTruthy();
     expect(document.querySelector(".lucide-layout-grid")).toBeTruthy();
-    const appLink = screen.getByRole("link", {
-      name: /client engagement twenty crm/i,
+    const appMenuItem = screen.getByRole("button", {
+      name: /client engagement/i,
     });
-    expect(appLink.getAttribute("href")).toBe(
-      "/apps/twenty/client-engagement",
-    );
+    fireEvent.click(appMenuItem);
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/apps/$pluginKey/$appRouteSegment",
+      params: {
+        pluginKey: "twenty",
+        appRouteSegment: "client-engagement",
+      },
+    });
+    expect(screen.queryByText("Twenty CRM")).toBeNull();
+    expect(screen.getAllByText("Apps")).toHaveLength(1);
     expect(
       screen
         .getByRole("link", { name: /work items/i })
-        .compareDocumentPosition(
-          screen.getByRole("button", { name: /^apps/i }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(appsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /automations/i })
-        .compareDocumentPosition(
-          screen.getByRole("button", { name: /^apps/i }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(appsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
