@@ -95,7 +95,7 @@ import {
   wikiContextTraceKey,
   wikiContextTraceTitle,
 } from "@/components/workbench/WikiContextTraceCard";
-import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
+import { IconCircleCheckFilled, IconPlus } from "@tabler/icons-react";
 import {
   Reasoning,
   ReasoningContent,
@@ -2831,10 +2831,10 @@ function PromptInputAttachButton() {
       variant="ghost"
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
-      title="Attach file"
+      title="Add files and more"
       className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
     >
-      <IconPaperclip stroke={2} className="h-4 w-4" />
+      <IconPlus stroke={2} className="h-4 w-4" />
     </PromptInputButton>
   );
 }

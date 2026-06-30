@@ -24,7 +24,7 @@ import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
-import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
+import { IconPlanet, IconPlus } from "@tabler/icons-react";
 import {
   useEffect,
   useMemo,
@@ -608,9 +608,9 @@ function PromptInputAttachButton() {
       className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
-      title="Attach a spreadsheet"
+      title="Add files and more"
     >
-      <IconPaperclip stroke={2} className="h-4 w-4" />
+      <IconPlus stroke={2} className="h-4 w-4" />
     </PromptInputButton>
   );
 }
