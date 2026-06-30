@@ -72,10 +72,23 @@ type PiExtension {
   updatedAt: AWSDateTime!
 }
 
+input ImportPiExtensionFromGitHubInput {
+  tenantId: ID!
+  repositoryUrl: String!
+  ref: String!
+  manifestPath: String = "pi-extension.json"
+}
+
 extend type Query {
   piExtensions(
     tenantId: ID!
     includeRejected: Boolean = true
     includeFailed: Boolean = true
   ): [PiExtension!]!
+}
+
+extend type Mutation {
+  importPiExtensionFromGitHub(
+    input: ImportPiExtensionFromGitHubInput!
+  ): PiExtension!
 }

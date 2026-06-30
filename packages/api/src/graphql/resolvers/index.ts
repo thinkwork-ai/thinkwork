@@ -132,7 +132,10 @@ import {
   spaceQueries,
   spaceTypeResolvers,
 } from "./spaces/index.js";
-import { piExtensionQueries } from "./pi-extensions/index.js";
+import {
+  piExtensionMutations,
+  piExtensionQueries,
+} from "./pi-extensions/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -231,6 +234,7 @@ export const mutationResolvers: Record<string, any> = {
   ...linkedTaskMutations,
   ...workItemMutations,
   ...agentLoopMutations,
+  ...piExtensionMutations,
 };
 
 import { agentTypeResolvers } from "./tenant-agent/types.js";
