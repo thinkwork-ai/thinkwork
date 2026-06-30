@@ -136,7 +136,8 @@ export async function handler(
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, x-tenant-id, x-tenant-slug, x-thinkwork-tenant-id, x-thinkwork-tenant-slug, x-api-key, x-thinkwork-deployment-token",
       },
       body: "",
     };

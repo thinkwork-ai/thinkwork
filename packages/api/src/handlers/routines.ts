@@ -20,8 +20,10 @@ export async function handler(
       statusCode: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "*",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods":
+          "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, x-tenant-id, x-tenant-slug, x-thinkwork-tenant-id, x-thinkwork-tenant-slug, x-api-key, x-thinkwork-deployment-token",
       },
       body: "",
     };
