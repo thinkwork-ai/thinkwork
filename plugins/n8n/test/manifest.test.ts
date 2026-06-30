@@ -16,6 +16,7 @@ import {
   N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH,
   N8N_MCP_ENDPOINT_PATH,
   N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD,
+  N8N_PLUGIN_LEGACY_VERSION,
   N8N_PLUGIN_VERSION,
   N8N_SERVICE_CREDENTIAL_KIND,
   N8N_SERVICE_CREDENTIAL_SECRET_JSON_KEY,
@@ -45,6 +46,7 @@ describe("n8n plugin manifest", () => {
       "terraform",
       "runtime",
       "web",
+      "web",
       "skills",
       "smoke",
       "tests",
@@ -61,7 +63,11 @@ describe("n8n plugin manifest", () => {
       displayName: "n8n",
       description: expect.stringContaining("workflow automation runtime"),
     });
-    expect(version.version).toBe(N8N_PLUGIN_VERSION);
+    expect(manifest.versions.map((entry) => entry.version)).toEqual([
+      N8N_PLUGIN_LEGACY_VERSION,
+      N8N_PLUGIN_VERSION,
+    ]);
+    expect(version.version).toBe(N8N_PLUGIN_LEGACY_VERSION);
     expect(version.requiredOauthScopes).toEqual([]);
     expect(version.components.map((component) => component.type)).toEqual([
       "infrastructure",

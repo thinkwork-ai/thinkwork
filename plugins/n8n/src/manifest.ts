@@ -5,9 +5,18 @@ import type {
   SkillsComponent,
   UiSurfaceComponent,
 } from "@thinkwork/plugin-catalog/contracts";
+import {
+  N8N_APP_DESCRIPTION,
+  N8N_APP_DISPLAY_NAME,
+  N8N_APP_ICON,
+  N8N_APP_KEY,
+  N8N_APP_ROUTE_SEGMENT,
+  N8N_APP_SURFACE_KEY,
+} from "../n8n-app/src/application-config";
 
 export const N8N_PLUGIN_KEY = "n8n";
-export const N8N_PLUGIN_VERSION = "0.1.0";
+export const N8N_PLUGIN_VERSION = "0.2.0";
+export const N8N_PLUGIN_LEGACY_VERSION = "0.1.0";
 export const N8N_MCP_ENDPOINT_PATH = "/mcp-server/http";
 export const N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH =
   "/api/integrations/n8n/agent-steps";
@@ -320,6 +329,24 @@ const N8N_PACKAGE_SETTINGS_COMPONENT: UiSurfaceComponent = {
   intendedMount: "settings.plugins.detail",
 };
 
+const N8N_WORKFLOW_OPERATIONS_APP_COMPONENT: UiSurfaceComponent = {
+  type: "ui-surface",
+  key: N8N_APP_SURFACE_KEY,
+  displayName: N8N_APP_DISPLAY_NAME,
+  intendedMount: "apps.main",
+  launch: {
+    schemaVersion: 1,
+    type: "app",
+    appKey: N8N_APP_KEY,
+    routeSegment: N8N_APP_ROUTE_SEGMENT,
+    mount: "main-shell",
+    runtime: "trusted-bundled-react",
+    description: N8N_APP_DESCRIPTION,
+    icon: N8N_APP_ICON,
+    entitlementProductKey: N8N_APP_KEY,
+  },
+};
+
 const N8N_SKILLS_COMPONENT: SkillsComponent = {
   type: "skills",
   key: "workflow-operator-instructions",
@@ -352,12 +379,23 @@ export const n8nManifest: PluginManifest = {
     "Self-hosted n8n workflow automation runtime with queue-mode workers, custom Code node packages, and native n8n MCP access for agents.",
   versions: [
     {
+      version: N8N_PLUGIN_LEGACY_VERSION,
+      requiredOauthScopes: [],
+      components: [
+        N8N_INFRA_COMPONENT,
+        N8N_MCP_COMPONENT,
+        N8N_PACKAGE_SETTINGS_COMPONENT,
+        N8N_SKILLS_COMPONENT,
+      ],
+    },
+    {
       version: N8N_PLUGIN_VERSION,
       requiredOauthScopes: [],
       components: [
         N8N_INFRA_COMPONENT,
         N8N_MCP_COMPONENT,
         N8N_PACKAGE_SETTINGS_COMPONENT,
+        N8N_WORKFLOW_OPERATIONS_APP_COMPONENT,
         N8N_SKILLS_COMPONENT,
       ],
     },
