@@ -44,6 +44,7 @@ describe("N8nPluginHome", () => {
   it("keeps plugin detail settings-only with an install action", () => {
     expect(home).toContain("SettingsInstallPluginMutation");
     expect(home).toContain("SettingsRefreshPluginCatalogMutation");
+    expect(home).toContain("SettingsStartManagedApplicationPlanMutation");
     expect(home).toContain("SettingsUpgradePluginMutation");
     expect(home).toContain("Install");
     expect(home).toContain("Install ${displayName}");
@@ -53,13 +54,20 @@ describe("N8nPluginHome", () => {
     expect(home).toContain("componentsHeaderAction");
     expect(home).toContain("{componentsHeaderAction}");
     expect(home).toContain('className="mb-3 flex items-center justify-between gap-3"');
+    expect(home).toContain("runtimeBlocked");
+    expect(home).toContain("Install/Update");
+    expect(home).toContain("startN8nInstallUpdatePlan");
+    expect(home).toContain("ManagedApplicationPlanDialog");
+    expect(home).toContain("n8nDesiredConfigForCurrentDeployment");
+    expect(home).toContain('if (normalized === "app.thinkwork.ai") return "thinkwork.ai";');
     expect(
       (home.match(/onClick=\{\(\) => void installN8n\(\)\}/g) ?? []).length,
     ).toBeGreaterThanOrEqual(2);
     expect(
       (home.match(/onClick=\{\(\) => void installUpdate\(\)\}/g) ?? []).length,
     ).toBeGreaterThanOrEqual(2);
-    expect(home).toContain("Refresh catalog");
+    expect(home).toContain("Version metadata");
+    expect(home).toContain("Refresh versions");
     expect(home).toContain(
       '${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.',
     );
