@@ -17,7 +17,7 @@ export function N8nPluginSettings({
     return (
       <SettingsSection label="n8n Settings">
         <p className="text-sm text-muted-foreground">
-          Install the n8n plugin before configuring workflow and package
+          Install the n8n plugin before configuring runtime and package
           settings.
         </p>
       </SettingsSection>
