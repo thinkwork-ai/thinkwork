@@ -7,16 +7,19 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { approveMock, queryDocs, rejectMock, useQueryMock } = vi.hoisted(() => ({
-  approveMock: vi.fn(),
-  queryDocs: {
-    SettingsApproveManagedApplicationDeploymentMutation: Symbol("approve"),
-    SettingsRejectManagedApplicationDeploymentMutation: Symbol("reject"),
-    SettingsDeploymentEvidenceQuery: Symbol("evidence"),
-  },
-  rejectMock: vi.fn(),
-  useQueryMock: vi.fn(),
-}));
+const { approveMock, queryDocs, refreshJobMock, rejectMock, useQueryMock } =
+  vi.hoisted(() => ({
+    approveMock: vi.fn(),
+    queryDocs: {
+      SettingsApproveManagedApplicationDeploymentMutation: Symbol("approve"),
+      SettingsManagedApplicationDeploymentQuery: Symbol("deployment"),
+      SettingsRejectManagedApplicationDeploymentMutation: Symbol("reject"),
+      SettingsDeploymentEvidenceQuery: Symbol("evidence"),
+    },
+    refreshJobMock: vi.fn(),
+    rejectMock: vi.fn(),
+    useQueryMock: vi.fn(),
+  }));
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
@@ -49,20 +52,32 @@ beforeEach(() => {
   rejectMock.mockResolvedValue({
     data: { rejectManagedApplicationDeployment: null },
   });
-  useQueryMock.mockReturnValue([
-    {
-      data: {
-        deploymentEvidence: {
-          jobId: twentyDestroyJob.id,
-          bucket: "tw-evidence",
-          prefix: "plans/twenty",
-          urls: [],
+  refreshJobMock.mockReset();
+  useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
+    if (query === queryDocs.SettingsManagedApplicationDeploymentQuery) {
+      return [
+        {
+          data: { managedApplicationDeployment: null },
+          fetching: false,
         },
+        refreshJobMock,
+      ];
+    }
+    return [
+      {
+        data: {
+          deploymentEvidence: {
+            jobId: twentyDestroyJob.id,
+            bucket: "tw-evidence",
+            prefix: "plans/twenty",
+            urls: [],
+          },
+        },
+        fetching: false,
       },
-      fetching: false,
-    },
-    vi.fn(),
-  ]);
+      vi.fn(),
+    ];
+  });
 });
 
 afterEach(cleanup);
@@ -104,6 +119,53 @@ describe("ManagedApplicationPlanDialog", () => {
       });
     });
   });
+
+  it("enables approval when a planning job refreshes to awaiting approval", async () => {
+    const onJobChanged = vi.fn();
+    useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
+      if (query === queryDocs.SettingsManagedApplicationDeploymentQuery) {
+        return [
+          {
+            data: { managedApplicationDeployment: n8nReadyJob },
+            fetching: false,
+          },
+          refreshJobMock,
+        ];
+      }
+      return [
+        {
+          data: {
+            deploymentEvidence: {
+              jobId: n8nReadyJob.id,
+              bucket: "tw-evidence",
+              prefix: "plans/n8n",
+              urls: [],
+            },
+          },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    });
+
+    render(
+      <ManagedApplicationPlanDialog
+        job={n8nPlanningJob}
+        open
+        onOpenChange={vi.fn()}
+        onJobChanged={onJobChanged}
+      />,
+    );
+
+    expect(screen.getByText("awaiting_approval")).toBeTruthy();
+    const approveButton = screen.getByRole("button", {
+      name: /deploy application/i,
+    });
+    expect((approveButton as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => {
+      expect(onJobChanged).toHaveBeenCalledWith(n8nReadyJob);
+    });
+  });
 });
 
 const twentyDestroyJob = {
@@ -136,4 +198,43 @@ const twentyDestroyJob = {
   createdAt: "2026-06-06T12:00:00Z",
   updatedAt: "2026-06-06T12:00:00Z",
   events: [],
+};
+
+const n8nPlanningJob = {
+  __typename: "ManagedApplicationDeploymentJob" as const,
+  id: "job-n8n",
+  appKey: "n8n",
+  operation: "ENABLE",
+  status: "planning",
+  releaseVersion: "v0.1.0-canary.294",
+  manifestDigest: "sha256:manifest",
+  desiredConfigVersion: "v1",
+  stateMachineArn: "arn:aws:states:workflow",
+  planExecutionArn: "arn:aws:states:plan",
+  applyExecutionArn: null,
+  codebuildBuildArn: null,
+  planDigest: null,
+  planSummary: null,
+  dataImpact: {
+    destructive: false,
+    summary: "No destructive n8n teardown requested.",
+    resources: [],
+  },
+  evidenceBucket: "tw-evidence",
+  evidencePrefix: "plans/n8n",
+  approvalRequired: true,
+  approvedAt: null,
+  rejectedAt: null,
+  errorMessage: null,
+  createdAt: "2026-06-30T16:11:00Z",
+  updatedAt: "2026-06-30T16:11:00Z",
+  events: [],
+};
+
+const n8nReadyJob = {
+  ...n8nPlanningJob,
+  status: "awaiting_approval",
+  planDigest: "sha256:plan-n8n",
+  planSummary: "Deploy n8n runtime.",
+  updatedAt: "2026-06-30T16:12:00Z",
 };
