@@ -258,12 +258,24 @@ export function parseAgentProfileSlashCommand(
 
 function profileSystemPrompt(request: CompiledAgentProfileRunRequest): string {
   const policy = request.execution.loopPolicy;
+  const skillInstruction =
+    request.skills.length > 0
+      ? [
+          "Configured skills for this profile:",
+          ...request.skills.map((skill) => `- ${skill}`),
+          "",
+          "Use the workspace_skill tool to read the full SKILL.md instructions before applying a configured skill. " +
+            "If the delegated task explicitly says to use your skills, read all applicable configured skills before analysis " +
+            "and verify the handoff satisfies their report requirements.",
+        ].join("\n")
+      : "";
   return [
     `You are the ${request.profileName} ThinkWork Agent Profile.`,
     request.routingGuidance
       ? `Routing guidance: ${request.routingGuidance}`
       : "",
     request.instructions,
+    skillInstruction,
     [
       "Run a closed specialist loop for only the delegated task:",
       "1. Discovery - identify the facts, files, tools, or context needed. If the request is ambiguous on a decision that changes the outcome, hand off with Verdict: needs_clarification instead of assuming; surface ALL clarification needs in that one handoff (max 4 questions) - you get one escalation per delegation.",

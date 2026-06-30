@@ -3674,9 +3674,21 @@ describe("agent install-skill action", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("rejects Space skill installs because capabilities belong in agent workspaces", async () => {
+  it("copies a catalog skill into a Space source scope and updates SPACE.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
+    const targetPrefix = "tenants/acme/spaces/engineering/";
+    mockCatalogInstallS3(targetPrefix);
+    s3Mock
+      .on(ListObjectsV2Command, { Prefix: targetPrefix })
+      .resolves({
+        Contents: [
+          { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
+      .resolves(body("# Engineering\n"));
 
     const res = await parse(
       await handler(
@@ -3689,11 +3701,23 @@ describe("agent install-skill action", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body.code).toBe("space_capability_file_rejected");
-    expect(res.body.error).toMatch(/master\/workspaces/);
-    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
-    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md`,
+      }),
+      expect.objectContaining({
+        Key: `${targetPrefix}skills/finance-audit-xls/WIRING.md`,
+      }),
+    ]);
+    const spaceMdPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find((call) => call.args[0].input.Key === `${targetPrefix}SPACE.md`);
+    expect(String(spaceMdPut?.args[0].input.Body)).toContain(
+      "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
+    );
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -3808,7 +3832,23 @@ describe("agent uninstall-skill action", () => {
   it("uninstalls from a Space source scope without refreshing agent state", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
-    mockCatalogUninstallS3("tenants/acme/spaces/engineering/");
+    const targetPrefix = "tenants/acme/spaces/engineering/";
+    mockCatalogUninstallS3(targetPrefix);
+    s3Mock
+      .on(ListObjectsV2Command, { Prefix: targetPrefix })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
+      .resolves(
+        body(`# Engineering
+
+<!-- BEGIN THINKWORK SPACE SKILLS -->
+## Skills
+
+- \`finance-audit-xls\` (\`skills/finance-audit-xls/SKILL.md\`)
+<!-- END THINKWORK SPACE SKILLS -->
+`),
+      );
 
     const res = await parse(
       await handler(
@@ -3831,6 +3871,10 @@ describe("agent uninstall-skill action", () => {
       "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
       "tenants/acme/spaces/engineering/skills/finance-audit-xls/WIRING.md",
     ]);
+    const spaceMdPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find((call) => call.args[0].input.Key === `${targetPrefix}SPACE.md`);
+    expect(String(spaceMdPut?.args[0].input.Body)).toBe("# Engineering\n");
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -3978,9 +4022,21 @@ describe("agent reinstall-skill action", () => {
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
-  it("rejects Space skill reinstalls because capabilities belong in agent workspaces", async () => {
+  it("reinstalls a stale catalog skill in a Space source scope and updates SPACE.md", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
+    const targetPrefix = "tenants/acme/spaces/engineering/";
+    mockCatalogReinstallS3(targetPrefix);
+    s3Mock
+      .on(ListObjectsV2Command, { Prefix: targetPrefix })
+      .resolves({
+        Contents: [
+          { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
+      .resolves(body("# Engineering\n"));
 
     const res = await parse(
       await handler(
@@ -3992,11 +4048,31 @@ describe("agent reinstall-skill action", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body.code).toBe("space_capability_file_rejected");
-    expect(res.body.error).toMatch(/master\/workspaces/);
-    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
-    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      `${targetPrefix}skills/finance-audit-xls/SKILL.md`,
+      `${targetPrefix}skills/finance-audit-xls/old.txt`,
+    ]);
+    expect(
+      s3Mock.commandCalls(CopyObjectCommand).map((call) => call.args[0].input),
+    ).toEqual([
+      expect.objectContaining({
+        Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md`,
+      }),
+      expect.objectContaining({
+        Key: `${targetPrefix}skills/finance-audit-xls/WIRING.md`,
+      }),
+    ]);
+    const spaceMdPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find((call) => call.args[0].input.Key === `${targetPrefix}SPACE.md`);
+    expect(String(spaceMdPut?.args[0].input.Body)).toContain(
+      "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
+    );
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
@@ -4631,7 +4707,58 @@ describe("pinned-file write guard", () => {
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
-  it.each(["skills/finance-audit-xls/SKILL.md", "TOOLS.md", "MCP.md"])(
+  it("allows writes to Space skill source paths", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/spaces/engineering/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
+          },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/spaces/engineering/SPACE.md",
+      })
+      .resolves(body("# Engineering\n"));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "skills/finance-audit-xls/SKILL.md",
+          content: "# Finance Audit\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input).toMatchObject(
+      {
+        Key: "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
+        Body: "# Finance Audit\n",
+      },
+    );
+    const spaceMdPut = s3Mock
+      .commandCalls(PutObjectCommand)
+      .find(
+        (call) =>
+          call.args[0].input.Key ===
+          "tenants/acme/spaces/engineering/SPACE.md",
+      );
+    expect(String(spaceMdPut?.args[0].input.Body)).toContain(
+      "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
+    );
+  });
+
+  it.each(["TOOLS.md", "MCP.md"])(
     "PUT to Space capability path %s returns typed 403",
     async (path) => {
       authMockImpl.mockResolvedValue(authOk());
@@ -4650,7 +4777,7 @@ describe("pinned-file write guard", () => {
 
       expect(res.statusCode).toBe(403);
       expect(res.body.code).toBe("space_capability_file_rejected");
-      expect(res.body.error).toMatch(/master\/workspaces/);
+      expect(res.body.error).toMatch(/tool and MCP policy files/);
       expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     },
   );
@@ -4782,9 +4909,21 @@ skills: [finance-audit-xls]
 // ─── 7. DELETE ───────────────────────────────────────────────────────────────
 
 describe("Space capability-file write guard", () => {
-  it("rejects moving a file into the Space skills folder before S3 mutation", async () => {
+  it("allows moving a file into the Space skills folder", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminSpaceTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/spaces/engineering/knowledge/notes.md/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/spaces/engineering/skills/finance-audit-xls/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(DeleteObjectCommand).resolves({});
 
     const res = await parse(
       await handler(
@@ -4797,12 +4936,14 @@ describe("Space capability-file write guard", () => {
       ),
     );
 
-    expect(res.statusCode).toBe(403);
-    expect(res.body.code).toBe("space_capability_file_rejected");
-    expect(res.body.error).toMatch(/master\/workspaces/);
-    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
-    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
-    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.destPath).toBe("skills/finance-audit-xls/notes.md");
+    expect(s3Mock.commandCalls(CopyObjectCommand)[0].args[0].input.Key).toBe(
+      "tenants/acme/spaces/engineering/skills/finance-audit-xls/notes.md",
+    );
+    expect(s3Mock.commandCalls(DeleteObjectCommand)[0].args[0].input.Key).toBe(
+      "tenants/acme/spaces/engineering/knowledge/notes.md",
+    );
   });
 
   it("rejects renaming a Space file to TOOLS.md before S3 mutation", async () => {
@@ -4822,7 +4963,7 @@ describe("Space capability-file write guard", () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.body.code).toBe("space_capability_file_rejected");
-    expect(res.body.error).toMatch(/master\/workspaces/);
+    expect(res.body.error).toMatch(/tool and MCP policy files/);
     expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
     expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
