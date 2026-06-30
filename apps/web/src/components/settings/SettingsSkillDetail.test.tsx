@@ -1124,7 +1124,7 @@ describe("SettingsSkillDetail eval panel", () => {
           skillCard: "present",
           evalDataset: "present",
           benchmark: "present",
-          signature: "present_unverified",
+          signature: "approved_unverified",
         },
         artifactPaths: {
           skillCard: "skill-card.md",
@@ -1148,10 +1148,11 @@ describe("SettingsSkillDetail eval panel", () => {
       ),
     );
     await waitFor(() =>
-      expect(screen.getAllByText("present unverified").length).toBeGreaterThan(
+      expect(screen.getAllByText("approved unverified").length).toBeGreaterThan(
         0,
       ),
     );
+    expect(screen.queryByTestId("skill-trust-fix-step")).toBeNull();
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Generated unverified skill.oms.sig approval evidence.",
     );

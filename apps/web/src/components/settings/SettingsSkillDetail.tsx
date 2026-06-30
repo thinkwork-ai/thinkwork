@@ -929,7 +929,13 @@ function firstActionableTrustStep(steps: SkillTrustStep[]) {
 }
 
 function isTrustStepSatisfied(step: SkillTrustStep) {
-  return ["passed", "completed", "present", "verified"].includes(step.status);
+  return [
+    "passed",
+    "completed",
+    "present",
+    "verified",
+    "approved_unverified",
+  ].includes(step.status);
 }
 
 function releaseEvidenceState(status: string) {
@@ -944,6 +950,8 @@ function signatureEvidenceState(status: string) {
   switch (status) {
     case "verified":
       return "A signature is present and verified for this catalog snapshot.";
+    case "approved_unverified":
+      return "Unsigned operator approval evidence is present for this catalog snapshot.";
     case "present_unverified":
       return "A signature file is present, but this session has not verified it.";
     case "missing_signing_config":
@@ -1004,6 +1012,7 @@ function trustEvidenceTone(value: string) {
     value === "completed" ||
     value === "present" ||
     value === "verified" ||
+    value === "approved_unverified" ||
     value === "starter_generated"
   ) {
     return {

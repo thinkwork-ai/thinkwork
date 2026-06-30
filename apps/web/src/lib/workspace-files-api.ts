@@ -89,6 +89,7 @@ export interface SkillTrustReport {
     benchmark: "present" | "missing" | "starter_generated";
     signature:
       | "verified"
+      | "approved_unverified"
       | "present_unverified"
       | "missing"
       | "missing_signing_config"

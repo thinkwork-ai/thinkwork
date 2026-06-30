@@ -635,7 +635,7 @@ describe("fixSkillTrustEvidence", () => {
           skillCard: "present",
           evalDataset: "present",
           benchmark: "present",
-          signature: "present_unverified",
+          signature: "approved_unverified",
         },
         artifactPaths: { evals: [], signature: "skill.oms.sig" },
       },

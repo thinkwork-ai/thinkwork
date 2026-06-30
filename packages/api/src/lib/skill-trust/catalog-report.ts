@@ -27,6 +27,7 @@ export type SkillTrustReleaseEvidenceStatus =
 
 export type SkillTrustSignatureEvidenceStatus =
   | "verified"
+  | "approved_unverified"
   | "present_unverified"
   | "missing"
   | "missing_signing_config"
