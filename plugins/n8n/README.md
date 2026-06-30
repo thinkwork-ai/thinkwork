@@ -45,6 +45,35 @@ The plugin is now catalog-published by `plugins/catalog`:
 The catalog display name is `n8n`, so the alpha-sorted Settings -> Plugins
 catalog places it with the other first-party application plugins.
 
+## Package Boundary
+
+- `src/manifest.ts` owns the catalog manifest and component contract.
+- `src/deployment/` owns the managed-app adapter and image build contract.
+- `terraform/n8n/` owns the queue-mode AWS module.
+- `runtime/` owns the thin n8n wrapper image and task-runner allow-list
+  template.
+- `src/web/` owns package-specific web contracts for Plugin Detail settings.
+- `n8n-app/` owns the native ThinkWork installed app surface for workflow and
+  execution operations.
+- `src/skills/` owns the `n8n-workflow-operator` skill source.
+- `smoke/` owns deployed validation for the managed-app, native MCP, and bridge
+  paths.
+- `test/` owns package-local manifest, image, settings, and source-boundary
+  checks.
+
+## Native ThinkWork app
+
+The n8n installed app is hosted by ThinkWork at `/apps/n8n/workflows`, using
+the same trusted bundled React app launch contract as other first-party plugin
+apps. n8n itself does not currently provide a Twenty-style application SDK for
+adding a full native app inside the n8n editor, so the app is package-owned
+source under `plugins/n8n/n8n-app` and launches from ThinkWork's main shell.
+
+The app must use the signed-in ThinkWork session and server-mediated ThinkWork
+APIs for workflow and execution data. Browser code must not collect an n8n API
+key, call an unauthenticated n8n proxy, or expose write-control actions such as
+activate, publish, delete, retry, or stop.
+
 ## Operator Flow
 
 1. Install `n8n` from Settings -> Plugins.

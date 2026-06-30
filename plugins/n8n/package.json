@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p n8n-app/tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

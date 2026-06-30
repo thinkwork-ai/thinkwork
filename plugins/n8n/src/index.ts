@@ -29,6 +29,12 @@ export const n8nPluginPackage = {
     },
     {
       kind: "web",
+      path: "plugins/n8n/n8n-app",
+      description:
+        "Native ThinkWork n8n installed app surface for workflow and execution operations.",
+    },
+    {
+      kind: "web",
       path: "plugins/n8n/src/web",
       description:
         "Package-owned contracts for n8n Plugin Detail package settings.",
