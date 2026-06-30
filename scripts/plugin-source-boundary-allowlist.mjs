@@ -104,10 +104,9 @@ export const sharedPluginTermAllowlist = [
       "shared platform GraphQL control-surface coverage for n8n package settings; package-specific validation is imported from plugins/n8n.",
   },
   {
-    pathPrefix:
-      "packages/api/src/graphql/resolvers/plugin-apps/twenty-client-engagement",
+    path: "packages/api/src/handlers/twenty-client-engagement.ts",
     reason:
-      "shared platform GraphQL app data API for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
+      "shared platform REST app data API for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
   },
   {
     pathPrefix: "apps/web/src/components/plugin-apps/twenty-client-engagement/",
