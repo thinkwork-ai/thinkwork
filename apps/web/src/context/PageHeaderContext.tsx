@@ -34,6 +34,7 @@ export interface PageHeaderActions {
     label: string;
     href?: string;
     search?: Record<string, unknown>;
+    onClick?: () => void;
   }[];
   /** Optional title renderer for inline title affordances such as rename inputs. */
   titleContent?: ReactNode;
@@ -100,7 +101,7 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
     actions?.breadcrumbs
       ?.map(
         (b) =>
-          `${b.href ?? ""}:${b.search ? JSON.stringify(b.search) : ""}:${b.label}`,
+          `${b.href ?? ""}:${b.search ? JSON.stringify(b.search) : ""}:${b.onClick ? "click" : ""}:${b.label}`,
       )
       .join(",") ?? "";
   const key = actions

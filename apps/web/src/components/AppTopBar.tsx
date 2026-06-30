@@ -79,7 +79,7 @@ export function AppTopBar() {
                 const isLast = index === actions.breadcrumbs!.length - 1;
                 return (
                   <Fragment
-                    key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
+                    key={`${crumb.href ?? "current"}:${crumb.onClick ? "click" : ""}:${crumb.label}:${index}`}
                   >
                     {index > 0 ? (
                       <ChevronRight
@@ -98,6 +98,18 @@ export function AppTopBar() {
                         <div className="min-w-0 flex-1">
                           {actions.titleContent}
                         </div>
+                      ) : crumb.onClick ? (
+                        <button
+                          type="button"
+                          onClick={crumb.onClick}
+                          className={
+                            isLast
+                              ? "truncate text-foreground"
+                              : "shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                          }
+                        >
+                          {crumb.label}
+                        </button>
                       ) : isLast || !crumb.href ? (
                         <span
                           className={

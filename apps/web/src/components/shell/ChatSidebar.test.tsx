@@ -820,7 +820,7 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     expect(screen.getByRole("button", { name: /^apps/i })).toBeTruthy();
-    expect(document.querySelector(".tabler-icon-apps")).toBeTruthy();
+    expect(document.querySelector(".lucide-layout-grid")).toBeTruthy();
     const appLink = screen.getByRole("link", {
       name: /client engagement twenty crm/i,
     });
@@ -830,6 +830,13 @@ describe("ChatSidebar", () => {
     expect(
       screen
         .getByRole("link", { name: /work items/i })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: /^apps/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /automations/i })
         .compareDocumentPosition(
           screen.getByRole("button", { name: /^apps/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,

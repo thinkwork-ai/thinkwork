@@ -14,7 +14,9 @@ describe("ToolWorkspace", () => {
     render(<Harness />);
 
     expect(
-      screen.getByText("Value Discovery & Alignment Session"),
+      screen.getByRole("heading", {
+        name: "Value Discovery & Alignment Session",
+      }),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Discovery Tool" }));

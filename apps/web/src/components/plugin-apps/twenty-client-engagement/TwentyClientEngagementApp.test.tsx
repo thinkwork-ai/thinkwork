@@ -8,76 +8,80 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const {
-  dashboardResultMock,
+  accountsMock,
   overlayRowsMock,
   appOverlayRowsMock,
   mutationCalls,
   upsertOverlayMock,
-  updateStageMock,
-  updateLayerStatusMock,
+  fetchTwentyEngagementDashboardMock,
+  updateTwentyOpportunityStageMock,
+  updateTwentyLayerStatusMock,
+  saveTwentyStakeholderMock,
   usePageHeaderActionsMock,
 } = vi.hoisted(() => ({
-  dashboardResultMock: {
-    fetching: false,
-    error: null as { message: string } | null,
-    data: {
-      twentyEngagementDashboard: {
-        accounts: [
-          {
-            company: {
-              id: "company-1",
-              name: "McPherson Companies",
-              domainName: "mcpherson.example",
-              crmUrl: "https://crm.example/company-1",
-            },
-            opportunities: [
-              {
-                opportunity: {
-                  id: "opp-1",
-                  name: "JDE AI Query Layer",
-                  stage: "SOW_DELIVERED",
-                  stageLabel: "SOW Delivered",
-                  amountMicros: 8750000000,
-                  closeDate: "2026-07-27",
-                  companyId: "company-1",
-                  companyName: "McPherson Companies",
-                  crmUrl: "https://crm.example/opp-1",
-                },
-                layers: [
-                  {
-                    id: "layer-1",
-                    name: "Core Problem",
-                    layerType: "CORE_PROBLEM",
-                    layerTypeLabel: "Core Problem",
-                    instanceName: "JDE visibility",
-                    layerStatus: "READY_FOR_SOW",
-                    layerStatusLabel: "Ready for SOW",
-                    whatWeKnow: "Manual JDE data pulls are slow.",
-                    openQuestions: "Who owns Snowflake access?",
-                    businessValue: "Reduce analyst lookup time.",
-                    nextSteps: "Confirm read-only access.",
-                    opportunityId: "opp-1",
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            company: {
-              id: "company-2",
-              name: "Prospect Only",
-              domainName: "prospect.example",
-              crmUrl: "https://crm.example/company-2",
-            },
-            opportunities: [],
-          },
-        ],
-        companies: [],
-        opportunities: [],
-        opportunityLayers: [],
+  accountsMock: [
+    {
+      company: {
+        id: "company-1",
+        name: "McPherson Companies",
+        domainName: "mcpherson.example",
+        crmUrl: "https://crm.thinkwork.ai/objects/companies/company-1",
       },
+      opportunities: [
+        {
+          opportunity: {
+            id: "opp-1",
+            name: "JDE AI Query Layer",
+            stage: "SOW_DELIVERED",
+            stageLabel: "SOW Delivered",
+            amountMicros: 8750000000,
+            closeDate: "2026-07-27",
+            companyId: "company-1",
+            companyName: "McPherson Companies",
+            crmUrl: "https://crm.thinkwork.ai/objects/opportunities/opp-1",
+          },
+          layers: [
+            {
+              id: "layer-1",
+              name: "Core Problem",
+              layerType: "CORE_PROBLEM",
+              layerTypeLabel: "Core Problem",
+              instanceName: "JDE visibility",
+              layerStatus: "READY_FOR_SOW",
+              layerStatusLabel: "Ready for SOW",
+              whatWeKnow: "Manual JDE data pulls are slow.",
+              openQuestions: "Who owns Snowflake access?",
+              businessValue: "Reduce analyst lookup time.",
+              nextSteps: "Confirm read-only access.",
+              opportunityId: "opp-1",
+            },
+          ],
+        },
+      ],
+      stakeholders: [
+        {
+          id: "person-1",
+          name: "Chad Logan",
+          title: "Operations / IT Lead",
+          department: "Operations",
+          role: "Technical Champion",
+          email: "chad@example.test",
+          companyId: "company-1",
+          crmUrl: "https://crm.thinkwork.ai/objects/people/person-1",
+        },
+      ],
     },
-  },
+    {
+      company: {
+        id: "company-2",
+        name: "Prospect Only",
+        domainName: "prospect.example",
+        crmUrl: "https://crm.thinkwork.ai/objects/companies/company-2",
+      },
+      opportunities: [],
+      stakeholders: [],
+    },
+  ],
   overlayRowsMock: [] as Array<{
     sectionKey: string;
     payload: Record<string, unknown>;
@@ -99,19 +103,56 @@ const {
       },
     };
   }),
-  updateStageMock: vi.fn(async (variables: unknown) => {
-    mutationCalls.push({ name: "updateStage", variables });
-    return { data: { updateTwentyEngagementOpportunityStage: {} } };
-  }),
-  updateLayerStatusMock: vi.fn(async (variables: unknown) => {
-    mutationCalls.push({ name: "updateLayerStatus", variables });
-    return { data: { updateTwentyEngagementOpportunityLayerStatus: {} } };
-  }),
+  fetchTwentyEngagementDashboardMock: vi.fn(async () => ({
+    accounts: accountsMock,
+  })),
+  updateTwentyOpportunityStageMock: vi.fn(async (opportunityId, stage) => ({
+    id: opportunityId,
+    name: "JDE AI Query Layer",
+    stage,
+    stageLabel: "SOW Delivered",
+    amountMicros: 8750000000,
+    closeDate: "2026-07-27",
+    companyId: "company-1",
+    companyName: "McPherson Companies",
+    crmUrl: "https://crm.thinkwork.ai/objects/opportunities/opp-1",
+  })),
+  updateTwentyLayerStatusMock: vi.fn(async (layerId, layerStatus) => ({
+    id: layerId,
+    name: "Core Problem",
+    layerType: "CORE_PROBLEM",
+    layerTypeLabel: "Core Problem",
+    instanceName: "JDE visibility",
+    layerStatus,
+    layerStatusLabel: "Ready for SOW",
+    whatWeKnow: "Manual JDE data pulls are slow.",
+    openQuestions: "Who owns Snowflake access?",
+    businessValue: "Reduce analyst lookup time.",
+    nextSteps: "Confirm read-only access.",
+    opportunityId: "opp-1",
+  })),
+  saveTwentyStakeholderMock: vi.fn(async (input) => ({
+    id: input.stakeholderId ?? "person-new",
+    companyId: input.companyId,
+    name: input.name,
+    title: input.title ?? null,
+    department: input.department ?? null,
+    role: input.role ?? null,
+    email: input.email ?? null,
+    crmUrl: "https://crm.thinkwork.ai/objects/people/person-new",
+  })),
   usePageHeaderActionsMock: vi.fn(),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: usePageHeaderActionsMock,
+}));
+
+vi.mock("./data/twentyEngagementApi", () => ({
+  fetchTwentyEngagementDashboard: fetchTwentyEngagementDashboardMock,
+  updateTwentyOpportunityStage: updateTwentyOpportunityStageMock,
+  updateTwentyLayerStatus: updateTwentyLayerStatusMock,
+  saveTwentyStakeholder: saveTwentyStakeholderMock,
 }));
 
 vi.mock("urql", () => ({
@@ -153,21 +194,17 @@ vi.mock("urql", () => ({
         vi.fn(),
       ];
     }
-    return [dashboardResultMock, vi.fn()];
+    return [{ fetching: false, error: null, data: {} }, vi.fn()];
   },
-  useMutation: (document: unknown) => {
-    const source = JSON.stringify(document);
-    if (source.includes("UpdateTwentyEngagementOpportunityStage")) {
-      return [{ fetching: false }, updateStageMock];
-    }
-    if (source.includes("UpdateTwentyEngagementOpportunityLayerStatus")) {
-      return [{ fetching: false }, updateLayerStatusMock];
-    }
-    return [{ fetching: false }, upsertOverlayMock];
-  },
+  useMutation: () => [{ fetching: false }, upsertOverlayMock],
 }));
 
 import { TwentyClientEngagementApp } from "./TwentyClientEngagementApp";
+
+Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+  configurable: true,
+  value: vi.fn(),
+});
 
 function latestHeaderActions() {
   const actions = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
@@ -181,17 +218,32 @@ function renderLatestHeaderAction() {
   return render(<>{action}</>);
 }
 
+function renderLatestTitleContent() {
+  const titleContent = latestHeaderActions().titleContent;
+  if (!titleContent) throw new Error("Expected header title content");
+  return render(<>{titleContent}</>);
+}
+
+async function openFirstAccount() {
+  fireEvent.click(await screen.findByText("McPherson Companies"));
+}
+
+async function openFirstAccountOpportunities() {
+  await openFirstAccount();
+  fireEvent.click(screen.getByRole("tab", { name: /Opportunities/ }));
+}
+
 afterEach(() => {
   cleanup();
   overlayRowsMock.length = 0;
   appOverlayRowsMock.length = 0;
   mutationCalls.length = 0;
   upsertOverlayMock.mockClear();
-  updateStageMock.mockClear();
-  updateLayerStatusMock.mockClear();
+  fetchTwentyEngagementDashboardMock.mockClear();
+  updateTwentyOpportunityStageMock.mockClear();
+  updateTwentyLayerStatusMock.mockClear();
+  saveTwentyStakeholderMock.mockClear();
   usePageHeaderActionsMock.mockClear();
-  dashboardResultMock.fetching = false;
-  dashboardResultMock.error = null;
 });
 
 describe("TwentyClientEngagementApp", () => {
@@ -203,29 +255,65 @@ describe("TwentyClientEngagementApp", () => {
       />,
     );
 
-    expect(
-      await screen.findByRole("heading", { name: "McPherson Companies" }),
-    ).toBeTruthy();
+    expect(await screen.findByText("McPherson Companies")).toBeTruthy();
     expect(usePageHeaderActionsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         title: "Client Engagement",
         documentTitle: "Twenty CRM · Client Engagement",
         breadcrumbs: [
           { label: "Twenty CRM", href: "/settings/plugins/twenty" },
-          { label: "Client Engagement" },
+          { label: "Client Engagement", onClick: undefined },
         ],
       }),
     );
+    const headerAction = renderLatestHeaderAction();
     expect(
-      renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
+      headerAction.getByRole("button", { name: "Pipeline" }),
     ).toBeTruthy();
+    expect(
+      headerAction.getByRole("button", { name: "Refresh" }),
+    ).toBeTruthy();
+    expect(
+      headerAction.queryByRole("link", { name: "Open in CRM" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: "Search accounts" }),
+    ).toBeNull();
     expect(screen.queryByText("Twenty CRM projection")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "McPherson Companies" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByText("McPherson Companies"));
+
+    expect(
+      screen.getByRole("heading", { name: "McPherson Companies" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Account Profile" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Opportunities (1)" })).toBeTruthy();
+    expect(screen.queryByText("1 active opportunity")).toBeNull();
+    expect(latestHeaderActions().breadcrumbs).toEqual([
+      { label: "Twenty CRM", href: "/settings/plugins/twenty" },
+      { label: "Client Engagement", onClick: expect.any(Function) },
+      { label: "McPherson Companies" },
+    ]);
+    const titleContent = renderLatestTitleContent();
+    expect(
+      titleContent.getByRole("button", { name: "Account picker" }),
+    ).toBeTruthy();
+    const selectedHeaderAction = renderLatestHeaderAction();
+    expect(
+      selectedHeaderAction
+        .getByRole("link", { name: "Open in CRM" })
+        .getAttribute("href"),
+    ).toBe("https://crm.thinkwork.ai/objects/companies/company-1");
   });
 
   it("opens account and opportunity CRM data without direct browser MCP fetches", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     render(<TwentyClientEngagementApp />);
+    await openFirstAccountOpportunities();
     fireEvent.click(await screen.findByText("JDE AI Query Layer"));
 
     expect(
@@ -238,12 +326,23 @@ describe("TwentyClientEngagementApp", () => {
     fetchSpy.mockRestore();
   });
 
+  it("opens CRM object paths on the Twenty CRM host", async () => {
+    render(<TwentyClientEngagementApp />);
+    await openFirstAccount();
+
+    expect(
+      renderLatestHeaderAction()
+        .getByRole("link", { name: "Open in CRM" })
+        .getAttribute("href"),
+    ).toBe("https://crm.thinkwork.ai/objects/companies/company-1");
+  });
+
   it("renders a useful empty state for accounts without opportunities", async () => {
     render(<TwentyClientEngagementApp />);
 
     fireEvent.click(await screen.findByText("Prospect Only"));
+    fireEvent.click(screen.getByRole("tab", { name: /Opportunities/ }));
 
-    expect(screen.getByRole("heading", { name: "Prospect Only" })).toBeTruthy();
     expect(screen.getByText("No opportunities")).toBeTruthy();
     expect(
       screen.getByText("This account has no Twenty opportunities yet."),
@@ -252,6 +351,7 @@ describe("TwentyClientEngagementApp", () => {
 
   it("saves overlay-owned KPI baseline and restores overlay values after remount", async () => {
     render(<TwentyClientEngagementApp />);
+    await openFirstAccountOpportunities();
     fireEvent.click(await screen.findByText("JDE AI Query Layer"));
 
     fireEvent.click(screen.getByRole("button", { name: "KPI Framework" }));
@@ -286,6 +386,7 @@ describe("TwentyClientEngagementApp", () => {
     );
 
     render(<TwentyClientEngagementApp />);
+    await openFirstAccountOpportunities();
     fireEvent.click(await screen.findByText("JDE AI Query Layer"));
     fireEvent.click(screen.getByRole("button", { name: "KPI Framework" }));
     expect(
@@ -301,6 +402,7 @@ describe("TwentyClientEngagementApp", () => {
 
   it("opens converted tool views from an opportunity stage action", async () => {
     render(<TwentyClientEngagementApp />);
+    await openFirstAccountOpportunities();
     fireEvent.click(await screen.findByText("JDE AI Query Layer"));
 
     fireEvent.click(
@@ -313,13 +415,16 @@ describe("TwentyClientEngagementApp", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.getByText("Value Discovery & Alignment Session"),
+      screen.getByRole("heading", {
+        name: "Value Discovery & Alignment Session",
+      }),
     ).toBeTruthy();
     expect(screen.getAllByText(/JDE AI Query Layer/).length).toBeGreaterThan(0);
   });
 
   it("persists app-level opportunity pipeline edits and restores them after remount", async () => {
     render(<TwentyClientEngagementApp />);
+    await screen.findByText("McPherson Companies");
     fireEvent.click(
       renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
     );
@@ -365,6 +470,7 @@ describe("TwentyClientEngagementApp", () => {
     });
 
     render(<TwentyClientEngagementApp />);
+    await screen.findByText("McPherson Companies");
     fireEvent.click(
       renderLatestHeaderAction().getByRole("button", { name: "Pipeline" }),
     );
