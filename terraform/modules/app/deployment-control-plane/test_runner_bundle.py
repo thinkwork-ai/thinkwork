@@ -1619,6 +1619,49 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     )
 
 
+def test_full_update_preserves_existing_n8n_certificate_guardrail() -> None:
+    runner = load_runner()
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "n8n_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "n8n_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/n8n"
+                                    ),
+                                    "n8n_public_url": "https://n8n.thinkwork.ai",
+                                }
+                            }
+                        }
+                    }
+                ],
+            },
+            {
+                "type": "aws_acm_certificate",
+                "name": "n8n",
+                "instances": [{"attributes": {}}],
+            },
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {},
+        "dev",
+        "487219502366",
+        {"n8n_provisioned": {"value": True}},
+        state,
+    )
+
+    assert overrides["n8n_certificate_arn"].endswith(":certificate/n8n")
+    assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
+
+
 def test_n8n_destroy_normalizes_legacy_binary_database_guardrail() -> None:
     runner = load_runner()
     state = {

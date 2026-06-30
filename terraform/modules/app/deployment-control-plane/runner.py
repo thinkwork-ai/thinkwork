@@ -1870,7 +1870,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     )
     n8n_preserved_certificate_arn = (
         ""
-        if state_has_resource(current_state, "aws_acm_certificate", "n8n")
+        if app_key and state_has_resource(current_state, "aws_acm_certificate", "n8n")
         else n8n_guardrails.get("n8n_certificate_arn", "")
     )
 
