@@ -545,6 +545,12 @@ describe("handleInvocation — happy path", () => {
             instructions: "Research with sources.",
             builtInTools: ["read"],
             piExtensions: [
+              {
+                toolNames: ["read"],
+                targetType: "agent_profile",
+                agentProfileId: profileId,
+              },
+              {},
               DYNAMIC_EXTENSION_PAYLOAD({
                 versionId: "55555555-5555-4555-8555-555555555555",
                 assignmentId: "66666666-6666-4666-8666-666666666666",

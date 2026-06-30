@@ -8,7 +8,6 @@ import {
   runAgentLoop,
   type ActivityEmitEvent,
   type AgentProfileRunRecord,
-  type PiExtensionRuntimeDescriptor,
   type RunAgentLoopArgs,
   type RunAgentLoopResult,
   type ToolInvocationRecord,
@@ -76,11 +75,11 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function descriptorArray(value: unknown): PiExtensionRuntimeDescriptor[] {
+function descriptorArray(value: unknown): unknown[] {
   return Array.isArray(value)
-    ? (value.filter(
+    ? value.filter(
         (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
-      ) as PiExtensionRuntimeDescriptor[])
+      )
     : [];
 }
 
@@ -566,6 +565,8 @@ export async function executeAgentProfileDelegation(input: {
       (skill) => skill.slug,
     ),
     mcpRegistry: input.options.mcpRegistry,
+    dynamicExtensionToolNames:
+      input.options.profileExtensionToolNamesById?.get(profile.id) ?? [],
     requestedOverrides: input.requestedOverrides,
     now: input.options.now,
   });

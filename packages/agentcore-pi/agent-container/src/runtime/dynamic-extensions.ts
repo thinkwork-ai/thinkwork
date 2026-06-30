@@ -95,9 +95,12 @@ function createDynamicExtensionFactory(
           input: event,
         });
         if (!result.ok) {
-          throw new Error(
-            result.error ?? `Dynamic extension hook ${hook} failed.`,
-          );
+          console.warn("[dynamic-extension] hook failed", {
+            extensionId: descriptor.extensionId,
+            versionId: descriptor.versionId,
+            hook,
+            error: result.error ?? "Dynamic extension hook failed.",
+          });
         }
       });
     }

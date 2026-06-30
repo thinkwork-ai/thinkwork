@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type {
-  PiExtensionRuntimeDescriptor,
-  ToolInvocationRecord,
-} from "@thinkwork/pi-runtime-core";
+import type { ToolInvocationRecord } from "@thinkwork/pi-runtime-core";
 import type { McpToolRegistry } from "./mcp-registry.js";
 
 export type AgentProfileRunStatus =
@@ -69,7 +66,7 @@ export interface AgentProfileConfig {
   instructions: string;
   routingGuidance?: string;
   toolPolicy?: AgentProfileToolPolicy;
-  piExtensions?: PiExtensionRuntimeDescriptor[];
+  piExtensions?: unknown[];
   executionControls?: AgentProfileExecutionControls;
   contextPolicy?: AgentProfileContextPolicy;
 }
@@ -82,6 +79,7 @@ export interface CompileAgentProfileRunRequestArgs {
   availableToolNames: readonly string[];
   availableSkillNames: readonly string[];
   mcpRegistry: McpToolRegistry;
+  dynamicExtensionToolNames?: readonly string[];
   requestedOverrides?: Record<string, unknown>;
   now?: () => Date;
   idFactory?: () => string;
@@ -557,9 +555,7 @@ export function compileAgentProfileRunRequest(
       policy: args.profile.toolPolicy,
       availableToolNames: args.availableToolNames,
     }),
-    ...(args.profile.piExtensions ?? []).flatMap(
-      (extension) => extension.toolNames,
-    ),
+    ...(args.dynamicExtensionToolNames ?? []),
   ]);
   const skills = compileSkills({
     policy: args.profile.toolPolicy,

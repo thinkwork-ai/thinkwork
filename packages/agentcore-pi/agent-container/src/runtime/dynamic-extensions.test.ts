@@ -77,7 +77,8 @@ describe("loadDynamicPiExtensions", () => {
     expect(pi.tools.map((tool) => tool.name)).toEqual(["search_issues"]);
   });
 
-  it("loads hook-only extensions without adding model-visible tools", () => {
+  it("loads hook-only extensions without adding model-visible tools", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const result = loadDynamicPiExtensions({
       value: [
         descriptor({
@@ -93,6 +94,13 @@ describe("loadDynamicPiExtensions", () => {
     expect(result.extensionToolNames).toEqual([]);
     expect(pi.tools).toEqual([]);
     expect(pi.hooks.get("before_agent_start")).toHaveLength(1);
+    await expect(
+      pi.hooks.get("before_agent_start")?.[0]({}),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[dynamic-extension] hook failed",
+      expect.objectContaining({ hook: "before_agent_start" }),
+    );
   });
 
   it("skips malformed descriptors without throwing", () => {
