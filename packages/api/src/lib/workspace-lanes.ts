@@ -172,7 +172,8 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
       sourcePath.startsWith("plans/") ||
       sourcePath.startsWith("artifacts/") ||
       sourcePath.startsWith("workflows/") ||
-      sourcePath.startsWith("knowledge/"))
+      sourcePath.startsWith("knowledge/") ||
+      sourcePath.startsWith("skills/"))
   ) {
     return "space";
   }
@@ -330,10 +331,5 @@ export function isProtectedOrchestrationWritePath(path: string): boolean {
 
 export function isSpaceCapabilityWritePath(path: string): boolean {
   const clean = workspaceSourcePath(path);
-  return (
-    clean === "skills" ||
-    clean.startsWith("skills/") ||
-    clean === "TOOLS.md" ||
-    clean === "MCP.md"
-  );
+  return clean === "TOOLS.md" || clean === "MCP.md";
 }

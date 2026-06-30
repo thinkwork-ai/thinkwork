@@ -262,6 +262,10 @@ old`,
       content: "# Report\n",
       lastModified: "2026-05-22T09:06:00.000Z",
     },
+    "tenants/acme/spaces/board-pack/skills/ratio-review/SKILL.md": {
+      content: "---\ndisplay_name: Ratio Review\n---\n# Ratio Review\n",
+      lastModified: "2026-05-22T09:06:10.000Z",
+    },
     "tenants/acme/threads/thread-1/notes/findings.md": {
       content: "# Findings\n",
       lastModified: "2026-05-22T09:06:30.000Z",
@@ -494,6 +498,12 @@ describe("renderWorkspaceTuple", () => {
           owner: "space",
           path: "Spaces/board-pack/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
+        }),
+        expect.objectContaining({
+          owner: "space",
+          path: "Spaces/board-pack/skills/ratio-review/SKILL.md",
+          sourceKey:
+            "tenants/acme/spaces/board-pack/skills/ratio-review/SKILL.md",
         }),
         expect.objectContaining({
           owner: "user",

@@ -297,6 +297,7 @@ const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
 const TEMPLATE_ID = "33333333-3333-3333-3333-333333333333";
 const USER_ID = "44444444-4444-4444-4444-444444444444";
+const SPACE_ID = "55555555-5555-5555-5555-555555555555";
 const PROFILE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 const TRUST_PIPELINE_VERSION = "thinkwork-skill-trust-v1";
 const DEFAULT_RUNTIME_SKILL_IDS = [
@@ -670,6 +671,52 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(
       cfg.skillsConfig.some((skill) => skill.skillId === "web-search"),
     ).toBe(false);
+  });
+
+  it("registers active Space skills from the Space source tree", async () => {
+    vi.stubEnv("WORKSPACE_BUCKET", "workspace-bucket");
+    mockS3Send.mockImplementation(async (command: { input?: any }) => {
+      const prefix = String(command.input?.Prefix ?? "");
+      if (prefix) {
+        return {
+          Contents: prefix.includes("/spaces/customer/")
+            ? [
+                {
+                  Key: "tenants/acme/spaces/customer/skills/ratio-review/SKILL.md",
+                },
+              ]
+            : [],
+        };
+      }
+      return {
+        Body: {
+          transformToString: async () => "---\nname: Ratio Review\n---\n",
+        },
+      };
+    });
+    stageAgentRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([{ slug: "customer", workspace_folder_name: null }]);
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // agent_skills metadata overlay
+    stageTrustedRuntimeSkillRows("ratio-review");
+    rowsQueue.push([]); // kbs
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      spaceId: SPACE_ID,
+    });
+
+    expect(cfg.skillsConfig).toEqual(
+      expect.arrayContaining([
+        {
+          skillId: "ratio-review",
+          s3Key: "tenants/acme/spaces/customer/skills/ratio-review",
+        },
+      ]),
+    );
+    expect(cfg.trustedSkillIds).toContain("ratio-review");
   });
 
   it("filters workspace skills that have not passed the current trust pipeline", async () => {
@@ -1426,6 +1473,7 @@ describe("resolveAgentRuntimeConfig", () => {
 
     stageAgentRow();
     stageTenantSlug();
+    rowsQueue.push([{ slug: "engineering", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
@@ -1567,6 +1615,7 @@ describe("resolveAgentRuntimeConfig", () => {
   it("excludes a Space-restricted Coding profile when the invocation Space is not assigned", async () => {
     stageAgentRow();
     stageTenantSlug();
+    rowsQueue.push([{ slug: "finance", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
@@ -1605,6 +1654,7 @@ describe("resolveAgentRuntimeConfig", () => {
   it("includes a Space-restricted Coding profile when the invocation Space is assigned", async () => {
     stageAgentRow();
     stageTenantSlug();
+    rowsQueue.push([{ slug: "engineering", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
@@ -1791,6 +1841,7 @@ describe("resolveAgentRuntimeConfig", () => {
   it("overlays Space runtime overrides when spaceId is provided", async () => {
     stageAgentRow({ sandbox: { environment: "default-public" } });
     stageTenantSlug();
+    rowsQueue.push([{ slug: "finance", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs

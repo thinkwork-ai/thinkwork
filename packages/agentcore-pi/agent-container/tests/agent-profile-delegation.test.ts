@@ -102,7 +102,7 @@ async function options(
     parentModelId: "anthropic/claude-sonnet-4-5",
     tools: [...mcpTools, tool("execute_code")],
     extensionFactories: [],
-    extensionToolNames: ["web_search", "web_extract"],
+    extensionToolNames: ["web_search", "web_extract", "workspace_skill"],
     workspaceSkills: [
       {
         slug: "source-review",
@@ -235,7 +235,11 @@ describe("agent profile delegation", () => {
     expect(runLoop).toHaveBeenCalledTimes(1);
     expect(captured?.modelId).toBe("anthropic/claude-haiku-4-5");
     expect(captured?.builtinToolNames).toEqual(["read"]);
-    expect(captured?.extensionToolNames).toEqual(["web_search", "web_extract"]);
+    expect(captured?.extensionToolNames).toEqual([
+      "web_search",
+      "web_extract",
+      "workspace_skill",
+    ]);
     expect(captured?.tools.map((item) => item.name)).toEqual([
       "find_many_opportunities",
     ]);
@@ -246,6 +250,13 @@ describe("agent profile delegation", () => {
       "execute_code",
     );
     expect(captured?.systemPrompt).toContain("Research with sources.");
+    expect(captured?.systemPrompt).toContain(
+      "Configured skills for this profile:",
+    );
+    expect(captured?.systemPrompt).toContain("- source-review");
+    expect(captured?.systemPrompt).toContain(
+      "Use the workspace_skill tool to read the full SKILL.md instructions",
+    );
     expect(captured?.systemPrompt).toContain("Discovery");
     expect(captured?.systemPrompt).toContain("Planning");
     expect(captured?.systemPrompt).toContain("Execution");
@@ -289,7 +300,13 @@ describe("agent profile delegation", () => {
       executeAgentProfileDelegation({
         options: await options({
           runLoop,
-          extensionToolNames: ["web_search", "web_extract", "recall", "reflect"],
+          extensionToolNames: [
+            "web_search",
+            "web_extract",
+            "workspace_skill",
+            "recall",
+            "reflect",
+          ],
         }),
         profileSlug: "research",
         task: "Recall my user memory verification passphrase and General Space launch codename.",
@@ -520,7 +537,7 @@ describe("agent profile delegation", () => {
         message:
           "Search the web and cite the source for the CEO of Stripe today.",
         modelId: "anthropic/claude-haiku-4-5",
-        extensionToolNames: ["web_search", "web_extract"],
+        extensionToolNames: ["web_search", "web_extract", "workspace_skill"],
         threadId: expect.stringContaining(":profile:"),
       }),
       expect.objectContaining({

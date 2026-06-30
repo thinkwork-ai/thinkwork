@@ -379,6 +379,13 @@ export async function resolveAgentRuntimeConfig(
     .where(eq(tenants.id, opts.tenantId));
   const tenantSlug = tenant?.slug ?? "";
   const agentSlug = agent.slug ?? "";
+  const activeSpaceSlug = opts.spaceId
+    ? await resolveSpaceWorkspaceFolderName({
+        tenantId: opts.tenantId,
+        spaceId: opts.spaceId,
+        logPrefix,
+      })
+    : null;
 
   // Resolve email: explicit override → users lookup → optional human-pair fallback.
   //
@@ -538,6 +545,7 @@ export async function resolveAgentRuntimeConfig(
   let skillsConfig: SkillConfig[] = await loadWorkspaceSkillConfigs({
     tenantSlug,
     agentSlug,
+    spaceSlug: activeSpaceSlug,
     logPrefix,
   });
   skillsConfig = await applyAgentSkillMetadata({
@@ -1345,25 +1353,48 @@ function normalizeMcpToolNames(value: unknown): string[] {
 export async function loadWorkspaceSkillConfigs(input: {
   tenantSlug: string;
   agentSlug: string;
+  spaceSlug?: string | null;
   logPrefix: string;
 }): Promise<SkillConfig[]> {
   const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket || !input.tenantSlug || !input.agentSlug) return [];
 
-  const prefix = `tenants/${input.tenantSlug}/agents/${input.agentSlug}/`;
+  const prefixes = [
+    `tenants/${input.tenantSlug}/agents/${input.agentSlug}/`,
+    ...(input.spaceSlug
+      ? [`tenants/${input.tenantSlug}/spaces/${input.spaceSlug}/`]
+      : []),
+  ];
+  const bySkillId = new Map<string, SkillConfig>();
+  for (const prefix of prefixes) {
+    const skills = await loadWorkspaceSkillConfigsForPrefix({
+      bucket,
+      prefix,
+      logPrefix: input.logPrefix,
+    });
+    for (const skill of skills) bySkillId.set(skill.skillId, skill);
+  }
+  return [...bySkillId.values()];
+}
+
+async function loadWorkspaceSkillConfigsForPrefix(input: {
+  bucket: string;
+  prefix: string;
+  logPrefix: string;
+}): Promise<SkillConfig[]> {
   const paths: string[] = [];
   let continuationToken: string | undefined;
   do {
     const response = await s3.send(
       new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: prefix,
+        Bucket: input.bucket,
+        Prefix: input.prefix,
         ContinuationToken: continuationToken,
       }),
     );
     for (const item of response.Contents ?? []) {
-      if (!item.Key?.startsWith(prefix)) continue;
-      const relPath = item.Key.slice(prefix.length);
+      if (!item.Key?.startsWith(input.prefix)) continue;
+      const relPath = item.Key.slice(input.prefix.length);
       if (relPath) paths.push(relPath);
     }
     continuationToken = response.IsTruncated
@@ -1374,7 +1405,10 @@ export async function loadWorkspaceSkillConfigs(input: {
   const skills = await discoverWorkspaceSkillsFromPaths(paths, async (path) => {
     try {
       const response = await s3.send(
-        new GetObjectCommand({ Bucket: bucket, Key: prefix + path }),
+        new GetObjectCommand({
+          Bucket: input.bucket,
+          Key: input.prefix + path,
+        }),
       );
       return (await response.Body?.transformToString("utf-8")) ?? "";
     } catch (err) {
@@ -1390,8 +1424,35 @@ export async function loadWorkspaceSkillConfigs(input: {
     .filter((skill) => !isBuiltinToolSlug(skill.slug))
     .map((skill) => ({
       skillId: skill.slug,
-      s3Key: `${prefix}${skill.skillPath.replace(/\/SKILL\.md$/, "")}`,
+      s3Key: `${input.prefix}${skill.skillPath.replace(/\/SKILL\.md$/, "")}`,
     }));
+}
+
+async function resolveSpaceWorkspaceFolderName(input: {
+  tenantId: string;
+  spaceId: string;
+  logPrefix: string;
+}): Promise<string | null> {
+  const db = getDb();
+  const [space] = await db
+    .select({
+      slug: spaces.slug,
+      workspace_folder_name: spaces.workspace_folder_name,
+    })
+    .from(spaces)
+    .where(
+      and(eq(spaces.id, input.spaceId), eq(spaces.tenant_id, input.tenantId)),
+    )
+    .limit(1);
+
+  if (!space?.slug) {
+    console.warn(
+      `${input.logPrefix} Space ${input.spaceId} not found for tenant ${input.tenantId}; space skills skipped`,
+    );
+    return null;
+  }
+
+  return space.workspace_folder_name ?? space.slug;
 }
 
 export async function applyAgentSkillMetadata(input: {

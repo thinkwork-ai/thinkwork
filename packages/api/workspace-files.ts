@@ -2720,7 +2720,7 @@ function rejectSpaceCapabilityWrite(
     code: "space_capability_file_rejected",
     error:
       `Spaces cannot contain capability files such as ${path}. ` +
-      "Put skills, TOOLS.md, and MCP.md under master/workspaces/ instead.",
+      "Put tool and MCP policy files under the agent workspace instead.",
   });
 }
 
@@ -2929,6 +2929,9 @@ async function handlePut(
         content,
       );
       if (refreshError) return refreshError;
+    }
+    if (isSkillMarkerPath(cleanPath)) {
+      await refreshSpaceSkillInventory(target);
     }
     if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
       // Space-local Agent Profile projection (plan 2026-06-12-002 U7):
@@ -3316,6 +3319,9 @@ async function handleDelete(
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
   } else if (target.kind === "space") {
+    if (isSkillMarkerPath(cleanPath)) {
+      await refreshSpaceSkillInventory(target);
+    }
     if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
       // Mirror the central agents/<slug>.md delete: removing the file
       // removes the space-local projection row (plan 2026-06-12-002 U7).
@@ -3519,19 +3525,91 @@ async function stageGatedSkillUpdate(
   }
 }
 
+const SPACE_SKILLS_SECTION_START = "<!-- BEGIN THINKWORK SPACE SKILLS -->";
+const SPACE_SKILLS_SECTION_END = "<!-- END THINKWORK SPACE SKILLS -->";
+
+async function refreshSpaceSkillInventory(
+  target: SpaceTarget,
+): Promise<void> {
+  const installedPaths = await listPrefix(target.prefix);
+  const skillSlugs = [
+    ...new Set(
+      installedPaths
+        .map((path) => {
+          const match = /^skills\/([^/]+)\/SKILL\.md$/.exec(path);
+          return match?.[1] ?? "";
+        })
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const spaceMdKey = target.key("SPACE.md");
+  let existing = "";
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({ Bucket: bucket(), Key: spaceMdKey }),
+    );
+    existing = (await response.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNoSuchKey(err)) throw err;
+  }
+
+  const next = replaceSpaceSkillsSection(existing, skillSlugs);
+  if (next === existing) return;
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: spaceMdKey,
+      Body: next,
+      ContentType: "text/markdown; charset=utf-8",
+    }),
+  );
+}
+
+function replaceSpaceSkillsSection(
+  content: string,
+  skillSlugs: string[],
+): string {
+  const stripped = stripSpaceSkillsSection(content).trimEnd();
+  if (skillSlugs.length === 0) return stripped ? `${stripped}\n` : "";
+
+  const lines = [
+    SPACE_SKILLS_SECTION_START,
+    "## Skills",
+    "",
+    "The active Space has these workspace skills installed. Use the `workspace_skill` " +
+      "tool to read a skill's full `SKILL.md` instructions before applying it.",
+    "",
+    ...skillSlugs.map((slug) => `- \`${slug}\` (\`skills/${slug}/SKILL.md\`)`),
+    SPACE_SKILLS_SECTION_END,
+  ];
+  const section = lines.join("\n");
+  return stripped ? `${stripped}\n\n${section}\n` : `${section}\n`;
+}
+
+function stripSpaceSkillsSection(content: string): string {
+  const start = content.indexOf(SPACE_SKILLS_SECTION_START);
+  if (start === -1) return content;
+  const end = content.indexOf(SPACE_SKILLS_SECTION_END, start);
+  if (end === -1) return content;
+  return (
+    content.slice(0, start).trimEnd() +
+    "\n\n" +
+    content.slice(end + SPACE_SKILLS_SECTION_END.length).trimStart()
+  );
+}
+
 async function handleInstallSkill(
   deps: HandlerDeps,
   slug: string,
   wiringChoice: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "space") {
-    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
-  }
-  if (target.kind !== "agent") {
+  if (target.kind !== "agent" && target.kind !== "space") {
     return json(400, {
       ok: false,
-      error: "install-skill requires an agent target",
+      error: "install-skill requires an agent or space target",
       code: "unsupported_target",
     });
   }
@@ -3558,6 +3636,7 @@ async function handleInstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
@@ -3618,6 +3697,7 @@ async function handleUninstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
@@ -3649,13 +3729,10 @@ async function handleReinstallSkill(
   slug: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "space") {
-    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
-  }
-  if (target.kind !== "agent") {
+  if (target.kind !== "agent" && target.kind !== "space") {
     return json(400, {
       ok: false,
-      error: "reinstall-skill requires an agent target",
+      error: "reinstall-skill requires an agent or space target",
       code: "unsupported_target",
     });
   }
@@ -3748,6 +3825,7 @@ async function handleReinstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
