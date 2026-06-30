@@ -470,16 +470,11 @@ describe("DesktopOAuthController", () => {
     ).resolves.toBe("[]");
   });
 
-  it("opens the WorkOS browser logout URL before revoking the Cognito refresh token", async () => {
+  it("does not open the browser when desktop WorkOS logout is revoked server-side", async () => {
     const openExternal = vi.fn(async () => undefined);
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
-          logout_url:
-            "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123",
-        }),
-      )
+      .mockResolvedValueOnce(jsonResponse({ logout_url: null }))
       .mockResolvedValueOnce(new Response("", { status: 200 }));
     const controller = createController({
       fetch: fetchImpl,
@@ -509,9 +504,7 @@ describe("DesktopOAuthController", () => {
         }),
       },
     );
-    expect(openExternal).toHaveBeenCalledWith(
-      "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123",
-    );
+    expect(openExternal).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       "https://thinkwork-dev.auth.us-east-1.amazoncognito.com/oauth2/revoke",

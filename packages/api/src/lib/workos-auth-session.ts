@@ -66,7 +66,7 @@ export interface WorkosSignOutAuditInput {
   workosUserId: string;
   authProviderResourceId: string;
   tenantReferenceId: string;
-  result: "workos_logout_url_issued";
+  result: "workos_logout_url_issued" | "workos_session_revoked";
 }
 
 export function createDefaultWorkosLogoutDeps(
@@ -126,9 +126,42 @@ export async function createWorkosLogoutRedirect(args: {
   });
   if (!session) return { logout_url: null };
 
+  const returnTo = normalizeLogoutReturnTo(args.returnTo);
+  if (isDesktopLogoutReturnToValue(returnTo)) {
+    const secret = await deps.getSecret(session.clientSecretRef);
+    const clientSecret = parseWorkosClientSecret(secret);
+    if (!clientSecret) {
+      throw new WorkosLogoutError(
+        "WorkOS client secret is not configured",
+        500,
+      );
+    }
+
+    await deps.revokeWorkosSession({
+      sessionId: session.workosSessionId,
+      clientSecret,
+    });
+    await deps.markSessionLoggedOut({
+      sessionRowId: session.id,
+      now: deps.now(),
+    });
+    await deps.emitSignOutAudit({
+      tenantId: session.tenantId,
+      userId: session.userId,
+      cognitoSub: auth.principalId,
+      sessionId: session.id,
+      workosUserId: session.workosUserId,
+      authProviderResourceId: session.authProviderResourceId,
+      tenantReferenceId: session.tenantReferenceId,
+      result: "workos_session_revoked",
+    });
+
+    return { logout_url: null };
+  }
+
   const logoutUrl = buildWorkosLogoutUrl({
     sessionId: session.workosSessionId,
-    returnTo: normalizeLogoutReturnTo(args.returnTo),
+    returnTo,
   });
   await deps.markSessionLoggedOut({
     sessionRowId: session.id,
@@ -192,6 +225,14 @@ function isDesktopLogoutReturnTo(url: URL): boolean {
     url.hostname === "oauth" &&
     url.pathname === "/callback"
   );
+}
+
+function isDesktopLogoutReturnToValue(value: string): boolean {
+  try {
+    return isDesktopLogoutReturnTo(new URL(value));
+  } catch {
+    return false;
+  }
 }
 
 export class WorkosLogoutError extends Error {

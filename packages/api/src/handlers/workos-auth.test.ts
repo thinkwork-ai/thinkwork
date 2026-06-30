@@ -179,7 +179,7 @@ describe("workos-auth handler", () => {
     });
   });
 
-  it("allows desktop deep links as WorkOS browser logout return targets", async () => {
+  it("revokes server-side without returning a browser logout URL for desktop logout", async () => {
     const logoutDeps = logoutDepsForHandler();
     const handler = createWorkosAuthHandler({
       workosAuthDeps: depsForHandler(),
@@ -197,9 +197,21 @@ describe("workos-auth handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body ?? "{}")).toEqual({
-      logout_url:
-        "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123&return_to=thinkwork-canary%3A%2F%2Foauth%2Fcallback",
+    expect(JSON.parse(response.body ?? "{}")).toEqual({ logout_url: null });
+    expect(logoutDeps.getSecret).toHaveBeenCalledWith("secret-ref");
+    expect(logoutDeps.revokeWorkosSession).toHaveBeenCalledWith({
+      sessionId: "workos-session-123",
+      clientSecret: "secret_123",
+    });
+    expect(logoutDeps.emitSignOutAudit).toHaveBeenCalledWith({
+      tenantId: "tenant-123",
+      userId: "user-123",
+      cognitoSub: "cognito-sub-123",
+      sessionId: "session-row-123",
+      workosUserId: "workos-user-123",
+      authProviderResourceId: "resource-123",
+      tenantReferenceId: "tenant-ref-123",
+      result: "workos_session_revoked",
     });
   });
 
