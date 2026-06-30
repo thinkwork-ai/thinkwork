@@ -291,7 +291,7 @@ function n8nWorkflowDetailUrl(baseUrl: string, workflowId: string): string {
   return new URL(`workflows/${encodeURIComponent(workflowId)}`, root).toString();
 }
 
-function n8nApiRootUrl(value: string): URL {
+export function n8nApiRootUrl(value: string): URL {
   const url = new URL(value);
   const path = url.pathname.replace(/\/+$/, "");
   if (path.endsWith("/api/v1")) {
@@ -341,7 +341,10 @@ function inferTriggerTypes(nodes: unknown[]): string[] {
   return [...values];
 }
 
-function parseJsonRecord(text: string, endpoint: string): Record<string, unknown> {
+export function parseJsonRecord(
+  text: string,
+  endpoint: string,
+): Record<string, unknown> {
   try {
     return recordValue(JSON.parse(text));
   } catch (error) {
@@ -621,7 +624,7 @@ async function ensureN8nWorkflowTrigger(
     });
 }
 
-async function loadN8nInstall(
+export async function loadN8nInstall(
   database: WorkflowDb,
   input: { tenantId: string; installId: string },
 ) {
@@ -645,7 +648,7 @@ async function loadN8nInstall(
   return install;
 }
 
-async function loadN8nManagedApplication(
+export async function loadN8nManagedApplication(
   database: WorkflowDb,
   tenantId: string,
 ) {
@@ -662,7 +665,10 @@ async function loadN8nManagedApplication(
   return app ?? null;
 }
 
-async function loadN8nApiCredential(database: WorkflowDb, tenantId: string) {
+export async function loadN8nApiCredential(
+  database: WorkflowDb,
+  tenantId: string,
+) {
   const [credential] = await dbSelect(database)
     .select({
       id: tenantCredentials.id,
@@ -681,13 +687,13 @@ async function loadN8nApiCredential(database: WorkflowDb, tenantId: string) {
   return credential ?? null;
 }
 
-type N8nWorkflowReadiness = {
+export type N8nWorkflowReadiness = {
   state: "ready" | "blocked_not_ready" | "disabled";
   bindingStatus: "ready" | "blocked_not_ready" | "disabled";
   reasons: unknown[];
 };
 
-function n8nDiscoveryReadiness(
+export function n8nDiscoveryReadiness(
   install: { state: string },
   app: {
     desired_status?: string | null;
@@ -750,7 +756,7 @@ function n8nDiscoveryReadiness(
         {
           code: "n8n_api_key_missing",
           message:
-            "n8n API key is not configured. Add one in the n8n plugin Settings tab to discover workflows.",
+            "n8n API key is not configured. Add one in the n8n plugin settings to discover workflows.",
         },
       ],
     };
@@ -817,7 +823,7 @@ function normalizeTriggerTypes(value: unknown): string[] {
   ];
 }
 
-function normalizeDate(value: unknown): Date | null {
+export function normalizeDate(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date)
     return Number.isNaN(value.getTime()) ? null : value;
@@ -834,11 +840,11 @@ function booleanOrNull(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function stringValue(value: unknown): string | null {
+export function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function recordValue(value: unknown): Record<string, unknown> {
+export function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};

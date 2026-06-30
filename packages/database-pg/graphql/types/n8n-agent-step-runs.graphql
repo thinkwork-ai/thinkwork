@@ -104,6 +104,49 @@ type N8nAgentStepRunTelemetry {
   updatedAt: AWSDateTime!
 }
 
+type N8nAppWorkflowRow {
+  externalWorkflowId: String!
+  name: String!
+  active: Boolean
+  triggerTypes: [String!]!
+  lastModifiedAt: AWSDateTime
+  lastExecutionAt: AWSDateTime
+  connectedWorkflowId: ID
+  connectedBindingId: ID
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  nativeWorkflowUrl: String
+  warnings: [String!]!
+}
+
+type N8nAppExecutionRow {
+  externalExecutionId: String!
+  externalWorkflowId: String!
+  workflowName: String
+  status: String!
+  mode: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  durationMs: Int
+  failureMessage: String
+  nativeExecutionUrl: String!
+  nativeWorkflowUrl: String!
+  bridgeRuns: [N8nAgentStepRunTelemetry!]!
+  warnings: [String!]!
+}
+
+type N8nAppData {
+  installId: ID!
+  workflowReadinessState: WorkflowReadinessState!
+  workflowReadinessReasons: AWSJSON!
+  executionReadinessState: WorkflowReadinessState!
+  executionReadinessReasons: AWSJSON!
+  nativeBaseUrl: String
+  workflows: [N8nAppWorkflowRow!]!
+  executions: [N8nAppExecutionRow!]!
+}
+
 extend type Query {
   n8nAgentStepRuns(threadId: ID, limit: Int): [N8nAgentStepRunTelemetry!]!
+  n8nAppData(installId: ID!, executionLimit: Int): N8nAppData!
 }
