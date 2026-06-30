@@ -16,7 +16,7 @@ status: active
 - Linear attached document: `Plan: Add n8n integrated app`.
 - Child issues: none found. Autopilot will use plan units as implementation units.
 - Blocking issue relations: none found.
-- Current branch: `codex/think-113-u2-n8n-app-data`.
+- Current branch: `codex/think-113-u3-n8n-app-tables`.
 
 ## Context discovery
 
@@ -70,7 +70,16 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | 2026-06-30 | U2 typechecks | `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/web typecheck`. | Passed |
 | 2026-06-30 | U2 CI lint failure | PR #3138 lint failed on `verify-plugin-source-boundary` because the new shared n8n app-data resolver paths were not documented in `scripts/plugin-source-boundary-allowlist.mjs`. Added explicit allowlist entries. | Fixed |
 | 2026-06-30 | U2 source-boundary verification | `pnpm lint:plugin-source`. | Passed |
+| 2026-06-30 | U2 merge | PR #3138 required a rebase onto current `main`, then passed required checks and was squash-merged at `ab4970dda3a138d46f5548eb9b6bbd66ed40e2c4`. | Passed |
+| 2026-06-30 | U3 branch created | Created `codex/think-113-u3-n8n-app-tables` from updated `origin/main` at `ab4970dda`. | Passed |
+| 2026-06-30 | U3 objective restated | Add the read-only native n8n app tables, search/filter/refresh behavior, empty/error states, native n8n drill-in links, and ThinkWork bridge links. | Passed |
+| 2026-06-30 | U3 package tests | `pnpm --filter @thinkwork/plugin-n8n test`. | Passed |
+| 2026-06-30 | U3 route tests | `pnpm --dir apps/web exec vitest run src/components/apps/PluginAppRoute.test.tsx`. | Passed |
+| 2026-06-30 | U3 typechecks | `pnpm --filter @thinkwork/plugin-n8n typecheck`; `pnpm --filter @thinkwork/web typecheck`. | Passed |
+| 2026-06-30 | U3 source-boundary verification | `pnpm lint:plugin-source`; added the narrow shared web-host adapter allowlist entry for the n8n app. | Passed |
+| 2026-06-30 | U3 local dev server | Started `pnpm --filter @thinkwork/web dev -- --host 0.0.0.0 --port 5174`; fresh browser context loaded `/apps/n8n/workflows`, redirected to sign-in, and reported no page errors. | Passed |
+| 2026-06-30 | U3 production web build | `pnpm --filter @thinkwork/web build`; existing route-test/sourcemap/chunk-size warnings only. | Passed |
 
 ## Active unit
 
-U2 is active. The branch adds server-side n8n execution discovery, extends the GraphQL schema with `n8nAppData(installId)`, and composes workflow discovery, execution discovery, native n8n links, and redacted bridge telemetry into app-ready read-only rows.
+U3 is active. The branch builds the n8n installed app UI under `plugins/n8n/n8n-app`, registers it in the ThinkWork main-shell plugin app host, and consumes the U2 `n8nAppData(installId)` query without exposing write controls or browser-entered n8n credentials.

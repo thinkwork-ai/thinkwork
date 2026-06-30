@@ -8,6 +8,7 @@ import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import type { InstalledPluginAppsQuery as InstalledPluginAppsQueryResult } from "@/gql/graphql";
+import { N8nWorkflowOperationsApp } from "@/components/plugin-apps/n8n-workflows/N8nWorkflowOperationsApp";
 import { TwentyClientEngagementApp } from "@/components/plugin-apps/twenty-client-engagement/TwentyClientEngagementApp";
 
 type InstalledPluginApp =
@@ -106,6 +107,15 @@ function PluginAppHost({ app }: { app: InstalledPluginApp }) {
   if (app.pluginKey === "twenty" && app.appKey === "twenty-client-engagement") {
     return (
       <TwentyClientEngagementApp
+        appDisplayName={app.displayName}
+        pluginDisplayName={app.pluginDisplayName}
+      />
+    );
+  }
+  if (app.pluginKey === "n8n" && app.appKey === "n8n-workflow-operations") {
+    return (
+      <N8nWorkflowOperationsApp
+        pluginInstallId={app.pluginInstallId}
         appDisplayName={app.displayName}
         pluginDisplayName={app.pluginDisplayName}
       />

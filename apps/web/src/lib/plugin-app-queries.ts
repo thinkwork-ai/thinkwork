@@ -70,3 +70,54 @@ export const UpsertPluginAppOverlayMutation = graphql(`
     }
   }
 `);
+
+export const N8nAppDataQuery = graphql(`
+  query N8nAppData($installId: ID!, $executionLimit: Int) {
+    n8nAppData(installId: $installId, executionLimit: $executionLimit) {
+      installId
+      workflowReadinessState
+      workflowReadinessReasons
+      executionReadinessState
+      executionReadinessReasons
+      nativeBaseUrl
+      workflows {
+        externalWorkflowId
+        name
+        active
+        triggerTypes
+        lastModifiedAt
+        lastExecutionAt
+        connectedWorkflowId
+        connectedBindingId
+        readinessState
+        readinessReasons
+        nativeWorkflowUrl
+        warnings
+      }
+      executions {
+        externalExecutionId
+        externalWorkflowId
+        workflowName
+        status
+        mode
+        startedAt
+        finishedAt
+        durationMs
+        failureMessage
+        nativeExecutionUrl
+        nativeWorkflowUrl
+        warnings
+        bridgeRuns {
+          id
+          threadId
+          threadTurnId
+          status
+          resumeStatus
+          summary
+          errorMessage
+          updatedAt
+        }
+      }
+    }
+  }
+`);

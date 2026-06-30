@@ -16,6 +16,10 @@ export const n8nApplicationConfig = {
     runtime: "trusted-bundled-react",
     route: `/apps/n8n/${N8N_APP_ROUTE_SEGMENT}`,
     sourceRoot: "plugins/n8n/n8n-app",
+    frontComponent: {
+      source: "src/front-components/thinkwork-workflows.front-component.tsx",
+      exportName: "ThinkWorkN8nWorkflowsApp",
+    },
   },
   dataAccess: {
     mode: "thinkwork-session",
