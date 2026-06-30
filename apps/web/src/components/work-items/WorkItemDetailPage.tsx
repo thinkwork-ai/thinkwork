@@ -29,6 +29,7 @@ import {
   FileText,
   Flag,
   GitBranch,
+  Info,
   Link2,
   LockOpen,
   MessageSquareText,
@@ -39,6 +40,7 @@ import {
   UserPlus,
   UserRound,
   Workflow,
+  X,
 } from "lucide-react";
 import {
   Button,
@@ -249,6 +251,7 @@ export function WorkItemDetailPage({
     CreateWorkItemCommentMutation,
   );
   const [humanActionError, setHumanActionError] = useState<string | null>(null);
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
   const itemKey = item ? workItemKey(item) : "Work Item";
   usePageHeaderActions({
@@ -265,6 +268,20 @@ export function WorkItemDetailPage({
       },
       { label: item ? `${itemKey} ${item.title}` : "Work Item" },
     ],
+    action: item ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-8 text-muted-foreground hover:text-foreground lg:hidden"
+        aria-label="Show Work Item details"
+        title="Show Work Item details"
+        onClick={() => setDetailsSheetOpen(true)}
+      >
+        <Info className="size-4" />
+      </Button>
+    ) : undefined,
+    actionKey: item ? `work-item-detail-actions:${item.id}` : undefined,
   });
 
   if (!tenantId || (fetching && !data)) return <PageSkeleton />;
@@ -418,97 +435,214 @@ export function WorkItemDetailPage({
             />
           </div>
 
-          <aside className="space-y-3 lg:sticky lg:top-5 lg:self-start">
-            <RailSection title="Properties">
-              <EditablePropertyRow
-                icon={<CircleDot className="size-4" />}
-                label="Status"
-                value={
-                  item.statusId ??
-                  statusOptions.find(
-                    (status) => status.category === item.status?.category,
-                  )?.id ??
-                  ""
-                }
-                options={statusOptions.map((status) => ({
-                  value: status.id,
-                  label:
-                    status.name ?? workItemStatusCategoryLabel(status.category),
-                  color: status.color,
-                }))}
-                disabled={statusSaving}
-                onChange={handleStatusChange}
-              />
-              <EditablePropertyRow
-                icon={<GitBranch className="size-4" />}
-                label="Priority"
-                value={item.priority}
-                options={WORK_ITEM_PRIORITY_OPTIONS}
-                disabled={workItemSaving}
-                onChange={(priority) =>
-                  handleWorkItemUpdate({
-                    priority: priority as WorkItemPriority,
-                  })
-                }
-              />
-              <EditablePropertyRow
-                icon={<UserRound className="size-4" />}
-                label="Assignee"
-                value={item.ownerUserId ?? ""}
-                options={[
-                  { value: "", label: "Unassigned" },
-                  ...assignees.map((assignee) => ({
-                    value: assignee.id,
-                    label: assignee.name,
-                  })),
-                ]}
-                disabled={workItemSaving}
-                onChange={(ownerUserId) =>
-                  handleWorkItemUpdate({
-                    ownerUserId: ownerUserId || null,
-                  })
-                }
-              />
-              <PropertyRow
-                icon={<CalendarDays className="size-4" />}
-                label="Created"
-                value={formatDate(item.createdAt)}
-              />
-              <PropertyRow
-                icon={<CalendarDays className="size-4" />}
-                label="Updated"
-                value={formatDate(item.updatedAt)}
-              />
-              <PropertyRow
-                icon={<Link2 className="size-4" />}
-                label="Space"
-                value={workItemSpaceLabel(item.spaceId, spaces)}
-              />
-            </RailSection>
-
-            <LabelsRailSection
+          <aside className="hidden space-y-3 lg:sticky lg:top-5 lg:block lg:self-start">
+            <WorkItemDetailRail
+              presentation="cards"
               item={item}
+              spaces={spaces}
+              assignees={assignees}
               labels={labels}
-              disabled={workItemSaving}
-              onChange={(labelIds) => handleWorkItemUpdate({ labelIds })}
-            />
-
-            <OpenEngineRailSection
-              item={item}
+              statusOptions={statusOptions}
               events={sortedEvents}
               documents={documents}
+              statusSaving={statusSaving}
+              workItemSaving={workItemSaving}
               saving={humanActionSaving}
-              queueSaving={workItemSaving}
               error={humanActionError}
-              onQueueChange={(openEngineQueueKey) =>
-                handleWorkItemUpdate({ openEngineQueueKey })
-              }
+              onStatusChange={handleStatusChange}
+              onWorkItemUpdate={handleWorkItemUpdate}
               onAction={handleOpenEngineHumanAction}
             />
           </aside>
         </div>
       </div>
+
+      {detailsSheetOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/10"
+          role="presentation"
+          onClick={() => setDetailsSheetOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-label="Work Item details"
+            data-testid="work-item-details-floating-panel"
+            className="fixed right-3 top-16 w-[259px] animate-in slide-in-from-right-10 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-2 top-2 z-10 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Close Work Item details"
+              title="Close Work Item details"
+              onClick={() => setDetailsSheetOpen(false)}
+            >
+              <X className="size-4" />
+            </button>
+            <WorkItemDetailRail
+              presentation="single"
+              item={item}
+              spaces={spaces}
+              assignees={assignees}
+              labels={labels}
+              statusOptions={statusOptions}
+              events={sortedEvents}
+              documents={documents}
+              statusSaving={statusSaving}
+              workItemSaving={workItemSaving}
+              saving={humanActionSaving}
+              error={humanActionError}
+              onStatusChange={handleStatusChange}
+              onWorkItemUpdate={handleWorkItemUpdate}
+              onAction={handleOpenEngineHumanAction}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
+  );
+}
+
+function WorkItemDetailRail({
+  presentation,
+  item,
+  spaces,
+  assignees,
+  labels,
+  statusOptions,
+  events,
+  documents,
+  statusSaving,
+  workItemSaving,
+  saving,
+  error,
+  onStatusChange,
+  onWorkItemUpdate,
+  onAction,
+}: {
+  presentation: "cards" | "single";
+  item: WorkItemSummary;
+  spaces: WorkItemSpaceSummary[];
+  assignees: WorkItemAssigneeSummary[];
+  labels: WorkItemLabelSummary[];
+  statusOptions: WorkItemStatusSummary[];
+  events: WorkItemEventSummary[];
+  documents: WorkItemDocumentSummary[];
+  statusSaving: boolean;
+  workItemSaving: boolean;
+  saving: boolean;
+  error: string | null;
+  onStatusChange: (statusId: string) => Promise<boolean>;
+  onWorkItemUpdate: (patch: {
+    priority?: WorkItemPriority;
+    ownerUserId?: string | null;
+    labelIds?: string[];
+    openEngineQueueKey?: string | null;
+  }) => Promise<boolean>;
+  onAction: (
+    actionType: OpenEngineHumanActionType,
+    message: string,
+  ) => Promise<boolean>;
+}) {
+  const sectionVariant = presentation === "single" ? "separator" : "card";
+  const content = (
+    <>
+      <RailSection title="Properties" variant={sectionVariant}>
+        <EditablePropertyRow
+          icon={<CircleDot className="size-4" />}
+          label="Status"
+          value={
+            item.statusId ??
+            statusOptions.find(
+              (status) => status.category === item.status?.category,
+            )?.id ??
+            ""
+          }
+          options={statusOptions.map((status) => ({
+            value: status.id,
+            label: status.name ?? workItemStatusCategoryLabel(status.category),
+            color: status.color,
+          }))}
+          disabled={statusSaving}
+          onChange={onStatusChange}
+        />
+        <EditablePropertyRow
+          icon={<GitBranch className="size-4" />}
+          label="Priority"
+          value={item.priority}
+          options={WORK_ITEM_PRIORITY_OPTIONS}
+          disabled={workItemSaving}
+          onChange={(priority) =>
+            onWorkItemUpdate({
+              priority: priority as WorkItemPriority,
+            })
+          }
+        />
+        <EditablePropertyRow
+          icon={<UserRound className="size-4" />}
+          label="Assignee"
+          value={item.ownerUserId ?? ""}
+          options={[
+            { value: "", label: "Unassigned" },
+            ...assignees.map((assignee) => ({
+              value: assignee.id,
+              label: assignee.name,
+            })),
+          ]}
+          disabled={workItemSaving}
+          onChange={(ownerUserId) =>
+            onWorkItemUpdate({
+              ownerUserId: ownerUserId || null,
+            })
+          }
+        />
+        <PropertyRow
+          icon={<Link2 className="size-4" />}
+          label="Space"
+          value={workItemSpaceLabel(item.spaceId, spaces)}
+        />
+        <PropertyRow
+          icon={<CalendarDays className="size-4" />}
+          label="Created"
+          value={formatDate(item.createdAt)}
+        />
+        <PropertyRow
+          icon={<CalendarDays className="size-4" />}
+          label="Updated"
+          value={formatDate(item.updatedAt)}
+        />
+      </RailSection>
+
+      <LabelsRailSection
+        variant={sectionVariant}
+        item={item}
+        labels={labels}
+        disabled={workItemSaving}
+        onChange={(labelIds) => onWorkItemUpdate({ labelIds })}
+      />
+
+      <OpenEngineRailSection
+        variant={sectionVariant}
+        item={item}
+        events={events}
+        documents={documents}
+        saving={saving}
+        queueSaving={workItemSaving}
+        error={error}
+        onQueueChange={(openEngineQueueKey) =>
+          onWorkItemUpdate({ openEngineQueueKey })
+        }
+        onAction={onAction}
+      />
+    </>
+  );
+
+  if (presentation === "cards") return content;
+
+  return (
+    <div className="w-[259px] rounded-md border bg-background p-3 shadow-lg">
+      {content}
+    </div>
   );
 }
 
@@ -884,7 +1018,7 @@ function ActivitySection({
               )}
             </ol>
           )}
-          <div className="rounded-md border bg-muted/40 p-3 dark:bg-muted/40">
+          <div className="space-y-3">
             <Textarea
               value={commentBody}
               rows={3}
@@ -898,7 +1032,7 @@ function ActivitySection({
               onChange={(event) => setCommentBody(event.target.value)}
               className="min-h-20 resize-y bg-background/35 px-3 py-2 shadow-none focus-visible:ring-1"
             />
-            <div className="mt-3 flex justify-end">
+            <div className="flex justify-end">
               <Button
                 type="button"
                 size="sm"
@@ -1144,14 +1278,22 @@ function SectionHeader({ title, detail }: { title: string; detail?: string }) {
 function RailSection({
   title,
   children,
+  variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
+  variant?: "card" | "separator";
 }) {
   const [expanded, setExpanded] = useState(true);
 
   return (
-    <section className="rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
+    <section
+      className={cn(
+        variant === "card"
+          ? "rounded-md border bg-muted/35 p-3 dark:bg-muted/35"
+          : "mt-4 border-t border-border/70 pt-4 first:mt-0 first:border-t-0 first:pt-0",
+      )}
+    >
       <button
         type="button"
         className="mb-3 flex w-full items-center gap-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1528,11 +1670,13 @@ function LabelPickerOption({
 }
 
 function LabelsRailSection({
+  variant = "card",
   item,
   labels,
   disabled,
   onChange,
 }: {
+  variant?: "card" | "separator";
   item: WorkItemSummary;
   labels: WorkItemLabelSummary[];
   disabled?: boolean;
@@ -1542,7 +1686,7 @@ function LabelsRailSection({
   const selectedLabels = item.labels ?? [];
 
   return (
-    <RailSection title="Labels">
+    <RailSection title="Labels" variant={variant}>
       {selectedLabels.length ? (
         <LabelPicker
           labels={labels}
@@ -1582,6 +1726,7 @@ function LabelsRailSection({
 }
 
 function OpenEngineRailSection({
+  variant = "card",
   item,
   events,
   documents,
@@ -1591,6 +1736,7 @@ function OpenEngineRailSection({
   onQueueChange,
   onAction,
 }: {
+  variant?: "card" | "separator";
   item: WorkItemSummary;
   events: WorkItemEventSummary[];
   documents: WorkItemDocumentSummary[];
@@ -1615,7 +1761,7 @@ function OpenEngineRailSection({
 
   return (
     <>
-      <RailSection title="OpenEngine">
+      <RailSection title="OpenEngine" variant={variant}>
         <div className="space-y-2 px-1">
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
             <span className="text-muted-foreground">Queue</span>
