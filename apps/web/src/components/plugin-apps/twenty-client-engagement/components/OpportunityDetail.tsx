@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import {
   Button,
   Input,
@@ -156,14 +156,6 @@ export function OpportunityDetail({
                 ))}
               </SelectContent>
             </Select>
-            {opportunity.crmUrl ? (
-              <Button type="button" variant="outline" size="sm" asChild>
-                <a href={opportunity.crmUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 size-3.5" />
-                  CRM
-                </a>
-              </Button>
-            ) : null}
           </div>
         </div>
         {error || overlayError ? (

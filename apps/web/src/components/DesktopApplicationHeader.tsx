@@ -182,7 +182,7 @@ export function DesktopApplicationHeader() {
                     index === headerActions.breadcrumbs!.length - 1;
                   return (
                     <Fragment
-                      key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
+                      key={`${crumb.href ?? "current"}:${crumb.onClick ? "click" : ""}:${crumb.label}:${index}`}
                     >
                       {index > 0 ? (
                         <ChevronRight
@@ -202,6 +202,18 @@ export function DesktopApplicationHeader() {
                           <div className="min-w-0">
                             {headerActions.titleContent}
                           </div>
+                        ) : crumb.onClick ? (
+                          <button
+                            type="button"
+                            onClick={crumb.onClick}
+                            className={
+                              isLast
+                                ? "truncate text-foreground"
+                                : "shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                            }
+                          >
+                            {crumb.label}
+                          </button>
                         ) : isLast || !crumb.href ? (
                           <span
                             className={

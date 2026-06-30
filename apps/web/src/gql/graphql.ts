@@ -3830,10 +3830,6 @@ export type Mutation = {
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
   updateThreadLabel: ThreadLabel;
-  /** Update an opportunity layer status in Twenty through the authenticated plugin MCP path. */
-  updateTwentyEngagementOpportunityLayerStatus: TwentyEngagementOpportunityLayer;
-  /** Update an opportunity stage in Twenty through the authenticated plugin MCP path. */
-  updateTwentyEngagementOpportunityStage: TwentyEngagementOpportunity;
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
@@ -5235,16 +5231,6 @@ export type MutationUpdateThreadLabelArgs = {
 };
 
 
-export type MutationUpdateTwentyEngagementOpportunityLayerStatusArgs = {
-  input: UpdateTwentyEngagementOpportunityLayerStatusInput;
-};
-
-
-export type MutationUpdateTwentyEngagementOpportunityStageArgs = {
-  input: UpdateTwentyEngagementOpportunityStageInput;
-};
-
-
 export type MutationUpdateUserArgs = {
   id: Scalars['ID']['input'];
   input: UpdateUserInput;
@@ -6311,8 +6297,6 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
-  /** CRM-owned records for the Twenty Client Engagement app. */
-  twentyEngagementDashboard: TwentyEngagementDashboard;
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
@@ -9574,70 +9558,6 @@ export type TriggerWorkflowRunInput = {
   workflowId: Scalars['ID']['input'];
 };
 
-export type TwentyEngagementAccount = {
-  __typename?: 'TwentyEngagementAccount';
-  company: TwentyEngagementCompany;
-  opportunities: Array<TwentyEngagementOpportunityWithLayers>;
-};
-
-/**
- * Twenty CRM records normalized for the Client Engagement plugin app.
- *
- * The app reads and mutates CRM-owned fields through the authenticated Twenty
- * plugin path. Browser clients receive only app-shaped records; they never send
- * MCP URLs, bearer tokens, or generic tool-call payloads.
- */
-export type TwentyEngagementCompany = {
-  __typename?: 'TwentyEngagementCompany';
-  crmUrl?: Maybe<Scalars['String']['output']>;
-  domainName?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-};
-
-export type TwentyEngagementDashboard = {
-  __typename?: 'TwentyEngagementDashboard';
-  accounts: Array<TwentyEngagementAccount>;
-  companies: Array<TwentyEngagementCompany>;
-  opportunities: Array<TwentyEngagementOpportunity>;
-  opportunityLayers: Array<TwentyEngagementOpportunityLayer>;
-};
-
-export type TwentyEngagementOpportunity = {
-  __typename?: 'TwentyEngagementOpportunity';
-  amountMicros?: Maybe<Scalars['Float']['output']>;
-  closeDate?: Maybe<Scalars['String']['output']>;
-  companyId?: Maybe<Scalars['ID']['output']>;
-  companyName?: Maybe<Scalars['String']['output']>;
-  crmUrl?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-  stage: Scalars['String']['output'];
-  stageLabel: Scalars['String']['output'];
-};
-
-export type TwentyEngagementOpportunityLayer = {
-  __typename?: 'TwentyEngagementOpportunityLayer';
-  businessValue?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  instanceName?: Maybe<Scalars['String']['output']>;
-  layerStatus: Scalars['String']['output'];
-  layerStatusLabel: Scalars['String']['output'];
-  layerType: Scalars['String']['output'];
-  layerTypeLabel: Scalars['String']['output'];
-  name?: Maybe<Scalars['String']['output']>;
-  nextSteps?: Maybe<Scalars['String']['output']>;
-  openQuestions?: Maybe<Scalars['String']['output']>;
-  opportunityId: Scalars['ID']['output'];
-  whatWeKnow?: Maybe<Scalars['String']['output']>;
-};
-
-export type TwentyEngagementOpportunityWithLayers = {
-  __typename?: 'TwentyEngagementOpportunityWithLayers';
-  layers: Array<TwentyEngagementOpportunityLayer>;
-  opportunity: TwentyEngagementOpportunity;
-};
-
 /** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
 export type TwentyPluginCutoverResult = {
   __typename?: 'TwentyPluginCutoverResult';
@@ -9987,16 +9907,6 @@ export type UpdateThreadLabelInput = {
   color?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type UpdateTwentyEngagementOpportunityLayerStatusInput = {
-  layerId: Scalars['ID']['input'];
-  layerStatus: Scalars['String']['input'];
-};
-
-export type UpdateTwentyEngagementOpportunityStageInput = {
-  opportunityId: Scalars['ID']['input'];
-  stage: Scalars['String']['input'];
 };
 
 export type UpdateUserInput = {
@@ -11620,25 +11530,6 @@ export type UpsertPluginAppOverlayMutationVariables = Exact<{
 
 export type UpsertPluginAppOverlayMutation = { __typename?: 'Mutation', upsertPluginAppOverlay: { __typename?: 'PluginAppOverlay', id: string, pluginInstallId: string, pluginKey: string, appSurfaceKey: string, appKey: string, provider: string, providerRecordType: string, providerRecordId: string, sectionKey: string, payload: any, createdByUserId?: string | null, updatedByUserId?: string | null, createdAt: any, updatedAt: any } };
 
-export type TwentyEngagementDashboardQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type TwentyEngagementDashboardQuery = { __typename?: 'Query', twentyEngagementDashboard: { __typename?: 'TwentyEngagementDashboard', accounts: Array<{ __typename?: 'TwentyEngagementAccount', company: { __typename?: 'TwentyEngagementCompany', id: string, name: string, domainName?: string | null, crmUrl?: string | null }, opportunities: Array<{ __typename?: 'TwentyEngagementOpportunityWithLayers', opportunity: { __typename?: 'TwentyEngagementOpportunity', id: string, name: string, stage: string, stageLabel: string, amountMicros?: number | null, closeDate?: string | null, companyId?: string | null, companyName?: string | null, crmUrl?: string | null }, layers: Array<{ __typename?: 'TwentyEngagementOpportunityLayer', id: string, name?: string | null, layerType: string, layerTypeLabel: string, instanceName?: string | null, layerStatus: string, layerStatusLabel: string, whatWeKnow?: string | null, openQuestions?: string | null, businessValue?: string | null, nextSteps?: string | null, opportunityId: string }> }> }>, companies: Array<{ __typename?: 'TwentyEngagementCompany', id: string, name: string, domainName?: string | null, crmUrl?: string | null }>, opportunities: Array<{ __typename?: 'TwentyEngagementOpportunity', id: string, name: string, stage: string, stageLabel: string, amountMicros?: number | null, closeDate?: string | null, companyId?: string | null, companyName?: string | null, crmUrl?: string | null }>, opportunityLayers: Array<{ __typename?: 'TwentyEngagementOpportunityLayer', id: string, name?: string | null, layerType: string, layerTypeLabel: string, instanceName?: string | null, layerStatus: string, layerStatusLabel: string, whatWeKnow?: string | null, openQuestions?: string | null, businessValue?: string | null, nextSteps?: string | null, opportunityId: string }> } };
-
-export type UpdateTwentyEngagementOpportunityStageMutationVariables = Exact<{
-  input: UpdateTwentyEngagementOpportunityStageInput;
-}>;
-
-
-export type UpdateTwentyEngagementOpportunityStageMutation = { __typename?: 'Mutation', updateTwentyEngagementOpportunityStage: { __typename?: 'TwentyEngagementOpportunity', id: string, name: string, stage: string, stageLabel: string, amountMicros?: number | null, closeDate?: string | null, companyId?: string | null, companyName?: string | null, crmUrl?: string | null } };
-
-export type UpdateTwentyEngagementOpportunityLayerStatusMutationVariables = Exact<{
-  input: UpdateTwentyEngagementOpportunityLayerStatusInput;
-}>;
-
-
-export type UpdateTwentyEngagementOpportunityLayerStatusMutation = { __typename?: 'Mutation', updateTwentyEngagementOpportunityLayerStatus: { __typename?: 'TwentyEngagementOpportunityLayer', id: string, name?: string | null, layerType: string, layerTypeLabel: string, instanceName?: string | null, layerStatus: string, layerStatusLabel: string, whatWeKnow?: string | null, openQuestions?: string | null, businessValue?: string | null, nextSteps?: string | null, opportunityId: string } };
-
 export type RoutineDetailQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -12532,9 +12423,6 @@ export const SetSpaceKnowledgeBasesDocument = {"kind":"Document","definitions":[
 export const InstalledPluginAppsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"InstalledPluginApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installedPluginApps"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"pluginDisplayName"}},{"kind":"Field","name":{"kind":"Name","value":"pluginVersion"}},{"kind":"Field","name":{"kind":"Name","value":"surfaceKey"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"routeSegment"}},{"kind":"Field","name":{"kind":"Name","value":"mount"}},{"kind":"Field","name":{"kind":"Name","value":"runtime"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"entitlementProductKey"}},{"kind":"Field","name":{"kind":"Name","value":"readiness"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"nextAction"}}]}}]}}]}}]} as unknown as DocumentNode<InstalledPluginAppsQuery, InstalledPluginAppsQueryVariables>;
 export const PluginAppOverlaysDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"PluginAppOverlays"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PluginAppOverlayQueryInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pluginAppOverlays"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"appSurfaceKey"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"providerRecordType"}},{"kind":"Field","name":{"kind":"Name","value":"providerRecordId"}},{"kind":"Field","name":{"kind":"Name","value":"sectionKey"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PluginAppOverlaysQuery, PluginAppOverlaysQueryVariables>;
 export const UpsertPluginAppOverlayDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpsertPluginAppOverlay"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertPluginAppOverlayInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"upsertPluginAppOverlay"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"appSurfaceKey"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"providerRecordType"}},{"kind":"Field","name":{"kind":"Name","value":"providerRecordId"}},{"kind":"Field","name":{"kind":"Name","value":"sectionKey"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpsertPluginAppOverlayMutation, UpsertPluginAppOverlayMutationVariables>;
-export const TwentyEngagementDashboardDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TwentyEngagementDashboard"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"twentyEngagementDashboard"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"accounts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"company"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"domainName"}},{"kind":"Field","name":{"kind":"Name","value":"crmUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"opportunities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"opportunity"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"stageLabel"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicros"}},{"kind":"Field","name":{"kind":"Name","value":"closeDate"}},{"kind":"Field","name":{"kind":"Name","value":"companyId"}},{"kind":"Field","name":{"kind":"Name","value":"companyName"}},{"kind":"Field","name":{"kind":"Name","value":"crmUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"layers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"layerType"}},{"kind":"Field","name":{"kind":"Name","value":"layerTypeLabel"}},{"kind":"Field","name":{"kind":"Name","value":"instanceName"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatus"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatusLabel"}},{"kind":"Field","name":{"kind":"Name","value":"whatWeKnow"}},{"kind":"Field","name":{"kind":"Name","value":"openQuestions"}},{"kind":"Field","name":{"kind":"Name","value":"businessValue"}},{"kind":"Field","name":{"kind":"Name","value":"nextSteps"}},{"kind":"Field","name":{"kind":"Name","value":"opportunityId"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"companies"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"domainName"}},{"kind":"Field","name":{"kind":"Name","value":"crmUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"opportunities"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"stageLabel"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicros"}},{"kind":"Field","name":{"kind":"Name","value":"closeDate"}},{"kind":"Field","name":{"kind":"Name","value":"companyId"}},{"kind":"Field","name":{"kind":"Name","value":"companyName"}},{"kind":"Field","name":{"kind":"Name","value":"crmUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"opportunityLayers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"layerType"}},{"kind":"Field","name":{"kind":"Name","value":"layerTypeLabel"}},{"kind":"Field","name":{"kind":"Name","value":"instanceName"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatus"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatusLabel"}},{"kind":"Field","name":{"kind":"Name","value":"whatWeKnow"}},{"kind":"Field","name":{"kind":"Name","value":"openQuestions"}},{"kind":"Field","name":{"kind":"Name","value":"businessValue"}},{"kind":"Field","name":{"kind":"Name","value":"nextSteps"}},{"kind":"Field","name":{"kind":"Name","value":"opportunityId"}}]}}]}}]}}]} as unknown as DocumentNode<TwentyEngagementDashboardQuery, TwentyEngagementDashboardQueryVariables>;
-export const UpdateTwentyEngagementOpportunityStageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateTwentyEngagementOpportunityStage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTwentyEngagementOpportunityStageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTwentyEngagementOpportunityStage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"stageLabel"}},{"kind":"Field","name":{"kind":"Name","value":"amountMicros"}},{"kind":"Field","name":{"kind":"Name","value":"closeDate"}},{"kind":"Field","name":{"kind":"Name","value":"companyId"}},{"kind":"Field","name":{"kind":"Name","value":"companyName"}},{"kind":"Field","name":{"kind":"Name","value":"crmUrl"}}]}}]}}]} as unknown as DocumentNode<UpdateTwentyEngagementOpportunityStageMutation, UpdateTwentyEngagementOpportunityStageMutationVariables>;
-export const UpdateTwentyEngagementOpportunityLayerStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateTwentyEngagementOpportunityLayerStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTwentyEngagementOpportunityLayerStatusInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTwentyEngagementOpportunityLayerStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"layerType"}},{"kind":"Field","name":{"kind":"Name","value":"layerTypeLabel"}},{"kind":"Field","name":{"kind":"Name","value":"instanceName"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatus"}},{"kind":"Field","name":{"kind":"Name","value":"layerStatusLabel"}},{"kind":"Field","name":{"kind":"Name","value":"whatWeKnow"}},{"kind":"Field","name":{"kind":"Name","value":"openQuestions"}},{"kind":"Field","name":{"kind":"Name","value":"businessValue"}},{"kind":"Field","name":{"kind":"Name","value":"nextSteps"}},{"kind":"Field","name":{"kind":"Name","value":"opportunityId"}}]}}]}}]} as unknown as DocumentNode<UpdateTwentyEngagementOpportunityLayerStatusMutation, UpdateTwentyEngagementOpportunityLayerStatusMutationVariables>;
 export const RoutineDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routine"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"schedule"}},{"kind":"Field","name":{"kind":"Name","value":"engine"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"triggers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RoutineDetailQuery, RoutineDetailQueryVariables>;
 export const RoutineRecipeCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineRecipeCatalog"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineRecipeCatalog"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"hitlCapable"}},{"kind":"Field","name":{"kind":"Name","value":"defaultArgs"}},{"kind":"Field","name":{"kind":"Name","value":"configFields"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"inputType"}},{"kind":"Field","name":{"kind":"Name","value":"control"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"editable"}},{"kind":"Field","name":{"kind":"Name","value":"options"}},{"kind":"Field","name":{"kind":"Name","value":"placeholder"}},{"kind":"Field","name":{"kind":"Name","value":"helpText"}},{"kind":"Field","name":{"kind":"Name","value":"min"}},{"kind":"Field","name":{"kind":"Name","value":"max"}},{"kind":"Field","name":{"kind":"Name","value":"pattern"}}]}}]}}]}}]} as unknown as DocumentNode<RoutineRecipeCatalogQuery, RoutineRecipeCatalogQueryVariables>;
 export const TenantCredentialsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantCredentials"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"TenantCredentialStatus"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"metadataJson"}},{"kind":"Field","name":{"kind":"Name","value":"schemaJson"}},{"kind":"Field","name":{"kind":"Name","value":"eventbridgeConnectionArn"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastValidatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"deletedAt"}}]}}]}}]} as unknown as DocumentNode<TenantCredentialsQuery, TenantCredentialsQueryVariables>;
