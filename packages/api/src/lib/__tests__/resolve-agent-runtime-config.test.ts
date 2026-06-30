@@ -21,7 +21,7 @@ const {
   mockListTenantModelCatalogByIds,
   mockS3Send,
 } = vi.hoisted(() => ({
-  rowsQueue: [] as unknown[][],
+  rowsQueue: [] as Array<unknown[] | Error>,
   whereCalls: [] as unknown[],
   mockBuildSkillEnvOverrides: vi.fn(),
   mockLoadTenantBuiltinTools: vi.fn(),
@@ -33,13 +33,23 @@ const {
 
 function takeRows(): unknown[] {
   const next = rowsQueue.shift();
+  if (next instanceof Error) throw next;
   if (next === undefined) return [];
   return next;
 }
 
 function rowsResult() {
   return {
-    then: (fn: (rows: unknown[]) => unknown) => Promise.resolve(fn(takeRows())),
+    then: (
+      fn: (rows: unknown[]) => unknown,
+      reject?: (err: unknown) => unknown,
+    ) => {
+      try {
+        return Promise.resolve(fn(takeRows()));
+      } catch (err) {
+        return reject ? Promise.resolve(reject(err)) : Promise.reject(err);
+      }
+    },
     limit: () => rowsResult(),
   };
 }
@@ -322,8 +332,10 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
 }
 
 function stageTemplateRow(overrides?: Record<string, unknown>) {
-  const stagedAgent = rowsQueue[rowsQueue.length - 1]?.[0] as
-    Record<string, unknown> | undefined;
+  const lastRows = rowsQueue[rowsQueue.length - 1];
+  const stagedAgent = Array.isArray(lastRows)
+    ? (lastRows[0] as Record<string, unknown> | undefined)
+    : undefined;
   if (!stagedAgent) return;
   const { runtime: _runtime, ...agentOverrides } = overrides ?? {};
   Object.assign(stagedAgent, agentOverrides);
@@ -1395,6 +1407,22 @@ describe("resolveAgentRuntimeConfig", () => {
       assignment_id: "assignment-stale",
     });
     stale.artifact_hash = "stale-artifact-hash";
+    const descriptorRuntimeMismatch = piExtensionRuntimeRow({
+      assignment_id: "assignment-descriptor-runtime-mismatch",
+    });
+    const descriptor = {
+      ...((
+        descriptorRuntimeMismatch.verification_report as Record<string, unknown>
+      ).artifactDescriptor as Record<string, unknown>),
+      runtimeTarget: "browser",
+    };
+    descriptorRuntimeMismatch.verification_report = {
+      status: "passed",
+      artifactDescriptor: descriptor,
+    };
+    descriptorRuntimeMismatch.artifact_hash = piExtensionArtifactHash(
+      descriptor as Parameters<typeof piExtensionArtifactHash>[0],
+    );
 
     stageAgentRow();
     stageTenantSlug();
@@ -1420,6 +1448,11 @@ describe("resolveAgentRuntimeConfig", () => {
         assignment_id: "assignment-unsupported-runtime",
         runtime_target: "browser",
       }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-missing-runtime",
+        runtime_target: null,
+      }),
+      descriptorRuntimeMismatch,
       stale,
       piExtensionRuntimeRow({
         assignment_id: "assignment-missing-artifact",
@@ -1437,6 +1470,25 @@ describe("resolveAgentRuntimeConfig", () => {
     });
 
     expect(cfg.piExtensions).toEqual([]);
+  });
+
+  it("keeps chat runtime config available when Pi extension loading fails", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    rowsQueue.push(new Error("pi extension table unavailable"));
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.piExtensions).toEqual([]);
+    expect(cfg.agentProfilesConfig).toEqual([]);
   });
 
   it("includes an enabled global Research profile in the runtime config", async () => {

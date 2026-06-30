@@ -813,6 +813,9 @@ export async function resolveAgentRuntimeConfig(
       (profile) => profile.id,
     ),
     logPrefix,
+  }).catch((err): PiExtensionRuntimeAssignments => {
+    console.error(`${logPrefix} Pi extension resolution failed:`, err);
+    return { defaultAgent: [], byAgentProfileId: new Map() };
   });
   overriddenConfig.piExtensions = piExtensionAssignments.defaultAgent;
   overriddenConfig.agentProfilesConfig =
@@ -1172,7 +1175,7 @@ function toRuntimePiExtension(
   }
   if (!row.enabled) return null;
   if (row.status !== "approved") return null;
-  if (row.runtime_target && row.runtime_target !== "agentcore-pi") {
+  if (row.runtime_target !== "agentcore-pi") {
     return skip(`unsupported runtime target ${row.runtime_target}`);
   }
   if (!row.commit_sha) return skip("missing commit SHA");
@@ -1201,6 +1204,11 @@ function toRuntimePiExtension(
   );
   if (!artifactDescriptor) {
     return skip("missing verification artifact descriptor");
+  }
+  if (artifactDescriptor.runtimeTarget !== "agentcore-pi") {
+    return skip(
+      `unsupported verification runtime target ${artifactDescriptor.runtimeTarget}`,
+    );
   }
   if (artifactDescriptor.commitSha !== row.commit_sha) {
     return skip("verification source commit is stale");
