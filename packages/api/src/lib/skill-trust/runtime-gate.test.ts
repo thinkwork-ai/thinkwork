@@ -50,6 +50,26 @@ describe("isCurrentPassedSkillTrustReport", () => {
     ).toBe(true);
   });
 
+  it("allows approved-unverified signed skills even when release evidence is incomplete", () => {
+    expect(
+      isCurrentPassedSkillTrustReport(
+        row({
+          trust_report: {
+            status: "passed",
+            spec: { status: "passed" },
+            scanner: { status: "completed" },
+            evidence: {
+              skillCard: "missing",
+              evalDataset: "missing",
+              benchmark: "missing",
+              signature: "approved_unverified",
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("fails closed for missing, stale, old-version, and non-passed reports", () => {
     expect(isCurrentPassedSkillTrustReport(row({ trust_report: null }))).toBe(
       false,
