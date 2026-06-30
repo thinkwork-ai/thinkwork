@@ -18,7 +18,10 @@
  * Plan 2026-06-12-002 U1 (dynamic workspace) — wakeup dispatch payload parity.
  */
 
-import type { AgentProfileRuntimeConfig } from "./resolve-agent-runtime-config.js";
+import type {
+  AgentProfileRuntimeConfig,
+  AgentRuntimePiExtension,
+} from "./resolve-agent-runtime-config.js";
 import type { EffectiveWorkspaceModelRoutingEntry } from "./workspace-renderer/index.js";
 
 /**
@@ -31,6 +34,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "thinkwork_api_secret",
   "thread_turn_id",
   "agent_profiles",
+  "pi_extensions",
   "model_routing_policy",
   "approved_model_ids",
   "rendered_workspace_prefix",
@@ -62,9 +66,9 @@ export interface AgentDispatchControlFieldArgs {
   threadId: string | null | undefined;
   threadTurnId: string | null | undefined;
   agentProfiles: AgentProfileRuntimeConfig[];
+  piExtensions: AgentRuntimePiExtension[];
   modelRoutingPolicy:
-    | { routes: EffectiveWorkspaceModelRoutingEntry[] }
-    | undefined;
+    { routes: EffectiveWorkspaceModelRoutingEntry[] } | undefined;
   approvedModelIds: string[] | undefined;
   renderedWorkspacePrefix: string | undefined;
   turnContext: DispatchTurnContext | null;
@@ -99,6 +103,10 @@ export function buildAgentDispatchControlFields(
     thread_turn_id: args.threadTurnId || undefined,
     // Always an array — `[]` (not absent) when the tenant has no profiles.
     agent_profiles: args.agentProfiles,
+    // Dynamic Pi extensions are resolved at invocation time from approved,
+    // enabled assignments. Keep this beside agent_profiles so every dispatch
+    // path carries the same runtime extension set.
+    pi_extensions: args.piExtensions,
     model_routing_policy: args.modelRoutingPolicy,
     approved_model_ids: args.approvedModelIds,
     rendered_workspace_prefix: args.renderedWorkspacePrefix,

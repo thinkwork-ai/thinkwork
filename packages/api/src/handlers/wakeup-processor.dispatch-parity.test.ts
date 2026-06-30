@@ -37,6 +37,7 @@ function baseArgs(
     threadId: "thread-1",
     threadTurnId: "turn-1",
     agentProfiles: [],
+    piExtensions: [],
     modelRoutingPolicy: undefined,
     approvedModelIds: undefined,
     renderedWorkspacePrefix: "spaces/research/thread-1",
@@ -145,6 +146,15 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wire.agent_profiles).toEqual([]);
   });
 
+  it("tenant with no default Pi extensions ships pi_extensions as [] on every dispatch path", () => {
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ piExtensions: [] }),
+    );
+    const wire = JSON.parse(JSON.stringify(fields)) as Record<string, unknown>;
+    expect("pi_extensions" in wire).toBe(true);
+    expect(wire.pi_extensions).toEqual([]);
+  });
+
   it("both wakeup dispatch payloads use the resolved mcpConfigs object directly", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
     expect(
@@ -152,6 +162,16 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
         /mcp_configs: mcpConfigs\.length > 0 \? mcpConfigs : undefined/g,
       ),
     ).toHaveLength(2);
+  });
+
+  it("agentcore-invoke forwards pi_extensions through its whitelist payload rebuild", () => {
+    const source = readFileSync(
+      new URL("../../agentcore-invoke.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain(
+      "if (body.pi_extensions) payload.pi_extensions = body.pi_extensions",
+    );
   });
 
   it("builds the activity callback on every path but the finalize callback only when opted in", () => {
