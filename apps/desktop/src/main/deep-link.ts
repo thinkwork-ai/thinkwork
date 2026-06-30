@@ -161,6 +161,15 @@ export function parseDeepLinkCallback(
     };
   }
 
+  const workosBridge = url.searchParams.get("workos_bridge");
+  if (workosBridge) {
+    const next = normalizeNext(url.searchParams.get("next"));
+    return {
+      workos_bridge: workosBridge,
+      ...(next ? { next } : {}),
+    };
+  }
+
   if (!url.searchParams.has("code") || !url.searchParams.has("state")) {
     options.logger?.warn("[desktop] rejected deep link with unexpected query");
     return null;
@@ -176,6 +185,16 @@ export function parseDeepLinkCallback(
   }
 
   return { code, state };
+}
+
+function normalizeNext(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  try {
+    const url = new URL(value, "https://thinkwork.local");
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
 }
 
 function parseAppRoutePath(
@@ -200,7 +219,9 @@ function parseAppRoutePath(
       path.startsWith("/settings?")
     )
   ) {
-    logger?.warn("[desktop] rejected app-route deep link with disallowed route");
+    logger?.warn(
+      "[desktop] rejected app-route deep link with disallowed route",
+    );
     return null;
   }
 
