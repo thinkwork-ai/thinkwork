@@ -534,7 +534,7 @@ export function SpacesComposer({
                 onTranscriptionChange={onChange}
                 aria-label="Voice input"
                 title="Voice input"
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
                 disabled={disabled || isSubmitting}
               />
               <ConditionalSubmit
@@ -605,7 +605,7 @@ function PromptInputAttachButton() {
     <PromptInputButton
       type="button"
       variant="ghost"
-      className="text-muted-foreground hover:text-foreground"
+      className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
       title="Attach a spreadsheet"

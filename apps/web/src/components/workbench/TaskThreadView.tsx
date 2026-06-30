@@ -2832,7 +2832,7 @@ function PromptInputAttachButton() {
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
       title="Attach file"
-      className="text-muted-foreground hover:text-foreground"
+      className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
     >
       <IconPaperclip stroke={2} className="h-4 w-4" />
     </PromptInputButton>
@@ -3300,7 +3300,7 @@ function FollowUpComposer({
                 onTranscriptionChange={composer.setText}
                 aria-label="Voice input"
                 title="Voice input"
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
                 disabled={disabled || isSending}
               />
               <PromptInputSubmit
