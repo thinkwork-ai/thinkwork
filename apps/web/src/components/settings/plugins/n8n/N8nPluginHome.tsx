@@ -264,7 +264,7 @@ export function N8nPluginHome() {
             label="Refresh n8n versions"
             description={
               entry
-                ? `Installed v${install?.pinnedVersion ?? "none"} · Latest v${entry.latestVersion}.`
+                ? `${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.`
                 : "Refresh the trusted plugin catalog before installing or updating n8n."
             }
           >

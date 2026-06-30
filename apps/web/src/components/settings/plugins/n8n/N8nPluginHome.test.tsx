@@ -51,6 +51,10 @@ describe("N8nPluginHome", () => {
     expect(home).toContain("Update available");
     expect(home).toContain("Install update");
     expect(home).toContain("Refresh catalog");
+    expect(home).toContain(
+      '${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.',
+    );
+    expect(home).not.toContain('install?.pinnedVersion ?? "none"');
     expect(home).not.toContain('activeTab === "workflows"');
     expect(home).not.toContain("<N8nPluginWorkflows");
     expect(home).not.toContain("Refresh n8n workflows");
