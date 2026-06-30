@@ -3218,7 +3218,12 @@ function FollowUpComposer({
         ) : null}
         <PromptInput
           className={cn(
-            "tw-composer-surface text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!ring-0",
+            // Always-active look that never reacts to input: force a constant
+            // background and full opacity so the shared InputGroup can't dim
+            // itself while the Send button is disabled on an empty field
+            // (`has-disabled:opacity-50`) or swap its fill as you type
+            // (`has-disabled:bg-input/80` empty -> `bg-input/30`), and no ring.
+            "tw-composer-surface text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!bg-input/80 [&_[data-slot=input-group]]:!opacity-100 [&_[data-slot=input-group]]:!ring-0",
             hasTaskQueue
               ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
               : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
