@@ -343,7 +343,7 @@ class TwentyRestClient {
   ) {}
 
   async list(objectName: string, collectionKeys: string[]) {
-    const payload = await this.request(`${objectName}?limit=200&depth=2`, {
+    const payload = await this.request(`${objectName}?limit=200&depth=0`, {
       method: "GET",
     });
     return recordsFromPayload(payload, collectionKeys);
