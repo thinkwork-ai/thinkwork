@@ -3223,7 +3223,9 @@ function FollowUpComposer({
             // itself while the Send button is disabled on an empty field
             // (`has-disabled:opacity-50`) or swap its fill as you type
             // (`has-disabled:bg-input/80` empty -> `bg-input/30`), and no ring.
-            "tw-composer-surface text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!bg-input/80 [&_[data-slot=input-group]]:!opacity-100 [&_[data-slot=input-group]]:!ring-0",
+            // The fill/text/border colors are theme-scoped: a white card with a
+            // dark hairline in light mode, the translucent dark card in dark.
+            "tw-composer-surface dark:text-white motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:zoom-in-95 [&_[data-slot=input-group]]:min-h-14 [&_[data-slot=input-group]]:border-black/10 dark:[&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:px-2 [&_[data-slot=input-group]]:!bg-card dark:[&_[data-slot=input-group]]:!bg-input/80 [&_[data-slot=input-group]]:!opacity-100 [&_[data-slot=input-group]]:!ring-0",
             hasTaskQueue
               ? "[&_[data-slot=input-group]]:rounded-none [&_[data-slot=input-group]]:border-0 [&_[data-slot=input-group]]:shadow-none"
               : "[&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:shadow-lg",
@@ -3242,7 +3244,7 @@ function FollowUpComposer({
             <SkillTokenInput
               ref={textareaRef}
               aria-label="Follow up"
-              className="min-h-12 max-h-24 py-3 text-base text-white placeholder:text-white/75"
+              className="min-h-12 max-h-24 py-3 text-base dark:text-white dark:placeholder:text-white/75"
               value={composer.text}
               onChange={composer.setText}
               catalog={skillCatalog}
@@ -3273,7 +3275,7 @@ function FollowUpComposer({
                 title={agentToggleTitle}
                 disabled={disabled || isSending || agentForcedOn}
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
                 )}
               >
@@ -3283,7 +3285,6 @@ function FollowUpComposer({
                 enabled={goalModeSubmission.requested && effectiveAgentEnabled}
                 objective={goalModeSubmission.content}
                 disabled={disabled || isSending || !effectiveAgentEnabled}
-                tone="dark"
                 onClick={() => setGoalDialogOpen(true)}
               />
               <ComposerModelPicker
@@ -3291,7 +3292,6 @@ function FollowUpComposer({
                 value={selectedModelId}
                 onValueChange={onSelectedModelChange}
                 disabled={disabled || isSending || !effectiveAgentEnabled}
-                tone="dark"
               />
               <PromptInputSpeechButton
                 textareaRef={
@@ -3300,11 +3300,11 @@ function FollowUpComposer({
                 onTranscriptionChange={composer.setText}
                 aria-label="Voice input"
                 title="Voice input"
-                className="text-white/60 hover:bg-white/10"
+                className="text-muted-foreground hover:text-foreground"
                 disabled={disabled || isSending}
               />
               <PromptInputSubmit
-                className="shrink-0 rounded-full bg-zinc-100 text-zinc-950 hover:bg-white disabled:bg-zinc-500 disabled:text-zinc-200"
+                className="shrink-0 rounded-full"
                 disabled={!canSubmit}
                 status={isSending ? "submitted" : undefined}
                 aria-label={isSending ? "Sending" : "Send"}

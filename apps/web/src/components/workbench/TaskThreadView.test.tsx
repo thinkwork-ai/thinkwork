@@ -4563,7 +4563,7 @@ describe("TaskThreadView", () => {
     fireEvent.click(agentToggle);
 
     expect(agentToggle.className).toContain("size-8");
-    expect(agentToggle.className).toContain("text-white/60");
+    expect(agentToggle.className).toContain("text-muted-foreground");
     expect(agentToggle.className).not.toContain("bg-white/15");
   });
 
