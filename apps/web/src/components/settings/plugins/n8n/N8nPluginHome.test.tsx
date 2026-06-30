@@ -50,6 +50,15 @@ describe("N8nPluginHome", () => {
     expect(home).toContain("latest n8n version");
     expect(home).toContain("Update available");
     expect(home).toContain("Install update");
+    expect(home).toContain("componentsHeaderAction");
+    expect(home).toContain("{componentsHeaderAction}");
+    expect(home).toContain('className="mb-3 flex items-center justify-between gap-3"');
+    expect(
+      (home.match(/onClick=\{\(\) => void installN8n\(\)\}/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      (home.match(/onClick=\{\(\) => void installUpdate\(\)\}/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
     expect(home).toContain("Refresh catalog");
     expect(home).toContain(
       '${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.',
