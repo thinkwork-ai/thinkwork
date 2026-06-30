@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
+    "@tanstack/react-table": "^8.21.3",
+    "@thinkwork/ui": "workspace:*",
     "react": "^19.2.0"
   },
   "devDependencies": {

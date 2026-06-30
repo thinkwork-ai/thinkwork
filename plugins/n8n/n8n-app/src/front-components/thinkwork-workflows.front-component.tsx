@@ -1,17 +1,23 @@
+import { useMemo, useState, type ReactNode } from "react";
 import {
-  useMemo,
-  useState,
-  type ChangeEventHandler,
-  type ReactNode,
-} from "react";
+  type ColumnDef,
+  type ColumnFiltersState,
+  type Table as TanStackTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
+  Button,
+  DataTableTokenFilter,
+  Input,
+  dataTableTokenFilterFns,
+  type DataTableTokenFilterColumn,
+} from "@thinkwork/ui";
 
 import {
-  bridgeThreadPath,
   connectionLabel,
   executionStatuses,
-  filterN8nExecutions,
-  filterN8nWorkflows,
-  formatDateTime,
   formatDuration,
   readinessLabel,
   type N8nAppData,
@@ -28,6 +34,8 @@ export type ThinkWorkN8nWorkflowsAppProps = {
   fetching?: boolean;
   error?: { message?: string } | null;
   onRefresh?: () => void;
+  viewMode?: N8nAppViewMode;
+  onViewModeChange?: (viewMode: N8nAppViewMode) => void;
 };
 
 export type { N8nAppData } from "../lib/n8n-app-data";
@@ -39,6 +47,11 @@ const READINESS_FILTERS: Array<"all" | N8nReadinessState> = [
   "disabled",
   "unknown",
 ];
+const N8N_FILTER_COLUMNS = {
+  search: "filterSearch",
+  readiness: "filterReadiness",
+  status: "filterStatus",
+} as const;
 
 export function ThinkWorkN8nWorkflowsApp({
   appDisplayName = "n8n Workflows",
@@ -47,27 +60,60 @@ export function ThinkWorkN8nWorkflowsApp({
   fetching = false,
   error = null,
   onRefresh,
+  viewMode: controlledViewMode,
+  onViewModeChange: _onViewModeChange,
 }: ThinkWorkN8nWorkflowsAppProps) {
-  const [viewMode, setViewMode] = useState<N8nAppViewMode>("workflows");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [readinessFilter, setReadinessFilter] = useState<
-    "all" | N8nReadinessState
-  >("all");
-  const [executionStatusFilter, setExecutionStatusFilter] = useState("all");
+  const [uncontrolledViewMode] = useState<N8nAppViewMode>("workflows");
+  const viewMode = controlledViewMode ?? uncontrolledViewMode;
+  const [workflowColumnFilters, setWorkflowColumnFilters] =
+    useState<ColumnFiltersState>([]);
+  const [executionColumnFilters, setExecutionColumnFilters] =
+    useState<ColumnFiltersState>([]);
 
   const workflows = data?.workflows ?? [];
   const executions = data?.executions ?? [];
-  const filteredWorkflows = useMemo(
-    () => filterN8nWorkflows(workflows, searchQuery, readinessFilter),
-    [readinessFilter, searchQuery, workflows],
-  );
   const executionStatusOptions = useMemo(
     () => executionStatuses(executions),
     [executions],
   );
+  const workflowFilterColumns = useMemo(() => buildWorkflowFilterColumns(), []);
+  const executionFilterColumns = useMemo(
+    () => buildExecutionFilterColumns(),
+    [],
+  );
+  const workflowTokenFilterColumns = useMemo(
+    () => buildWorkflowTokenFilterColumns(),
+    [],
+  );
+  const executionTokenFilterColumns = useMemo(
+    () => buildExecutionTokenFilterColumns(executionStatusOptions),
+    [executionStatusOptions],
+  );
+  const workflowTable = useReactTable({
+    data: workflows,
+    columns: workflowFilterColumns,
+    state: { columnFilters: workflowColumnFilters },
+    onColumnFiltersChange: setWorkflowColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const executionTable = useReactTable({
+    data: executions,
+    columns: executionFilterColumns,
+    state: { columnFilters: executionColumnFilters },
+    onColumnFiltersChange: setExecutionColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const filteredWorkflows = useMemo(
+    () => workflowTable.getFilteredRowModel().rows.map((row) => row.original),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workflowTable.getState().columnFilters, workflows],
+  );
   const filteredExecutions = useMemo(
-    () => filterN8nExecutions(executions, searchQuery, executionStatusFilter),
-    [executionStatusFilter, executions, searchQuery],
+    () => executionTable.getFilteredRowModel().rows.map((row) => row.original),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [executionTable.getState().columnFilters, executions],
   );
   if (fetching && !data) {
     return (
@@ -118,56 +164,18 @@ export function ThinkWorkN8nWorkflowsApp({
     <AppFrame title={appDisplayName} pluginName={pluginDisplayName}>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-6 py-3">
-          <div className="inline-flex rounded-md border border-border bg-muted/30 p-0.5">
-            <ViewButton
-              active={viewMode === "workflows"}
-              onClick={() => setViewMode("workflows")}
-            >
-              Workflows
-            </ViewButton>
-            <ViewButton
-              active={viewMode === "executions"}
-              onClick={() => setViewMode("executions")}
-            >
-              Executions
-            </ViewButton>
-          </div>
-          <ToolbarSearch
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder={
-              viewMode === "workflows"
-                ? "Search workflows..."
-                : "Search executions..."
-            }
-          />
           {viewMode === "workflows" ? (
-            <FilterSelect
-              value={readinessFilter}
-              onChange={(event) =>
-                setReadinessFilter(
-                  event.target.value as "all" | N8nReadinessState,
-                )
-              }
-            >
-              {READINESS_FILTERS.map((state) => (
-                <option key={state} value={state}>
-                  {state === "all" ? "All readiness" : readinessLabel(state)}
-                </option>
-              ))}
-            </FilterSelect>
+            <AppTableToolbar
+              table={workflowTable}
+              tokenFilterColumns={workflowTokenFilterColumns}
+              searchPlaceholder="Search workflows..."
+            />
           ) : (
-            <FilterSelect
-              value={executionStatusFilter}
-              onChange={(event) => setExecutionStatusFilter(event.target.value)}
-            >
-              <option value="all">All statuses</option>
-              {executionStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </FilterSelect>
+            <AppTableToolbar
+              table={executionTable}
+              tokenFilterColumns={executionTokenFilterColumns}
+              searchPlaceholder="Search executions..."
+            />
           )}
         </div>
 
@@ -323,13 +331,11 @@ function ExecutionTable({
       <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <HeaderCell className="w-[24%]">Execution</HeaderCell>
-            <HeaderCell className="w-[22%]">Workflow</HeaderCell>
-            <HeaderCell className="w-[10%]">Status</HeaderCell>
-            <HeaderCell className="w-[10%]">Mode</HeaderCell>
-            <HeaderCell className="w-[12%]">Started</HeaderCell>
-            <HeaderCell className="w-[10%]">Duration</HeaderCell>
-            <HeaderCell className="w-[12%]">ThinkWork</HeaderCell>
+            <HeaderCell className="w-[42%]">Workflow name</HeaderCell>
+            <HeaderCell className="w-[16%]">Status</HeaderCell>
+            <HeaderCell className="w-[14%]">Mode</HeaderCell>
+            <HeaderCell className="w-[14%]">Started</HeaderCell>
+            <HeaderCell className="w-[14%]">Duration</HeaderCell>
           </tr>
         </thead>
         <tbody>
@@ -346,7 +352,7 @@ function ExecutionTable({
                     rel="noreferrer"
                     className="truncate font-medium text-foreground underline-offset-4 hover:underline"
                   >
-                    {execution.externalExecutionId}
+                    {execution.workflowName ?? execution.externalWorkflowId}
                   </a>
                   <WarningList
                     warnings={[
@@ -357,17 +363,6 @@ function ExecutionTable({
                     ]}
                   />
                 </div>
-              </BodyCell>
-              <BodyCell>
-                <a
-                  href={execution.nativeWorkflowUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block truncate text-foreground underline-offset-4 hover:underline"
-                >
-                  {execution.workflowName ?? execution.externalWorkflowId}
-                </a>
-                <MonoText>{execution.externalWorkflowId}</MonoText>
               </BodyCell>
               <BodyCell>
                 <Badge tone={statusTone(execution.status)}>
@@ -381,7 +376,7 @@ function ExecutionTable({
               </BodyCell>
               <BodyCell>
                 <span className="text-muted-foreground">
-                  {formatDateTime(execution.startedAt)}
+                  {formatShortDateTime(execution.startedAt)}
                 </span>
               </BodyCell>
               <BodyCell>
@@ -389,44 +384,10 @@ function ExecutionTable({
                   {formatDuration(execution.durationMs)}
                 </span>
               </BodyCell>
-              <BodyCell>
-                <BridgeLinks runs={execution.bridgeRuns} />
-              </BodyCell>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function BridgeLinks({ runs }: { runs: N8nAppExecutionRow["bridgeRuns"] }) {
-  if (runs.length === 0) {
-    return <span className="text-muted-foreground">No bridge run</span>;
-  }
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      {runs.slice(0, 2).map((run) => {
-        const path = bridgeThreadPath(run);
-        return path ? (
-          <a
-            key={run.id}
-            href={path}
-            className="truncate text-foreground underline-offset-4 hover:underline"
-          >
-            {run.summary ?? run.status}
-          </a>
-        ) : (
-          <span key={run.id} className="truncate text-muted-foreground">
-            {run.summary ?? run.status}
-          </span>
-        );
-      })}
-      {runs.length > 2 ? (
-        <span className="text-xs text-muted-foreground">
-          +{runs.length - 2} more
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -445,113 +406,222 @@ function BodyCell({ children }: { children: ReactNode }) {
   return <td className="min-w-0 px-4 py-3 align-top">{children}</td>;
 }
 
-function ViewButton({
-  active,
-  onClick,
-  children,
+function AppTableToolbar<TData>({
+  table,
+  tokenFilterColumns,
+  searchPlaceholder,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
+  table: TanStackTable<TData>;
+  tokenFilterColumns: DataTableTokenFilterColumn[];
+  searchPlaceholder: string;
 }) {
   return (
-    <button
-      type="button"
-      className={`rounded-[5px] px-3 py-1.5 text-sm font-medium ${
-        active
-          ? "bg-background text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ToolbarSearch({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const isOpen = expanded || value.length > 0;
-
-  if (!isOpen) {
-    return (
-      <button
-        type="button"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-        aria-label={placeholder}
-        onClick={() => setExpanded(true)}
-      >
-        <SearchIcon className="size-4" />
-      </button>
-    );
-  }
-
-  return (
-    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center">
-      <SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value.trimStart())}
-        onBlur={() => {
-          if (!value) setExpanded(false);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onChange("");
-            setExpanded(false);
-          }
-        }}
-        placeholder={placeholder}
-        className="h-8 w-full rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <ToolbarSearch table={table} placeholder={searchPlaceholder} />
+      <DataTableTokenFilter
+        table={table}
+        columns={tokenFilterColumns}
+        addLabel="Filter"
+        showAddLabel={false}
+        clearLabel="Clear filters"
+        flattenToolbar
+        className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+        popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
       />
-      <button
-        type="button"
-        className="absolute right-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-        aria-label="Clear search"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          onChange("");
-          setExpanded(false);
-        }}
-      >
-        <XIcon className="size-3.5" />
-      </button>
     </div>
   );
 }
 
-function FilterSelect({
-  value,
-  onChange,
-  children,
+function ToolbarSearch<TData>({
+  table,
+  placeholder,
 }: {
-  value: string;
-  onChange: ChangeEventHandler<HTMLSelectElement>;
-  children: ReactNode;
+  table: TanStackTable<TData>;
+  placeholder: string;
 }) {
+  const searchFilter = table
+    .getState()
+    .columnFilters.find(
+      (filter) => filter.id === N8N_FILTER_COLUMNS.search,
+    )?.value;
+  const searchValue =
+    isTextFilterValue(searchFilter) && typeof searchFilter.value === "string"
+      ? searchFilter.value
+      : "";
+  const setSearchValue = (value: string) => {
+    const trimmed = value.trimStart();
+    table.getColumn(N8N_FILTER_COLUMNS.search)?.setFilterValue(
+      trimmed
+        ? {
+            operator: "contains",
+            value: trimmed,
+          }
+        : undefined,
+    );
+    table.setPageIndex(0);
+  };
   return (
-    <label className="relative inline-flex h-8 items-center rounded-md border border-border text-sm text-foreground hover:bg-muted/30">
-      <FilterIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
-      <select
-        value={value}
-        onChange={onChange}
-        className="h-full min-w-[9.5rem] appearance-none rounded-md bg-transparent pl-8 pr-8 text-sm outline-none"
-      >
-        {children}
-      </select>
-      <ChevronDownIcon className="pointer-events-none absolute right-2.5 size-4 text-muted-foreground" />
-    </label>
+    <div className="relative flex h-8 w-[min(18rem,calc(100vw-2rem))] items-center">
+      <SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+      <Input
+        type="search"
+        value={searchValue}
+        onChange={(event) => setSearchValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setSearchValue("");
+          }
+        }}
+        placeholder={placeholder}
+        className="h-8 rounded-md border-border bg-background pl-8 pr-8 text-sm shadow-none"
+      />
+      {searchValue ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+          aria-label="Clear search"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setSearchValue("")}
+        >
+          <XIcon className="size-3.5" />
+        </Button>
+      ) : null}
+    </div>
   );
+}
+
+function buildWorkflowTokenFilterColumns(): DataTableTokenFilterColumn[] {
+  return [
+    {
+      id: N8N_FILTER_COLUMNS.readiness,
+      label: "Readiness",
+      type: "option",
+      options: READINESS_FILTERS.filter((state) => state !== "all").map(
+        (state) => ({
+          value: state,
+          label: readinessLabel(state),
+        }),
+      ),
+    },
+  ];
+}
+
+function buildExecutionTokenFilterColumns(
+  statuses: string[],
+): DataTableTokenFilterColumn[] {
+  return [
+    {
+      id: N8N_FILTER_COLUMNS.status,
+      label: "Status",
+      type: "option",
+      options: statuses.map((status) => ({
+        value: status,
+        label: status,
+      })),
+      emptyMessage: "No statuses available.",
+    },
+  ];
+}
+
+function buildWorkflowFilterColumns(): Array<
+  ColumnDef<N8nAppWorkflowRow, unknown>
+> {
+  return [
+    {
+      id: N8N_FILTER_COLUMNS.search,
+      accessorFn: workflowSearchText,
+      filterFn: dataTableTokenFilterFns.text,
+    },
+    {
+      id: N8N_FILTER_COLUMNS.readiness,
+      accessorFn: (workflow) => workflow.readinessState,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+  ];
+}
+
+function buildExecutionFilterColumns(): Array<
+  ColumnDef<N8nAppExecutionRow, unknown>
+> {
+  return [
+    {
+      id: N8N_FILTER_COLUMNS.search,
+      accessorFn: executionSearchText,
+      filterFn: dataTableTokenFilterFns.text,
+    },
+    {
+      id: N8N_FILTER_COLUMNS.status,
+      accessorFn: (execution) => execution.status,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+  ];
+}
+
+function isTextFilterValue(
+  value: unknown,
+): value is { operator: "contains"; value: string } {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    (value as { operator?: unknown }).operator === "contains" &&
+    typeof (value as { value?: unknown }).value === "string"
+  );
+}
+
+function workflowSearchText(workflow: N8nAppWorkflowRow): string {
+  return [
+    workflow.name,
+    workflow.externalWorkflowId,
+    workflow.triggerTypes.join(" "),
+    workflow.readinessState,
+    connectionLabel(workflow),
+    workflow.warnings.join(" "),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function executionSearchText(execution: N8nAppExecutionRow): string {
+  return [
+    execution.externalExecutionId,
+    execution.externalWorkflowId,
+    execution.workflowName ?? "",
+    execution.status,
+    execution.mode ?? "",
+    execution.failureMessage ?? "",
+    execution.bridgeRuns
+      .map((run) =>
+        [
+          run.id,
+          run.status,
+          run.resumeStatus,
+          run.summary ?? "",
+          run.errorMessage ?? "",
+        ].join(" "),
+      )
+      .join(" "),
+    execution.warnings.join(" "),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function formatShortDateTime(value?: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+    .format(date)
+    .replace(/,\s*/, " ")
+    .replace(/\s([AP]M)$/i, "$1");
 }
 
 function Badge({
@@ -599,14 +669,6 @@ function WarningList({ warnings }: { warnings: string[] }) {
     <span className="block truncate text-xs text-amber-500">
       {filtered[0]}
       {filtered.length > 1 ? ` +${filtered.length - 1}` : ""}
-    </span>
-  );
-}
-
-function MonoText({ children }: { children: ReactNode }) {
-  return (
-    <span className="block truncate font-mono text-xs text-muted-foreground">
-      {children}
     </span>
   );
 }
@@ -689,42 +751,6 @@ function SearchIcon({ className }: { className?: string }) {
     >
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.3-4.3" />
-    </svg>
-  );
-}
-
-function FilterIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-    >
-      <path d="M3 5h18" />
-      <path d="M6 12h12" />
-      <path d="M10 19h4" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-    >
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
