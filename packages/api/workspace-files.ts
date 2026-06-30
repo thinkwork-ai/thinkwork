@@ -154,6 +154,7 @@ import {
   parseCatalogSkillArchive,
   renderCatalogSkillArchive,
   textFromCatalogArchiveFile,
+  validateCatalogSkillFiles,
 } from "./src/lib/catalog-skill-archive.js";
 import { isCatalogArchiveSlug } from "./src/types/catalog-skill.js";
 import {
@@ -1106,6 +1107,7 @@ function catalogSummaryTrustMetadata(skill: {
     trustStatus: report.status,
     trustStale,
     skillCardStatus: report.evidence.skillCard,
+    signatureStatus: report.evidence.signature,
     trustUpdatedAt:
       skill.trust_report_updated_at instanceof Date
         ? skill.trust_report_updated_at.toISOString()
@@ -1886,6 +1888,35 @@ async function handleFixSkillTrustEvidence(
       contentSha: updatedContentSha,
       signedByUserId: deps.userId,
     });
+    if (
+      step === "signature" &&
+      isPublishableSkillSignature(result.trustReport)
+    ) {
+      const publishResult = await publishSignedSkillDraftFromTrustFix({
+        deps,
+        target,
+        slug: effectiveSlug,
+        files: updatedFiles,
+        report: result.trustReport,
+        catalogContentSha: updatedContentSha,
+      });
+      if (publishResult.indexWarning) {
+        indexWarning = publishResult.indexWarning;
+      }
+      return json(200, {
+        ok: true,
+        slug: effectiveSlug,
+        trustReport: result.trustReport,
+        fixedStep: serializeSkillTrustEvidenceFix(result),
+        artifactPath: result.artifact.path,
+        autoPublished: true,
+        publishedCatalogSlug: publishResult.slug,
+        ...(result.signedPayloadHash
+          ? { signedPayloadHash: result.signedPayloadHash }
+          : {}),
+        ...(indexWarning ? { indexWarning } : {}),
+      });
+    }
   }
 
   return json(200, {
@@ -1899,6 +1930,107 @@ async function handleFixSkillTrustEvidence(
       : {}),
     ...(indexWarning ? { indexWarning } : {}),
   });
+}
+
+function isPublishableSkillSignature(report: SkillTrustPipelineReport): boolean {
+  return (
+    report.evidence.signature === "verified" ||
+    report.evidence.signature === "approved_unverified"
+  );
+}
+
+async function publishSignedSkillDraftFromTrustFix(input: {
+  deps: HandlerDeps;
+  target: SkillDraftTarget;
+  slug: string;
+  files: SkillTrustInputFile[];
+  report: SkillTrustPipelineReport;
+  catalogContentSha: string;
+}): Promise<{ slug: string; indexWarning?: string }> {
+  const validated = validateCatalogSkillFiles(input.files);
+  if (!validated.ok) {
+    throw new Error(
+      "Signed skill draft cannot be published because its files are not a valid Agent Skills directory.",
+    );
+  }
+  if (validated.slug !== input.slug) {
+    throw new Error(
+      `Signed skill draft slug '${input.slug}' does not match SKILL.md name '${validated.slug}'.`,
+    );
+  }
+
+  const catalogSkillPrefix = `${catalogPrefix(input.target.tenantSlug)}${validated.slug}/`;
+  const existingPaths = await listAllObjectsUnfiltered(catalogSkillPrefix);
+  await Promise.all(
+    existingPaths.map((path) =>
+      s3.send(
+        new DeleteObjectCommand({
+          Bucket: bucket(),
+          Key: `${catalogSkillPrefix}${path}`,
+        }),
+      ),
+    ),
+  );
+  await Promise.all(
+    validated.files.map((file) =>
+      s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: `${catalogSkillPrefix}${file.path}`,
+          Body: file.content,
+          ContentType: contentTypeForCatalogSkillPath(file.path),
+        }),
+      ),
+    ),
+  );
+
+  const reindexResult = await reindexCatalogSkill({
+    tenantId: input.deps.tenantId,
+    tenantSlug: input.target.tenantSlug,
+    slug: validated.slug,
+    client: s3,
+    bucket: bucket(),
+  });
+  await persistSkillTrustReport({
+    tenantId: input.deps.tenantId,
+    slug: validated.slug,
+    report: input.report,
+    catalogContentSha: input.catalogContentSha,
+    signedByUserId: input.deps.userId,
+  });
+  await db
+    .update(skillDrafts)
+    .set({
+      status: "published",
+      published_catalog_slug: validated.slug,
+      published_content_hash: input.report.contentHash,
+      failure_message: null,
+      updated_at: new Date(),
+    })
+    .where(eq(skillDrafts.id, input.target.draftId));
+  await db.insert(skillDraftEvents).values({
+    tenant_id: input.deps.tenantId,
+    draft_id: input.target.draftId,
+    actor_user_id: input.deps.userId,
+    event_type: "published",
+    message: `Skill draft signed and published to Skill Library as '${validated.slug}'.`,
+    payload: {
+      slug: validated.slug,
+      contentHash: input.report.contentHash,
+      trustStatus: input.report.status,
+      scannerStatus: input.report.scanner.status,
+      signatureStatus: input.report.evidence.signature,
+      autoPublished: true,
+    },
+  });
+  return {
+    slug: validated.slug,
+    ...(reindexResult.action === "upserted"
+      ? {}
+      : {
+          indexWarning: `Catalog index ${reindexResult.action} for '${validated.slug}' after signing.`,
+        }),
+  };
 }
 
 type CatalogTrustFilesLoaded =

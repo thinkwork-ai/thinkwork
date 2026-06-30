@@ -284,6 +284,7 @@ type SkillRowFixture = {
   trustStale?: boolean | null;
   trustUpdatedAt?: string | null;
   skillCardStatus?: "present" | "missing" | "starter_generated" | null;
+  signatureStatus?: "verified" | "approved_unverified" | "missing" | null;
 };
 
 vi.mock("@/components/LoadingShimmer", () => ({
@@ -319,6 +320,7 @@ beforeEach(() => {
       trustStatus: "passed",
       trustStale: false,
       skillCardStatus: "starter_generated",
+      signatureStatus: "approved_unverified",
     },
   ]);
   mocks.getSkillCardFile.mockResolvedValue({
@@ -390,14 +392,16 @@ describe("SettingsSkills import", () => {
     expect(actions.contains(gate)).toBe(true);
   });
 
-  it("shows skill card and trust pipeline badges instead of the description column", async () => {
+  it("shows skill card, trust pipeline, and signature badges instead of the description column", async () => {
     render(<SettingsSkills />);
     await screen.findByPlaceholderText("Search skills…");
 
     expect(screen.getByText("Skill card")).toBeTruthy();
     expect(screen.getByText("Trust pipeline")).toBeTruthy();
+    expect(screen.getByText("Signature")).toBeTruthy();
     expect(screen.getByText("Available")).toBeTruthy();
     expect(screen.getByText("Passed")).toBeTruthy();
+    expect(screen.getByText("Approved unverified")).toBeTruthy();
     expect(screen.queryByText("Description")).toBeNull();
     expect(screen.queryByText("Eval score")).toBeNull();
   });

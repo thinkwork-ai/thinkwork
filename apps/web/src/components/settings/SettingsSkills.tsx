@@ -300,6 +300,7 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
                 trustStale: false,
                 trustUpdatedAt: report.generatedAt,
                 skillCardStatus: report.evidence.skillCard,
+                signatureStatus: report.evidence.signature,
               }
             : skill,
         ) ?? current,
@@ -448,6 +449,21 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
             label={trustPipelineLabel(row.original)}
             tone={trustPipelineTone(row.original)}
             ariaLabel={`Open trust pipeline for ${
+              row.original.displayName?.trim() || row.original.slug
+            }`}
+            onClick={(event) => void openTrustBadge(row.original, event)}
+          />
+        ),
+      },
+      {
+        id: "signature",
+        header: "Signature",
+        size: 180,
+        cell: ({ row }) => (
+          <SkillLibraryStatusBadgeButton
+            label={signatureLabel(row.original.signatureStatus)}
+            tone={signatureTone(row.original.signatureStatus)}
+            ariaLabel={`Open signature status for ${
               row.original.displayName?.trim() || row.original.slug
             }`}
             onClick={(event) => void openTrustBadge(row.original, event)}
@@ -713,6 +729,16 @@ function trustPipelineTone(
   if (skill.trustStatus === "passed") return "success";
   if (skill.trustStatus === "review") return "warning";
   return "danger";
+}
+
+function signatureLabel(status: SkillSummary["signatureStatus"]) {
+  return formatTrustEvidenceValue(status ?? "not_run");
+}
+
+function signatureTone(
+  status: SkillSummary["signatureStatus"],
+): "success" | "warning" | "danger" | "neutral" {
+  return trustEvidenceTone(status ?? "not_run");
 }
 
 function SkillLibraryCardSheetContent({
@@ -1321,6 +1347,10 @@ function toastTrustFixResult(result: SkillTrustEvidenceFixResult) {
   if (result.fixedStep.status === "prerequisite_missing") {
     toast.info?.(result.fixedStep.message);
     if (!toast.info) toast.success(result.fixedStep.message);
+    return;
+  }
+  if (result.autoPublished) {
+    toast.success("Skill approved and published.");
     return;
   }
   if (result.fixedStep.status === "existing_artifact") {

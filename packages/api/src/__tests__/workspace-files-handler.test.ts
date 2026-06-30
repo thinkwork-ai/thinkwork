@@ -1816,6 +1816,87 @@ describe("skill draft file target", () => {
       ]),
     );
   });
+
+  it("publishes a submitted draft after generating signature evidence", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOwnerSkillDraftTargetRows({ status: "submitted" });
+    const draftPrefix = `tenants/acme/skill-drafts/${DRAFT_ID}/`;
+    const catalogPrefix = "tenants/acme/skill-catalog/draft-helper/";
+    s3Mock.on(ListObjectsV2Command, { Prefix: draftPrefix }).resolves({
+      Contents: [{ Key: `${draftPrefix}SKILL.md` }],
+    });
+    s3Mock.on(ListObjectsV2Command, { Prefix: catalogPrefix }).resolves({
+      Contents: [],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `${draftPrefix}SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "fix-skill-trust-evidence",
+          skillDraftId: DRAFT_ID,
+          slug: "draft-helper",
+          step: "signature",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "draft-helper",
+      autoPublished: true,
+      publishedCatalogSlug: "draft-helper",
+      artifactPath: "skill.oms.sig",
+      trustReport: {
+        evidence: {
+          signature: "approved_unverified",
+        },
+      },
+    });
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual(
+      expect.arrayContaining([
+        `${draftPrefix}skill.oms.sig`,
+        `${catalogPrefix}SKILL.md`,
+        `${catalogPrefix}skill.oms.sig`,
+      ]),
+    );
+    expect(reindexCatalogSkillMock).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      tenantSlug: "acme",
+      slug: "draft-helper",
+      client: expect.any(S3Client),
+      bucket: "test-bucket",
+    });
+    expect(dbUpdateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "published",
+          published_catalog_slug: "draft-helper",
+          published_content_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+      ]),
+    );
+    expect(dbInsertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            event_type: "published",
+            payload: expect.objectContaining({ autoPublished: true }),
+          }),
+        }),
+      ]),
+    );
+  });
 });
 
 // ─── 4c. Catalog skill install action ───────────────────────────────────────
@@ -1884,7 +1965,10 @@ describe("catalog summary read (U4)", () => {
         content_sha: "a".repeat(64),
         trust_report: {
           status: "passed",
-          evidence: { skillCard: "starter_generated" },
+          evidence: {
+            skillCard: "starter_generated",
+            signature: "approved_unverified",
+          },
         },
         trust_report_content_sha: "a".repeat(64),
         trust_report_pipeline_version: "thinkwork-skill-trust-v1",
@@ -1921,6 +2005,7 @@ describe("catalog summary read (U4)", () => {
         trustStatus: "passed",
         trustStale: false,
         skillCardStatus: "starter_generated",
+        signatureStatus: "approved_unverified",
         trustUpdatedAt: "2026-06-22T12:00:00.000Z",
       },
       {
