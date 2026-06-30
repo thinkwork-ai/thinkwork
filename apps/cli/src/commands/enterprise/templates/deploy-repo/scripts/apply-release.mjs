@@ -193,6 +193,15 @@ async function updateAgentCoreRuntimes() {
       (item) => item.runtime === runtime && item.architecture === "arm64",
     );
     if (!image) continue;
+    if (runtime === "pi") {
+      updates.push(
+        updatePiLambdaRuntime({
+          stage,
+          region,
+          imageUri: image.stageUri,
+        }),
+      );
+    }
     const runtimeId = findAgentCoreRuntimeId({ stage, runtime, region });
     if (!runtimeId) {
       if (runtime === "pi") {
@@ -223,6 +232,87 @@ async function updateAgentCoreRuntimes() {
   }
 
   await writeJson(join(workDir, "runtime-updates.json"), updates);
+}
+
+function updatePiLambdaRuntime({ stage, region, imageUri }) {
+  const functionName = `thinkwork-${stage}-agentcore-pi`;
+  const expectedDigest = resolveEcrImageDigest({ imageUri, region });
+  run("aws", [
+    "lambda",
+    "update-function-code",
+    "--region",
+    region,
+    "--function-name",
+    functionName,
+    "--image-uri",
+    imageUri,
+  ]);
+  run("aws", [
+    "lambda",
+    "wait",
+    "function-updated",
+    "--region",
+    region,
+    "--function-name",
+    functionName,
+  ]);
+
+  const fn = awsJson([
+    "lambda",
+    "get-function",
+    "--region",
+    region,
+    "--function-name",
+    functionName,
+    "--output",
+    "json",
+  ]);
+  const resolvedImageUri = fn.Code?.ResolvedImageUri ?? "";
+  if (!resolvedImageUri.endsWith(`@${expectedDigest}`)) {
+    throw new Error(
+      `${functionName} resolved ${resolvedImageUri || "(missing)"} instead of ${expectedDigest}`,
+    );
+  }
+
+  return {
+    runtime: "pi-lambda",
+    status: "updated",
+    image: imageUri,
+    resolvedImageUri,
+    functionName,
+  };
+}
+
+function resolveEcrImageDigest({ imageUri, region }) {
+  const parsed = parseEcrImageUri(imageUri);
+  const image = awsJson([
+    "ecr",
+    "describe-images",
+    "--region",
+    region,
+    "--repository-name",
+    parsed.repositoryName,
+    "--image-ids",
+    `imageTag=${parsed.tag}`,
+    "--query",
+    "imageDetails[0]",
+    "--output",
+    "json",
+  ]);
+  if (!image?.imageDigest) {
+    throw new Error(`Could not resolve ECR image digest for ${imageUri}`);
+  }
+  return image.imageDigest;
+}
+
+function parseEcrImageUri(imageUri) {
+  const match = imageUri.match(
+    /^[^.]+\.dkr\.ecr\.[^.]+\.amazonaws\.com\/(.+):([^:@]+)$/,
+  );
+  if (!match) {
+    throw new Error(`Expected tagged ECR image URI, got ${imageUri}`);
+  }
+  return { repositoryName: match[1], tag: match[2] };
 }
 
 function findAgentCoreRuntimeId({ stage, runtime, region }) {

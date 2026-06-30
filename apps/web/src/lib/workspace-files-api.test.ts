@@ -605,16 +605,18 @@ describe("fixSkillTrustEvidence", () => {
       slug: "account-health-review",
       fixedStep: {
         step: "signature",
-        status: "prerequisite_missing",
-        message: "Signing is not configured.",
+        status: "generated",
+        message: "Generated unverified skill.oms.sig approval evidence.",
       },
-      prerequisite: "signing_config",
+      artifactPath: "skill.oms.sig",
+      signedPayloadHash: "b".repeat(64),
       trustReport: {
         slug: "account-health-review",
         contentHash: "a".repeat(64),
+        signedPayloadHash: "b".repeat(64),
         generatedAt: "2026-06-22T00:00:00.000Z",
         status: "passed",
-        summary: "Signing config is missing.",
+        summary: "Signature evidence is present.",
         spec: {
           status: "passed",
           allowedTools: [],
@@ -633,9 +635,9 @@ describe("fixSkillTrustEvidence", () => {
           skillCard: "present",
           evalDataset: "present",
           benchmark: "present",
-          signature: "missing_signing_config",
+          signature: "present_unverified",
         },
-        artifactPaths: { evals: [] },
+        artifactPaths: { evals: [], signature: "skill.oms.sig" },
       },
     });
 
@@ -648,7 +650,8 @@ describe("fixSkillTrustEvidence", () => {
       "/api/workspaces/files",
       expect.objectContaining({ baseUrl: "http://localhost:8787" }),
     );
-    expect(result.prerequisite).toBe("signing_config");
+    expect(result.artifactPath).toBe("skill.oms.sig");
+    expect(result.signedPayloadHash).toBe("b".repeat(64));
   });
 
   it("fails loudly when the fix response omits fix metadata", async () => {

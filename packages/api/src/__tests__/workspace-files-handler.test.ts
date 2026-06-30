@@ -3064,7 +3064,7 @@ allowed-tools:
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("reports the missing signing prerequisite instead of writing a signature", async () => {
+  it("writes unverified signature evidence when signing config is missing", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminCatalogTargetRows();
     const prefix = "tenants/acme/skill-catalog/account-health-review/";
@@ -3081,6 +3081,7 @@ description: Reviews account health signals and produces a health report.
     s3Mock
       .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
       .resolves(body(skill));
+    s3Mock.on(PutObjectCommand).resolves({});
 
     const res = await parse(
       await handler(
@@ -3098,17 +3099,27 @@ description: Reviews account health signals and produces a health report.
       ok: true,
       fixedStep: {
         step: "signature",
-        status: "prerequisite_missing",
+        status: "generated",
       },
-      prerequisite: "signing_config",
+      artifactPath: "skill.oms.sig",
       trustReport: {
         evidence: {
-          signature: "missing_signing_config",
+          signature: "present_unverified",
         },
       },
     });
-    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
-    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+    expect(res.body.signedPayloadHash).toMatch(/^[a-f0-9]{64}$/);
+    const putCalls = s3Mock.commandCalls(PutObjectCommand);
+    expect(putCalls).toHaveLength(1);
+    expect(putCalls[0].args[0].input).toMatchObject({
+      Bucket: "test-bucket",
+      Key: `${prefix}skill.oms.sig`,
+      ContentType: "application/json",
+    });
+    expect(String(putCalls[0].args[0].input.Body)).toContain(
+      '"algorithm": "UNSIGNED-APPROVAL"',
+    );
+    expect(reindexCatalogSkillMock).toHaveBeenCalled();
   });
 
   it("overwrites an existing signature when approving the current catalog snapshot", async () => {

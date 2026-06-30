@@ -127,6 +127,9 @@ describe("enterprise deploy workflow template", () => {
     const root = render();
     const helper = read(root, "scripts/apply-release.mjs");
 
+    expect(helper).toContain("update-function-code");
+    expect(helper).toContain("function-updated");
+    expect(helper).toContain("ResolvedImageUri");
     expect(helper).toContain("get-agent-runtime");
     expect(helper).toContain("--role-arn");
     expect(helper).toContain("--network-configuration");

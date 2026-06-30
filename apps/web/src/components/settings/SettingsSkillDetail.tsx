@@ -873,16 +873,13 @@ function buildSkillTrustSteps(report: SkillTrustReport): SkillTrustStep[] {
       artifactPath: report.artifactPaths.signature,
       fixStep:
         report.evidence.signature === "missing" ||
+        report.evidence.signature === "missing_signing_config" ||
         report.evidence.signature === "present_unverified" ||
         report.evidence.signature === "stale" ||
         report.evidence.signature === "invalid"
           ? "signature"
           : undefined,
       fixLabel: "Approve and sign",
-      disabledReason:
-        report.evidence.signature === "missing_signing_config"
-          ? "Signing is not configured for this environment, so ThinkWork cannot generate a real skill.oms.sig file."
-          : undefined,
     },
   ];
   return [
@@ -950,7 +947,7 @@ function signatureEvidenceState(status: string) {
     case "present_unverified":
       return "A signature file is present, but this session has not verified it.";
     case "missing_signing_config":
-      return "Signing configuration is missing, so no real signature can be generated here.";
+      return "Signing configuration is missing; approving will create unverified skill.oms.sig evidence for this catalog snapshot.";
     case "stale":
       return "The signature is stale for the current signed payload hash.";
     case "invalid":

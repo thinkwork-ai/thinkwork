@@ -150,20 +150,24 @@ describe("fixSkillTrustEvidence", () => {
     expect(result.trustReport.spec.status).toBe("failed");
   });
 
-  it("reports missing signing configuration without creating a signature", async () => {
+  it("creates unverified approval evidence without signing configuration", async () => {
+    const files = baseFiles();
     const result = await fixSkillTrustEvidence({
       slug: "account-health-review",
-      files: baseFiles(),
+      files,
       step: "signature",
       scanner: { status: "completed" },
+      now: new Date("2026-06-30T13:00:00.000Z"),
     });
 
-    expect(result.status).toBe("prerequisite_missing");
-    expect(result.artifact).toBeUndefined();
-    expect(result.prerequisite).toBe("signing_config");
-    expect(result.trustReport.evidence.signature).toBe(
-      "missing_signing_config",
+    expect(result.status).toBe("generated");
+    expect(result.artifactPath).toBe("skill.oms.sig");
+    expect(result.artifact?.contentType).toBe("application/json");
+    expect(result.artifact?.content.toString("utf8")).toContain(
+      '"algorithm": "UNSIGNED-APPROVAL"',
     );
+    expect(result.signedPayloadHash).toBe(computeSignedPayloadHash(files));
+    expect(result.trustReport.evidence.signature).toBe("present_unverified");
   });
 
   it("generates a signature only when the configured signer verifies it", async () => {

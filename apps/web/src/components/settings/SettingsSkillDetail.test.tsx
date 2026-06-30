@@ -1053,7 +1053,7 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Generated skill-card.md.");
   });
 
-  it("shows the signing prerequisite instead of offering a fake signature", async () => {
+  it("allows operators to approve signature evidence without signing config", async () => {
     mocks.runSkillTrustPipeline.mockResolvedValueOnce({
       slug: "web-research",
       contentHash: "a".repeat(64),
@@ -1088,17 +1088,73 @@ describe("SettingsSkillDetail eval panel", () => {
         benchmark: "BENCHMARK.md",
       },
     });
+    mocks.fixSkillTrustEvidence.mockResolvedValueOnce({
+      slug: "web-research",
+      fixedStep: {
+        step: "signature",
+        status: "generated",
+        message: "Generated unverified skill.oms.sig approval evidence.",
+      },
+      artifactPath: "skill.oms.sig",
+      signedPayloadHash: "b".repeat(64),
+      trustReport: {
+        slug: "web-research",
+        contentHash: "b".repeat(64),
+        signedPayloadHash: "b".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "passed",
+        summary: "Signature evidence is present.",
+        spec: {
+          status: "passed",
+          name: "web-research",
+          description: "Researches the web.",
+          allowedTools: ["web_search"],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "present_unverified",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+          signature: "skill.oms.sig",
+        },
+      },
+    });
     render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
     await openTrustStepDetail(/Signature trust step: missing signing config/i);
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
-    expect(
-      screen.getByText(/Signing is not configured for this environment/i),
-    ).toBeTruthy();
-    expect(screen.queryByTestId("skill-trust-fix-step")).toBeNull();
-    expect(mocks.fixSkillTrustEvidence).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mocks.fixSkillTrustEvidence).toHaveBeenCalledWith(
+        "web-research",
+        "signature",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("present unverified").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Generated unverified skill.oms.sig approval evidence.",
+    );
   });
 
   it("allows operators to approve and re-sign a present unverified signature", async () => {

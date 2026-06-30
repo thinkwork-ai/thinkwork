@@ -8,13 +8,14 @@ import {
 
 const SIGNATURE_VERSION = 1;
 const SIGNATURE_ALGORITHM = "HMAC-SHA256";
+const UNSIGNED_APPROVAL_ALGORITHM = "UNSIGNED-APPROVAL";
 
 interface SkillSignatureEnvelope {
   version: number;
-  algorithm: typeof SIGNATURE_ALGORITHM;
+  algorithm: typeof SIGNATURE_ALGORITHM | typeof UNSIGNED_APPROVAL_ALGORITHM;
   slug: string;
   signedPayloadHash: string;
-  signature: string;
+  signature?: string;
 }
 
 export function createConfiguredSkillTrustSigner(): SkillTrustSigner | null {
@@ -47,6 +48,9 @@ export function createConfiguredSkillTrustSigner(): SkillTrustSigner | null {
       if (!parsed) return false;
       if (parsed.slug !== slug) return false;
       if (parsed.signedPayloadHash !== signedPayloadHash) return false;
+      if (parsed.algorithm !== SIGNATURE_ALGORITHM || !parsed.signature) {
+        return false;
+      }
       const expected = signPayload(secret, slug, signedPayloadHash);
       return timingSafeEqualHex(parsed.signature, expected);
     },
@@ -85,6 +89,12 @@ export async function signatureStatusForFiles(input: {
   if (parsed.signedPayloadHash !== currentPayloadHash) {
     return { status: "stale", signedPayloadHash: currentPayloadHash };
   }
+  if (parsed.algorithm !== SIGNATURE_ALGORITHM) {
+    return {
+      status: "present_unverified",
+      signedPayloadHash: currentPayloadHash,
+    };
+  }
 
   const verified = await input.signer.verify({
     slug: input.slug,
@@ -118,7 +128,12 @@ function parseSkillSignature(signature: Buffer): SkillSignatureEnvelope | null {
       signature: unknown;
     }>;
     if (parsed.version !== SIGNATURE_VERSION) return null;
-    if (parsed.algorithm !== SIGNATURE_ALGORITHM) return null;
+    if (
+      parsed.algorithm !== SIGNATURE_ALGORITHM &&
+      parsed.algorithm !== UNSIGNED_APPROVAL_ALGORITHM
+    ) {
+      return null;
+    }
     if (typeof parsed.slug !== "string" || !parsed.slug) return null;
     if (
       typeof parsed.signedPayloadHash !== "string" ||
@@ -127,17 +142,20 @@ function parseSkillSignature(signature: Buffer): SkillSignatureEnvelope | null {
       return null;
     }
     if (
-      typeof parsed.signature !== "string" ||
-      !/^[a-f0-9]{64}$/i.test(parsed.signature)
+      parsed.algorithm === SIGNATURE_ALGORITHM &&
+      (typeof parsed.signature !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(parsed.signature))
     ) {
       return null;
     }
     return {
       version: SIGNATURE_VERSION,
-      algorithm: SIGNATURE_ALGORITHM,
+      algorithm: parsed.algorithm,
       slug: parsed.slug,
       signedPayloadHash: parsed.signedPayloadHash.toLowerCase(),
-      signature: parsed.signature.toLowerCase(),
+      ...(typeof parsed.signature === "string"
+        ? { signature: parsed.signature.toLowerCase() }
+        : {}),
     };
   } catch {
     return null;
