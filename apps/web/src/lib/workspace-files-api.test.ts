@@ -610,6 +610,8 @@ describe("fixSkillTrustEvidence", () => {
       },
       artifactPath: "skill.oms.sig",
       signedPayloadHash: "b".repeat(64),
+      autoPublished: true,
+      publishedCatalogSlug: "account-health-review",
       trustReport: {
         slug: "account-health-review",
         contentHash: "a".repeat(64),
@@ -652,6 +654,8 @@ describe("fixSkillTrustEvidence", () => {
     );
     expect(result.artifactPath).toBe("skill.oms.sig");
     expect(result.signedPayloadHash).toBe("b".repeat(64));
+    expect(result.autoPublished).toBe(true);
+    expect(result.publishedCatalogSlug).toBe("account-health-review");
   });
 
   it("fails loudly when the fix response omits fix metadata", async () => {

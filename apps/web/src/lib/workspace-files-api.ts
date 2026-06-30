@@ -33,6 +33,7 @@ export interface SkillSummary {
   trustStale?: boolean | null;
   trustUpdatedAt?: string | null;
   skillCardStatus?: SkillTrustReport["evidence"]["skillCard"] | null;
+  signatureStatus?: SkillTrustReport["evidence"]["signature"] | null;
 }
 
 export interface ExportSkillArchiveResult {
@@ -120,6 +121,8 @@ export interface SkillTrustEvidenceFixResult {
   prerequisite?: string;
   signedPayloadHash?: string;
   indexWarning?: string;
+  autoPublished?: boolean;
+  publishedCatalogSlug?: string;
 }
 
 export interface SkillTrustCacheResult {
@@ -192,6 +195,8 @@ interface WorkspaceFilesResponse {
   artifactPath?: string;
   prerequisite?: string;
   signedPayloadHash?: string;
+  autoPublished?: boolean;
+  publishedCatalogSlug?: string;
 }
 
 async function request(
@@ -442,6 +447,10 @@ export async function fixSkillTrustEvidence(
       ? { signedPayloadHash: data.signedPayloadHash }
       : {}),
     ...(data.indexWarning ? { indexWarning: data.indexWarning } : {}),
+    ...(data.autoPublished ? { autoPublished: true } : {}),
+    ...(data.publishedCatalogSlug
+      ? { publishedCatalogSlug: data.publishedCatalogSlug }
+      : {}),
   };
 }
 

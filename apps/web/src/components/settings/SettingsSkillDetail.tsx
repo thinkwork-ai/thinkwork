@@ -1040,6 +1040,10 @@ function toastTrustFixResult(result: SkillTrustEvidenceFixResult) {
     if (!toast.info) toast.success(result.fixedStep.message);
     return;
   }
+  if (result.autoPublished) {
+    toast.success("Skill approved and published.");
+    return;
+  }
   if (result.fixedStep.status === "existing_artifact") {
     toast.success(result.fixedStep.message);
     return;
@@ -1253,6 +1257,14 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
         setTrustFixWarning(result.indexWarning);
       }
       toastTrustFixResult(result);
+      if (result.autoPublished) {
+        const publishedSlug = result.publishedCatalogSlug ?? result.slug;
+        refetchDrafts({ requestPolicy: "network-only" });
+        navigate({
+          to: "/settings/skills/$skillSlug",
+          params: { skillSlug: publishedSlug },
+        });
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unknown trust evidence failure.";
