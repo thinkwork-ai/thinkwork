@@ -1,13 +1,5 @@
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Check,
-  ClipboardList,
-  Gauge,
-  MessageCircle,
-  Pencil,
-  SlidersHorizontal,
-} from "lucide-react";
+import { Check, ClipboardList, MessageCircle } from "lucide-react";
 import {
   Button,
   Select,
@@ -22,11 +14,7 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import {
-  SettingsPageTitle,
-  SettingsRow,
-  SettingsSection,
-} from "@/components/settings/SettingsContent";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import type {
   AgentLoopDraft,
   AgentLoopRow,
@@ -107,22 +95,9 @@ export function AgentLoopForm({
     setError(null);
   }, [mode, seededDraft]);
 
-  const validationError = validateDraft(draft);
-  const chatBuilderRequired =
-    mode === "create" &&
-    draft.creationMode === "chat" &&
-    (!draft.builderThreadId || !builderAnswersApplied);
-  const saveDisabled = saving || !!validationError || chatBuilderRequired;
+  const saveDisabled = saving;
 
   async function save() {
-    if (chatBuilderRequired) {
-      setError(
-        draft.builderThreadId
-          ? "Answer the builder questions to finalize the chat draft."
-          : "Start the chat builder to generate a reviewable draft.",
-      );
-      return;
-    }
     const invalid = validateDraft(draft);
     if (invalid) {
       setError(invalid);
@@ -137,11 +112,7 @@ export function AgentLoopForm({
         id: initialLoop?.id,
         workerOptions,
       });
-      if (
-        draft.creationMode === "chat" &&
-        draft.builderThreadId &&
-        onConfirmBuilderDraft
-      ) {
+      if (draft.builderThreadId && onConfirmBuilderDraft) {
         await onConfirmBuilderDraft(payload, draft.builderThreadId);
       } else {
         await onSubmit(payload);
@@ -168,7 +139,8 @@ export function AgentLoopForm({
       setDraft((current) => ({
         ...current,
         ...builderDraft,
-        creationMode: "chat",
+        creationMode:
+          current.creationMode === "advanced" ? "advanced" : "builder",
         builderThreadId: result.thread.id,
         builderThreadTitle: result.thread.title ?? "Automation setup",
         builderSetupPrompt: result.setupPrompt,
@@ -184,20 +156,13 @@ export function AgentLoopForm({
   function selectPreset(nextDraft: AgentLoopDraft) {
     setDraft((current) => ({
       ...nextDraft,
-      creationMode: current.creationMode === "advanced" ? "advanced" : "easy",
+      creationMode:
+        current.creationMode === "advanced" ? "advanced" : "builder",
       builderThreadId: null,
       builderThreadTitle: null,
       builderSetupPrompt: null,
     }));
     setBuilderAnswersApplied(false);
-  }
-
-  function setCreationMode(creationMode: AgentLoopDraft["creationMode"]) {
-    setDraft((current) => ({ ...current, creationMode }));
-    setBuilderAnswersApplied(false);
-    if (creationMode === "advanced") {
-      setAdvancedOpen(true);
-    }
   }
 
   function applyBuilderAnswers(answers: BuilderAnswers) {
@@ -220,172 +185,73 @@ export function AgentLoopForm({
         description={
           mode === "edit"
             ? "Update the prompt, trigger, and advanced runtime settings."
-            : "Start with a prompt, then refine only when needed."
+            : "Define when it runs, what it does, and what it can use."
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
         {mode === "create" ? (
-          <div className="flex flex-wrap gap-2">
-            <ModeButton
-              active={draft.creationMode === "chat"}
-              icon={<MessageCircle className="size-4" />}
-              label="Chat"
-              onClick={() => setCreationMode("chat")}
-            />
-            <ModeButton
-              active={draft.creationMode === "easy"}
-              icon={<Pencil className="size-4" />}
-              label="Manual"
-              onClick={() => setCreationMode("easy")}
-            />
-            <ModeButton
-              active={draft.creationMode === "advanced"}
-              icon={<Gauge className="size-4" />}
-              label="Advanced"
-              onClick={() => setCreationMode("advanced")}
-            />
-          </div>
-        ) : (
-          <div />
-        )}
-
-        <div className="flex items-center gap-2">
-          {mode === "create" ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="Open templates"
-              onClick={() => setPresetSheetOpen(true)}
-            >
-              <ClipboardList className="size-4" />
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setAdvancedOpen(true)}
+            aria-label="Open templates"
+            onClick={() => setPresetSheetOpen(true)}
           >
-            <SlidersHorizontal className="mr-2 size-4" />
-            Advanced settings
+            <ClipboardList className="mr-2 size-4" />
+            Templates
           </Button>
-        </div>
+        ) : null}
+        {mode === "create" && onStartBuilder ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void startBuilder()}
+            disabled={builderStarting}
+          >
+            <MessageCircle className="mr-2 size-4" />
+            {builderStarting
+              ? "Starting..."
+              : draft.builderThreadId
+                ? "Refresh chat draft"
+                : "Chat help"}
+          </Button>
+        ) : null}
       </div>
 
-      {mode === "create" && draft.creationMode === "chat" ? (
-        <SettingsSection label="Chat builder">
-          <SettingsRow label="Prompt" layout="stacked">
-            <Textarea
-              aria-label="Automation prompt"
-              className="min-h-32 w-full"
-              value={draft.objective}
-              onChange={(event) =>
-                setDraft((current) => {
-                  const objective = event.target.value;
-                  return {
-                    ...current,
-                    objective,
-                    name: current.name || titleFromPrompt(objective),
-                  };
-                })
-              }
-              placeholder="Watch Linear for issues ready for implementation and create a short routing summary."
-            />
-          </SettingsRow>
-          <SettingsRow label="Builder">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void startBuilder()}
-                disabled={builderStarting || !onStartBuilder}
-              >
-                <MessageCircle className="mr-2 size-4" />
-                {builderStarting
-                  ? "Starting..."
-                  : draft.builderThreadId
-                    ? "Resume chat builder"
-                    : "Start chat builder"}
-              </Button>
-              {draft.builderThreadId ? (
-                <a
-                  className="text-sm text-primary hover:underline"
-                  href={`/threads/${draft.builderThreadId}`}
-                >
-                  Open setup thread
-                </a>
-              ) : null}
+      <AutomationEasyForm
+        draft={draft}
+        setDraft={setDraft}
+        spaceOptions={spaceOptions}
+      />
+
+      {draft.builderThreadId ? (
+        <div className="mx-auto mt-6 w-full max-w-6xl rounded-lg border border-border/70 bg-background/60 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Chat draft helper</p>
+              <p className="text-xs text-muted-foreground">
+                Optional setup history. Applying answers updates this same
+                builder.
+              </p>
             </div>
-          </SettingsRow>
-          {draft.builderThreadId ? (
-            <SettingsRow label="Builder questions" layout="stacked">
-              <AutomationBuilderQuestionCard
-                prompt={draft.objective}
-                spaceOptions={spaceOptions}
-                defaultSpaceId={defaultSpaceId}
-                applied={builderAnswersApplied}
-                onApply={applyBuilderAnswers}
-              />
-            </SettingsRow>
-          ) : null}
-          <SettingsRow label="Space">
-            <Select
-              value={draft.spaceId || undefined}
-              onValueChange={(value) =>
-                setDraft((current) => ({ ...current, spaceId: value }))
-              }
+            <a
+              className="text-sm text-primary hover:underline"
+              href={`/threads/${draft.builderThreadId}`}
             >
-              <SelectTrigger className="w-72" aria-label="Automation Space">
-                <SelectValue placeholder="Choose a Space" />
-              </SelectTrigger>
-              <SelectContent>
-                {spaceOptions.map((space) => (
-                  <SelectItem key={space.id} value={space.id}>
-                    {space.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingsRow>
-          {draft.builderThreadId ? (
-            <SettingsRow label="Review draft" layout="stacked">
-              <div className="rounded-md border border-border/70 p-4 text-sm">
-                <div className="font-medium">{draft.name || "Untitled"}</div>
-                <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-                  {draft.objective}
-                </p>
-                <div className="mt-3 grid gap-1 text-muted-foreground">
-                  <p>
-                    Trigger:{" "}
-                    {draft.triggerFamily === "schedule"
-                      ? `Schedule (${draft.scheduleExpression})`
-                      : "Manual"}
-                  </p>
-                  <p>
-                    Done:{" "}
-                    {draft.completionCriteriaText ||
-                      "Runtime will infer completion from the prompt."}
-                  </p>
-                  <p>
-                    Status:{" "}
-                    {builderAnswersApplied
-                      ? "Ready to create"
-                      : "Waiting on builder answers"}
-                  </p>
-                </div>
-              </div>
-            </SettingsRow>
-          ) : null}
-        </SettingsSection>
-      ) : (
-        <AutomationEasyForm
-          draft={draft}
-          setDraft={setDraft}
-          spaceOptions={spaceOptions}
-        />
-      )}
+              Open setup thread
+            </a>
+          </div>
+          <AutomationBuilderQuestionCard
+            prompt={draft.objective}
+            spaceOptions={spaceOptions}
+            defaultSpaceId={defaultSpaceId}
+            applied={builderAnswersApplied}
+            onApply={applyBuilderAnswers}
+          />
+        </div>
+      ) : null}
 
       <AutomationAdvancedInspector
         open={advancedOpen}
@@ -403,28 +269,24 @@ export function AgentLoopForm({
         onSelect={selectPreset}
       />
 
-      <div className="flex items-center justify-end gap-3 pb-8 pt-4">
-        {error || validationError ? (
-          <p className="mr-auto text-sm text-destructive">
-            {error ?? validationError}
-          </p>
-        ) : null}
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          onClick={() => void save()}
-          disabled={saveDisabled}
-        >
-          {saving
-            ? "Saving..."
-            : mode === "edit"
-              ? "Save Automation"
-              : draft.creationMode === "chat"
-                ? "Create from Chat Draft"
-                : "Create Automation"}
-        </Button>
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-start gap-3 pb-8 pt-6">
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <div className="ml-auto flex items-center gap-3">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void save()}
+            disabled={saveDisabled}
+          >
+            {saving
+              ? "Saving..."
+              : mode === "edit"
+                ? "Save Automation"
+                : "Create automation"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -703,39 +565,12 @@ function RadioChoice({
   );
 }
 
-function ModeButton({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? "default" : "outline"}
-      size="sm"
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      {icon}
-      <span className="ml-2">{label}</span>
-    </Button>
-  );
-}
-
 function jsonDraft(value: unknown): Partial<AgentLoopDraft> {
   const source =
     typeof value === "string" && value.trim()
       ? safeRecord(parseJson(value))
       : safeRecord(value);
-  const draft: Partial<AgentLoopDraft> = {
-    creationMode: "chat",
-  };
+  const draft: Partial<AgentLoopDraft> = {};
   setString(draft, "name", source.name);
   setString(draft, "description", source.description);
   setString(draft, "scheduleType", source.scheduleType);

@@ -1,12 +1,9 @@
 export type AgentLoopLifecycleStatus =
-  | "draft"
-  | "active"
-  | "paused"
-  | "archived";
+  "draft" | "active" | "paused" | "archived";
 
 export type AgentLoopTriggerFamily = "manual" | "schedule";
 export type AgentLoopJudgeMode = "self_check" | "human_approval";
-export type AgentLoopCreationMode = "advanced" | "chat" | "easy";
+export type AgentLoopCreationMode = "advanced" | "builder" | "chat" | "easy";
 
 export type JsonRecord = Record<string, unknown>;
 
