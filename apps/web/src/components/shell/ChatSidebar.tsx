@@ -912,6 +912,18 @@ export function ChatSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
+                isActive={isAgentLoopsRoute}
+                tooltip="Automations"
+              >
+                <Link to="/automations">
+                  <Clock />
+                  <span>Automations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
                 isActive={isWorkItemsRoute}
                 tooltip="Work Items"
               >
@@ -924,18 +936,6 @@ export function ChatSidebar() {
                       className="border border-transparent transition-colors group-hover/menu-button:border-white/35 group-data-[active=true]/menu-button:border-white/45"
                     />
                   ) : null}
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={isAgentLoopsRoute}
-                tooltip="Automations"
-              >
-                <Link to="/automations">
-                  <Clock />
-                  <span>Automations</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
