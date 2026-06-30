@@ -2832,7 +2832,7 @@ function PromptInputAttachButton() {
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
       title="Attach file"
-      className="text-white hover:bg-white/10"
+      className="text-muted-foreground hover:text-foreground"
     >
       <IconPaperclip stroke={2} className="h-4 w-4" />
     </PromptInputButton>
