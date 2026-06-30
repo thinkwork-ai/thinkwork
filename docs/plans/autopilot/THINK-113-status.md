@@ -3,7 +3,7 @@ title: "Autopilot status: THINK-113 n8n integrated app"
 date: 2026-06-30
 issue: THINK-113
 plan: docs/plans/2026-06-30-001-feat-n8n-integrated-app-plan.md
-status: active
+status: complete
 ---
 
 # Autopilot status: THINK-113 n8n integrated app
@@ -16,7 +16,7 @@ status: active
 - Linear attached document: `Plan: Add n8n integrated app`.
 - Child issues: none found. Autopilot will use plan units as implementation units.
 - Blocking issue relations: none found.
-- Current branch: `codex/think-113-u5-n8n-app-smoke`.
+- Current branch: none; THINK-113 implementation is merged to `main`.
 
 ## Context discovery
 
@@ -88,7 +88,13 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | 2026-06-30 | U5 tests | `pnpm --filter @thinkwork/plugin-n8n test`; `npx vitest run src/graphql/resolvers/plugin-apps/installedPluginApps.query.test.ts`; `npx vitest run src/components/settings/plugins/n8n/N8nPluginHome.test.tsx src/components/apps/PluginAppRoute.test.tsx`. | Passed |
 | 2026-06-30 | U5 typechecks/source-boundary | `pnpm --filter @thinkwork/plugin-n8n typecheck`; `pnpm --filter @thinkwork/web typecheck`; `pnpm --filter @thinkwork/api typecheck`; `pnpm lint:plugin-source`. | Passed |
 | 2026-06-30 | U5 browser verification | Worktree server on `5174` shows Settings -> Plugins -> n8n with `Update available`, `Install update`, `Plugin catalog`, and `Refresh catalog` for installed `v0.1.0 -> v0.2.0`. `/apps` still shows deployed-API behavior until the local resolver change is deployed. Port `5180` is served by a different worktree (`c64d`). | Passed |
+| 2026-06-30 | U5 managed app plan dialog fix | Addressed install approval confusion by polling `managedApplicationDeployment(jobId)` while the deployment plan dialog is open, showing an explicit preparing-plan state, and enabling deploy approval once the backend reaches `awaiting_approval`. | Passed |
+| 2026-06-30 | U5 native app visibility fix | Added compatibility projection so existing installed n8n tenants expose the native n8n app surface in `/apps` after the resolver deploy, without mutating legacy pinned plugin manifests. | Passed |
+| 2026-06-30 | U5 n8n app UI feedback | Removed workflow ID / last-seen columns, removed the app title area, matched the Twenty-style breadcrumb/action header, moved Workflows/Executions switching into the breadcrumb dropdown, replaced the custom filter select with Bessa `DataTableTokenFilter`, restored bordered search inputs, and simplified the executions table to workflow name, status, mode, compact started time, and duration. | Passed |
+| 2026-06-30 | U5 final local verification | `corepack pnpm --filter @thinkwork/plugin-n8n typecheck`; `corepack pnpm --filter @thinkwork/web typecheck`; `corepack pnpm lint:plugin-source`; `npx vitest run src/components/apps/PluginAppRoute.test.tsx`; browser-verified `/apps/n8n/workflows` on port `5174`. | Passed |
+| 2026-06-30 | U5 PR merge | PR [#3145](https://github.com/thinkwork-ai/thinkwork/pull/3145) passed CLA, lint, plugin catalog, supply-chain verify, test, typecheck, and Devin Review, then squash-merged into `main` at `3a589065dc92c102f353c08028ab55245bbd151c`. | Passed |
+| 2026-06-30 | U5 cleanup | Remote branch `codex/think-113-u5-n8n-app-smoke` was deleted by the merge flow; local worktree `/Users/ericodom/.codex/worktrees/fffa/thinkwork` and the local branch were removed. | Passed |
 
-## Active unit
+## Final state
 
-U5 is active. The branch adds guarded dry-run sync and smoke verification, documents the native installed-app path, and fixes the operator-facing n8n install/update path so legacy installed tenants can refresh the catalog, install the update, and launch the native workflow app from `/apps/n8n/workflows` after the backend resolver deploys.
+THINK-113 is complete. The n8n plugin settings surface is settings-only with clear install/update access, the installed native n8n app is discoverable from `/apps`, workflow and execution data are exposed through a ThinkWork-mediated read-only API, the native app tables follow the shared Bessa/Work Items interaction patterns, guarded sync/smoke tooling is documented, and PR #3145 merged the final U5 work into `main`.
