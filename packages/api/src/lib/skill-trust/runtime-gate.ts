@@ -32,12 +32,6 @@ export function isCurrentPassedSkillTrustReport(
     report.status === "passed" &&
     report.spec?.status === "passed" &&
     report.scanner?.status === "completed" &&
-    (evidence?.skillCard === "present" ||
-      evidence?.skillCard === "starter_generated") &&
-    (evidence?.evalDataset === "present" ||
-      evidence?.evalDataset === "starter_generated") &&
-    (evidence?.benchmark === "present" ||
-      evidence?.benchmark === "starter_generated") &&
     hasRuntimeTrustedSignature(evidence) &&
     row.trust_report_content_sha === row.content_sha &&
     row.trust_report_pipeline_version === SKILL_TRUST_PIPELINE_VERSION
