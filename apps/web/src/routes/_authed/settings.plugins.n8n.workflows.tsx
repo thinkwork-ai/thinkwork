@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { N8nPluginHome } from "@/components/settings/plugins/n8n/N8nPluginHome";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/plugins/n8n/workflows")(
   {
-    component: () => <N8nPluginHome tab="workflows" />,
+    beforeLoad: () => {
+      throw redirect({ to: "/settings/plugins/n8n", replace: true });
+    },
   },
 );

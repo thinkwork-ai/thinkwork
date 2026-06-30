@@ -6,9 +6,6 @@ const read = (path: string) =>
   readFileSync(resolve(process.cwd(), path), "utf8");
 
 const home = read("src/components/settings/plugins/n8n/N8nPluginHome.tsx");
-const workflows = read(
-  "src/components/settings/plugins/n8n/N8nPluginWorkflows.tsx",
-);
 const settings = read(
   "src/components/settings/plugins/n8n/N8nPluginSettings.tsx",
 );
@@ -21,11 +18,12 @@ const settingsRoute = read(
 );
 
 describe("N8nPluginHome", () => {
-  it("publishes route-backed Workflows and Settings tabs in the header", () => {
+  it("publishes a settings-only n8n plugin header with native n8n launch", () => {
     expect(home).toContain("title: displayName");
     expect(home).toContain('{ label: "Plugins", href: "/settings/plugins" }');
-    expect(home).toContain('{ to: N8N_WORKFLOWS, label: "Workflows" }');
-    expect(home).toContain('{ to: N8N_SETTINGS, label: "Settings" }');
+    expect(home).not.toContain("tabs:");
+    expect(home).not.toContain("N8N_WORKFLOWS");
+    expect(home).not.toContain("N8N_SETTINGS");
     expect(home).toContain('aria-label="Open n8n UI"');
     expect(home).toContain(
       'window.open(launchUrl, "_blank", "noopener,noreferrer")',
@@ -34,19 +32,22 @@ describe("N8nPluginHome", () => {
     expect(home).not.toContain("TabsList");
   });
 
-  it("mounts the n8n plugin home across the n8n plugin tab routes", () => {
-    expect(n8nRoute).toContain('<N8nPluginHome tab="workflows"');
-    expect(workflowsRoute).toContain('<N8nPluginHome tab="workflows"');
-    expect(settingsRoute).toContain('<N8nPluginHome tab="settings"');
+  it("mounts settings routes and redirects the legacy workflows route", () => {
+    expect(n8nRoute).toContain("<N8nPluginHome />");
+    expect(settingsRoute).toContain("<N8nPluginHome />");
+    expect(workflowsRoute).toContain("redirect({");
+    expect(workflowsRoute).toContain('to: "/settings/plugins/n8n"');
+    expect(workflowsRoute).toContain("replace: true");
+    expect(workflowsRoute).not.toContain("N8nPluginWorkflows");
   });
 
-  it("keeps workflow discovery separate from package/runtime settings", () => {
-    expect(workflows).toContain("SettingsDiscoverN8nWorkflowsQuery");
-    expect(workflows).toContain("SettingsConnectN8nWorkflowMutation");
-    expect(workflows).toContain("<DataTable");
-    expect(workflows).toContain("No n8n workflows have been discovered yet.");
-    expect(home).toContain('activeTab === "workflows"');
-    expect(home).toContain("<N8nPluginWorkflows");
+  it("keeps plugin detail settings-only with an install action", () => {
+    expect(home).toContain("SettingsInstallPluginMutation");
+    expect(home).toContain("Install");
+    expect(home).toContain("Install ${entry.displayName}");
+    expect(home).not.toContain('activeTab === "workflows"');
+    expect(home).not.toContain("<N8nPluginWorkflows");
+    expect(home).not.toContain("Refresh n8n workflows");
     expect(settings).toContain("<N8nSettings");
   });
 });

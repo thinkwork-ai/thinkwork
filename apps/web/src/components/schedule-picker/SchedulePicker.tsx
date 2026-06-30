@@ -89,6 +89,7 @@ export function buildExpression(opts: {
 }): { type: string; expr: string } {
   if (opts.scheduleType === "one_time") {
     const dt = new Date(opts.oneTimeDate || "");
+    if (Number.isNaN(dt.getTime())) return { type: "at", expr: "" };
     return {
       type: "at",
       expr: `at(${dt.toISOString().replace(/\.\d{3}Z$/, "")})`,

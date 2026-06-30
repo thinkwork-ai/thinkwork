@@ -64,24 +64,79 @@ vi.mock("@/components/settings/SettingsContent", () => ({
 }));
 
 vi.mock("@thinkwork/ui", () => ({
-  Button: ({
+  Accordion: ({
+    children,
+    value: _value,
+    onValueChange: _onValueChange,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => <div>{children}</div>,
+  AccordionContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  AccordionItem: ({
+    children,
+    value: _value,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+  }) => <div>{children}</div>,
+  AccordionTrigger: ({
     children,
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
+    <button {...props} type="button">
+      {children}
+    </button>
   ),
+  Button: ({
+    children,
+    variant: _variant,
+    size: _size,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    variant?: string;
+    size?: string;
+  }) => <button {...props}>{children}</button>,
   Checkbox: ({
     checked,
+    disabled,
     onCheckedChange,
+    ...props
   }: {
     checked?: boolean;
+    disabled?: boolean;
     onCheckedChange?: (checked: boolean) => void;
   }) => (
     <input
+      {...props}
       type="checkbox"
       checked={checked}
+      disabled={disabled}
       onChange={(event) => onCheckedChange?.(event.target.checked)}
     />
+  ),
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DropdownMenuItem: ({
+    children,
+    onSelect,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    onSelect?: () => void;
+  }) => (
+    <button {...props} type="button" onClick={onSelect}>
+      {children}
+    </button>
+  ),
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
   ),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
@@ -185,7 +240,7 @@ const spaces: AgentLoopSpaceOption[] = [
 afterEach(() => cleanup());
 
 describe("AgentLoopForm", () => {
-  it("requires a prompt before saving", () => {
+  it("requires an instruction before saving", () => {
     render(
       <AgentLoopForm
         mode="create"
@@ -198,17 +253,42 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Create from Chat Draft",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    expect(screen.getByText("Goal intent is required.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
+    expect(screen.getByText("Instruction is required.")).toBeTruthy();
   });
 
-  it("saves Manual mode from prompt and default runtime settings", async () => {
+  it("renders the Devin-style builder without creation mode buttons", () => {
+    render(
+      <AgentLoopForm
+        mode="create"
+        tenantId="tenant-1"
+        workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
+        onSubmit={vi.fn()}
+        onStartBuilder={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "New Automation" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Automation name")).toBeTruthy();
+    expect(screen.getByText("Triggers")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add trigger/ })).toBeTruthy();
+    expect(screen.getByText("Instructions")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Add instruction/ }),
+    ).toBeTruthy();
+    expect(screen.getByText("MCPs")).toBeTruthy();
+    expect(screen.getByText("No MCPs available")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Advanced" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Chat" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Manual" })).toBeNull();
+  });
+
+  it("saves the builder from instruction and default runtime settings", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -223,13 +303,10 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
-    expect(screen.queryByText("Worker")).toBeNull();
-
-    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+    fireEvent.change(screen.getByLabelText("Automation instruction"), {
       target: { value: "Route Linear issues to the right worker." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
@@ -240,14 +317,14 @@ describe("AgentLoopForm", () => {
         triggerSpec: expect.objectContaining({ family: "manual" }),
         workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
         sourceMetadata: expect.objectContaining({
-          creationMode: "easy",
-          createdFrom: "settings.automations.easy",
+          creationMode: "builder",
+          createdFrom: "settings.automations.builder",
         }),
       }),
     );
   });
 
-  it("defaults creation to chat and confirms a builder draft before saving", async () => {
+  it("keeps chat assistance optional and confirms a linked builder draft when used", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const onConfirmBuilderDraft = vi.fn().mockResolvedValue(undefined);
     const onStartBuilder = vi.fn().mockResolvedValue({
@@ -286,17 +363,15 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(onStartBuilder).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+    fireEvent.change(screen.getByLabelText("Automation instruction"), {
       target: {
         value:
           "Every weekday morning, route Linear issues to the right worker.",
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start chat builder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chat help" }));
 
     await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
     expect(screen.getByText("Open setup thread")).toBeTruthy();
@@ -304,17 +379,15 @@ describe("AgentLoopForm", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create from Chat Draft",
+          name: "Create automation",
         }) as HTMLButtonElement
       ).disabled,
-    ).toBe(true);
+    ).toBe(false);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Apply builder answers" }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create from Chat Draft" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onConfirmBuilderDraft).toHaveBeenCalledTimes(1));
     expect(onConfirmBuilderDraft).toHaveBeenCalledWith(
@@ -329,7 +402,7 @@ describe("AgentLoopForm", () => {
           }),
         }),
         sourceMetadata: expect.objectContaining({
-          creationMode: "chat",
+          creationMode: "builder",
           builderThreadId: "thread-1",
         }),
       }),
@@ -338,7 +411,7 @@ describe("AgentLoopForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("keeps the entered prompt when the builder returns an incomplete draft", async () => {
+  it("keeps the entered instruction when chat help returns an incomplete draft", async () => {
     const onStartBuilder = vi.fn().mockResolvedValue({
       threadCreated: true,
       setupPrompt: "Builder questions",
@@ -359,18 +432,19 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+    fireEvent.change(screen.getByLabelText("Automation instruction"), {
       target: { value: "Route Linear issues to the right worker." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start chat builder" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chat help" }));
 
     await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
     expect(
-      (screen.getByLabelText("Automation prompt") as HTMLTextAreaElement).value,
+      (screen.getByLabelText("Automation instruction") as HTMLTextAreaElement)
+        .value,
     ).toBe("Route Linear issues to the right worker.");
   });
 
-  it("opens templates in a side sheet and applies the weekly preset", async () => {
+  it("opens templates in a side sheet and applies the weekly preset to the builder", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -389,7 +463,7 @@ describe("AgentLoopForm", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Weekly Agent Check-In/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
@@ -411,6 +485,10 @@ describe("AgentLoopForm", () => {
         }),
         workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
         judgeSpec: expect.objectContaining({ mode: "self_check" }),
+        sourceMetadata: expect.objectContaining({
+          creationMode: "builder",
+          createdFrom: "settings.automations.builder",
+        }),
         loopPolicy: expect.objectContaining({
           maxIterations: 1,
           maxRuntimeMs: 1_800_000,
@@ -423,7 +501,7 @@ describe("AgentLoopForm", () => {
     );
   });
 
-  it("keeps Advanced settings in an inspector and saves explicit criteria", async () => {
+  it("keeps Advanced settings in an accordion and saves explicit criteria", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -438,7 +516,7 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("Completion criteria")).toBeNull();
+    expect(screen.queryByTestId("sheet")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Goal intent"), {
@@ -455,13 +533,13 @@ describe("AgentLoopForm", () => {
     fireEvent.change(screen.getByLabelText("Max iterations"), {
       target: { value: "3" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceMetadata: expect.objectContaining({
-          creationMode: "advanced",
+          creationMode: "builder",
         }),
         goalSpec: expect.objectContaining({
           completionCriteria: [

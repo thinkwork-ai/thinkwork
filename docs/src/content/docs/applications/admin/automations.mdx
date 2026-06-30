@@ -53,14 +53,19 @@ event-driven triggers remain later phases.
 
 ### Creating an Automation
 
-New Automations expose 3 modes:
+New Automations open in a single block builder:
 
-- **Chat**: the default. A hidden builder thread asks focused questions, drafts
-  a reviewable Automation, and saves only after confirmation.
-- **Manual**: the easy form. Operators provide prompt, Space, and trigger.
-  ThinkWork derives the goal, self-check judge, worker, and policy defaults.
-- **Advanced**: an inspector side panel for explicit criteria, judge settings,
-  policy limits, evidence retention, and raw runtime metadata.
+1. name the Automation;
+2. choose a supported trigger, currently manual or schedule;
+3. write a **Start session** instruction;
+4. review visible MCP/connector availability;
+5. expand **Advanced** only when explicit criteria, worker/judge settings,
+   policy limits, or evidence controls are needed.
+
+The common path only needs a name, trigger, instruction, and Space. ThinkWork
+derives the internal goal, self-check judge, worker, and policy defaults from
+that builder state. Chat help can still create setup history and prefill the
+same builder, but it is no longer a separate creation mode or a required step.
 
 Every Automation must choose a Space. The form defaults to the Space configured
 in Agent settings, then persists the selected Space on the Automation. Manual
@@ -69,7 +74,7 @@ the result in the same conversation surface as ordinary agent work.
 
 ### Builder and execution threads
 
-Chat creation uses a real setup thread in a lazily-created system-managed
+Optional chat help uses a real setup thread in a lazily-created system-managed
 Automation Builder Space. The Space and its setup threads are hidden from normal
 navigation, search, and unread counts. Direct thread access still requires the
 creating user to be a participant, and the Automation detail page can link to
@@ -82,7 +87,7 @@ Setup threads are distinct from execution threads:
 
 ### Automation Loop Designer skill
 
-The Chat builder seeds the hidden thread with the
+The optional chat helper seeds the hidden thread with the
 `automation-loop-designer` workspace skill. The skill emits a ThinkWork-native
 `AutomationDraft` containing prompt, Space, trigger, goal, judge, policy, and
 source metadata.

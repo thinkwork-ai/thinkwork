@@ -7,7 +7,7 @@ import {
 } from "./automation-draft.js";
 
 describe("normalizeAutomationDraft", () => {
-  it("infers goal, judge, and default worker settings for prompt-first drafts", () => {
+  it("infers goal, judge, and default worker settings for builder drafts", () => {
     const normalized = normalizeAutomationDraft({
       goalSpec: {
         objective: "Check customer escalations",
@@ -16,8 +16,8 @@ describe("normalizeAutomationDraft", () => {
       workerSpec: { type: "agent", id: "", toolHints: [], config: {} },
       judgeSpec: { mode: "self_check", criteria: [], config: {} },
       sourceMetadata: {
-        createdFrom: "settings.automations.easy",
-        creationMode: "easy",
+        createdFrom: "settings.automations.builder",
+        creationMode: "builder",
       },
       defaultWorker: {
         type: "agent",
