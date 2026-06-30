@@ -912,6 +912,18 @@ export function ChatSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
+                isActive={isAgentLoopsRoute}
+                tooltip="Automations"
+              >
+                <Link to="/automations">
+                  <Clock />
+                  <span>Automations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
                 isActive={isWorkItemsRoute}
                 tooltip="Work Items"
               >
@@ -927,24 +939,9 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={isAgentLoopsRoute}
-                tooltip="Automations"
-              >
-                <Link to="/automations">
-                  <Clock />
-                  <span>Automations</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             {installedApps.length > 0 ? (
               <SidebarMenuItem>
-                <PluginAppsNavItem
-                  apps={installedApps}
-                  isActive={isAppsRoute}
-                />
+                <PluginAppsNavItem isActive={isAppsRoute} />
               </SidebarMenuItem>
             ) : null}
           </SidebarMenu>
@@ -1030,83 +1027,14 @@ export function ChatSidebar() {
   );
 }
 
-function PluginAppsNavItem({
-  apps,
-  isActive,
-}: {
-  apps: NonNullable<InstalledPluginAppsResult["installedPluginApps"]>;
-  isActive: boolean;
-}) {
-  const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-
+function PluginAppsNavItem({ isActive }: { isActive: boolean }) {
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
-        <div
-          data-plugin-apps-row
-          className="cursor-pointer"
-          onClick={(event) => {
-            if (
-              event.target instanceof Element &&
-              event.target.closest("[data-plugin-apps-trigger]")
-            ) {
-              return;
-            }
-            setOpen((value) => !value);
-          }}
-        >
-          <LayoutGrid />
-          <span className="min-w-0 flex-1 truncate text-left">Apps</span>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="Apps"
-              data-plugin-apps-trigger
-              className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-            >
-              <ChevronDown
-                className={cn(
-                  "size-3.5 transition-transform",
-                  open ? "rotate-180" : null,
-                )}
-              />
-            </button>
-          </DropdownMenuTrigger>
-        </div>
-      </SidebarMenuButton>
-      <DropdownMenuContent
-        side="bottom"
-        align="start"
-        sideOffset={4}
-        className="z-[1000] w-auto min-w-0"
-        data-plugin-apps-menu
-        style={{ width: "max-content", minWidth: "max-content" }}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-      >
-        {apps.map((app) => {
-          const ready = app.readiness.state === "ready";
-          return (
-            <DropdownMenuItem
-              key={app.id}
-              className="whitespace-nowrap py-2"
-              onSelect={() => {
-                setOpen(false);
-                void navigate({
-                  to: "/apps/$pluginKey/$appRouteSegment",
-                  params: {
-                    pluginKey: app.pluginKey,
-                    appRouteSegment: app.routeSegment,
-                  },
-                });
-              }}
-            >
-              {ready ? app.displayName : app.readiness.message}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SidebarMenuButton asChild isActive={isActive} tooltip="Applications">
+      <Link to="/apps">
+        <LayoutGrid />
+        <span className="min-w-0 truncate">Applications</span>
+      </Link>
+    </SidebarMenuButton>
   );
 }
 

@@ -751,7 +751,7 @@ describe("ChatSidebar", () => {
     expect(
       screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
     ).toBe("/work-items");
-    expect(screen.queryByRole("button", { name: /apps/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /apps/i })).toBeNull();
     expect(
       screen.getByRole("link", { name: /automations/i }).getAttribute("href"),
     ).toBe("/automations");
@@ -759,14 +759,14 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("link", { name: "New thread" })
         .compareDocumentPosition(
-          screen.getByRole("link", { name: /work items/i }),
+          screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /work items/i })
+        .getByRole("link", { name: /automations/i })
         .compareDocumentPosition(
-          screen.getByRole("link", { name: /automations/i }),
+          screen.getByRole("link", { name: /work items/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Threads" })).toBeTruthy();
@@ -792,7 +792,7 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
-  it("renders Apps navigation when launchable plugin apps are installed", () => {
+  it("renders Applications navigation when launchable plugin apps are installed", () => {
     pluginAppsMock.push({
       id: "install-1:client-engagement",
       pluginKey: "twenty",
@@ -812,31 +812,28 @@ describe("ChatSidebar", () => {
 
     render(<ChatSidebar />);
 
-    const appsButton = screen.getByRole("button", { name: /^apps/i });
-    expect(appsButton).toBeTruthy();
+    const appsLink = screen.getByRole("link", { name: /^applications/i });
+    expect(appsLink.getAttribute("href")).toBe("/apps");
     expect(document.querySelector(".lucide-layout-grid")).toBeTruthy();
-    const appMenuItem = screen.getByRole("button", {
-      name: /client engagement/i,
-    });
-    fireEvent.click(appMenuItem);
-    expect(navigateMock).toHaveBeenCalledWith({
-      to: "/apps/$pluginKey/$appRouteSegment",
-      params: {
-        pluginKey: "twenty",
-        appRouteSegment: "client-engagement",
-      },
-    });
+    expect(screen.queryByText("Client Engagement")).toBeNull();
     expect(screen.queryByText("Twenty CRM")).toBeNull();
-    expect(screen.getAllByText("Apps")).toHaveLength(1);
+    expect(screen.getAllByText("Applications")).toHaveLength(1);
+    expect(
+      screen
+        .getByRole("link", { name: /automations/i })
+        .compareDocumentPosition(
+          screen.getByRole("link", { name: /work items/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /work items/i })
-        .compareDocumentPosition(appsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(appsLink) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: /automations/i })
-        .compareDocumentPosition(appsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(appsLink) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

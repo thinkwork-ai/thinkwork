@@ -1,8 +1,11 @@
-import { useEffect } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { AlertCircle, AppWindow, Loader2, PlugZap } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import { Badge, Button, DataTable } from "@thinkwork/ui";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import type { InstalledPluginAppsQuery as InstalledPluginAppsQueryResult } from "@/gql/graphql";
 import { TwentyClientEngagementApp } from "@/components/plugin-apps/twenty-client-engagement/TwentyClientEngagementApp";
@@ -10,33 +13,34 @@ import { TwentyClientEngagementApp } from "@/components/plugin-apps/twenty-clien
 type InstalledPluginApp =
   InstalledPluginAppsQueryResult["installedPluginApps"][number];
 
+type ApplicationRow = {
+  id: string;
+  pluginName: string;
+  appName: string;
+  statusLabel: string;
+  isReady: boolean;
+  pluginKey: string;
+  routeSegment: string;
+};
+
 export function PluginAppsIndexRoute() {
-  const navigate = useNavigate();
   const [{ data, fetching, error }] = useQuery<InstalledPluginAppsQueryResult>({
     query: InstalledPluginAppsQuery,
     requestPolicy: "cache-and-network",
   });
   const apps = data?.installedPluginApps ?? [];
 
-  useEffect(() => {
-    const firstApp = apps[0];
-    if (!firstApp) return;
-    void navigate({
-      to: "/apps/$pluginKey/$appRouteSegment",
-      params: {
-        pluginKey: firstApp.pluginKey,
-        appRouteSegment: firstApp.routeSegment,
-      },
-      replace: true,
-    });
-  }, [apps, navigate]);
+  usePageHeaderActions({
+    title: "Applications",
+    breadcrumbs: [{ label: "Applications" }],
+  });
 
   if (fetching && apps.length === 0) return <PluginAppLoading />;
   if (error) {
     return (
       <PluginAppMessage
         icon={<AlertCircle className="size-5" />}
-        title="Apps unavailable"
+        title="Applications unavailable"
         description={error.message}
       />
     );
@@ -45,13 +49,13 @@ export function PluginAppsIndexRoute() {
     return (
       <PluginAppMessage
         icon={<AppWindow className="size-5" />}
-        title="No apps installed"
-        description="Install a plugin app to open it here."
+        title="No applications installed"
+        description="Install a plugin application to open it here."
       />
     );
   }
 
-  return <PluginAppLoading />;
+  return <ApplicationsIndexPage apps={apps} />;
 }
 
 export function PluginAppRoute({
@@ -137,6 +141,97 @@ function PluginAppHost({ app }: { app: InstalledPluginApp }) {
             ) : null}
           </div>
         </div>
+      </main>
+    </section>
+  );
+}
+
+function ApplicationsIndexPage({ apps }: { apps: InstalledPluginApp[] }) {
+  const navigate = useNavigate();
+  const rows = useMemo<ApplicationRow[]>(
+    () =>
+      apps.map((app) => ({
+        id: app.id,
+        pluginName: app.pluginDisplayName,
+        appName: app.displayName,
+        statusLabel:
+          app.readiness.state === "ready" ? "Ready" : app.readiness.message,
+        isReady: app.readiness.state === "ready",
+        pluginKey: app.pluginKey,
+        routeSegment: app.routeSegment,
+      })),
+    [apps],
+  );
+  const columns = useMemo<ColumnDef<ApplicationRow>[]>(
+    () => [
+      {
+        accessorKey: "pluginName",
+        header: "Plugin",
+        cell: ({ row }) => (
+          <span
+            className="block truncate text-sm font-semibold text-foreground"
+            title={row.original.pluginName}
+          >
+            {row.original.pluginName}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "appName",
+        header: "Application",
+        cell: ({ row }) => (
+          <span
+            className="block truncate text-sm text-muted-foreground"
+            title={row.original.appName}
+          >
+            {row.original.appName}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "statusLabel",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge
+            variant="outline"
+            className={
+              row.original.isReady
+                ? "rounded-full border-green-500/40 bg-green-500/10 px-2 text-xs font-medium text-green-400"
+                : "max-w-full rounded-full bg-muted/10 px-2 text-xs font-medium text-muted-foreground"
+            }
+          >
+            <span className="truncate">{row.original.statusLabel}</span>
+          </Badge>
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <section className="flex h-full min-h-0 flex-col bg-background">
+      <main className="min-h-0 flex-1 overflow-auto p-6">
+        <SettingsPageTitle
+          title="Applications"
+          description="Open installed plugin applications and custom workspace projections."
+        />
+        <DataTable
+          columns={columns}
+          data={rows}
+          onRowClick={(row) => {
+            void navigate({
+              to: "/apps/$pluginKey/$appRouteSegment",
+              params: {
+                pluginKey: row.pluginKey,
+                appRouteSegment: row.routeSegment,
+              },
+            });
+          }}
+          allowHorizontalScroll={false}
+          pageSize={10}
+          tableClassName="table-fixed [&_tbody_tr:last-child]:shadow-none"
+          emptyState="No applications installed."
+        />
       </main>
     </section>
   );

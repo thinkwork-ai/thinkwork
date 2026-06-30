@@ -18,6 +18,7 @@ const {
   updateTwentyLayerStatusMock,
   saveTwentyStakeholderMock,
   usePageHeaderActionsMock,
+  navigateMock,
 } = vi.hoisted(() => ({
   accountsMock: [
     {
@@ -142,10 +143,15 @@ const {
     crmUrl: "https://crm.thinkwork.ai/objects/people/person-new",
   })),
   usePageHeaderActionsMock: vi.fn(),
+  navigateMock: vi.fn(),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: usePageHeaderActionsMock,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("./data/twentyEngagementApi", () => ({
@@ -158,8 +164,7 @@ vi.mock("./data/twentyEngagementApi", () => ({
 vi.mock("urql", () => ({
   useQuery: ({ variables }: { variables?: Record<string, unknown> }) => {
     const input = variables?.input as
-      | { providerRecordType?: string; providerRecordId?: string }
-      | undefined;
+      { providerRecordType?: string; providerRecordId?: string } | undefined;
     if (
       input?.providerRecordType === "opportunity" ||
       input?.providerRecordType === "app"
@@ -245,6 +250,7 @@ afterEach(() => {
   updateTwentyLayerStatusMock.mockClear();
   saveTwentyStakeholderMock.mockClear();
   usePageHeaderActionsMock.mockClear();
+  navigateMock.mockClear();
 });
 
 describe("TwentyClientEngagementApp", () => {
@@ -262,11 +268,14 @@ describe("TwentyClientEngagementApp", () => {
         title: "Client Engagement",
         documentTitle: "Twenty CRM · Client Engagement",
         breadcrumbs: [
+          { label: "Apps", onClick: expect.any(Function) },
           { label: "Twenty CRM" },
           { label: "Client Engagement", onClick: undefined },
         ],
       }),
     );
+    latestHeaderActions().breadcrumbs?.[0]?.onClick?.();
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/apps" });
     const headerAction = renderLatestHeaderAction();
     expect(headerAction.getByRole("button", { name: "Pipeline" })).toBeTruthy();
     expect(headerAction.getByRole("button", { name: "Refresh" })).toBeTruthy();
@@ -290,6 +299,7 @@ describe("TwentyClientEngagementApp", () => {
     expect(screen.getByRole("tab", { name: "Opportunities (1)" })).toBeTruthy();
     expect(screen.queryByText("1 active opportunity")).toBeNull();
     expect(latestHeaderActions().breadcrumbs).toEqual([
+      { label: "Apps", onClick: expect.any(Function) },
       { label: "Twenty CRM" },
       { label: "Client Engagement", onClick: expect.any(Function) },
       { label: "McPherson Companies" },

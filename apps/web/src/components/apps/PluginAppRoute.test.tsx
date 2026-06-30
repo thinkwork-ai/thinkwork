@@ -1,10 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { navigateMock, queryResultMock } = vi.hoisted(() => ({
@@ -39,26 +33,84 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
     to,
+    params,
     search: _search,
     ...props
   }: {
     children: React.ReactNode;
     to: string;
+    params?: Record<string, string>;
     search?: Record<string, unknown>;
-  }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  }) => {
+    const href =
+      params && to === "/apps/$pluginKey/$appRouteSegment"
+        ? `/apps/${params.pluginKey}/${params.appRouteSegment}`
+        : to;
+    return (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    );
+  },
   useNavigate: () => navigateMock,
 }));
 
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: vi.fn(),
+}));
+
 vi.mock("@thinkwork/ui", () => ({
+  Badge: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLSpanElement> & { variant?: string }) => (
+    <span {...props}>{children}</span>
+  ),
   Button: ({
     children,
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
+  ),
+  DataTable: ({
+    columns,
+    data,
+    onRowClick,
+  }: {
+    columns: Array<any>;
+    data: Array<any>;
+    onRowClick?: (row: any) => void;
+  }) => (
+    <table>
+      <thead>
+        <tr>
+          {columns.map((column) => (
+            <th key={String(column.accessorKey ?? column.id)}>
+              {column.header}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((row) => (
+          <tr
+            key={row.id}
+            role="button"
+            tabIndex={0}
+            aria-label={`${row.pluginName} ${row.appName}`}
+            onClick={() => onRowClick?.(row)}
+          >
+            {columns.map((column) => (
+              <td key={String(column.accessorKey ?? column.id)}>
+                {column.cell
+                  ? column.cell({ row: { original: row } } as any)
+                  : row[column.accessorKey]}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   ),
 }));
 
@@ -112,10 +164,7 @@ describe("PluginAppRoute", () => {
     ];
 
     render(
-      <PluginAppRoute
-        pluginKey="twenty"
-        appRouteSegment="client-engagement"
-      />,
+      <PluginAppRoute pluginKey="twenty" appRouteSegment="client-engagement" />,
     );
 
     expect(
@@ -143,10 +192,7 @@ describe("PluginAppRoute", () => {
     ];
 
     render(
-      <PluginAppRoute
-        pluginKey="twenty"
-        appRouteSegment="client-engagement"
-      />,
+      <PluginAppRoute pluginKey="twenty" appRouteSegment="client-engagement" />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Connect plugin" }));
 
@@ -156,7 +202,7 @@ describe("PluginAppRoute", () => {
     });
   });
 
-  it("redirects /apps to the first installed app route", async () => {
+  it("renders installed applications on /apps", () => {
     queryResultMock.data.installedPluginApps = [
       {
         id: "install-1:client-engagement",
@@ -175,15 +221,35 @@ describe("PluginAppRoute", () => {
 
     render(<PluginAppsIndexRoute />);
 
-    await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith({
-        to: "/apps/$pluginKey/$appRouteSegment",
-        params: {
-          pluginKey: "twenty",
-          appRouteSegment: "client-engagement",
-        },
-        replace: true,
-      }),
-    );
+    const row = screen.getByRole("button", {
+      name: "Twenty CRM Client Engagement",
+    });
+    expect(row).toBeTruthy();
+    fireEvent.click(row);
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/apps/$pluginKey/$appRouteSegment",
+      params: {
+        pluginKey: "twenty",
+        appRouteSegment: "client-engagement",
+      },
+    });
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Plugin" })
+        .compareDocumentPosition(
+          screen.getByRole("columnheader", { name: "Application" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
+    expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("shows an empty applications page state when no apps are installed", () => {
+    render(<PluginAppsIndexRoute />);
+
+    expect(screen.getByText("No applications installed")).toBeTruthy();
+    expect(
+      screen.getByText("Install a plugin application to open it here."),
+    ).toBeTruthy();
   });
 });
