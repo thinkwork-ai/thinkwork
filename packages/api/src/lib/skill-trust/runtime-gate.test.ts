@@ -30,6 +30,26 @@ describe("isCurrentPassedSkillTrustReport", () => {
     expect(isCurrentPassedSkillTrustReport(row())).toBe(true);
   });
 
+  it("allows approved-unverified signature evidence as runtime-trusted operator approval", () => {
+    expect(
+      isCurrentPassedSkillTrustReport(
+        row({
+          trust_report: {
+            status: "passed",
+            spec: { status: "passed" },
+            scanner: { status: "completed" },
+            evidence: {
+              skillCard: "present",
+              evalDataset: "present",
+              benchmark: "present",
+              signature: "approved_unverified",
+            },
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("fails closed for missing, stale, old-version, and non-passed reports", () => {
     expect(isCurrentPassedSkillTrustReport(row({ trust_report: null }))).toBe(
       false,
