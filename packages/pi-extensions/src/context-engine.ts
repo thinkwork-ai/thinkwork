@@ -23,6 +23,7 @@ export interface ContextEngineExtensionOptions {
   // backend can scope ephemeral context providers to the thread's Space.
   threadId?: string;
   contextEngineConfig?: Record<string, unknown>;
+  includeMemoryContext?: boolean;
   fetchImpl?: FetchLike;
 }
 
@@ -33,6 +34,12 @@ const MISSING_IDENTITY =
 const TOOL_NAMES = [
   "query_context",
   "query_memory_context",
+  "query_brain_context",
+  "query_wiki_context",
+] as const;
+
+const TOOL_NAMES_WITHOUT_MEMORY = [
+  "query_context",
   "query_brain_context",
   "query_wiki_context",
 ] as const;
@@ -208,9 +215,14 @@ function wikiContextDetails(
 export function createContextEngineExtension(
   options: ContextEngineExtensionOptions,
 ): ThinkworkExtension {
+  const includeMemoryContext = options.includeMemoryContext !== false;
   return defineExtension({
     name: "thinkwork-context-engine",
-    toolNames: options.enabled ? TOOL_NAMES : [],
+    toolNames: options.enabled
+      ? includeMemoryContext
+        ? TOOL_NAMES
+        : TOOL_NAMES_WITHOUT_MEMORY
+      : [],
     register(pi) {
       if (!options.enabled) return;
 
@@ -352,8 +364,10 @@ export function createContextEngineExtension(
           "Search the ThinkWork Context Engine (ThinkWork Brain) across fast default " +
           "providers: wiki, workspace files, sub-agent providers, " +
           "and approved search-safe MCP tools. Use this first for ordinary agent " +
-          "context lookup. Use query_memory_context only when user-carried or " +
-          "current-space long-term memory is specifically needed.",
+          "context lookup." +
+          (includeMemoryContext
+            ? " Use query_memory_context only when user-carried or current-space long-term memory is specifically needed."
+            : " Do not use this for user or Space long-term memory; use the direct memory tools instead."),
         parameters: Type.Object({
           ...sharedParams,
           provider_ids: Type.Optional(
@@ -448,7 +462,9 @@ export function createContextEngineExtension(
           "Search only tenant-shared ThinkWork Brain business/domain context. " +
           "Use this for governed customers, opportunities, commitments, risks, " +
           "stakeholders, products, relationships, and cited provenance. " +
-          "Use query_memory_context for user/space long-term memory and " +
+          (includeMemoryContext
+            ? "Use query_memory_context for user/space long-term memory and "
+            : "Use direct memory tools for user/space long-term memory and ") +
           "query_wiki_context for compiled page lookup. Initial results are " +
           "shortlists; call again with detailIds or detailIndexes to expand " +
           "selected Brain results.",
@@ -555,7 +571,7 @@ export function createContextEngineExtension(
       };
 
       pi.registerTool(queryContext);
-      pi.registerTool(queryMemoryContext);
+      if (includeMemoryContext) pi.registerTool(queryMemoryContext);
       pi.registerTool(queryBrainContext);
       pi.registerTool(queryWikiContext);
     },

@@ -74,4 +74,5 @@ export * from "./goals";
 export * from "./deployments";
 export * from "./pending-user-questions";
 export * from "./plugins";
+export * from "./plugin-app-overlays";
 export * from "./n8n-agent-step-runs";

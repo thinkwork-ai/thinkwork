@@ -68,6 +68,9 @@ export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
           userAgent: event.requestContext.http.userAgent,
           deps: workosAuthDeps,
         });
+        if (isDesktopRedirect(redirect)) {
+          return desktopCallbackResponse(redirect);
+        }
         return redirectResponse(redirect);
       }
 
@@ -131,6 +134,74 @@ function redirectResponse(location: string): APIGatewayProxyStructuredResultV2 {
     },
     body: "",
   };
+}
+
+function desktopCallbackResponse(
+  redirect: string,
+): APIGatewayProxyStructuredResultV2 {
+  const safeRedirect = JSON.stringify(redirect);
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, max-age=0",
+    },
+    body: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ThinkWork sign-in complete</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        align-items: center;
+        display: flex;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+      }
+      main {
+        max-width: 32rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 650;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        color: color-mix(in srgb, CanvasText 70%, transparent);
+        font-size: 1rem;
+        line-height: 1.5;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You're signed in to ThinkWork</h1>
+      <p>You can close this browser window and return to the desktop app.</p>
+    </main>
+    <script>
+      window.location.href = ${safeRedirect};
+    </script>
+  </body>
+</html>`,
+  };
+}
+
+function isDesktopRedirect(location: string): boolean {
+  try {
+    const url = new URL(location);
+    return ["thinkwork:", "thinkwork-dev:", "thinkwork-canary:"].includes(
+      url.protocol,
+    );
+  } catch {
+    return false;
+  }
 }
 
 function parseJsonBody(event: APIGatewayProxyEventV2): Record<string, unknown> {

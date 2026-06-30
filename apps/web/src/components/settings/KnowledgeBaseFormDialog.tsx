@@ -116,7 +116,7 @@ export function KnowledgeBaseFormDialog({
         <div className="space-y-4">
           {!isEdit ? (
             <p className="text-sm text-muted-foreground">
-              Create a document-backed Brain Source. Retained documents are
+              Create a document-backed Knowledge Base. Retained documents are
               added to Hindsight Space memory.
             </p>
           ) : null}

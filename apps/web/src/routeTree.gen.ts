@@ -30,6 +30,7 @@ import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_auth
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
+import { Route as AuthedSettingsContextDiagnosticsRouteImport } from "./routes/_authed/settings.context-diagnostics";
 import { Route as AuthedSettingsBrainOperationsRouteImport } from "./routes/_authed/settings.brain-operations";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
@@ -61,6 +62,7 @@ import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_sh
 import { Route as AuthedShellCustomizeIndexRouteImport } from "./routes/_authed/_shell/customize.index";
 import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
+import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId";
 import { Route as AuthedSettingsWebhooksWebhookIdRouteImport } from "./routes/_authed/settings.webhooks.$webhookId";
@@ -73,6 +75,7 @@ import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/s
 import { Route as AuthedSettingsPluginsDataIntegrationsRouteImport } from "./routes/_authed/settings.plugins.data-integrations";
 import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
 import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/settings.memory.wiki";
+import { Route as AuthedSettingsMemoryOntologyRouteImport } from "./routes/_authed/settings.memory.ontology";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
@@ -89,6 +92,7 @@ import { Route as AuthedShellWorkItemsWorkItemIdRouteImport } from "./routes/_au
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
 import { Route as AuthedShellMemoryPagesRouteImport } from "./routes/_authed/_shell/memory.pages";
+import { Route as AuthedShellMemoryMemoriesRouteImport } from "./routes/_authed/_shell/memory.memories";
 import { Route as AuthedShellMemoryKbsRouteImport } from "./routes/_authed/_shell/memory.kbs";
 import { Route as AuthedShellMemoryBrainRouteImport } from "./routes/_authed/_shell/memory.brain";
 import { Route as AuthedShellCustomizeWorkflowsRouteImport } from "./routes/_authed/_shell/customize.workflows";
@@ -107,6 +111,7 @@ import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
+import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$pluginKey.$appRouteSegment";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
@@ -222,6 +227,12 @@ const AuthedSettingsCrmRoute = AuthedSettingsCrmRouteImport.update({
   path: "/crm",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsContextDiagnosticsRoute =
+  AuthedSettingsContextDiagnosticsRouteImport.update({
+    id: "/context-diagnostics",
+    path: "/context-diagnostics",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsBrainOperationsRoute =
   AuthedSettingsBrainOperationsRouteImport.update({
     id: "/brain-operations",
@@ -396,6 +407,11 @@ const AuthedShellArtifactsIndexRoute =
     path: "/artifacts/",
     getParentRoute: () => AuthedShellRoute,
   } as any);
+const AuthedShellAppsIndexRoute = AuthedShellAppsIndexRouteImport.update({
+  id: "/apps/",
+  path: "/apps/",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 const AuthedShellApprovalsIndexRoute =
   AuthedShellApprovalsIndexRouteImport.update({
     id: "/approvals/",
@@ -466,6 +482,12 @@ const AuthedSettingsMemoryWikiRoute =
   AuthedSettingsMemoryWikiRouteImport.update({
     id: "/wiki",
     path: "/wiki",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
+const AuthedSettingsMemoryOntologyRoute =
+  AuthedSettingsMemoryOntologyRouteImport.update({
+    id: "/ontology",
+    path: "/ontology",
     getParentRoute: () => AuthedSettingsMemoryRoute,
   } as any);
 const AuthedSettingsMemoryKnowledgeGraphRoute =
@@ -562,6 +584,12 @@ const AuthedShellMemoryPagesRoute = AuthedShellMemoryPagesRouteImport.update({
   path: "/pages",
   getParentRoute: () => AuthedShellMemoryRoute,
 } as any);
+const AuthedShellMemoryMemoriesRoute =
+  AuthedShellMemoryMemoriesRouteImport.update({
+    id: "/memories",
+    path: "/memories",
+    getParentRoute: () => AuthedShellMemoryRoute,
+  } as any);
 const AuthedShellMemoryKbsRoute = AuthedShellMemoryKbsRouteImport.update({
   id: "/kbs",
   path: "/kbs",
@@ -667,6 +695,12 @@ const AuthedShellMemoryKbsKbIdRoute =
     path: "/$kbId",
     getParentRoute: () => AuthedShellMemoryKbsRoute,
   } as any);
+const AuthedShellAppsPluginKeyAppRouteSegmentRoute =
+  AuthedShellAppsPluginKeyAppRouteSegmentRouteImport.update({
+    id: "/apps/$pluginKey/$appRouteSegment",
+    path: "/apps/$pluginKey/$appRouteSegment",
+    getParentRoute: () => AuthedShellRoute,
+  } as any);
 const AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute =
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport.update({
     id: "/workflows/$workflowId_/runs/$runId",
@@ -729,6 +763,7 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -748,6 +783,7 @@ export interface FileRoutesByFullPath {
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
   "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
+  "/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
@@ -764,6 +800,7 @@ export interface FileRoutesByFullPath {
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
@@ -776,6 +813,7 @@ export interface FileRoutesByFullPath {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
+  "/apps/": typeof AuthedShellAppsIndexRoute;
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -797,6 +835,7 @@ export interface FileRoutesByFullPath {
   "/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
+  "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -829,6 +868,7 @@ export interface FileRoutesByTo {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -848,6 +888,7 @@ export interface FileRoutesByTo {
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
   "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
+  "/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
   "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
@@ -864,6 +905,7 @@ export interface FileRoutesByTo {
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
@@ -876,6 +918,7 @@ export interface FileRoutesByTo {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
+  "/apps": typeof AuthedShellAppsIndexRoute;
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
   "/automations": typeof AuthedShellAutomationsIndexRoute;
   "/customize": typeof AuthedShellCustomizeIndexRoute;
@@ -897,6 +940,7 @@ export interface FileRoutesByTo {
   "/settings/users": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows": typeof AuthedSettingsWorkflowsIndexRoute;
+  "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -937,6 +981,7 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/_authed/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -956,6 +1001,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/_authed/_shell/memory/brain": typeof AuthedShellMemoryBrainRoute;
   "/_authed/_shell/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
+  "/_authed/_shell/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
   "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
@@ -972,6 +1018,7 @@ export interface FileRoutesById {
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  "/_authed/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/_authed/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/_authed/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
@@ -984,6 +1031,7 @@ export interface FileRoutesById {
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/_authed/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
+  "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/_authed/_shell/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -1005,6 +1053,7 @@ export interface FileRoutesById {
   "/_authed/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/_authed/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
+  "/_authed/_shell/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -1044,6 +1093,7 @@ export interface FileRouteTypes {
     | "/settings/artifacts"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
@@ -1063,6 +1113,7 @@ export interface FileRouteTypes {
     | "/customize/workflows"
     | "/memory/brain"
     | "/memory/kbs"
+    | "/memory/memories"
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
@@ -1079,6 +1130,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/$serverId"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
+    | "/settings/memory/ontology"
     | "/settings/memory/wiki"
     | "/settings/plugins/$pluginKey"
     | "/settings/plugins/data-integrations"
@@ -1091,6 +1143,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals/"
+    | "/apps/"
     | "/artifacts/"
     | "/automations/"
     | "/customize/"
@@ -1112,6 +1165,7 @@ export interface FileRouteTypes {
     | "/settings/users/"
     | "/settings/webhooks/"
     | "/settings/workflows/"
+    | "/apps/$pluginKey/$appRouteSegment"
     | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
@@ -1144,6 +1198,7 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
@@ -1163,6 +1218,7 @@ export interface FileRouteTypes {
     | "/customize/workflows"
     | "/memory/brain"
     | "/memory/kbs"
+    | "/memory/memories"
     | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
@@ -1179,6 +1235,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/$serverId"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
+    | "/settings/memory/ontology"
     | "/settings/memory/wiki"
     | "/settings/plugins/$pluginKey"
     | "/settings/plugins/data-integrations"
@@ -1191,6 +1248,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals"
+    | "/apps"
     | "/artifacts"
     | "/automations"
     | "/customize"
@@ -1212,6 +1270,7 @@ export interface FileRouteTypes {
     | "/settings/users"
     | "/settings/webhooks"
     | "/settings/workflows"
+    | "/apps/$pluginKey/$appRouteSegment"
     | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
@@ -1251,6 +1310,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
     | "/_authed/settings/brain-operations"
+    | "/_authed/settings/context-diagnostics"
     | "/_authed/settings/crm"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
@@ -1270,6 +1330,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/customize/workflows"
     | "/_authed/_shell/memory/brain"
     | "/_authed/_shell/memory/kbs"
+    | "/_authed/_shell/memory/memories"
     | "/_authed/_shell/memory/pages"
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
@@ -1286,6 +1347,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
+    | "/_authed/settings/memory/ontology"
     | "/_authed/settings/memory/wiki"
     | "/_authed/settings/plugins/$pluginKey"
     | "/_authed/settings/plugins/data-integrations"
@@ -1298,6 +1360,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/webhooks/$webhookId"
     | "/_authed/settings/workflows/$workflowId"
     | "/_authed/_shell/approvals/"
+    | "/_authed/_shell/apps/"
     | "/_authed/_shell/artifacts/"
     | "/_authed/_shell/automations/"
     | "/_authed/_shell/customize/"
@@ -1319,6 +1382,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/users/"
     | "/_authed/settings/webhooks/"
     | "/_authed/settings/workflows/"
+    | "/_authed/_shell/apps/$pluginKey/$appRouteSegment"
     | "/_authed/_shell/memory/kbs/$kbId"
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
@@ -1496,6 +1560,13 @@ declare module "@tanstack/react-router" {
       path: "/crm";
       fullPath: "/settings/crm";
       preLoaderRoute: typeof AuthedSettingsCrmRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/context-diagnostics": {
+      id: "/_authed/settings/context-diagnostics";
+      path: "/context-diagnostics";
+      fullPath: "/settings/context-diagnostics";
+      preLoaderRoute: typeof AuthedSettingsContextDiagnosticsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/brain-operations": {
@@ -1715,6 +1786,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellArtifactsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/_shell/apps/": {
+      id: "/_authed/_shell/apps/";
+      path: "/apps";
+      fullPath: "/apps/";
+      preLoaderRoute: typeof AuthedShellAppsIndexRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/approvals/": {
       id: "/_authed/_shell/approvals/";
       path: "/approvals";
@@ -1797,6 +1875,13 @@ declare module "@tanstack/react-router" {
       path: "/wiki";
       fullPath: "/settings/memory/wiki";
       preLoaderRoute: typeof AuthedSettingsMemoryWikiRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
+    };
+    "/_authed/settings/memory/ontology": {
+      id: "/_authed/settings/memory/ontology";
+      path: "/ontology";
+      fullPath: "/settings/memory/ontology";
+      preLoaderRoute: typeof AuthedSettingsMemoryOntologyRouteImport;
       parentRoute: typeof AuthedSettingsMemoryRoute;
     };
     "/_authed/settings/memory/knowledge-graph": {
@@ -1909,6 +1994,13 @@ declare module "@tanstack/react-router" {
       path: "/pages";
       fullPath: "/memory/pages";
       preLoaderRoute: typeof AuthedShellMemoryPagesRouteImport;
+      parentRoute: typeof AuthedShellMemoryRoute;
+    };
+    "/_authed/_shell/memory/memories": {
+      id: "/_authed/_shell/memory/memories";
+      path: "/memories";
+      fullPath: "/memory/memories";
+      preLoaderRoute: typeof AuthedShellMemoryMemoriesRouteImport;
       parentRoute: typeof AuthedShellMemoryRoute;
     };
     "/_authed/_shell/memory/kbs": {
@@ -2037,6 +2129,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellMemoryKbsKbIdRouteImport;
       parentRoute: typeof AuthedShellMemoryKbsRoute;
     };
+    "/_authed/_shell/apps/$pluginKey/$appRouteSegment": {
+      id: "/_authed/_shell/apps/$pluginKey/$appRouteSegment";
+      path: "/apps/$pluginKey/$appRouteSegment";
+      fullPath: "/apps/$pluginKey/$appRouteSegment";
+      preLoaderRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/settings/workflows/$workflowId_/runs/$runId": {
       id: "/_authed/settings/workflows/$workflowId_/runs/$runId";
       path: "/workflows/$workflowId/runs/$runId";
@@ -2135,6 +2234,7 @@ const AuthedShellMemoryKbsRouteWithChildren =
 interface AuthedShellMemoryRouteChildren {
   AuthedShellMemoryBrainRoute: typeof AuthedShellMemoryBrainRoute;
   AuthedShellMemoryKbsRoute: typeof AuthedShellMemoryKbsRouteWithChildren;
+  AuthedShellMemoryMemoriesRoute: typeof AuthedShellMemoryMemoriesRoute;
   AuthedShellMemoryPagesRoute: typeof AuthedShellMemoryPagesRoute;
   AuthedShellMemoryIndexRoute: typeof AuthedShellMemoryIndexRoute;
 }
@@ -2142,6 +2242,7 @@ interface AuthedShellMemoryRouteChildren {
 const AuthedShellMemoryRouteChildren: AuthedShellMemoryRouteChildren = {
   AuthedShellMemoryBrainRoute: AuthedShellMemoryBrainRoute,
   AuthedShellMemoryKbsRoute: AuthedShellMemoryKbsRouteWithChildren,
+  AuthedShellMemoryMemoriesRoute: AuthedShellMemoryMemoriesRoute,
   AuthedShellMemoryPagesRoute: AuthedShellMemoryPagesRoute,
   AuthedShellMemoryIndexRoute: AuthedShellMemoryIndexRoute,
 };
@@ -2192,10 +2293,12 @@ interface AuthedShellRouteChildren {
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
   AuthedShellWorkItemsWorkItemIdRoute: typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
+  AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellSpacesIndexRoute: typeof AuthedShellSpacesIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
   AuthedShellWorkItemsIndexRoute: typeof AuthedShellWorkItemsIndexRoute;
+  AuthedShellAppsPluginKeyAppRouteSegmentRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -2212,10 +2315,13 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellWorkItemsWorkItemIdRoute:
     AuthedShellWorkItemsWorkItemIdRouteWithChildren,
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
+  AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellSpacesIndexRoute: AuthedShellSpacesIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
   AuthedShellWorkItemsIndexRoute: AuthedShellWorkItemsIndexRoute,
+  AuthedShellAppsPluginKeyAppRouteSegmentRoute:
+    AuthedShellAppsPluginKeyAppRouteSegmentRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
@@ -2255,6 +2361,7 @@ const AuthedSettingsArtifactsRouteWithChildren =
 interface AuthedSettingsMemoryRouteChildren {
   AuthedSettingsMemoryKnowledgeBasesRoute: typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
+  AuthedSettingsMemoryOntologyRoute: typeof AuthedSettingsMemoryOntologyRoute;
   AuthedSettingsMemoryWikiRoute: typeof AuthedSettingsMemoryWikiRoute;
 }
 
@@ -2263,6 +2370,7 @@ const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
     AuthedSettingsMemoryKnowledgeBasesRoute,
   AuthedSettingsMemoryKnowledgeGraphRoute:
     AuthedSettingsMemoryKnowledgeGraphRoute,
+  AuthedSettingsMemoryOntologyRoute: AuthedSettingsMemoryOntologyRoute,
   AuthedSettingsMemoryWikiRoute: AuthedSettingsMemoryWikiRoute,
 };
 
@@ -2308,6 +2416,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsBrainOperationsRoute: typeof AuthedSettingsBrainOperationsRoute;
+  AuthedSettingsContextDiagnosticsRoute: typeof AuthedSettingsContextDiagnosticsRoute;
   AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
@@ -2368,6 +2477,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsBrainOperationsRoute: AuthedSettingsBrainOperationsRoute,
+  AuthedSettingsContextDiagnosticsRoute: AuthedSettingsContextDiagnosticsRoute,
   AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,

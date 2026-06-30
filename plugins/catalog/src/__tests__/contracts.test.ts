@@ -594,10 +594,45 @@ describe("validatePluginManifest", () => {
           key: "dashboard",
           displayName: "LastMile dashboard",
           intendedMount: "settings.plugins.detail.tab",
+          launch: {
+            schemaVersion: 1,
+            type: "app",
+            appKey: "lastmile-dashboard",
+            routeSegment: "dashboard",
+            mount: "main-shell",
+            runtime: "trusted-bundled-react",
+            description: "Account engagement dashboard.",
+            icon: "layout-dashboard",
+            entitlementProductKey: "lastmile",
+          },
         },
       );
     });
     expect(() => validatePluginManifest(ok)).not.toThrow();
+  });
+
+  it("accepts settings-only ui-surface components without launch metadata", () => {
+    const ok = manifest((m) => {
+      m.versions[0].components.push({
+        type: "ui-surface",
+        key: "settings",
+        displayName: "LastMile settings",
+        intendedMount: "settings.plugins.detail.tab",
+      });
+    });
+    const validated = validatePluginManifest(ok);
+    const surface = validated.versions[0].components.find(
+      (component) => component.type === "ui-surface",
+    );
+    expect(surface).toMatchObject({
+      type: "ui-surface",
+      key: "settings",
+      displayName: "LastMile settings",
+      intendedMount: "settings.plugins.detail.tab",
+    });
+    expect(surface?.type === "ui-surface" ? surface.launch : undefined).toBe(
+      undefined,
+    );
   });
 
   it("validates auth-provider components", () => {
@@ -748,5 +783,79 @@ describe("validatePluginManifest", () => {
       });
     });
     expect(() => validatePluginManifest(bad)).toThrow(/intendedMount/);
+  });
+
+  it("rejects malformed ui-surface launch metadata", () => {
+    for (const launch of [
+      null,
+      {
+        schemaVersion: 2,
+        type: "app",
+        appKey: "lastmile-dashboard",
+        routeSegment: "dashboard",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+      },
+      {
+        schemaVersion: 1,
+        type: "widget",
+        appKey: "lastmile-dashboard",
+        routeSegment: "dashboard",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+      },
+      {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "LastMile",
+        routeSegment: "dashboard",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+      },
+      {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "lastmile-dashboard",
+        routeSegment: "/dashboard",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+      },
+      {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "lastmile-dashboard",
+        routeSegment: "dashboard",
+        mount: "settings",
+        runtime: "trusted-bundled-react",
+      },
+      {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "lastmile-dashboard",
+        routeSegment: "dashboard",
+        mount: "main-shell",
+        runtime: "remote-url",
+      },
+      {
+        schemaVersion: 1,
+        type: "app",
+        appKey: "lastmile-dashboard",
+        routeSegment: "dashboard",
+        mount: "main-shell",
+        runtime: "trusted-bundled-react",
+        url: "https://example.com/dashboard",
+      },
+    ]) {
+      const bad = manifest((m) => {
+        m.versions[0].components.push({
+          type: "ui-surface",
+          key: "dashboard",
+          displayName: "LastMile dashboard",
+          intendedMount: "settings.plugins.detail.tab",
+          launch,
+        } as never);
+      });
+      expect(() => validatePluginManifest(bad)).toThrow(/launch/);
+    }
   });
 });

@@ -162,7 +162,7 @@ export function SettingsKnowledgeBaseBinding({
 
       <SettingsRow
         label="Tenant-wide"
-        description="Every Space's threads can retrieve this Brain Source."
+        description="Every Space's threads can retrieve this Knowledge Base."
       >
         <Switch
           checked={tenantWide}
@@ -175,7 +175,7 @@ export function SettingsKnowledgeBaseBinding({
         <div className="px-4 py-3 text-sm text-muted-foreground">Loading…</div>
       ) : spaces.length === 0 ? (
         <div className="px-4 py-3 text-sm text-muted-foreground">
-          No Spaces yet. Create a Space to bind this Brain Source to it.
+          No Spaces yet. Create a Space to bind this Knowledge Base to it.
         </div>
       ) : (
         <div className="px-4 py-3">

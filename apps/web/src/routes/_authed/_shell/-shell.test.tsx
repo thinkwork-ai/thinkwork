@@ -1,7 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tenantMock = vi.fn();
+const authMock = vi.fn();
+const navigateMock = vi.fn();
 const desktopRuntimeMocks = vi.hoisted(() => ({
   getDesktopBridge: vi.fn(() => null),
   isDesktopBuild: vi.fn(() => false),
@@ -9,6 +11,9 @@ const desktopRuntimeMocks = vi.hoisted(() => ({
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
+}));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => authMock(),
 }));
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 
@@ -67,6 +72,12 @@ vi.mock("@tanstack/react-router", async () => {
     createFileRoute: () => (config: { component: React.ComponentType }) =>
       config,
     Outlet: () => <div data-testid="outlet" />,
+    useNavigate: () => navigateMock,
+    useRouterState: (options?: {
+      select?: (state: { location: { pathname: string } }) => unknown;
+    }) =>
+      options?.select?.({ location: { pathname: "/work-items/123" } }) ??
+      "/work-items/123",
   };
 });
 
@@ -78,11 +89,20 @@ const ShellLayout = (Route as unknown as { component: React.ComponentType })
 afterEach(() => {
   cleanup();
   tenantMock.mockReset();
+  authMock.mockReset();
+  navigateMock.mockReset();
   desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
 describe("_authed/_shell layout", () => {
+  beforeEach(() => {
+    authMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  });
+
   it("renders centered monospace shimmer Loading while tenant resolves", () => {
     tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: true });
     const { container } = render(<ShellLayout />);
@@ -141,5 +161,23 @@ describe("_authed/_shell layout", () => {
     expect(screen.getByTestId("sidebar-inset").className).not.toContain("pt-");
     expect(screen.getByTestId("sidebar-inset").className).toContain("relative");
     expect(screen.getByTestId("outlet")).toBeTruthy();
+  });
+
+  it("redirects to sign-in instead of rendering shell chrome after logout", () => {
+    authMock.mockReturnValue({
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    tenantMock.mockReturnValue({ noTenantAssigned: true, isLoading: false });
+
+    render(<ShellLayout />);
+
+    expect(screen.queryByTestId("no-tenant")).toBeNull();
+    expect(screen.queryByTestId("computer-sidebar")).toBeNull();
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/sign-in",
+      search: { next: "/work-items/123" },
+      replace: true,
+    });
   });
 });

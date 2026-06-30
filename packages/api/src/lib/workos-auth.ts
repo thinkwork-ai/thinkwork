@@ -34,6 +34,11 @@ const PROVIDERS = new Set([
   "VercelOAuth",
   "XeroOAuth",
 ]);
+const DESKTOP_REDIRECT_SCHEMES = new Set([
+  "thinkwork:",
+  "thinkwork-dev:",
+  "thinkwork-canary:",
+]);
 
 export interface WorkosAuthPublication {
   tenantId: string;
@@ -135,7 +140,10 @@ export async function createWorkosAuthorizeRedirect(args: {
   if (!host) throw new WorkosAuthError("trusted host missing", 400);
 
   const publication = await deps.loadPublicationForHost(host);
-  if (!publication || !componentAllowsPublication(publication.componentHandlerRef)) {
+  if (
+    !publication ||
+    !componentAllowsPublication(publication.componentHandlerRef)
+  ) {
     throw new WorkosAuthError("WorkOS auth is not available", 404);
   }
 
@@ -160,7 +168,9 @@ export async function createWorkosAuthorizeRedirect(args: {
     deps.signingSecret(),
   );
 
-  const url = new URL(`${DEFAULT_WORKOS_API_BASE_URL}/user_management/authorize`);
+  const url = new URL(
+    `${DEFAULT_WORKOS_API_BASE_URL}/user_management/authorize`,
+  );
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", publication.clientId);
   url.searchParams.set("redirect_uri", callbackUrlForHost(host));
@@ -303,6 +313,13 @@ function normalizeRedirectUriForPublication(
     url = new URL(value);
   } catch {
     throw new WorkosAuthError("redirect_uri is invalid", 400);
+  }
+  if (DESKTOP_REDIRECT_SCHEMES.has(url.protocol)) {
+    if (url.hostname !== "oauth" || url.pathname !== "/callback") {
+      throw new WorkosAuthError("redirect_uri path is not allowed", 400);
+    }
+    url.hash = "";
+    return url.toString();
   }
   if (
     url.protocol !== "https:" &&
@@ -538,7 +555,11 @@ function redirectUriAllowed(
   const allowedUris = metadataStringArray(
     publication.metadata.allowedRedirectUris,
   );
-  if (allowedUris.some((candidate) => normalizeAllowedUri(candidate) === normalized)) {
+  if (
+    allowedUris.some(
+      (candidate) => normalizeAllowedUri(candidate) === normalized,
+    )
+  ) {
     return true;
   }
 

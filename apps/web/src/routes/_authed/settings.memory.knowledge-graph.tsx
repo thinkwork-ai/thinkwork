@@ -1,13 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsMemoryHome } from "@/components/settings/SettingsMemoryHome";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/memory/knowledge-graph")(
   {
-    component: () => (
-      <OperatorGuard>
-        <SettingsMemoryHome />
-      </OperatorGuard>
-    ),
+    beforeLoad: () => {
+      throw redirect({ to: "/settings/memory/ontology", replace: true });
+    },
   },
 );

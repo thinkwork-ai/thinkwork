@@ -12,9 +12,10 @@ do not journal turns yourself.
 - **`reflect(query)`** or **`hindsight_reflect(query)`** — Hindsight synthesis
   across many memories. Use for "brief me on X" / "summarize the history of Y"
   prompts after checking the current prompt and mounted files.
-- **`query_memory_context(query)`** — Context Engine facade for Hindsight memory
-  when the direct memory tools are unavailable or when you need provider-status
-  diagnostics.
+
+Do not use Context Engine queries as a memory backend. If direct memory tools are
+not available, say that memory lookup is unavailable for the turn instead of
+falling back to context tools.
 
 Before any memory lookup, check the current prompt and workspace files you
 already have, especially `USER.md` for the requester's profile and family facts.

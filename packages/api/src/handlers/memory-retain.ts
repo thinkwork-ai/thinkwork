@@ -396,6 +396,36 @@ async function processClaimedRetainAttempt(
     return { ok: true, engine, attemptId: attempt.id };
   } catch (err) {
     const classification = classifyRetainError(err);
+    if (
+      highConfidenceFacts.documents.length > 0 &&
+      highConfidenceFactError === null
+    ) {
+      await markRetainAttemptRetained(attempt.id, {
+        backendLatencyMs: Date.now() - started,
+        providerDocumentId: eventThreadId,
+        providerResult: {
+          engine,
+          adapterKind: adapter.kind,
+          highConfidenceFactCount: highConfidenceFacts.documents.length,
+          conversationRetainStatus: "failed_after_high_confidence_retained",
+          conversationRetainErrorClass: classification.errorClass,
+          conversationRetainErrorMessage: classification.errorMessage,
+        },
+        metadata: mergeAttemptMetadata(attempt.metadata, {
+          retainedAt: new Date().toISOString(),
+          retainedVia: "high_confidence_fact",
+          highConfidenceFacts: highConfidenceFacts.documents,
+          rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
+          conversationRetainFailedAt: new Date().toISOString(),
+          conversationRetainFailedStatus: classification.status,
+          conversationRetainErrorClass: classification.errorClass,
+        }),
+      });
+      console.warn(
+        `[memory-retain] attempt=${attempt.id} retained via high-confidence facts after conversation retain failed: ${classification.errorMessage}`,
+      );
+      return { ok: true, engine, attemptId: attempt.id };
+    }
     const status = await markRetainAttemptFailed(attempt, classification, {
       backendLatencyMs: Date.now() - started,
       metadata: mergeAttemptMetadata(attempt.metadata, {
@@ -499,7 +529,7 @@ async function retainHighConfidenceFacts(input: {
             ownerType: "user" as const,
             ownerId: input.userId,
           };
-    const documentId = highConfidenceFactDocumentId(input.attempt.id, fact);
+    const documentId = highConfidenceFactDocumentId(fact);
     const path = `memory/high-confidence-facts/${input.threadId}/${fact.id}.md`;
     const retainOptions = buildHighConfidenceFactRetainOptions({
       scope: fact.scope,
@@ -519,7 +549,7 @@ async function retainHighConfidenceFacts(input: {
       factKind: fact.kind,
       confidence: fact.confidence,
       sourceText: fact.sourceText,
-      sourceMessageIndex: fact.sourceMessageIndex,
+      sourceMessageIndex: String(fact.sourceMessageIndex),
     };
     await persistHighConfidenceFactMemoryUnit({
       bankId:
@@ -645,6 +675,8 @@ async function persistHighConfidenceFactMemoryUnit(input: {
   const db = getDb();
   const now = new Date();
   const contentHash = createHash("sha256").update(input.content).digest("hex");
+  const factId =
+    typeof input.metadata.factId === "string" ? input.metadata.factId : "";
   await db.execute(sql`
     INSERT INTO hindsight.banks (bank_id, name, updated_at)
     VALUES (${input.bankId}, ${input.bankId}, ${now})
@@ -684,6 +716,23 @@ async function persistHighConfidenceFactMemoryUnit(input: {
       AND document_id = ${input.documentId}
       AND context = 'thinkwork_high_confidence_fact'
   `);
+  if (factId) {
+    await db.execute(sql`
+      WITH stale_units AS (
+        DELETE FROM hindsight.memory_units
+        WHERE bank_id = ${input.bankId}
+          AND context = 'thinkwork_high_confidence_fact'
+          AND metadata->>'factId' = ${factId}
+          AND document_id <> ${input.documentId}
+        RETURNING document_id
+      )
+      DELETE FROM hindsight.documents d
+      USING stale_units s
+      WHERE d.bank_id = ${input.bankId}
+        AND d.id = s.document_id
+        AND d.id LIKE 'high_confidence_fact:%'
+    `);
+  }
   await db.execute(sql`
     INSERT INTO hindsight.memory_units (
       bank_id,
@@ -702,7 +751,7 @@ async function persistHighConfidenceFactMemoryUnit(input: {
       ${input.documentId},
       ${input.content},
       'thinkwork_high_confidence_fact',
-      'observation',
+      'experience',
       ${input.eventDate ? new Date(input.eventDate) : now},
       ${input.eventDate ? new Date(input.eventDate) : now},
       ${JSON.stringify(input.metadata)}::jsonb,
@@ -721,10 +770,9 @@ function varcharArraySql(values: string[]) {
 }
 
 function highConfidenceFactDocumentId(
-  attemptId: string,
   fact: ExtractedHighConfidenceFact,
 ): string {
-  return `high_confidence_fact:${attemptId}:${fact.id}`;
+  return `high_confidence_fact:${fact.id}`;
 }
 
 /**

@@ -158,7 +158,7 @@ export async function listWorkItems(
     ctx.auth?.authType === "cognito" ? await resolveCallerUserId(ctx) : null;
   if (ctx.auth?.authType === "cognito") {
     if (!callerUserId) return [];
-    conditions.push(visibleSpaceExistsPredicate(tenantId, callerUserId));
+    conditions.push(callerCanListWorkItemPredicate(tenantId, callerUserId));
   }
 
   return db
@@ -179,9 +179,7 @@ export async function getWorkItem(
     .from(workItems)
     .where(and(eq(workItems.tenant_id, tenantId), eq(workItems.id, input.id)));
   if (!item) return null;
-  try {
-    await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
-  } catch {
+  if (!(await canAccessWorkItem(ctx, tenantId, item))) {
     return null;
   }
   return item;
@@ -340,6 +338,14 @@ export async function updateWorkItem(
   if (input.archived !== undefined) {
     updates.archived_at = input.archived ? now : null;
   }
+  const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+  const labelChangeRequested =
+    input.labelIds !== undefined || input.labelSlugs !== undefined;
+  const updateActivity = buildWorkItemUpdateActivity({
+    item,
+    updates,
+    labelChangeRequested,
+  });
 
   return db.transaction(async (tx) => {
     const [updated] = await tx
@@ -351,7 +357,7 @@ export async function updateWorkItem(
       await replaceWorkItemLabels(tx as unknown as typeof db, {
         tenantId,
         workItemId: item.id,
-        callerUserId: await resolveCallerUserId(ctx).catch(() => null),
+        callerUserId,
         labelIds: input.labelIds,
         labelSlugs: input.labelSlugs,
       });
@@ -360,10 +366,15 @@ export async function updateWorkItem(
       tenant_id: tenantId,
       space_id: item.space_id,
       work_item_id: item.id,
-      actor_user_id: await resolveCallerUserId(ctx).catch(() => null),
-      event_type: "updated",
-      message: `${item.title} updated.`,
-      metadata: compactObject({ changedFields: Object.keys(updates).sort() }),
+      actor_user_id: callerUserId,
+      event_type: updateActivity.eventType,
+      message: updateActivity.message,
+      metadata: compactObject({
+        source: "graphql",
+        action: updateActivity.action,
+        changedFields: updateActivity.changedFields,
+        fieldChanges: updateActivity.fieldChanges,
+      }),
     });
     return updated;
   });
@@ -545,9 +556,12 @@ export async function createWorkItemComment(
     optionalTrim(input.authorUserId);
   const authorAgentId = optionalTrim(input.authorAgentId);
   if (!callerUserId && !authorAgentId) {
-    throw new GraphQLError("Work Item comments require a user or agent author", {
-      extensions: { code: "FORBIDDEN" },
-    });
+    throw new GraphQLError(
+      "Work Item comments require a user or agent author",
+      {
+        extensions: { code: "FORBIDDEN" },
+      },
+    );
   }
   const body = requireNonEmpty(input.body, "body");
   const source = optionalTrim(input.source) ?? "graphql";
@@ -673,11 +687,12 @@ export async function createWorkItemDocument(
       work_item_id: item.id,
       actor_user_id: callerUserId,
       event_type: "updated",
-      message: `${created.title} document created.`,
+      message: "document created.",
       metadata: compactObject({
         source: "graphql",
         action: "document_created",
         documentId: created.id,
+        documentTitle: created.title,
         kind: created.kind,
       }),
     });
@@ -783,14 +798,13 @@ export async function updateWorkItemDocument(
       actor_user_id: callerUserId,
       event_type: "updated",
       message:
-        input.archived === true
-          ? `${updated.title} document archived.`
-          : `${updated.title} document updated.`,
+        input.archived === true ? "document archived." : "document updated.",
       metadata: compactObject({
         source: "graphql",
         action:
           input.archived === true ? "document_archived" : "document_updated",
         documentId: updated.id,
+        documentTitle: updated.title,
         changedFields: Object.keys(updates).sort(),
       }),
     });
@@ -853,10 +867,11 @@ export async function updateWorkItemStatus(
       event_type: eventTypeForStatus(status.category),
       previous_status_id: item.status_id,
       new_status_id: status.id,
-      message: buildStatusMessage(item.title, status.name, input.note),
+      message: buildStatusMessage(status.name, input.note),
       metadata: compactObject({
         source: "graphql",
         note: optionalTrim(input.note),
+        newStatusName: status.name,
         inputMetadata: parseAwsJsonObject(input.metadata),
       }),
     });
@@ -879,7 +894,8 @@ export async function recordOpenEngineHumanAction(
   }
   const actionType = normalizeOpenEngineHumanActionType(input.actionType);
   const now = input.now ? (optionalDate(input.now) ?? new Date()) : new Date();
-  const message = optionalTrim(input.message) ?? defaultHumanActionMessage(actionType);
+  const message =
+    optionalTrim(input.message) ?? defaultHumanActionMessage(actionType);
   const evidence = parseAwsJsonObject(input.evidence);
   const metadata = parseAwsJsonObject(input.metadata);
   const idempotencyKey = optionalTrim(input.idempotencyKey);
@@ -966,8 +982,34 @@ async function loadAuthorizedWorkItem(
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
+  if (!(await canAccessWorkItem(ctx, tenantId, item))) {
+    throw new GraphQLError("Work item not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
   return item;
+}
+
+function callerCanListWorkItemPredicate(tenantId: string, callerUserId: string) {
+  return or(
+    visibleSpaceExistsPredicate(tenantId, callerUserId),
+    eq(workItems.owner_user_id, callerUserId),
+  );
+}
+
+async function canAccessWorkItem(
+  ctx: GraphQLContext,
+  tenantId: string,
+  item: Record<string, any>,
+) {
+  try {
+    await requireWorkItemSpaceAccess(ctx, tenantId, item.space_id);
+    return true;
+  } catch {
+    if (ctx.auth?.authType !== "cognito") return false;
+    const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+    return Boolean(callerUserId && item.owner_user_id === callerUserId);
+  }
 }
 
 function visibleSpaceExistsPredicate(tenantId: string, callerUserId: string) {
@@ -1089,6 +1131,133 @@ async function resolveWorkItemLabelIds(
     });
   }
   return resolved;
+}
+
+function buildWorkItemUpdateActivity(input: {
+  item: typeof workItems.$inferSelect;
+  updates: Record<string, unknown>;
+  labelChangeRequested: boolean;
+}) {
+  const fieldChanges = buildWorkItemFieldChanges(input);
+  const changedFields = fieldChanges.map((change) => change.field).sort();
+  const primary = fieldChanges[0];
+  const action = primary ? activityActionForField(primary.field) : "updated";
+  return {
+    eventType: eventTypeForUpdateActivity(primary),
+    message: updateActivityMessage(primary),
+    action,
+    changedFields,
+    fieldChanges,
+  };
+}
+
+function buildWorkItemFieldChanges(input: {
+  item: typeof workItems.$inferSelect;
+  updates: Record<string, unknown>;
+  labelChangeRequested: boolean;
+}) {
+  const fields = Object.keys(input.updates)
+    .filter((field) => field !== "updated_at")
+    .sort();
+  if (input.labelChangeRequested) fields.push("labels");
+  return [...new Set(fields)].map((field) => ({
+    field: activityFieldName(field),
+    previousValue: workItemActivityPreviousValue(input.item, field),
+    newValue: workItemActivityNewValue(input.updates[field]),
+  }));
+}
+
+function activityFieldName(field: string) {
+  if (field === "archived_at") return "archived";
+  if (field === "labelIds" || field === "labelSlugs") return "labels";
+  return field;
+}
+
+function workItemActivityPreviousValue(
+  item: typeof workItems.$inferSelect,
+  field: string,
+) {
+  if (field === "archived_at") return Boolean(item.archived_at);
+  return workItemActivityNewValue((item as Record<string, unknown>)[field]);
+}
+
+function workItemActivityNewValue(value: unknown) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function eventTypeForUpdateActivity(
+  change?: { field: string; newValue?: unknown } | null,
+) {
+  if (!change) return "updated";
+  switch (change.field) {
+    case "owner_user_id":
+    case "owner_agent_id":
+      return "assigned";
+    case "due_at":
+      return "due_date_changed";
+    case "applicable":
+    case "required":
+      return "applicability_changed";
+    case "blocked":
+      return change.newValue ? "blocked" : "unblocked";
+    default:
+      return "updated";
+  }
+}
+
+function activityActionForField(field: string) {
+  switch (field) {
+    case "owner_user_id":
+    case "owner_agent_id":
+      return "assignment_changed";
+    case "due_at":
+      return "due_date_changed";
+    case "applicable":
+      return "applicability_changed";
+    case "required":
+      return "required_changed";
+    case "blocked":
+      return "blocked_changed";
+    case "labels":
+      return "labels_changed";
+    case "open_engine_queue_key":
+      return "open_engine_queue_changed";
+    case "archived":
+      return "archive_changed";
+    default:
+      return `${field}_changed`;
+  }
+}
+
+function updateActivityMessage(change?: { field: string } | null) {
+  if (!change) return "updated this Work Item.";
+  switch (change.field) {
+    case "owner_user_id":
+    case "owner_agent_id":
+      return "assignee changed.";
+    case "priority":
+      return "priority changed.";
+    case "due_at":
+      return "due date changed.";
+    case "applicable":
+      return "applicability changed.";
+    case "required":
+      return "requirement changed.";
+    case "blocked":
+      return "blocked state changed.";
+    case "labels":
+      return "labels changed.";
+    case "title":
+      return "title changed.";
+    case "notes":
+      return "description changed.";
+    case "open_engine_queue_key":
+      return "OpenEngine queue changed.";
+    case "archived":
+      return "archive state changed.";
+    default:
+      return "updated this Work Item.";
+  }
 }
 
 export function normalizeWorkItemPriority(value: unknown): WorkItemPriority {
@@ -1233,12 +1402,11 @@ function eventTypeForStatus(category: string) {
 }
 
 function buildStatusMessage(
-  title: string,
   statusName: string,
   note: string | null | undefined,
 ) {
   const suffix = optionalTrim(note) ? ` Note: ${optionalTrim(note)}` : "";
-  return `${title} moved to ${statusName}.${suffix}`;
+  return `moved to ${statusName}.${suffix}`;
 }
 
 function clampLimit(value: unknown) {

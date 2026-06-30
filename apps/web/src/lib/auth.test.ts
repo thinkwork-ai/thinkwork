@@ -139,7 +139,7 @@ describe("signOut", () => {
       ok: true,
       json: async () => ({
         logout_url:
-          "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example%2Fsign-in",
+          "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
       }),
     } as Response);
     vi.stubGlobal("fetch", fetchMock);
@@ -171,13 +171,40 @@ describe("signOut", () => {
           Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
-          return_to: "https://app.example/sign-in",
+          return_to: "https://app.example/",
         }),
       },
     );
     expect(navigations).toEqual([
-      "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example%2Fsign-in",
+      "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
     ]);
+  });
+
+  it("does not fall back to Cognito logout when WorkOS has no session URL", async () => {
+    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      json: async () => ({ logout_url: null }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
+    const { navigations } = stubLocation("https://app.example");
+    storeTokensInCognitoStorage(
+      {
+        id_token: makeIdToken({
+          sub: "cognito-sub-123",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      },
+      "workos",
+    );
+
+    await signOut();
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(navigations).toEqual(["/sign-in"]);
   });
 });
 
@@ -282,6 +309,45 @@ describe("Cognito token storage", () => {
       tenantId: "tenant-id",
       groups: ["users"],
     });
+  });
+
+  it("clears federated tokens so logout cannot immediately restore the session", async () => {
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    const idToken = makeIdToken({
+      email: "user@example.com",
+      sub: "user-sub",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
+    window.localStorage.setItem(`${prefix}.workos-user.idToken`, idToken);
+    window.localStorage.setItem(
+      `${prefix}.workos-user.accessToken`,
+      "access-token",
+    );
+    window.localStorage.setItem(
+      `${prefix}.workos-user.refreshToken`,
+      "refresh-token",
+    );
+    window.localStorage.setItem(`${prefix}.workos-user.clockDrift`, "0");
+    window.localStorage.setItem("thinkwork:auth-source", "workos");
+
+    vi.resetModules();
+    const { clearLocalAuthSession, getIdToken } = await import("./auth");
+
+    clearLocalAuthSession();
+
+    expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.idToken`),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.accessToken`),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(`${prefix}.workos-user.refreshToken`),
+    ).toBeNull();
+    expect(window.localStorage.getItem("thinkwork:auth-source")).toBeNull();
+    await expect(getIdToken()).resolves.toBeNull();
   });
 
   it("refreshes expired federated tokens from the stored refresh token", async () => {

@@ -354,11 +354,7 @@ function profileHasMemoryRetrievalTool(
   request: CompiledAgentProfileRunRequest,
 ): boolean {
   const tools = new Set(request.tools);
-  return (
-    tools.has("recall") ||
-    tools.has("reflect") ||
-    tools.has("query_memory_context")
-  );
+  return tools.has("recall") || tools.has("reflect");
 }
 
 export function createProfileChildRunner(
@@ -556,7 +552,7 @@ export async function executeAgentProfileDelegation(input: {
     !profileHasMemoryRetrievalTool(request)
   ) {
     throw new Error(
-      `Agent profile "${profile.name}" cannot perform explicit user or Space memory retrieval because its tool policy does not include recall, reflect, or query_memory_context. Use the parent agent memory tools directly.`,
+      `Agent profile "${profile.name}" cannot perform explicit user or Space memory retrieval because its tool policy does not include recall or reflect. Use the parent agent memory tools directly.`,
     );
   }
   return runCompiledAgentProfile({

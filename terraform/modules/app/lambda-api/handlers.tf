@@ -445,6 +445,9 @@ resource "aws_lambda_function" "handler" {
     # local.api_routes; the function name must also be listed here (this set
     # is the for_each source for aws_lambda_function.handler).
     "mcp-proxy",
+    # Client Engagement app API. Calls Twenty REST API directly server-side;
+    # it is not backed by ThinkWork GraphQL or the agent MCP runtime.
+    "twenty-client-engagement",
     # Desktop-local Pi tombstone endpoints. Kept temporarily so old packaged
     # desktop clients receive a stable 410 while all supported Pi execution
     # routes through managed AgentCore.
@@ -1067,6 +1070,11 @@ locals {
       "OPTIONS /api/mcp/tools/list" = "mcp-proxy"
       "POST /api/mcp/tools/call"    = "mcp-proxy"
       "OPTIONS /api/mcp/tools/call" = "mcp-proxy"
+
+      # Twenty Client Engagement app: browser -> ThinkWork REST Lambda ->
+      # Twenty REST API with the caller's plugin activation.
+      "ANY /api/plugin-apps/twenty/client-engagement"          = "twenty-client-engagement"
+      "ANY /api/plugin-apps/twenty/client-engagement/{proxy+}" = "twenty-client-engagement"
 
       # Messages
       "ANY /api/messages/{proxy+}" = "messages"

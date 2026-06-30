@@ -26,6 +26,7 @@ import {
   type StartOAuthRequest,
   type StartOAuthResponse,
   type TokenStorageSnapshot,
+  type WorkosBridgeCallback,
 } from "@thinkwork/desktop-ipc";
 import type { ICognitoStorage } from "./cognito-storage.js";
 import type { DeepLinkDispatcher } from "./deep-link.js";
@@ -70,9 +71,15 @@ export interface AuthBridgeState {
 export interface OAuthBridgeController {
   startOAuth(request?: StartOAuthRequest): Promise<StartOAuthResponse>;
   completeOAuthCallback(
-    callback: OAuthSuccessCallback,
+    callback: OAuthSuccessCallback | WorkosBridgeCallback,
   ): Promise<PendingOAuthCallback>;
-  signOut(refreshToken: string | null): Promise<SignOutResponse>;
+  signOut(session: SignOutSession): Promise<SignOutResponse>;
+}
+
+export interface SignOutSession {
+  refreshToken: string | null;
+  idToken: string | null;
+  authSource: string | null;
 }
 
 export function registerAuthBridgeHandlers(
@@ -149,11 +156,11 @@ export function registerAuthBridgeHandlers(
       intervalMs: 2_000,
       now: options.now,
     });
-    const refreshToken = currentRefreshToken(options.storage.snapshot());
+    const signOutSession = currentSignOutSession(options.storage.snapshot());
     options.storage.clear();
     publishTokenStorageChange();
     const result = options.oauth
-      ? await options.oauth.signOut(refreshToken)
+      ? await options.oauth.signOut(signOutSession)
       : { ok: true as const, revokeFailed: false };
     broadcast(SIGNED_OUT_EVENT_CHANNEL, result);
     return result;
@@ -241,13 +248,23 @@ function formatOAuthError(callback: {
   return callback.error;
 }
 
-function currentRefreshToken(items: Record<string, string>): string | null {
+function currentSignOutSession(items: Record<string, string>): SignOutSession {
   const lastAuthUserEntry = Object.entries(items).find(([key]) =>
     key.endsWith(".LastAuthUser"),
   );
-  if (!lastAuthUserEntry) return null;
+  if (!lastAuthUserEntry) {
+    return {
+      authSource: items["thinkwork:auth-source"] ?? null,
+      idToken: null,
+      refreshToken: null,
+    };
+  }
 
   const [lastAuthUserKey, username] = lastAuthUserEntry;
   const prefix = lastAuthUserKey.slice(0, -".LastAuthUser".length);
-  return items[`${prefix}.${username}.refreshToken`] ?? null;
+  return {
+    authSource: items["thinkwork:auth-source"] ?? null,
+    idToken: items[`${prefix}.${username}.idToken`] ?? null,
+    refreshToken: items[`${prefix}.${username}.refreshToken`] ?? null,
+  };
 }

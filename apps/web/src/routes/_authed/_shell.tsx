@@ -1,4 +1,9 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import {
+  Outlet,
+  createFileRoute,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Menu } from "lucide-react";
 import {
@@ -12,6 +17,7 @@ import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader"
 import { SpacesSidebar } from "@/components/SpacesSidebar";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
+import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
@@ -21,7 +27,12 @@ export const Route = createFileRoute("/_authed/_shell")({
 });
 
 function ShellLayout() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { noTenantAssigned, isLoading } = useTenant();
+  const navigate = useNavigate();
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   const isDesktop = isDesktopBuild();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DESKTOP_SIDEBAR_WIDTH);
@@ -30,21 +41,25 @@ function ShellLayout() {
     void requestDesktopNotificationPermission();
   }, []);
 
+  useEffect(() => {
+    if (authLoading || isAuthenticated) return;
+    void navigate({
+      to: "/sign-in",
+      search: { next: pathname },
+      replace: true,
+    });
+  }, [authLoading, isAuthenticated, navigate, pathname]);
+
+  if (authLoading || !isAuthenticated) {
+    return <ShellLoadingState />;
+  }
+
   if (noTenantAssigned) {
     return <NoTenantAssigned />;
   }
 
   if (isLoading) {
-    // Use LoadingShimmer directly (rather than <PageSkeleton/>) because
-    // this branch renders before the shell exists — there's no flex
-    // parent above it, so h-full collapses and PageSkeleton renders at
-    // the top of the page. Force viewport-height sizing here so the
-    // shimmer sits in the middle.
-    return (
-      <main className="flex min-h-svh w-full items-center justify-center bg-background">
-        <LoadingShimmer />
-      </main>
-    );
+    return <ShellLoadingState />;
   }
 
   const shellChrome = (
@@ -83,6 +98,19 @@ function ShellLayout() {
       {isDesktop ? null : <MobileSidebarTrigger />}
       <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
     </SidebarProvider>
+  );
+}
+
+function ShellLoadingState() {
+  // Use LoadingShimmer directly (rather than <PageSkeleton/>) because
+  // this branch renders before the shell exists — there's no flex
+  // parent above it, so h-full collapses and PageSkeleton renders at
+  // the top of the page. Force viewport-height sizing here so the
+  // shimmer sits in the middle.
+  return (
+    <main className="flex min-h-svh w-full items-center justify-center bg-background">
+      <LoadingShimmer />
+    </main>
   );
 }
 

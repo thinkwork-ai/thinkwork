@@ -189,17 +189,25 @@ export function confirmForgotPassword(
 export async function signOut(): Promise<void> {
   const idToken = await getIdToken().catch(() => getStoredIdToken());
   const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
-  const workosLogoutUrl = idToken && authSource === "workos"
-    ? await requestWorkosLogoutUrl(idToken).catch((error) => {
-        console.error("[auth] WorkOS logout failed", error);
-        return null;
-      })
-    : null;
+  const isWorkosSession = authSource === "workos";
 
   clearLocalAuthSession();
 
+  const workosLogoutUrl =
+    idToken && isWorkosSession
+      ? await requestWorkosLogoutUrl(idToken).catch((error) => {
+          console.error("[auth] WorkOS logout failed", error);
+          return null;
+        })
+      : null;
+
   if (workosLogoutUrl) {
     window.location.href = workosLogoutUrl;
+    return;
+  }
+
+  if (isWorkosSession) {
+    window.location.href = "/sign-in";
     return;
   }
 
@@ -221,8 +229,24 @@ export async function signOut(): Promise<void> {
 }
 
 export function clearLocalAuthSession(): void {
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const prefix = clientId ? `CognitoIdentityServiceProvider.${clientId}` : "";
+  const lastUser = prefix
+    ? tokenStorage.getItem(`${prefix}.LastAuthUser`)
+    : null;
+
   const pool = getUserPool();
   pool?.getCurrentUser()?.signOut();
+
+  if (prefix) {
+    if (lastUser) {
+      tokenStorage.removeItem(`${prefix}.${lastUser}.idToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.accessToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.refreshToken`);
+      tokenStorage.removeItem(`${prefix}.${lastUser}.clockDrift`);
+    }
+    tokenStorage.removeItem(`${prefix}.LastAuthUser`);
+  }
   tokenStorage.removeItem(AUTH_SOURCE_STORAGE_KEY);
 }
 
@@ -434,7 +458,10 @@ export function getAuthOptionSignInUrl(
     throw new Error("Unsupported auth option route");
   }
   const url = new URL(`${apiBaseUrl()}${option.route.authorizePath}`);
-  url.searchParams.set("redirect_uri", `${window.location.origin}/auth/callback`);
+  url.searchParams.set(
+    "redirect_uri",
+    `${window.location.origin}/auth/callback`,
+  );
   url.searchParams.set("return_to", safeReturnTo(next));
   if (option.route.prompt) {
     url.searchParams.set("prompt", option.route.prompt);
@@ -609,9 +636,7 @@ export function storeTokensInCognitoStorage(
   tokenStorage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
 }
 
-async function requestWorkosLogoutUrl(
-  idToken: string,
-): Promise<string | null> {
+async function requestWorkosLogoutUrl(idToken: string): Promise<string | null> {
   const res = await fetch(`${apiBaseUrl()}/api/auth/workos/logout`, {
     method: "POST",
     headers: {
@@ -620,7 +645,7 @@ async function requestWorkosLogoutUrl(
       Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify({
-      return_to: `${window.location.origin}/sign-in`,
+      return_to: `${window.location.origin}/`,
     }),
   });
   if (!res.ok) return null;

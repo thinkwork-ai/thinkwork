@@ -1,12 +1,11 @@
-import { sql, threads } from "../../utils.js";
+import { sql, threads, workItems, workItemThreadLinks } from "../../utils.js";
 
 /**
- * User-visible personal Threads are private to the requester unless the
- * requester was explicitly added as a participant via a mention.
- *
- * Space Threads are different: access to the active Space authorizes reading
- * threads inside it, and per-thread participant rows are optional read-state /
- * notification records. Tenant role is not a thread visibility grant;
+ * User-visible Threads are private to the requester unless the requester was
+ * explicitly added as a participant via a mention/collaboration invite.
+ * A user assigned a Work Item linked to the Thread can also see that Thread;
+ * assignment is the task-level invite and does not create a participant row.
+ * Tenant role and Space membership are not thread visibility grants;
  * service-secret callers bypass this at their own resolver boundary for
  * background/system work.
  */
@@ -15,50 +14,25 @@ export function callerVisibleThreadPredicate(
   callerUserId: string,
 ) {
   return sql`(
-    (
-      ${threads.space_id} IS NULL
-      AND (
-        ${threads.user_id} = ${callerUserId}
-        OR EXISTS (
-          SELECT 1
-            FROM thread_participants caller_tp
-           WHERE caller_tp.tenant_id = ${tenantId}
-             AND caller_tp.thread_id = ${threads.id}
-             AND caller_tp.participant_type = 'user'
-             AND caller_tp.user_id = ${callerUserId}
-        )
-      )
-    )
-    OR (
-      ${threads.space_id} IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-          FROM spaces caller_space
-         WHERE caller_space.tenant_id = ${tenantId}
-           AND caller_space.id = ${threads.space_id}
-           AND caller_space.status = 'active'
-           AND (
-             caller_space.access_mode = 'public'
-             OR EXISTS (
-               SELECT 1
-                 FROM space_members caller_sm
-                WHERE caller_sm.tenant_id = ${tenantId}
-                  AND caller_sm.space_id = caller_space.id
-                 AND caller_sm.user_id = ${callerUserId}
-             )
-           )
-      )
-    )
-    -- A mention into a thread is a thread-level invite: an explicit
-    -- participant sees THAT thread even inside a private Space they don't
-    -- belong to. They still don't gain access to the rest of the Space.
+    ${threads.user_id} = ${callerUserId}
     OR EXISTS (
-      SELECT 1
-        FROM thread_participants caller_tp_space
-       WHERE caller_tp_space.tenant_id = ${tenantId}
-         AND caller_tp_space.thread_id = ${threads.id}
-         AND caller_tp_space.participant_type = 'user'
-         AND caller_tp_space.user_id = ${callerUserId}
+        SELECT 1
+          FROM thread_participants caller_tp
+         WHERE caller_tp.tenant_id = ${tenantId}
+           AND caller_tp.thread_id = ${threads.id}
+           AND caller_tp.participant_type = 'user'
+           AND caller_tp.user_id = ${callerUserId}
+    )
+    OR EXISTS (
+        SELECT 1
+          FROM ${workItemThreadLinks} caller_witl
+          JOIN ${workItems} caller_wi
+            ON caller_wi.tenant_id = caller_witl.tenant_id
+           AND caller_wi.id = caller_witl.work_item_id
+         WHERE caller_witl.tenant_id = ${tenantId}
+           AND caller_witl.thread_id = ${threads.id}
+           AND caller_wi.owner_user_id = ${callerUserId}
+           AND caller_wi.archived_at IS NULL
     )
   )`;
 }

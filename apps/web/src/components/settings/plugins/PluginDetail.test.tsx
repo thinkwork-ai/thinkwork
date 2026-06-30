@@ -249,6 +249,7 @@ beforeEach(() => {
   refreshCatalog.mockReset();
   refreshInstalls.mockReset();
   refreshActivations.mockReset();
+  paramsState.pluginKey = "lastmile";
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
   desktopState.bridge = null;
@@ -386,6 +387,28 @@ describe("PluginDetail", () => {
         input: { installId: "install-1", componentKey: "lastmile-skills" },
       });
     });
+  });
+
+  it("keeps the Twenty Client Engagement app surface as configuration in Settings", () => {
+    paramsState.pluginKey = "twenty";
+    mockQueries({
+      install: twentyClientEngagementInstall,
+      activations: [twentyActiveActivation],
+      catalog: [twentyClientEngagementEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("client-engagement")).toBeTruthy();
+    expect(screen.getByText("UI surface")).toBeTruthy();
+    expect(screen.getAllByText("Provisioned").length).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(
+      screen.queryByRole("button", { name: /open client engagement/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /open client engagement/i }),
+    ).toBeNull();
   });
 
   it("renders the Reconnect badge and button for a needs_reauth activation", () => {
@@ -957,7 +980,7 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("Premium access")).toBeNull();
     expect(screen.queryByText("Install key required")).toBeNull();
     expect(
-      screen.getByText("knowledge graph substrate.", { exact: false }),
+      screen.getByText("private context substrate.", { exact: false }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /enter key/i }));
 
@@ -986,7 +1009,7 @@ describe("PluginDetail", () => {
     });
   });
 
-  it("shows ThinkWork Brain operations, workspace, and adoption evidence once entitled", () => {
+  it("shows ThinkWork Brain context diagnostics and adoption evidence once entitled", () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
       install: companyBrainInstall,
@@ -998,14 +1021,14 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("Premium access")).toBeNull();
     expect(screen.queryByText("Entitled")).toBeNull();
     expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
-    const operations = screen.getByRole("link", { name: /open operations/i });
-    expect(operations.getAttribute("href")).toBe("/settings/brain-operations");
-    expect(screen.getByText("Memory graph")).toBeTruthy();
-    expect(
-      screen.getByText(/ontology and graph infrastructure evidence/i),
-    ).toBeTruthy();
-    const link = screen.getByRole("link", { name: /open graph/i });
-    expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
+    const diagnostics = screen.getByRole("link", {
+      name: /open diagnostics/i,
+    });
+    expect(diagnostics.getAttribute("href")).toBe(
+      "/settings/context-diagnostics",
+    );
+    expect(screen.queryByText("Memory graph")).toBeNull();
+    expect(screen.queryByRole("link", { name: /open graph/i })).toBeNull();
   });
 
   it("renders n8n package settings only for installed operator plugins", () => {
@@ -1309,6 +1332,91 @@ const n8nPluginSettings = {
   recentAgentStepRuns: [],
 };
 
+const twentyClientEngagementInstall = {
+  ...baseInstall,
+  id: "install-twenty",
+  pluginKey: "twenty",
+  pinnedVersion: "0.3.0",
+  state: "installed",
+  activatedUserCount: 1,
+  components: [
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-twenty-crm",
+      componentKey: "crm",
+      componentType: "mcp-server",
+      state: "provisioned",
+      handlerRef: { tenantMcpServerId: "server-twenty" },
+      lastError: null,
+    },
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-twenty-runtime",
+      componentKey: "runtime",
+      componentType: "infrastructure",
+      state: "provisioned",
+      handlerRef: { managedAppKey: "twenty" },
+      lastError: null,
+    },
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-twenty-client-engagement",
+      componentKey: "client-engagement",
+      componentType: "ui-surface",
+      state: "provisioned",
+      handlerRef: {},
+      lastError: null,
+    },
+  ],
+};
+
+const twentyClientEngagementEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "twenty",
+  displayName: "Twenty CRM",
+  description: "Customer relationship management.",
+  latestVersion: "0.3.0",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.3.0",
+      payloadSha256: "sha256:twenty-030",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "crm",
+          type: "mcp-server",
+          displayName: "Twenty CRM",
+        },
+        {
+          key: "runtime",
+          type: "infrastructure",
+          displayName: "Twenty runtime",
+        },
+        {
+          key: "client-engagement",
+          type: "ui-surface",
+          displayName: "Client Engagement",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const twentyActiveActivation = {
+  __typename: "UserPluginActivation" as const,
+  id: "act-twenty",
+  pluginInstallId: "install-twenty",
+  pluginKey: "twenty",
+  status: "active",
+  grantedScopes: [],
+  grantedAt: "2026-06-29T12:00:00Z",
+  revokedAt: null,
+};
+
 // Returns the most recent non-empty `action` node handed to the (mocked)
 // page-header hook, so tests can assert on header affordances rendered
 // outside the PluginDetail subtree.
@@ -1500,7 +1608,7 @@ const companyBrainEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "company-brain",
   displayName: "ThinkWork Brain",
-  description: "Premium knowledge graph substrate.",
+  description: "Premium private context substrate.",
   latestVersion: "0.1.0",
   updateAvailable: false,
   premium: {

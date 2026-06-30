@@ -68,7 +68,7 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { BrainOperationsPage } from "./BrainOperationsPage";
+import { ContextDiagnosticsPage } from "./BrainOperationsPage";
 
 const refreshStatus = vi.fn();
 
@@ -96,21 +96,19 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("BrainOperationsPage", () => {
+describe("ContextDiagnosticsPage", () => {
   it("renders tenant-safe Brain posture without backend evidence", () => {
     mockStatus({ ...baseStatus, evidence: null });
 
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
-    expect(screen.getByText("Brain operations")).toBeTruthy();
+    expect(screen.getByText("Context diagnostics")).toBeTruthy();
     expect(screen.getByText("default tier")).toBeTruthy();
     expect(screen.getByText("default active")).toBeTruthy();
     expect(screen.getByText("query_brain_context")).toBeTruthy();
     expect(screen.getByText("Evidence hidden")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /open graph/i }).getAttribute("href"),
-    ).toBe("/settings/memory/knowledge-graph");
-    expect(screen.getByText("Memory graph")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /open graph/i })).toBeNull();
+    expect(screen.getByText("Context substrate")).toBeTruthy();
     expect(screen.getByText("Ontology posture")).toBeTruthy();
     expect(screen.getByText("Projection follow-up")).toBeTruthy();
     expect(screen.getByText("Company/wiki projections")).toBeTruthy();
@@ -120,7 +118,7 @@ describe("BrainOperationsPage", () => {
     expect(
       screen.getByRole("link", { name: /open tools/i }).getAttribute("href"),
     ).toBe("/settings/tools");
-    expect(screen.queryByText("Cognee endpoint")).toBeNull();
+    expect(screen.queryByText("Deprecated backend endpoint")).toBeNull();
     expect(screen.queryByText("S3 artifact root")).toBeNull();
     expect(JSON.stringify(document.body.textContent)).not.toContain("s3://");
     expect(JSON.stringify(document.body.textContent)).not.toContain(
@@ -154,9 +152,9 @@ describe("BrainOperationsPage", () => {
       },
     });
 
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
-    expect(screen.getByText("Cognee endpoint")).toBeTruthy();
+    expect(screen.getByText("Deprecated backend endpoint")).toBeTruthy();
     expect(
       screen.getByText("https://cognee.internal.example.com"),
     ).toBeTruthy();
@@ -180,7 +178,7 @@ describe("BrainOperationsPage", () => {
       },
     });
 
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
     expect(
       screen.getAllByText("Brain substrate failed").length,
@@ -192,7 +190,7 @@ describe("BrainOperationsPage", () => {
   });
 
   it("requests production migration from ready default posture", async () => {
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /request production migration/i }),
@@ -216,7 +214,7 @@ describe("BrainOperationsPage", () => {
         status: "failed",
       },
     });
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /mark rolled back/i }));
 
@@ -241,7 +239,7 @@ describe("BrainOperationsPage", () => {
         status: "rolled_back",
       },
     });
-    render(<BrainOperationsPage />);
+    render(<ContextDiagnosticsPage />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /request production migration/i }),

@@ -71,15 +71,21 @@ describe("createWorkosAuthorizeRedirect", () => {
     expect(() => normalizeRedirectUri("https://evil.example/callback")).toThrow(
       /path/,
     );
-    expect(() => normalizeRedirectUri("http://evil.example/auth/callback")).toThrow(
-      /https/,
-    );
-    expect(() => normalizeRedirectUri("https://evil.example/auth/callback")).toThrow(
-      /origin/,
-    );
+    expect(() =>
+      normalizeRedirectUri("http://evil.example/auth/callback"),
+    ).toThrow(/https/);
+    expect(() =>
+      normalizeRedirectUri("https://evil.example/auth/callback"),
+    ).toThrow(/origin/);
     expect(normalizeRedirectUri("http://localhost:5180/auth/callback")).toBe(
       "http://localhost:5180/auth/callback",
     );
+    expect(normalizeRedirectUri("thinkwork-canary://oauth/callback")).toBe(
+      "thinkwork-canary://oauth/callback",
+    );
+    expect(() =>
+      normalizeRedirectUri("thinkwork-canary://oauth/other"),
+    ).toThrow(/path/);
   });
 
   it("normalizes unsafe return destinations to /new", () => {
@@ -145,6 +151,36 @@ describe("completeWorkosCallback", () => {
     expect(JSON.stringify(persisted[0])).not.toContain("secret_123");
   });
 
+  it("redirects desktop WorkOS callbacks back to the custom scheme bridge", async () => {
+    const deps = depsForTest({
+      randomTokens: ["bridge-code"],
+    });
+    const state = signWorkosAuthorizeState(
+      {
+        kind: "workos_authorize_state",
+        nonce: "nonce-123",
+        host: "api.customer.example",
+        tenantId: "tenant-123",
+        tenantReferenceId: "tenant-ref-123",
+        authProviderResourceId: "resource-123",
+        redirectUri: "thinkwork-canary://oauth/callback",
+        returnTo: "/work-items/123",
+      },
+      "state-secret",
+    );
+
+    await expect(
+      completeWorkosCallback({
+        trustedDomainName: "api.customer.example",
+        code: "workos-code",
+        state,
+        deps,
+      }),
+    ).resolves.toBe(
+      "thinkwork-canary://oauth/callback?workos_bridge=bridge-code&next=%2Fwork-items%2F123",
+    );
+  });
+
   it("rejects WorkOS responses without a verified email", async () => {
     const deps = depsForTest({
       exchangeCode: async () => ({
@@ -207,12 +243,14 @@ describe("completeWorkosCallback", () => {
   });
 });
 
-function depsForTest(overrides: {
-  randomTokens?: string[];
-  secret?: string | null;
-  exchangeCode?: WorkosAuthDeps["exchangeCode"];
-  persistBridge?: WorkosAuthDeps["persistBridge"];
-} = {}): WorkosAuthDeps {
+function depsForTest(
+  overrides: {
+    randomTokens?: string[];
+    secret?: string | null;
+    exchangeCode?: WorkosAuthDeps["exchangeCode"];
+    persistBridge?: WorkosAuthDeps["persistBridge"];
+  } = {},
+): WorkosAuthDeps {
   const randomTokens = [...(overrides.randomTokens ?? [])];
   return {
     loadPublicationForHost: vi.fn(async (host: string) =>

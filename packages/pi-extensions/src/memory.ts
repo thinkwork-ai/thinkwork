@@ -50,6 +50,12 @@ export interface MemoryExtensionOptions {
    * wires it to structured logging.
    */
   onError?: (error: unknown, context: { phase: string }) => void;
+  /** Optional sink for successful proactive grounding recall telemetry. */
+  onGrounding?: (context: {
+    phase: string;
+    query: string;
+    count: number;
+  }) => void;
 }
 
 const DEFAULT_GROUNDING_LIMIT = 5;
@@ -107,9 +113,9 @@ export function createMemoryExtension(
           "consolidated observations (synthesized beliefs annotated with freshness and " +
           "supporting-fact counts) alongside raw facts. Prefer observations when both cover " +
           "the same ground: they are deduplicated and evidence-weighted. " +
-          "Use only when the current prompt and workspace files, especially `User/USER.md`, " +
-          "do not already contain the needed fact, or when the user explicitly asks to search memory " +
-          "or prior context. For questions about shared institutional entities and their " +
+          "For explicit user memory, Space memory, or long-term-memory retrieval requests, " +
+          "use this tool directly; do not search workspace files, `User/USER.md`, or `SPACE.md` " +
+          "as a substitute memory backend. For questions about shared institutional entities and their " +
           "relationships (customers, projects, decisions across the company), use " +
           "`knowledge_graph_search` instead — recall is the user's own episodic memory.\n\n" +
           "REQUIRED FOLLOW-UP: after recall you MUST call `reflect` on the same query to " +
@@ -176,8 +182,9 @@ export function createMemoryExtension(
         description:
           "Synthesize the memory units recalled for a query into a coherent answer. " +
           "The synthesis is hierarchical — consolidated observations are weighed ahead of " +
-          "raw facts. Call this AFTER `recall` on the same query. Do not call it for facts " +
-          "that are already available in `User/USER.md` or the current workspace. For shared " +
+          "raw facts. Call this AFTER `recall` on the same query for explicit user memory, " +
+          "Space memory, or long-term-memory retrieval requests. Do not use workspace files, " +
+          "`User/USER.md`, or `SPACE.md` as a substitute memory backend. For shared " +
           "institutional entity/relationship questions, prefer `knowledge_graph_search` over " +
           "the recall/reflect chain — reflect synthesizes the user's own episodic memory.",
         parameters: Type.Object({
@@ -248,6 +255,11 @@ export function createMemoryExtension(
               options.groundingTimeoutMs ?? DEFAULT_GROUNDING_TIMEOUT_MS,
             ),
           );
+          options.onGrounding?.({
+            phase: "session_start_grounding",
+            query,
+            count: result.memories.length,
+          });
           if (result.memories.length > 0) {
             groundingText = formatMemories(result.memories);
           }

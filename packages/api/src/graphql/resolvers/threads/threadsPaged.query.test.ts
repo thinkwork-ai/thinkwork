@@ -21,6 +21,8 @@ const {
   mockHasSpaceMemberAccess,
   threadsTable,
   threadParticipantsTable,
+  workItemsTable,
+  workItemThreadLinksTable,
 } = vi.hoisted(() => {
   const captured: unknown[][] = [];
 
@@ -66,6 +68,17 @@ const {
     thread_id: tableCol("thread_participants.thread_id"),
     last_read_at: tableCol("thread_participants.last_read_at"),
   };
+  const workItems = {
+    id: tableCol("work_items.id"),
+    tenant_id: tableCol("work_items.tenant_id"),
+    owner_user_id: tableCol("work_items.owner_user_id"),
+    archived_at: tableCol("work_items.archived_at"),
+  };
+  const workItemThreadLinks = {
+    tenant_id: tableCol("work_item_thread_links.tenant_id"),
+    work_item_id: tableCol("work_item_thread_links.work_item_id"),
+    thread_id: tableCol("work_item_thread_links.thread_id"),
+  };
 
   // db.select().from(threads).where(...).orderBy(...).limit(...).offset(...)
   // db.select({count}).from(threads).where(...)
@@ -108,6 +121,8 @@ const {
     mockDesc: desc,
     threadsTable: threads,
     threadParticipantsTable: threadParticipants,
+    workItemsTable: workItems,
+    workItemThreadLinksTable: workItemThreadLinks,
   };
 });
 
@@ -123,6 +138,8 @@ vi.mock("../../utils.js", () => ({
   })),
   threads: threadsTable,
   threadParticipants: threadParticipantsTable,
+  workItems: workItemsTable,
+  workItemThreadLinks: workItemThreadLinksTable,
   threadToCamel: (row: unknown) => row,
 }));
 

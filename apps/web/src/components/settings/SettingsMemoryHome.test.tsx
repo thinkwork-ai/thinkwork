@@ -15,6 +15,9 @@ const memoryKbRoute = read(
 const memoryKgRoute = read(
   "src/routes/_authed/settings.memory.knowledge-graph.tsx",
 );
+const memoryOntologyRoute = read(
+  "src/routes/_authed/settings.memory.ontology.tsx",
+);
 
 describe("SettingsMemoryHome", () => {
   it("owns a single stable Memory breadcrumb", () => {
@@ -31,9 +34,16 @@ describe("SettingsMemoryHome", () => {
     expect(source).not.toContain('label: "Graph"');
   });
 
+  it("keeps the Memory refresh control visually interactive", () => {
+    expect(source).toContain("hover:text-primary");
+    expect(source).toContain("bg-primary/10 text-primary");
+    expect(source).toContain('"animate-spin"');
+    expect(source).toContain("setRefreshPending(true)");
+  });
+
   it("renders the active facet selected by the current route", () => {
     expect(source).toContain("tabForPath");
-    expect(source).toContain("<SettingsMemory embedded");
+    expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<SettingsKnowledgeBases embedded");
     expect(source).toContain("<KnowledgeGraphTab");
     expect(source).not.toContain("<SettingsWiki embedded");
@@ -54,7 +64,10 @@ describe("SettingsMemoryHome", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
     expect(memoryWikiRoute).toContain('redirect({ to: "/settings/memory" })');
     expect(memoryKbRoute).toContain("SettingsMemoryHome");
-    expect(memoryKgRoute).toContain("SettingsMemoryHome");
+    expect(memoryOntologyRoute).toContain("SettingsMemoryHome");
+    expect(memoryKgRoute).toContain(
+      'redirect({ to: "/settings/memory/ontology", replace: true })',
+    );
   });
 
   it("redirects retired memory routes into the matching tab", () => {
@@ -63,7 +76,7 @@ describe("SettingsMemoryHome", () => {
       'redirect({ to: "/settings/memory/knowledge-bases" })',
     );
     expect(kgRoute).toContain(
-      'redirect({ to: "/settings/memory/knowledge-graph" })',
+      'redirect({ to: "/settings/memory/ontology", replace: true })',
     );
   });
 });

@@ -34,6 +34,19 @@ const {
       last_read_at: tableCol("thread_participants.last_read_at"),
       updated_at: tableCol("thread_participants.updated_at"),
     },
+    workItems: {
+      __table__: "work_items",
+      id: tableCol("work_items.id"),
+      tenant_id: tableCol("work_items.tenant_id"),
+      owner_user_id: tableCol("work_items.owner_user_id"),
+      archived_at: tableCol("work_items.archived_at"),
+    },
+    workItemThreadLinks: {
+      __table__: "work_item_thread_links",
+      tenant_id: tableCol("work_item_thread_links.tenant_id"),
+      work_item_id: tableCol("work_item_thread_links.work_item_id"),
+      thread_id: tableCol("work_item_thread_links.thread_id"),
+    },
     goals: {
       __table__: "goals",
       id: tableCol("goals.id"),
@@ -137,6 +150,8 @@ vi.mock("../../utils.js", () => ({
   sql: vi.fn(() => ({ __sql: true })),
   threads: tables.threads,
   threadParticipants: tables.threadParticipants,
+  workItems: tables.workItems,
+  workItemThreadLinks: tables.workItemThreadLinks,
   goals: tables.goals,
   agentWakeupRequests: { __table__: "agent_wakeup_requests" },
   inboxItems: { __table__: "inbox_items" },
