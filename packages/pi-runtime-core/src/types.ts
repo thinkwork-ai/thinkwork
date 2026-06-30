@@ -200,6 +200,45 @@ export interface PiInvocationIdentity {
   traceId?: string;
 }
 
+export interface PiExtensionRuntimeDescriptor {
+  extensionId: string;
+  versionId: string;
+  assignmentId: string;
+  sourceId: string;
+  name: string | null;
+  displayName: string | null;
+  repositoryUrl: string;
+  repositoryOwner: string | null;
+  repositoryName: string | null;
+  sourceRef: string;
+  commitSha: string;
+  manifestHash: string;
+  artifactHash: string;
+  artifactUri: string;
+  runtimeTarget: "agentcore-pi";
+  targetType: "default_agent" | "agent_profile";
+  agentProfileId: string | null;
+  toolNames: string[];
+  lifecycleHooks: string[];
+  permissionClasses: string[];
+  grantedPermissionClasses: string[];
+}
+
+export interface DynamicPiExtensionLoadEvidence {
+  extensionId: string;
+  versionId: string;
+  assignmentId: string;
+  name: string | null;
+  artifactHashPrefix: string;
+  targetType: "default_agent" | "agent_profile";
+  agentProfileId: string | null;
+  toolNames: string[];
+  lifecycleHooks: string[];
+  grantedPermissionClasses: string[];
+  status: "loaded" | "skipped" | "failed";
+  reason?: string;
+}
+
 export interface RunAgentLoopArgs {
   message: string;
   history: Message[];

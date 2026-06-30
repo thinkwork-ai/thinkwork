@@ -55,6 +55,34 @@ const VALID_PAYLOAD = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const DYNAMIC_EXTENSION_PAYLOAD = (overrides: Record<string, unknown> = {}) => ({
+  extensionId: "11111111-1111-4111-8111-111111111111",
+  versionId: "22222222-2222-4222-8222-222222222222",
+  assignmentId: "33333333-3333-4333-8333-333333333333",
+  sourceId: "11111111-1111-4111-8111-111111111111",
+  name: "issue_search",
+  displayName: "Issue Search",
+  repositoryUrl: "https://github.com/acme/issues-extension",
+  repositoryOwner: "acme",
+  repositoryName: "issues-extension",
+  sourceRef: "main",
+  commitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  manifestHash:
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  artifactHash:
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  artifactUri:
+    "github://acme/issues-extension/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  runtimeTarget: "agentcore-pi",
+  targetType: "default_agent",
+  agentProfileId: null,
+  toolNames: ["search_issues"],
+  lifecycleHooks: [],
+  permissionClasses: [],
+  grantedPermissionClasses: [],
+  ...overrides,
+});
+
 const noopConnect: ConnectMcpServerFn = async () => [];
 
 function fakeAgentCoreClient(): unknown {
@@ -495,6 +523,70 @@ describe("handleInvocation — happy path", () => {
         }),
       ],
     });
+  });
+
+  it("keeps default and profile dynamic Pi extensions on their scoped sessions", async () => {
+    const profileId = "44444444-4444-4444-8444-444444444444";
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "#Research Find current sources",
+        requested_agent_profile_slug: "research",
+        model: "anthropic/claude-sonnet-4-5",
+        pi_extensions: [
+          DYNAMIC_EXTENSION_PAYLOAD({ toolNames: ["default_lookup"] }),
+        ],
+        agent_profiles: [
+          {
+            id: profileId,
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["read"],
+            piExtensions: [
+              {
+                toolNames: ["read"],
+                targetType: "agent_profile",
+                agentProfileId: profileId,
+              },
+              {},
+              DYNAMIC_EXTENSION_PAYLOAD({
+                versionId: "55555555-5555-4555-8555-555555555555",
+                assignmentId: "66666666-6666-4666-8666-666666666666",
+                targetType: "agent_profile",
+                agentProfileId: profileId,
+                toolNames: ["profile_lookup"],
+              }),
+            ],
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId, extensionToolNames }) => {
+          if (modelId === "anthropic/claude-haiku-4-5") {
+            expect(extensionToolNames).toContain("profile_lookup");
+            expect(extensionToolNames).not.toContain("default_lookup");
+            return {
+              content: "Research handoff",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          }
+          expect(extensionToolNames).toContain("default_lookup");
+          expect(extensionToolNames).not.toContain("profile_lookup");
+          return {
+            content: "Parent final answer",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
   });
 
   it("chains multiple explicit profile mentions and returns the parent Agent response", async () => {

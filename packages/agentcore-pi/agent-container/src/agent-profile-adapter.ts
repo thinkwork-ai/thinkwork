@@ -66,6 +66,7 @@ export interface AgentProfileConfig {
   instructions: string;
   routingGuidance?: string;
   toolPolicy?: AgentProfileToolPolicy;
+  piExtensions?: unknown[];
   executionControls?: AgentProfileExecutionControls;
   contextPolicy?: AgentProfileContextPolicy;
 }
@@ -78,6 +79,7 @@ export interface CompileAgentProfileRunRequestArgs {
   availableToolNames: readonly string[];
   availableSkillNames: readonly string[];
   mcpRegistry: McpToolRegistry;
+  dynamicExtensionToolNames?: readonly string[];
   requestedOverrides?: Record<string, unknown>;
   now?: () => Date;
   idFactory?: () => string;
@@ -548,10 +550,13 @@ export function compileAgentProfileRunRequest(
   const model = cleanString(args.profile.modelId);
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
 
-  const tools = compileToolAllowlist({
-    policy: args.profile.toolPolicy,
-    availableToolNames: args.availableToolNames,
-  });
+  const tools = unique([
+    ...compileToolAllowlist({
+      policy: args.profile.toolPolicy,
+      availableToolNames: args.availableToolNames,
+    }),
+    ...(args.dynamicExtensionToolNames ?? []),
+  ]);
   const skills = compileSkills({
     policy: args.profile.toolPolicy,
     availableSkillNames: args.availableSkillNames,

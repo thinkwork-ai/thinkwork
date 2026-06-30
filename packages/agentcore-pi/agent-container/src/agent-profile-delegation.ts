@@ -41,6 +41,8 @@ export interface ProfileDelegationToolOptions {
   tools: AgentTool<any>[];
   extensionFactories: ExtensionFactory[];
   extensionToolNames: string[];
+  profileExtensionFactoriesById?: Map<string, ExtensionFactory[]>;
+  profileExtensionToolNamesById?: Map<string, string[]>;
   workspaceSkills: WorkspaceSkill[];
   mcpRegistry: McpToolRegistry;
   cwd: string;
@@ -71,6 +73,14 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function descriptorArray(value: unknown): unknown[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
+      )
+    : [];
 }
 
 function normalizeProfileConfig(value: unknown): AgentProfileConfig | null {
@@ -111,6 +121,7 @@ function normalizeProfileConfig(value: unknown): AgentProfileConfig | null {
         };
       }),
     },
+    piExtensions: descriptorArray(record.piExtensions ?? record.pi_extensions),
     executionControls: {
       thinking: asString(execution.thinking) || undefined,
       maxRuntimeMs: numberValue(execution.maxRuntimeMs),
@@ -377,8 +388,14 @@ export function createProfileChildRunner(
       const childSurface = childToolSurface({
         request,
         tools: options.tools,
-        extensionToolNames: options.extensionToolNames,
+        extensionToolNames: [
+          ...options.extensionToolNames,
+          ...(options.profileExtensionToolNamesById?.get(request.profileId) ??
+            []),
+        ],
       });
+      const profileExtensionFactories =
+        options.profileExtensionFactoriesById?.get(request.profileId) ?? [];
       try {
         const systemPrompt = [
           profileSystemPrompt(request),
@@ -398,7 +415,10 @@ export function createProfileChildRunner(
             history: options.parentHistory ?? [],
             systemPrompt,
             tools: childSurface.tools,
-            extensionFactories: options.extensionFactories,
+            extensionFactories: [
+              ...options.extensionFactories,
+              ...profileExtensionFactories,
+            ],
             extensionToolNames: childSurface.extensionToolNames,
             builtinToolNames: childSurface.builtinToolNames,
             modelId: request.model,
@@ -539,11 +559,14 @@ export async function executeAgentProfileDelegation(input: {
       ...BUILTIN_TOOL_NAMES,
       ...input.options.tools.map((tool) => tool.name),
       ...input.options.extensionToolNames,
+      ...(input.options.profileExtensionToolNamesById?.get(profile.id) ?? []),
     ],
     availableSkillNames: input.options.workspaceSkills.map(
       (skill) => skill.slug,
     ),
     mcpRegistry: input.options.mcpRegistry,
+    dynamicExtensionToolNames:
+      input.options.profileExtensionToolNamesById?.get(profile.id) ?? [],
     requestedOverrides: input.requestedOverrides,
     now: input.options.now,
   });
