@@ -69,6 +69,20 @@ export const OAuthSuccessCallbackSchema = z
   })
   .strict();
 
+const InternalNextSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.startsWith("/") && !value.startsWith("//"), {
+    message: "next must be an internal absolute path",
+  });
+
+export const WorkosBridgeCallbackSchema = z
+  .object({
+    workos_bridge: z.string().min(1),
+    next: InternalNextSchema.optional(),
+  })
+  .strict();
+
 export const OAuthFailureCallbackSchema = z
   .object({
     error: z.string().min(1),
@@ -93,14 +107,18 @@ export const AppRouteDeepLinkSchema = z
 
 export const DeepLinkCallbackSchema = z.union([
   OAuthSuccessCallbackSchema,
+  WorkosBridgeCallbackSchema,
   OAuthFailureCallbackSchema,
   DeploymentProfileDeepLinkSchema,
   AppRouteDeepLinkSchema,
 ]);
 
-export const PendingOAuthCallbackSchema = OAuthSuccessCallbackSchema.extend({
-  next: z.string().min(1).optional(),
-}).strict();
+export const PendingOAuthCallbackSchema = z.union([
+  OAuthSuccessCallbackSchema.extend({
+    next: InternalNextSchema.optional(),
+  }).strict(),
+  WorkosBridgeCallbackSchema,
+]);
 
 export const ConsumePendingOAuthRequestSchema = EmptyRequestSchema;
 export const ConsumePendingOAuthResponseSchema =
@@ -363,6 +381,7 @@ export type StartOAuthResponse = z.infer<typeof StartOAuthResponseSchema>;
 export type SignOutResponse = z.infer<typeof SignOutResponseSchema>;
 export type DeepLinkCallback = z.infer<typeof DeepLinkCallbackSchema>;
 export type OAuthSuccessCallback = z.infer<typeof OAuthSuccessCallbackSchema>;
+export type WorkosBridgeCallback = z.infer<typeof WorkosBridgeCallbackSchema>;
 export type OAuthFailureCallback = z.infer<typeof OAuthFailureCallbackSchema>;
 export type DeploymentProfileDeepLink = z.infer<
   typeof DeploymentProfileDeepLinkSchema
