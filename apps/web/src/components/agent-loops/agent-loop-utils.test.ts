@@ -17,6 +17,17 @@ const spaces: AgentLoopSpaceOption[] = [
 ];
 
 describe("agent-loop-utils", () => {
+  it("defaults new Automation drafts to a schedule trigger", () => {
+    expect(
+      defaultAgentLoopDraft(workers, spaces, "space-1"),
+    ).toMatchObject({
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(7 days)",
+      timezone: "UTC",
+    });
+  });
+
   it("keeps advanced drafts strict about explicit completion criteria", () => {
     const draft = {
       ...defaultAgentLoopDraft(workers, spaces, "space-1"),

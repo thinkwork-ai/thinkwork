@@ -12,6 +12,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
+  Checkbox,
   Input,
   Select,
   SelectContent,
@@ -37,7 +38,7 @@ export function AutomationAdvancedInspector({
   workerOptions: AgentLoopWorkerOption[];
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="mx-auto mt-8 w-full max-w-6xl">
       <Accordion
         type="single"
         collapsible
@@ -45,44 +46,21 @@ export function AutomationAdvancedInspector({
         onValueChange={(value) => onOpenChange(value === "advanced")}
       >
         <AccordionItem value="advanced" className="border-0">
-          <AccordionTrigger className="w-auto justify-start gap-2 px-0 text-base font-semibold hover:no-underline">
-            Advanced
+          <AccordionTrigger
+            aria-label="Advanced"
+            className="w-full justify-start px-0 py-0 hover:no-underline"
+          >
+            <span className="min-w-0">
+              <span className="block text-lg font-semibold leading-6 text-foreground">
+                Advanced
+              </span>
+              <span className="mt-0 block text-sm font-normal leading-5 text-muted-foreground">
+                Fine-tune runtime, review, and evidence settings
+              </span>
+            </span>
           </AccordionTrigger>
-          <AccordionContent className="pb-0">
+          <AccordionContent className="pb-0 pt-4">
             <div className="grid gap-6 rounded-lg border border-border/75 bg-muted/25 p-5">
-              <InspectorSection label="Identity">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <InspectorField label="Name">
-                    <Input
-                      aria-label="Advanced automation name"
-                      className="h-10 w-full"
-                      value={draft.name}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      placeholder="Weekly Agent Check-In"
-                    />
-                  </InspectorField>
-                  <InspectorField label="Description">
-                    <Textarea
-                      aria-label="Automation description"
-                      className="min-h-20 w-full resize-y"
-                      value={draft.description}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                      placeholder="Review open work and summarize next actions."
-                    />
-                  </InspectorField>
-                </div>
-              </InspectorSection>
-
               <InspectorSection label="Goal">
                 <div className="grid gap-4 md:grid-cols-2">
                   <InspectorField
@@ -119,6 +97,41 @@ export function AutomationAdvancedInspector({
                       }
                     />
                   </InspectorField>
+                </div>
+              </InspectorSection>
+
+              <InspectorSection label="Suitability">
+                <div className="grid gap-3 text-sm md:grid-cols-3">
+                  <ChecklistItem
+                    label="Goal is stable"
+                    checked={draft.suitabilityGoalStable}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        suitabilityGoalStable: checked,
+                      }))
+                    }
+                  />
+                  <ChecklistItem
+                    label="Evidence is available"
+                    checked={draft.suitabilityEvidenceAvailable}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        suitabilityEvidenceAvailable: checked,
+                      }))
+                    }
+                  />
+                  <ChecklistItem
+                    label="Budget is bounded"
+                    checked={draft.suitabilityBudgeted}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({
+                        ...current,
+                        suitabilityBudgeted: checked,
+                      }))
+                    }
+                  />
                 </div>
               </InspectorSection>
 
@@ -348,6 +361,26 @@ function InspectorField({
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <div className="min-w-0 text-sm text-foreground">{children}</div>
     </div>
+  );
+}
+
+function ChecklistItem({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
