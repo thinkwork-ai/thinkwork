@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { createWorkosAuthHandler } from "./workos-auth.js";
-import { signWorkosAuthorizeState, type WorkosAuthDeps } from "../lib/workos-auth.js";
+import {
+  signWorkosAuthorizeState,
+  type WorkosAuthDeps,
+} from "../lib/workos-auth.js";
 import type { WorkosLogoutDeps } from "../lib/workos-auth-session.js";
 import type { WorkosCognitoBridgeDeps } from "../lib/workos-cognito-bridge.js";
 
@@ -60,6 +63,43 @@ describe("workos-auth handler", () => {
     );
   });
 
+  it("shows a terminal desktop callback page while opening the deep link", async () => {
+    const state = signWorkosAuthorizeState(
+      {
+        kind: "workos_authorize_state",
+        nonce: "nonce-123",
+        host: "api.customer.example",
+        tenantId: "tenant-123",
+        tenantReferenceId: "tenant-ref-123",
+        authProviderResourceId: "resource-123",
+        redirectUri: "thinkwork-canary://oauth/callback",
+        returnTo: "/new",
+      },
+      "state-secret",
+    );
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/callback",
+        query: { code: "code_123", state },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers?.["Content-Type"]).toBe("text/html; charset=utf-8");
+    expect(response.body).toContain("You're signed in to ThinkWork");
+    expect(response.body).toContain(
+      "You can close this browser window and return to the desktop app.",
+    );
+    expect(response.body).toContain(
+      "thinkwork-canary://oauth/callback?workos_bridge=bridge-code&next=%2Fnew",
+    );
+  });
+
   it("fails closed for unsupported paths", async () => {
     const handler = createWorkosAuthHandler({
       workosAuthDeps: depsForHandler(),
@@ -95,7 +135,7 @@ describe("workos-auth handler", () => {
     expect(bridgeDeps.startCognitoCustomAuth).toHaveBeenCalled();
   });
 
-  it("revokes authenticated WorkOS sessions server-side", async () => {
+  it("issues a WorkOS browser logout URL for authenticated WorkOS sessions", async () => {
     const logoutDeps = logoutDepsForHandler();
     const handler = createWorkosAuthHandler({
       workosAuthDeps: depsForHandler(),
@@ -113,16 +153,16 @@ describe("workos-auth handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body ?? "{}")).toEqual({ logout_url: null });
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      logout_url:
+        "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123&return_to=https%3A%2F%2Fapp.customer.example%2F",
+    });
     expect(logoutDeps.findActiveSession).toHaveBeenCalledWith({
       cognitoPrincipalId: "cognito-sub-123",
       now: new Date("2026-06-19T12:00:00Z"),
     });
-    expect(logoutDeps.getSecret).toHaveBeenCalledWith("secret-ref");
-    expect(logoutDeps.revokeWorkosSession).toHaveBeenCalledWith({
-      sessionId: "workos-session-123",
-      clientSecret: "secret_123",
-    });
+    expect(logoutDeps.getSecret).not.toHaveBeenCalled();
+    expect(logoutDeps.revokeWorkosSession).not.toHaveBeenCalled();
     expect(logoutDeps.markSessionLoggedOut).toHaveBeenCalledWith({
       sessionRowId: "session-row-123",
       now: new Date("2026-06-19T12:00:00Z"),
@@ -135,7 +175,31 @@ describe("workos-auth handler", () => {
       workosUserId: "workos-user-123",
       authProviderResourceId: "resource-123",
       tenantReferenceId: "tenant-ref-123",
-      result: "workos_session_revoked",
+      result: "workos_logout_url_issued",
+    });
+  });
+
+  it("allows desktop deep links as WorkOS browser logout return targets", async () => {
+    const logoutDeps = logoutDepsForHandler();
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+      logoutDeps,
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/logout",
+        method: "POST",
+        headers: { authorization: "Bearer id-token" },
+        body: { return_to: "thinkwork-canary://oauth/callback" },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      logout_url:
+        "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123&return_to=thinkwork-canary%3A%2F%2Foauth%2Fcallback",
     });
   });
 
@@ -251,10 +315,12 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
   };
 }
 
-function logoutDepsForHandler(overrides: {
-  auth?: Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>;
-  session?: Awaited<ReturnType<WorkosLogoutDeps["findActiveSession"]>>;
-} = {}): WorkosLogoutDeps {
+function logoutDepsForHandler(
+  overrides: {
+    auth?: Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>;
+    session?: Awaited<ReturnType<WorkosLogoutDeps["findActiveSession"]>>;
+  } = {},
+): WorkosLogoutDeps {
   const defaultAuth: NonNullable<
     Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>
   > = {

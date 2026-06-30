@@ -470,12 +470,21 @@ describe("DesktopOAuthController", () => {
     ).resolves.toBe("[]");
   });
 
-  it("revokes the server-side WorkOS session before revoking the Cognito refresh token", async () => {
+  it("opens the WorkOS browser logout URL before revoking the Cognito refresh token", async () => {
+    const openExternal = vi.fn(async () => undefined);
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ logout_url: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          logout_url:
+            "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123",
+        }),
+      )
       .mockResolvedValueOnce(new Response("", { status: 200 }));
-    const controller = createController({ fetch: fetchImpl });
+    const controller = createController({
+      fetch: fetchImpl,
+      shell: { openExternal },
+    });
 
     await expect(
       controller.signOut({
@@ -499,6 +508,9 @@ describe("DesktopOAuthController", () => {
           return_to: "thinkwork-dev://oauth/callback",
         }),
       },
+    );
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://api.workos.com/user_management/sessions/logout?session_id=workos-session-123",
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
