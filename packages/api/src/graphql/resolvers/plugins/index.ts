@@ -10,6 +10,7 @@ import {
   updateN8nPluginApiCredential,
   updateN8nPluginPackageSettings,
 } from "./n8n-settings.js";
+import { n8nAppData } from "./n8n-app-data.js";
 import {
   activatePlugin,
   activatePluginWithCredentials,
@@ -32,6 +33,7 @@ export const pluginQueries = {
   pluginInstalls,
   pluginInstall,
   n8nPluginSettings,
+  n8nAppData,
   myPluginActivations,
 };
 

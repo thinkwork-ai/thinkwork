@@ -16,7 +16,7 @@ status: active
 - Linear attached document: `Plan: Add n8n integrated app`.
 - Child issues: none found. Autopilot will use plan units as implementation units.
 - Blocking issue relations: none found.
-- Current branch: `codex/think-113-u4-n8n-settings`.
+- Current branch: `codex/think-113-u2-n8n-app-data`.
 
 ## Context discovery
 
@@ -60,7 +60,17 @@ U1 stays first because U2 and U3 depend on the host/auth decision. U4 can land i
 | 2026-06-30 | U4 objective restated | Simplify the n8n plugin detail to settings-only, remove the Workflows tab from the plugin surface, redirect the legacy workflows route, route catalog opens to settings, and add an install action for uninstalled n8n. | Passed |
 | 2026-06-30 | U4 web tests | `pnpm --dir apps/web exec vitest run src/components/settings/plugins/n8n/N8nPluginHome.test.tsx src/components/settings/plugins/PluginsPage.test.tsx`. | Passed |
 | 2026-06-30 | U4 typecheck | `pnpm --filter @thinkwork/web typecheck`. | Passed |
+| 2026-06-30 | U4 PR | Opened and linked PR [#3136](https://github.com/thinkwork-ai/thinkwork/pull/3136). Required checks `cla`, `lint`, `verify`, `test`, `typecheck`, and `Devin Review` passed. | Passed |
+| 2026-06-30 | U4 merge | Squash-merged PR #3136 into `main` at `3a9e05112eea550efb8315ff4a17ae22a2f1e7ec`; remote branch was deleted by the merge flow and the local branch was deleted before starting U2. | Passed |
+| 2026-06-30 | U2 branch created | Created `codex/think-113-u2-n8n-app-data` from updated `origin/main`. | Passed |
+| 2026-06-30 | U2 objective restated | Add a ThinkWork-mediated, read-only n8n app data API for workflow rows, execution rows, native n8n navigation URLs, and redacted bridge linkage using the existing tenant `n8n-api` credential path. | Passed |
+| 2026-06-30 | U2 schema/codegen | `pnpm schema:build`; `pnpm --filter ./apps/cli codegen`; `pnpm --filter @thinkwork/web codegen`; `pnpm --filter @thinkwork/mobile codegen`. CLI/mobile generated formatting churn was reverted because U2 does not consume the new query there yet. | Passed |
+| 2026-06-30 | U2 API tests | `pnpm --filter @thinkwork/api test -- src/lib/workflows/n8n-discovery.test.ts src/lib/workflows/n8n-executions.test.ts src/graphql/resolvers/plugins/n8n-app-data.test.ts` expanded to the package suite; 617 files and 5655 tests passed. | Passed |
+| 2026-06-30 | U2 focused tests | `pnpm --dir packages/api exec vitest run src/lib/workflows/n8n-discovery.test.ts src/lib/workflows/n8n-executions.test.ts src/graphql/resolvers/plugins/n8n-app-data.test.ts`. | Passed |
+| 2026-06-30 | U2 typechecks | `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/web typecheck`. | Passed |
+| 2026-06-30 | U2 CI lint failure | PR #3138 lint failed on `verify-plugin-source-boundary` because the new shared n8n app-data resolver paths were not documented in `scripts/plugin-source-boundary-allowlist.mjs`. Added explicit allowlist entries. | Fixed |
+| 2026-06-30 | U2 source-boundary verification | `pnpm lint:plugin-source`. | Passed |
 
 ## Active unit
 
-U4 is active. The branch removes the tabbed n8n plugin detail in favor of the Settings surface, redirects `/settings/plugins/n8n/workflows` back to `/settings/plugins/n8n`, updates the settings catalog to open n8n directly, and adds an operator-only install action when the n8n catalog entry exists but the tenant has not installed it.
+U2 is active. The branch adds server-side n8n execution discovery, extends the GraphQL schema with `n8nAppData(installId)`, and composes workflow discovery, execution discovery, native n8n links, and redacted bridge telemetry into app-ready read-only rows.

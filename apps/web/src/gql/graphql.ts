@@ -5397,6 +5397,51 @@ export type N8nAgentStepRunTelemetry = {
   workflowName?: Maybe<Scalars['String']['output']>;
 };
 
+export type N8nAppData = {
+  __typename?: 'N8nAppData';
+  executionReadinessReasons: Scalars['AWSJSON']['output'];
+  executionReadinessState: WorkflowReadinessState;
+  executions: Array<N8nAppExecutionRow>;
+  installId: Scalars['ID']['output'];
+  nativeBaseUrl?: Maybe<Scalars['String']['output']>;
+  workflowReadinessReasons: Scalars['AWSJSON']['output'];
+  workflowReadinessState: WorkflowReadinessState;
+  workflows: Array<N8nAppWorkflowRow>;
+};
+
+export type N8nAppExecutionRow = {
+  __typename?: 'N8nAppExecutionRow';
+  bridgeRuns: Array<N8nAgentStepRunTelemetry>;
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  externalExecutionId: Scalars['String']['output'];
+  externalWorkflowId: Scalars['String']['output'];
+  failureMessage?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  mode?: Maybe<Scalars['String']['output']>;
+  nativeExecutionUrl: Scalars['String']['output'];
+  nativeWorkflowUrl: Scalars['String']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  warnings: Array<Scalars['String']['output']>;
+  workflowName?: Maybe<Scalars['String']['output']>;
+};
+
+export type N8nAppWorkflowRow = {
+  __typename?: 'N8nAppWorkflowRow';
+  active?: Maybe<Scalars['Boolean']['output']>;
+  connectedBindingId?: Maybe<Scalars['ID']['output']>;
+  connectedWorkflowId?: Maybe<Scalars['ID']['output']>;
+  externalWorkflowId: Scalars['String']['output'];
+  lastExecutionAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastModifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  name: Scalars['String']['output'];
+  nativeWorkflowUrl?: Maybe<Scalars['String']['output']>;
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  triggerTypes: Array<Scalars['String']['output']>;
+  warnings: Array<Scalars['String']['output']>;
+};
+
 export type N8nDiscoveredWorkflow = {
   __typename?: 'N8nDiscoveredWorkflow';
   active?: Maybe<Scalars['Boolean']['output']>;
@@ -6198,6 +6243,7 @@ export type Query = {
   myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
   n8nAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
+  n8nAppData: N8nAppData;
   /** Operator settings for the installed n8n plugin package image config. */
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
@@ -6884,6 +6930,12 @@ export type QueryMySlackLinksArgs = {
 export type QueryN8nAgentStepRunsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryN8nAppDataArgs = {
+  executionLimit?: InputMaybe<Scalars['Int']['input']>;
+  installId: Scalars['ID']['input'];
 };
 
 
