@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { sql as realSql } from "drizzle-orm";
+import { piExtensionVersions as realPiExtensionVersions } from "@thinkwork/database-pg/schema";
 
 const {
   mockTransaction,
@@ -311,6 +314,42 @@ describe("importPiExtensionFromGitHub", () => {
       approvedByUserId: "reviewer-1",
       approvedAt: "2026-06-30T01:00:00.000Z",
     });
+  });
+
+  it("renders the immutable version conflict guard in Drizzle SQL", () => {
+    const db = drizzle({} as never);
+    const query = db
+      .insert(realPiExtensionVersions)
+      .values({
+        tenant_id: "00000000-0000-0000-0000-000000000001",
+        source_id: "00000000-0000-0000-0000-000000000002",
+        source_ref: "main",
+        commit_sha: "abc123",
+        status: "needs_review",
+        manifest: {},
+        tool_names: [],
+        lifecycle_hooks: [],
+        permission_classes: [],
+        verification_report: {},
+      })
+      .onConflictDoUpdate({
+        target: [
+          realPiExtensionVersions.tenant_id,
+          realPiExtensionVersions.source_id,
+          realPiExtensionVersions.commit_sha,
+        ],
+        setWhere: realSql`${realPiExtensionVersions.status} NOT IN ('approved', 'rejected')`,
+        set: { status: "needs_review" },
+      })
+      .returning()
+      .toSQL();
+
+    expect(query.sql).toContain(
+      `on conflict ("tenant_id","source_id","commit_sha") do update set`,
+    );
+    expect(query.sql).toContain(
+      `where "pi_extension_versions"."status" NOT IN ('approved', 'rejected')`,
+    );
   });
 });
 
