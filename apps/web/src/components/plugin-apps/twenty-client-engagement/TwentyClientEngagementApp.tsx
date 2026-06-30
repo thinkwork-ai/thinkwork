@@ -36,11 +36,9 @@ const TWENTY_CRM_FALLBACK_ORIGIN = "https://crm.thinkwork.ai";
 export function TwentyClientEngagementApp({
   appDisplayName = "Client Engagement",
   pluginDisplayName = "Twenty CRM",
-  pluginKey = "twenty",
 }: {
   appDisplayName?: string;
   pluginDisplayName?: string;
-  pluginKey?: string;
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
@@ -50,7 +48,10 @@ export function TwentyClientEngagementApp({
   >(null);
   const [activeToolPageId, setActiveToolPageId] =
     useState<PrototypePageId | null>(null);
-  const data = useTwentyEngagementData(selectedOpportunityId, selectedAccountId);
+  const data = useTwentyEngagementData(
+    selectedOpportunityId,
+    selectedAccountId,
+  );
 
   const accounts = data.accounts;
   const selectedAccount =
@@ -143,7 +144,7 @@ export function TwentyClientEngagementApp({
     title: appDisplayName,
     documentTitle: `${pluginDisplayName} · ${appDisplayName}`,
     breadcrumbs: [
-      { label: pluginDisplayName, href: `/settings/plugins/${pluginKey}` },
+      { label: pluginDisplayName },
       {
         label: appDisplayName,
         onClick: selectedAccount
@@ -259,9 +260,7 @@ export function TwentyClientEngagementApp({
         ) : selectedAccount ? (
           <AccountProfile
             account={selectedAccount}
-            overlay={
-              data.companyOverlayBySection.get("account-profile") ?? {}
-            }
+            overlay={data.companyOverlayBySection.get("account-profile") ?? {}}
             onSaveOverlay={(payload) =>
               data.saveCompanyOverlay(
                 selectedAccount.company.id,
@@ -380,14 +379,17 @@ function absoluteUrl(value: string | null | undefined): string | null {
       : null;
   } catch {
     if (!value.startsWith("/")) return null;
-    return new URL(normalizeTwentyObjectPath(value), TWENTY_CRM_FALLBACK_ORIGIN)
-      .toString();
+    return new URL(
+      normalizeTwentyObjectPath(value),
+      TWENTY_CRM_FALLBACK_ORIGIN,
+    ).toString();
   }
 }
 
 function normalizeTwentyObjectPath(path: string): string {
   const companyMatch = path.match(/^\/objects\/companies\/([^/?#]+)(.*)$/);
-  if (companyMatch) return `/object/company/${companyMatch[1]}${companyMatch[2]}`;
+  if (companyMatch)
+    return `/object/company/${companyMatch[1]}${companyMatch[2]}`;
 
   const opportunityMatch = path.match(
     /^\/objects\/opportunities\/([^/?#]+)(.*)$/,

@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   Button,
+  DataTable,
   Input,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
   Tabs,
   TabsContent,
   TabsList,
@@ -47,6 +54,10 @@ type StakeholderDraft = {
   department: string;
   role: string;
   email: string;
+};
+
+type StakeholderTableRow = StakeholderDraft & {
+  index: number;
 };
 
 type AccountOverlay = {
@@ -105,6 +116,9 @@ export function AccountProfile({
   const [stakeholders, setStakeholders] = useState<StakeholderDraft[]>(
     stakeholderDrafts(account.stakeholders),
   );
+  const [selectedStakeholderIndex, setSelectedStakeholderIndex] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     setProfile(overlayValue);
@@ -112,7 +126,68 @@ export function AccountProfile({
 
   useEffect(() => {
     setStakeholders(stakeholderDrafts(account.stakeholders));
+    setSelectedStakeholderIndex(null);
   }, [account.stakeholders]);
+
+  const stakeholderRows = useMemo<StakeholderTableRow[]>(
+    () =>
+      stakeholders.map((stakeholder, index) => ({
+        ...stakeholder,
+        index,
+      })),
+    [stakeholders],
+  );
+
+  const stakeholderColumns = useMemo<ColumnDef<StakeholderTableRow>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => (
+          <span
+            className="block truncate text-sm font-medium text-foreground"
+            title={row.original.name || "Unnamed stakeholder"}
+          >
+            {row.original.name || "Unnamed stakeholder"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "title",
+        header: "Title",
+        cell: ({ row }) => (
+          <MutedTableValue value={row.original.title} fallback="Not set" />
+        ),
+      },
+      {
+        accessorKey: "department",
+        header: "Department",
+        cell: ({ row }) => (
+          <MutedTableValue value={row.original.department} fallback="Not set" />
+        ),
+      },
+      {
+        accessorKey: "role",
+        header: "Role",
+        cell: ({ row }) => (
+          <MutedTableValue value={row.original.role} fallback="Other" />
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: "Email / Contact",
+        cell: ({ row }) => (
+          <MutedTableValue value={row.original.email} fallback="Not provided" />
+        ),
+      },
+    ],
+    [],
+  );
+
+  const selectedStakeholder =
+    selectedStakeholderIndex == null
+      ? null
+      : (stakeholders[selectedStakeholderIndex] ?? null);
 
   const saveProfile = async (next: AccountOverlay) => {
     setProfile(next);
@@ -126,11 +201,7 @@ export function AccountProfile({
 
   return (
     <div className="min-h-full">
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="min-h-0"
-      >
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-h-0">
         <div>
           <div className="grid gap-3 px-6 py-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
             <h2 className="min-w-0 truncate text-2xl font-semibold tracking-tight text-foreground">
@@ -231,96 +302,22 @@ export function AccountProfile({
                 </span>
               }
             >
-              <div className="overflow-x-auto">
-                <div className="grid min-w-[960px] grid-cols-[1fr_1fr_1fr_1.1fr_1.1fr_auto] gap-3 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <div>Name</div>
-                  <div>Title</div>
-                  <div>Department</div>
-                  <div>Role</div>
-                  <div>Email / Contact</div>
-                  <div />
-                </div>
-                <div className="space-y-2">
-                  {stakeholders.map((stakeholder, index) => (
-                    <div
-                      key={stakeholder.id ?? `draft-${index}`}
-                      className="grid min-w-[960px] grid-cols-[1fr_1fr_1fr_1.1fr_1.1fr_auto] gap-3"
-                    >
-                      <Input
-                        value={stakeholder.name}
-                        placeholder="Name"
-                        onChange={(event) =>
-                          setStakeholder(index, { name: event.target.value })
-                        }
-                        onBlur={() => persistStakeholder(index)}
-                      />
-                      <Input
-                        value={stakeholder.title}
-                        placeholder="Title"
-                        onChange={(event) =>
-                          setStakeholder(index, { title: event.target.value })
-                        }
-                        onBlur={() => persistStakeholder(index)}
-                      />
-                      <Input
-                        value={stakeholder.department}
-                        placeholder="Department"
-                        onChange={(event) =>
-                          setStakeholder(index, {
-                            department: event.target.value,
-                          })
-                        }
-                        onBlur={() => persistStakeholder(index)}
-                      />
-                      <Select
-                        value={stakeholder.role || "Other"}
-                        onValueChange={(role) => {
-                          setStakeholder(index, { role });
-                          void persistStakeholder(index, { role });
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STAKEHOLDER_ROLES.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={stakeholder.email}
-                        placeholder="email@company.com"
-                        onChange={(event) =>
-                          setStakeholder(index, { email: event.target.value })
-                        }
-                        onBlur={() => persistStakeholder(index)}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Remove stakeholder row"
-                        onClick={() =>
-                          setStakeholders((current) =>
-                            current.filter((_, rowIndex) => rowIndex !== index),
-                          )
-                        }
-                      >
-                        x
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <DataTable
+                columns={stakeholderColumns}
+                data={stakeholderRows}
+                emptyState="No stakeholders yet."
+                onRowClick={(row) => setSelectedStakeholderIndex(row.index)}
+                pageSize={0}
+                tableClassName="table-auto"
+                allowHorizontalScroll={false}
+              />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="mt-3"
-                onClick={() =>
+                onClick={() => {
+                  const nextIndex = stakeholders.length;
                   setStakeholders((current) => [
                     ...current,
                     {
@@ -331,11 +328,31 @@ export function AccountProfile({
                       role: "Other",
                       email: "",
                     },
-                  ])
-                }
+                  ]);
+                  setSelectedStakeholderIndex(nextIndex);
+                }}
               >
                 + Add Stakeholder
               </Button>
+              <Sheet
+                open={selectedStakeholder != null}
+                onOpenChange={(open) => {
+                  if (!open) setSelectedStakeholderIndex(null);
+                }}
+              >
+                {selectedStakeholder != null &&
+                selectedStakeholderIndex != null ? (
+                  <StakeholderEditSheet
+                    stakeholder={selectedStakeholder}
+                    onCancel={() => setSelectedStakeholderIndex(null)}
+                    onSave={async (draft) => {
+                      setStakeholder(selectedStakeholderIndex, draft);
+                      await persistStakeholder(selectedStakeholderIndex, draft);
+                      setSelectedStakeholderIndex(null);
+                    }}
+                  />
+                ) : null}
+              </Sheet>
             </Section>
 
             <Section number="03" title="Decision Maker Map">
@@ -427,26 +444,21 @@ export function AccountProfile({
                 <DecisionCard title="Internal Advocates">
                   {(profile.advocates?.length ? profile.advocates : [{}]).map(
                     (advocate, index) => (
-                      <div key={index} className="space-y-2 rounded-md border border-border p-3">
+                      <div
+                        key={index}
+                        className="space-y-3 border-t border-border/70 pt-3 first:border-t-0 first:pt-0"
+                      >
                         <EditableField
                           label="Name"
                           value={advocate.name ?? ""}
-                          onChange={(name) =>
-                            updateAdvocate(index, { name })
-                          }
-                          onSave={(name) =>
-                            persistAdvocate(index, { name })
-                          }
+                          onChange={(name) => updateAdvocate(index, { name })}
+                          onSave={(name) => persistAdvocate(index, { name })}
                         />
                         <EditableField
                           label="Role"
                           value={advocate.role ?? ""}
-                          onChange={(role) =>
-                            updateAdvocate(index, { role })
-                          }
-                          onSave={(role) =>
-                            persistAdvocate(index, { role })
-                          }
+                          onChange={(role) => updateAdvocate(index, { role })}
+                          onSave={(role) => persistAdvocate(index, { role })}
                         />
                         <EditableField
                           label="Concern / what they need"
@@ -494,16 +506,20 @@ export function AccountProfile({
                 </DecisionCard>
 
                 <DecisionCard title="Economic Decision Makers">
-                  {(
-                    profile.economicDecisionMakers?.length
-                      ? profile.economicDecisionMakers
-                      : [{}]
+                  {(profile.economicDecisionMakers?.length
+                    ? profile.economicDecisionMakers
+                    : [{}]
                   ).map((maker, index) => (
-                    <div key={index} className="space-y-2 rounded-md border border-border p-3">
+                    <div
+                      key={index}
+                      className="space-y-3 border-t border-border/70 pt-3 first:border-t-0 first:pt-0"
+                    >
                       <EditableField
                         label="Name / Title"
                         value={maker.name ?? ""}
-                        onChange={(name) => updateDecisionMaker(index, { name })}
+                        onChange={(name) =>
+                          updateDecisionMaker(index, { name })
+                        }
                         onSave={(name) => persistDecisionMaker(index, { name })}
                       />
                       <EditableField
@@ -522,9 +538,7 @@ export function AccountProfile({
                         onChange={(sees) =>
                           updateDecisionMaker(index, { sees })
                         }
-                        onSave={(sees) =>
-                          persistDecisionMaker(index, { sees })
-                        }
+                        onSave={(sees) => persistDecisionMaker(index, { sees })}
                       />
                     </div>
                   ))}
@@ -650,6 +664,105 @@ function Section({
   );
 }
 
+function StakeholderEditSheet({
+  stakeholder,
+  onCancel,
+  onSave,
+}: {
+  stakeholder: StakeholderDraft;
+  onCancel: () => void;
+  onSave: (draft: StakeholderDraft) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(stakeholder);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(stakeholder);
+    setSaving(false);
+  }, [stakeholder]);
+
+  const updateDraft = (patch: Partial<StakeholderDraft>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+  };
+
+  const save = async () => {
+    if (!draft.name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSave(draft);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SheetContent
+      aria-describedby={undefined}
+      className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+    >
+      <SheetHeader className="border-b border-border px-6 py-5 pr-14">
+        <SheetTitle>{draft.name.trim() || "New stakeholder"}</SheetTitle>
+      </SheetHeader>
+      <div className="space-y-4 px-6 py-5">
+        <DraftField
+          label="Name"
+          value={draft.name}
+          placeholder="Name"
+          onChange={(name) => updateDraft({ name })}
+        />
+        <DraftField
+          label="Title"
+          value={draft.title}
+          placeholder="Title"
+          onChange={(title) => updateDraft({ title })}
+        />
+        <DraftField
+          label="Department"
+          value={draft.department}
+          placeholder="Department"
+          onChange={(department) => updateDraft({ department })}
+        />
+        <div>
+          <FieldLabel>Role</FieldLabel>
+          <Select
+            value={draft.role || "Other"}
+            onValueChange={(role) => updateDraft({ role })}
+          >
+            <SelectTrigger aria-label="Stakeholder role">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STAKEHOLDER_ROLES.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DraftField
+          label="Email / Contact"
+          value={draft.email}
+          placeholder="email@company.com"
+          onChange={(email) => updateDraft({ email })}
+        />
+      </div>
+      <SheetFooter className="mt-auto border-t border-border px-6 py-4">
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          disabled={!draft.name.trim() || saving}
+          onClick={save}
+        >
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </SheetFooter>
+    </SheetContent>
+  );
+}
+
 function DecisionCard({
   title,
   children,
@@ -684,10 +797,34 @@ function EditableField({
     <div>
       <FieldLabel>{label}</FieldLabel>
       <Input
+        aria-label={label}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onBlur={(event) => void onSave(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function DraftField({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <FieldLabel>{label}</FieldLabel>
+      <Input
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
       />
     </div>
   );
@@ -701,10 +838,32 @@ function FieldLabel({ children }: { children: ReactNode }) {
   );
 }
 
+function MutedTableValue({
+  value,
+  fallback,
+}: {
+  value: string;
+  fallback: string;
+}) {
+  const label = value.trim() || fallback;
+  return (
+    <span
+      className={
+        value.trim()
+          ? "block truncate text-sm text-foreground"
+          : "block truncate text-sm text-muted-foreground"
+      }
+      title={label}
+    >
+      {label}
+    </span>
+  );
+}
+
 function stakeholderDrafts(
   stakeholders: EngagementStakeholder[],
 ): StakeholderDraft[] {
-  const drafts = stakeholders.map((stakeholder) => ({
+  return stakeholders.map((stakeholder) => ({
     id: stakeholder.id,
     name: stakeholder.name,
     title: stakeholder.title ?? "",
@@ -712,18 +871,6 @@ function stakeholderDrafts(
     role: stakeholder.role ?? "Other",
     email: stakeholder.email ?? "",
   }));
-  return drafts.length > 0
-    ? drafts
-    : [
-        {
-          id: null,
-          name: "",
-          title: "",
-          department: "",
-          role: "Other",
-          email: "",
-        },
-      ];
 }
 
 function normalizeOverlay(value: Record<string, unknown>): AccountOverlay {

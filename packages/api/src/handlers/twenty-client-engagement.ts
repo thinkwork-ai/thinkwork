@@ -301,13 +301,10 @@ async function loadDashboard(context: TwentyContext): Promise<{
 }> {
   const [companiesRaw, opportunitiesRaw, layersRaw, stakeholdersRaw] =
     await Promise.all([
-      context.client.list("companies", ["companies"]),
+      context.client.list("companies", ["companies"], { depth: 1 }),
       context.client.list("opportunities", ["opportunities"]),
       context.client
-        .list("opportunityLayers", [
-          "opportunityLayers",
-          "opportunity_layers",
-        ])
+        .list("opportunityLayers", ["opportunityLayers", "opportunity_layers"])
         .catch((err) => {
           if (err instanceof HttpError && err.status === 404) return [];
           throw err;
@@ -342,10 +339,18 @@ class TwentyRestClient {
     private readonly token: string,
   ) {}
 
-  async list(objectName: string, collectionKeys: string[]) {
-    const payload = await this.request(`${objectName}?limit=200&depth=0`, {
-      method: "GET",
-    });
+  async list(
+    objectName: string,
+    collectionKeys: string[],
+    options: { depth?: 0 | 1 } = {},
+  ) {
+    const depth = options.depth ?? 0;
+    const payload = await this.request(
+      `${objectName}?limit=200&depth=${depth}`,
+      {
+        method: "GET",
+      },
+    );
     return recordsFromPayload(payload, collectionKeys);
   }
 
@@ -485,13 +490,12 @@ function toCompany(
   baseUrl: string,
 ): EngagementCompany {
   const id = requiredRecordId(record, "company");
+  const rawName = nameString(record.name);
+  const domainName = companyDomainName(record, rawName);
   return {
     id,
-    name: nameString(record.name) ?? "Unnamed company",
-    domainName:
-      stringValue(record.domainName) ??
-      stringValue(record.domain) ??
-      stringValue(record.website),
+    name: companyDisplayName(record, rawName, domainName),
+    domainName,
     crmUrl: crmRecordUrl(baseUrl, "companies", id),
   };
 }
@@ -609,7 +613,9 @@ function recordsFromPayload(
   return typeof root.id === "string" ? [root] : [];
 }
 
-function firstRecordFromPayload(payload: unknown): Record<string, unknown> | null {
+function firstRecordFromPayload(
+  payload: unknown,
+): Record<string, unknown> | null {
   return recordsFromPayload(payload, [])[0] ?? null;
 }
 
@@ -635,8 +641,12 @@ function compareOpportunities(
   const stageA = STAGE_SORT[a.stage] ?? STAGE_SORT.IDENTIFIED;
   const stageB = STAGE_SORT[b.stage] ?? STAGE_SORT.IDENTIFIED;
   if (stageA !== stageB) return stageA - stageB;
-  const closeA = a.closeDate ? Date.parse(a.closeDate) : Number.POSITIVE_INFINITY;
-  const closeB = b.closeDate ? Date.parse(b.closeDate) : Number.POSITIVE_INFINITY;
+  const closeA = a.closeDate
+    ? Date.parse(a.closeDate)
+    : Number.POSITIVE_INFINITY;
+  const closeB = b.closeDate
+    ? Date.parse(b.closeDate)
+    : Number.POSITIVE_INFINITY;
   if (closeA !== closeB) return closeA - closeB;
   return a.name.localeCompare(b.name);
 }
@@ -652,9 +662,7 @@ function normalizedSubpath(event: APIGatewayProxyEventV2): string {
   const rawPath = event.rawPath ?? event.requestContext.http.path ?? "";
   const baseIndex = rawPath.indexOf(API_BASE_PATH);
   if (baseIndex < 0) return "";
-  return rawPath
-    .slice(baseIndex + API_BASE_PATH.length)
-    .replace(/\/+$/, "");
+  return rawPath.slice(baseIndex + API_BASE_PATH.length).replace(/\/+$/, "");
 }
 
 function publicHttpUrl(value: unknown): string | null {
@@ -697,6 +705,91 @@ function amountMicros(value: unknown): number | null {
   );
 }
 
+function companyDisplayName(
+  record: Record<string, unknown>,
+  rawName: string | null,
+  domainName: string | null,
+): string {
+  return (
+    stringValue(record.accountName) ??
+    stringValue(record.companyName) ??
+    stringValue(record.displayName) ??
+    linkLabelString(record.name) ??
+    (!looksLikeDomain(rawName) ? rawName : null) ??
+    titleFromDomain(domainName) ??
+    "Unnamed company"
+  );
+}
+
+function companyDomainName(
+  record: Record<string, unknown>,
+  rawName: string | null,
+): string | null {
+  return cleanDomain(
+    stringValue(record.domainName) ??
+      stringValue(record.domain) ??
+      stringValue(record.website) ??
+      linkUrlString(record.name) ??
+      (looksLikeDomain(rawName) ? rawName : null),
+  );
+}
+
+function linkLabelString(value: unknown): string | null {
+  const record = recordOrNull(value);
+  return (
+    stringValue(record?.primaryLinkLabel) ??
+    stringValue(record?.label) ??
+    stringValue(record?.text) ??
+    stringValue(record?.displayName)
+  );
+}
+
+function linkUrlString(value: unknown): string | null {
+  const record = recordOrNull(value);
+  return (
+    stringValue(record?.primaryLinkUrl) ??
+    stringValue(record?.url) ??
+    stringValue(record?.href) ??
+    stringValue(record?.value)
+  );
+}
+
+function looksLikeDomain(value: string | null): value is string {
+  const clean = cleanDomain(value);
+  if (!clean) return false;
+  return !/\s/.test(clean) && clean.includes(".");
+}
+
+function cleanDomain(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const emailDomain = trimmed.includes("@") ? trimmed.split("@").pop() : null;
+  const candidate = emailDomain || trimmed;
+  try {
+    const parsed = new URL(
+      candidate.startsWith("http://") || candidate.startsWith("https://")
+        ? candidate
+        : `https://${candidate}`,
+    );
+    return parsed.hostname.replace(/^www\./, "") || null;
+  } catch {
+    return candidate.replace(/^www\./, "").replace(/\/+$/, "") || null;
+  }
+}
+
+function titleFromDomain(value: string | null): string | null {
+  const domain = cleanDomain(value);
+  if (!domain) return null;
+  const label = domain.split(".")[0];
+  if (!label) return null;
+  return label
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function labelFor(value: string, labels: Record<string, string>): string {
   return labels[value] ?? titleCase(value);
 }
@@ -715,7 +808,9 @@ function requiredRecordId(
   label: string,
 ): string {
   const id =
-    entityId(record.id) ?? entityId(record.recordId) ?? entityId(record.objectId);
+    entityId(record.id) ??
+    entityId(record.recordId) ??
+    entityId(record.objectId);
   if (!id) throw new Error(`Twenty ${label} record is missing an id`);
   return id;
 }
@@ -754,6 +849,7 @@ function nameString(value: unknown): string | null {
     .join(" ");
   return (
     stringValue(record.fullName) ??
+    stringValue(record.primaryLinkLabel) ??
     stringValue(record.name) ??
     stringValue(record.firstLastName) ??
     (composed || null)
