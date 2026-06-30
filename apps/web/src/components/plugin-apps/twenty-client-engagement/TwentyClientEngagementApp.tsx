@@ -1,14 +1,37 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, RefreshCcw } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import { useMemo, useState, type ReactNode } from "react";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  RefreshCcw,
+} from "lucide-react";
+import {
+  Button,
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  cn,
+} from "@thinkwork/ui";
 
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { AccountIndexPage } from "./components/AccountIndexPage";
 import { AccountProfile } from "./components/AccountProfile";
-import { AccountSidebar } from "./components/AccountSidebar";
 import { OpportunityDetail } from "./components/OpportunityDetail";
 import { ToolWorkspace } from "./components/ToolWorkspace";
 import type { PrototypePageId } from "./data/model";
-import { useTwentyEngagementData } from "./data/useTwentyEngagementData";
+import {
+  type EngagementAccount,
+  useTwentyEngagementData,
+} from "./data/useTwentyEngagementData";
+
+const TWENTY_CRM_FALLBACK_ORIGIN = "https://crm.thinkwork.ai";
 
 export function TwentyClientEngagementApp({
   appDisplayName = "Client Engagement",
@@ -27,12 +50,11 @@ export function TwentyClientEngagementApp({
   >(null);
   const [activeToolPageId, setActiveToolPageId] =
     useState<PrototypePageId | null>(null);
-  const data = useTwentyEngagementData(selectedOpportunityId);
+  const data = useTwentyEngagementData(selectedOpportunityId, selectedAccountId);
 
   const accounts = data.accounts;
   const selectedAccount =
     accounts.find((account) => account.company.id === selectedAccountId) ??
-    accounts[0] ??
     null;
   const selectedOpportunity = useMemo(() => {
     if (!selectedAccount || !selectedOpportunityId) return null;
@@ -43,11 +65,10 @@ export function TwentyClientEngagementApp({
     );
   }, [selectedAccount, selectedOpportunityId]);
 
-  useEffect(() => {
-    if (!selectedAccountId && accounts[0]) {
-      setSelectedAccountId(accounts[0].company.id);
-    }
-  }, [accounts, selectedAccountId]);
+  const rawCrmUrl =
+    selectedOpportunity?.opportunity.crmUrl ?? selectedAccount?.company.crmUrl;
+  const crmUrl = absoluteUrl(rawCrmUrl);
+  const showCrmAction = Boolean(rawCrmUrl && selectedAccount);
 
   const headerAction = useMemo(
     () => (
@@ -56,31 +77,66 @@ export function TwentyClientEngagementApp({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground"
             onClick={() => setActiveToolPageId("opportunity-pipeline")}
           >
             Pipeline
           </Button>
         ) : null}
+        {showCrmAction ? (
+          crmUrl ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              asChild
+              title="Open in CRM"
+              aria-label="Open in CRM"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <a href={crmUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3.5" />
+                <span className="sr-only">Open in CRM</span>
+              </a>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
+              disabled
+              title="Open in CRM unavailable until Twenty URL is absolute"
+              aria-label="Open in CRM"
+            >
+              <ExternalLink className="size-3.5" />
+            </Button>
+          )
+        ) : null}
         <Button
           type="button"
-          size="sm"
-          variant="outline"
+          size="icon-sm"
+          variant="ghost"
+          className="text-muted-foreground hover:text-foreground"
           onClick={data.refreshDashboard}
           disabled={data.dashboardFetching}
+          title="Refresh"
+          aria-label="Refresh"
         >
           <RefreshCcw
-            className={`mr-2 size-3.5 ${data.dashboardFetching ? "animate-spin" : ""}`}
+            className={`size-3.5 ${data.dashboardFetching ? "animate-spin" : ""}`}
           />
-          Refresh
         </Button>
       </div>
     ),
     [
-      accounts.length,
+      accounts,
+      crmUrl,
       data.dashboardError,
       data.dashboardFetching,
       data.refreshDashboard,
+      showCrmAction,
     ],
   );
   usePageHeaderActions({
@@ -88,13 +144,38 @@ export function TwentyClientEngagementApp({
     documentTitle: `${pluginDisplayName} · ${appDisplayName}`,
     breadcrumbs: [
       { label: pluginDisplayName, href: `/settings/plugins/${pluginKey}` },
-      { label: appDisplayName },
+      {
+        label: appDisplayName,
+        onClick: selectedAccount
+          ? () => {
+              setSelectedAccountId(null);
+              setSelectedOpportunityId(null);
+              setActiveToolPageId(null);
+            }
+          : undefined,
+      },
+      ...(selectedAccount ? [{ label: selectedAccount.company.name }] : []),
     ],
+    titleContent:
+      selectedAccount && accounts.length > 0 && !data.dashboardError ? (
+        <AccountBreadcrumbPicker
+          accounts={accounts}
+          selectedAccount={selectedAccount}
+          onSelectAccount={(accountId) => {
+            setSelectedAccountId(accountId);
+            setSelectedOpportunityId(null);
+            setActiveToolPageId(null);
+          }}
+        />
+      ) : undefined,
     action: headerAction,
     actionKey: [
       pluginDisplayName,
       appDisplayName,
       accounts.length,
+      selectedAccount?.company.id ?? "no-account",
+      selectedOpportunity?.opportunity.id ?? "no-opportunity",
+      crmUrl ?? "no-crm-url",
       data.dashboardFetching ? "fetching" : "idle",
       data.dashboardError ? "error" : "ready",
     ].join(":"),
@@ -148,53 +229,137 @@ export function TwentyClientEngagementApp({
 
   return (
     <AppFrame>
-      <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] overflow-hidden">
-        <AccountSidebar
-          accounts={accounts}
-          selectedAccountId={selectedAccount?.company.id ?? null}
-          onSelectAccount={(accountId) => {
-            setSelectedAccountId(accountId);
-            setSelectedOpportunityId(null);
-          }}
-        />
-        <main className="min-w-0 overflow-auto bg-background">
-          {activeToolPageId ? (
-            <ToolWorkspace
-              activePageId={activeToolPageId}
-              selectedAccount={selectedAccount}
-              selectedOpportunity={selectedOpportunity}
-              appOverlayBySection={data.appOverlayBySection}
-              opportunityOverlayBySection={data.overlayBySection}
-              appOverlayError={data.appOverlayError?.message ?? null}
-              onBack={() => setActiveToolPageId(null)}
-              onPageChange={setActiveToolPageId}
-              onSaveAppOverlay={data.saveAppOverlay}
-              onSaveOpportunityOverlay={data.saveOpportunityOverlay}
-            />
-          ) : selectedOpportunity && selectedAccount ? (
-            <OpportunityDetail
-              account={selectedAccount}
-              opportunityWithLayers={selectedOpportunity}
-              overlayBySection={data.overlayBySection}
-              overlayFetching={data.overlayFetching}
-              overlayError={data.overlayError?.message ?? null}
-              onBack={() => setSelectedOpportunityId(null)}
-              onSaveOverlay={data.saveOpportunityOverlay}
-              onUpdateStage={data.updateOpportunityStage}
-              onUpdateLayerStatus={data.updateLayerStatus}
-              onOpenTool={setActiveToolPageId}
-            />
-          ) : selectedAccount ? (
-            <AccountProfile
-              account={selectedAccount}
-              onSelectOpportunity={(opportunityId) =>
-                setSelectedOpportunityId(opportunityId)
-              }
-            />
-          ) : null}
-        </main>
-      </div>
+      <main className="min-h-0 flex-1 overflow-auto bg-background">
+        {activeToolPageId ? (
+          <ToolWorkspace
+            activePageId={activeToolPageId}
+            selectedAccount={selectedAccount}
+            selectedOpportunity={selectedOpportunity}
+            appOverlayBySection={data.appOverlayBySection}
+            opportunityOverlayBySection={data.overlayBySection}
+            appOverlayError={data.appOverlayError?.message ?? null}
+            onBack={() => setActiveToolPageId(null)}
+            onPageChange={setActiveToolPageId}
+            onSaveAppOverlay={data.saveAppOverlay}
+            onSaveOpportunityOverlay={data.saveOpportunityOverlay}
+          />
+        ) : selectedOpportunity && selectedAccount ? (
+          <OpportunityDetail
+            account={selectedAccount}
+            opportunityWithLayers={selectedOpportunity}
+            overlayBySection={data.overlayBySection}
+            overlayFetching={data.overlayFetching}
+            overlayError={data.overlayError?.message ?? null}
+            onBack={() => setSelectedOpportunityId(null)}
+            onSaveOverlay={data.saveOpportunityOverlay}
+            onUpdateStage={data.updateOpportunityStage}
+            onUpdateLayerStatus={data.updateLayerStatus}
+            onOpenTool={setActiveToolPageId}
+          />
+        ) : selectedAccount ? (
+          <AccountProfile
+            account={selectedAccount}
+            overlay={
+              data.companyOverlayBySection.get("account-profile") ?? {}
+            }
+            onSaveOverlay={(payload) =>
+              data.saveCompanyOverlay(
+                selectedAccount.company.id,
+                "account-profile",
+                payload,
+              )
+            }
+            onSaveStakeholder={data.saveStakeholder}
+            onSelectOpportunity={(opportunityId) =>
+              setSelectedOpportunityId(opportunityId)
+            }
+          />
+        ) : (
+          <AccountIndexPage
+            accounts={accounts}
+            onSelectAccount={(accountId) => {
+              setSelectedAccountId(accountId);
+              setSelectedOpportunityId(null);
+              setActiveToolPageId(null);
+            }}
+          />
+        )}
+      </main>
     </AppFrame>
+  );
+}
+
+function AccountBreadcrumbPicker({
+  accounts,
+  selectedAccount,
+  onSelectAccount,
+}: {
+  accounts: EngagementAccount[];
+  selectedAccount: EngagementAccount | null;
+  onSelectAccount: (accountId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!selectedAccount) return null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 max-w-[280px] gap-1 px-1.5 text-sm font-medium"
+          aria-label="Account picker"
+        >
+          <span className="truncate">{selectedAccount.company.name}</span>
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        className="w-[320px] gap-0 rounded-lg p-0"
+      >
+        <Command>
+          <CommandInput placeholder="Search accounts..." className="text-sm" />
+          <CommandList>
+            <CommandEmpty>No accounts found.</CommandEmpty>
+            <CommandGroup className="max-h-[320px] overflow-y-auto p-1">
+              {accounts.map((account) => (
+                <CommandItem
+                  key={account.company.id}
+                  value={`${account.company.name} ${account.company.domainName ?? ""}`}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm"
+                  onSelect={() => {
+                    onSelectAccount(account.company.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "size-4 shrink-0",
+                      selectedAccount.company.id === account.company.id
+                        ? "opacity-100"
+                        : "opacity-0",
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {account.company.name}
+                    </div>
+                    {account.company.domainName ? (
+                      <div className="truncate text-xs text-muted-foreground">
+                        {account.company.domainName}
+                      </div>
+                    ) : null}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -204,4 +369,32 @@ function AppFrame({ children }: { children?: ReactNode }) {
       {children ?? <div className="min-h-0 flex-1" />}
     </section>
   );
+}
+
+function absoluteUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    if (!value.startsWith("/")) return null;
+    return new URL(normalizeTwentyObjectPath(value), TWENTY_CRM_FALLBACK_ORIGIN)
+      .toString();
+  }
+}
+
+function normalizeTwentyObjectPath(path: string): string {
+  const companyMatch = path.match(/^\/objects\/companies\/([^/?#]+)(.*)$/);
+  if (companyMatch) return `/object/company/${companyMatch[1]}${companyMatch[2]}`;
+
+  const opportunityMatch = path.match(
+    /^\/objects\/opportunities\/([^/?#]+)(.*)$/,
+  );
+  if (opportunityMatch) {
+    return `/object/opportunity/${opportunityMatch[1]}${opportunityMatch[2]}`;
+  }
+
+  return path;
 }

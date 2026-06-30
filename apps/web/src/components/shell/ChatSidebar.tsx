@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { IconApps, IconPin, IconPlanet } from "@tabler/icons-react";
+import { IconPin, IconPlanet } from "@tabler/icons-react";
 import {
   closestCenter,
   DndContext,
@@ -32,6 +32,7 @@ import {
   GitBranch,
   Globe,
   Keyboard,
+  LayoutGrid,
   List,
   ListChecks,
   ListFilter,
@@ -942,14 +943,6 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {installedApps.length > 0 ? (
-              <SidebarMenuItem>
-                <PluginAppsNavItem
-                  apps={installedApps}
-                  isActive={isAppsRoute}
-                />
-              </SidebarMenuItem>
-            ) : null}
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
@@ -962,6 +955,14 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {installedApps.length > 0 ? (
+              <SidebarMenuItem>
+                <PluginAppsNavItem
+                  apps={installedApps}
+                  isActive={isAppsRoute}
+                />
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -1060,7 +1061,7 @@ function PluginAppsNavItem({
       <PopoverTrigger asChild>
         <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
           <button type="button">
-            <IconApps />
+            <LayoutGrid />
             <span className="min-w-0 flex-1 truncate text-left">Apps</span>
             <ChevronDown className="ml-auto size-3.5 text-sidebar-foreground/45" />
           </button>
