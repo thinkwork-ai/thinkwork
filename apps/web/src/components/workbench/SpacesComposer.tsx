@@ -24,7 +24,7 @@ import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
-import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
+import { IconPlanet, IconPlus } from "@tabler/icons-react";
 import {
   useEffect,
   useMemo,
@@ -403,11 +403,14 @@ export function SpacesComposer({
           />
         ) : null}
         <PromptInput
-          // One consistent "normal" look in every state — same visible border
-          // whether empty, filled, or focused, no dim fill, and no focus ring.
-          // We target the inner InputGroup directly and force (`!`) the values
-          // so the shared InputGroup's focus-ring + dim-bg defaults can't win.
-          className="tw-composer-surface [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:border-black/10 [&_[data-slot=input-group]]:!bg-white [&_[data-slot=input-group]]:shadow-sm [&_[data-slot=input-group]]:!ring-0 [&_[data-slot=input-group]]:focus-within:border-black/20 dark:[&_[data-slot=input-group]]:border-white/10 dark:[&_[data-slot=input-group]]:!bg-card dark:[&_[data-slot=input-group]]:shadow-none dark:[&_[data-slot=input-group]]:focus-within:border-white/10"
+          // Matches the follow-up composer (TaskThreadView) surface: the same
+          // rounded, shadowed, translucent card in every state. The look must
+          // not react to input, so we force a constant background and full
+          // opacity — otherwise the shared InputGroup dims itself while the Send
+          // button is disabled (`has-disabled:opacity-50`) and swaps its fill
+          // (`has-disabled:bg-input/80` empty -> `bg-input/30` once typing),
+          // which reads as the card darkening as you type. Focus ring dropped.
+          className="tw-composer-surface [&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border-black/10 dark:[&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-card dark:[&_[data-slot=input-group]]:!bg-input/80 [&_[data-slot=input-group]]:!opacity-100 [&_[data-slot=input-group]]:shadow-lg [&_[data-slot=input-group]]:!ring-0"
           accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           maxFiles={5}
           maxFileSize={25 * 1024 * 1024}
@@ -531,7 +534,7 @@ export function SpacesComposer({
                 onTranscriptionChange={onChange}
                 aria-label="Voice input"
                 title="Voice input"
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
                 disabled={disabled || isSubmitting}
               />
               <ConditionalSubmit
@@ -602,12 +605,12 @@ function PromptInputAttachButton() {
     <PromptInputButton
       type="button"
       variant="ghost"
-      className="text-muted-foreground hover:text-foreground"
+      className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
-      title="Attach a spreadsheet"
+      title="Add files and more"
     >
-      <IconPaperclip stroke={2} className="h-4 w-4" />
+      <IconPlus stroke={2} className="h-4 w-4" />
     </PromptInputButton>
   );
 }

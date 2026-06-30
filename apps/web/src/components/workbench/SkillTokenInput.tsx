@@ -383,7 +383,11 @@ export const SkillTokenInput = forwardRef<
     document.execCommand("insertText", false, text);
   };
 
-  const isEmpty = value.length === 0;
+  // Treat whitespace-only content as empty so the placeholder always shows when
+  // nothing meaningful is entered. The browser leaves a stray <br> after the
+  // field is cleared, which serializes to "\n" — without trimming, that would
+  // suppress the placeholder even though the composer looks empty.
+  const isEmpty = value.trim().length === 0;
 
   return (
     <div

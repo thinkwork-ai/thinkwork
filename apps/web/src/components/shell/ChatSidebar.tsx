@@ -40,7 +40,6 @@ import {
   MoreHorizontal,
   Paperclip,
   Pencil,
-  Search,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -909,17 +908,6 @@ export function ChatSidebar() {
                 </SidebarMenuButton>
                 <SpaceJumpMenu spaces={spaces} isLoading={spacesFetching} />
               </div>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Search">
-                <button type="button" onClick={() => setSearchOpen(true)}>
-                  <Search />
-                  <span className="min-w-0 flex-1 text-left">Search</span>
-                  <span className="ml-auto text-xs text-sidebar-foreground/45">
-                    ⌘K
-                  </span>
-                </button>
-              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton

@@ -267,7 +267,7 @@
   box-shadow: 0 24px 70px hsl(217 45% 6% / 0.38);
 }
 
-.dark-blue .tw-composer-surface [data-slot="input-group"]:focus-within {
+.dark-blue .tw-composer-surface [data-slot="input-group"] {
   border-color: hsl(213 94% 68% / 0.42) !important;
   box-shadow:
     0 18px 52px hsl(217 45% 6% / 0.32),
