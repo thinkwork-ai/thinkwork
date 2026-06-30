@@ -1054,24 +1054,43 @@ function PluginAppsNavItem({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
-          <button type="button" data-plugin-apps-trigger>
-            <LayoutGrid />
-            <span className="min-w-0 flex-1 truncate text-left">Apps</span>
-            <ChevronDown
-              className={cn(
-                "ml-auto size-3.5 text-sidebar-foreground/45 transition-transform",
-                open ? "rotate-180" : null,
-              )}
-            />
-          </button>
-        </SidebarMenuButton>
-      </DropdownMenuTrigger>
+      <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
+        <div
+          data-plugin-apps-row
+          className="cursor-pointer"
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("[data-plugin-apps-trigger]")
+            ) {
+              return;
+            }
+            setOpen((value) => !value);
+          }}
+        >
+          <LayoutGrid />
+          <span className="min-w-0 flex-1 truncate text-left">Apps</span>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Apps"
+              data-plugin-apps-trigger
+              className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            >
+              <ChevronDown
+                className={cn(
+                  "size-3.5 transition-transform",
+                  open ? "rotate-180" : null,
+                )}
+              />
+            </button>
+          </DropdownMenuTrigger>
+        </div>
+      </SidebarMenuButton>
       <DropdownMenuContent
-        side="right"
+        side="bottom"
         align="start"
-        sideOffset={8}
+        sideOffset={4}
         className="z-[1000] w-auto min-w-0"
         data-plugin-apps-menu
         style={{ width: "max-content", minWidth: "max-content" }}
