@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronRight, RefreshCw } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -175,43 +175,66 @@ export function DesktopApplicationHeader() {
             headerActions.breadcrumbs.length > 0 ? (
               <nav
                 aria-label="Breadcrumb"
-                className="flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
+                className="flex min-w-0 items-center overflow-hidden text-sm font-medium"
               >
                 {headerActions.breadcrumbs.map((crumb, index) => {
                   const isLast =
                     index === headerActions.breadcrumbs!.length - 1;
                   return (
-                    <span
-                      key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
-                      className="flex min-w-0 items-center gap-1"
+                    <Fragment
+                      key={`${crumb.href ?? "current"}:${crumb.onClick ? "click" : ""}:${crumb.label}:${index}`}
                     >
                       {index > 0 ? (
-                        <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
+                        <ChevronRight
+                          className="mx-1.5 size-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                          data-testid="desktop-breadcrumb-separator"
+                        />
                       ) : null}
-                      {isLast && headerActions.titleContent ? (
-                        <div className="min-w-0">
-                          {headerActions.titleContent}
-                        </div>
-                      ) : isLast || !crumb.href ? (
-                        <span
-                          className={
-                            isLast
-                              ? "truncate text-foreground"
-                              : "shrink-0 truncate text-muted-foreground"
-                          }
-                        >
-                          {crumb.label}
-                        </span>
-                      ) : (
-                        <Link
-                          to={crumb.href}
-                          search={crumb.search}
-                          className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          {crumb.label}
-                        </Link>
-                      )}
-                    </span>
+                      <span
+                        className={
+                          isLast
+                            ? "flex min-w-0 items-center"
+                            : "flex shrink-0 items-center"
+                        }
+                      >
+                        {isLast && headerActions.titleContent ? (
+                          <div className="min-w-0">
+                            {headerActions.titleContent}
+                          </div>
+                        ) : crumb.onClick ? (
+                          <button
+                            type="button"
+                            onClick={crumb.onClick}
+                            className={
+                              isLast
+                                ? "truncate text-foreground"
+                                : "shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                            }
+                          >
+                            {crumb.label}
+                          </button>
+                        ) : isLast || !crumb.href ? (
+                          <span
+                            className={
+                              isLast
+                                ? "truncate text-foreground"
+                                : "shrink-0 truncate text-muted-foreground"
+                            }
+                          >
+                            {crumb.label}
+                          </span>
+                        ) : (
+                          <Link
+                            to={crumb.href}
+                            search={crumb.search}
+                            className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            {crumb.label}
+                          </Link>
+                        )}
+                      </span>
+                    </Fragment>
                   );
                 })}
               </nav>

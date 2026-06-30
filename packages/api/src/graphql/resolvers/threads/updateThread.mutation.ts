@@ -59,16 +59,23 @@ export const updateThread = async (
       updates.closed_at = new Date();
       updates.checkout_run_id = null; // auto-release lock
       // PRD-40: Cascade done to all child threads
-      db.update(threads)
-        .set({
-          status: "done",
-          completed_at: new Date(),
-          closed_at: new Date(),
-          checkout_run_id: null,
-          updated_at: new Date(),
-        })
-        .where(eq(threads.parent_id, args.id))
-        .catch(() => {});
+      try {
+        await db
+          .update(threads)
+          .set({
+            status: "done",
+            completed_at: new Date(),
+            closed_at: new Date(),
+            checkout_run_id: null,
+            updated_at: new Date(),
+          })
+          .where(eq(threads.parent_id, args.id));
+      } catch (err) {
+        console.error(
+          `[updateThread] Failed to cascade done status to child threads of ${args.id}:`,
+          err,
+        );
+      }
     }
     if (newStatus === "cancelled") {
       updates.cancelled_at = new Date();
@@ -144,8 +151,8 @@ export const updateThread = async (
           ? parent.assignee_id
           : parent?.created_by_id;
       if (ownerId) {
-        db.insert(inboxItems)
-          .values({
+        try {
+          await db.insert(inboxItems).values({
             tenant_id: row.tenant_id,
             recipient_id: ownerId,
             requester_type: "system",
@@ -154,8 +161,13 @@ export const updateThread = async (
             description: `${row.identifier} has been marked done`,
             entity_type: "thread",
             entity_id: row.id,
-          })
-          .catch(() => {}); // fire-and-forget
+          });
+        } catch (err) {
+          console.warn(
+            `[updateThread] Failed to create inbox notification for task completion thread=${row.id}:`,
+            err,
+          );
+        }
       }
     }
   }

@@ -46,8 +46,9 @@ export async function handler(
       statusCode: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "*",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, x-tenant-id, x-tenant-slug, x-thinkwork-tenant-id, x-thinkwork-tenant-slug, x-api-key, x-thinkwork-deployment-token",
       },
       body: "",
     };
@@ -272,7 +273,7 @@ async function inviteMember(
       }
     } else {
       console.error("inviteMember: Cognito admin-create-user failed", err);
-      return error(err.message || "Cognito admin-create-user failed", 502);
+      return error("Cognito admin-create-user failed", 502);
     }
   }
 

@@ -1,0 +1,89 @@
+"""
+Installed plugin app surfaces.
+
+These are trusted, first-party plugin apps declared by launchable `ui-surface`
+components in installed plugin manifests. The launch contract is identity and
+route metadata only; browser clients never receive plugin credentials or
+runtime code from this surface.
+"""
+type InstalledPluginAppReadiness {
+  """
+  ready | install_in_progress | operator_setup_required |
+  component_unavailable | activation_required
+  """
+  state: String!
+  message: String!
+  "Optional product-action hint for the web shell."
+  nextAction: String
+}
+
+type InstalledPluginApp {
+  "Stable install/surface identity."
+  id: ID!
+  pluginInstallId: ID!
+  pluginKey: String!
+  pluginDisplayName: String!
+  pluginVersion: String!
+  surfaceKey: String!
+  displayName: String!
+  appKey: String!
+  routeSegment: String!
+  mount: String!
+  runtime: String!
+  description: String
+  icon: String
+  entitlementProductKey: String
+  readiness: InstalledPluginAppReadiness!
+}
+
+"""
+ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
+source-system record. Overlay payloads are tenant-shared in v1; created/updated
+user fields are audit metadata, not visibility scopes.
+"""
+type PluginAppOverlay {
+  id: ID!
+  pluginInstallId: ID!
+  pluginKey: String!
+  appSurfaceKey: String!
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKey: String!
+  payload: AWSJSON!
+  createdByUserId: ID
+  updatedByUserId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input PluginAppOverlayQueryInput {
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKeys: [String!]
+}
+
+input UpsertPluginAppOverlayInput {
+  appKey: String!
+  provider: String!
+  providerRecordType: String!
+  providerRecordId: ID!
+  sectionKey: String!
+  payload: AWSJSON!
+}
+
+extend type Query {
+  "Launchable plugin apps available to the current tenant/user."
+  installedPluginApps: [InstalledPluginApp!]!
+
+  "ThinkWork-owned overlay sections for one plugin-app record."
+  pluginAppOverlays(input: PluginAppOverlayQueryInput!): [PluginAppOverlay!]!
+}
+
+extend type Mutation {
+  "Create or replace one ThinkWork-owned overlay section for a plugin-app record."
+  upsertPluginAppOverlay(input: UpsertPluginAppOverlayInput!): PluginAppOverlay!
+}

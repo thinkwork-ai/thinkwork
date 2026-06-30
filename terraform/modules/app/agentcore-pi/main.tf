@@ -258,11 +258,10 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         ]
       },
       {
-        # Aurora Data API — U4 SessionStore writes thread/message rows via
-        # the RDS Data API rather than long-lived Postgres connections.
-        # The cluster ARN and credentials secret are wired through the API
-        # Lambda's env (Plan §005 U4); listed here as broad cluster scope
-        # because the cluster ARN isn't an input to this module yet.
+        # Aurora Data API — U4 SessionStore and Hindsight exact-memory recall
+        # read/write via the RDS Data API rather than long-lived Postgres
+        # connections. Cover both the canonical cluster name and suffixed
+        # replacement names.
         Sid    = "AuroraDataAPI"
         Effect = "Allow"
         Action = [
@@ -272,7 +271,10 @@ resource "aws_iam_role_policy" "agentcore_pi" {
           "rds-data:CommitTransaction",
           "rds-data:RollbackTransaction",
         ]
-        Resource = "arn:aws:rds:${var.region}:${var.account_id}:cluster:thinkwork-${var.stage}-db-*"
+        Resource = [
+          "arn:aws:rds:${var.region}:${var.account_id}:cluster:thinkwork-${var.stage}-db",
+          "arn:aws:rds:${var.region}:${var.account_id}:cluster:thinkwork-${var.stage}-db-*",
+        ]
       },
       {
         # Secrets Manager — Pi resolves db credentials and other runtime

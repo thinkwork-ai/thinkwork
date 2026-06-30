@@ -221,6 +221,7 @@ describe("DesktopApplicationHeader", () => {
     // Last crumb (no titleContent) renders as plain, non-link text.
     const last = screen.getByText("My thread");
     expect(last.tagName).not.toBe("A");
+    expect(screen.getByTestId("desktop-breadcrumb-separator")).toBeTruthy();
   });
 
   it("hosts titleContent (inline rename) in the final breadcrumb crumb", () => {

@@ -31,6 +31,7 @@ import {
   GitBranch,
   Globe,
   Keyboard,
+  LayoutGrid,
   List,
   ListChecks,
   ListFilter,
@@ -104,6 +105,7 @@ import {
   setSectionUnreadFilter,
   useSectionUnreadFilter,
 } from "@/lib/sidebar-section-prefs";
+import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
@@ -165,6 +167,21 @@ interface WorkItemsResult {
   workItems?: SidebarWorkItemSummary[] | null;
 }
 
+interface InstalledPluginAppsResult {
+  installedPluginApps?: Array<{
+    id: string;
+    pluginKey: string;
+    pluginDisplayName: string;
+    displayName: string;
+    routeSegment: string;
+    icon?: string | null;
+    readiness: {
+      state: string;
+      message: string;
+    };
+  }> | null;
+}
+
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 const PINNED_LIMIT = 100;
@@ -192,6 +209,7 @@ export function ChatSidebar() {
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
   const isAgentLoopsRoute = location.pathname.startsWith("/automations");
+  const isAppsRoute = location.pathname.startsWith("/apps");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
@@ -289,6 +307,13 @@ export function ChatSidebar() {
       (item) => item.ownerUserId === userId && isOpenSidebarWorkItem(item),
     ).length;
   }, [userId, workItemsData?.workItems]);
+
+  const [{ data: installedAppsData }] = useQuery<InstalledPluginAppsResult>({
+    query: InstalledPluginAppsQuery,
+    pause: !tenantId || !userId,
+    requestPolicy: "cache-and-network",
+  });
+  const installedApps = installedAppsData?.installedPluginApps ?? [];
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -926,6 +951,14 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {installedApps.length > 0 ? (
+              <SidebarMenuItem>
+                <PluginAppsNavItem
+                  apps={installedApps}
+                  isActive={isAppsRoute}
+                />
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -1006,6 +1039,86 @@ export function ChatSidebar() {
         error={searchError?.message ?? null}
       />
     </div>
+  );
+}
+
+function PluginAppsNavItem({
+  apps,
+  isActive,
+}: {
+  apps: NonNullable<InstalledPluginAppsResult["installedPluginApps"]>;
+  isActive: boolean;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <SidebarMenuButton asChild isActive={isActive} tooltip="Apps">
+        <div
+          data-plugin-apps-row
+          className="cursor-pointer"
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest("[data-plugin-apps-trigger]")
+            ) {
+              return;
+            }
+            setOpen((value) => !value);
+          }}
+        >
+          <LayoutGrid />
+          <span className="min-w-0 flex-1 truncate text-left">Apps</span>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Apps"
+              data-plugin-apps-trigger
+              className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            >
+              <ChevronDown
+                className={cn(
+                  "size-3.5 transition-transform",
+                  open ? "rotate-180" : null,
+                )}
+              />
+            </button>
+          </DropdownMenuTrigger>
+        </div>
+      </SidebarMenuButton>
+      <DropdownMenuContent
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        className="z-[1000] w-auto min-w-0"
+        data-plugin-apps-menu
+        style={{ width: "max-content", minWidth: "max-content" }}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
+        {apps.map((app) => {
+          const ready = app.readiness.state === "ready";
+          return (
+            <DropdownMenuItem
+              key={app.id}
+              className="whitespace-nowrap py-2"
+              onSelect={() => {
+                setOpen(false);
+                void navigate({
+                  to: "/apps/$pluginKey/$appRouteSegment",
+                  params: {
+                    pluginKey: app.pluginKey,
+                    appRouteSegment: app.routeSegment,
+                  },
+                });
+              }}
+            >
+              {ready ? app.displayName : app.readiness.message}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -2303,6 +2416,16 @@ function threadIdFromThreadPath(pathname: string) {
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function appRouteFromPath(pathname: string) {
+  const match = /^\/apps\/([^/]+)\/([^/]+)(?:\/|$)/.exec(pathname);
+  return match
+    ? {
+        pluginKey: decodeURIComponent(match[1]),
+        appRouteSegment: decodeURIComponent(match[2]),
+      }
+    : undefined;
 }
 
 function isOpenSidebarWorkItem(item: SidebarWorkItemSummary) {

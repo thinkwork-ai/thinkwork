@@ -84,43 +84,14 @@ export async function threadVisibilityWhereSql(
   }
   const callerUserId = scope.callerUserId!;
   return sql`(
-    (
-      t.user_id = ${callerUserId}
-      OR EXISTS (
-        SELECT 1
-          FROM thread_participants caller_tp
-         WHERE caller_tp.tenant_id = ${scope.tenantId}
-           AND caller_tp.thread_id = t.id
-           AND caller_tp.participant_type = 'user'
-           AND caller_tp.user_id = ${callerUserId}
-      )
-    )
-    AND (
-      EXISTS (
-        SELECT 1
-          FROM spaces caller_space
-         WHERE caller_space.tenant_id = ${scope.tenantId}
-           AND caller_space.id = t.space_id
-           AND caller_space.status = 'active'
-           AND (
-             caller_space.access_mode = 'public'
-             OR EXISTS (
-               SELECT 1
-                 FROM space_members caller_sm
-                WHERE caller_sm.tenant_id = ${scope.tenantId}
-                  AND caller_sm.space_id = caller_space.id
-                  AND caller_sm.user_id = ${callerUserId}
-             )
-           )
-      )
-      OR EXISTS (
-        SELECT 1
-          FROM thread_participants caller_tp_space
-         WHERE caller_tp_space.tenant_id = ${scope.tenantId}
-           AND caller_tp_space.thread_id = t.id
-           AND caller_tp_space.participant_type = 'user'
-           AND caller_tp_space.user_id = ${callerUserId}
-      )
+    t.user_id = ${callerUserId}
+    OR EXISTS (
+      SELECT 1
+        FROM thread_participants caller_tp
+       WHERE caller_tp.tenant_id = ${scope.tenantId}
+         AND caller_tp.thread_id = t.id
+         AND caller_tp.participant_type = 'user'
+         AND caller_tp.user_id = ${callerUserId}
     )
   )`;
 }

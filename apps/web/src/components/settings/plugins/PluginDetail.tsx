@@ -173,6 +173,9 @@ export function PluginDetail() {
     ),
   );
   const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
+  const workosSignOutRedirectUrl = isWorkosAuth
+    ? workosAuthSignOutRedirectUrl()
+    : null;
   const workosAccountConfigured = isWorkosAccountConfigured(
     install?.components,
   );
@@ -648,24 +651,13 @@ export function PluginDetail() {
         {isCompanyBrain && (install || hasActiveEntitlement) ? (
           <SettingsSection label="Workspace">
             <SettingsRow
-              label="Brain operations"
+              label="Context diagnostics"
               description="Inspect substrate status, migration posture, evidence, and operator actions."
             >
               <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/brain-operations">
+                <Link to="/settings/context-diagnostics">
                   <Settings2 className="size-4" />
-                  Open operations
-                </Link>
-              </Button>
-            </SettingsRow>
-            <SettingsRow
-              label="Memory graph"
-              description="Open the ThinkWork Brain graph workspace for ontology and graph infrastructure evidence."
-            >
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/memory/knowledge-graph">
-                  <Brain className="size-4" />
-                  Open graph
+                  Open diagnostics
                 </Link>
               </Button>
             </SettingsRow>
@@ -735,6 +727,16 @@ export function PluginDetail() {
               <CopyablePluginValue
                 value={workosCallbackUrl ?? ""}
                 label="WorkOS callback URL"
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="Sign-out redirect"
+              description="Add this URL to the WorkOS application's Sign-out redirects list."
+              layout="stacked"
+            >
+              <CopyablePluginValue
+                value={workosSignOutRedirectUrl ?? ""}
+                label="WorkOS sign-out redirect URL"
               />
             </SettingsRow>
             <WorkosConfigurationRow
@@ -810,6 +812,7 @@ export function PluginDetail() {
             open={workosInstructionsOpen}
             onOpenChange={setWorkosInstructionsOpen}
             callbackUrl={workosCallbackUrl ?? ""}
+            signOutRedirectUrl={workosSignOutRedirectUrl ?? ""}
           />
         ) : null}
       </div>
@@ -821,10 +824,12 @@ function WorkosSetupInstructionsSheet({
   open,
   onOpenChange,
   callbackUrl,
+  signOutRedirectUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   callbackUrl: string;
+  signOutRedirectUrl: string;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -881,6 +886,13 @@ function WorkosSetupInstructionsSheet({
                 callback URL:
                 <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
                   {callbackUrl}
+                </code>
+              </li>
+              <li>
+                In the same WorkOS application, add this ThinkWork Sign-out
+                redirect:
+                <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                  {signOutRedirectUrl}
                 </code>
               </li>
               <li>
@@ -1152,6 +1164,10 @@ function WorkosConfigurationRow({
 function workosAuthCallbackUrl(): string {
   const baseUrl = deploymentApiBaseUrl() || window.location.origin;
   return `${baseUrl}/api/auth/workos/callback`;
+}
+
+function workosAuthSignOutRedirectUrl(): string {
+  return `${window.location.origin}/`;
 }
 
 function OAuthConnectionRow({

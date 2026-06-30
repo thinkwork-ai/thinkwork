@@ -580,13 +580,28 @@ export class HindsightAdapter implements MemoryAdapter {
           m.event_date, m.occurred_start, m.occurred_end,
           m.mentioned_at, m.tags, m.access_count, m.proof_count,
           m.metadata, m.created_at, m.updated_at,
-          COALESCE(m.metadata->>'ownerType', b.owner_type) AS inferred_owner_type,
           COALESCE(
-            m.metadata->>'spaceId',
-            m.metadata->>'userId',
-            m.metadata->>'agentId',
-            b.owner_id
-          ) AS inferred_owner_id
+            m.metadata->>'ownerType',
+            b.owner_type,
+            CASE
+              WHEN m.bank_id LIKE 'space_%' THEN 'space'
+              WHEN m.bank_id LIKE 'user_%' THEN 'user'
+              ELSE 'agent'
+            END
+          ) AS inferred_owner_type,
+          CASE COALESCE(
+            m.metadata->>'ownerType',
+            b.owner_type,
+            CASE
+              WHEN m.bank_id LIKE 'space_%' THEN 'space'
+              WHEN m.bank_id LIKE 'user_%' THEN 'user'
+              ELSE 'agent'
+            END
+          )
+            WHEN 'space' THEN COALESCE(m.metadata->>'spaceId', b.owner_id)
+            WHEN 'agent' THEN COALESCE(m.metadata->>'agentId', b.owner_id)
+            ELSE COALESCE(m.metadata->>'userId', b.owner_id)
+          END AS inferred_owner_id
         FROM hindsight.memory_units m
         LEFT JOIN tenant_banks b ON b.bank_id = m.bank_id
         WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR b.bank_id IS NOT NULL)
@@ -1167,8 +1182,8 @@ export class HindsightAdapter implements MemoryAdapter {
     const bankId = String(row.bank_id || "");
     const ownerType = inferOwnerType(row.inferred_owner_type, bankId);
     const ownerId =
-      stringField(row.inferred_owner_id) ||
       inferOwnerIdFromBank(bankId, ownerType) ||
+      stringField(row.inferred_owner_id) ||
       bankId;
 
     return this.mapUnit(

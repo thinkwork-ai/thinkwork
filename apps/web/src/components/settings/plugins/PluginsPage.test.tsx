@@ -353,7 +353,7 @@ describe("PluginsPage", () => {
       name: "Open ThinkWork Brain",
     });
     expect(
-      within(brainRow).getByText("knowledge graph substrate.", {
+      within(brainRow).getByText("private context substrate.", {
         exact: false,
       }),
     ).toBeTruthy();
@@ -406,6 +406,18 @@ describe("PluginsPage", () => {
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
     const twentyRow = screen.getByRole("link", { name: "Open Twenty CRM" });
     expect(within(twentyRow).getByText("Not installed")).toBeTruthy();
+  });
+
+  it("does not launch main-shell plugin apps from Settings catalog rows", () => {
+    render(<PluginsPage />);
+
+    const twentyRow = screen.getByRole("link", { name: "Open Twenty CRM" });
+    expect(
+      within(twentyRow).queryByRole("button", {
+        name: "Open Twenty CRM application",
+      }),
+    ).toBeNull();
+    expect(within(twentyRow).getByText(/Latest v0\.3\.0/)).toBeTruthy();
   });
 
   it("opens plugin details from the full catalog row", () => {
@@ -618,7 +630,7 @@ const catalogEntries = [
     __typename: "PluginCatalogEntry" as const,
     pluginKey: "company-brain",
     displayName: "ThinkWork Brain",
-    description: "Premium knowledge graph substrate.",
+    description: "Premium private context substrate.",
     latestVersion: "0.1.0",
     launchUrl: null,
     updateAvailable: false,
@@ -668,15 +680,21 @@ const catalogEntries = [
     pluginKey: "twenty",
     displayName: "Twenty CRM",
     description: "Customer relationship management.",
-    latestVersion: "1.0.0",
+    latestVersion: "0.3.0",
     launchUrl: null,
     updateAvailable: false,
     versions: [
       {
-        version: "1.0.0",
+        version: "0.3.0",
         payloadSha256: "sha256:c",
         requiredOauthScopes: ["read"],
-        components: [],
+        components: [
+          {
+            key: "client-engagement",
+            type: "ui-surface",
+            displayName: "Client Engagement",
+          },
+        ],
       },
     ],
     install: null,

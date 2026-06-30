@@ -50,6 +50,20 @@ describe("desktop deep links", () => {
     });
   });
 
+  it("parses WorkOS bridge callbacks for desktop auth", () => {
+    expect(
+      parseDeepLinkCallback(
+        "thinkwork-canary://oauth/callback?workos_bridge=bridge-code&next=%2Fwork-items%2F123",
+        {
+          allowedSchemes: ["thinkwork-canary"],
+        },
+      ),
+    ).toEqual({
+      workos_bridge: "bridge-code",
+      next: "/work-items/123",
+    });
+  });
+
   it("parses deployment profile import deep links", () => {
     const json = JSON.stringify({ schemaVersion: 1, deploymentId: "acme" });
     const encoded = Buffer.from(json).toString("base64url");

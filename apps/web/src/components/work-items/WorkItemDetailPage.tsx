@@ -2,8 +2,24 @@ import type React from "react";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  IconAlertTriangle,
+  IconCalendarClock,
+  IconCircleCheck,
+  IconCircleDashed,
+  IconEdit,
+  IconFileText,
+  IconFlag,
+  IconLink,
+  IconLockOpen,
+  IconMessageCircle,
+  IconRobot,
+  IconTag,
+  IconUserPlus,
+} from "@tabler/icons-react";
+import {
   AlertTriangle,
   Bot,
+  CalendarClock,
   CalendarDays,
   ChevronDown,
   CheckCircle2,
@@ -11,13 +27,20 @@ import {
   Clock,
   ExternalLink,
   FileText,
+  Flag,
   GitBranch,
+  Info,
   Link2,
   LockOpen,
   MessageSquareText,
   MoreHorizontal,
   PauseCircle,
+  PencilLine,
+  Tag,
+  UserPlus,
   UserRound,
+  Workflow,
+  X,
 } from "lucide-react";
 import {
   Button,
@@ -76,6 +99,13 @@ import {
   DEFAULT_WORK_ITEM_SEARCH,
   workItemRouteSearchToParams,
 } from "./work-item-filters";
+import {
+  describeWorkItemActivity,
+  isWorkItemActivityTimelineEvent,
+  type WorkItemActivityDescriptor,
+  type WorkItemActivityIconKey,
+  type WorkItemActivityTone,
+} from "./work-item-activity";
 
 interface WorkItemResult {
   workItem?: WorkItemSummary | null;
@@ -221,21 +251,36 @@ export function WorkItemDetailPage({
     CreateWorkItemCommentMutation,
   );
   const [humanActionError, setHumanActionError] = useState<string | null>(null);
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
-  const itemKey = item ? workItemKey(item) : "Work Item";
   usePageHeaderActions({
     title: item?.title ?? "Work Item",
-    documentTitle: item ? `${itemKey} ${item.title}` : "Work Item",
+    documentTitle: item?.title ?? "Work Item",
     breadcrumbs: [
       {
         label: "Work Items",
         href: "/work-items",
-        search: workItemRouteSearchToParams(
-          DEFAULT_WORK_ITEM_SEARCH,
-        ) as Record<string, unknown>,
+        search: workItemRouteSearchToParams(DEFAULT_WORK_ITEM_SEARCH) as Record<
+          string,
+          unknown
+        >,
       },
-      { label: item ? `${itemKey} ${item.title}` : "Work Item" },
+      { label: item?.title ?? "Work Item" },
     ],
+    action: item ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-8 text-muted-foreground hover:text-foreground lg:hidden"
+        aria-label="Show Work Item details"
+        title="Show Work Item details"
+        onClick={() => setDetailsSheetOpen(true)}
+      >
+        <Info className="size-4" />
+      </Button>
+    ) : undefined,
+    actionKey: item ? `work-item-detail-actions:${item.id}` : undefined,
   });
 
   if (!tenantId || (fetching && !data)) return <PageSkeleton />;
@@ -263,9 +308,7 @@ export function WorkItemDetailPage({
   const assignees = workItemAssigneesFromMembers(
     membersData?.tenantMembers ?? [],
   );
-  const statuses = sortWorkItemStatuses(
-    statusesData?.workItemStatuses ?? [],
-  );
+  const statuses = sortWorkItemStatuses(statusesData?.workItemStatuses ?? []);
   const statusOptions = statuses.length > 0 ? statuses : categoryStatuses();
   const labels = labelsData?.workItemLabels ?? [];
   const documents = documentsData?.workItemDocuments ?? [];
@@ -296,14 +339,12 @@ export function WorkItemDetailPage({
   const sortedEvents = [...events].sort(
     (left, right) => dateTime(right.createdAt) - dateTime(left.createdAt),
   );
-  const handleWorkItemUpdate = async (
-    patch: {
-      priority?: WorkItemPriority;
-      ownerUserId?: string | null;
-      labelIds?: string[];
-      openEngineQueueKey?: string | null;
-    },
-  ) => {
+  const handleWorkItemUpdate = async (patch: {
+    priority?: WorkItemPriority;
+    ownerUserId?: string | null;
+    labelIds?: string[];
+    openEngineQueueKey?: string | null;
+  }) => {
     if (!tenantId || workItemSaving) return false;
     const result = await executeWorkItemUpdate({
       input: {
@@ -385,6 +426,7 @@ export function WorkItemDetailPage({
               item={item}
               activityItems={activityItems}
               assignees={assignees}
+              statuses={statusOptions}
               commentSaving={commentSaving}
               commentsUnavailable={Boolean(commentsError)}
               onCreateComment={handleCreateComment}
@@ -392,97 +434,214 @@ export function WorkItemDetailPage({
             />
           </div>
 
-          <aside className="space-y-3 lg:sticky lg:top-5 lg:self-start">
-            <RailSection title="Properties">
-              <EditablePropertyRow
-                icon={<CircleDot className="size-4" />}
-                label="Status"
-                value={
-                  item.statusId ??
-                  statusOptions.find(
-                    (status) => status.category === item.status?.category,
-                  )?.id ??
-                  ""
-                }
-                options={statusOptions.map((status) => ({
-                  value: status.id,
-                  label:
-                    status.name ?? workItemStatusCategoryLabel(status.category),
-                  color: status.color,
-                }))}
-                disabled={statusSaving}
-                onChange={handleStatusChange}
-              />
-              <EditablePropertyRow
-                icon={<GitBranch className="size-4" />}
-                label="Priority"
-                value={item.priority}
-                options={WORK_ITEM_PRIORITY_OPTIONS}
-                disabled={workItemSaving}
-                onChange={(priority) =>
-                  handleWorkItemUpdate({
-                    priority: priority as WorkItemPriority,
-                  })
-                }
-              />
-              <EditablePropertyRow
-                icon={<UserRound className="size-4" />}
-                label="Assignee"
-                value={item.ownerUserId ?? ""}
-                options={[
-                  { value: "", label: "Unassigned" },
-                  ...assignees.map((assignee) => ({
-                    value: assignee.id,
-                    label: assignee.name,
-                  })),
-                ]}
-                disabled={workItemSaving}
-                onChange={(ownerUserId) =>
-                  handleWorkItemUpdate({
-                    ownerUserId: ownerUserId || null,
-                  })
-                }
-              />
-              <PropertyRow
-                icon={<CalendarDays className="size-4" />}
-                label="Created"
-                value={formatDate(item.createdAt)}
-              />
-              <PropertyRow
-                icon={<CalendarDays className="size-4" />}
-                label="Updated"
-                value={formatDate(item.updatedAt)}
-              />
-              <PropertyRow
-                icon={<Link2 className="size-4" />}
-                label="Space"
-                value={workItemSpaceLabel(item.spaceId, spaces)}
-              />
-            </RailSection>
-
-            <LabelsRailSection
+          <aside className="hidden space-y-3 lg:sticky lg:top-5 lg:block lg:self-start">
+            <WorkItemDetailRail
+              presentation="cards"
               item={item}
+              spaces={spaces}
+              assignees={assignees}
               labels={labels}
-              disabled={workItemSaving}
-              onChange={(labelIds) => handleWorkItemUpdate({ labelIds })}
-            />
-
-            <OpenEngineRailSection
-              item={item}
+              statusOptions={statusOptions}
               events={sortedEvents}
               documents={documents}
+              statusSaving={statusSaving}
+              workItemSaving={workItemSaving}
               saving={humanActionSaving}
-              queueSaving={workItemSaving}
               error={humanActionError}
-              onQueueChange={(openEngineQueueKey) =>
-                handleWorkItemUpdate({ openEngineQueueKey })
-              }
+              onStatusChange={handleStatusChange}
+              onWorkItemUpdate={handleWorkItemUpdate}
               onAction={handleOpenEngineHumanAction}
             />
           </aside>
         </div>
       </div>
+
+      {detailsSheetOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/10"
+          role="presentation"
+          onClick={() => setDetailsSheetOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-label="Work Item details"
+            data-testid="work-item-details-floating-panel"
+            className="fixed right-3 top-16 w-[259px] animate-in slide-in-from-right-10 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute right-2 top-2 z-10 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Close Work Item details"
+              title="Close Work Item details"
+              onClick={() => setDetailsSheetOpen(false)}
+            >
+              <X className="size-4" />
+            </button>
+            <WorkItemDetailRail
+              presentation="single"
+              item={item}
+              spaces={spaces}
+              assignees={assignees}
+              labels={labels}
+              statusOptions={statusOptions}
+              events={sortedEvents}
+              documents={documents}
+              statusSaving={statusSaving}
+              workItemSaving={workItemSaving}
+              saving={humanActionSaving}
+              error={humanActionError}
+              onStatusChange={handleStatusChange}
+              onWorkItemUpdate={handleWorkItemUpdate}
+              onAction={handleOpenEngineHumanAction}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
+  );
+}
+
+function WorkItemDetailRail({
+  presentation,
+  item,
+  spaces,
+  assignees,
+  labels,
+  statusOptions,
+  events,
+  documents,
+  statusSaving,
+  workItemSaving,
+  saving,
+  error,
+  onStatusChange,
+  onWorkItemUpdate,
+  onAction,
+}: {
+  presentation: "cards" | "single";
+  item: WorkItemSummary;
+  spaces: WorkItemSpaceSummary[];
+  assignees: WorkItemAssigneeSummary[];
+  labels: WorkItemLabelSummary[];
+  statusOptions: WorkItemStatusSummary[];
+  events: WorkItemEventSummary[];
+  documents: WorkItemDocumentSummary[];
+  statusSaving: boolean;
+  workItemSaving: boolean;
+  saving: boolean;
+  error: string | null;
+  onStatusChange: (statusId: string) => Promise<boolean>;
+  onWorkItemUpdate: (patch: {
+    priority?: WorkItemPriority;
+    ownerUserId?: string | null;
+    labelIds?: string[];
+    openEngineQueueKey?: string | null;
+  }) => Promise<boolean>;
+  onAction: (
+    actionType: OpenEngineHumanActionType,
+    message: string,
+  ) => Promise<boolean>;
+}) {
+  const sectionVariant = presentation === "single" ? "separator" : "card";
+  const content = (
+    <>
+      <RailSection title="Properties" variant={sectionVariant}>
+        <EditablePropertyRow
+          icon={<CircleDot className="size-4" />}
+          label="Status"
+          value={
+            item.statusId ??
+            statusOptions.find(
+              (status) => status.category === item.status?.category,
+            )?.id ??
+            ""
+          }
+          options={statusOptions.map((status) => ({
+            value: status.id,
+            label: status.name ?? workItemStatusCategoryLabel(status.category),
+            color: status.color,
+          }))}
+          disabled={statusSaving}
+          onChange={onStatusChange}
+        />
+        <EditablePropertyRow
+          icon={<GitBranch className="size-4" />}
+          label="Priority"
+          value={item.priority}
+          options={WORK_ITEM_PRIORITY_OPTIONS}
+          disabled={workItemSaving}
+          onChange={(priority) =>
+            onWorkItemUpdate({
+              priority: priority as WorkItemPriority,
+            })
+          }
+        />
+        <EditablePropertyRow
+          icon={<UserRound className="size-4" />}
+          label="Assignee"
+          value={item.ownerUserId ?? ""}
+          options={[
+            { value: "", label: "Unassigned" },
+            ...assignees.map((assignee) => ({
+              value: assignee.id,
+              label: assignee.name,
+            })),
+          ]}
+          disabled={workItemSaving}
+          onChange={(ownerUserId) =>
+            onWorkItemUpdate({
+              ownerUserId: ownerUserId || null,
+            })
+          }
+        />
+        <PropertyRow
+          icon={<Link2 className="size-4" />}
+          label="Space"
+          value={workItemSpaceLabel(item.spaceId, spaces)}
+        />
+        <PropertyRow
+          icon={<CalendarDays className="size-4" />}
+          label="Created"
+          value={formatDate(item.createdAt)}
+        />
+        <PropertyRow
+          icon={<CalendarDays className="size-4" />}
+          label="Updated"
+          value={formatDate(item.updatedAt)}
+        />
+      </RailSection>
+
+      <LabelsRailSection
+        variant={sectionVariant}
+        item={item}
+        labels={labels}
+        disabled={workItemSaving}
+        onChange={(labelIds) => onWorkItemUpdate({ labelIds })}
+      />
+
+      <OpenEngineRailSection
+        variant={sectionVariant}
+        item={item}
+        events={events}
+        documents={documents}
+        saving={saving}
+        queueSaving={workItemSaving}
+        error={error}
+        onQueueChange={(openEngineQueueKey) =>
+          onWorkItemUpdate({ openEngineQueueKey })
+        }
+        onAction={onAction}
+      />
+    </>
+  );
+
+  if (presentation === "cards") return content;
+
+  return (
+    <div className="w-[259px] rounded-md border bg-background p-3 shadow-lg">
+      {content}
+    </div>
   );
 }
 
@@ -502,18 +661,19 @@ export function WorkItemDocumentPage({
       pause: !tenantId,
       requestPolicy: "cache-and-network",
     });
-  const [{ data: documentData, fetching: documentFetching, error: documentError }] =
-    useQuery<WorkItemDocumentResult>({
-      query: WorkItemDocumentQuery,
-      variables: {
-        input: {
-          tenantId: tenantId ?? "",
-          id: documentId,
-        },
+  const [
+    { data: documentData, fetching: documentFetching, error: documentError },
+  ] = useQuery<WorkItemDocumentResult>({
+    query: WorkItemDocumentQuery,
+    variables: {
+      input: {
+        tenantId: tenantId ?? "",
+        id: documentId,
       },
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const item = itemData?.workItem ?? null;
   const document = documentData?.workItemDocument ?? null;
@@ -528,9 +688,10 @@ export function WorkItemDocumentPage({
       {
         label: "Work Items",
         href: "/work-items",
-        search: workItemRouteSearchToParams(
-          DEFAULT_WORK_ITEM_SEARCH,
-        ) as Record<string, unknown>,
+        search: workItemRouteSearchToParams(DEFAULT_WORK_ITEM_SEARCH) as Record<
+          string,
+          unknown
+        >,
       },
       {
         label: itemKey,
@@ -540,7 +701,10 @@ export function WorkItemDocumentPage({
     ],
   });
 
-  if (!tenantId || ((itemFetching || documentFetching) && (!item || !document))) {
+  if (
+    !tenantId ||
+    ((itemFetching || documentFetching) && (!item || !document))
+  ) {
     return <PageSkeleton />;
   }
 
@@ -770,6 +934,7 @@ function ActivitySection({
   item,
   activityItems,
   assignees,
+  statuses,
   commentSaving,
   commentsUnavailable,
   onCreateComment,
@@ -778,6 +943,7 @@ function ActivitySection({
   item: WorkItemSummary;
   activityItems: WorkItemActivityItem[];
   assignees: WorkItemAssigneeSummary[];
+  statuses: WorkItemStatusSummary[];
   commentSaving: boolean;
   commentsUnavailable: boolean;
   onCreateComment: (body: string) => Promise<boolean>;
@@ -841,6 +1007,7 @@ function ActivitySection({
                     item={item}
                     event={activityItem.event}
                     assignees={assignees}
+                    statuses={statuses}
                     showConnector={hasFollowingTimelineEvent(
                       activityItems,
                       index,
@@ -850,7 +1017,7 @@ function ActivitySection({
               )}
             </ol>
           )}
-          <div className="rounded-md border bg-muted/40 p-3 dark:bg-muted/40">
+          <div className="space-y-3">
             <Textarea
               value={commentBody}
               rows={3}
@@ -864,7 +1031,7 @@ function ActivitySection({
               onChange={(event) => setCommentBody(event.target.value)}
               className="min-h-20 resize-y bg-background/35 px-3 py-2 shadow-none focus-visible:ring-1"
             />
-            <div className="mt-3 flex justify-end">
+            <div className="flex justify-end">
               <Button
                 type="button"
                 size="sm"
@@ -899,9 +1066,9 @@ function ActivityCommentRow({
     <li className="mt-3 first:mt-0">
       <article className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40">
         <header className="flex min-w-0 items-center gap-1.5">
-          <ActivityAvatar
-            actor={commentAuthor(comment, assignees)}
-            agent={Boolean(comment.authorAgentId)}
+          <ActivityInlineIcon
+            icon={IconMessageCircle}
+            className="text-blue-600 dark:text-blue-300"
           />
           <span className="truncate text-xs font-semibold text-foreground">
             {commentAuthor(comment, assignees)}
@@ -924,32 +1091,35 @@ function ActivityEventRow({
   item,
   event,
   assignees,
+  statuses,
   showConnector,
 }: {
   item: WorkItemSummary;
   event: WorkItemEventSummary;
   assignees: WorkItemAssigneeSummary[];
+  statuses: WorkItemStatusSummary[];
   showConnector: boolean;
 }) {
-  return isActivityTimelineEvent(event, item) ? (
+  const descriptor = describeWorkItemActivity({
+    event,
+    item,
+    assignees,
+    statuses,
+  });
+
+  return descriptor.displayMode === "compact" ? (
     <li className="grid min-h-8 grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2">
       <span className="relative flex h-8 items-center justify-center">
         {showConnector ? (
           <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 bg-border" />
         ) : null}
-        <ActivityAvatar
-          actor={eventActor(event, assignees)}
-          agent={Boolean(event.actorAgentId)}
-          compact
-        />
+        <ActivityEventIcon descriptor={descriptor} />
       </span>
       <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
         <span className="shrink-0 font-medium text-foreground">
-          {eventActor(event, assignees)}
+          {descriptor.actorLabel}
         </span>
-        <span className="min-w-0 truncate">
-          {activityTimelineMessage(event, item)}
-        </span>
+        <span className="min-w-0 truncate">{descriptor.actionText}</span>
       </p>
       <time
         dateTime={event.createdAt ?? undefined}
@@ -963,15 +1133,12 @@ function ActivityEventRow({
     <li>
       <article className="rounded-md border bg-muted/40 p-4 dark:bg-muted/40">
         <header className="flex min-w-0 items-center gap-1.5">
-          <ActivityAvatar
-            actor={eventActor(event, assignees)}
-            agent={Boolean(event.actorAgentId)}
-          />
+          <ActivityEventIcon descriptor={descriptor} />
           <span className="truncate text-xs font-semibold text-foreground">
-            {eventActor(event, assignees)}
+            {descriptor.actorLabel}
           </span>
           <span className="text-xs text-muted-foreground">
-            {eventLabel(event.eventType).toLowerCase()}
+            {descriptor.actionText.toLowerCase()}
           </span>
           <span
             className="shrink-0 text-xs text-muted-foreground"
@@ -989,29 +1156,90 @@ function ActivityEventRow({
   );
 }
 
-function ActivityAvatar({
-  actor,
-  agent,
-  compact,
+function ActivityEventIcon({
+  descriptor,
 }: {
-  actor: string;
-  agent: boolean;
-  compact?: boolean;
+  descriptor: WorkItemActivityDescriptor;
 }) {
-  const initials = actorInitials(actor);
+  const Icon = activityIcon(descriptor.iconKey);
+  return (
+    <ActivityInlineIcon
+      icon={Icon}
+      className={activityIconTone(descriptor.tone)}
+    />
+  );
+}
 
+function ActivityInlineIcon({
+  icon: Icon,
+  className,
+}: {
+  icon: React.ComponentType<{ className?: string; stroke?: number }>;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
-        "relative z-10 flex shrink-0 items-center justify-center rounded-full font-semibold text-white",
-        compact ? "size-4 text-[9px]" : "size-5 text-[10px]",
-        agent ? "bg-blue-500" : "bg-pink-500",
+        "relative z-10 flex size-5 shrink-0 items-center justify-center bg-background",
+        className,
       )}
       aria-hidden="true"
     >
-      {initials || <MessageSquareText className={compact ? "size-2.5" : "size-3"} />}
+      <Icon className="size-4" stroke={2} />
     </span>
   );
+}
+
+function activityIcon(iconKey: WorkItemActivityIconKey) {
+  switch (iconKey) {
+    case "agent":
+      return IconRobot;
+    case "applicability":
+      return IconCircleDashed;
+    case "assigned":
+      return IconUserPlus;
+    case "blocked":
+      return IconAlertTriangle;
+    case "completed":
+      return IconCircleCheck;
+    case "created":
+      return IconEdit;
+    case "document":
+      return IconFileText;
+    case "due_date":
+      return IconCalendarClock;
+    case "labels":
+      return IconTag;
+    case "linked":
+      return IconLink;
+    case "priority":
+      return IconFlag;
+    case "status":
+      return IconCircleDashed;
+    case "unblocked":
+      return IconLockOpen;
+    case "updated":
+    default:
+      return IconEdit;
+  }
+}
+
+function activityIconTone(tone: WorkItemActivityTone) {
+  switch (tone) {
+    case "amber":
+      return "border-amber-500/30 text-amber-600 dark:text-amber-300";
+    case "blue":
+      return "border-blue-500/30 text-blue-600 dark:text-blue-300";
+    case "emerald":
+      return "border-emerald-500/30 text-emerald-600 dark:text-emerald-300";
+    case "red":
+      return "border-red-500/30 text-red-600 dark:text-red-300";
+    case "violet":
+      return "border-violet-500/30 text-violet-600 dark:text-violet-300";
+    case "slate":
+    default:
+      return "border-border text-muted-foreground";
+  }
 }
 
 function ActivityMarkdown({
@@ -1049,14 +1277,22 @@ function SectionHeader({ title, detail }: { title: string; detail?: string }) {
 function RailSection({
   title,
   children,
+  variant = "card",
 }: {
   title: string;
   children: React.ReactNode;
+  variant?: "card" | "separator";
 }) {
   const [expanded, setExpanded] = useState(true);
 
   return (
-    <section className="rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
+    <section
+      className={cn(
+        variant === "card"
+          ? "rounded-md border bg-muted/35 p-3 dark:bg-muted/35"
+          : "mt-4 border-t border-border/70 pt-4 first:mt-0 first:border-t-0 first:pt-0",
+      )}
+    >
       <button
         type="button"
         className="mb-3 flex w-full items-center gap-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1433,11 +1669,13 @@ function LabelPickerOption({
 }
 
 function LabelsRailSection({
+  variant = "card",
   item,
   labels,
   disabled,
   onChange,
 }: {
+  variant?: "card" | "separator";
   item: WorkItemSummary;
   labels: WorkItemLabelSummary[];
   disabled?: boolean;
@@ -1447,7 +1685,7 @@ function LabelsRailSection({
   const selectedLabels = item.labels ?? [];
 
   return (
-    <RailSection title="Labels">
+    <RailSection title="Labels" variant={variant}>
       {selectedLabels.length ? (
         <LabelPicker
           labels={labels}
@@ -1487,6 +1725,7 @@ function LabelsRailSection({
 }
 
 function OpenEngineRailSection({
+  variant = "card",
   item,
   events,
   documents,
@@ -1496,6 +1735,7 @@ function OpenEngineRailSection({
   onQueueChange,
   onAction,
 }: {
+  variant?: "card" | "separator";
   item: WorkItemSummary;
   events: WorkItemEventSummary[];
   documents: WorkItemDocumentSummary[];
@@ -1520,7 +1760,7 @@ function OpenEngineRailSection({
 
   return (
     <>
-      <RailSection title="OpenEngine">
+      <RailSection title="OpenEngine" variant={variant}>
         <div className="space-y-2 px-1">
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
             <span className="text-muted-foreground">Queue</span>
@@ -1538,7 +1778,9 @@ function OpenEngineRailSection({
               onClick={() => setSheetOpen(true)}
               className="inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-full border bg-background/50 px-2 text-sm text-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className={cn("shrink-0 text-muted-foreground", state.tone)}>
+              <span
+                className={cn("shrink-0 text-muted-foreground", state.tone)}
+              >
                 {state.icon}
               </span>
               <span className="min-w-0 truncate">{state.label}</span>
@@ -1546,7 +1788,9 @@ function OpenEngineRailSection({
           </div>
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 text-xs">
             <span className="text-muted-foreground">Receipt</span>
-            <span className="truncate text-foreground">{latestReceiptLabel}</span>
+            <span className="truncate text-foreground">
+              {latestReceiptLabel}
+            </span>
           </div>
         </div>
       </RailSection>
@@ -1586,7 +1830,9 @@ function OpenEngineRailSection({
                 <PropertyRow
                   icon={<Bot className="size-4" />}
                   label="Agent"
-                  value={truncateMiddle(item.openEngineClaimedByAgentId) || "None"}
+                  value={
+                    truncateMiddle(item.openEngineClaimedByAgentId) || "None"
+                  }
                 />
                 <PropertyRow
                   icon={<Clock className="size-4" />}
@@ -1619,7 +1865,8 @@ function OpenEngineRailSection({
               {latestReceipt ? (
                 <div className="rounded-md border bg-muted/35 p-3 dark:bg-muted/35">
                   <p className="text-sm leading-6 text-foreground">
-                    {latestReceipt.message || eventLabel(latestReceipt.eventType)}
+                    {latestReceipt.message ||
+                      eventLabel(latestReceipt.eventType)}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {relativeDate(latestReceipt.createdAt)}
@@ -1647,7 +1894,9 @@ function OpenEngineRailSection({
                     {latestLedger.title}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {relativeDate(latestLedger.updatedAt ?? latestLedger.createdAt)}
+                    {relativeDate(
+                      latestLedger.updatedAt ?? latestLedger.createdAt,
+                    )}
                   </span>
                 </button>
               </section>
@@ -1745,12 +1994,9 @@ function OpenEngineBlockerResolution({
   return (
     <section className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium text-foreground">
-          Resolve blocker
-        </h3>
+        <h3 className="text-sm font-medium text-foreground">Resolve blocker</h3>
         <p className="text-xs leading-5 text-muted-foreground">
-          {holdLabel}: add the answer the agent needs, then resume queue
-          pickup.
+          {holdLabel}: add the answer the agent needs, then resume queue pickup.
         </p>
       </div>
       <textarea
@@ -1915,7 +2161,10 @@ function workItemKey(item: WorkItemSummary) {
     stringValue(metadata.externalKey) ||
     item.externalRefs?.[0]?.externalId;
   if (key) return key;
-  return `WI-${item.id.replace(/[^a-z0-9]/gi, "").slice(0, 5).toUpperCase()}`;
+  return `WI-${item.id
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 5)
+    .toUpperCase()}`;
 }
 
 function formatBytes(value?: number | null) {
@@ -2048,20 +2297,9 @@ function hasFollowingTimelineEvent(
 ) {
   const nextItem = activityItems[currentIndex + 1];
   return (
-    nextItem?.kind === "event" && isActivityTimelineEvent(nextItem.event)
+    nextItem?.kind === "event" &&
+    isWorkItemActivityTimelineEvent(nextItem.event)
   );
-}
-
-function eventActor(
-  event: WorkItemEventSummary,
-  assignees: WorkItemAssigneeSummary[],
-) {
-  if (event.actorUserId) {
-    const assignee = assignees.find((entry) => entry.id === event.actorUserId);
-    return assignee?.name ?? "User";
-  }
-  if (event.actorAgentId) return event.actorAgentId;
-  return "System";
 }
 
 function commentAuthor(
@@ -2078,15 +2316,6 @@ function commentAuthor(
   return "System";
 }
 
-function actorInitials(actor: string) {
-  return actor
-    .split(/[\s._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
-}
-
 function eventLabel(value?: string | null) {
   return String(value ?? "activity")
     .toLowerCase()
@@ -2096,7 +2325,9 @@ function eventLabel(value?: string | null) {
     .join(" ");
 }
 
-function externalRefTitle(ref: NonNullable<WorkItemSummary["externalRefs"]>[0]) {
+function externalRefTitle(
+  ref: NonNullable<WorkItemSummary["externalRefs"]>[0],
+) {
   return [ref.provider ?? "External", ref.externalId].filter(Boolean).join(" ");
 }
 
@@ -2114,36 +2345,4 @@ function sameStringSet(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   const rightSet = new Set(right);
   return left.every((value) => rightSet.has(value));
-}
-
-const TIMELINE_EVENT_TYPES = new Set([
-  "created",
-  "updated",
-  "status_changed",
-  "completed",
-  "blocked",
-  "unblocked",
-  "assigned",
-  "due_date_changed",
-  "applicability_changed",
-  "linked_thread",
-  "agent_action",
-]);
-
-function isActivityTimelineEvent(
-  event: WorkItemEventSummary,
-  _item?: WorkItemSummary,
-) {
-  return TIMELINE_EVENT_TYPES.has(event.eventType.toLowerCase());
-}
-
-function activityTimelineMessage(
-  event: WorkItemEventSummary,
-  item: WorkItemSummary,
-) {
-  const message = event.message?.trim();
-  if (message) return message;
-  if (event.eventType === "created") return `created ${workItemKey(item)}.`;
-  if (event.eventType === "status_changed") return "changed the status.";
-  return eventLabel(event.eventType).toLowerCase();
 }

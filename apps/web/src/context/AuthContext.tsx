@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -65,6 +66,7 @@ export function AuthProvider({
 }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const signOutInProgressRef = useRef(false);
 
   // Check session on mount — restore cached token for GraphQL client
   useEffect(() => {
@@ -80,6 +82,11 @@ export function AuthProvider({
 
     async function restoreSession(hydrate: boolean): Promise<void> {
       try {
+        if (signOutInProgressRef.current) {
+          clearSession();
+          return;
+        }
+
         if (hydrate) {
           await withTimeout(
             Promise.resolve(tokenStorage.hydrate?.()),
@@ -103,6 +110,10 @@ export function AuthProvider({
         );
         const currentUser = auth.getCurrentUser();
         if (cancelled) return;
+        if (signOutInProgressRef.current) {
+          clearSession();
+          return;
+        }
 
         if (token && currentUser) {
           markAuthStorageDeploymentProfile(tokenStorage);
@@ -135,6 +146,7 @@ export function AuthProvider({
     const unsubscribeSignedOut = desktopBridge?.onSignedOut(() => {
       if (cancelled) return;
       clearSession();
+      redirectToSignIn();
     });
     const unsubscribeOAuthError = desktopBridge?.onOAuthError((event) => {
       console.error("[auth] desktop OAuth failed", event.message);
@@ -152,6 +164,7 @@ export function AuthProvider({
 
   const handleSignIn = useCallback(
     async (email: string, password: string, newPassword?: string) => {
+      signOutInProgressRef.current = false;
       auth.configureTokenStorage(tokenStorage);
       const session = await auth.signIn(email, password, newPassword);
       void session;
@@ -181,6 +194,7 @@ export function AuthProvider({
   );
 
   const handleSignOut = useCallback(() => {
+    signOutInProgressRef.current = true;
     stopTokenRefresh();
     setTokenProvider(null);
     setAuthToken(null);
@@ -188,12 +202,19 @@ export function AuthProvider({
     tokenStorage.removeItem(AUTH_DEPLOYMENT_BINDING_STORAGE_KEY);
     tokenStorage.removeItem(AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY);
     if (desktopBridge) {
-      void desktopBridge.signOut().catch((error) => {
-        console.error("[auth] desktop sign-out failed", error);
-      });
+      void desktopBridge
+        .signOut()
+        .catch((error) => {
+          console.error("[auth] desktop sign-out failed", error);
+        })
+        .finally(() => {
+          signOutInProgressRef.current = false;
+        });
       return;
     }
-    void auth.signOut();
+    void auth.signOut().finally(() => {
+      signOutInProgressRef.current = false;
+    });
   }, [desktopBridge, tokenStorage]);
 
   const getToken = useCallback(() => auth.getIdToken(), []);
@@ -246,4 +267,9 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
+}
+
+function redirectToSignIn(): void {
+  if (window.location.pathname === "/sign-in") return;
+  window.location.href = "/sign-in";
 }

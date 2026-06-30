@@ -13,7 +13,9 @@ import type {
   SignOutResponse,
   StartOAuthRequest,
   StartOAuthResponse,
+  WorkosBridgeCallback,
 } from "@thinkwork/desktop-ipc";
+import type { SignOutSession } from "./auth-bridge.js";
 import type { ICognitoStorage } from "./cognito-storage.js";
 import { resolveDeepLinkScheme } from "./deep-link.js";
 import type { DesktopEnvSnapshot } from "./env.js";
@@ -23,6 +25,7 @@ const DEFAULT_MAX_IN_FLIGHT = 5;
 const DEFAULT_EVICTION_INTERVAL_MS = 60 * 1000;
 const DEFAULT_REVOKE_ATTEMPTS = 3;
 const DEFAULT_REVOKE_BUDGET_MS = 5_000;
+const AUTH_SOURCE_STORAGE_KEY = "thinkwork:auth-source";
 
 export interface DesktopAppPathLike {
   getPath(name: "userData"): string;
@@ -68,11 +71,16 @@ export interface OAuthTokens {
 }
 
 interface PublicOAuthOption {
-  cognitoIdentityProviderName: string;
-  route: {
-    type: string;
-    identityProvider: string;
-  };
+  route:
+    | {
+        type: "workosAuthorize";
+        authorizePath: "/api/auth/workos/authorize";
+        prompt?: string;
+      }
+    | {
+        type: "cognitoHostedUi";
+        identityProvider: string;
+      };
 }
 
 interface PublicAuthOptionsResponse {
@@ -133,7 +141,20 @@ export class DesktopOAuthController {
     request: StartOAuthRequest = undefined,
   ): Promise<StartOAuthResponse> {
     const env = await this.currentEnv();
-    const clientId = requireConfig(env.cognito.clientId, "client id");
+    const option = await this.fetchPublicAuthOption(env);
+
+    if (option?.route.type === "workosAuthorize") {
+      const state = randomBytes(16).toString("hex");
+      const url = this.buildWorkosAuthorizeUrl({
+        env,
+        next: request?.next,
+        prompt: option.route.prompt,
+        route: option.route,
+      });
+      await this.shell.openExternal(url);
+      return { url, state };
+    }
+
     const verifierBytes = randomBytes(32);
     const verifier = verifierString(verifierBytes);
     const challenge = sha256Base64Url(verifier);
@@ -150,12 +171,11 @@ export class DesktopOAuthController {
       next: request?.next,
     });
 
-    const identityProvider = await this.resolveIdentityProvider(env);
     const url = this.buildAuthorizeUrl({
       challenge,
-      clientId,
+      clientId: requireConfig(env.cognito.clientId, "client id"),
       env,
-      identityProvider,
+      identityProvider: option?.route.identityProvider ?? "Google",
       state,
     });
     try {
@@ -169,8 +189,23 @@ export class DesktopOAuthController {
   }
 
   async completeOAuthCallback(
-    callback: OAuthSuccessCallback,
+    callback: OAuthSuccessCallback | WorkosBridgeCallback,
   ): Promise<PendingOAuthCallback> {
+    if ("workos_bridge" in callback) {
+      const env = await this.currentEnv();
+      const tokens = await this.exchangeWorkosBridgeForTokens(
+        callback.workos_bridge,
+        env,
+      );
+      this.persistTokens(
+        tokens,
+        resolveCognitoUsername(tokens.id_token),
+        env,
+        "workos",
+      );
+      return callback;
+    }
+
     this.evictExpiredAttempts();
 
     const attempt = this.inFlight.get(callback.state);
@@ -186,6 +221,7 @@ export class DesktopOAuthController {
         tokens,
         resolveCognitoUsername(tokens.id_token),
         attempt.env,
+        "cognito",
       );
 
       return {
@@ -198,17 +234,26 @@ export class DesktopOAuthController {
     }
   }
 
-  async signOut(refreshToken: string | null): Promise<SignOutResponse> {
-    if (!refreshToken) {
-      return { ok: true, revokeFailed: false };
+  async signOut(session: SignOutSession): Promise<SignOutResponse> {
+    let revokeFailed = false;
+
+    if (session.authSource === "workos" && session.idToken) {
+      try {
+        await this.revokeWorkosSession(session.idToken);
+      } catch (error) {
+        this.logger.warn("[desktop:oauth] WorkOS session revoke failed", error);
+        revokeFailed = true;
+      }
     }
 
+    if (!session.refreshToken) return { ok: true, revokeFailed };
+
     try {
-      await this.revokeRefreshTokenWithRetry(refreshToken);
-      return { ok: true, revokeFailed: false };
+      await this.revokeRefreshTokenWithRetry(session.refreshToken);
+      return { ok: true, revokeFailed };
     } catch (error) {
       this.logger.warn("[desktop:oauth] refresh-token revoke failed", error);
-      await this.queuePendingRevocation(refreshToken);
+      await this.queuePendingRevocation(session.refreshToken);
       return { ok: true, revokeFailed: true };
     }
   }
@@ -274,9 +319,18 @@ export class DesktopOAuthController {
     )}/oauth2/authorize?${params.toString()}`;
   }
 
-  private async resolveIdentityProvider(env: DesktopEnvSnapshot): Promise<string> {
-    const option = await this.fetchPublicAuthOption(env);
-    return option?.route.identityProvider ?? "Google";
+  private buildWorkosAuthorizeUrl(options: {
+    env: DesktopEnvSnapshot;
+    next?: string;
+    prompt?: string;
+    route: { authorizePath: "/api/auth/workos/authorize" };
+  }): string {
+    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(options.env), "API URL");
+    const url = new URL(`${apiBaseUrl}${options.route.authorizePath}`);
+    url.searchParams.set("redirect_uri", this.redirectUri(options.env));
+    url.searchParams.set("return_to", normalizeNext(options.next));
+    if (options.prompt) url.searchParams.set("prompt", options.prompt);
+    return url.toString();
   }
 
   private async fetchPublicAuthOption(
@@ -299,7 +353,10 @@ export class DesktopOAuthController {
         if (option) return option;
       }
     } catch (error) {
-      this.logger.warn("[desktop:oauth] public auth options unavailable", error);
+      this.logger.warn(
+        "[desktop:oauth] public auth options unavailable",
+        error,
+      );
     }
     return null;
   }
@@ -344,10 +401,49 @@ export class DesktopOAuthController {
     };
   }
 
+  private async exchangeWorkosBridgeForTokens(
+    bridgeCode: string,
+    env: DesktopEnvSnapshot,
+  ): Promise<OAuthTokens> {
+    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(env), "API URL");
+    const response = await this.fetchImpl(
+      `${apiBaseUrl}/api/auth/workos/bridge`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ bridge_code: bridgeCode }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `WorkOS bridge exchange failed: ${await response.text()}`,
+      );
+    }
+
+    const raw = (await response.json()) as Record<string, unknown>;
+    if (
+      typeof raw.id_token !== "string" ||
+      typeof raw.access_token !== "string" ||
+      typeof raw.refresh_token !== "string"
+    ) {
+      throw new Error("WorkOS bridge returned an unexpected response shape");
+    }
+    return {
+      id_token: raw.id_token,
+      access_token: raw.access_token,
+      refresh_token: raw.refresh_token,
+    };
+  }
+
   private persistTokens(
     tokens: OAuthTokens,
     username: string,
     env: DesktopEnvSnapshot,
+    authSource: "cognito" | "workos",
   ): void {
     const clientId = requireConfig(env.cognito.clientId, "client id");
     const prefix = `CognitoIdentityServiceProvider.${clientId}`;
@@ -362,6 +458,38 @@ export class DesktopOAuthController {
     );
     this.storage.setItem(`${prefix}.${username}.clockDrift`, "0");
     this.storage.setItem(`${prefix}.LastAuthUser`, username);
+    this.storage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
+  }
+
+  private async revokeWorkosSession(idToken: string): Promise<void> {
+    const env = await this.currentEnv();
+    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(env), "API URL");
+    const response = await this.fetchImpl(
+      `${apiBaseUrl}/api/auth/workos/logout`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          return_to: this.redirectUri(env),
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`WorkOS logout failed: ${await response.text()}`);
+    }
+
+    const raw = (await response.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (typeof raw?.logout_url === "string" && raw.logout_url) {
+      await this.shell.openExternal(raw.logout_url);
+    }
   }
 
   private async revokeRefreshTokenWithRetry(
@@ -512,27 +640,42 @@ function parsePublicOAuthOption(raw: unknown): PublicOAuthOption | null {
   if (!route || typeof route !== "object" || Array.isArray(route)) return null;
 
   const routeRecord = route as Record<string, unknown>;
+  if (record.provider !== "workos") {
+    return null;
+  }
+
+  if (
+    routeRecord.type === "workosAuthorize" &&
+    routeRecord.authorizePath === "/api/auth/workos/authorize"
+  ) {
+    const prompt = safeString(routeRecord.prompt);
+    return {
+      route: {
+        type: "workosAuthorize",
+        authorizePath: "/api/auth/workos/authorize",
+        ...(prompt ? { prompt } : {}),
+      },
+    };
+  }
+
   const cognitoIdentityProviderName = safeString(
     record.cognitoIdentityProviderName,
   );
   const identityProvider = safeString(routeRecord.identityProvider);
-
   if (
-    record.provider !== "workos" ||
-    !cognitoIdentityProviderName ||
-    routeRecord.type !== "cognitoHostedUi" ||
-    identityProvider !== cognitoIdentityProviderName
+    cognitoIdentityProviderName &&
+    routeRecord.type === "cognitoHostedUi" &&
+    identityProvider === cognitoIdentityProviderName
   ) {
-    return null;
+    return {
+      route: {
+        type: "cognitoHostedUi",
+        identityProvider,
+      },
+    };
   }
 
-  return {
-    cognitoIdentityProviderName,
-    route: {
-      type: "cognitoHostedUi",
-      identityProvider,
-    },
-  };
+  return null;
 }
 
 function safeString(value: unknown): string {
@@ -546,6 +689,16 @@ function sha256Base64Url(value: BinaryLike): string {
 function requireConfig(value: string | null, label: string): string {
   if (!value) throw new Error(`Missing Cognito ${label}`);
   return value;
+}
+
+function normalizeNext(value: string | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
+  try {
+    const url = new URL(value, "https://thinkwork.local");
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "/new";
+  }
 }
 
 function resolveCognitoUsername(idToken: string): string {

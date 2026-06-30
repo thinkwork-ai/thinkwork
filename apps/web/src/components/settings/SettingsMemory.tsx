@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Brain, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -17,7 +17,7 @@ import {
 } from "@thinkwork/graph";
 import {
   ComputerMemoryRecordsQuery,
-  ComputerMemorySystemConfigQuery,
+  ComputerMemoryRetainAttemptsQuery,
   SpacesQuery,
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
@@ -40,20 +40,14 @@ import {
   type MemoryGraphEdge,
 } from "@/components/memory/MemoryGraphNodeSheet";
 
-type BrainView = "table" | "graph";
+type MemoryView = "table" | "graph";
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
-type MemorySystemConfig = {
-  activeEngine?: string | null;
-  managedMemoryEnabled?: boolean | null;
-  hindsightEnabled?: boolean | null;
-  cogneeMemoryEnabled?: boolean | null;
-  userMemoryEnabled?: boolean | null;
-  spaceMemoryEnabled?: boolean | null;
-  legacyHindsightAvailable?: boolean | null;
-  companyDistillationEnabled?: boolean | null;
-  wikiProjectionEnabled?: boolean | null;
-};
+export interface MemoryRefreshController {
+  refresh: () => Promise<void>;
+  isRefreshing: boolean;
+  disabled: boolean;
+}
 
 // Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
 // as a child so the embedded variant can suppress it without a conditional hook.
@@ -72,9 +66,17 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
   );
 }
 
-export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
+export function SettingsMemory({
+  embedded,
+  onRefreshControllerChange,
+}: {
+  embedded?: boolean;
+  onRefreshControllerChange?: (
+    controller: MemoryRefreshController | null,
+  ) => void;
+} = {}) {
   const { tenantId } = useTenant();
-  const [view, setView] = useState<BrainView>("table");
+  const [view, setView] = useState<MemoryView>("table");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<MemoryGraphHandle>(null);
@@ -83,13 +85,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   const requesterUserId = null;
   const namespace = "requester";
 
-  const [systemResult] = useQuery<{
-    memorySystemConfig?: MemorySystemConfig | null;
-  }>({
-    query: ComputerMemorySystemConfigQuery,
-  });
-
-  const [spacesResult] = useQuery<{
+  const [spacesResult, reexecuteSpacesQuery] = useQuery<{
     spaces?: Array<{ id: string; name?: string | null; slug?: string | null }>;
   }>({
     query: SpacesQuery,
@@ -97,7 +93,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     pause: !effectiveTenantId,
   });
 
-  const [membersResult] = useQuery<{
+  const [membersResult, reexecuteMembersQuery] = useQuery<{
     tenantMembers?: Array<{
       principalType?: string | null;
       principalId?: string | null;
@@ -114,7 +110,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
     pause: !effectiveTenantId,
   });
 
-  const [recordsResult] = useQuery<{
+  const [recordsResult, reexecuteRecordsQuery] = useQuery<{
     memoryRecords?: any[] | null;
   }>({
     query: ComputerMemoryRecordsQuery,
@@ -125,6 +121,24 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       scope: "OPERATOR",
       query: activeSearch || null,
       limit: 500,
+    },
+    pause: !effectiveTenantId,
+  });
+
+  const [retainAttemptsResult, reexecuteRetainAttemptsQuery] = useQuery<{
+    memoryRetainAttempts?: Array<{
+      id: string;
+      status?: string | null;
+      attemptCount?: number | null;
+      maxAttempts?: number | null;
+      errorClass?: string | null;
+      errorMessage?: string | null;
+    }> | null;
+  }>({
+    query: ComputerMemoryRetainAttemptsQuery,
+    variables: {
+      tenantId: effectiveTenantId ?? "",
+      limit: 25,
     },
     pause: !effectiveTenantId,
   });
@@ -188,7 +202,8 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
       if (member.principalType?.toUpperCase() !== "USER") continue;
       const user = member.user;
       const userId = user?.id || member.principalId;
-      const label = user?.profile?.callBy || user?.name || user?.email || userId;
+      const label =
+        user?.profile?.callBy || user?.name || user?.email || userId;
       if (userId && label) labels.set(`user:${userId}`, label);
     }
     return labels;
@@ -269,6 +284,51 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   );
 
   const isLoading = recordsResult.fetching && !recordsResult.data;
+  const isRefreshing =
+    (recordsResult.fetching && Boolean(recordsResult.data)) ||
+    retainAttemptsResult.fetching;
+  const retainAttention = useMemo(() => {
+    const attempts = retainAttemptsResult.data?.memoryRetainAttempts ?? [];
+    let retrying = 0;
+    let deadLettered = 0;
+    for (const attempt of attempts) {
+      const status = attempt.status ?? "";
+      if (status === "dead_lettered") deadLettered += 1;
+      if (status === "failed_timeout" || status === "failed_backend") {
+        retrying += 1;
+      }
+    }
+    return { retrying, deadLettered, total: retrying + deadLettered };
+  }, [retainAttemptsResult.data]);
+
+  const refreshMemory = useCallback(async () => {
+    if (!effectiveTenantId) return;
+    reexecuteSpacesQuery({ requestPolicy: "network-only" });
+    reexecuteMembersQuery({ requestPolicy: "network-only" });
+    reexecuteRecordsQuery({ requestPolicy: "network-only" });
+    reexecuteRetainAttemptsQuery({ requestPolicy: "network-only" });
+  }, [
+    effectiveTenantId,
+    reexecuteMembersQuery,
+    reexecuteRecordsQuery,
+    reexecuteRetainAttemptsQuery,
+    reexecuteSpacesQuery,
+  ]);
+
+  useEffect(() => {
+    if (!onRefreshControllerChange) return;
+    onRefreshControllerChange({
+      refresh: refreshMemory,
+      isRefreshing,
+      disabled: !effectiveTenantId,
+    });
+    return () => onRefreshControllerChange(null);
+  }, [
+    effectiveTenantId,
+    isRefreshing,
+    onRefreshControllerChange,
+    refreshMemory,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
@@ -305,7 +365,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         <ToggleGroup
           type="single"
           value={view}
-          onValueChange={(v) => v && setView(v as BrainView)}
+          onValueChange={(v) => v && setView(v as MemoryView)}
           variant="outline"
         >
           <ToggleGroupItem value="table" className="px-3 text-xs">
@@ -316,6 +376,17 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
+      {retainAttention.total > 0 ? (
+        <div
+          role="status"
+          className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+        >
+          Memory retain status: {retainAttention.retrying} retrying
+          {retainAttention.deadLettered > 0
+            ? `, ${retainAttention.deadLettered} dead-lettered`
+            : ""}
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1">
         {view === "graph" ? (
@@ -343,10 +414,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
             <LoadingShimmer />
           </div>
         ) : rows.length === 0 ? (
-          <MemoryEmptyState
-            activeSearch={activeSearch}
-            config={systemResult.data?.memorySystemConfig}
-          />
+          <MemoryEmptyState activeSearch={activeSearch} />
         ) : (
           <DataTable
             columns={columns}
@@ -440,33 +508,19 @@ function compactMemoryId(value: string): string {
   return `${value.slice(0, 14)}...`;
 }
 
-function MemoryEmptyState({
-  activeSearch,
-  config,
-}: {
-  activeSearch: string;
-  config?: MemorySystemConfig | null;
-}) {
-  const hindsightActive = config?.hindsightEnabled === true;
-  const hindsightAvailableButInactive =
-    !hindsightActive && config?.legacyHindsightAvailable === true;
-
+function MemoryEmptyState({ activeSearch }: { activeSearch: string }) {
   const title = activeSearch
     ? "No matching memory rows"
-    : hindsightAvailableButInactive
-      ? "Memory service update required"
-      : "No memory rows found";
+    : "No memory rows found";
 
   const detail = activeSearch
-    ? "The operator memory query returned 0 Hindsight rows for this search."
-    : hindsightAvailableButInactive
-      ? "The table reads Hindsight banks, but this deployment has not switched to Hindsight yet. Redeploy with MEMORY_ENGINE=hindsight and retain user or Space memory to populate rows."
-      : "The operator memory query returned 0 Hindsight memory_units across user, Space, and agent banks for this tenant.";
+    ? "The operator memory query returned 0 User or Space memory rows for this search."
+    : "This tenant does not have User, Space, or agent memory rows yet.";
 
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-xl px-6 text-center">
-        <Brain className="mx-auto h-11 w-11 text-muted-foreground/40" />
+        <Search className="mx-auto h-11 w-11 text-muted-foreground/40" />
         <h3 className="mt-4 text-base font-medium text-foreground">{title}</h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
       </div>

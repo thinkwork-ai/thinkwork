@@ -7,8 +7,8 @@ const source = read("src/components/settings/SettingsMemory.tsx");
 const queries = read("src/lib/graphql-queries.ts");
 
 describe("SettingsMemory", () => {
-  it("queries the explicit memory mode fields", () => {
-    expect(source).toContain("ComputerMemorySystemConfigQuery");
+  it("leaves engine mode fields in the GraphQL contract without rendering them", () => {
+    expect(source).not.toContain("ComputerMemorySystemConfigQuery");
     expect(queries).toContain("activeEngine");
     expect(queries).toContain("cogneeMemoryEnabled");
     expect(queries).toContain("userMemoryEnabled");
@@ -45,7 +45,8 @@ describe("SettingsMemory", () => {
     expect(source).not.toContain("Memory engine:");
     expect(source).not.toContain("User memory on");
     expect(source).not.toContain("Space memory on");
-    expect(source).toContain("has not switched to Hindsight");
+    expect(source).not.toContain("has not switched to Hindsight");
+    expect(source).not.toContain("MEMORY_ENGINE");
     expect(source).not.toContain("ThinkWork Brain diagnostic");
     expect(source).not.toContain("Company distillation");
     expect(source).not.toContain("Wiki projection");

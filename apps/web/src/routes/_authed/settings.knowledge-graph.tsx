@@ -1,9 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// Knowledge Graph explorer folded into the unified Memory page (Knowledge Graph
-// tab). ThinkWork Brain plugin detail owns the substrate lifecycle surface.
+// Legacy top-level URL redirects to the Ontology tab under Memory settings.
 export const Route = createFileRoute("/_authed/settings/knowledge-graph")({
   beforeLoad: () => {
-    throw redirect({ to: "/settings/memory/knowledge-graph" });
+    throw redirect({ to: "/settings/memory/ontology", replace: true });
   },
 });

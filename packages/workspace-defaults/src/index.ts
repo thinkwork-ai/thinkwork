@@ -211,9 +211,10 @@ do not journal turns yourself.
 - **\`reflect(query)\`** or **\`hindsight_reflect(query)\`** — Hindsight synthesis
   across many memories. Use for "brief me on X" / "summarize the history of Y"
   prompts after checking the current prompt and mounted files.
-- **\`query_memory_context(query)\`** — Context Engine facade for Hindsight memory
-  when the direct memory tools are unavailable or when you need provider-status
-  diagnostics.
+
+Do not use Context Engine queries as a memory backend. If direct memory tools are
+not available, say that memory lookup is unavailable for the turn instead of
+falling back to context tools.
 
 Before any memory lookup, check the current prompt and workspace files you
 already have, especially \`USER.md\` for the requester's profile and family facts.
@@ -440,9 +441,8 @@ You have access to ThinkWork Brain, the platform context layer:
 If \`query_context\` is available, use it for external or lazy-loaded context such
 as compiled pages, workspace files, approved search-safe MCP tools, source
 agents, or web/search providers. It is read-only and returns cited results plus
-provider status. Use direct memory tools for durable Hindsight memory, and use
-\`query_memory_context\` only when those tools are unavailable or you need
-provider-status diagnostics.
+provider status. Do not use Context Engine queries as a durable Hindsight memory
+backend; use direct memory tools for user and Space memory.
 
 ### Thread Management
 
@@ -459,7 +459,7 @@ workspace style guide says otherwise.
 ### Brain Sources
 
 Space reference documents are retained into Hindsight as Brain Sources. Use
-direct memory lookup or \`query_memory_context\` for durable Space document memory.
+direct memory lookup for durable Space document memory.
 Use any legacy \`knowledge_base_search\` tool only if the workspace explicitly
 provides it for compatibility.
 

@@ -7,7 +7,7 @@
  *   - `mcp-server`     — a hosted MCP endpoint the agent dispatches to
  *   - `skills`         — bundled skill folders seeded into the tenant catalog
  *   - `infrastructure` — a managed-app Terraform deployment
- *   - `ui-surface`     — declared-only in v1 (identity + intended mount)
+ *   - `ui-surface`     — declared or launchable UI identity
  *   - `auth-provider`  — declared/admin-configured login federation capability
  *
  * Capability declarations are catalog metadata, not install lifecycle
@@ -240,8 +240,41 @@ export interface UiSurfaceComponent {
   type: "ui-surface";
   key: string;
   displayName: string;
-  /** Intended mount point identity; declared-only in v1, never rendered. */
+  /** Intended mount point identity for settings/reserved surfaces. */
   intendedMount: string;
+  /**
+   * Optional safe launch metadata for trusted first-party plugin apps.
+   * This is route identity only: no URLs, credentials, or executable code.
+   */
+  launch?: UiSurfaceLaunchMetadata;
+}
+
+export const UI_SURFACE_LAUNCH_MOUNTS = ["main-shell"] as const;
+
+export type UiSurfaceLaunchMount = (typeof UI_SURFACE_LAUNCH_MOUNTS)[number];
+
+export const UI_SURFACE_LAUNCH_RUNTIMES = ["trusted-bundled-react"] as const;
+
+export type UiSurfaceLaunchRuntime =
+  (typeof UI_SURFACE_LAUNCH_RUNTIMES)[number];
+
+export interface UiSurfaceLaunchMetadata {
+  schemaVersion: 1;
+  type: "app";
+  /** Stable app identity within the plugin package/catalog. */
+  appKey: string;
+  /** URL segment used by the shell host, e.g. /apps/twenty/client-engagement. */
+  routeSegment: string;
+  /** Trusted host mount point for the app. */
+  mount: UiSurfaceLaunchMount;
+  /** Runtime implementation class. V1 only supports bundled React routes. */
+  runtime: UiSurfaceLaunchRuntime;
+  /** Optional sidebar/menu description. */
+  description?: string;
+  /** Optional non-secret icon token understood by the web shell. */
+  icon?: string;
+  /** Future-friendly product/entitlement key. Metadata only in v1. */
+  entitlementProductKey?: string;
 }
 
 export const AUTH_PROVIDER_KEYS = ["workos"] as const;
@@ -1210,6 +1243,92 @@ function validateUiSurfaceComponent(
   const prefix = `${label}: ui-surface "${component.key}"`;
   requireString(component.displayName, `${prefix}.displayName`);
   requireString(component.intendedMount, `${prefix}.intendedMount`);
+  if (component.launch !== undefined) {
+    validateUiSurfaceLaunchMetadata(component.launch, prefix);
+  }
+}
+
+const UI_SURFACE_LAUNCH_ALLOWED_KEYS = [
+  "schemaVersion",
+  "type",
+  "appKey",
+  "routeSegment",
+  "mount",
+  "runtime",
+  "description",
+  "icon",
+  "entitlementProductKey",
+] as const;
+
+function validateUiSurfaceLaunchMetadata(
+  launch: Partial<UiSurfaceLaunchMetadata>,
+  prefix: string,
+): void {
+  const label = `${prefix}.launch`;
+  if (!launch || typeof launch !== "object" || Array.isArray(launch)) {
+    throw new PluginManifestError(`${label} must be an object`);
+  }
+  rejectUnknownKeys(
+    launch as Record<string, unknown>,
+    UI_SURFACE_LAUNCH_ALLOWED_KEYS,
+    label,
+  );
+  if (launch.schemaVersion !== 1) {
+    throw new PluginManifestError(`${label}.schemaVersion must be 1`);
+  }
+  if (launch.type !== "app") {
+    throw new PluginManifestError(`${label}.type must be "app"`);
+  }
+  requireString(launch.appKey, `${label}.appKey`);
+  if (!SLUG_RE.test(launch.appKey)) {
+    throw new PluginManifestError(
+      `${label}.appKey "${launch.appKey}" must match ${SLUG_RE.source}`,
+    );
+  }
+  requireString(launch.routeSegment, `${label}.routeSegment`);
+  if (!SLUG_RE.test(launch.routeSegment)) {
+    throw new PluginManifestError(
+      `${label}.routeSegment "${launch.routeSegment}" must match ${SLUG_RE.source}`,
+    );
+  }
+  if (
+    typeof launch.mount !== "string" ||
+    !(UI_SURFACE_LAUNCH_MOUNTS as readonly string[]).includes(launch.mount)
+  ) {
+    throw new PluginManifestError(
+      `${label}.mount "${String(launch.mount)}" is not supported`,
+    );
+  }
+  if (
+    typeof launch.runtime !== "string" ||
+    !(UI_SURFACE_LAUNCH_RUNTIMES as readonly string[]).includes(launch.runtime)
+  ) {
+    throw new PluginManifestError(
+      `${label}.runtime "${String(launch.runtime)}" is not supported`,
+    );
+  }
+  if (launch.description !== undefined) {
+    requireString(launch.description, `${label}.description`);
+  }
+  if (launch.icon !== undefined) {
+    requireString(launch.icon, `${label}.icon`);
+    if (!SLUG_RE.test(launch.icon)) {
+      throw new PluginManifestError(
+        `${label}.icon "${launch.icon}" must match ${SLUG_RE.source}`,
+      );
+    }
+  }
+  if (launch.entitlementProductKey !== undefined) {
+    requireString(
+      launch.entitlementProductKey,
+      `${label}.entitlementProductKey`,
+    );
+    if (!SLUG_RE.test(launch.entitlementProductKey)) {
+      throw new PluginManifestError(
+        `${label}.entitlementProductKey "${launch.entitlementProductKey}" must match ${SLUG_RE.source}`,
+      );
+    }
+  }
 }
 
 function validateAuthProviderComponent(

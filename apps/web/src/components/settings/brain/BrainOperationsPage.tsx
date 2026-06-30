@@ -4,7 +4,6 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  Brain,
   Coins,
   GitBranch,
   KeyRound,
@@ -34,7 +33,7 @@ type CompanyBrainCapability =
 
 const ACTIVE_MIGRATION_STATUSES = new Set(["requested", "running"]);
 
-export function BrainOperationsPage() {
+export function ContextDiagnosticsPage() {
   const [statusResult, refreshStatus] = useQuery({
     query: SettingsCompanyBrainStatusQuery,
     requestPolicy: "cache-and-network",
@@ -54,14 +53,14 @@ export function BrainOperationsPage() {
     Boolean(migration?.id) && ACTIVE_MIGRATION_STATUSES.has(migration!.status);
 
   usePageHeaderActions({
-    title: "Brain operations",
+    title: "Context diagnostics",
     breadcrumbs: [
       { label: "Plugins", href: "/settings/plugins" },
       {
         label: "ThinkWork Brain",
         href: "/settings/plugins/company-brain",
       },
-      { label: "Brain operations" },
+      { label: "Context diagnostics" },
     ],
   });
 
@@ -82,7 +81,7 @@ export function BrainOperationsPage() {
         migrationId: migration.id,
         phase: "failed",
         status: "failed",
-        errorMessage: "Recorded from Brain operations.",
+        errorMessage: "Recorded from Context diagnostics.",
       },
     });
     if (result.error) {
@@ -126,8 +125,8 @@ export function BrainOperationsPage() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <SettingsPane className="max-w-6xl">
         <SettingsPageTitle
-          title="Brain operations"
-          description="Tenant-scoped ThinkWork Brain substrate posture, migration controls, and operator evidence."
+          title="Context diagnostics"
+          description="Tenant-scoped Context Engine substrate posture, migration controls, and operator evidence."
           badge={
             status ? (
               <Badge variant="outline" className={statusBadge(status.status)}>
@@ -140,7 +139,7 @@ export function BrainOperationsPage() {
         {statusResult.fetching && !status ? (
           <div className="flex items-center gap-2 rounded-md border border-border px-4 py-3 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />
-            Loading Brain operations...
+            Loading Context diagnostics...
           </div>
         ) : null}
         {statusResult.error ? (
@@ -222,7 +221,7 @@ function OperationsSummary({
             </Badge>
           </div>
           <h2 className="mt-3 text-lg font-semibold tracking-tight">
-            {blocking ? blocking.title : "Brain substrate is operational"}
+            {blocking ? blocking.title : "Context substrate is operational"}
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {blocking
@@ -273,7 +272,10 @@ function OperationsSummary({
 function IngestionSection({ status }: { status: CompanyBrainStatus }) {
   return (
     <SettingsSection label="Ingestion">
-      <SettingsRow label="Queue depth" description="Pending Brain ingest work.">
+      <SettingsRow
+        label="Queue depth"
+        description="Pending Context Engine ingest work."
+      >
         <Value>{status.counters.ingestionQueueDepth}</Value>
       </SettingsRow>
       <SettingsRow
@@ -308,26 +310,15 @@ function IngestionSection({ status }: { status: CompanyBrainStatus }) {
 
 function OntologySection({ status }: { status: CompanyBrainStatus }) {
   return (
-    <SettingsSection label="Memory graph">
+    <SettingsSection label="Context substrate">
       <SettingsRow
         label="Ontology posture"
-        description="Ontology processing is not part of the current user + space memory proof."
+        description="Ontology processing is internal diagnostics, separate from current User and Space memory."
       >
         <Value>{status.counters.ontologyVersion ?? "Deferred"}</Value>
       </SettingsRow>
       <SettingsRow label="Launch capabilities">
         <CapabilityList capabilities={status.capabilities.launch} />
-      </SettingsRow>
-      <SettingsRow
-        label="Graph workspace"
-        description="Review Cognee-backed memory graph evidence."
-      >
-        <Button asChild type="button" size="sm" variant="outline">
-          <Link to="/settings/memory/knowledge-graph">
-            <Brain className="mr-2 size-4" />
-            Open graph
-          </Link>
-        </Button>
       </SettingsRow>
     </SettingsSection>
   );
@@ -536,10 +527,10 @@ function EvidenceSection({
       <SettingsRow label="Vector provider">
         <Value>{evidence.vectorProvider ?? "Not reported"}</Value>
       </SettingsRow>
-      <SettingsRow label="Cognee version">
+      <SettingsRow label="Deprecated backend version">
         <Value>{evidence.cogneeVersion ?? "Not reported"}</Value>
       </SettingsRow>
-      <SettingsRow label="Cognee endpoint">
+      <SettingsRow label="Deprecated backend endpoint">
         <SecretValue value={evidence.cogneeEndpoint} />
       </SettingsRow>
       <SettingsRow label="S3 artifact root">

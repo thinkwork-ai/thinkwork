@@ -135,7 +135,9 @@ describe("composeSystemPrompt", () => {
     expect(prompt).toContain('email "me"');
     expect(prompt).toContain("## Requester Profile Policy");
     expect(prompt).toContain("first source of truth");
-    expect(prompt).toContain("Do not call `recall`, `reflect`");
+    expect(prompt).toContain(
+      "When the user explicitly asks to search, recall, retrieve, or prove memory, use the memory tools instead of `User/USER.md` or workspace files.",
+    );
     expect(prompt.indexOf("<current_requester>")).toBeLessThan(
       prompt.indexOf("## Requester Profile Policy"),
     );

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button, Tabs, TabsList, TabsTrigger, useSidebar } from "@thinkwork/ui";
@@ -70,46 +71,66 @@ export function AppTopBar() {
               // active (titleContent present, the "…" titleTrailing hidden),
               // so the rename input spans the full width. When not editing,
               // stay content-sized so the "…" menu hugs the title.
-              className={`flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium${
+              className={`flex min-w-0 items-center overflow-hidden text-sm font-medium${
                 actions.titleContent && !actions.titleTrailing ? " flex-1" : ""
               }`}
             >
               {actions.breadcrumbs.map((crumb, index) => {
                 const isLast = index === actions.breadcrumbs!.length - 1;
                 return (
-                  <span
-                    key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
-                    className={`flex min-w-0 items-center gap-1${
-                      isLast && actions.titleContent ? " flex-1" : ""
-                    }`}
+                  <Fragment
+                    key={`${crumb.href ?? "current"}:${crumb.onClick ? "click" : ""}:${crumb.label}:${index}`}
                   >
                     {index > 0 ? (
-                      <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
+                      <ChevronRight
+                        className="mx-1.5 size-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
                     ) : null}
-                    {isLast && actions.titleContent ? (
-                      <div className="min-w-0 flex-1">
-                        {actions.titleContent}
-                      </div>
-                    ) : isLast || !crumb.href ? (
-                      <span
-                        className={
-                          isLast
-                            ? "truncate text-foreground"
-                            : "shrink-0 truncate text-muted-foreground"
-                        }
-                      >
-                        {crumb.label}
-                      </span>
-                    ) : (
-                      <Link
-                        to={crumb.href}
-                        search={crumb.search}
-                        className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        {crumb.label}
-                      </Link>
-                    )}
-                  </span>
+                    <span
+                      className={`flex ${
+                        isLast ? "min-w-0" : "shrink-0"
+                      } items-center${
+                        isLast && actions.titleContent ? " flex-1" : ""
+                      }`}
+                    >
+                      {isLast && actions.titleContent ? (
+                        <div className="min-w-0 flex-1">
+                          {actions.titleContent}
+                        </div>
+                      ) : crumb.onClick ? (
+                        <button
+                          type="button"
+                          onClick={crumb.onClick}
+                          className={
+                            isLast
+                              ? "truncate text-foreground"
+                              : "shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                          }
+                        >
+                          {crumb.label}
+                        </button>
+                      ) : isLast || !crumb.href ? (
+                        <span
+                          className={
+                            isLast
+                              ? "truncate text-foreground"
+                              : "shrink-0 truncate text-muted-foreground"
+                          }
+                        >
+                          {crumb.label}
+                        </span>
+                      ) : (
+                        <Link
+                          to={crumb.href}
+                          search={crumb.search}
+                          className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          {crumb.label}
+                        </Link>
+                      )}
+                    </span>
+                  </Fragment>
                 );
               })}
             </nav>

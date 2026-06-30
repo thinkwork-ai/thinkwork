@@ -1586,6 +1586,14 @@ export type CreateWebhookInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type CreateWorkItemCommentInput = {
+  body: Scalars["String"]["input"];
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
 export type CreateWorkItemDocumentInput = {
   content?: InputMaybe<Scalars["String"]["input"]>;
   contentBase64?: InputMaybe<Scalars["String"]["input"]>;
@@ -2499,6 +2507,46 @@ export type InstallPluginInput = {
   pluginKey: Scalars["String"]["input"];
   /** Catalog version to pin; defaults to the latest published version. */
   version?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type InstalledPluginApp = {
+  __typename?: "InstalledPluginApp";
+  appKey: Scalars["String"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  displayName: Scalars["String"]["output"];
+  entitlementProductKey?: Maybe<Scalars["String"]["output"]>;
+  icon?: Maybe<Scalars["String"]["output"]>;
+  /** Stable install/surface identity. */
+  id: Scalars["ID"]["output"];
+  mount: Scalars["String"]["output"];
+  pluginDisplayName: Scalars["String"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  pluginKey: Scalars["String"]["output"];
+  pluginVersion: Scalars["String"]["output"];
+  readiness: InstalledPluginAppReadiness;
+  routeSegment: Scalars["String"]["output"];
+  runtime: Scalars["String"]["output"];
+  surfaceKey: Scalars["String"]["output"];
+};
+
+/**
+ * Installed plugin app surfaces.
+ *
+ * These are trusted, first-party plugin apps declared by launchable `ui-surface`
+ * components in installed plugin manifests. The launch contract is identity and
+ * route metadata only; browser clients never receive plugin credentials or
+ * runtime code from this surface.
+ */
+export type InstalledPluginAppReadiness = {
+  __typename?: "InstalledPluginAppReadiness";
+  message: Scalars["String"]["output"];
+  /** Optional product-action hint for the web shell. */
+  nextAction?: Maybe<Scalars["String"]["output"]>;
+  /**
+   * ready | install_in_progress | operator_setup_required |
+   * component_unavailable | activation_required
+   */
+  state: Scalars["String"]["output"];
 };
 
 export type InviteMemberInput = {
@@ -3535,6 +3583,7 @@ export type Mutation = {
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
   createWorkItem: WorkItem;
+  createWorkItemComment: WorkItemComment;
   createWorkItemDocument: WorkItemDocument;
   createWorkItemLabel: WorkItemLabel;
   /**
@@ -3793,6 +3842,10 @@ export type Mutation = {
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
   updateThreadLabel: ThreadLabel;
+  /** Update an opportunity layer status in Twenty through the authenticated plugin MCP path. */
+  updateTwentyEngagementOpportunityLayerStatus: TwentyEngagementOpportunityLayer;
+  /** Update an opportunity stage in Twenty through the authenticated plugin MCP path. */
+  updateTwentyEngagementOpportunityStage: TwentyEngagementOpportunity;
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
@@ -3808,6 +3861,8 @@ export type Mutation = {
   upgradePlugin: PluginInstall;
   upsertBudgetPolicy: BudgetPolicy;
   upsertEmailSpacePolicy: EmailSpacePolicy;
+  /** Create or replace one ThinkWork-owned overlay section for a plugin-app record. */
+  upsertPluginAppOverlay: PluginAppOverlay;
 };
 
 export type MutationAcceptAgentWorkspaceReviewArgs = {
@@ -4074,6 +4129,10 @@ export type MutationCreateWebhookArgs = {
 
 export type MutationCreateWorkItemArgs = {
   input: CreateWorkItemInput;
+};
+
+export type MutationCreateWorkItemCommentArgs = {
+  input: CreateWorkItemCommentInput;
 };
 
 export type MutationCreateWorkItemDocumentArgs = {
@@ -4947,6 +5006,14 @@ export type MutationUpdateThreadLabelArgs = {
   input: UpdateThreadLabelInput;
 };
 
+export type MutationUpdateTwentyEngagementOpportunityLayerStatusArgs = {
+  input: UpdateTwentyEngagementOpportunityLayerStatusInput;
+};
+
+export type MutationUpdateTwentyEngagementOpportunityStageArgs = {
+  input: UpdateTwentyEngagementOpportunityStageInput;
+};
+
 export type MutationUpdateUserArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateUserInput;
@@ -4989,6 +5056,10 @@ export type MutationUpsertBudgetPolicyArgs = {
 
 export type MutationUpsertEmailSpacePolicyArgs = {
   input: UpsertEmailSpacePolicyInput;
+};
+
+export type MutationUpsertPluginAppOverlayArgs = {
+  input: UpsertPluginAppOverlayInput;
 };
 
 export enum N8nAgentStepResumeStatus {
@@ -5493,6 +5564,37 @@ export type PlanRoutineDraftInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+/**
+ * ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
+ * source-system record. Overlay payloads are tenant-shared in v1; created/updated
+ * user fields are audit metadata, not visibility scopes.
+ */
+export type PluginAppOverlay = {
+  __typename?: "PluginAppOverlay";
+  appKey: Scalars["String"]["output"];
+  appSurfaceKey: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  id: Scalars["ID"]["output"];
+  payload: Scalars["AWSJSON"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  pluginKey: Scalars["String"]["output"];
+  provider: Scalars["String"]["output"];
+  providerRecordId: Scalars["ID"]["output"];
+  providerRecordType: Scalars["String"]["output"];
+  sectionKey: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  updatedByUserId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+export type PluginAppOverlayQueryInput = {
+  appKey: Scalars["String"]["input"];
+  provider: Scalars["String"]["input"];
+  providerRecordId: Scalars["ID"]["input"];
+  providerRecordType: Scalars["String"]["input"];
+  sectionKeys?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
 /** Display summary of one manifest component for catalog browse. */
 export type PluginCatalogComponent = {
   __typename?: "PluginCatalogComponent";
@@ -5817,6 +5919,8 @@ export type Query = {
   flaggedTurnSkillCandidates: SkillAttributionCandidates;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
+  /** Launchable plugin apps available to the current tenant/user. */
+  installedPluginApps: Array<InstalledPluginApp>;
   knowledgeBase?: Maybe<KnowledgeBase>;
   knowledgeBases: Array<KnowledgeBase>;
   knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
@@ -5832,6 +5936,7 @@ export type Query = {
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
+  memoryRetainAttempts: Array<MemoryRetainAttempt>;
   memorySearch: MemorySearchResult;
   memorySystemConfig: MemorySystemConfig;
   messages: MessageConnection;
@@ -5876,6 +5981,8 @@ export type Query = {
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   pinnedThreads: Array<PinnedThread>;
+  /** ThinkWork-owned overlay sections for one plugin-app record. */
+  pluginAppOverlays: Array<PluginAppOverlay>;
   /**
    * Browse the signed plugin catalog overlaid with the caller tenant's install
    * state. Fails closed (GraphQL error) on catalog signature/digest failure.
@@ -5963,6 +6070,8 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
+  /** CRM-owned records for the Twenty Client Engagement app. */
+  twentyEngagementDashboard: TwentyEngagementDashboard;
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
@@ -6019,6 +6128,7 @@ export type Query = {
    */
   wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
+  workItemComments: Array<WorkItemComment>;
   workItemDocument?: Maybe<WorkItemDocument>;
   workItemDocuments: Array<WorkItemDocument>;
   workItemLabels: Array<WorkItemLabel>;
@@ -6418,6 +6528,15 @@ export type QueryMemoryRecordsArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type QueryMemoryRetainAttemptsArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type QueryMemorySearchArgs = {
   assistantId?: InputMaybe<Scalars["ID"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
@@ -6505,6 +6624,10 @@ export type QueryPerformanceTimeSeriesArgs = {
 export type QueryPinnedThreadsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryPluginAppOverlaysArgs = {
+  input: PluginAppOverlayQueryInput;
 };
 
 export type QueryPluginInstallArgs = {
@@ -6890,6 +7013,10 @@ export type QueryWikiSearchArgs = {
 export type QueryWorkItemArgs = {
   id: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemCommentsArgs = {
+  input: WorkItemCommentsInput;
 };
 
 export type QueryWorkItemDocumentArgs = {
@@ -9023,6 +9150,70 @@ export type TriggerWorkflowRunInput = {
   workflowId: Scalars["ID"]["input"];
 };
 
+export type TwentyEngagementAccount = {
+  __typename?: "TwentyEngagementAccount";
+  company: TwentyEngagementCompany;
+  opportunities: Array<TwentyEngagementOpportunityWithLayers>;
+};
+
+/**
+ * Twenty CRM records normalized for the Client Engagement plugin app.
+ *
+ * The app reads and mutates CRM-owned fields through the authenticated Twenty
+ * plugin path. Browser clients receive only app-shaped records; they never send
+ * MCP URLs, bearer tokens, or generic tool-call payloads.
+ */
+export type TwentyEngagementCompany = {
+  __typename?: "TwentyEngagementCompany";
+  crmUrl?: Maybe<Scalars["String"]["output"]>;
+  domainName?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+};
+
+export type TwentyEngagementDashboard = {
+  __typename?: "TwentyEngagementDashboard";
+  accounts: Array<TwentyEngagementAccount>;
+  companies: Array<TwentyEngagementCompany>;
+  opportunities: Array<TwentyEngagementOpportunity>;
+  opportunityLayers: Array<TwentyEngagementOpportunityLayer>;
+};
+
+export type TwentyEngagementOpportunity = {
+  __typename?: "TwentyEngagementOpportunity";
+  amountMicros?: Maybe<Scalars["Float"]["output"]>;
+  closeDate?: Maybe<Scalars["String"]["output"]>;
+  companyId?: Maybe<Scalars["ID"]["output"]>;
+  companyName?: Maybe<Scalars["String"]["output"]>;
+  crmUrl?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  stage: Scalars["String"]["output"];
+  stageLabel: Scalars["String"]["output"];
+};
+
+export type TwentyEngagementOpportunityLayer = {
+  __typename?: "TwentyEngagementOpportunityLayer";
+  businessValue?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  instanceName?: Maybe<Scalars["String"]["output"]>;
+  layerStatus: Scalars["String"]["output"];
+  layerStatusLabel: Scalars["String"]["output"];
+  layerType: Scalars["String"]["output"];
+  layerTypeLabel: Scalars["String"]["output"];
+  name?: Maybe<Scalars["String"]["output"]>;
+  nextSteps?: Maybe<Scalars["String"]["output"]>;
+  openQuestions?: Maybe<Scalars["String"]["output"]>;
+  opportunityId: Scalars["ID"]["output"];
+  whatWeKnow?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type TwentyEngagementOpportunityWithLayers = {
+  __typename?: "TwentyEngagementOpportunityWithLayers";
+  layers: Array<TwentyEngagementOpportunityLayer>;
+  opportunity: TwentyEngagementOpportunity;
+};
+
 /** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
 export type TwentyPluginCutoverResult = {
   __typename?: "TwentyPluginCutoverResult";
@@ -9374,6 +9565,16 @@ export type UpdateThreadLabelInput = {
   name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type UpdateTwentyEngagementOpportunityLayerStatusInput = {
+  layerId: Scalars["ID"]["input"];
+  layerStatus: Scalars["String"]["input"];
+};
+
+export type UpdateTwentyEngagementOpportunityStageInput = {
+  opportunityId: Scalars["ID"]["input"];
+  stage: Scalars["String"]["input"];
+};
+
 export type UpdateUserInput = {
   image?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
@@ -9434,6 +9635,7 @@ export type UpdateWorkItemInput = {
   labelSlugs?: InputMaybe<Array<Scalars["String"]["input"]>>;
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   notes?: InputMaybe<Scalars["String"]["input"]>;
+  openEngineQueueKey?: InputMaybe<Scalars["String"]["input"]>;
   ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
   ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   priority?: InputMaybe<WorkItemPriority>;
@@ -9488,6 +9690,15 @@ export type UpsertEmailSpacePolicyInput = {
   providerInstallId?: InputMaybe<Scalars["ID"]["input"]>;
   registeredUsersAllowed?: InputMaybe<Scalars["Boolean"]["input"]>;
   spaceId: Scalars["ID"]["input"];
+};
+
+export type UpsertPluginAppOverlayInput = {
+  appKey: Scalars["String"]["input"];
+  payload: Scalars["AWSJSON"]["input"];
+  provider: Scalars["String"]["input"];
+  providerRecordId: Scalars["ID"]["input"];
+  providerRecordType: Scalars["String"]["input"];
+  sectionKey: Scalars["String"]["input"];
 };
 
 export type User = {
@@ -9900,6 +10111,7 @@ export type WorkItem = {
   applicable: Scalars["Boolean"]["output"];
   archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   blocked: Scalars["Boolean"]["output"];
+  comments: Array<WorkItemComment>;
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   completedByAgentId?: Maybe<Scalars["ID"]["output"]>;
   completedByUserId?: Maybe<Scalars["ID"]["output"]>;
@@ -9936,6 +10148,29 @@ export type WorkItem = {
   threadLinks: Array<WorkItemThreadLink>;
   title: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type WorkItemComment = {
+  __typename?: "WorkItemComment";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  authorAgentId?: Maybe<Scalars["ID"]["output"]>;
+  authorUserId?: Maybe<Scalars["ID"]["output"]>;
+  body: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  workItemId: Scalars["ID"]["output"];
+};
+
+export type WorkItemCommentsInput = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
 };
 
 export type WorkItemDocument = {
@@ -10003,6 +10238,7 @@ export enum WorkItemEventType {
   ApplicabilityChanged = "APPLICABILITY_CHANGED",
   Assigned = "ASSIGNED",
   Blocked = "BLOCKED",
+  CommentAdded = "COMMENT_ADDED",
   Completed = "COMPLETED",
   Created = "CREATED",
   DueDateChanged = "DUE_DATE_CHANGED",

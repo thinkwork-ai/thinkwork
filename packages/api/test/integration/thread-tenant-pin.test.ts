@@ -181,6 +181,19 @@ const mocks = vi.hoisted(() => {
     participant_type: { _name: "thread_participants.participant_type" },
     user_id: { _name: "thread_participants.user_id" },
   };
+  const workItemsTable = {
+    _name: "work_items",
+    id: { _name: "work_items.id" },
+    tenant_id: { _name: "work_items.tenant_id" },
+    owner_user_id: { _name: "work_items.owner_user_id" },
+    archived_at: { _name: "work_items.archived_at" },
+  };
+  const workItemThreadLinksTable = {
+    _name: "work_item_thread_links",
+    tenant_id: { _name: "work_item_thread_links.tenant_id" },
+    work_item_id: { _name: "work_item_thread_links.work_item_id" },
+    thread_id: { _name: "work_item_thread_links.thread_id" },
+  };
 
   function buildSelect(table: { _name?: string }) {
     const tableName = table?._name ?? "";
@@ -294,6 +307,8 @@ const mocks = vi.hoisted(() => {
     threadsTable,
     threadAttachmentsTable,
     threadParticipantsTable,
+    workItemsTable,
+    workItemThreadLinksTable,
     snakeToCamel,
     threadToCamel,
   };
@@ -307,6 +322,8 @@ vi.mock("../../src/graphql/utils.js", () => ({
   threads: mocks.threadsTable,
   threadAttachments: mocks.threadAttachmentsTable,
   threadParticipants: mocks.threadParticipantsTable,
+  workItems: mocks.workItemsTable,
+  workItemThreadLinks: mocks.workItemThreadLinksTable,
   snakeToCamel: mocks.snakeToCamel,
   threadToCamel: mocks.threadToCamel,
 }));
