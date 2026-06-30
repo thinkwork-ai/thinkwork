@@ -1,0 +1,81 @@
+# Dynamic Pi extensions are executable runtime capabilities. They remain
+# separate from workspace skills, MCP servers, and built-in tools.
+
+enum PiExtensionSourceType {
+  GITHUB
+}
+
+enum PiExtensionVersionStatus {
+  IMPORTED
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+  FAILED_VERIFICATION
+}
+
+enum PiExtensionAssignmentTargetType {
+  DEFAULT_AGENT
+  AGENT_PROFILE
+}
+
+type PiExtensionAssignmentSummary {
+  defaultAgentEnabled: Boolean!
+  enabledProfileCount: Int!
+  disabledCount: Int!
+}
+
+type PiExtensionAssignment {
+  id: ID!
+  tenantId: ID!
+  versionId: ID!
+  targetType: PiExtensionAssignmentTargetType!
+  agentProfileId: ID
+  enabled: Boolean!
+  grantedPermissions: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type PiExtension {
+  id: ID!
+  tenantId: ID!
+  sourceId: ID!
+  sourceType: PiExtensionSourceType!
+  repositoryUrl: String!
+  repositoryOwner: String
+  repositoryName: String
+  displayName: String
+  description: String
+  sourceRef: String!
+  commitSha: String
+  manifestHash: String
+  artifactHash: String
+  artifactUri: String
+  runtimeTarget: String
+  status: PiExtensionVersionStatus!
+  statusReason: String
+  manifest: AWSJSON!
+  toolNames: [String!]!
+  lifecycleHooks: [String!]!
+  permissionClasses: [String!]!
+  verificationReport: AWSJSON!
+  reviewedByUserId: ID
+  reviewedAt: AWSDateTime
+  approvedByUserId: ID
+  approvedAt: AWSDateTime
+  rejectedByUserId: ID
+  rejectedAt: AWSDateTime
+  executable: Boolean!
+  assignmentSummary: PiExtensionAssignmentSummary!
+  assignments: [PiExtensionAssignment!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+extend type Query {
+  piExtensions(
+    tenantId: ID!
+    includeRejected: Boolean = true
+    includeFailed: Boolean = true
+  ): [PiExtension!]!
+}

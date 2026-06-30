@@ -143,6 +143,9 @@ import {
   agentLoopIterations,
   agentLoopJudgments,
   agentLoopEvidence,
+  piExtensionSources,
+  piExtensionVersions,
+  piExtensionAssignments,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -261,6 +264,9 @@ export {
   agentLoopIterations,
   agentLoopJudgments,
   agentLoopEvidence,
+  piExtensionSources,
+  piExtensionVersions,
+  piExtensionAssignments,
   checkAndFireUnblockWakeups,
   generateSlug,
 };
