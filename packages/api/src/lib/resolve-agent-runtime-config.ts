@@ -1038,7 +1038,7 @@ export async function loadWorkspaceSkillConfigs(input: {
   const bucket = getConfig("WORKSPACE_BUCKET") || "";
   if (!bucket || !input.tenantSlug || !input.agentSlug) return [];
 
-  const prefix = `tenants/${input.tenantSlug}/agents/${input.agentSlug}/workspace/`;
+  const prefix = `tenants/${input.tenantSlug}/agents/${input.agentSlug}/`;
   const paths: string[] = [];
   let continuationToken: string | undefined;
   do {

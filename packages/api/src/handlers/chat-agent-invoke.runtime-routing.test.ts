@@ -120,6 +120,26 @@ function decodeInvokeBody(command: { input: { Payload?: Uint8Array } }) {
   return JSON.parse(wrapper.body) as Record<string, unknown>;
 }
 
+function trustedSkillRow(slug: string) {
+  return {
+    slug,
+    content_sha: `${slug}-sha`,
+    trust_report: {
+      status: "passed",
+      spec: { status: "passed" },
+      scanner: { status: "completed" },
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "verified",
+      },
+    },
+    trust_report_content_sha: `${slug}-sha`,
+    trust_report_pipeline_version: "thinkwork-skill-trust-v1",
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
@@ -292,6 +312,106 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     const body = decodeInvokeBody(command);
     expect(body.thread_json_render_ui_enabled).toBe(true);
+  });
+
+  it("pins trusted Agent Profile catalog skills for Pi profile validation", async () => {
+    mocks.selectRows = [
+      [{ sender_id: "user-1", sender_type: "human" }],
+      [{ email: "user-1@example.com" }],
+      [{ spaceId: null }],
+      [{ count: 0 }],
+      [],
+      [
+        trustedSkillRow("finance-audit-xls"),
+        trustedSkillRow("finance-statement-analysis"),
+      ],
+    ];
+    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      agentName: "ThinkWork",
+      agentSlug: "thinkwork",
+      agentSystemPrompt: null,
+      humanName: undefined,
+      humanPairId: null,
+      tenantSlug: "acme",
+      templateId: null,
+      templateModel: "moonshotai.kimi-k2.5",
+      runtimeType: "pi",
+      budgetMonthlyCents: null,
+      budgetPaused: false,
+      blockedTools: [],
+      sandboxTemplate: null,
+      browserAutomationEnabled: true,
+      threadJsonRenderUiEnabled: false,
+      contextEngineEnabled: false,
+      guardrailId: null,
+      guardrailConfig: undefined,
+      skillsConfig: [],
+      knowledgeBasesConfig: undefined,
+      mcpConfigs: [],
+      agentProfilesConfig: [
+        {
+          id: "profile-analyst",
+          slug: "analyst",
+          name: "Analyst",
+          description: null,
+          routingGuidance: null,
+          instructions: "Use finance skills.",
+          modelId: "moonshotai.kimi-k2.5",
+          builtInKey: null,
+          enabled: true,
+          availability: { scope: "global", spaceIds: [] },
+          sourceSpaceId: null,
+          shadowedCentralProfileId: null,
+          builtInTools: [],
+          mcpServers: [],
+          mcpToolAllowlist: {},
+          skillSlugs: ["finance-audit-xls", "finance-statement-analysis"],
+          executionControls: {
+            foreground: true,
+            clarify: false,
+            maxSubagentDepth: 1,
+            loopPolicy: "standard",
+          },
+        },
+      ],
+    });
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "@Analyst review this GL",
+      messageId: "message-1",
+      requestedProfileSlug: "analyst",
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+    expect(body.pinned_skills).toEqual([
+      {
+        skillId: "finance-audit-xls",
+        s3Key: "tenants/acme/skill-catalog/finance-audit-xls",
+      },
+      {
+        skillId: "finance-statement-analysis",
+        s3Key: "tenants/acme/skill-catalog/finance-statement-analysis",
+      },
+    ]);
+    expect(body.trusted_skill_ids).toEqual([
+      "finance-audit-xls",
+      "finance-statement-analysis",
+    ]);
+    expect(body.agent_profiles).toEqual([
+      expect.objectContaining({
+        slug: "analyst",
+        skillSlugs: ["finance-audit-xls", "finance-statement-analysis"],
+      }),
+    ]);
   });
 
   it("passes the normalized goal_mode runtime envelope to Pi dispatch", async () => {

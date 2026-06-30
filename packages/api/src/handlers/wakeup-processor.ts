@@ -2115,18 +2115,22 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
 
       // Force-pinned skills parity with the direct chat-agent-invoke path
-      // (plan 2026-06-04-004 U3). The wakeup fallback re-resolves
-      // `messages.metadata.skills` for the same user message and builds the
-      // ephemeral `pinned_skills` branch, dropping any blocked slug (KD4) using
-      // the resolved blocked_tools for this turn.
+      // (plan 2026-06-04-004 U3), plus Agent Profile skill policies. The
+      // wakeup fallback re-resolves `messages.metadata.skills` for the same
+      // user message and builds the ephemeral `pinned_skills` branch, dropping
+      // any blocked slug (KD4) using the resolved blocked_tools for this turn.
       try {
+        const messagePinnedSlugs = await resolveDispatchPinnedSkills({
+          db,
+          tenantId: wakeup.tenant_id,
+          threadId: runThreadId,
+          messageId,
+        });
+        const profilePinnedSlugs = agentProfilesConfig.flatMap(
+          (profile) => profile.skillSlugs,
+        );
         const policyAllowedPinnedSlugs = filterBlockedSkills(
-          await resolveDispatchPinnedSkills({
-            db,
-            tenantId: wakeup.tenant_id,
-            threadId: runThreadId,
-            messageId,
-          }),
+          [...new Set([...messagePinnedSlugs, ...profilePinnedSlugs])],
           effectiveBlockedTools,
         );
         const trustedPinnedSlugs = [
