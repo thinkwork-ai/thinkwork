@@ -190,6 +190,9 @@ export async function signOut(): Promise<void> {
   const idToken = await getIdToken().catch(() => getStoredIdToken());
   const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
   const isWorkosSession = authSource === "workos";
+
+  clearLocalAuthSession();
+
   const workosLogoutUrl =
     idToken && isWorkosSession
       ? await requestWorkosLogoutUrl(idToken).catch((error) => {
@@ -197,8 +200,6 @@ export async function signOut(): Promise<void> {
           return null;
         })
       : null;
-
-  clearLocalAuthSession();
 
   if (workosLogoutUrl) {
     window.location.href = workosLogoutUrl;
@@ -457,7 +458,10 @@ export function getAuthOptionSignInUrl(
     throw new Error("Unsupported auth option route");
   }
   const url = new URL(`${apiBaseUrl()}${option.route.authorizePath}`);
-  url.searchParams.set("redirect_uri", `${window.location.origin}/auth/callback`);
+  url.searchParams.set(
+    "redirect_uri",
+    `${window.location.origin}/auth/callback`,
+  );
   url.searchParams.set("return_to", safeReturnTo(next));
   if (option.route.prompt) {
     url.searchParams.set("prompt", option.route.prompt);
@@ -632,9 +636,7 @@ export function storeTokensInCognitoStorage(
   tokenStorage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
 }
 
-async function requestWorkosLogoutUrl(
-  idToken: string,
-): Promise<string | null> {
+async function requestWorkosLogoutUrl(idToken: string): Promise<string | null> {
   const res = await fetch(`${apiBaseUrl()}/api/auth/workos/logout`, {
     method: "POST",
     headers: {
