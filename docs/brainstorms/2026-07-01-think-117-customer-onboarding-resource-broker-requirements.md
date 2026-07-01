@@ -52,6 +52,31 @@ allowed actions, but the product value is cross-system truth compilation,
 domain-specific work surfaces, policy-governed actions, memory, and audit for
 external agents.
 
+## Connector Pitfall Alignment
+
+The Forte Labs Claude Connectors guide reinforces the broker direction by
+highlighting what goes wrong when users directly attach many connectors to an
+agent:
+
+- A connector can look complete while only exposing snippets, recent records, or
+  narrow search paths.
+- The agent usually samples from accessible data instead of reading everything,
+  which can create false authority.
+- The agent does not know which canonical sources are missing unless a human or
+  system tells it.
+- Multiple connectors can produce impressive dashboards that do not solve a
+  real bottleneck.
+- Private data, untrusted content, and external communication or write tools can
+  combine into a high-risk security posture.
+
+ThinkWork should turn those pitfalls into product requirements. The broker
+should expose a task-scoped source bundle, not an attach-everything connector
+menu. Every rendered work surface should show what sources were consulted, what
+was unavailable, what was sampled or incomplete, and which actions require
+approval. Write/delete/interactive tools should default to explicit approval and
+policy validation. Untrusted external content should be treated as data, never
+as instructions to the agent or broker.
+
 ---
 
 ## Actors
@@ -256,6 +281,30 @@ external agents.
   optimization layers; ThinkWork owns the cross-system business read model,
   policy, memory, rendered work surface, and governed action boundary.
 
+**Connector safety and source coverage**
+
+- R28. ThinkWork must not encourage users to attach every available connector
+  directly to an external agent. It must expose task-scoped source bundles that
+  are selected by use case, Space policy, user permissions, and data class.
+- R29. Each work surface must show a source coverage summary: sources
+  consulted, sources unavailable, stale sources, sampled or partial data, and
+  known blind spots relevant to the answer or action.
+- R30. If a canonical source required for a use case is missing, unauthorized,
+  stale, or unreachable, ThinkWork must say so before presenting a blocker,
+  route plan, or writeback as reliable.
+- R31. ThinkWork must record what it searched and what it found before
+  synthesis when the result is used to select a blocker, propose a dispatch
+  route, or justify a writeback.
+- R32. Write/delete/interactive tools must default to "needs approval" unless a
+  narrower policy explicitly allows automatic execution for the current Space,
+  user, data class, and use case.
+- R33. Untrusted content from source systems, emails, documents, web pages, or
+  customer-provided text must be treated as data. It must not be allowed to
+  override broker policy, tool routing, approval rules, or system instructions.
+- R34. ThinkWork should reject broad "connect everything and make a dashboard"
+  requests unless they are narrowed to a business bottleneck, canonical source
+  map, and reviewable work surface.
+
 ---
 
 ## Acceptance Examples
@@ -297,6 +346,19 @@ external agents.
   workflow state-machine engine for onboarding or dispatch, when reviewed
   against this requirements doc, then that plan is rejected as outside the MVP
   identity.
+- AE10. **Covers R28, R29, R30, R31.** Given the onboarding command center is
+  missing the canonical P21 account source, when ThinkWork answers what is
+  blocking onboarding, then the answer shows the missing source and does not
+  present the blocker as fully reliable.
+- AE11. **Covers R32, R33.** Given a dispatch order note contains text that
+  attempts to instruct the agent to bypass approval, when ThinkWork renders the
+  dispatch surface, then the note is shown only as source data and any P21
+  routing update still requires policy validation and approval.
+- AE12. **Covers R34.** Given a user asks an external agent to connect every
+  available business system and create a generic dashboard, when the agent calls
+  ThinkWork, then ThinkWork responds with a source audit or asks for a specific
+  workflow bottleneck instead of producing an authoritative-looking generic
+  dashboard.
 
 ---
 
@@ -313,6 +375,8 @@ external agents.
 - The work surfaces demonstrate the product distinction: ThinkWork is not the
   connector; ThinkWork is the cross-system truth compiler, optimization broker,
   governed action layer, and rendered workflow surface.
+- Users can see source coverage and known gaps before trusting an answer,
+  recommendation, or writeback.
 - Planning can proceed without inventing the first use cases, source sets, v1
   actions, render contract stance, writeback boundary, or state-machine
   boundary.
@@ -339,6 +403,8 @@ external agents.
 
 - A raw MCP connector marketplace where ThinkWork competes by offering the most
   individual system connectors.
+- A user-managed attach-everything connector panel where external agents decide
+  source scope and write authority without ThinkWork policy.
 - A generic ERP front end or replacement UI for P21.
 - A generic fleet management or transportation management system.
 - A new full deterministic workflow state-machine product.
@@ -362,6 +428,9 @@ external agents.
 - **Truth posture:** Lead onboarding with one canonical blocker and dispatch
   with one recommended routing solution, each with confidence and an evidence or
   input board underneath.
+- **Connector posture:** Do not ask users to attach every connector to the
+  external agent. ThinkWork exposes task-scoped source bundles, source coverage,
+  gaps, and policy-bounded actions.
 - **Action posture:** Onboarding includes ThinkWork-only actions. Dispatch can
   include governed P21 routing writeback after approval and validation.
 - **Workflow posture:** Do not build a state-machine product. Use workflow
@@ -413,6 +482,12 @@ external agents.
   shape should ThinkWork normalize to?
 - [Affects R19, R20, R21][Technical] Which P21 routing fields are safe and
   valuable enough for first dispatch writeback?
+- [Affects R28, R29, R30, R31][Technical] What is the minimum source coverage
+  schema needed to represent consulted sources, missing canonical sources,
+  stale sources, sampled data, and blind spots?
+- [Affects R32, R33][Security] Which data classes and tool types are considered
+  private data, untrusted content, and external communication or write channels
+  for the first two use cases?
 - [Affects R15, R16][Technical] Which render output should be the first
   implementation target: MCP App resource, ThinkWork `data-json-render`, or a
   dual-path adapter?

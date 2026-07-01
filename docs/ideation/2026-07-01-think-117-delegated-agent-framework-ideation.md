@@ -16,6 +16,7 @@ external:
   - https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
   - https://github.com/agentic-community/mcp-gateway-registry
   - https://github.com/thesysdev/openui
+  - https://fortelabs.com/blog/the-ultimate-guide-to-claude-connectors/
 ---
 
 # Ideation: THINK-117 Delegated Agent Framework
@@ -98,6 +99,16 @@ tool call is not enough if the host does not resolve and render the UI resource.
 OpenUI is relevant as a possible render grammar/runtime, but should be treated
 as an adapter target rather than the core product contract.
 
+Forte Labs' Claude Connectors guide reinforces the same strategic direction
+from the user side. Its strongest lesson is that connecting many tools directly
+to a frontier agent creates an illusion of completeness: the model samples,
+misses sources it was not told about, inherits connector-specific blind spots,
+and can combine private data, untrusted content, and external communication in
+dangerous ways. That argues against an "attach everything to Claude" product
+and for ThinkWork as the task-scoped broker that knows the source map, exposes
+coverage and gaps, controls write/delete tools, and returns source-backed work
+surfaces.
+
 ### Sharpened Product Shape
 
 The concrete product is **External Agent Resource Broker**:
@@ -112,13 +123,15 @@ The broker has four jobs:
    client, credential subject, and policy context.
 2. **Resource translation:** connect to legacy and modern systems such as
    Epicor P21, CRM, ERP, ticketing, docs, Slack, GitHub, and internal apps using
-   the user's or tenant's approved credentials.
+   the user's or tenant's approved credentials, but only through the
+   task-scoped source bundle approved for the request.
 3. **Presentation:** normalize raw system data into both model-readable context
    and a renderable UI envelope, such as an MCP App resource, ThinkWork
    `data-json-render` part, analytics display payload, or an OpenUI-compatible
    component description.
 4. **Control:** apply permission checks, approvals, redaction, write gates,
-   memory retention, and audit evidence before anything reaches the host.
+   coverage/gap disclosure, untrusted-content handling, memory retention, and
+   audit evidence before anything reaches the host.
 
 Example user flow:
 
@@ -145,9 +158,10 @@ The value proposition is therefore sharper than "MCP gateway":
 The stickiness is not the endpoint URL. Stickiness comes from the accumulated
 enterprise substrate: approved connectors, user OAuth grants, Space policies,
 legacy-system normalization maps, render templates, memory, approval history,
-audit evidence, and domain-specific capability cards. If ThinkWork only proxies
-tools, it is replaceable. If ThinkWork becomes the translation, policy, memory,
-and rendered-work layer for company systems, switching costs become real.
+audit evidence, source coverage maps, and domain-specific capability cards. If
+ThinkWork only proxies tools, it is replaceable. If ThinkWork becomes the
+translation, policy, memory, coverage, and rendered-work layer for company
+systems, switching costs become real.
 
 ## Ranked Ideas
 
