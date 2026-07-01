@@ -9,6 +9,9 @@ const navSource = read("src/components/settings/settings-nav.tsx");
 const workflowIndexRoute = read(
   "src/routes/_authed/settings.workflows.index.tsx",
 );
+const workflowInventory = read(
+  "src/components/workflows/WorkflowInventory.tsx",
+);
 const workflowDetailRoute = read(
   "src/routes/_authed/settings.workflows.$workflowId.tsx",
 );
@@ -36,6 +39,13 @@ describe("Settings workflow routing", () => {
     expect(workflowRunRoute).toContain("WorkflowRunDetail");
     expect(workflowRunRoute).toContain(
       '"/_authed/settings/workflows/$workflowId_/runs/$runId"',
+    );
+  });
+
+  it("navigates workflow inventory rows through TanStack Router", () => {
+    expect(workflowInventory).toContain('to="/settings/workflows/$workflowId"');
+    expect(workflowInventory).not.toContain(
+      "href={`/settings/workflows/${encodeURIComponent(row.original.id)}`}",
     );
   });
 

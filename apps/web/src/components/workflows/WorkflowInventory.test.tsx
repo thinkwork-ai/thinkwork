@@ -1,12 +1,15 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { navigateMock, useQueryMock } = vi.hoisted(() => ({
+const { navigateMock, useMutationMock, useQueryMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
+  useMutationMock: vi.fn(),
   useQueryMock: vi.fn(),
 }));
 
 vi.mock("urql", () => ({
+  useMutation: useMutationMock,
   useQuery: useQueryMock,
 }));
 
@@ -16,6 +19,28 @@ vi.mock("@tanstack/react-router", async () => {
   );
   return {
     ...actual,
+    Link: ({
+      children,
+      params,
+      to,
+      ...props
+    }: {
+      children: ReactNode;
+      params?: Record<string, string>;
+      to: string;
+    }) => {
+      const href = params
+        ? Object.entries(params).reduce(
+            (path, [key, value]) => path.replace(`$${key}`, value),
+            to,
+          )
+        : to;
+      return (
+        <a href={href} {...props}>
+          {children}
+        </a>
+      );
+    },
     useNavigate: () => navigateMock,
   };
 });
@@ -29,6 +54,12 @@ vi.mock("@/context/PageHeaderContext", () => ({
 }));
 
 import { WorkflowInventory } from "./WorkflowInventory";
+import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
+import {
+  SettingsDeploymentStatusQuery,
+  SettingsDiscoverN8nWorkflowsQuery,
+  SettingsPluginCatalogQuery,
+} from "@/lib/settings-queries";
 
 function mockWorkflowInventoryQueries({
   workflows,
@@ -39,33 +70,67 @@ function mockWorkflowInventoryQueries({
   pluginCatalog?: unknown[];
   managedApplications?: unknown[];
 }) {
-  useQueryMock
-    .mockReturnValueOnce([
-      {
-        fetching: false,
-        data: { workflows },
-      },
-    ])
-    .mockReturnValueOnce([
-      {
-        fetching: false,
-        data: { pluginCatalog },
-      },
-    ])
-    .mockReturnValueOnce([
-      {
-        fetching: false,
-        data: {
-          deploymentStatus: {
-            managedApplications,
+  useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
+    if (query === SettingsWorkflowsQuery) {
+      return [
+        {
+          fetching: false,
+          data: { workflows },
+        },
+      ];
+    }
+
+    if (query === SettingsPluginCatalogQuery) {
+      return [
+        {
+          fetching: false,
+          data: { pluginCatalog },
+        },
+      ];
+    }
+
+    if (query === SettingsDeploymentStatusQuery) {
+      return [
+        {
+          fetching: false,
+          data: {
+            deploymentStatus: {
+              managedApplications,
+            },
           },
         },
+      ];
+    }
+
+    if (query === SettingsDiscoverN8nWorkflowsQuery) {
+      return [
+        {
+          fetching: false,
+          data: {
+            discoverN8nWorkflows: {
+              readinessState: "ready",
+              workflows: [],
+            },
+          },
+        },
+        vi.fn(),
+      ];
+    }
+
+    return [
+      {
+        fetching: false,
+        data: {},
       },
-    ]);
+      vi.fn(),
+    ];
+  });
+  useMutationMock.mockReturnValue([{ fetching: false }, vi.fn()]);
 }
 
 beforeEach(() => {
   navigateMock.mockReset();
+  useMutationMock.mockReset();
   useQueryMock.mockReset();
 });
 

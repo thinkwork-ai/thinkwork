@@ -278,6 +278,17 @@ type ConnectN8nWorkflowResult {
   created: Boolean!
 }
 
+input DisconnectN8nWorkflowInput {
+  workflowId: ID
+  bindingId: ID
+  idempotencyKey: String!
+}
+
+type DisconnectN8nWorkflowResult {
+  workflow: Workflow!
+  binding: WorkflowEngineBinding!
+}
+
 type N8nWorkflowDraftDiagnostic {
   code: String!
   severity: String!
@@ -353,6 +364,9 @@ extend type Query {
 
 extend type Mutation {
   connectN8nWorkflow(input: ConnectN8nWorkflowInput!): ConnectN8nWorkflowResult!
+  disconnectN8nWorkflow(
+    input: DisconnectN8nWorkflowInput!
+  ): DisconnectN8nWorkflowResult!
   importN8nWorkflowDraft(
     input: ImportN8nWorkflowDraftInput!
   ): ImportN8nWorkflowDraftResult!

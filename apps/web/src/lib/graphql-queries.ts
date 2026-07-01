@@ -348,6 +348,23 @@ export const SettingsWorkflowQuery = gql`
   }
 `;
 
+export const DisconnectN8nWorkflowMutation = gql`
+  mutation DisconnectN8nWorkflow($input: DisconnectN8nWorkflowInput!) {
+    disconnectN8nWorkflow(input: $input) {
+      workflow {
+        id
+        lifecycleStatus
+        readinessState
+      }
+      binding {
+        id
+        bindingStatus
+        readinessState
+      }
+    }
+  }
+`;
+
 export const SettingsWorkflowRunsQuery = gql`
   query SettingsWorkflowRuns(
     $tenantId: ID!
