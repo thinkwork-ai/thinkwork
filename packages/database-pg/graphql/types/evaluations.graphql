@@ -153,6 +153,51 @@ type SkillAttributionCandidates {
 }
 
 # ────────────────────────────────────────────────────────────────────
+# Eval Profiles (THINK-107 — the agent-under-test as named config)
+#
+# A profile bundles agent model + pinned judge model + trial count. Runs
+# stamp profileId at insert and pin the resolved profileSnapshot at
+# dispatch, so later profile edits never reinterpret past runs. Exactly
+# one default per tenant; the resolution seam synthesizes a default when
+# none exists. Profiles soft-archive; archiving the current default is
+# rejected. Distinct from the unrelated "Agent Profile" prompt presets.
+# ────────────────────────────────────────────────────────────────────
+
+type EvalProfile {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  # Bedrock model id of the agent under test (tenant-catalog validated).
+  model: String!
+  # Pinned LLM-judge model for llm-rubric scoring; null = deployed default.
+  judgeModel: String
+  # Trial count applied to llm-rubric cases only (>= 1). Deterministic-only
+  # cases always run once.
+  trials: Int!
+  isDefault: Boolean!
+  archivedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateEvalProfileInput {
+  name: String!
+  model: String!
+  judgeModel: String
+  trials: Int
+}
+
+input UpdateEvalProfileInput {
+  name: String
+  model: String
+  judgeModel: String
+  # Explicit null is not distinguishable from omitted for judgeModel; pass
+  # clearJudgeModel: true to reset the judge pin to the deployed default.
+  clearJudgeModel: Boolean
+  trials: Int
+}
+
+# ────────────────────────────────────────────────────────────────────
 # Runs
 # ────────────────────────────────────────────────────────────────────
 
@@ -177,6 +222,16 @@ type EvalRun {
   # on legacy category/test-case launches.
   datasetId: ID
   datasetVersion: Int
+  # Eval Profile the run executed against (THINK-107). profileId stamps at
+  # run creation; profileSnapshot ({ model, judgeModel, trials,
+  # workspaceFingerprint }) pins at dispatch. Null on pre-profile runs —
+  # the UI renders those "Legacy (pre-profile)".
+  profileId: ID
+  profileName: String
+  profileSnapshot: AWSJSON
+  # True fan-out count (sum of per-case trial counts); null on pre-profile
+  # runs, where completion arithmetic falls back to totalTests.
+  expectedResultRows: Int
   totalTests: Int!
   passed: Int!
   failed: Int!
@@ -213,8 +268,18 @@ type EvalResult {
   testCaseName: String
   category: String
   status: String!
+  # Which trial of the case this row is (0-based). 0 on legacy
+  # single-trial rows.
+  trialIndex: Int!
   score: Float
   durationMs: Int
+  # Agent-turn telemetry (THINK-107 U5): token usage of the agent
+  # invocation itself, priced against the run's snapshot model. Tokens
+  # without resolved catalog pricing carry null cost (summary marks cost
+  # partial — never a false zero).
+  agentInputTokens: Int
+  agentOutputTokens: Int
+  agentCostUsd: Float
   agentSessionId: String
   input: String
   expected: String
@@ -493,8 +558,14 @@ input OverrideEvalResultInput {
 }
 
 input StartEvalRunInput {
-  # Optional model override for the direct-AgentCore eval run. Omit to use
-  # Kimi K2.5; non-default overrides must be available in model_catalog.
+  # Eval Profile to run against (THINK-107). Omit to use the tenant's
+  # default profile (synthesized when none exists). When set, the profile
+  # supplies model, judge pin, and trial count; the legacy `model` scalar
+  # below is ignored.
+  profileId: ID
+  # Legacy model override, superseded by profileId. Omit to use the
+  # resolved profile's model; non-default overrides must be available in
+  # model_catalog.
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.
   categories: [String!]
@@ -544,6 +615,9 @@ extend type Query {
   # the cached tenant_mcp_servers.tools list (approved + enabled servers); no
   # live MCP discovery.
   evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
+  # Eval Profiles (THINK-107). Default listing hides archived profiles;
+  # pass includeArchived to see them (historical runs resolve either way).
+  evalProfiles(tenantId: ID!, includeArchived: Boolean): [EvalProfile!]!
   # Per-skill eval score + regression (Skill Tests & Evals U5).
   # Operator-gated; tenant-scoped. Returns an "unrated" score (rated:
   # false) for a skill with no enabled cases — never null.
@@ -565,6 +639,16 @@ extend type Query {
 }
 
 extend type Mutation {
+  # Eval Profile CRUD (THINK-107). Operator-gated; model and judgeModel
+  # validate against the tenant model catalog. archiveEvalProfile rejects
+  # the current default (designate another first); setDefaultEvalProfile
+  # swaps atomically; duplicateEvalProfile copies all fields under a
+  # derived name.
+  createEvalProfile(tenantId: ID!, input: CreateEvalProfileInput!): EvalProfile!
+  updateEvalProfile(id: ID!, input: UpdateEvalProfileInput!): EvalProfile!
+  duplicateEvalProfile(id: ID!, name: String): EvalProfile!
+  archiveEvalProfile(id: ID!): EvalProfile!
+  setDefaultEvalProfile(id: ID!): EvalProfile!
   startEvalRun(tenantId: ID!, input: StartEvalRunInput!): EvalRun!
   cancelEvalRun(id: ID!): EvalRun!
   deleteEvalRun(id: ID!): Boolean!

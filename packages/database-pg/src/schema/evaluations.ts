@@ -108,6 +108,14 @@ export const evalTestCases = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     enabled: boolean("enabled").notNull().default(true),
+    // quality_state: curation disposition (Eval Profiles U1/U7). Enum-by-CHECK
+    // in 0197: 'active' | 'retired' | 'needs-revision'. Retired cases are
+    // excluded from run-snapshot capture but keep their result history.
+    // Seed re-sync propagates transitions one-way (never retired -> active).
+    quality_state: text("quality_state").notNull().default("active"),
+    // rewritten_from_id: dataset_case_id of the predecessor case when a
+    // curation rewrite minted a new identity (R14). Null otherwise.
+    rewritten_from_id: text("rewritten_from_id"),
     source: text("source").notNull().default("manual"), // 'manual' | 'yaml-seed' | 'imported' | 'dataset'
     // dataset_id / dataset_case_id: linkage into the S3-canonical dataset
     // substrate (Evaluations Trust Core U4). Null on pre-dataset rows.
@@ -135,6 +143,60 @@ export const evalTestCases = pgTable(
     uniqueIndex("uq_eval_test_cases_dataset_case")
       .on(table.dataset_id, table.dataset_case_id)
       .where(sql`${table.dataset_id} IS NOT NULL`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// eval_profiles — the agent-under-test as a named, reusable configuration
+// (Eval Profiles U1; CONCEPTS.md "Eval Profile").
+//
+// A profile bundles agent model + pinned judge model + trial count. Runs
+// stamp profile_id at insert and pin the resolved profile_snapshot at
+// dispatch, so later edits never reinterpret past runs. Exactly one
+// default per tenant (partial unique index); the resolution seam
+// synthesizes a default transactionally when none exists, so automatic
+// consumers (skill-eval gate, scheduled runs) can never fail on a missing
+// default. Profiles soft-archive (archived_at) — never hard-delete while
+// runs reference them; archiving the current default is rejected.
+// Distinct from the unrelated "Agent Profile" prompt presets.
+// ---------------------------------------------------------------------------
+
+export const evalProfiles = pgTable(
+  "eval_profiles",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    name: text("name").notNull(),
+    // model: Bedrock model id of the agent under test. Validated against
+    // the tenant model catalog at write time.
+    model: text("model").notNull(),
+    // judge_model: pinned LLM-judge model for llm-rubric scoring. Null =
+    // the deployed default (EVAL_JUDGE_MODEL_ID). Threaded into scoring-
+    // engine creation per run (KTD11) — the pin is enforced, not recorded.
+    judge_model: text("judge_model"),
+    // trials: per-case trial count applied to llm-rubric cases only
+    // (deterministic-only cases always run once). CHECK (trials >= 1) in
+    // 0197. Default 1; 3 recommended for comparison profiles.
+    trials: integer("trials").notNull().default(1),
+    is_default: boolean("is_default").notNull().default(false),
+    archived_at: timestamp("archived_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_eval_profiles_tenant_name").on(table.tenant_id, table.name),
+    uniqueIndex("uq_eval_profiles_tenant_default")
+      .on(table.tenant_id)
+      .where(sql`${table.is_default} = true`),
+    index("idx_eval_profiles_tenant").on(table.tenant_id),
   ],
 );
 
@@ -183,6 +245,24 @@ export const evalRuns = pgTable(
     dataset_id: uuid("dataset_id").references(() => evalDatasets.id),
     dataset_version: integer("dataset_version"),
     pinned_case_ids: text("pinned_case_ids").array(),
+    // profile_id / profile_snapshot: the Eval Profile (agent-under-test
+    // config) the run executed against. profile_id is stamped at run-row
+    // insert; profile_snapshot (jsonb: { model, judgeModel, trials,
+    // workspaceFingerprint }) is pinned at dispatch alongside
+    // dataset_version so later profile edits never reinterpret past runs.
+    // Both null on pre-profile runs, rendered "Legacy (pre-profile)".
+    profile_id: uuid("profile_id").references(() => evalProfiles.id),
+    profile_snapshot: jsonb("profile_snapshot"),
+    // pinned_trial_plan: per-case trial counts pinned at dispatch —
+    // [{ caseId, trials }] keyed by dataset_case_id (dataset runs) or
+    // test_case_id (category runs). The reconciler reconstructs expected
+    // trial rows from this immutable plan, never from live assertions.
+    pinned_trial_plan: jsonb("pinned_trial_plan"),
+    // expected_result_rows: sum of the trial plan — the true fan-out count.
+    // Completion checks read COALESCE(expected_result_rows, total_tests)
+    // so pre-profile and in-flight runs keep finalizing. total_tests keeps
+    // its case-count meaning for every existing reader.
+    expected_result_rows: integer("expected_result_rows"),
     total_tests: integer("total_tests").notNull().default(0),
     passed: integer("passed").notNull().default(0),
     failed: integer("failed").notNull().default(0),
@@ -251,9 +331,22 @@ export const evalResults = pgTable(
       .notNull(),
     test_case_id: uuid("test_case_id").references(() => evalTestCases.id),
     status: text("status").notNull(), // 'pass' | 'fail' | 'error'
+    // trial_index: which trial of the case this row is (0-based). Row
+    // identity is (run_id, test_case_id, trial_index) — enforced at the
+    // app layer (worker dedup check + advisory lock), matching the
+    // existing convention of app-level identity on this table. Legacy
+    // single-trial rows carry 0 via the column default.
+    trial_index: integer("trial_index").notNull().default(0),
     // score: 0.0–1.0 aggregated across evaluators; null if no scorer ran
     score: numeric("score", { precision: 5, scale: 4 }),
     duration_ms: integer("duration_ms"),
+    // Agent-turn telemetry (Eval Profiles U5). Token usage of the agent
+    // invocation itself (not evaluator tokens), priced against the run's
+    // snapshot model. Tokens without resolved catalog pricing record with
+    // agent_cost_usd null — the summary marks cost partial, never zero.
+    agent_input_tokens: integer("agent_input_tokens"),
+    agent_output_tokens: integer("agent_output_tokens"),
+    agent_cost_usd: numeric("agent_cost_usd", { precision: 12, scale: 6 }),
     // agent_session_id: stable session ID used to invoke the agent under test;
     // also the key for querying CloudWatch spans in the runner
     agent_session_id: text("agent_session_id"),
@@ -317,6 +410,55 @@ export const evalResults = pgTable(
     index("idx_eval_results_test_case_created").on(
       table.test_case_id,
       table.created_at,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// eval_case_overrides — operator verdict override at CASE level
+// (Eval Profiles KTD9).
+//
+// Multi-trial cases have no single eval_results row to carry an override:
+// the case verdict (including 'unstable') exists only in the evals-core
+// trial-aggregation layer above the per-trial rows. This table is that
+// layer's override input — aggregation applies it LAST (effective case
+// verdict = case override ?? aggregate). Same immutable-override shape as
+// the row-level fields on eval_results; per-trial rows are never
+// overridden individually. Row-level override_status remains the path for
+// legacy/single-trial rows.
+// ---------------------------------------------------------------------------
+
+export const evalCaseOverrides = pgTable(
+  "eval_case_overrides",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    run_id: uuid("run_id")
+      .references(() => evalRuns.id, { onDelete: "cascade" })
+      .notNull(),
+    test_case_id: uuid("test_case_id")
+      .references(() => evalTestCases.id)
+      .notNull(),
+    // override_status: 'pass' | 'fail' (enum-by-CHECK in 0197).
+    override_status: text("override_status").notNull(),
+    // overridden_by: authenticated caller identity (users.id), derived
+    // server-side — never accepted as an argument.
+    overridden_by: text("overridden_by"),
+    overridden_at: timestamp("overridden_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    // override_reason: required non-empty audit note; overrides accumulate
+    // as labeled data for rubric hardening.
+    override_reason: text("override_reason").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_eval_case_overrides_run_case").on(
+      table.run_id,
+      table.test_case_id,
     ),
   ],
 );
@@ -448,6 +590,31 @@ export const evalTestCasesRelations = relations(
   }),
 );
 
+export const evalProfilesRelations = relations(
+  evalProfiles,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [evalProfiles.tenant_id],
+      references: [tenants.id],
+    }),
+    runs: many(evalRuns),
+  }),
+);
+
+export const evalCaseOverridesRelations = relations(
+  evalCaseOverrides,
+  ({ one }) => ({
+    run: one(evalRuns, {
+      fields: [evalCaseOverrides.run_id],
+      references: [evalRuns.id],
+    }),
+    testCase: one(evalTestCases, {
+      fields: [evalCaseOverrides.test_case_id],
+      references: [evalTestCases.id],
+    }),
+  }),
+);
+
 export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [evalRuns.tenant_id],
@@ -456,6 +623,10 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
   dataset: one(evalDatasets, {
     fields: [evalRuns.dataset_id],
     references: [evalDatasets.id],
+  }),
+  profile: one(evalProfiles, {
+    fields: [evalRuns.profile_id],
+    references: [evalProfiles.id],
   }),
   agent: one(agents, {
     fields: [evalRuns.agent_id],

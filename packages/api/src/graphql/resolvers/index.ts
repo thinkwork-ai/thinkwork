@@ -51,6 +51,10 @@ import {
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
 import {
+  evalProfileQueries,
+  evalProfileMutations,
+} from "./evaluations/profiles.js";
+import {
   flagThreadMutations,
   flagThreadQueries,
 } from "./evaluations/flag-thread.js";
@@ -158,6 +162,7 @@ export const queryResolvers: Record<string, any> = {
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
+  ...evalProfileQueries,
   ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
@@ -209,6 +214,7 @@ export const mutationResolvers: Record<string, any> = {
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,
+  ...evalProfileMutations,
   ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
   ...wikiMutations,
