@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, resolve as pathResolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Command } from "commander";
@@ -27,6 +27,11 @@ import {
   ensureStateBackend,
   parseLockError,
 } from "../lib/state-backend.js";
+import {
+  type PreflightContext,
+  preflightChecks,
+  runChecks,
+} from "../lib/checks.js";
 import { confirm } from "../prompt.js";
 import {
   printHeader,
@@ -50,6 +55,7 @@ export interface DeployCommandOptions extends EnterpriseDeployOptions {
   stage?: string;
   component: string;
   yes?: boolean;
+  skipPreflight?: boolean;
   controller?: boolean;
   controllerAction?: string;
   sessionId?: string;
@@ -202,6 +208,10 @@ export function registerDeployCommand(
       "Plan enterprise bootstrap without mutating AWS, GitHub, git, or secrets",
     )
     .option("-y, --yes", "Skip interactive confirmation (for CI)")
+    .option(
+      "--skip-preflight",
+      "Skip preflight account checks before terraform apply (not recommended)",
+    )
     .action(async (opts: DeployCommandOptions) => {
       try {
         await runDeployCommand(opts, deps);
@@ -423,6 +433,35 @@ function normalizeControllerDeployAction(
   );
 }
 
+/**
+ * Preflight signals from the stage tfvars: whether a customer domain and SES
+ * are configured. Uncommented assignments only.
+ */
+export function readTfvarsSignals(cwd: string): {
+  domain?: string;
+  sesConfigured: boolean;
+} {
+  const tfvarsPath = join(cwd, "terraform.tfvars");
+  if (!existsSync(tfvarsPath)) return { sesConfigured: false };
+  let domain: string | undefined;
+  let sesConfigured = false;
+  for (const line of readFileSync(tfvarsPath, "utf8").split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    if (!match) continue;
+    const [, key, value] = match;
+    if (key === "customer_domain" && value) domain = value;
+    if (
+      (key === "ses_parent_domain" ||
+        key === "ses_inbound_domain" ||
+        key === "cognito_email_source_arn") &&
+      value
+    ) {
+      sesConfigured = true;
+    }
+  }
+  return { domain, sesConfigured };
+}
+
 export async function runLocalTerraformDeploy(
   opts: DeployCommandOptions,
 ): Promise<void> {
@@ -442,6 +481,15 @@ export async function runLocalTerraformDeploy(
     printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
   }
 
+  // Non-interactive sessions must be explicit: silently exiting 0 with no
+  // action (the historical behavior) is worse than failing.
+  if (!opts.yes && !process.stdout.isTTY) {
+    printError(
+      `Non-interactive session: pass --yes (or -y) to deploy stage "${initialStage}", or run in a terminal to confirm interactively.`,
+    );
+    process.exit(1);
+  }
+
   const stage = await confirmLocalDeployStage(initialStage, opts);
   if (!stage) {
     console.log("  Aborted.");
@@ -458,6 +506,42 @@ export async function runLocalTerraformDeploy(
 
   const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component);
+
+  // ── Preflight (R6): report every detectable blocker before any resource is
+  //    created. Warn-tier checks (SES) are reported but never block (AE3). ──
+  if (!opts.skipPreflight) {
+    const preflightCwd = resolveTierDir(terraformDir, stage, tiers[0]);
+    const signals = readTfvarsSignals(preflightCwd);
+    const ctx: PreflightContext = {
+      backend:
+        identity && isInitScaffoldedLayout(preflightCwd)
+          ? backendTarget(identity.account, identity.region, stage)
+          : undefined,
+      domain: signals.domain,
+      sesConfigured: signals.sesConfigured,
+    };
+    console.log("\n  Preflight checks:");
+    const summary = await runChecks(preflightChecks(ctx));
+    for (const { name, blocking, result } of summary.results) {
+      const icon = result.pass ? "✓" : blocking ? "✗" : "!";
+      console.log(`    ${icon} ${name}  ${result.detail}`);
+    }
+    if (!summary.passed) {
+      console.log("");
+      printError(
+        `Preflight found ${summary.failures.length} blocker(s) — nothing was deployed. ` +
+          "Fix the items above and rerun (or bypass with --skip-preflight).",
+      );
+      process.exit(1);
+    }
+    if (summary.warnings.length > 0) {
+      printWarning(
+        `Proceeding with ${summary.warnings.length} pending item(s) tracked as external approvals.`,
+      );
+    }
+  } else {
+    printWarning("Preflight skipped (--skip-preflight).");
+  }
 
   for (let i = 0; i < tiers.length; i++) {
     const tier = tiers[i];
