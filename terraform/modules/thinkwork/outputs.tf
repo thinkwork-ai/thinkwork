@@ -527,6 +527,11 @@ output "n8n_service_credential_secret_arn" {
   value       = local.n8n_provisioned ? module.n8n[0].n8n_service_credential_secret_arn : null
 }
 
+output "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN used for the inbound n8n agent-step bridge credential (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_agent_step_bridge_credential_secret_arn : null
+}
+
 output "admin_url" {
   description = "Deprecated compatibility alias for app_url"
   value       = local.end_user_app_url

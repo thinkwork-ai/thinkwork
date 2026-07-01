@@ -921,6 +921,12 @@ variable "n8n_service_credential_secret_arn" {
   default     = ""
 }
 
+variable "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge."
+  type        = string
+  default     = ""
+}
+
 variable "n8n_storage_bucket_name" {
   description = "S3 bucket name used for n8n managed artifacts and optional storage mode objects. Required when n8n_provisioned = true."
   type        = string

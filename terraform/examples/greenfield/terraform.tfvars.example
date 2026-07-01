@@ -59,6 +59,7 @@ database_engine = "rds-postgres"
 # n8n_encryption_key_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/encryption-key-..."
 # n8n_operator_secret_arn               = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/operator-..."
 # n8n_service_credential_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/service-credential-..."
+# n8n_agent_step_bridge_credential_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/agent-step-bridge-credential-..."
 # n8n_storage_bucket_name               = "thinkwork-dev-n8n"
 # n8n_container_port                    = 5678
 # n8n_cache_engine                      = "valkey"
