@@ -477,6 +477,12 @@ variable "n8n_service_credential_secret_arn" {
   default     = ""
 }
 
+variable "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge."
+  type        = string
+  default     = ""
+}
+
 variable "n8n_storage_bucket_name" {
   description = "S3 bucket name used for n8n managed artifacts and optional storage mode objects."
   type        = string
@@ -952,89 +958,90 @@ module "thinkwork" {
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
 
-  db_password                                = var.db_password
-  database_engine                            = var.database_engine
-  enable_hindsight                           = var.enable_hindsight
-  memory_engine                              = var.memory_engine
-  enable_cognee                              = var.enable_cognee
-  cognee_image_uri                           = var.cognee_image_uri
-  cognee_db_username                         = var.cognee_db_username
-  cognee_db_name                             = var.cognee_db_name
-  cognee_db_password_secret_arn              = var.cognee_db_password_secret_arn
-  cognee_allowed_internal_cidr_blocks        = var.cognee_allowed_internal_cidr_blocks
-  cognee_allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
-  cognee_backend_mode                        = var.cognee_backend_mode
-  cognee_desired_count                       = var.cognee_desired_count
-  cognee_brain_tenant_id                     = var.cognee_brain_tenant_id
-  cognee_brain_instance_key                  = var.cognee_brain_instance_key
-  cognee_brain_storage_tier                  = var.cognee_brain_storage_tier
-  cognee_brain_s3_artifact_root              = var.cognee_brain_s3_artifact_root
-  cognee_brain_s3_manifest_root              = var.cognee_brain_s3_manifest_root
-  cognee_brain_s3_vault_projection_root      = var.cognee_brain_s3_vault_projection_root
-  cognee_brain_artifacts_bucket_arn          = var.cognee_brain_artifacts_bucket_arn
-  cognee_brain_artifacts_prefixes            = var.cognee_brain_artifacts_prefixes
-  cognee_private_substrate_mode              = var.cognee_private_substrate_mode
-  cognee_require_authentication              = var.cognee_require_authentication
-  cognee_enable_backend_access_control       = var.cognee_enable_backend_access_control
-  cognee_cors_allowed_origins                = var.cognee_cors_allowed_origins
-  cognee_llm_provider                        = var.cognee_llm_provider
-  cognee_llm_model                           = var.cognee_llm_model
-  cognee_llm_api_key_secret_arn              = var.cognee_llm_api_key_secret_arn
-  cognee_embedding_provider                  = var.cognee_embedding_provider
-  cognee_embedding_model                     = var.cognee_embedding_model
-  cognee_embedding_dimensions                = var.cognee_embedding_dimensions
-  cognee_embedding_api_key_secret_arn        = var.cognee_embedding_api_key_secret_arn
-  cognee_vector_db_provider                  = var.cognee_vector_db_provider
-  cognee_vector_db_url                       = var.cognee_vector_db_url
-  cognee_vector_db_key_secret_arn            = var.cognee_vector_db_key_secret_arn
-  cognee_graph_database_provider             = var.cognee_graph_database_provider
-  cognee_graph_database_url                  = var.cognee_graph_database_url
-  cognee_graph_database_username             = var.cognee_graph_database_username
-  cognee_graph_database_password_secret_arn  = var.cognee_graph_database_password_secret_arn
-  cognee_neptune_graph_id                    = var.cognee_neptune_graph_id
-  cognee_neptune_graph_arn                   = var.cognee_neptune_graph_arn
-  cognee_neptune_endpoint                    = var.cognee_neptune_endpoint
-  cognee_production_posture                  = var.cognee_production_posture
-  cognee_bedrock_model_resource_arns         = var.cognee_bedrock_model_resource_arns
-  cognee_kms_key_arns                        = var.cognee_kms_key_arns
-  twenty_provisioned                         = var.twenty_provisioned
-  twenty_runtime_enabled                     = var.twenty_runtime_enabled
-  twenty_image_uri                           = var.twenty_image_uri
-  twenty_db_username                         = var.twenty_db_username
-  twenty_db_name                             = var.twenty_db_name
-  twenty_db_url_secret_arn                   = var.twenty_db_url_secret_arn
-  twenty_encryption_key_secret_arn           = var.twenty_encryption_key_secret_arn
-  twenty_email_from_address                  = var.twenty_email_from_address
-  twenty_email_from_name                     = var.twenty_email_from_name
-  twenty_public_url                          = local.twenty_url
-  twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
-  n8n_provisioned                            = var.n8n_provisioned
-  n8n_runtime_enabled                        = var.n8n_runtime_enabled
-  n8n_image_uri                              = var.n8n_image_uri
-  n8n_database_admin_secret_arn              = var.n8n_database_admin_secret_arn
-  n8n_database_url_secret_arn                = var.n8n_database_url_secret_arn
-  n8n_database_username                      = var.n8n_database_username
-  n8n_database_name                          = var.n8n_database_name
-  n8n_encryption_key_secret_arn              = var.n8n_encryption_key_secret_arn
-  n8n_operator_secret_arn                    = var.n8n_operator_secret_arn
-  n8n_service_credential_secret_arn          = var.n8n_service_credential_secret_arn
-  n8n_storage_bucket_name                    = var.n8n_storage_bucket_name
-  n8n_container_port                         = var.n8n_container_port
-  n8n_cache_engine                           = var.n8n_cache_engine
-  n8n_domain                                 = local.n8n_domain
-  n8n_public_url                             = local.n8n_url
-  n8n_certificate_arn                        = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
-  google_oauth_client_id                     = var.google_oauth_client_id
-  google_oauth_client_secret                 = var.google_oauth_client_secret
-  pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
-  cognito_custom_auth_lambda_zip             = var.cognito_custom_auth_lambda_zip
-  lambda_zips_dir                            = var.lambda_zips_dir
-  lambda_artifact_bucket                     = var.lambda_artifact_bucket
-  lambda_artifact_prefix                     = var.lambda_artifact_prefix
-  require_lambda_artifacts                   = var.require_lambda_artifacts
-  enable_workspace_orchestration             = var.enable_workspace_orchestration
-  api_auth_secret                            = var.api_auth_secret
-  platform_operator_emails                   = var.platform_operator_emails
+  db_password                                 = var.db_password
+  database_engine                             = var.database_engine
+  enable_hindsight                            = var.enable_hindsight
+  memory_engine                               = var.memory_engine
+  enable_cognee                               = var.enable_cognee
+  cognee_image_uri                            = var.cognee_image_uri
+  cognee_db_username                          = var.cognee_db_username
+  cognee_db_name                              = var.cognee_db_name
+  cognee_db_password_secret_arn               = var.cognee_db_password_secret_arn
+  cognee_allowed_internal_cidr_blocks         = var.cognee_allowed_internal_cidr_blocks
+  cognee_allowed_internal_security_group_ids  = var.cognee_allowed_internal_security_group_ids
+  cognee_backend_mode                         = var.cognee_backend_mode
+  cognee_desired_count                        = var.cognee_desired_count
+  cognee_brain_tenant_id                      = var.cognee_brain_tenant_id
+  cognee_brain_instance_key                   = var.cognee_brain_instance_key
+  cognee_brain_storage_tier                   = var.cognee_brain_storage_tier
+  cognee_brain_s3_artifact_root               = var.cognee_brain_s3_artifact_root
+  cognee_brain_s3_manifest_root               = var.cognee_brain_s3_manifest_root
+  cognee_brain_s3_vault_projection_root       = var.cognee_brain_s3_vault_projection_root
+  cognee_brain_artifacts_bucket_arn           = var.cognee_brain_artifacts_bucket_arn
+  cognee_brain_artifacts_prefixes             = var.cognee_brain_artifacts_prefixes
+  cognee_private_substrate_mode               = var.cognee_private_substrate_mode
+  cognee_require_authentication               = var.cognee_require_authentication
+  cognee_enable_backend_access_control        = var.cognee_enable_backend_access_control
+  cognee_cors_allowed_origins                 = var.cognee_cors_allowed_origins
+  cognee_llm_provider                         = var.cognee_llm_provider
+  cognee_llm_model                            = var.cognee_llm_model
+  cognee_llm_api_key_secret_arn               = var.cognee_llm_api_key_secret_arn
+  cognee_embedding_provider                   = var.cognee_embedding_provider
+  cognee_embedding_model                      = var.cognee_embedding_model
+  cognee_embedding_dimensions                 = var.cognee_embedding_dimensions
+  cognee_embedding_api_key_secret_arn         = var.cognee_embedding_api_key_secret_arn
+  cognee_vector_db_provider                   = var.cognee_vector_db_provider
+  cognee_vector_db_url                        = var.cognee_vector_db_url
+  cognee_vector_db_key_secret_arn             = var.cognee_vector_db_key_secret_arn
+  cognee_graph_database_provider              = var.cognee_graph_database_provider
+  cognee_graph_database_url                   = var.cognee_graph_database_url
+  cognee_graph_database_username              = var.cognee_graph_database_username
+  cognee_graph_database_password_secret_arn   = var.cognee_graph_database_password_secret_arn
+  cognee_neptune_graph_id                     = var.cognee_neptune_graph_id
+  cognee_neptune_graph_arn                    = var.cognee_neptune_graph_arn
+  cognee_neptune_endpoint                     = var.cognee_neptune_endpoint
+  cognee_production_posture                   = var.cognee_production_posture
+  cognee_bedrock_model_resource_arns          = var.cognee_bedrock_model_resource_arns
+  cognee_kms_key_arns                         = var.cognee_kms_key_arns
+  twenty_provisioned                          = var.twenty_provisioned
+  twenty_runtime_enabled                      = var.twenty_runtime_enabled
+  twenty_image_uri                            = var.twenty_image_uri
+  twenty_db_username                          = var.twenty_db_username
+  twenty_db_name                              = var.twenty_db_name
+  twenty_db_url_secret_arn                    = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn            = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address                   = var.twenty_email_from_address
+  twenty_email_from_name                      = var.twenty_email_from_name
+  twenty_public_url                           = local.twenty_url
+  twenty_certificate_arn                      = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
+  n8n_provisioned                             = var.n8n_provisioned
+  n8n_runtime_enabled                         = var.n8n_runtime_enabled
+  n8n_image_uri                               = var.n8n_image_uri
+  n8n_database_admin_secret_arn               = var.n8n_database_admin_secret_arn
+  n8n_database_url_secret_arn                 = var.n8n_database_url_secret_arn
+  n8n_database_username                       = var.n8n_database_username
+  n8n_database_name                           = var.n8n_database_name
+  n8n_encryption_key_secret_arn               = var.n8n_encryption_key_secret_arn
+  n8n_operator_secret_arn                     = var.n8n_operator_secret_arn
+  n8n_service_credential_secret_arn           = var.n8n_service_credential_secret_arn
+  n8n_agent_step_bridge_credential_secret_arn = var.n8n_agent_step_bridge_credential_secret_arn
+  n8n_storage_bucket_name                     = var.n8n_storage_bucket_name
+  n8n_container_port                          = var.n8n_container_port
+  n8n_cache_engine                            = var.n8n_cache_engine
+  n8n_domain                                  = local.n8n_domain
+  n8n_public_url                              = local.n8n_url
+  n8n_certificate_arn                         = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
+  google_oauth_client_id                      = var.google_oauth_client_id
+  google_oauth_client_secret                  = var.google_oauth_client_secret
+  pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
+  cognito_custom_auth_lambda_zip              = var.cognito_custom_auth_lambda_zip
+  lambda_zips_dir                             = var.lambda_zips_dir
+  lambda_artifact_bucket                      = var.lambda_artifact_bucket
+  lambda_artifact_prefix                      = var.lambda_artifact_prefix
+  require_lambda_artifacts                    = var.require_lambda_artifacts
+  enable_workspace_orchestration              = var.enable_workspace_orchestration
+  api_auth_secret                             = var.api_auth_secret
+  platform_operator_emails                    = var.platform_operator_emails
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain
@@ -1417,6 +1424,16 @@ output "n8n_valkey_endpoint" {
 output "n8n_storage_bucket_name" {
   description = "S3 bucket name used for n8n managed artifacts (null when n8n_provisioned = false)"
   value       = module.thinkwork.n8n_storage_bucket_name
+}
+
+output "n8n_service_credential_secret_arn" {
+  description = "Secrets Manager ARN used for the n8n MCP tenant service credential (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_service_credential_secret_arn
+}
+
+output "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN used for the inbound n8n agent-step bridge credential (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_agent_step_bridge_credential_secret_arn
 }
 
 output "agentcore_memory_id" {
