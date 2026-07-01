@@ -77,6 +77,14 @@ approval. Write/delete/interactive tools should default to explicit approval and
 policy validation. Untrusted external content should be treated as data, never
 as instructions to the agent or broker.
 
+Brad Groux's Codex permissions article adds the same idea at the operating-mode
+level: the team should name the work mode before the agent starts and give that
+mode only the access the task needs. Codex permission profiles are a useful
+analogy, but they only govern local sandboxed command execution. ThinkWork must
+apply the same least-privilege-per-task concept across the company-resource
+surface: connectors, MCP tools, browser sessions, cloud actions, production
+credentials, external communication, and system writebacks.
+
 ---
 
 ## Actors
@@ -281,7 +289,7 @@ as instructions to the agent or broker.
   optimization layers; ThinkWork owns the cross-system business read model,
   policy, memory, rendered work surface, and governed action boundary.
 
-**Connector safety and source coverage**
+**Connector safety, source coverage, and task permissions**
 
 - R28. ThinkWork must not encourage users to attach every available connector
   directly to an external agent. It must expose task-scoped source bundles that
@@ -304,6 +312,23 @@ as instructions to the agent or broker.
 - R34. ThinkWork should reject broad "connect everything and make a dashboard"
   requests unless they are narrowed to a business bottleneck, canonical source
   map, and reviewable work surface.
+- R35. Every broker call must resolve an explicit task access posture before
+  source access or action execution begins. The posture should include source
+  scope, data classes, read/write capability, network or external-service
+  access, approval mode, and denied sensitive paths or secrets where relevant.
+- R36. ThinkWork should support named task modes for common broker use:
+  read/inspect, compile/render, optimize/recommend, and approved-writeback. The
+  names can change during implementation, but each mode must map to concrete
+  policy behavior instead of prompt-only instructions.
+- R37. ThinkWork must choose the narrowest task mode that can satisfy the
+  request. Escalating to broader connector, network, browser, cloud, production,
+  or writeback access must require a clear reason, policy allowance, and audit
+  record.
+- R38. ThinkWork must not treat Codex, Claude, or any host-level permission
+  profile as sufficient protection for company resources. Host permissions are
+  one layer; ThinkWork still owns controls for MCP tools, connectors, browser
+  surfaces, cloud actions, production credentials, external communication, and
+  writebacks.
 
 ---
 
@@ -359,6 +384,12 @@ as instructions to the agent or broker.
   ThinkWork, then ThinkWork responds with a source audit or asks for a specific
   workflow bottleneck instead of producing an authoritative-looking generic
   dashboard.
+- AE13. **Covers R35, R36, R37, R38.** Given a user asks an external agent to
+  review onboarding blockers, when the agent calls ThinkWork, then ThinkWork
+  uses a read/compile task mode without external writeback access; given the
+  user later approves a dispatch routing update, then ThinkWork escalates only
+  to the approved-writeback mode required for the P21 routing fields and records
+  the reason.
 
 ---
 
@@ -431,6 +462,10 @@ as instructions to the agent or broker.
 - **Connector posture:** Do not ask users to attach every connector to the
   external agent. ThinkWork exposes task-scoped source bundles, source coverage,
   gaps, and policy-bounded actions.
+- **Task-permission posture:** Use least privilege per task. Each broker call
+  resolves a named access posture before work starts, and broader source,
+  network, browser, cloud, production, or writeback access requires policy and a
+  recorded reason.
 - **Action posture:** Onboarding includes ThinkWork-only actions. Dispatch can
   include governed P21 routing writeback after approval and validation.
 - **Workflow posture:** Do not build a state-machine product. Use workflow
@@ -488,6 +523,9 @@ as instructions to the agent or broker.
 - [Affects R32, R33][Security] Which data classes and tool types are considered
   private data, untrusted content, and external communication or write channels
   for the first two use cases?
+- [Affects R35, R36, R37, R38][Security] What are the first named ThinkWork task
+  modes, and how do they map to source bundles, data classes, approval policy,
+  network/browser/cloud access, and writeback rights?
 - [Affects R15, R16][Technical] Which render output should be the first
   implementation target: MCP App resource, ThinkWork `data-json-render`, or a
   dual-path adapter?

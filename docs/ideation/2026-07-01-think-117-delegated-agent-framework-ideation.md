@@ -17,6 +17,8 @@ external:
   - https://github.com/agentic-community/mcp-gateway-registry
   - https://github.com/thesysdev/openui
   - https://fortelabs.com/blog/the-ultimate-guide-to-claude-connectors/
+  - https://x.com/BradGroux/status/2072313657883586873
+  - https://developers.openai.com/codex/permissions
 ---
 
 # Ideation: THINK-117 Delegated Agent Framework
@@ -109,6 +111,16 @@ and for ThinkWork as the task-scoped broker that knows the source map, exposes
 coverage and gaps, controls write/delete tools, and returns source-backed work
 surfaces.
 
+Brad Groux's Codex permissions article adds the operating-model version of the
+same point: name the work mode before the agent starts and give it only the
+access that task needs. OpenAI's Codex permissions docs make this concrete for
+local command execution with named profiles, filesystem read/write/deny rules,
+network domain rules, and admin-managed allowlists. The key translation for
+ThinkWork is broader than Codex local sandboxing: the broker must apply
+least-privilege per task across connectors, MCP tools, browser surfaces, cloud
+actions, production credentials, and external writebacks. Prompt-only guidance
+is not enough; the task access posture has to be policy and audit data.
+
 ### Sharpened Product Shape
 
 The concrete product is **External Agent Resource Broker**:
@@ -120,7 +132,7 @@ The concrete product is **External Agent Resource Broker**:
 The broker has four jobs:
 
 1. **Access:** authenticate the external harness and resolve the human, Space,
-   client, credential subject, and policy context.
+   client, credential subject, task mode, and policy context.
 2. **Resource translation:** connect to legacy and modern systems such as
    Epicor P21, CRM, ERP, ticketing, docs, Slack, GitHub, and internal apps using
    the user's or tenant's approved credentials, but only through the
@@ -130,8 +142,9 @@ The broker has four jobs:
    `data-json-render` part, analytics display payload, or an OpenUI-compatible
    component description.
 4. **Control:** apply permission checks, approvals, redaction, write gates,
-   coverage/gap disclosure, untrusted-content handling, memory retention, and
-   audit evidence before anything reaches the host.
+   least-privilege task profiles, coverage/gap disclosure, untrusted-content
+   handling, memory retention, and audit evidence before anything reaches the
+   host.
 
 Example user flow:
 
@@ -158,10 +171,10 @@ The value proposition is therefore sharper than "MCP gateway":
 The stickiness is not the endpoint URL. Stickiness comes from the accumulated
 enterprise substrate: approved connectors, user OAuth grants, Space policies,
 legacy-system normalization maps, render templates, memory, approval history,
-audit evidence, source coverage maps, and domain-specific capability cards. If
-ThinkWork only proxies tools, it is replaceable. If ThinkWork becomes the
-translation, policy, memory, coverage, and rendered-work layer for company
-systems, switching costs become real.
+audit evidence, source coverage maps, task access profiles, and domain-specific
+capability cards. If ThinkWork only proxies tools, it is replaceable. If
+ThinkWork becomes the translation, policy, memory, coverage, and rendered-work
+layer for company systems, switching costs become real.
 
 ## Ranked Ideas
 
