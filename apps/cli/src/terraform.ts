@@ -74,13 +74,26 @@ export function resolveTierDir(
   if (existsSync(envDir)) {
     return envDir;
   }
+  // Flat init-scaffolded layout BEFORE the greenfield example: `thinkwork
+  // init` copies examples/ into the scaffold as reference material, so a
+  // scaffolded dir matches both. Resolving greenfield first ran terraform in
+  // the bundled example — which has no terraform.tfvars (the npm bundler
+  // strips them) — failing every scaffolded deploy with "No value for
+  // required variable" (harness ledger, cycle 1). The repo layout is
+  // unaffected: its terraform/ root has no main.tf + tfvars pair.
+  const flat = path.join(terraformDir);
+  if (
+    existsSync(path.join(flat, "main.tf")) &&
+    existsSync(path.join(flat, "terraform.tfvars"))
+  ) {
+    return flat;
+  }
   // Check for greenfield example (repo layout)
   const greenfield = path.join(terraformDir, "examples", "greenfield");
   if (existsSync(greenfield)) {
     return greenfield;
   }
-  // Flat layout (scaffolded by `thinkwork init`): terraform/ in CWD with main.tf
-  const flat = path.join(terraformDir);
+  // Flat layout without tfvars yet (main.tf only)
   if (existsSync(path.join(flat, "main.tf"))) {
     return flat;
   }
