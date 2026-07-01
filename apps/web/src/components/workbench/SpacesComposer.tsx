@@ -605,7 +605,7 @@ function PromptInputAttachButton() {
     <PromptInputButton
       type="button"
       variant="ghost"
-      className="text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+      className="-ml-1.5 text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
       onClick={() => attachments.openFileDialog()}
       aria-label="Attach file"
       title="Add files and more"
