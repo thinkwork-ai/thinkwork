@@ -16,6 +16,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   costEvents,
+  evalCaseOverrides,
   evalReplayToolAllowlist,
   evalResults,
   evalRuns,
@@ -43,12 +44,16 @@ import {
 } from "../lib/evals/agentcore-direct.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
 import {
-  bedrockLlmJudge,
+  createBedrockLlmJudge,
   createInHouseScoringEngine,
   EvalJudgeInvocationError,
   heuristicFallbackJudge,
   llmJudgeEnabled,
 } from "../lib/evals/engines/in-house.js";
+import {
+  summarizeEvalRunVerdicts,
+  summaryScoringVersionFor,
+} from "../lib/evals/case-verdicts.js";
 import { createAgentCoreScoringEngine } from "../lib/evals/engines/agentcore.js";
 
 // Engine-seam extractions (Trust Core U10): the judge + gate symbols
@@ -57,6 +62,7 @@ import { createAgentCoreScoringEngine } from "../lib/evals/engines/agentcore.js"
 export { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
 export {
   bedrockLlmJudge,
+  createBedrockLlmJudge,
   EVAL_IN_HOUSE_ENGINE_ID,
   EVAL_JUDGE_SYSTEM_PROMPT,
   EvalJudgeInvocationError,
@@ -64,6 +70,7 @@ export {
   heuristicFallbackJudge,
   llmJudgeEnabled,
   parseEvalJudgeVerdict,
+  resolveEvalJudgeModelId,
   type EvalJudgeVerdict,
 } from "../lib/evals/engines/in-house.js";
 export {
@@ -96,6 +103,13 @@ export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
   index?: number;
+  /**
+   * Which trial of the case this message executes (0-based; Eval
+   * Profiles U4). Part of the result-row identity
+   * (run_id, test_case_id, trial_index) — the dedup check and advisory
+   * lock incorporate it. Absent on legacy in-flight messages (= 0).
+   */
+  trialIndex?: number;
   /**
    * Dataset-pinned launches (Trust Core U6): the run-scoped S3 key the
    * worker loads the case content from, plus its expected sha. Absent on
@@ -189,6 +203,8 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
     runId: parsed.runId,
     testCaseId: parsed.testCaseId,
     index: typeof parsed.index === "number" ? parsed.index : undefined,
+    trialIndex:
+      typeof parsed.trialIndex === "number" ? parsed.trialIndex : undefined,
     snapshotKey:
       typeof parsed.snapshotKey === "string" && parsed.snapshotKey.length > 0
         ? parsed.snapshotKey
@@ -324,8 +340,15 @@ export function _setScoringEnginesForTests(
  * agentCoreEvaluatorsEnabled() is consulted inside the adapter. Engines
  * are resolved per case so env-driven judge enablement is read at
  * execution time, exactly like the pre-contract path.
+ *
+ * `pinnedJudgeModel` is the run's profile_snapshot.judgeModel (Eval
+ * Profiles U4, KTD11) — threaded into the Bedrock judge so two profiles
+ * with different judge pins genuinely score under different judges; null
+ * falls back to the deployed default (EVAL_JUDGE_MODEL_ID).
  */
-function resolveScoringEngines(): ScoringEngines {
+function resolveScoringEngines(
+  pinnedJudgeModel: string | null = null,
+): ScoringEngines {
   return {
     inHouse:
       scoringEnginesForTests?.inHouse ??
@@ -336,11 +359,29 @@ function resolveScoringEngines(): ScoringEngines {
         // rubrics (red-team) and throws EvalJudgeInvocationError →
         // error/evaluator_error for non-refusal rubrics, so a quality
         // rubric is recorded unscored rather than vacuously passed.
-        judge: llmJudgeEnabled() ? bedrockLlmJudge : heuristicFallbackJudge,
+        judge: llmJudgeEnabled()
+          ? createBedrockLlmJudge(pinnedJudgeModel)
+          : heuristicFallbackJudge,
       }),
     agentCore:
       scoringEnginesForTests?.agentCore ?? createAgentCoreScoringEngine(),
   };
+}
+
+/**
+ * Extract the pinned judge model from the run's dispatch-time profile
+ * snapshot (KTD11). Null when the run predates profiles or the profile
+ * left the judge unpinned — the deployed default judge applies.
+ */
+export function pinnedJudgeModelForRun(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot">,
+): string | null {
+  const snapshot = run.profile_snapshot;
+  if (typeof snapshot !== "object" || snapshot === null) return null;
+  const judgeModel = (snapshot as { judgeModel?: unknown }).judgeModel;
+  return typeof judgeModel === "string" && judgeModel.trim().length > 0
+    ? judgeModel
+    : null;
 }
 
 /**
@@ -608,7 +649,7 @@ async function executeCase(
     // EvalEngineContractViolationError (classified error/evaluator_error
     // below); engine-thrown errors propagate raw so throttles stay
     // SQS-retryable.
-    const engines = resolveScoringEngines();
+    const engines = resolveScoringEngines(pinnedJudgeModelForRun(run));
     const response = { output: actualOutput, durationMs, sessionId };
     const inHouseResult = await runScoringEngine(engines.inHouse, {
       query: tc.query,
@@ -722,14 +763,41 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
 
   const rows = await db
     .select({
+      test_case_id: evalResults.test_case_id,
+      trial_index: evalResults.trial_index,
       status: evalResults.status,
       override_status: evalResults.override_status,
       evaluator_results: evalResults.evaluator_results,
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
-  const summary = summarizeEvalResults(rows, run.scoring_version);
-  const isComplete = summary.completed >= run.total_tests;
+  // Case-level overrides (KTD9) apply LAST in the aggregation layer;
+  // legacy (unversioned) runs never consult them.
+  const caseOverrides =
+    run.scoring_version === null
+      ? []
+      : await db
+          .select({
+            test_case_id: evalCaseOverrides.test_case_id,
+            override_status: evalCaseOverrides.override_status,
+          })
+          .from(evalCaseOverrides)
+          .where(eq(evalCaseOverrides.run_id, runId));
+  // Counters are CASE verdicts (trial aggregation, KTD4); completion is
+  // per-trial row arithmetic against the pinned fan-out count —
+  // pre-profile / in-flight runs (null expected_result_rows) keep
+  // finalizing at case count.
+  const summary = summarizeEvalRunVerdicts(
+    rows,
+    caseOverrides,
+    run.scoring_version,
+  );
+  const totalCostUsd = rows.reduce(
+    (total, row) => total + evaluatorCostUsd(row.evaluator_results),
+    0,
+  );
+  const expectedRows = run.expected_result_rows ?? run.total_tests;
+  const isComplete = summary.completed >= expectedRows;
   const completedAt = new Date();
 
   const updated = await db
@@ -740,21 +808,25 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
       passed: summary.passed,
       failed: summary.failed,
       errored: summary.errored,
+      unstable: summary.unstable,
       pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
-      cost_usd: summary.totalCostUsd.toFixed(6),
+      cost_usd: totalCostUsd.toFixed(6),
       // Record the semantics this summary was computed under. Legacy
-      // runs (null stamp) keep a null summary version; stamped runs get
-      // the version this code actually knows — if the run was stamped by
-      // newer code, the divergence makes the reconciler/read path
-      // recompute once that code is warm (deploy-window guard).
-      summary_scoring_version:
-        run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+      // runs (null stamp) keep a null summary version; runs stamped at or
+      // below the deployed version record their own stamp (v2 and v3
+      // share the denominator rule); runs stamped by newer code record
+      // this code's version — the divergence makes the reconciler/read
+      // path recompute once that code is warm (deploy-window guard).
+      summary_scoring_version: summaryScoringVersionFor(
+        run.scoring_version,
+        CURRENT_EVAL_SCORING_VERSION,
+      ),
     })
     .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, "running")))
     .returning({ id: evalRuns.id });
   if (updated.length === 0) return;
 
-  if (isComplete && summary.totalCostUsd > 0 && run.agent_id) {
+  if (isComplete && totalCostUsd > 0 && run.agent_id) {
     await db
       .insert(costEvents)
       .values({
@@ -762,7 +834,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
         agent_id: run.agent_id,
         request_id: `eval-run-${runId}`,
         event_type: "eval_compute",
-        amount_usd: summary.totalCostUsd.toFixed(6),
+        amount_usd: totalCostUsd.toFixed(6),
         metadata: {
           source: "eval-worker",
           run_id: runId,
@@ -783,7 +855,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     passRate: summary.passRate ?? undefined,
   });
   console.log(
-    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed, ${summary.errored ?? 0} errored of ${run.total_tests}`,
+    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed, ${summary.errored ?? 0} errored, ${summary.unstable ?? 0} unstable of ${run.total_tests} cases (${summary.completed}/${expectedRows} rows)`,
   );
 }
 
@@ -808,6 +880,9 @@ async function handleMessage(
     return;
   }
 
+  // Result-row identity is (run, case, trial) — Eval Profiles U4. A
+  // legacy in-flight message without trialIndex is trial 0.
+  const trialIndex = message.trialIndex ?? 0;
   const [existing] = await db
     .select({ id: evalResults.id })
     .from(evalResults)
@@ -815,6 +890,7 @@ async function handleMessage(
       and(
         eq(evalResults.run_id, message.runId),
         eq(evalResults.test_case_id, message.testCaseId),
+        eq(evalResults.trial_index, trialIndex),
       ),
     );
   if (existing) {
@@ -882,10 +958,12 @@ async function handleMessage(
   if (freshRun?.status === "cancelled") return;
 
   await db.transaction(async (tx) => {
+    // The lock key combines the case with the trial index (KTD5) so
+    // concurrent trials of one case serialize per trial, not per case.
     await tx.execute(sql`
 			SELECT pg_advisory_xact_lock(
 				hashtext(${message.runId}),
-				hashtext(${message.testCaseId})
+				hashtext(${`${message.testCaseId}:${trialIndex}`})
 			)
 		`);
     const [duplicate] = await tx
@@ -895,6 +973,7 @@ async function handleMessage(
         and(
           eq(evalResults.run_id, message.runId),
           eq(evalResults.test_case_id, message.testCaseId),
+          eq(evalResults.trial_index, trialIndex),
         ),
       );
     if (duplicate) return;
@@ -902,6 +981,7 @@ async function handleMessage(
     await tx.insert(evalResults).values({
       run_id: message.runId,
       test_case_id: message.testCaseId,
+      trial_index: trialIndex,
       status: outcome.status,
       error_cause: outcome.errorCause,
       score: outcome.score === null ? null : outcome.score.toFixed(4),

@@ -10,6 +10,7 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, asc, desc, inArray, sql } from "../../utils.js";
 import {
+  evalCaseOverrides,
   evalRuns,
   evalResults,
   evalTestCases,
@@ -25,6 +26,10 @@ import {
   CURRENT_EVAL_SCORING_VERSION,
   summarizeEvalStatuses,
 } from "@thinkwork/evals-core";
+import {
+  summarizeEvalRunVerdicts,
+  summaryScoringVersionFor,
+} from "../../../lib/evals/case-verdicts.js";
 import { GraphQLError } from "graphql";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
@@ -108,6 +113,9 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     passed: row.passed,
     failed: row.failed,
     errored: row.errored ?? null,
+    // Unstable CASE verdicts (Eval Profiles U4) — excluded from passRate
+    // like errors. Null on legacy/pre-trial-aggregation runs.
+    unstable: row.unstable ?? null,
     // Legacy runs predate scoring_version stamping: errors were folded
     // into `failed` and pass_rate used the old denominator. Surface the
     // label so UIs never blend the two scales silently.
@@ -226,6 +234,9 @@ function resultToGraphql(
     testCaseName: testCase?.name ?? null,
     category: testCase?.category ?? null,
     status: row.status,
+    // 0-based trial identity (Eval Profiles U4); legacy rows carry 0
+    // via the column default.
+    trialIndex: (row.trial_index as number | null) ?? 0,
     score: row.score ? Number(row.score) : null,
     durationMs: row.duration_ms,
     agentSessionId: row.agent_session_id,
@@ -352,6 +363,7 @@ function plannedResultToGraphql(
     testCaseName: testCase.name,
     category: testCase.category,
     status: placeholderStatusForEvalRun(String(run.status ?? "")),
+    trialIndex: 0,
     score: null,
     durationMs: null,
     agentSessionId: null,
@@ -462,19 +474,21 @@ const evalSummary = async (
     };
   }
   // Headline numbers never blend denominators: latest/avg pass rates
-  // only aggregate non-cancelled completed runs stamped with the current
-  // scoring version. Legacy runs (null scoring_version) used a different
-  // denominator (errors counted as failed) and are excluded; AVG ignores
-  // null pass_rate (all-error / zero-case runs) by construction.
+  // only aggregate non-cancelled completed runs stamped with a versioned
+  // (>= 2) scoring semantics — v2 and v3 share the errors-out-of-
+  // denominator rule (KTD4), so their pass rates blend safely. Legacy
+  // runs (null scoring_version) used a different denominator (errors
+  // counted as failed) and are excluded; AVG ignores null pass_rate
+  // (all-error / zero-case runs) by construction.
   const [agg] = await db
     .select({
       totalRuns: sql<number>`COUNT(*)::int`,
       latestPassRate: sql<
         number | null
-      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${tenantId} AND status = 'completed' AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION} ORDER BY completed_at DESC LIMIT 1)`,
+      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${tenantId} AND status = 'completed' AND scoring_version >= 2 ORDER BY completed_at DESC LIMIT 1)`,
       avgPassRate: sql<
         number | null
-      >`(AVG(pass_rate) FILTER (WHERE status = 'completed' AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION}))::float`,
+      >`(AVG(pass_rate) FILTER (WHERE status = 'completed' AND scoring_version >= 2))::float`,
       regressionCount: sql<number>`COUNT(*) FILTER (WHERE regression = true)::int`,
     })
     .from(evalRuns)
@@ -591,11 +605,16 @@ const evalRunResults = async (
     ),
   );
 
-  const actualByTestCaseId = new Map(
-    actualRows
-      .filter((result) => result.testCaseId)
-      .map((result) => [result.testCaseId, result]),
-  );
+  // Multi-trial runs (Eval Profiles U4) write several rows per case —
+  // group them so every trial row survives the planned-set merge below
+  // (case-level grouping/nesting in the UI is KTD12/U6).
+  const actualByTestCaseId = new Map<unknown, (typeof actualRows)[number][]>();
+  for (const result of actualRows) {
+    if (!result.testCaseId) continue;
+    const grouped = actualByTestCaseId.get(result.testCaseId);
+    if (grouped) grouped.push(result);
+    else actualByTestCaseId.set(result.testCaseId, [result]);
+  }
   const caseConditions = [
     eq(evalTestCases.tenant_id, run.tenant_id),
     eq(evalTestCases.enabled, true),
@@ -634,7 +653,11 @@ const evalRunResults = async (
   const plannedTestCaseIds = new Set(testCases.map((testCase) => testCase.id));
   const plannedRows = testCases.flatMap((testCase) => {
     const actual = actualByTestCaseId.get(testCase.id);
-    if (actual) return [actual];
+    if (actual) {
+      return [...actual].sort(
+        (a, b) => (a.trialIndex ?? 0) - (b.trialIndex ?? 0),
+      );
+    }
     return shouldIncludePlaceholders
       ? [plannedResultToGraphql(run, testCase)]
       : [];
@@ -724,7 +747,7 @@ const evalTimeSeries = async (
 		FROM eval_runs
 		WHERE tenant_id = ${tenantId}
 		  AND status = 'completed'
-		  AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION}
+		  AND scoring_version >= 2
 		  AND completed_at >= NOW() - (${days} || ' days')::interval
 		GROUP BY 1
 		ORDER BY 1 ASC
@@ -982,7 +1005,7 @@ const startEvalRun = async (
   );
   const requestedModel = args.input.profileId
     ? profile.model
-    : (args.input.model?.trim() || profile.model);
+    : args.input.model?.trim() || profile.model;
   const model = await resolveEvalModelId(args.tenantId, requestedModel);
 
   // Dataset launch (Trust Core U6): resolve the dataset BEFORE the run
@@ -1401,7 +1424,7 @@ function evalNotFound(message: string): GraphQLError {
  */
 async function recomputeEvalRunSummaryAfterOverride(runId: string): Promise<{
   run: typeof evalRuns.$inferSelect;
-  summary: ReturnType<typeof summarizeEvalStatuses>;
+  summary: ReturnType<typeof summarizeEvalRunVerdicts>;
 } | null> {
   return await db.transaction(async (tx) => {
     await tx.execute(sql`
@@ -1419,12 +1442,32 @@ async function recomputeEvalRunSummaryAfterOverride(runId: string): Promise<{
 
     const rows = await tx
       .select({
+        test_case_id: evalResults.test_case_id,
+        trial_index: evalResults.trial_index,
         status: evalResults.status,
         override_status: evalResults.override_status,
       })
       .from(evalResults)
       .where(eq(evalResults.run_id, runId));
-    const summary = summarizeEvalStatuses(rows, run.scoring_version);
+    // Case-level overrides (KTD9) apply LAST in the aggregation layer;
+    // legacy (unversioned) runs never consult them.
+    const caseOverrides =
+      run.scoring_version === null
+        ? []
+        : await tx
+            .select({
+              test_case_id: evalCaseOverrides.test_case_id,
+              override_status: evalCaseOverrides.override_status,
+            })
+            .from(evalCaseOverrides)
+            .where(eq(evalCaseOverrides.run_id, runId));
+    // Same trial-aggregation layer the worker's finalization consumes
+    // (KTD4 — the two summary call sites must never fork).
+    const summary = summarizeEvalRunVerdicts(
+      rows,
+      caseOverrides,
+      run.scoring_version,
+    );
 
     if (run.status === "completed" || run.status === "cancelled") {
       await tx
@@ -1433,16 +1476,66 @@ async function recomputeEvalRunSummaryAfterOverride(runId: string): Promise<{
           passed: summary.passed,
           failed: summary.failed,
           errored: summary.errored,
+          unstable: summary.unstable,
           pass_rate:
             summary.passRate === null ? null : summary.passRate.toFixed(4),
-          summary_scoring_version:
-            run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: summaryScoringVersionFor(
+            run.scoring_version,
+            CURRENT_EVAL_SCORING_VERSION,
+          ),
         })
         .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, run.status)));
     }
 
     return { run, summary };
   });
+}
+
+/**
+ * Read the trial count the run's pinned plan assigns a case. The plan
+ * ([{ caseId, trials }], caseId = eval_test_cases uuid) is immutable
+ * run-row data pinned at dispatch; null when the run predates trial
+ * plans or the case isn't in the plan.
+ */
+function pinnedTrialsForCase(
+  pinnedTrialPlan: unknown,
+  testCaseId: string,
+): number | null {
+  if (!Array.isArray(pinnedTrialPlan)) return null;
+  for (const entry of pinnedTrialPlan) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { caseId, trials } = entry as { caseId?: unknown; trials?: unknown };
+    if (caseId === testCaseId && typeof trials === "number") {
+      return trials;
+    }
+  }
+  return null;
+}
+
+/**
+ * True when a case ran (or was fanned out) multi-trial in the run —
+ * either the pinned plan gives it >1 trials, or a trial_index > 0 row
+ * exists for it (belt-and-suspenders for plan-less edge cases).
+ */
+async function isMultiTrialCase(
+  runId: string,
+  testCaseId: string,
+  pinnedTrialPlan: unknown,
+): Promise<boolean> {
+  const planTrials = pinnedTrialsForCase(pinnedTrialPlan, testCaseId);
+  if (planTrials !== null) return planTrials > 1;
+  const [sibling] = await db
+    .select({ id: evalResults.id })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.run_id, runId),
+        eq(evalResults.test_case_id, testCaseId),
+        sql`${evalResults.trial_index} > 0`,
+      ),
+    )
+    .limit(1);
+  return Boolean(sibling);
 }
 
 /**
@@ -1486,6 +1579,7 @@ const overrideEvalResult = async (
     .select({
       id: evalResults.id,
       runId: evalResults.run_id,
+      testCaseId: evalResults.test_case_id,
       status: evalResults.status,
     })
     .from(evalResults)
@@ -1493,7 +1587,10 @@ const overrideEvalResult = async (
   if (!existing) throw evalNotFound(`eval result ${resultId} not found`);
 
   const [run] = await db
-    .select({ tenantId: evalRuns.tenant_id })
+    .select({
+      tenantId: evalRuns.tenant_id,
+      pinnedTrialPlan: evalRuns.pinned_trial_plan,
+    })
     .from(evalRuns)
     .where(eq(evalRuns.id, existing.runId));
   if (!run) throw evalNotFound(`eval run ${existing.runId} not found`);
@@ -1508,6 +1605,25 @@ const overrideEvalResult = async (
   if (existing.status !== "pass" && existing.status !== "fail") {
     throw evalBadInput(
       `Only scored results (status pass|fail) can be overridden; this result has status '${existing.status}'.`,
+    );
+  }
+
+  // Rows of multi-trial cases are never overridden individually (KTD9)
+  // — a single trial's verdict is one vote, not the case verdict. The
+  // case-level mutation applies last in the aggregation layer instead.
+  // Clears stay allowed unconditionally: removing a stray override can
+  // only restore the judge's verdict.
+  if (
+    overrideStatus !== null &&
+    existing.testCaseId &&
+    (await isMultiTrialCase(
+      existing.runId,
+      existing.testCaseId,
+      run.pinnedTrialPlan,
+    ))
+  ) {
+    throw evalBadInput(
+      "This result belongs to a multi-trial case; per-trial rows cannot be overridden individually. Use overrideEvalCaseVerdict to override the case-level verdict.",
     );
   }
 
@@ -1567,6 +1683,139 @@ const overrideEvalResult = async (
     if (tc) testCase = { name: tc.name, category: tc.category ?? "" };
   }
   return resultToGraphql(updatedRow, testCase);
+};
+
+interface OverrideEvalCaseVerdictInput {
+  runId: string;
+  testCaseId: string;
+  /**
+   * 'pass' | 'fail' sets (or re-sets — last write wins) the case-level
+   * override; null/omitted clears it, restoring the aggregated verdict.
+   */
+  overrideStatus?: string | null;
+  /** Required non-empty (after trim) when setting; ignored on clear. */
+  reason?: string | null;
+}
+
+/**
+ * CASE-level verdict override (Eval Profiles U4, KTD9). Multi-trial
+ * cases have no single eval_results row to override — the case verdict
+ * (including `unstable`) exists only in the evals-core trial-aggregation
+ * layer, which applies this override LAST (effective case verdict =
+ * case override ?? aggregate). Same audit posture as overrideEvalResult:
+ * row-derived gate (run → requireTenantAdmin), reason required and
+ * validated server-side, actor derived from the authenticated caller —
+ * never accepted as an argument. Recomputes the run summary under the
+ * run-level advisory lock and pushes notifyEvalRunUpdate.
+ */
+const overrideEvalCaseVerdict = async (
+  _p: any,
+  args: { input: OverrideEvalCaseVerdictInput },
+  ctx: GraphQLContext,
+) => {
+  const { runId, testCaseId } = args.input;
+  const overrideStatus = args.input.overrideStatus ?? null;
+  if (
+    overrideStatus !== null &&
+    overrideStatus !== "pass" &&
+    overrideStatus !== "fail"
+  ) {
+    throw evalBadInput(
+      "overrideStatus must be 'pass' or 'fail' (or null to clear the override).",
+    );
+  }
+  const reason = (args.input.reason ?? "").trim();
+  if (overrideStatus !== null && reason.length === 0) {
+    throw evalBadInput(
+      "A non-empty reason is required to override an eval case verdict.",
+    );
+  }
+
+  const [run] = await db
+    .select({ tenantId: evalRuns.tenant_id })
+    .from(evalRuns)
+    .where(eq(evalRuns.id, runId));
+  if (!run) throw evalNotFound(`eval run ${runId} not found`);
+
+  // Row-derived gate — fails FORBIDDEN before any write when the run
+  // belongs to another tenant.
+  await requireTenantAdmin(ctx, run.tenantId);
+
+  // The override targets a case the run actually produced rows for —
+  // otherwise there is no verdict to overturn (and a typo'd case id
+  // must not create a dangling override).
+  const [resultRow] = await db
+    .select({ id: evalResults.id })
+    .from(evalResults)
+    .where(
+      and(
+        eq(evalResults.run_id, runId),
+        eq(evalResults.test_case_id, testCaseId),
+      ),
+    )
+    .limit(1);
+  if (!resultRow) {
+    throw evalNotFound(
+      `eval run ${runId} has no results for test case ${testCaseId}`,
+    );
+  }
+
+  // The actor is always the authenticated caller — input can't spoof it.
+  const callerUserId = await resolveCallerUserId(ctx);
+  if (!callerUserId) {
+    throw new GraphQLError("Caller identity required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+
+  if (overrideStatus === null) {
+    await db
+      .delete(evalCaseOverrides)
+      .where(
+        and(
+          eq(evalCaseOverrides.run_id, runId),
+          eq(evalCaseOverrides.test_case_id, testCaseId),
+        ),
+      );
+  } else {
+    // Upsert on the (run, case) unique key — last write wins, exactly
+    // like the row-level override's re-set semantics.
+    await db
+      .insert(evalCaseOverrides)
+      .values({
+        run_id: runId,
+        test_case_id: testCaseId,
+        override_status: overrideStatus,
+        overridden_by: callerUserId,
+        overridden_at: new Date(),
+        override_reason: reason,
+      })
+      .onConflictDoUpdate({
+        target: [evalCaseOverrides.run_id, evalCaseOverrides.test_case_id],
+        set: {
+          override_status: overrideStatus,
+          overridden_by: callerUserId,
+          overridden_at: new Date(),
+          override_reason: reason,
+        },
+      });
+  }
+
+  const recomputed = await recomputeEvalRunSummaryAfterOverride(runId);
+  if (recomputed) {
+    await notifyEvalRunUpdate({
+      runId,
+      tenantId: recomputed.run.tenant_id,
+      agentId: recomputed.run.agent_id,
+      status: recomputed.run.status,
+      totalTests: recomputed.run.total_tests,
+      passed: recomputed.summary.passed,
+      failed: recomputed.summary.failed,
+      passRate: recomputed.summary.passRate ?? undefined,
+    });
+  }
+
+  return true;
 };
 
 // ---------------------------------------------------------------------------
@@ -1783,6 +2032,7 @@ export const evaluationsMutations = {
   deleteEvalTestCase,
   seedEvalTestCases,
   overrideEvalResult,
+  overrideEvalCaseVerdict,
   setSkillEvalGate,
   applySkillUpdate,
 };

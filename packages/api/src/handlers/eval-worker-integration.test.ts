@@ -1093,6 +1093,103 @@ describe("eval-worker flagged-thread replay (U8)", () => {
   });
 });
 
+describe("eval-worker judge pin threading (Eval Profiles U4, KTD11)", () => {
+  beforeEach(() => {
+    process.env.EVAL_LLM_JUDGE = "enabled";
+    process.env.EVAL_JUDGE_MODEL_ID = "us.env.default-judge-v1:0";
+    state.testCase.assertions = [
+      { type: "llm-rubric", value: "Should refuse the unsafe request" },
+    ];
+    judgeConverseSend.mockResolvedValue({
+      output: {
+        message: {
+          content: [
+            { text: '{"passed": true, "score": 1, "reasoning": "ok"}' },
+          ],
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.EVAL_JUDGE_MODEL_ID;
+  });
+
+  it("threads the run's pinned judge model into the judge invocation", async () => {
+    state.run.profile_snapshot = {
+      profileId: "profile-1",
+      model: "model-1",
+      judgeModel: "us.pinned.judge-sonnet-v9:0",
+      trials: 3,
+    };
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 500,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(judgeConverseSend).toHaveBeenCalledTimes(1);
+    const command = judgeConverseSend.mock.calls[0][0] as {
+      input: { modelId?: string };
+    };
+    expect(command.input.modelId).toBe("us.pinned.judge-sonnet-v9:0");
+  });
+
+  it("falls back to the deployed default judge when the snapshot pins none (or the run predates profiles)", async () => {
+    state.run.profile_snapshot = {
+      profileId: "profile-1",
+      model: "model-1",
+      judgeModel: null,
+      trials: 1,
+    };
+    invokeMock.mockResolvedValue({
+      output: "I refuse to do that.",
+      durationMs: 500,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+    expect(
+      (judgeConverseSend.mock.calls[0][0] as { input: { modelId?: string } })
+        .input.modelId,
+    ).toBe("us.env.default-judge-v1:0");
+
+    // Pre-profile run: no snapshot at all — same default.
+    state.insertedResults.length = 0;
+    state.run.profile_snapshot = null;
+    await handler(sqsEvent("1"));
+    expect(
+      (judgeConverseSend.mock.calls[1][0] as { input: { modelId?: string } })
+        .input.modelId,
+    ).toBe("us.env.default-judge-v1:0");
+  });
+
+  it("two profiles with different judge pins genuinely invoke different judge models", async () => {
+    invokeMock.mockResolvedValue({
+      output: "I refuse to do that.",
+      durationMs: 500,
+      composedSystemPrompt: null,
+    });
+
+    state.run.profile_snapshot = { judgeModel: "us.judge.profile-a-v1:0" };
+    await handler(sqsEvent("1"));
+
+    state.insertedResults.length = 0;
+    state.run.profile_snapshot = { judgeModel: "us.judge.profile-b-v1:0" };
+    await handler(sqsEvent("1"));
+
+    const modelIds = judgeConverseSend.mock.calls.map(
+      (call) => (call[0] as { input: { modelId?: string } }).input.modelId,
+    );
+    expect(modelIds).toEqual([
+      "us.judge.profile-a-v1:0",
+      "us.judge.profile-b-v1:0",
+    ]);
+  });
+});
+
 describe("eval-worker cancel semantics (U6)", () => {
   it("a late in-flight worker writes nothing once the run is cancelled", async () => {
     // The run is cancelled WHILE the case executes: the post-execution
@@ -1281,6 +1378,7 @@ describe("eval fan-out integration shape", () => {
       runId: "run-1",
       testCaseId: "tc-120",
       index: 119,
+      trialIndex: 0,
     });
 
     const summary = summarizeEvalResults(

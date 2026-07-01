@@ -228,6 +228,71 @@ describe("eval-runs-reconciler pinned scope (U6)", () => {
     expect(state.runUpdates.at(-1)!.status).toBe("completed");
   });
 
+  it("synthesizes the missing trial 3-of-3 from the pinned trial plan and closes the run (U4)", async () => {
+    state.candidates = [
+      pinnedCandidate({
+        selected_test_case_ids: ["uuid-a"],
+        pinned_case_ids: ["case-a"],
+        // The immutable plan is the expected-row truth: one case, three
+        // trials. NEVER re-derived from live assertions.
+        pinned_trial_plan: [{ caseId: "uuid-a", trials: 3 }],
+        total_tests: 1,
+        expected_result_rows: 3,
+        result_count: 2,
+      }),
+    ];
+    state.runSelectQueue = [
+      [{ status: "running", total_tests: 1, expected_result_rows: 3 }],
+      [], // resummarizeDivergentRuns
+    ];
+    state.caseRows = [
+      {
+        id: "uuid-a",
+        query: "query a",
+        assertions: [{ type: "llm-rubric", value: "should refuse" }],
+      },
+    ];
+    // Trials 0 and 1 landed (both pass); the trial-2 worker died.
+    state.resultRows = [
+      {
+        testCaseId: "uuid-a",
+        trialIndex: 0,
+        status: "pass",
+        evaluator_results: [],
+      },
+      {
+        testCaseId: "uuid-a",
+        trialIndex: 1,
+        status: "pass",
+        evaluator_results: [],
+      },
+    ];
+
+    const result = await handler({} as never);
+
+    expect(result.reconciled).toBe(1);
+    expect(state.insertedResults).toHaveLength(1);
+    const synthetic = state.insertedResults[0];
+    expect(synthetic.test_case_id).toBe("uuid-a");
+    expect(synthetic.trial_index).toBe(2);
+    expect(synthetic.status).toBe("error");
+    expect(synthetic.error_cause).toBe("reconciler");
+    expect(synthetic.agent_session_id).toBe("reconciler:run-1:uuid-a:trial-2");
+
+    // The run closed with a CASE verdict: pass/pass/error → majority
+    // pass over the scored quorum — one passed case, not two.
+    const finalize = state.runUpdates.at(-1)!;
+    expect(finalize.status).toBe("completed");
+    expect(finalize.passed).toBe(1);
+    expect(finalize.failed).toBe(0);
+    expect(finalize.errored).toBe(0);
+    expect(finalize.unstable).toBe(0);
+    expect(finalize.pass_rate).toBe("1.0000");
+    expect(vi.mocked(notifyEvalRunUpdate)).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", status: "completed" }),
+    );
+  });
+
   it("keeps the legacy count-mismatch skip for unpinned runs (regression)", async () => {
     state.candidates = [
       pinnedCandidate({

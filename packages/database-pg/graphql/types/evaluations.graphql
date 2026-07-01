@@ -238,6 +238,11 @@ type EvalRun {
   # Count of error-status results (infra noise — excluded from passRate).
   # Null on legacy runs, where errors are folded into `failed`.
   errored: Int
+  # Count of unstable CASE verdicts (Eval Profiles U4): scored trials
+  # splitting with no majority. Excluded from passRate and gate math
+  # exactly like errors. Null on legacy runs and on runs finalized before
+  # trial aggregation shipped.
+  unstable: Int
   # Scoring-semantics version stamped at run creation
   # (CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core). Null = legacy
   # run scored under the old denominator (errors counted as failed).
@@ -557,6 +562,20 @@ input OverrideEvalResultInput {
   reason: String
 }
 
+input OverrideEvalCaseVerdictInput {
+  runId: ID!
+  testCaseId: ID!
+  # 'pass' | 'fail' to set (or re-set — last write wins) the case-level
+  # override; null/omitted CLEARS an existing override, restoring the
+  # aggregated verdict. The aggregation layer applies this LAST, so it can
+  # settle an `unstable` case or overturn a majority.
+  overrideStatus: String
+  # Required non-empty (after trim) when setting an override; ignored
+  # when clearing. The overriding caller's identity is derived from the
+  # authenticated context, never from input.
+  reason: String
+}
+
 input StartEvalRunInput {
   # Eval Profile to run against (THINK-107). Omit to use the tenant's
   # default profile (synthesized when none exists). When set, the profile
@@ -703,6 +722,15 @@ extend type Mutation {
   # stamped scoring_version (legacy runs recompute under legacy
   # semantics), and pushes notifyEvalRunUpdate.
   overrideEvalResult(input: OverrideEvalResultInput!): EvalResult!
+  # CASE-level verdict override (Eval Profiles U4, KTD9). Multi-trial
+  # cases have no single result row to override — the case verdict
+  # (including `unstable`) exists only in the trial-aggregation layer, so
+  # the override lives in eval_case_overrides and is applied last there.
+  # Gate is row-derived (run → tenant admin); writing recomputes the run
+  # summary under the run-level advisory lock and pushes
+  # notifyEvalRunUpdate. Row-level overrideEvalResult remains the path
+  # for legacy/single-trial rows and rejects rows of multi-trial cases.
+  overrideEvalCaseVerdict(input: OverrideEvalCaseVerdictInput!): Boolean!
   # MCP replay tool override (Trust Core U14). Operator-gated
   # (requireTenantAdmin). mode 'allow' force-allows a write the heuristic
   # blocks; mode 'block' force-blocks a read the heuristic allows. Upserts

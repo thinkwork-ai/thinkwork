@@ -86,6 +86,7 @@ vi.mock("../../graphql/utils.js", () => {
     },
     eq: (...args: unknown[]) => ({ eq: args }),
     and: (...args: unknown[]) => ({ and: args }),
+    gte: (...args: unknown[]) => ({ gte: args }),
     desc: (arg: unknown) => ({ desc: arg }),
     sql: (...args: unknown[]) => ({ sql: args }),
     evalDatasets: { id: "ds.id", tenant_id: "ds.tenant", slug: "ds.slug" },

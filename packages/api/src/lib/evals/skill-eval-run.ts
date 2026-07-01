@@ -30,6 +30,7 @@ import {
   db,
   and,
   eq,
+  gte,
   desc,
   sql,
   evalDatasets,
@@ -289,8 +290,8 @@ export async function readSkillEvalScore(
     );
   const rated = (totalCases ?? 0) > 0;
 
-  // Latest two completed scored runs (current scoring version only — a
-  // baseline/version change carries a different scoring_version and is
+  // Latest two completed scored runs (versioned scoring only, >= 2 — a
+  // legacy-denominator run carries a null scoring_version and is
   // excluded so it never reads as a skill regression).
   const recent = await db
     .select({
@@ -304,7 +305,9 @@ export async function readSkillEvalScore(
         eq(evalRuns.tenant_id, tenantId),
         eq(evalRuns.dataset_id, dataset.id),
         eq(evalRuns.status, "completed"),
-        eq(evalRuns.scoring_version, CURRENT_EVAL_SCORING_VERSION),
+        // v2 and v3 share the errors-out-of-denominator rule (KTD4), so
+        // their pass rates compare safely; legacy (null) stays excluded.
+        gte(evalRuns.scoring_version, 2),
       ),
     )
     .orderBy(desc(evalRuns.completed_at))

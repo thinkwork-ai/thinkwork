@@ -254,9 +254,10 @@ export const evalRuns = pgTable(
     profile_id: uuid("profile_id").references(() => evalProfiles.id),
     profile_snapshot: jsonb("profile_snapshot"),
     // pinned_trial_plan: per-case trial counts pinned at dispatch —
-    // [{ caseId, trials }] keyed by dataset_case_id (dataset runs) or
-    // test_case_id (category runs). The reconciler reconstructs expected
-    // trial rows from this immutable plan, never from live assertions.
+    // [{ caseId, trials }] where caseId is the eval_test_cases row uuid
+    // the fan-out messages carry (both dispatch paths). The reconciler
+    // reconstructs expected trial rows from this immutable plan, never
+    // from live assertions.
     pinned_trial_plan: jsonb("pinned_trial_plan"),
     // expected_result_rows: sum of the trial plan — the true fan-out count.
     // Completion checks read COALESCE(expected_result_rows, total_tests)
@@ -271,6 +272,12 @@ export const evalRuns = pgTable(
     // runs where errors stay folded into `failed`. Nullable, no default —
     // a null-errored discriminator must never be used to infer semantics.
     errored: integer("errored"),
+    // unstable: count of unstable CASE verdicts (Eval Profiles U4, KTD4)
+    // — scored trials splitting with no majority in the evals-core
+    // trial-aggregation layer. Excluded from pass_rate and gate math
+    // exactly like errors. Null on legacy runs and on runs finalized
+    // before 0198 shipped. Hand-rolled migration 0198_eval_runs_unstable.
+    unstable: integer("unstable"),
     // scoring_version: scoring-semantics version stamped at run creation
     // (CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core). Null =
     // legacy run (~v1: errors count as failed); legacy runs are labeled
