@@ -153,9 +153,13 @@ resource "aws_nat_gateway" "main" {
 }
 
 resource "aws_route" "private_nat" {
-  for_each = local.nat_gateway_enabled ? toset(local.private_route_table_ids) : toset([])
+  # Keyed by static index, not route-table ID: created-in-this-apply IDs are
+  # unknown at plan time and break the FIRST apply in a fresh account
+  # ("Invalid for_each argument" — THINK-118 harness cycle 4). Existing states
+  # re-address these routes on the next apply (brief default-route recreate).
+  count = local.nat_gateway_enabled ? (var.create_vpc ? length(var.availability_zones) : length(var.existing_private_route_table_ids)) : 0
 
-  route_table_id         = each.key
+  route_table_id         = local.private_route_table_ids[count.index]
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.main[0].id
 }

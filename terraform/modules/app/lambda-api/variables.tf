@@ -470,6 +470,12 @@ variable "ecr_repository_url" {
   default     = ""
 }
 
+variable "ecr_repository_provisioned" {
+  description = "Static flag: an ECR repository exists for image-based handlers. count cannot depend on the repository URL attribute (unknown until apply in fresh accounts)."
+  type        = bool
+  default     = false
+}
+
 variable "cors_allowed_origins" {
   description = "Allowed CORS origins for the API Gateway. Use [\"*\"] for development."
   type        = list(string)

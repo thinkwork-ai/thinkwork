@@ -397,7 +397,10 @@ locals {
 }
 
 resource "aws_lambda_function" "skill_trust_runner" {
-  count = local.deploy_lambda_handlers && trimspace(var.ecr_repository_url) != "" ? 1 : 0
+  # Gated on the static ecr_repository_provisioned flag: the repository URL is
+  # an apply-time-unknown attribute in a fresh account, and count cannot
+  # depend on it ("Invalid count argument" — THINK-118 harness cycle 4).
+  count = local.deploy_lambda_handlers && var.ecr_repository_provisioned ? 1 : 0
 
   function_name = "thinkwork-${var.stage}-skill-trust-runner"
   role          = aws_iam_role.lambda.arn
