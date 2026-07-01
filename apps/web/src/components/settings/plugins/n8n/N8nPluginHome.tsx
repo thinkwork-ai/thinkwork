@@ -17,10 +17,12 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsDeploymentStatusQuery,
+  SettingsManagedApplicationDeploymentQuery,
   SettingsInstallPluginMutation,
   SettingsPluginCatalogQuery,
   SettingsPluginInstallsQuery,
   SettingsRefreshPluginCatalogMutation,
+  SettingsStartManagedApplicationPlanMutation,
   SettingsUpgradePluginMutation,
 } from "@/lib/settings-queries";
 import {
@@ -29,6 +31,8 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
+import type { ManagedApplicationJob } from "@/components/settings/managed-applications/types";
 import {
   broadenedScopes,
   componentStateChipClassName,
@@ -44,6 +48,10 @@ export function N8nPluginHome() {
   const showOperatorActions = roleResolved && isOperator;
   const [recentAgentStepsAction, setRecentAgentStepsAction] =
     useState<ReactNode | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [optimisticJob, setOptimisticJob] =
+    useState<ManagedApplicationJob | null>(null);
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -57,6 +65,12 @@ export function N8nPluginHome() {
     query: SettingsPluginInstallsQuery,
     requestPolicy: "cache-and-network",
   });
+  const [jobResult, refreshJob] = useQuery({
+    query: SettingsManagedApplicationDeploymentQuery,
+    variables: { jobId: selectedJobId ?? "" },
+    pause: !selectedJobId,
+    requestPolicy: "cache-and-network",
+  });
   const [installMutationState, installPlugin] = useMutation(
     SettingsInstallPluginMutation,
   );
@@ -65,6 +79,9 @@ export function N8nPluginHome() {
   );
   const [refreshCatalogState, refreshRemoteCatalog] = useMutation(
     SettingsRefreshPluginCatalogMutation,
+  );
+  const [planState, startPlan] = useMutation(
+    SettingsStartManagedApplicationPlanMutation,
   );
 
   const entry =
@@ -90,7 +107,18 @@ export function N8nPluginHome() {
   const allComponentsProvisioned =
     components.length > 0 &&
     components.every((component) => component.state === "provisioned");
+  const runtimeBlocked =
+    install &&
+    (install.state === "failed" ||
+      install.state === "partially_installed" ||
+      components.some(
+        (component) =>
+          component.componentType === "infrastructure" &&
+          component.state === "failed",
+      ));
   const updateAvailable = Boolean(entry?.updateAvailable && install);
+  const deploymentJob =
+    jobResult.data?.managedApplicationDeployment ?? optimisticJob;
   const newScopes =
     updateAvailable && entry && install
       ? broadenedScopes(entry, install.pinnedVersion, entry.latestVersion)
@@ -115,6 +143,16 @@ export function N8nPluginHome() {
       >
         <ArrowDownToLine className="mr-2 size-4" />
         Update
+      </Button>
+    ) : showOperatorActions && runtimeBlocked ? (
+      <Button
+        type="button"
+        size="sm"
+        disabled={planState.fetching}
+        onClick={() => void startN8nInstallUpdatePlan()}
+      >
+        <ArrowDownToLine className="mr-2 size-4" />
+        Install/Update
       </Button>
     ) : null;
 
@@ -162,6 +200,37 @@ export function N8nPluginHome() {
       return;
     }
     toast.success(`Updating ${displayName} to v${entry.latestVersion}.`);
+    refreshAll();
+  }
+
+  async function startN8nInstallUpdatePlan() {
+    const idempotencyKey = [
+      "plugins",
+      "n8n",
+      "install-update",
+      Date.now().toString(36),
+    ].join("-");
+    const result = await startPlan({
+      input: {
+        key: "n8n",
+        operation: "ENABLE",
+        desiredConfigVersion: "v1",
+        desiredConfig: n8nDesiredConfigForCurrentDeployment(
+          deploymentResult.data?.deploymentStatus.adminUrl,
+        ),
+        idempotencyKey,
+      },
+    });
+    if (result.error) {
+      toast.error(`Could not start n8n install/update: ${result.error.message}`);
+      return;
+    }
+    const started = result.data?.startManagedApplicationPlan;
+    if (!started) return;
+    setSelectedJobId(started.id);
+    setOptimisticJob(started);
+    setPlanDialogOpen(true);
+    toast.success("n8n install/update plan started.");
     refreshAll();
   }
 
@@ -280,30 +349,6 @@ export function N8nPluginHome() {
         </SettingsSection>
       ) : null}
 
-      {showOperatorActions ? (
-        <SettingsSection label="Plugin catalog">
-          <SettingsRow
-            label="Refresh n8n versions"
-            description={
-              entry
-                ? `${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.`
-                : "Refresh the trusted plugin catalog before installing or updating n8n."
-            }
-          >
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={refreshCatalogState.fetching}
-              onClick={() => void refreshTrustedCatalog()}
-            >
-              <RefreshCw className="mr-2 size-4" />
-              Refresh catalog
-            </Button>
-          </SettingsRow>
-        </SettingsSection>
-      ) : null}
-
       <Collapsible
         defaultOpen={!allComponentsProvisioned}
         className="group/components"
@@ -375,6 +420,73 @@ export function N8nPluginHome() {
         onChanged={() => refreshInstalls({ requestPolicy: "network-only" })}
         onRecentAgentStepsActionChange={setRecentAgentStepsAction}
       />
+      {showOperatorActions ? (
+        <SettingsSection label="Version metadata">
+          <SettingsRow
+            label="Refresh n8n versions"
+            description={
+              entry
+                ? `${install ? `Installed v${install.pinnedVersion} · ` : ""}Latest v${entry.latestVersion}.`
+                : "Refreshes the trusted plugin catalog version metadata."
+            }
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={refreshCatalogState.fetching}
+              onClick={() => void refreshTrustedCatalog()}
+            >
+              <RefreshCw className="mr-2 size-4" />
+              Refresh versions
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+      ) : null}
+      <ManagedApplicationPlanDialog
+        job={deploymentJob}
+        open={planDialogOpen}
+        onOpenChange={setPlanDialogOpen}
+        onJobChanged={(next) => {
+          setOptimisticJob(next);
+          setSelectedJobId(next.id);
+          refreshJob({ requestPolicy: "network-only" });
+          refreshAll();
+        }}
+      />
     </SettingsPane>
   );
+}
+
+function n8nDesiredConfigForCurrentDeployment(
+  adminUrl: string | null | undefined,
+): Record<string, string> {
+  const host =
+    hostnameFromUrl(adminUrl) ??
+    (typeof window !== "undefined" ? window.location.hostname : null);
+  const domain = customerDomainFromHost(host);
+  return domain ? { domain } : {};
+}
+
+function hostnameFromUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function customerDomainFromHost(host: string | null | undefined): string | null {
+  const normalized = host?.trim().toLowerCase().replace(/^www\./, "");
+  if (!normalized) return null;
+  if (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1"
+  ) {
+    return null;
+  }
+  if (normalized === "app.thinkwork.ai") return "thinkwork.ai";
+  return normalized;
 }
