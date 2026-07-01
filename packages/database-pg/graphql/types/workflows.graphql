@@ -373,5 +373,6 @@ extend type Mutation {
   createN8nWorkflowBridge(
     input: CreateN8nWorkflowBridgeInput!
   ): N8nWorkflowBridgeCredential!
+  deleteWorkflow(id: ID!): ID!
   triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
 }

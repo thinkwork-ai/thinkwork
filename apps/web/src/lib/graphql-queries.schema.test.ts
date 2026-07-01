@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   NewThreadMentionTargetsQuery,
   CreateWorkItemDocumentMutation,
+  DeleteWorkflowMutation,
   DeleteWorkItemViewMutation,
   SaveWorkItemViewMutation,
   SettingsWorkflowQuery,
@@ -113,6 +114,7 @@ describe("workflow settings queries vs canonical schema", () => {
     ["SettingsWorkflowQuery", SettingsWorkflowQuery],
     ["SettingsWorkflowRunsQuery", SettingsWorkflowRunsQuery],
     ["SettingsWorkflowRunQuery", SettingsWorkflowRunQuery],
+    ["DeleteWorkflowMutation", DeleteWorkflowMutation],
   ] as const)("%s validates against the schema", (_name, doc) => {
     const errors = validate(schema, doc as DocumentNode);
     expect(errors.map((e) => e.message)).toEqual([]);

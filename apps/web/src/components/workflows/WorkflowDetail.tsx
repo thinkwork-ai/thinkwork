@@ -28,6 +28,7 @@ import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  DeleteWorkflowMutation,
   DisconnectN8nWorkflowMutation,
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
@@ -38,6 +39,7 @@ import {
   InfoCard,
   JsonPreview,
   primaryBinding,
+  readinessReasonText,
   sourceLabel,
   SourceBadge,
   titleize,
@@ -103,14 +105,18 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
   const [disconnectState, disconnectWorkflow] = useMutation(
     DisconnectN8nWorkflowMutation,
   );
+  const [deleteState, deleteWorkflowMutation] = useMutation(
+    DeleteWorkflowMutation,
+  );
 
   const workflow = result.data?.workflow ?? null;
   const binding = primaryBinding(workflow?.bindings);
+  const readinessReason = readinessReasonText(workflow?.readinessReasons);
   const canUnlinkN8nWorkflow = Boolean(
     workflow &&
-      binding?.bindingType === "n8n_bridge" &&
-      binding.bindingStatus !== "archived" &&
-      workflow.lifecycleStatus !== "archived",
+    binding?.bindingType === "n8n_bridge" &&
+    binding.bindingStatus !== "archived" &&
+    workflow.lifecycleStatus !== "archived",
   );
   const routineId =
     binding?.bindingType === "step_functions_routine"
@@ -139,19 +145,24 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     void navigate({ to: "/settings/workflows" });
   }
 
+  async function deleteWorkflow() {
+    if (!workflow) return;
+    const response = await deleteWorkflowMutation({ id: workflow.id });
+    if (response.error) {
+      toast.error(`Could not delete workflow: ${response.error.message}`);
+      return;
+    }
+    toast.success("Workflow deleted.");
+    void navigate({ to: "/settings/workflows" });
+  }
+
   usePageHeaderActions({
     title: workflow?.name ?? "Workflow",
     breadcrumbs: [
       { label: "Workflows", href: "/settings/workflows" },
       { label: workflow?.name ?? "Workflow" },
     ],
-    action: workflow ? (
-      <WorkflowReadinessBadge
-        state={workflow.readinessState}
-        reasons={workflow.readinessReasons}
-      />
-    ) : undefined,
-    actionKey: `workflow:${workflowId}:${workflow?.readinessState ?? "loading"}`,
+    actionKey: `workflow:${workflowId}:${workflow?.updatedAt ?? "loading"}`,
   });
 
   const runColumns = useMemo<ColumnDef<WorkflowRunSummary>[]>(
@@ -232,10 +243,46 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-6">
       <SettingsPageTitle
         title={workflow.name}
-        description={workflow.description ?? "No description provided."}
         badge={<SourceBadge binding={binding} />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={deleteState.fetching}
+                >
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this workflow?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {workflow.name} and its ThinkWork workflow records will be
+                    permanently removed. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleteState.fetching}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deleteState.fetching}
+                    className="bg-destructive text-white hover:bg-destructive/90"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void deleteWorkflow();
+                    }}
+                  >
+                    Delete workflow
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             {canUnlinkN8nWorkflow ? (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -263,7 +310,10 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       disabled={disconnectState.fetching}
-                      onClick={() => void unlinkN8nWorkflow()}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void unlinkN8nWorkflow();
+                      }}
                     >
                       Unlink workflow
                     </AlertDialogAction>
@@ -321,9 +371,18 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                       <WorkflowReadinessBadge
                         state={workflow.readinessState}
                         reasons={workflow.readinessReasons}
+                        showReason={false}
                       />
                     ),
                   },
+                  ...(readinessReason
+                    ? [
+                        {
+                          label: "Readiness details",
+                          value: readinessReason,
+                        },
+                      ]
+                    : []),
                   {
                     label: "Trigger",
                     value: titleize(workflow.primaryTriggerFamily),

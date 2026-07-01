@@ -857,6 +857,11 @@ export type ApproveOntologyChangeSetInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type ApprovePiExtensionVersionInput = {
+  tenantId: Scalars["ID"]["input"];
+  versionId: Scalars["ID"]["input"];
+};
+
 export type Artifact = {
   __typename?: "Artifact";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -1863,6 +1868,18 @@ export type DisableWorkflowTemplateInput = {
   slug: Scalars["String"]["input"];
 };
 
+export type DisconnectN8nWorkflowInput = {
+  bindingId?: InputMaybe<Scalars["ID"]["input"]>;
+  idempotencyKey: Scalars["String"]["input"];
+  workflowId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type DisconnectN8nWorkflowResult = {
+  __typename?: "DisconnectN8nWorkflowResult";
+  binding: WorkflowEngineBinding;
+  workflow: Workflow;
+};
+
 export enum EmailAllowlistType {
   Domain = "DOMAIN",
   Email = "EMAIL",
@@ -2384,6 +2401,13 @@ export type ImportN8nWorkflowDraftResult = {
   sourceMetadata: Scalars["AWSJSON"]["output"];
   workflow: Workflow;
   workflowVersion: WorkflowVersion;
+};
+
+export type ImportPiExtensionFromGitHubInput = {
+  manifestPath?: InputMaybe<Scalars["String"]["input"]>;
+  ref: Scalars["String"]["input"];
+  repositoryUrl: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type ImportTenantBedrockModelInput = {
@@ -3502,6 +3526,7 @@ export type Mutation = {
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
+  approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
   assignThreadLabel: ThreadLabelAssignment;
   /**
@@ -3618,14 +3643,17 @@ export type Mutation = {
   deleteRoutineTrigger: Scalars["Boolean"]["output"];
   deleteRun: Scalars["Boolean"]["output"];
   deleteScheduledJob: DeleteScheduledJobResult;
+  deleteSpace: Scalars["Boolean"]["output"];
   deleteTenantCredential: Scalars["Boolean"]["output"];
   deleteThread: Scalars["Boolean"]["output"];
   deleteThreadLabel: Scalars["Boolean"]["output"];
   deleteWebhook: Scalars["Boolean"]["output"];
   deleteWorkItemView: Scalars["Boolean"]["output"];
+  deleteWorkflow: Scalars["ID"]["output"];
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
+  disconnectN8nWorkflow: DisconnectN8nWorkflowResult;
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
@@ -3633,6 +3661,7 @@ export type Mutation = {
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
+  importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
@@ -3699,6 +3728,7 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
+  rejectPiExtensionVersion: PiExtension;
   /** Tenant-operator rejection with rationale. */
   rejectSkillDraft: SkillDraft;
   releaseThread: Thread;
@@ -3819,6 +3849,7 @@ export type Mutation = {
   updateOntologyChangeSet: OntologyChangeSet;
   updateOntologyEntityType: OntologyEntityType;
   updateOntologyRelationshipType: OntologyRelationshipType;
+  updatePiExtensionAssignment: PiExtension;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
@@ -3842,10 +3873,6 @@ export type Mutation = {
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
   updateThreadLabel: ThreadLabel;
-  /** Update an opportunity layer status in Twenty through the authenticated plugin MCP path. */
-  updateTwentyEngagementOpportunityLayerStatus: TwentyEngagementOpportunityLayer;
-  /** Update an opportunity stage in Twenty through the authenticated plugin MCP path. */
-  updateTwentyEngagementOpportunityStage: TwentyEngagementOpportunity;
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
@@ -3950,6 +3977,10 @@ export type MutationApproveManagedApplicationDeploymentArgs = {
 
 export type MutationApproveOntologyChangeSetArgs = {
   input: ApproveOntologyChangeSetInput;
+};
+
+export type MutationApprovePiExtensionVersionArgs = {
+  input: ApprovePiExtensionVersionInput;
 };
 
 export type MutationArchiveEvalDatasetArgs = {
@@ -4231,6 +4262,11 @@ export type MutationDeleteScheduledJobArgs = {
   id: Scalars["ID"]["input"];
 };
 
+export type MutationDeleteSpaceArgs = {
+  id: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type MutationDeleteTenantCredentialArgs = {
   id: Scalars["ID"]["input"];
 };
@@ -4251,6 +4287,10 @@ export type MutationDeleteWorkItemViewArgs = {
   input: DeleteWorkItemViewInput;
 };
 
+export type MutationDeleteWorkflowArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -4261,6 +4301,10 @@ export type MutationDisableWorkflowArgs = {
 
 export type MutationDisableWorkflowTemplateArgs = {
   input: DisableWorkflowTemplateInput;
+};
+
+export type MutationDisconnectN8nWorkflowArgs = {
+  input: DisconnectN8nWorkflowInput;
 };
 
 export type MutationEnableWorkflowArgs = {
@@ -4289,6 +4333,10 @@ export type MutationImportN8nRoutineArgs = {
 
 export type MutationImportN8nWorkflowDraftArgs = {
   input: ImportN8nWorkflowDraftInput;
+};
+
+export type MutationImportPiExtensionFromGitHubArgs = {
+  input: ImportPiExtensionFromGitHubInput;
 };
 
 export type MutationImportTenantBedrockModelsArgs = {
@@ -4517,6 +4565,10 @@ export type MutationRejectManagedApplicationDeploymentArgs = {
 
 export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
+};
+
+export type MutationRejectPiExtensionVersionArgs = {
+  input: RejectPiExtensionVersionInput;
 };
 
 export type MutationRejectSkillDraftArgs = {
@@ -4926,6 +4978,10 @@ export type MutationUpdateOntologyRelationshipTypeArgs = {
   input: UpdateOntologyRelationshipTypeInput;
 };
 
+export type MutationUpdatePiExtensionAssignmentArgs = {
+  input: UpdatePiExtensionAssignmentInput;
+};
+
 export type MutationUpdateQuickActionArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateQuickActionInput;
@@ -5004,14 +5060,6 @@ export type MutationUpdateThreadArgs = {
 export type MutationUpdateThreadLabelArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateThreadLabelInput;
-};
-
-export type MutationUpdateTwentyEngagementOpportunityLayerStatusArgs = {
-  input: UpdateTwentyEngagementOpportunityLayerStatusInput;
-};
-
-export type MutationUpdateTwentyEngagementOpportunityStageArgs = {
-  input: UpdateTwentyEngagementOpportunityStageInput;
 };
 
 export type MutationUpdateUserArgs = {
@@ -5168,6 +5216,51 @@ export type N8nAgentStepRunTelemetry = {
   updatedAt: Scalars["AWSDateTime"]["output"];
   workflowId: Scalars["String"]["output"];
   workflowName?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type N8nAppData = {
+  __typename?: "N8nAppData";
+  executionReadinessReasons: Scalars["AWSJSON"]["output"];
+  executionReadinessState: WorkflowReadinessState;
+  executions: Array<N8nAppExecutionRow>;
+  installId: Scalars["ID"]["output"];
+  nativeBaseUrl?: Maybe<Scalars["String"]["output"]>;
+  workflowReadinessReasons: Scalars["AWSJSON"]["output"];
+  workflowReadinessState: WorkflowReadinessState;
+  workflows: Array<N8nAppWorkflowRow>;
+};
+
+export type N8nAppExecutionRow = {
+  __typename?: "N8nAppExecutionRow";
+  bridgeRuns: Array<N8nAgentStepRunTelemetry>;
+  durationMs?: Maybe<Scalars["Int"]["output"]>;
+  externalExecutionId: Scalars["String"]["output"];
+  externalWorkflowId: Scalars["String"]["output"];
+  failureMessage?: Maybe<Scalars["String"]["output"]>;
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  mode?: Maybe<Scalars["String"]["output"]>;
+  nativeExecutionUrl: Scalars["String"]["output"];
+  nativeWorkflowUrl: Scalars["String"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  warnings: Array<Scalars["String"]["output"]>;
+  workflowName?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type N8nAppWorkflowRow = {
+  __typename?: "N8nAppWorkflowRow";
+  active?: Maybe<Scalars["Boolean"]["output"]>;
+  connectedBindingId?: Maybe<Scalars["ID"]["output"]>;
+  connectedWorkflowId?: Maybe<Scalars["ID"]["output"]>;
+  externalWorkflowId: Scalars["String"]["output"];
+  lastExecutionAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastModifiedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name: Scalars["String"]["output"];
+  nativeWorkflowUrl?: Maybe<Scalars["String"]["output"]>;
+  readinessReasons: Scalars["AWSJSON"]["output"];
+  readinessState: WorkflowReadinessState;
+  triggerTypes: Array<Scalars["String"]["output"]>;
+  warnings: Array<Scalars["String"]["output"]>;
 };
 
 export type N8nDiscoveredWorkflow = {
@@ -5549,6 +5642,80 @@ export type PerformanceTimeSeries = {
   invocationCount: Scalars["Int"]["output"];
   totalCostUsd: Scalars["Float"]["output"];
 };
+
+export type PiExtension = {
+  __typename?: "PiExtension";
+  approvedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  approvedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  artifactHash?: Maybe<Scalars["String"]["output"]>;
+  artifactUri?: Maybe<Scalars["String"]["output"]>;
+  assignmentSummary: PiExtensionAssignmentSummary;
+  assignments: Array<PiExtensionAssignment>;
+  commitSha?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  executable: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  lifecycleHooks: Array<Scalars["String"]["output"]>;
+  manifest: Scalars["AWSJSON"]["output"];
+  manifestHash?: Maybe<Scalars["String"]["output"]>;
+  permissionClasses: Array<Scalars["String"]["output"]>;
+  rejectedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  rejectedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  repositoryName?: Maybe<Scalars["String"]["output"]>;
+  repositoryOwner?: Maybe<Scalars["String"]["output"]>;
+  repositoryUrl: Scalars["String"]["output"];
+  reviewedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  reviewedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  runtimeTarget?: Maybe<Scalars["String"]["output"]>;
+  sourceId: Scalars["ID"]["output"];
+  sourceRef: Scalars["String"]["output"];
+  sourceType: PiExtensionSourceType;
+  status: PiExtensionVersionStatus;
+  statusReason?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  toolNames: Array<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  verificationReport: Scalars["AWSJSON"]["output"];
+};
+
+export type PiExtensionAssignment = {
+  __typename?: "PiExtensionAssignment";
+  agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  grantedPermissions: Scalars["AWSJSON"]["output"];
+  id: Scalars["ID"]["output"];
+  targetType: PiExtensionAssignmentTargetType;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  versionId: Scalars["ID"]["output"];
+};
+
+export type PiExtensionAssignmentSummary = {
+  __typename?: "PiExtensionAssignmentSummary";
+  defaultAgentEnabled: Scalars["Boolean"]["output"];
+  disabledCount: Scalars["Int"]["output"];
+  enabledProfileCount: Scalars["Int"]["output"];
+};
+
+export enum PiExtensionAssignmentTargetType {
+  AgentProfile = "AGENT_PROFILE",
+  DefaultAgent = "DEFAULT_AGENT",
+}
+
+export enum PiExtensionSourceType {
+  Github = "GITHUB",
+}
+
+export enum PiExtensionVersionStatus {
+  Approved = "APPROVED",
+  FailedVerification = "FAILED_VERIFICATION",
+  Imported = "IMPORTED",
+  NeedsReview = "NEEDS_REVIEW",
+  Rejected = "REJECTED",
+}
 
 export type PinnedThread = {
   __typename?: "PinnedThread";
@@ -5971,6 +6138,7 @@ export type Query = {
   myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
   n8nAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
+  n8nAppData: N8nAppData;
   /** Operator settings for the installed n8n plugin package image config. */
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
@@ -5980,6 +6148,7 @@ export type Query = {
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
+  piExtensions: Array<PiExtension>;
   pinnedThreads: Array<PinnedThread>;
   /** ThinkWork-owned overlay sections for one plugin-app record. */
   pluginAppOverlays: Array<PluginAppOverlay>;
@@ -6070,8 +6239,6 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
-  /** CRM-owned records for the Twenty Client Engagement app. */
-  twentyEngagementDashboard: TwentyEngagementDashboard;
   unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
@@ -6584,6 +6751,11 @@ export type QueryN8nAgentStepRunsArgs = {
   threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type QueryN8nAppDataArgs = {
+  executionLimit?: InputMaybe<Scalars["Int"]["input"]>;
+  installId: Scalars["ID"]["input"];
+};
+
 export type QueryN8nPluginSettingsArgs = {
   installId: Scalars["ID"]["input"];
 };
@@ -6618,6 +6790,12 @@ export type QueryPendingSystemReviewsCountArgs = {
 export type QueryPerformanceTimeSeriesArgs = {
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
   days?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryPiExtensionsArgs = {
+  includeFailed?: InputMaybe<Scalars["Boolean"]["input"]>;
+  includeRejected?: InputMaybe<Scalars["Boolean"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -7163,6 +7341,12 @@ export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
   reason?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type RejectPiExtensionVersionInput = {
+  reason: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  versionId: Scalars["ID"]["input"];
 };
 
 export type RejectSkillDraftInput = {
@@ -9150,70 +9334,6 @@ export type TriggerWorkflowRunInput = {
   workflowId: Scalars["ID"]["input"];
 };
 
-export type TwentyEngagementAccount = {
-  __typename?: "TwentyEngagementAccount";
-  company: TwentyEngagementCompany;
-  opportunities: Array<TwentyEngagementOpportunityWithLayers>;
-};
-
-/**
- * Twenty CRM records normalized for the Client Engagement plugin app.
- *
- * The app reads and mutates CRM-owned fields through the authenticated Twenty
- * plugin path. Browser clients receive only app-shaped records; they never send
- * MCP URLs, bearer tokens, or generic tool-call payloads.
- */
-export type TwentyEngagementCompany = {
-  __typename?: "TwentyEngagementCompany";
-  crmUrl?: Maybe<Scalars["String"]["output"]>;
-  domainName?: Maybe<Scalars["String"]["output"]>;
-  id: Scalars["ID"]["output"];
-  name: Scalars["String"]["output"];
-};
-
-export type TwentyEngagementDashboard = {
-  __typename?: "TwentyEngagementDashboard";
-  accounts: Array<TwentyEngagementAccount>;
-  companies: Array<TwentyEngagementCompany>;
-  opportunities: Array<TwentyEngagementOpportunity>;
-  opportunityLayers: Array<TwentyEngagementOpportunityLayer>;
-};
-
-export type TwentyEngagementOpportunity = {
-  __typename?: "TwentyEngagementOpportunity";
-  amountMicros?: Maybe<Scalars["Float"]["output"]>;
-  closeDate?: Maybe<Scalars["String"]["output"]>;
-  companyId?: Maybe<Scalars["ID"]["output"]>;
-  companyName?: Maybe<Scalars["String"]["output"]>;
-  crmUrl?: Maybe<Scalars["String"]["output"]>;
-  id: Scalars["ID"]["output"];
-  name: Scalars["String"]["output"];
-  stage: Scalars["String"]["output"];
-  stageLabel: Scalars["String"]["output"];
-};
-
-export type TwentyEngagementOpportunityLayer = {
-  __typename?: "TwentyEngagementOpportunityLayer";
-  businessValue?: Maybe<Scalars["String"]["output"]>;
-  id: Scalars["ID"]["output"];
-  instanceName?: Maybe<Scalars["String"]["output"]>;
-  layerStatus: Scalars["String"]["output"];
-  layerStatusLabel: Scalars["String"]["output"];
-  layerType: Scalars["String"]["output"];
-  layerTypeLabel: Scalars["String"]["output"];
-  name?: Maybe<Scalars["String"]["output"]>;
-  nextSteps?: Maybe<Scalars["String"]["output"]>;
-  openQuestions?: Maybe<Scalars["String"]["output"]>;
-  opportunityId: Scalars["ID"]["output"];
-  whatWeKnow?: Maybe<Scalars["String"]["output"]>;
-};
-
-export type TwentyEngagementOpportunityWithLayers = {
-  __typename?: "TwentyEngagementOpportunityWithLayers";
-  layers: Array<TwentyEngagementOpportunityLayer>;
-  opportunity: TwentyEngagementOpportunity;
-};
-
 /** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
 export type TwentyPluginCutoverResult = {
   __typename?: "TwentyPluginCutoverResult";
@@ -9390,6 +9510,15 @@ export type UpdateOntologyRelationshipTypeInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type UpdatePiExtensionAssignmentInput = {
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  grantedPermissions?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  targetType: PiExtensionAssignmentTargetType;
+  tenantId: Scalars["ID"]["input"];
+  versionId: Scalars["ID"]["input"];
+};
+
 export type UpdateQuickActionInput = {
   prompt?: InputMaybe<Scalars["String"]["input"]>;
   scope?: InputMaybe<QuickActionScope>;
@@ -9563,16 +9692,6 @@ export type UpdateThreadLabelInput = {
   color?: InputMaybe<Scalars["String"]["input"]>;
   description?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
-};
-
-export type UpdateTwentyEngagementOpportunityLayerStatusInput = {
-  layerId: Scalars["ID"]["input"];
-  layerStatus: Scalars["String"]["input"];
-};
-
-export type UpdateTwentyEngagementOpportunityStageInput = {
-  opportunityId: Scalars["ID"]["input"];
-  stage: Scalars["String"]["input"];
 };
 
 export type UpdateUserInput = {
