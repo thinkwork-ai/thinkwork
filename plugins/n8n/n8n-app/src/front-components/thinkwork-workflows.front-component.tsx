@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import {
   Button,
+  DataTable,
   DataTableTokenFilter,
   Input,
   dataTableTokenFilterFns,
@@ -71,7 +72,18 @@ export function ThinkWorkN8nWorkflowsApp({
     useState<ColumnFiltersState>([]);
 
   const workflows = data?.workflows ?? [];
-  const executions = data?.executions ?? [];
+  const executions = useMemo(() => {
+    const workflowNameById = new Map(
+      workflows.map((workflow) => [workflow.externalWorkflowId, workflow.name]),
+    );
+    return (data?.executions ?? []).map((execution) => ({
+      ...execution,
+      workflowName:
+        execution.workflowName ??
+        workflowNameById.get(execution.externalWorkflowId) ??
+        null,
+    }));
+  }, [data?.executions, workflows]);
   const executionStatusOptions = useMemo(
     () => executionStatuses(executions),
     [executions],
@@ -89,6 +101,8 @@ export function ThinkWorkN8nWorkflowsApp({
     () => buildExecutionTokenFilterColumns(executionStatusOptions),
     [executionStatusOptions],
   );
+  const workflowColumns = useMemo(() => buildWorkflowTableColumns(), []);
+  const executionColumns = useMemo(() => buildExecutionTableColumns(), []);
   const workflowTable = useReactTable({
     data: workflows,
     columns: workflowFilterColumns,
@@ -162,8 +176,19 @@ export function ThinkWorkN8nWorkflowsApp({
 
   return (
     <AppFrame title={appDisplayName} pluginName={pluginDisplayName}>
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-6 py-3">
+      <main className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background p-6">
+        <div className="mb-8 shrink-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {viewMode === "workflows" ? "Workflows" : "Executions"}
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            {viewMode === "workflows"
+              ? "Monitor n8n workflows, trigger coverage, ThinkWork links, and readiness."
+              : "Review recent n8n executions, run status, timing, and bridge resume evidence."}
+          </p>
+        </div>
+
+        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
           {viewMode === "workflows" ? (
             <AppTableToolbar
               table={workflowTable}
@@ -179,17 +204,22 @@ export function ThinkWorkN8nWorkflowsApp({
           )}
         </div>
 
-        <main className="min-h-0 flex-1 overflow-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {viewMode === "workflows" ? (
-            <WorkflowTable rows={filteredWorkflows} total={workflows.length} />
+            <WorkflowTable
+              rows={filteredWorkflows}
+              total={workflows.length}
+              columns={workflowColumns}
+            />
           ) : (
             <ExecutionTable
               rows={filteredExecutions}
               total={executions.length}
+              columns={executionColumns}
             />
           )}
-        </main>
-      </section>
+        </div>
+      </main>
     </AppFrame>
   );
 }
@@ -218,192 +248,71 @@ function AppFrame({
 function WorkflowTable({
   rows,
   total,
+  columns,
 }: {
   rows: N8nAppWorkflowRow[];
   total: number;
+  columns: Array<ColumnDef<N8nAppWorkflowRow, unknown>>;
 }) {
-  if (total === 0) {
-    return (
-      <CenteredState
-        title="No workflows found"
-        description="No n8n workflows are available yet."
-      />
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <CenteredState
-        title="No matching workflows"
-        description="Adjust the current filter."
-      />
-    );
-  }
-
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
-        <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-          <tr>
-            <HeaderCell className="w-[44%]">Workflow</HeaderCell>
-            <HeaderCell className="w-[20%]">Triggers</HeaderCell>
-            <HeaderCell className="w-[18%]">Link</HeaderCell>
-            <HeaderCell className="w-[18%]">Readiness</HeaderCell>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((workflow) => (
-            <tr
-              key={workflow.externalWorkflowId}
-              className="border-t border-border hover:bg-muted/20"
-            >
-              <BodyCell>
-                <div className="flex min-w-0 flex-col gap-1">
-                  {workflow.nativeWorkflowUrl ? (
-                    <a
-                      href={workflow.nativeWorkflowUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate font-medium text-foreground underline-offset-4 hover:underline"
-                    >
-                      {workflow.name}
-                    </a>
-                  ) : (
-                    <span className="truncate font-medium text-foreground">
-                      {workflow.name}
-                    </span>
-                  )}
-                  <WarningList warnings={workflow.warnings} />
-                </div>
-              </BodyCell>
-              <BodyCell>
-                <ChipList
-                  values={
-                    workflow.triggerTypes.length > 0
-                      ? workflow.triggerTypes
-                      : ["none"]
-                  }
-                />
-              </BodyCell>
-              <BodyCell>
-                <Badge tone={connectionTone(workflow)}>
-                  {connectionLabel(workflow)}
-                </Badge>
-              </BodyCell>
-              <BodyCell>
-                <Badge tone={workflow.readinessState}>
-                  {readinessLabel(workflow.readinessState)}
-                </Badge>
-              </BodyCell>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={rows}
+      pageSize={50}
+      scrollable
+      allowHorizontalScroll={false}
+      tableClassName="w-full table-auto"
+      emptyStatePlacement="container"
+      emptyState={
+        total === 0 ? (
+          <CenteredState
+            title="No workflows found"
+            description="No n8n workflows are available yet."
+          />
+        ) : (
+          <CenteredState
+            title="No matching workflows"
+            description="Adjust the current filter."
+          />
+        )
+      }
+    />
   );
 }
 
 function ExecutionTable({
   rows,
   total,
+  columns,
 }: {
   rows: N8nAppExecutionRow[];
   total: number;
+  columns: Array<ColumnDef<N8nAppExecutionRow, unknown>>;
 }) {
-  if (total === 0) {
-    return (
-      <CenteredState
-        title="No executions found"
-        description="Recent n8n executions are not available yet."
-      />
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <CenteredState
-        title="No matching executions"
-        description="Adjust the current filter."
-      />
-    );
-  }
-
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-sm">
-        <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-          <tr>
-            <HeaderCell className="w-[42%]">Workflow name</HeaderCell>
-            <HeaderCell className="w-[16%]">Status</HeaderCell>
-            <HeaderCell className="w-[14%]">Mode</HeaderCell>
-            <HeaderCell className="w-[14%]">Started</HeaderCell>
-            <HeaderCell className="w-[14%]">Duration</HeaderCell>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((execution) => (
-            <tr
-              key={execution.externalExecutionId}
-              className="border-t border-border hover:bg-muted/20"
-            >
-              <BodyCell>
-                <div className="flex min-w-0 flex-col gap-1">
-                  <a
-                    href={execution.nativeExecutionUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    {execution.workflowName ?? execution.externalWorkflowId}
-                  </a>
-                  <WarningList
-                    warnings={[
-                      ...execution.warnings,
-                      ...(execution.failureMessage
-                        ? [execution.failureMessage]
-                        : []),
-                    ]}
-                  />
-                </div>
-              </BodyCell>
-              <BodyCell>
-                <Badge tone={statusTone(execution.status)}>
-                  {execution.status}
-                </Badge>
-              </BodyCell>
-              <BodyCell>
-                <span className="text-muted-foreground">
-                  {execution.mode ?? "-"}
-                </span>
-              </BodyCell>
-              <BodyCell>
-                <span className="text-muted-foreground">
-                  {formatShortDateTime(execution.startedAt)}
-                </span>
-              </BodyCell>
-              <BodyCell>
-                <span className="text-muted-foreground">
-                  {formatDuration(execution.durationMs)}
-                </span>
-              </BodyCell>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={rows}
+      pageSize={50}
+      scrollable
+      allowHorizontalScroll={false}
+      tableClassName="w-full table-auto"
+      emptyStatePlacement="container"
+      emptyState={
+        total === 0 ? (
+          <CenteredState
+            title="No executions found"
+            description="Recent n8n executions are not available yet."
+          />
+        ) : (
+          <CenteredState
+            title="No matching executions"
+            description="Adjust the current filter."
+          />
+        )
+      }
+    />
   );
-}
-
-function HeaderCell({
-  className = "",
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
-  return <th className={`px-4 py-3 font-semibold ${className}`}>{children}</th>;
-}
-
-function BodyCell({ children }: { children: ReactNode }) {
-  return <td className="min-w-0 px-4 py-3 align-top">{children}</td>;
 }
 
 function AppTableToolbar<TData>({
@@ -439,6 +348,8 @@ function ToolbarSearch<TData>({
   table: TanStackTable<TData>;
   placeholder: string;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
   const searchFilter = table
     .getState()
     .columnFilters.find(
@@ -448,6 +359,13 @@ function ToolbarSearch<TData>({
     isTextFilterValue(searchFilter) && typeof searchFilter.value === "string"
       ? searchFilter.value
       : "";
+  const isOpen = expanded || searchValue.length > 0;
+  const label = placeholder.replace(/\.\.\.$/, "");
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
   const setSearchValue = (value: string) => {
     const trimmed = value.trimStart();
     table.getColumn(N8N_FILTER_COLUMNS.search)?.setFilterValue(
@@ -460,35 +378,58 @@ function ToolbarSearch<TData>({
     );
     table.setPageIndex(0);
   };
+  const clearSearch = () => {
+    setSearchValue("");
+    setExpanded(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label={label}
+        onClick={() => setExpanded(true)}
+      >
+        <SearchIcon className="h-4 w-4" />
+      </Button>
+    );
+  }
+
   return (
-    <div className="relative flex h-8 w-[min(18rem,calc(100vw-2rem))] items-center">
-      <SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center">
+      <SearchIcon className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
       <Input
+        ref={inputRef}
         type="search"
+        aria-label={label}
         value={searchValue}
         onChange={(event) => setSearchValue(event.target.value)}
+        onBlur={() => {
+          if (!searchValue) setExpanded(false);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
-            setSearchValue("");
+            clearSearch();
           }
         }}
         placeholder={placeholder}
-        className="h-8 rounded-md border-border bg-background pl-8 pr-8 text-sm shadow-none"
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
       />
-      {searchValue ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
-          aria-label="Clear search"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setSearchValue("")}
-        >
-          <XIcon className="size-3.5" />
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label={`Clear ${label.toLowerCase()}`}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={clearSearch}
+      >
+        <XIcon className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
@@ -499,11 +440,190 @@ function buildWorkflowTokenFilterColumns(): DataTableTokenFilterColumn[] {
       id: N8N_FILTER_COLUMNS.readiness,
       label: "Readiness",
       type: "option",
+      icon: <ReadinessFilterIcon className="size-4" />,
       options: READINESS_FILTERS.filter((state) => state !== "all").map(
         (state) => ({
           value: state,
           label: readinessLabel(state),
+          icon: readinessOptionIcon(state),
         }),
+      ),
+    },
+  ];
+}
+
+function buildWorkflowTableColumns(): Array<
+  ColumnDef<N8nAppWorkflowRow, unknown>
+> {
+  return [
+    {
+      accessorKey: "name",
+      header: "Workflow",
+      meta: {
+        headClassName: "w-full min-w-0",
+        cellClassName: "w-full min-w-0 max-w-0",
+      },
+      cell: ({ row }) => {
+        const workflow = row.original;
+        const content = (
+          <span className="block truncate font-medium text-foreground">
+            {workflow.name}
+          </span>
+        );
+        return (
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {workflow.nativeWorkflowUrl ? (
+              <a
+                href={workflow.nativeWorkflowUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="block min-w-0 truncate underline-offset-4 hover:underline"
+                title={workflow.name}
+              >
+                {content}
+              </a>
+            ) : (
+              <span className="block min-w-0 truncate" title={workflow.name}>
+                {content}
+              </span>
+            )}
+            <WarningList warnings={workflow.warnings} />
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "triggerTypes",
+      header: "Triggers",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <ChipList
+          values={
+            row.original.triggerTypes.length > 0
+              ? row.original.triggerTypes
+              : ["none"]
+          }
+        />
+      ),
+    },
+    {
+      id: "connection",
+      header: "Link",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <Badge tone={connectionTone(row.original)}>
+          {connectionLabel(row.original)}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "readinessState",
+      header: "Readiness",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <Badge tone={row.original.readinessState}>
+          {readinessLabel(row.original.readinessState)}
+        </Badge>
+      ),
+    },
+  ];
+}
+
+function buildExecutionTableColumns(): Array<
+  ColumnDef<N8nAppExecutionRow, unknown>
+> {
+  return [
+    {
+      accessorKey: "workflowName",
+      header: "Workflow",
+      meta: {
+        headClassName: "w-full min-w-0",
+        cellClassName: "w-full min-w-0 max-w-0",
+      },
+      cell: ({ row }) => {
+        const execution = row.original;
+        const workflowName =
+          execution.workflowName?.trim() || "Unknown workflow";
+        return (
+          <div className="flex min-w-0 flex-col gap-1">
+            <a
+              href={execution.nativeExecutionUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block min-w-0 truncate font-medium text-foreground underline-offset-4 hover:underline"
+              title={workflowName}
+            >
+              {workflowName}
+            </a>
+            <WarningList
+              warnings={[
+                ...execution.warnings,
+                ...(execution.failureMessage ? [execution.failureMessage] : []),
+              ]}
+            />
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <Badge tone={statusTone(row.original.status)}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "mode",
+      header: "Mode",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <span className="truncate text-muted-foreground">
+          {row.original.mode ?? "-"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "startedAt",
+      header: "Started",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <span className="truncate text-muted-foreground">
+          {formatShortDateTime(row.original.startedAt)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "durationMs",
+      header: "Duration",
+      meta: {
+        headClassName: "w-px whitespace-nowrap",
+        cellClassName: "w-px whitespace-nowrap",
+      },
+      cell: ({ row }) => (
+        <span className="truncate text-muted-foreground">
+          {formatDuration(row.original.durationMs)}
+        </span>
       ),
     },
   ];
@@ -517,9 +637,11 @@ function buildExecutionTokenFilterColumns(
       id: N8N_FILTER_COLUMNS.status,
       label: "Status",
       type: "option",
+      icon: <StatusFilterIcon className="size-4" />,
       options: statuses.map((status) => ({
         value: status,
         label: status,
+        icon: statusOptionIcon(status),
       })),
       emptyMessage: "No statuses available.",
     },
@@ -686,18 +808,18 @@ function CenteredState({
 }) {
   return (
     <div className="flex h-full min-h-[280px] items-center justify-center p-8">
-      <div
-        className={`max-w-md rounded-md border p-5 text-center ${
-          tone === "error"
-            ? "border-destructive/30 bg-destructive/10"
-            : "border-border bg-muted/20"
-        }`}
-      >
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      <div className="max-w-md text-center">
+        <h2
+          className={`text-base font-semibold ${
+            tone === "error" ? "text-destructive" : "text-foreground"
+          }`}
+        >
+          {title}
+        </h2>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           {description}
         </p>
-        {action ? <div className="mt-3">{action}</div> : null}
+        {action ? <div className="mt-4">{action}</div> : null}
       </div>
     </div>
   );
@@ -735,6 +857,80 @@ function badgeTone(tone: N8nReadinessState): string {
     return "border-border bg-muted/20 text-muted-foreground";
   }
   return "border-sky-500/40 bg-sky-500/10 text-sky-500";
+}
+
+function readinessOptionIcon(state: N8nReadinessState): ReactNode {
+  if (state === "ready")
+    return <StatusDotIcon className="size-4 text-emerald-500" />;
+  if (state === "blocked_not_ready") {
+    return <StatusDotIcon className="size-4 text-amber-500" />;
+  }
+  if (state === "disabled") {
+    return <StatusDotIcon className="size-4 text-muted-foreground" />;
+  }
+  return <StatusDotIcon className="size-4 text-sky-500" />;
+}
+
+function statusOptionIcon(status: string): ReactNode {
+  return (
+    <StatusDotIcon className={`size-4 ${badgeIconTone(statusTone(status))}`} />
+  );
+}
+
+function badgeIconTone(tone: N8nReadinessState): string {
+  if (tone === "ready") return "text-emerald-500";
+  if (tone === "blocked_not_ready") return "text-amber-500";
+  if (tone === "disabled") return "text-muted-foreground";
+  return "text-sky-500";
+}
+
+function ReadinessFilterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function StatusFilterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+function StatusDotIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="6" />
+    </svg>
+  );
 }
 
 function SearchIcon({ className }: { className?: string }) {

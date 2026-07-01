@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import {
@@ -153,13 +154,14 @@ export function WorkflowInventory() {
           cellClassName: "w-full min-w-[200px] max-w-0",
         },
         cell: ({ row }) => (
-          <a
-            href={`/settings/workflows/${encodeURIComponent(row.original.id)}`}
+          <Link
+            to="/settings/workflows/$workflowId"
+            params={{ workflowId: row.original.id }}
             className="block truncate font-medium text-foreground transition-colors hover:text-primary"
             title={row.original.name}
           >
             {row.original.name}
-          </a>
+          </Link>
         ),
       },
       {

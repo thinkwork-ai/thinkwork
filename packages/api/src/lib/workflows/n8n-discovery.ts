@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import {
   managedApplications,
   pluginInstalls,
@@ -50,6 +50,17 @@ export type ConnectN8nWorkflowResult = {
   workflowId: string;
   bindingId: string;
   created: boolean;
+};
+
+export type DisconnectN8nWorkflowInput = {
+  tenantId: string;
+  workflowId?: string | null;
+  bindingId?: string | null;
+};
+
+export type DisconnectN8nWorkflowResult = {
+  workflowId: string;
+  bindingId: string;
 };
 
 type DiscoverN8nWorkflowsDeps = {
@@ -288,7 +299,10 @@ function n8nWorkflowListUrl(baseUrl: string, cursor: string | null): string {
 
 function n8nWorkflowDetailUrl(baseUrl: string, workflowId: string): string {
   const root = n8nApiRootUrl(baseUrl);
-  return new URL(`workflows/${encodeURIComponent(workflowId)}`, root).toString();
+  return new URL(
+    `workflows/${encodeURIComponent(workflowId)}`,
+    root,
+  ).toString();
 }
 
 export function n8nApiRootUrl(value: string): URL {
@@ -484,6 +498,91 @@ export async function connectN8nWorkflow(
   return { workflowId, bindingId, created: true };
 }
 
+export async function disconnectN8nWorkflow(
+  database: WorkflowDb,
+  input: DisconnectN8nWorkflowInput,
+): Promise<DisconnectN8nWorkflowResult> {
+  if (!input.workflowId && !input.bindingId) {
+    throw new Error("workflowId or bindingId is required");
+  }
+  const workflowId = input.workflowId ?? "";
+  const [binding] = await dbSelect(database)
+    .select({
+      id: workflowEngineBindings.id,
+      workflow_id: workflowEngineBindings.workflow_id,
+    })
+    .from(workflowEngineBindings)
+    .where(
+      and(
+        eq(workflowEngineBindings.tenant_id, input.tenantId),
+        eq(workflowEngineBindings.binding_type, "n8n_bridge"),
+        ne(workflowEngineBindings.binding_status, "archived"),
+        input.bindingId
+          ? eq(workflowEngineBindings.id, input.bindingId)
+          : eq(workflowEngineBindings.workflow_id, workflowId),
+      ),
+    )
+    .limit(1);
+  if (!binding) {
+    throw new Error("n8n workflow link was not found");
+  }
+
+  const readinessReasons = [
+    {
+      code: "n8n_workflow_unlinked",
+      message:
+        "ThinkWork workflow projection was unlinked because the backing n8n workflow is missing.",
+    },
+  ];
+  const now = new Date();
+
+  await dbUpdate(database)
+    .update(workflowEngineBindings)
+    .set({
+      binding_status: "archived",
+      readiness_state: "disabled",
+      readiness_reasons: readinessReasons,
+      updated_at: now,
+    })
+    .where(eq(workflowEngineBindings.id, binding.id));
+
+  await dbUpdate(database)
+    .update(workflowTriggers)
+    .set({
+      enabled: false,
+      readiness_state: "disabled",
+      readiness_reasons: readinessReasons,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(workflowTriggers.tenant_id, input.tenantId),
+        eq(workflowTriggers.workflow_id, binding.workflow_id),
+        eq(workflowTriggers.trigger_family, "n8n"),
+      ),
+    );
+
+  await dbUpdate(database)
+    .update(workflows)
+    .set({
+      lifecycle_status: "archived",
+      readiness_state: "disabled",
+      readiness_reasons: readinessReasons,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(workflows.tenant_id, input.tenantId),
+        eq(workflows.id, binding.workflow_id),
+      ),
+    );
+
+  return {
+    workflowId: binding.workflow_id,
+    bindingId: binding.id,
+  };
+}
+
 function discoveredWorkflowsFromDesiredConfig(
   desiredConfig: unknown,
 ): N8nDiscoveredWorkflow[] {
@@ -531,6 +630,7 @@ async function loadConnectedN8nBindings(
         eq(workflowEngineBindings.tenant_id, input.tenantId),
         eq(workflowEngineBindings.plugin_install_id, input.installId),
         eq(workflowEngineBindings.binding_type, "n8n_bridge"),
+        ne(workflowEngineBindings.binding_status, "archived"),
       ),
     );
 }
