@@ -47,6 +47,7 @@ import {
   upsertTfvarsValues,
 } from "../lib/release.js";
 import { applyMigrations, clusterArn } from "../lib/db-migrations.js";
+import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
 import { confirm } from "../prompt.js";
 import {
@@ -847,6 +848,30 @@ export async function runLocalTerraformDeploy(
     await publishWebAssets(cwd0, webAssetUrl);
   }
 
+  // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by
+  //    terraform exiting 0. Blocking probe failures fail the deploy; pending
+  //    external approvals (SES, DNS) are reported and tracked (R9/AE3). ──
+  if (identity) {
+    const signals = readTfvarsSignalsRaw(cwd0);
+    const verification = await runStageVerification({
+      stage,
+      region: identity.region !== "unknown" ? identity.region : "us-east-1",
+      accountId: identity.account,
+      apiAuthSecret: signals.api_auth_secret,
+      domain: signals.customer_domain || undefined,
+      sesConfigured: Boolean(
+        signals.ses_parent_domain || signals.cognito_email_source_arn,
+      ),
+    });
+    if (!verification.passed) {
+      printError(
+        `Deploy applied but the stack failed verification (${verification.failures.length} probe(s)). ` +
+          `Fix the items above and rerun \`thinkwork deploy -s ${stage}\` — reruns converge.`,
+      );
+      process.exit(1);
+    }
+  }
+
   printSuccess("Deploy complete");
 
   // Post-deploy probe: surface any AgentCore Strands runtime drift as a
@@ -1019,6 +1044,8 @@ async function runPostDeployProbe(stage: string): Promise<void> {
 function locatePostDeployScript(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    // npm/brew install: bundled by scripts/bundle-terraform.js next to cli.js
+    pathResolve(here, "scripts", "post-deploy.sh"),
     pathResolve(here, "..", "..", "..", "..", "scripts", "post-deploy.sh"),
     pathResolve(process.cwd(), "scripts", "post-deploy.sh"),
     pathResolve(

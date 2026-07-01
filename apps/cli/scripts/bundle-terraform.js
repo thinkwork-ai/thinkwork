@@ -52,6 +52,19 @@ if (existsSync(schemaPath)) {
 
 console.log("✓ Terraform modules bundled into dist/terraform/");
 
+// Operational scripts (U6): bootstrap-workspace + post-deploy must behave
+// identically from npm/brew installs and repo checkouts.
+const scriptsDst = resolve(cliRoot, "dist/scripts");
+rmSync(scriptsDst, { recursive: true, force: true });
+mkdirSync(scriptsDst, { recursive: true });
+for (const script of ["bootstrap-workspace.sh", "post-deploy.sh"]) {
+  const scriptSrc = resolve(repoRoot, "scripts", script);
+  if (existsSync(scriptSrc)) {
+    cpSync(scriptSrc, resolve(scriptsDst, script));
+  }
+}
+console.log("✓ Operational scripts bundled into dist/scripts/");
+
 // Journaled Drizzle migrations (U10): the deploy tail applies these to fresh
 // stages via the Aurora Data API. Only journal-listed files ship — hand-rolled
 // .sql outside meta/_journal.json stays repo-only by design.

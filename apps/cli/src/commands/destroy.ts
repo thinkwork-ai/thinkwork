@@ -25,6 +25,14 @@ import {
 } from "../ui.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
+import { loadEnvironment } from "../environments.js";
+import {
+  emptyBucket,
+  forceDeleteStageSecrets,
+  listStageBuckets,
+  orphanCount,
+  scanOrphans,
+} from "../lib/clean-slate.js";
 import {
   runEnterpriseDestroy,
   shouldUseEnterpriseDestroy,
@@ -122,6 +130,29 @@ export async function runLocalTerraformDestroy(
     printWarning("Could not resolve AWS identity. Is the AWS CLI configured?");
   }
 
+  // Graduated-stage guard (U7): the strongest protection keys on the
+  // persisted identity recorded at graduation, not on stage-name patterns —
+  // a `prod` substring match would false-match ephemeral hprod-* harness
+  // stages while a renamed real stage could slip through.
+  const localEnv = loadEnvironment(stage);
+  if (localEnv?.graduated) {
+    if (opts.yes && !opts.stage) {
+      printError(
+        `Stage "${stage}" is a graduated (persistent) environment. --yes requires an explicit ` +
+          `--stage ${stage} — config-default fallback is disabled for graduated stages.`,
+      );
+      process.exit(1);
+    }
+    if (identity && identity.account !== localEnv.accountId) {
+      printError(
+        `Stage "${stage}" was graduated in account ${localEnv.accountId}, but the current ` +
+          `credentials are account ${identity.account}. Refusing to destroy.`,
+      );
+      process.exit(1);
+    }
+    printWarning(`Stage "${stage}" is a graduated persistent environment.`);
+  }
+
   if (isProdLike(stage)) {
     printWarning(`Stage "${stage}" is production-like.`);
     if (!opts.yes) {
@@ -145,6 +176,19 @@ export async function runLocalTerraformDestroy(
   const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component).reverse();
 
+  // Pre-empty stage buckets (U7): versioned/non-empty buckets otherwise block
+  // terraform's bucket deletion and strand the teardown partway.
+  const buckets = listStageBuckets(stage);
+  for (const bucket of buckets) {
+    console.log(`  Emptying s3://${bucket} (including versions)...`);
+    const result = emptyBucket(bucket);
+    if (!result.emptied) {
+      printWarning(
+        `Could not fully empty s3://${bucket} — terraform may fail on it; rerun destroy afterwards.`,
+      );
+    }
+  }
+
   for (let i = 0; i < tiers.length; i++) {
     const tier = tiers[i];
     printTierHeader(tier, i, tiers.length);
@@ -153,14 +197,53 @@ export async function runLocalTerraformDestroy(
     await ensureInit(cwd);
     await ensureWorkspace(cwd, stage);
 
-    const code = await runTerraform(cwd, [
-      "destroy",
-      "-auto-approve",
-      `-var=stage=${stage}`,
-    ]);
+    // Bounded retry (U7): dependency-order errors (lingering ENIs, eventual
+    // consistency) usually clear on a repeat; terraform destroy is idempotent.
+    let code = 1;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      code = await runTerraform(cwd, [
+        "destroy",
+        "-auto-approve",
+        `-var=stage=${stage}`,
+      ]);
+      if (code === 0) break;
+      if (attempt < 3) {
+        printWarning(
+          `Destroy attempt ${attempt} for ${tier} failed (exit ${code}) — retrying (dependency-order errors usually clear).`,
+        );
+      }
+    }
     if (code !== 0) {
-      printError(`Destroy failed for ${tier} (exit ${code})`);
+      printError(`Destroy failed for ${tier} after 3 attempts (exit ${code})`);
       process.exit(code);
+    }
+  }
+
+  // Force-delete stage secrets (U7): entries left in the 7-day recovery
+  // window break an immediate redeploy with AlreadyExists.
+  if (identity) {
+    const region =
+      identity.region !== "unknown" ? identity.region : "us-east-1";
+    const deleted = forceDeleteStageSecrets(stage, region);
+    if (deleted.length > 0) {
+      console.log(
+        `  Force-deleted ${deleted.length} lingering secret(s) (no recovery window).`,
+      );
+    }
+
+    // Orphan scan (U7): report anything still carrying the stage prefix so a
+    // "clean" destroy that wasn't is visible instead of silent.
+    const orphans = scanOrphans(stage, region);
+    const count = orphanCount(orphans);
+    if (count > 0) {
+      printWarning(`Orphan scan found ${count} leftover resource(s):`);
+      for (const [kind, names] of Object.entries(orphans)) {
+        for (const name of names as string[]) {
+          console.log(`    - ${kind}: ${name}`);
+        }
+      }
+    } else {
+      console.log("  Orphan scan: clean — account ready for redeploy.");
     }
   }
 
