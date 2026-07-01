@@ -19,6 +19,7 @@ external:
   - https://fortelabs.com/blog/the-ultimate-guide-to-claude-connectors/
   - https://x.com/BradGroux/status/2072313657883586873
   - https://developers.openai.com/codex/permissions
+  - https://x.com/tanayj/status/2070315875182268871
 ---
 
 # Ideation: THINK-117 Delegated Agent Framework
@@ -121,13 +122,33 @@ least-privilege per task across connectors, MCP tools, browser surfaces, cloud
 actions, production credentials, and external writebacks. Prompt-only guidance
 is not enough; the task access posture has to be policy and audit data.
 
+Tanay Jaipuria's "Build the Agent or Power the Agent?" framing updates the
+product shape from external-only to two surfaces. ThinkWork should still have a
+first-party Agent UI for core and power users who need full context, native
+workflow control, source-map configuration, approvals, correction flows, and
+audit. The MCP/API/CLI broker is the headless "power the agent" surface for
+everyone else who lives in Claude, Codex, ChatGPT, Cursor, Copilot, Kody, or the
+next horizontal harness. This lets ThinkWork expand through external agents
+without trying to become the horizontal frontier agent.
+
 ### Sharpened Product Shape
 
-The concrete product is **External Agent Resource Broker**:
+The concrete product is **External Agent Resource Broker**, backed by a
+two-surface model:
+
+- **ThinkWork-owned Agent UI** for core and power users who live in the
+  operational system and need privileged workflow control.
+- **MCP/API/CLI headless broker** for adjacent users and external agent
+  harnesses that need governed company resources without living in ThinkWork.
 
 > Let employees use Claude, Codex, Cursor, Kody-style, ChatGPT, or future agent
 > harnesses against company systems without giving those harnesses direct,
 > ungoverned access to company systems.
+
+This does not mean ThinkWork has no owned surface. It means ThinkWork should not
+compete to be the general-purpose horizontal agent. Its owned UI is the control
+surface for core users, while the broker lets outside agents safely reach
+company context, memory, rendered resource views, approvals, and actions.
 
 The broker has four jobs:
 
@@ -187,7 +208,9 @@ capability discovery. The first version should expose a compact surface:
 `remember_outcome`, policy explanation, and structured denials. External agents
 should see a small stable API while ThinkWork routes internally through
 Space/user policy, provider eligibility, credentials, memory scope, render
-adapters, and audit.
+adapters, and audit. Pair that headless broker with the owned ThinkWork Agent UI
+for privileged source configuration, approvals, correction flows, writeback
+review, and audit.
 
 **Warrant:** `direct:` `THINK-117` says ThinkWork should be an MCP that helps
 with access, memory, and adjacent Executor-like delegation. The repo already
@@ -442,9 +465,12 @@ events, policy decisions, external-client records, and grants exist.
 The strongest seed for `ce-brainstorm` is:
 
 > ThinkWork should become a host-agnostic enterprise resource broker for external
-> MCP-capable agents: a compact endpoint that lets Claude, Codex, Kody-style,
-> Cursor, ChatGPT, and future harnesses query company context, use portable
-> ThinkWork memory, access legacy systems like Epicor P21 through approved
-> user/tenant auth, receive renderable MCP App or compatible UI views instead of
-> plain text, request governed access, and eventually execute approved business
-> actions through ThinkWork's policy, credential, approval, and audit layers.
+> MCP-capable agents plus a first-party Agent UI for core users: a compact
+> endpoint that lets Claude, Codex, Kody-style, Cursor, ChatGPT, and future
+> harnesses query company context, use portable ThinkWork memory, access legacy
+> systems like Epicor P21 through approved user/tenant auth, receive renderable
+> MCP App or compatible UI views instead of plain text, request governed access,
+> and eventually execute approved business actions through ThinkWork's policy,
+> credential, approval, and audit layers, while ThinkWork-owned UI remains the
+> authoritative surface for privileged workflows, approvals, correction, and
+> audit review.

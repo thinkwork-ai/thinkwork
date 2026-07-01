@@ -16,8 +16,8 @@ concrete customer-facing use cases:
    waiting on people, Work Items, Company Brain, Epicor P21, and workflow
    status.
 2. Dispatch: operational routing decisions that need driver, vehicle, and
-   order data from systems such as P21, FleetIO, LastMile, and related internal
-   sources, then need a routing solution and governed update back into P21.
+   order data from the approved dispatch source map, then need a delegated
+   optimization result and governed update back into P21.
 
 The shared thesis is that individual systems may already expose their own MCP
 servers or APIs. ThinkWork should not compete by being another raw connector
@@ -32,7 +32,7 @@ Kody-style agents, or ChatGPT:
 
 or:
 
-> Optimize today's dispatch plan for the northwest route.
+> Show the governed dispatch recommendation for today's northwest route.
 
 For onboarding, ThinkWork responds through an MCP-accessible broker with a
 rendered Customer Onboarding Command Center. The view leads with one canonical
@@ -85,16 +85,41 @@ apply the same least-privilege-per-task concept across the company-resource
 surface: connectors, MCP tools, browser sessions, cloud actions, production
 credentials, external communication, and system writebacks.
 
+## Two-Surface Product Model
+
+Tanay Jaipuria's "Build the Agent or Power the Agent?" framing clarifies the
+product shape: ThinkWork should do both, but for different audiences.
+
+- **ThinkWork-owned Agent UI:** For core and power users who live in ThinkWork
+  for operational work. This surface owns full context, native workflows,
+  source configuration, source maps, approvals, correction flows, privileged
+  actions, and audit review.
+- **MCP / API / CLI headless broker:** For everyone else who lives in a
+  horizontal agent such as Claude, Codex, ChatGPT, Cursor, Copilot, or Kody.
+  This surface lets those agents call ThinkWork for company data, context,
+  recommendations, and governed actions without forcing every user to live in
+  ThinkWork.
+
+The surfaces are complementary. External agents should be able to initiate and
+consume the broker result. ThinkWork-owned UI should remain authoritative when
+the task requires privileged configuration, approval, correction, audit review,
+or system writeback. In other words: ThinkWork powers the external agent for
+edge users, while ThinkWork's own agent UI serves the core users who need native
+workflow control.
+
 ---
 
 ## Actors
 
-- A1. Customer onboarding coordinator: Owns the onboarding process, needs one
-  trusted blocker view, and takes the next internal action.
-- A2. Dispatcher or operations coordinator: Owns route planning, needs a
-  trusted route recommendation, and can approve governed dispatch updates.
-- A3. External agent user: Asks through an external agent harness and expects a
-  useful answer plus a rendered view, not raw system data.
+- A1. Customer onboarding coordinator: Core/power user who owns the onboarding
+  process, needs one trusted blocker view, and takes the next internal action in
+  ThinkWork or an approved external-agent surface.
+- A2. Dispatcher or operations coordinator: Core/power user who owns route
+  planning, needs a trusted route recommendation, and can approve governed
+  dispatch updates through a ThinkWork-controlled approval surface.
+- A3. External agent user: Edge or adjacent user who asks through a horizontal
+  agent harness and expects a useful answer plus a rendered view, not raw system
+  data.
 - A4. External agent harness: Calls ThinkWork through MCP and renders the
   returned text, structured result, and compatible UI.
 - A5. ThinkWork Resource Broker: Authenticates the caller, gathers permitted
@@ -122,7 +147,7 @@ credentials, external communication, and system writebacks.
     concise model-readable answer and a rendered command center.
   - **Outcome:** A3 receives a clear answer and can inspect the evidence board
     without manually visiting every system.
-  - **Covered by:** R1, R2, R3, R4, R7, R8, R11.
+  - **Covered by:** R1, R2, R3, R4, R5, R7, R8, R9, R12, R13, R28, R35, R40.
 
 - F2. Coordinator inspects onboarding evidence and conflicts
   - **Trigger:** A1 opens the rendered onboarding command center.
@@ -133,7 +158,7 @@ credentials, external communication, and system writebacks.
     pretending certainty.
   - **Outcome:** A1 can verify why ThinkWork selected the blocker and decide
     what to do next.
-  - **Covered by:** R5, R6, R8, R9, R10, R12.
+  - **Covered by:** R5, R7, R8, R10, R11, R13, R29, R30, R39, R41.
 
 - F3. Coordinator takes a ThinkWork-only onboarding action
   - **Trigger:** A1 chooses an allowed action from the command center.
@@ -145,7 +170,7 @@ credentials, external communication, and system writebacks.
     not write back to P21 or other external systems for the onboarding MVP.
   - **Outcome:** A1 advances coordination inside ThinkWork while external
     onboarding source systems remain read-only.
-  - **Covered by:** R13, R14, R15, R17.
+  - **Covered by:** R17, R18, R21, R32, R35, R36, R37, R41.
 
 - F4. Source data changes after a prior onboarding view
   - **Trigger:** P21, n8n, Work Items, or Company Brain state changes after a
@@ -156,9 +181,9 @@ credentials, external communication, and system writebacks.
     changes since the previous known view when that history is available.
   - **Outcome:** The coordinator sees a fresh compiled truth view instead of a
     stale snapshot masquerading as current status.
-  - **Covered by:** R6, R9, R18, R19.
+  - **Covered by:** R7, R10, R22, R29, R30, R31, R39.
 
-- F5. External agent asks for a dispatch plan
+- F5. External agent asks for a governed dispatch recommendation
   - **Trigger:** A2 or A3 asks an external agent to optimize dispatch for a
     day, branch, route, customer set, or order set.
   - **Actors:** A2, A3, A4, A5, A7.
@@ -167,9 +192,9 @@ credentials, external communication, and system writebacks.
     permitted driver, vehicle, and order information from sources such as P21,
     FleetIO, LastMile, and internal records. ThinkWork normalizes the inputs
     into a dispatch optimization request.
-  - **Outcome:** ThinkWork has a governed, auditable input set for route
-    optimization.
-  - **Covered by:** R1, R2, R5, R6, R8, R9, R20.
+  - **Outcome:** ThinkWork has a governed, auditable input set for delegated
+    route optimization.
+  - **Covered by:** R1, R2, R3, R4, R6, R7, R8, R9, R12, R28, R35, R36, R40.
 
 - F6. ThinkWork returns a dispatch optimization surface
   - **Trigger:** ThinkWork has enough dispatch inputs to request optimization.
@@ -180,7 +205,7 @@ credentials, external communication, and system writebacks.
     exceptions, source freshness, and proposed P21 updates.
   - **Outcome:** A2 can inspect the route recommendation and understand why it
     was produced.
-  - **Covered by:** R10, R11, R12, R13, R14.
+  - **Covered by:** R10, R11, R12, R14, R15, R16, R27, R47.
 
 - F7. Dispatcher approves governed P21 update
   - **Trigger:** A2 accepts the routing solution or an edited version of it.
@@ -191,7 +216,7 @@ credentials, external communication, and system writebacks.
     records the full approval and writeback evidence.
   - **Outcome:** P21 receives the routing update through a governed ThinkWork
     action instead of an untracked agent-side write.
-  - **Covered by:** R16, R17, R18, R20, R21.
+  - **Covered by:** R19, R20, R21, R23, R32, R35, R37, R41, R46.
 
 ---
 
@@ -203,7 +228,8 @@ credentials, external communication, and system writebacks.
   cross-system truth, optimization, and workflow surface for external agents,
   not as a raw MCP connector catalog.
 - R2. The first two user-facing questions are "what is blocking this customer
-  onboarding?" and "what is the best dispatch plan for this route/order set?"
+  onboarding?" and "show the governed dispatch recommendation for this
+  route/order set."
 - R3. The MVP must make clear that individual source-system MCP servers can
   already exist; ThinkWork's value is compiling, explaining, governing,
   rendering, and safely acting across systems.
@@ -216,8 +242,8 @@ credentials, external communication, and system writebacks.
 - R5. The onboarding source set is ThinkWork Work Items, Company Brain, Epicor
   P21, and n8n workflow status.
 - R6. The dispatch source set must support driver, vehicle, and order
-  information from approved systems such as P21, FleetIO, LastMile, and related
-  internal records.
+  information from approved systems such as P21, FleetIO, LastMile, and only
+  the internal records explicitly included in the use-case source map.
 - R7. ThinkWork must show source freshness and provenance for the data used to
   select an onboarding blocker or dispatch route recommendation.
 - R8. ThinkWork must use Company Brain to provide the shared aggregated
@@ -330,6 +356,54 @@ credentials, external communication, and system writebacks.
   surfaces, cloud actions, production credentials, external communication, and
   writebacks.
 
+**Two-surface product model and trust boundaries**
+
+- R39. Each broker use case must have an operator-owned source map that defines
+  canonical sources, optional sources, required fields, freshness thresholds,
+  permitted sampling, blind-spot labels, and the owner or policy that can change
+  those entries.
+- R40. ThinkWork must expose two complementary product surfaces: a ThinkWork-owned
+  Agent UI for core/power users and a headless MCP/API/CLI broker for edge users
+  working inside horizontal agents.
+- R41. The ThinkWork-owned Agent UI must be authoritative for privileged source
+  configuration, source-map management, approvals, correction flows, audit
+  review, and system writebacks.
+- R42. The MCP/API/CLI broker must be the primary "power the agent" surface for
+  external users. It should return model-readable context, renderable work
+  surfaces when the host supports them, and fallback summaries when it does not.
+- R43. Each use case must define a persona-channel map: who initiates from an
+  external agent, who operates or approves inside ThinkWork, which surface is
+  primary, what actions are allowed in-place, what deep-links or round trips to
+  ThinkWork are required, and what result returns to the external agent.
+- R44. Every external MCP/API caller must be a registered tenant-approved
+  client. Broker calls must carry audience-bound, scoped authorization tied to
+  the human user, tenant, Space, client, task mode, expiry, and revocation state.
+  Missing or expired consent must return a structured denial.
+- R45. Rendered MCP App resources, ThinkWork UI envelopes, and fallback
+  summaries must enforce fetch-time authorization, tenant/Space/user binding,
+  short-lived resource handles, no embedded credentials, data-class redaction,
+  no-policy caching, sanitized source content, and action callbacks that return
+  through ThinkWork server-side validation.
+- R46. External agents may propose writebacks but cannot attest approval.
+  Dispatch writeback must require a ThinkWork-captured or session-bound
+  approval artifact from an authorized dispatcher, bound to the source view
+  version, exact diff or payload, target P21 fields, actor, timestamp, expiry,
+  idempotency key, and audit record.
+- R47. Approved optimization services such as LastMile MCP must receive only the
+  minimum necessary fields for the task and no secrets. Optimizer outputs must
+  be treated as untrusted recommendations until validated against source state
+  and constraints; unavailable or inconsistent service responses must fail
+  closed and be audited.
+- R48. User, tenant, and source-system credentials must stay in the approved
+  secrets store, encrypted in transit and at rest, scoped by tenant, user,
+  source, and task mode, separated by environment, rotatable and revocable,
+  audited on use, and never exposed to external hosts, render payloads,
+  model-readable context, memory, or application logs.
+- R49. Broker memory and audit retention must classify retained fields,
+  minimize raw payloads, redact secrets and unnecessary PII, define retention,
+  deletion, and legal-hold behavior, enforce tenant and Space isolation, and
+  prefer references or hashes when full source payloads are not required.
+
 ---
 
 ## Acceptance Examples
@@ -386,10 +460,31 @@ credentials, external communication, and system writebacks.
   dashboard.
 - AE13. **Covers R35, R36, R37, R38.** Given a user asks an external agent to
   review onboarding blockers, when the agent calls ThinkWork, then ThinkWork
-  uses a read/compile task mode without external writeback access; given the
+  uses a compile/render task mode without external writeback access; given the
   user later approves a dispatch routing update, then ThinkWork escalates only
   to the approved-writeback mode required for the P21 routing fields and records
   the reason.
+- AE14. **Covers R40, R41, R42, R43.** Given an adjacent sales or operations
+  user asks Claude for onboarding or dispatch status, when the agent calls
+  ThinkWork, then the user receives a brokered answer in the external host;
+  given a coordinator or dispatcher needs privileged approval, correction, or
+  source-map work, then the flow uses the ThinkWork-owned Agent UI as the
+  authoritative surface and returns the final result to the external agent.
+- AE15. **Covers R39, R44, R45.** Given an external host calls ThinkWork for a
+  broker result, when the host is not tenant-approved or the scoped user consent
+  is expired, then ThinkWork returns a structured denial; given consent is
+  valid, then rendered resources are short-lived, source-map-aware, redacted,
+  and fetch-authorized.
+- AE16. **Covers R46, R47.** Given a dispatch route recommendation comes from
+  LastMile MCP or an approved equivalent, when the dispatcher approves it, then
+  ThinkWork validates the optimizer output, records the minimum necessary data
+  shared with the optimizer, binds the approval artifact to the exact P21 update
+  payload, and only then performs scoped writeback.
+- AE17. **Covers R48, R49.** Given ThinkWork uses source credentials and retains
+  broker evidence, when the broker completes the call, then credentials never
+  appear in external-host payloads, render resources, memory, or logs, and
+  retained evidence is minimized, redacted, tenant-isolated, and governed by the
+  retention policy.
 
 ---
 
@@ -403,6 +498,9 @@ credentials, external communication, and system writebacks.
   update without handing raw write access to the external agent.
 - An external agent can use ThinkWork as the company-resource authority without
   receiving raw, ungoverned access to every source system.
+- Core/power users can use ThinkWork's owned Agent UI for privileged workflows,
+  approvals, corrections, source-map management, and audit review, while edge
+  users call ThinkWork from the horizontal agents they already use.
 - The work surfaces demonstrate the product distinction: ThinkWork is not the
   connector; ThinkWork is the cross-system truth compiler, optimization broker,
   governed action layer, and rendered workflow surface.
@@ -429,6 +527,9 @@ credentials, external communication, and system writebacks.
   time-boxed grants.
 - Durable dashboard scheduling, sharing, and recurring refresh workflows.
 - Cross-host certification across every external agent harness.
+- Full feature parity between ThinkWork-owned Agent UI and every external host.
+- Live P21 dispatch writeback until the approval artifact, source-map,
+  credential, and sandbox requirements are satisfied.
 
 ### Outside this product's identity
 
@@ -436,6 +537,8 @@ credentials, external communication, and system writebacks.
   individual system connectors.
 - A user-managed attach-everything connector panel where external agents decide
   source scope and write authority without ThinkWork policy.
+- A horizontal general-purpose agent that tries to replace Claude, Codex,
+  ChatGPT, Cursor, Copilot, or similar frontier agent experiences.
 - A generic ERP front end or replacement UI for P21.
 - A generic fleet management or transportation management system.
 - A new full deterministic workflow state-machine product.
@@ -455,10 +558,15 @@ credentials, external communication, and system writebacks.
 - **Onboarding source set:** ThinkWork Work Items, Company Brain, Epicor P21,
   and n8n workflow status.
 - **Dispatch source set:** Driver, vehicle, and order data from approved
-  systems such as P21, FleetIO, LastMile, and related internal records.
+  systems such as P21, FleetIO, LastMile, and source-map-approved internal
+  records.
 - **Truth posture:** Lead onboarding with one canonical blocker and dispatch
   with one recommended routing solution, each with confidence and an evidence or
   input board underneath.
+- **Surface posture:** ThinkWork has two product surfaces. The owned Agent UI is
+  for core/power users, privileged workflows, approvals, corrections, source
+  configuration, and audit. The MCP/API/CLI broker is for everyone else calling
+  ThinkWork from horizontal agents.
 - **Connector posture:** Do not ask users to attach every connector to the
   external agent. ThinkWork exposes task-scoped source bundles, source coverage,
   gaps, and policy-bounded actions.
@@ -467,13 +575,14 @@ credentials, external communication, and system writebacks.
   network, browser, cloud, production, or writeback access requires policy and a
   recorded reason.
 - **Action posture:** Onboarding includes ThinkWork-only actions. Dispatch can
-  include governed P21 routing writeback after approval and validation.
+  include governed P21 routing writeback only after approval provenance,
+  source-map, credential, optimizer-boundary, and sandbox requirements are met.
 - **Workflow posture:** Do not build a state-machine product. Use workflow
   semantics only to support blocker explanation, dispatch constraints,
   approvals, next actions, and source evidence.
 - **Render posture:** Return model-readable context plus a renderable work
-  surface. MCP Apps are a target; ThinkWork UI envelopes and OpenUI-compatible
-  adapters are compatible paths.
+  surface. External hosts are the headless audience; ThinkWork-owned UI is the
+  authoritative surface for privileged core-user workflows and approvals.
 
 ---
 
@@ -484,7 +593,7 @@ credentials, external communication, and system writebacks.
 - n8n can expose enough workflow status for onboarding dependency/readiness
   signals without requiring ThinkWork to own every integration.
 - Dispatch planning can access credible driver, vehicle, and order fixtures
-  from P21, FleetIO, LastMile, or equivalent internal records.
+  from P21, FleetIO, LastMile, or source-map-approved internal records.
 - LastMile MCP or an equivalent approved route optimization service can accept
   normalized dispatch inputs and return a route solution suitable for rendering.
 - A safe P21 sandbox, fixture, or mock writeback path exists for validating
@@ -495,7 +604,8 @@ credentials, external communication, and system writebacks.
   rendered-output foundation, but the exact delivery shape should be validated
   during planning.
 - Current manual workaround is assumed to be calls, emails, waiting on people,
-  and ad hoc reconciliation across systems.
+  and ad hoc reconciliation across systems; this must be validated against a
+  target customer, role, or account before implementation tickets are created.
 
 ---
 
@@ -503,7 +613,26 @@ credentials, external communication, and system writebacks.
 
 ### Resolve Before Planning
 
-- None.
+- The next planning pass may proceed only as a discovery-first plan. It must not
+  produce implementation tickets until the first planning milestone resolves the
+  validation gates below.
+
+### Must Resolve Before Implementation Tickets
+
+- [Affects R1, R2, R4, R40, R43][Product] Which first learning wedge ships
+  first: onboarding blocker compilation, dispatch read-only recommendation, or
+  dispatch writeback?
+- [Affects R1, R2, R4, R43][Product] Which target customer, account, or role
+  proves the current workaround, problem frequency/cost, source systems, and why
+  ThinkWork beats direct connectors or the horizontal agent alone?
+- [Affects R39, R44, R45][Security] What is the first source map and external
+  client consent model for the chosen wedge?
+- [Affects R40, R41, R42, R43][Design] Which interactions happen inside the
+  external host, which require ThinkWork-owned UI, and what result returns to
+  the external agent?
+- [Affects R46, R47, R48, R49][Security] If dispatch writeback is in the first
+  tranche, which sandbox, approval artifact, credential lifecycle, optimizer
+  boundary, and retention policy make it safe?
 
 ### Deferred to Planning
 
