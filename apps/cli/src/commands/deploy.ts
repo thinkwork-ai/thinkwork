@@ -17,8 +17,16 @@ import {
   resolveTerraformRoot,
   ensureInit,
   ensureWorkspace,
+  isInitScaffoldedLayout,
   runTerraform,
+  runTerraformTee,
 } from "../terraform.js";
+import {
+  type BackendTarget,
+  backendTarget,
+  ensureStateBackend,
+  parseLockError,
+} from "../lib/state-backend.js";
 import { confirm } from "../prompt.js";
 import {
   printHeader,
@@ -456,15 +464,40 @@ export async function runLocalTerraformDeploy(
     printTierHeader(tier, i, tiers.length);
 
     const cwd = resolveTierDir(terraformDir, stage, tier);
-    await ensureInit(cwd);
+
+    // Init-scaffolded layouts get the per-account remote backend (R11).
+    // The repo greenfield layout keeps its own hardcoded backend for dev CI.
+    let backend: BackendTarget | undefined;
+    if (identity && isInitScaffoldedLayout(cwd)) {
+      const ensured = ensureStateBackend(
+        identity.account,
+        identity.region,
+        stage,
+      );
+      backend = ensured.target;
+      if (ensured.createdBucket || ensured.createdLockTable) {
+        console.log(
+          `  State backend provisioned: s3://${backend.bucket} + ${backend.lockTable}`,
+        );
+      }
+    }
+    console.log(
+      `  Terraform dir: ${cwd}\n  State: ${backend ? `s3://${backend.bucket}/${backend.key}` : "layout-defined backend"}`,
+    );
+
+    await ensureInit(cwd, backend);
     await ensureWorkspace(cwd, stage);
 
-    const code = await runTerraform(cwd, [
+    const { code, output } = await runTerraformTee(cwd, [
       "apply",
       "-auto-approve",
       `-var=stage=${stage}`,
     ]);
     if (code !== 0) {
+      const lock = parseLockError(output);
+      if (lock) {
+        await offerStaleLockRecovery(cwd, stage, tier, lock);
+      }
       printError(`Deploy failed for ${tier} (exit ${code})`);
       process.exit(code);
     }
@@ -480,6 +513,51 @@ export async function runLocalTerraformDeploy(
   await runPostDeployProbe(stage);
 
   printSummary("deploy", stage, tiers, startTime);
+}
+
+/**
+ * Guided recovery for a stale Terraform state lock (AE4): show holder/age,
+ * offer `force-unlock` interactively, and instruct non-TTY callers. A lock
+ * whose holder process is alive on another machine must NOT be force-broken,
+ * so the prompt leads with the holder details and defaults to "no".
+ */
+async function offerStaleLockRecovery(
+  cwd: string,
+  stage: string,
+  tier: string,
+  lock: import("../lib/state-backend.js").LockInfo,
+): Promise<void> {
+  console.log("");
+  printWarning(
+    `Terraform state for "${stage}" (${tier}) is locked — a previous run likely died mid-apply.`,
+  );
+  console.log(`    Lock ID:   ${lock.id ?? "unknown"}`);
+  console.log(`    Held by:   ${lock.who ?? "unknown"}`);
+  console.log(`    Operation: ${lock.operation ?? "unknown"}`);
+  console.log(`    Created:   ${lock.created ?? "unknown"}`);
+
+  if (!process.stdout.isTTY || !lock.id) {
+    console.log(
+      `\n  If that run is no longer alive, release the lock and rerun the deploy:\n` +
+        `    terraform force-unlock -force ${lock.id ?? "<lock-id>"}   (inside ${cwd})\n` +
+        `    thinkwork deploy -s ${stage}\n`,
+    );
+    return;
+  }
+
+  const release = await confirm(
+    `  Is the holding run dead? Release the lock now and rerun the deploy? (verify "${lock.who ?? "unknown"}" is not still applying)`,
+  );
+  if (!release) return;
+
+  const code = await runTerraform(cwd, ["force-unlock", "-force", lock.id]);
+  if (code === 0) {
+    printSuccess(
+      `Lock released. Rerun \`thinkwork deploy -s ${stage}\` to converge.`,
+    );
+  } else {
+    printError("force-unlock failed — see terraform output above.");
+  }
 }
 
 export async function confirmLocalDeployStage(

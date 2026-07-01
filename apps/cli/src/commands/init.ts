@@ -7,6 +7,7 @@ import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { saveEnvironment } from "../environments.js";
 import { ensurePrerequisites } from "../prerequisites.js";
+import { backendConfigArgs, ensureStateBackend } from "../lib/state-backend.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
@@ -359,6 +360,10 @@ export function registerInitCommand(program: Command): void {
 
 terraform {
   required_version = ">= 1.5"
+
+  # Partial backend: bucket/key/region/lock table are injected by the CLI via
+  # -backend-config at \`terraform init\` (per-account state bucket, R11).
+  backend "s3" {}
 
   required_providers {
     aws = {
@@ -808,9 +813,32 @@ output "agentcore_memory_id" {
 
         // ── Terraform init ─────────────────────────────────────────────
 
+        // ── State backend (R11): per-account bucket + lock table ────────
+        let initArgs = "";
+        try {
+          const ensured = ensureStateBackend(
+            config.account_id,
+            config.region,
+            config.stage,
+          );
+          initArgs = " " + backendConfigArgs(ensured.target).join(" ");
+          console.log(
+            `\n  State backend: s3://${ensured.target.bucket}/${ensured.target.key}` +
+              (ensured.createdBucket ? " (bucket created)" : ""),
+          );
+        } catch (err) {
+          printWarning(
+            `Could not provision the Terraform state backend now (${(err as Error).message.split("\n")[0]}). ` +
+              `\`thinkwork deploy -s ${stage}\` will provision it before applying.`,
+          );
+        }
+
         console.log("\n  Initializing Terraform...\n");
         try {
-          execSync("terraform init", { cwd: tfDir, stdio: "inherit" });
+          execSync(`terraform init${initArgs}`, {
+            cwd: tfDir,
+            stdio: "inherit",
+          });
         } catch {
           printWarning(
             "Terraform init failed. Run `thinkwork doctor -s " +
