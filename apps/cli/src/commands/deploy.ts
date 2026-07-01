@@ -1,5 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +27,7 @@ import {
   isInitScaffoldedLayout,
   runTerraform,
   runTerraformTee,
+  terraformOutput,
 } from "../terraform.js";
 import {
   type BackendTarget,
@@ -32,6 +40,14 @@ import {
   preflightChecks,
   runChecks,
 } from "../lib/checks.js";
+import {
+  releaseLambdaPrefix,
+  resolveReleaseArtifacts,
+  seedLambdaArtifacts,
+  upsertTfvarsValues,
+} from "../lib/release.js";
+import { applyMigrations, clusterArn } from "../lib/db-migrations.js";
+import { fetchRecentReleases } from "./release/helpers.js";
 import { confirm } from "../prompt.js";
 import {
   printHeader,
@@ -462,6 +478,217 @@ export function readTfvarsSignals(cwd: string): {
   return { domain, sesConfigured };
 }
 
+/**
+ * Release artifact resolution for init-scaffolded layouts (U9 / KTD-7).
+ *
+ * Without a repo checkout there is nothing to build Lambda zips or web assets
+ * from; an unpinned scaffolded deploy would resolve placeholder mode and ship
+ * infrastructure with no application code. Pins a release (latest unless
+ * --release-version), seeds its Lambda zips into the account state bucket,
+ * and writes the artifact variables into terraform.tfvars so reruns converge
+ * on the same release.
+ */
+export async function ensureReleaseArtifacts(
+  cwd: string,
+  identity: { account: string; region: string },
+  stage: string,
+  versionFlag?: string,
+): Promise<{ version: string; webAssetUrl: string | null }> {
+  const tfvarsPath = join(cwd, "terraform.tfvars");
+  const content = existsSync(tfvarsPath)
+    ? readFileSync(tfvarsPath, "utf8")
+    : "";
+  const assignments: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    if (match) assignments[match[1]] = match[2];
+  }
+
+  // Source-checkout layouts build their own zips — nothing to resolve.
+  if (assignments.lambda_zips_dir) {
+    return { version: "local-zips", webAssetUrl: null };
+  }
+
+  // Already pinned (rerun path): recover the version from the prefix so the
+  // web-asset URL can still be resolved for the post-apply publish.
+  const pinnedPrefixMatch = assignments.lambda_artifact_prefix?.match(
+    /^release-artifacts\/(.+)\/lambdas$/,
+  );
+  const version =
+    versionFlag ??
+    pinnedPrefixMatch?.[1] ??
+    (await fetchRecentReleases(1))[0]?.version;
+  if (!version) {
+    throw new Error(
+      "No deployable ThinkWork release found and no lambda_zips_dir configured — " +
+        "placeholder deploys are disabled. Pin one with --release-version <tag>.",
+    );
+  }
+
+  const artifacts = await resolveReleaseArtifacts(version);
+  if (artifacts.lambdaZips.length === 0) {
+    throw new Error(
+      `Release ${version} publishes no Lambda artifacts — cannot deploy application code from it.`,
+    );
+  }
+
+  const { target } = ensureStateBackend(
+    identity.account,
+    identity.region,
+    stage,
+  );
+  const prefix = releaseLambdaPrefix(version);
+  const seeded = await seedLambdaArtifacts({
+    zips: artifacts.lambdaZips,
+    bucket: target.bucket,
+    prefix,
+  });
+  console.log(
+    `  Release ${version}: ${seeded.uploaded} artifact(s) seeded, ${seeded.skipped} already present in s3://${target.bucket}/${prefix}`,
+  );
+
+  const pinned: Record<string, string> = {
+    lambda_artifact_bucket: target.bucket,
+    lambda_artifact_prefix: prefix,
+  };
+  if (artifacts.piImageUri) {
+    pinned.agentcore_pi_source_image_uri = artifacts.piImageUri;
+  }
+  writeFileSync(tfvarsPath, upsertTfvarsValues(content, pinned));
+
+  return { version, webAssetUrl: artifacts.webAssetUrl };
+}
+
+/**
+ * Publish the release's prebuilt web assets to the stage's app bucket
+ * (packaged installs have no web build step — CI builds ship in the release).
+ */
+async function publishWebAssets(
+  cwd: string,
+  webAssetUrl: string,
+): Promise<void> {
+  const bucket = await terraformOutput(cwd, "app_bucket_name");
+  if (!bucket) {
+    throw new Error(
+      "Terraform output app_bucket_name is empty — cannot publish web assets.",
+    );
+  }
+  const response = await fetch(webAssetUrl, { redirect: "follow" });
+  if (!response.ok) {
+    throw new Error(
+      `Could not download web assets (${response.status}) from ${webAssetUrl}`,
+    );
+  }
+  const tempDir = mkdtempSync(pathJoinTmp("thinkwork-web-assets-"));
+  const bundle = join(tempDir, "web.tar.gz");
+  writeFileSync(bundle, Buffer.from(await response.arrayBuffer()));
+
+  // The bundle tars the built dist contents at its root (`tar -C dist .`).
+  const siteDir = join(tempDir, "site");
+  mkdirSync(siteDir);
+  const extract = spawnSync("tar", ["-xzf", bundle, "-C", siteDir], {
+    encoding: "utf8",
+  });
+  if (extract.status !== 0) {
+    throw new Error(`Could not extract web assets: ${extract.stderr}`);
+  }
+  const sync = spawnSync(
+    "aws",
+    [
+      "s3",
+      "sync",
+      siteDir,
+      `s3://${bucket}/`,
+      "--delete",
+      "--only-show-errors",
+    ],
+    { encoding: "utf8", stdio: ["pipe", "inherit", "inherit"] },
+  );
+  if (sync.status !== 0) {
+    throw new Error(`Web asset sync to s3://${bucket} failed.`);
+  }
+  printSuccess(`Web assets published to s3://${bucket}`);
+}
+
+function pathJoinTmp(prefix: string): string {
+  return join(tmpdir(), prefix);
+}
+
+/**
+ * Apply the bundled journaled migrations to the stage database (U10) via the
+ * Aurora Data API. rds-postgres engines have no Data API — warn with the
+ * manual path instead of failing the deploy.
+ */
+async function applySchemaMigrations(
+  cwd: string,
+  identity: { account: string; region: string },
+  stage: string,
+): Promise<void> {
+  const signals = readTfvarsSignalsRaw(cwd);
+  if (signals.database_engine === "rds-postgres") {
+    printWarning(
+      "Schema application via the Data API needs aurora-serverless; apply migrations manually " +
+        "(psql + packages/database-pg/drizzle) for rds-postgres stages.",
+    );
+    return;
+  }
+
+  const drizzleDir = findBundledDrizzle();
+  if (!drizzleDir) {
+    printWarning(
+      "Bundled migrations not found — skipping schema application. `thinkwork verify` will fail until the schema is applied.",
+    );
+    return;
+  }
+
+  const secretArn = await terraformOutput(cwd, "db_secret_arn");
+  console.log("\n  Applying database schema (journaled migrations)...");
+  const summary = await applyMigrations({
+    drizzleDir,
+    target: {
+      resourceArn: clusterArn(identity.region, identity.account, stage),
+      secretArn,
+      database: "thinkwork",
+      region: identity.region,
+    },
+    log: (line) => console.log(`    ${line}`),
+  });
+  console.log(
+    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present.`,
+  );
+}
+
+/** Raw string assignments from the stage tfvars (engine, etc.). */
+function readTfvarsSignalsRaw(cwd: string): Record<string, string> {
+  const tfvarsPath = join(cwd, "terraform.tfvars");
+  if (!existsSync(tfvarsPath)) return {};
+  const values: Record<string, string> = {};
+  for (const line of readFileSync(tfvarsPath, "utf8").split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    if (match) values[match[1]] = match[2];
+  }
+  return values;
+}
+
+/** Bundled drizzle dir: dist/drizzle next to cli.js, or the repo checkout. */
+function findBundledDrizzle(): string | null {
+  const bundled = pathResolve(__dirnameForDeploy, "drizzle");
+  if (existsSync(join(bundled, "meta", "_journal.json"))) return bundled;
+  const repo = pathResolve(
+    __dirnameForDeploy,
+    "..",
+    "..",
+    "..",
+    "packages",
+    "database-pg",
+    "drizzle",
+  );
+  if (existsSync(join(repo, "meta", "_journal.json"))) return repo;
+  return null;
+}
+
+const __dirnameForDeploy = dirname(fileURLToPath(import.meta.url));
+
 export async function runLocalTerraformDeploy(
   opts: DeployCommandOptions,
 ): Promise<void> {
@@ -507,14 +734,17 @@ export async function runLocalTerraformDeploy(
   const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component);
 
+  const cwd0 = resolveTierDir(terraformDir, stage, tiers[0]);
+  const scaffolded = isInitScaffoldedLayout(cwd0);
+
   // ── Preflight (R6): report every detectable blocker before any resource is
   //    created. Warn-tier checks (SES) are reported but never block (AE3). ──
   if (!opts.skipPreflight) {
-    const preflightCwd = resolveTierDir(terraformDir, stage, tiers[0]);
+    const preflightCwd = cwd0;
     const signals = readTfvarsSignals(preflightCwd);
     const ctx: PreflightContext = {
       backend:
-        identity && isInitScaffoldedLayout(preflightCwd)
+        identity && scaffolded
           ? backendTarget(identity.account, identity.region, stage)
           : undefined,
       domain: signals.domain,
@@ -541,6 +771,19 @@ export async function runLocalTerraformDeploy(
     }
   } else {
     printWarning("Preflight skipped (--skip-preflight).");
+  }
+
+  // ── Release artifacts (U9): packaged installs deploy a pinned release's
+  //    application code, never placeholder mode. ──
+  let webAssetUrl: string | null = null;
+  if (scaffolded && identity) {
+    const release = await ensureReleaseArtifacts(
+      cwd0,
+      identity,
+      stage,
+      opts.releaseVersion,
+    );
+    webAssetUrl = release.webAssetUrl;
   }
 
   for (let i = 0; i < tiers.length; i++) {
@@ -590,6 +833,18 @@ export async function runLocalTerraformDeploy(
       );
       process.exit(code);
     }
+  }
+
+  // ── Schema (U10): apply journaled migrations before anything probes the
+  //    database — terraform provisions an EMPTY cluster. ──
+  if (scaffolded && identity) {
+    await applySchemaMigrations(cwd0, identity, stage);
+  }
+
+  // ── Web assets (U9): CI-built bundles ship in the release; publish them to
+  //    the stage's app bucket (packaged installs have no web build step). ──
+  if (scaffolded && webAssetUrl) {
+    await publishWebAssets(cwd0, webAssetUrl);
   }
 
   printSuccess("Deploy complete");
