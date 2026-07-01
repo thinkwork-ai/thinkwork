@@ -1868,10 +1868,13 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         current_state,
         "n8n_configuration_guardrails",
     )
+    n8n_managed_certificate_exists = state_has_resource(
+        current_state,
+        "aws_acm_certificate",
+        "n8n",
+    )
     n8n_preserved_certificate_arn = (
-        ""
-        if app_key and state_has_resource(current_state, "aws_acm_certificate", "n8n")
-        else n8n_guardrails.get("n8n_certificate_arn", "")
+        "" if n8n_managed_certificate_exists else n8n_guardrails.get("n8n_certificate_arn", "")
     )
 
     overrides = {
@@ -2047,6 +2050,17 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "n8n_dns_enabled": False,
         "n8n_dns_name": "",
     }
+
+    if not app_key and n8n_managed_certificate_exists:
+        n8n_dns_name = url_hostname(
+            n8n_guardrails.get("n8n_public_url", state_output(current_outputs, "n8n_url", ""))
+        )
+        overrides["cloudflare_zone_id"] = overrides[
+            "cloudflare_zone_id"
+        ] or cloudflare_zone_id_for_hostname(stage, n8n_dns_name)
+        overrides["n8n_domain"] = n8n_dns_name
+        overrides["n8n_dns_name"] = n8n_dns_name
+        overrides["n8n_dns_enabled"] = bool(overrides["cloudflare_zone_id"] and n8n_dns_name)
 
     if app_key == "n8n":
         provisioned = operation != "DESTROY"

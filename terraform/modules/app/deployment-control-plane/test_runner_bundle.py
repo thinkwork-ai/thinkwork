@@ -1578,6 +1578,11 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
                 "name": "n8n",
                 "instances": [{"attributes": {}}],
             },
+            {
+                "type": "cloudflare_record",
+                "name": "n8n",
+                "instances": [{"attributes": {"zone_id": "zone_123"}}],
+            },
         ]
     }
 
@@ -1647,6 +1652,11 @@ def test_full_update_preserves_existing_n8n_certificate_guardrail() -> None:
                 "name": "n8n",
                 "instances": [{"attributes": {}}],
             },
+            {
+                "type": "cloudflare_record",
+                "name": "n8n",
+                "instances": [{"attributes": {"zone_id": "zone_123"}}],
+            },
         ]
     }
 
@@ -1658,8 +1668,48 @@ def test_full_update_preserves_existing_n8n_certificate_guardrail() -> None:
         state,
     )
 
-    assert overrides["n8n_certificate_arn"].endswith(":certificate/n8n")
+    assert overrides["n8n_certificate_arn"] == ""
+    assert overrides["n8n_dns_name"] == "n8n.thinkwork.ai"
+    assert overrides["n8n_dns_enabled"] is True
     assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
+
+
+def test_full_update_preserves_external_n8n_certificate_guardrail() -> None:
+    runner = load_runner()
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "n8n_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "n8n_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/external-n8n"
+                                    ),
+                                    "n8n_public_url": "https://n8n.thinkwork.ai",
+                                }
+                            }
+                        }
+                    }
+                ],
+            },
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {},
+        "dev",
+        "487219502366",
+        {"n8n_provisioned": {"value": True}},
+        state,
+    )
+
+    assert overrides["n8n_certificate_arn"].endswith(":certificate/external-n8n")
+    assert overrides["n8n_dns_enabled"] is False
 
 
 def test_n8n_destroy_normalizes_legacy_binary_database_guardrail() -> None:
