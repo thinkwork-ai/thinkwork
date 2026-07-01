@@ -46,6 +46,7 @@ import {
   seedLambdaArtifacts,
   upsertTfvarsValues,
 } from "../lib/release.js";
+import { applyMigrations, clusterArn } from "../lib/db-migrations.js";
 import { fetchRecentReleases } from "./release/helpers.js";
 import { confirm } from "../prompt.js";
 import {
@@ -613,6 +614,81 @@ function pathJoinTmp(prefix: string): string {
   return join(tmpdir(), prefix);
 }
 
+/**
+ * Apply the bundled journaled migrations to the stage database (U10) via the
+ * Aurora Data API. rds-postgres engines have no Data API — warn with the
+ * manual path instead of failing the deploy.
+ */
+async function applySchemaMigrations(
+  cwd: string,
+  identity: { account: string; region: string },
+  stage: string,
+): Promise<void> {
+  const signals = readTfvarsSignalsRaw(cwd);
+  if (signals.database_engine === "rds-postgres") {
+    printWarning(
+      "Schema application via the Data API needs aurora-serverless; apply migrations manually " +
+        "(psql + packages/database-pg/drizzle) for rds-postgres stages.",
+    );
+    return;
+  }
+
+  const drizzleDir = findBundledDrizzle();
+  if (!drizzleDir) {
+    printWarning(
+      "Bundled migrations not found — skipping schema application. `thinkwork verify` will fail until the schema is applied.",
+    );
+    return;
+  }
+
+  const secretArn = await terraformOutput(cwd, "db_secret_arn");
+  console.log("\n  Applying database schema (journaled migrations)...");
+  const summary = await applyMigrations({
+    drizzleDir,
+    target: {
+      resourceArn: clusterArn(identity.region, identity.account, stage),
+      secretArn,
+      database: "thinkwork",
+      region: identity.region,
+    },
+    log: (line) => console.log(`    ${line}`),
+  });
+  console.log(
+    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present.`,
+  );
+}
+
+/** Raw string assignments from the stage tfvars (engine, etc.). */
+function readTfvarsSignalsRaw(cwd: string): Record<string, string> {
+  const tfvarsPath = join(cwd, "terraform.tfvars");
+  if (!existsSync(tfvarsPath)) return {};
+  const values: Record<string, string> = {};
+  for (const line of readFileSync(tfvarsPath, "utf8").split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    if (match) values[match[1]] = match[2];
+  }
+  return values;
+}
+
+/** Bundled drizzle dir: dist/drizzle next to cli.js, or the repo checkout. */
+function findBundledDrizzle(): string | null {
+  const bundled = pathResolve(__dirnameForDeploy, "drizzle");
+  if (existsSync(join(bundled, "meta", "_journal.json"))) return bundled;
+  const repo = pathResolve(
+    __dirnameForDeploy,
+    "..",
+    "..",
+    "..",
+    "packages",
+    "database-pg",
+    "drizzle",
+  );
+  if (existsSync(join(repo, "meta", "_journal.json"))) return repo;
+  return null;
+}
+
+const __dirnameForDeploy = dirname(fileURLToPath(import.meta.url));
+
 export async function runLocalTerraformDeploy(
   opts: DeployCommandOptions,
 ): Promise<void> {
@@ -757,6 +833,12 @@ export async function runLocalTerraformDeploy(
       );
       process.exit(code);
     }
+  }
+
+  // ── Schema (U10): apply journaled migrations before anything probes the
+  //    database — terraform provisions an EMPTY cluster. ──
+  if (scaffolded && identity) {
+    await applySchemaMigrations(cwd0, identity, stage);
   }
 
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to

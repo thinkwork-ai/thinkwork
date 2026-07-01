@@ -4,7 +4,7 @@
  * Called as part of `npm run build`.
  */
 
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +51,28 @@ if (existsSync(schemaPath)) {
 }
 
 console.log("✓ Terraform modules bundled into dist/terraform/");
+
+// Journaled Drizzle migrations (U10): the deploy tail applies these to fresh
+// stages via the Aurora Data API. Only journal-listed files ship — hand-rolled
+// .sql outside meta/_journal.json stays repo-only by design.
+const drizzleSrc = resolve(repoRoot, "packages/database-pg/drizzle");
+const drizzleDst = resolve(cliRoot, "dist/drizzle");
+const journalPath = resolve(drizzleSrc, "meta/_journal.json");
+if (existsSync(journalPath)) {
+  rmSync(drizzleDst, { recursive: true, force: true });
+  mkdirSync(resolve(drizzleDst, "meta"), { recursive: true });
+  cpSync(journalPath, resolve(drizzleDst, "meta/_journal.json"));
+  const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+  let copied = 0;
+  for (const entry of journal.entries ?? []) {
+    const sqlFile = resolve(drizzleSrc, `${entry.tag}.sql`);
+    if (existsSync(sqlFile)) {
+      cpSync(sqlFile, resolve(drizzleDst, `${entry.tag}.sql`));
+      copied += 1;
+    }
+  }
+  console.log(`✓ ${copied} journaled migrations bundled into dist/drizzle/`);
+}
 
 if (existsSync(pluginsSrc)) {
   mkdirSync(pluginsDst, { recursive: true });
