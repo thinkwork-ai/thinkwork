@@ -284,7 +284,7 @@ describe("TwentyClientEngagementApp", () => {
         title: "Client Engagement",
         documentTitle: "Twenty CRM · Client Engagement",
         breadcrumbs: [
-          { label: "Apps", onClick: expect.any(Function) },
+          { label: "Applications", onClick: expect.any(Function) },
           { label: "Twenty CRM" },
           { label: "Client Engagement", onClick: undefined },
         ],
@@ -315,7 +315,7 @@ describe("TwentyClientEngagementApp", () => {
     expect(screen.getByRole("tab", { name: "Opportunities (1)" })).toBeTruthy();
     expect(screen.queryByText("1 active opportunity")).toBeNull();
     expect(latestHeaderActions().breadcrumbs).toEqual([
-      { label: "Apps", onClick: expect.any(Function) },
+      { label: "Applications", onClick: expect.any(Function) },
       { label: "Twenty CRM" },
       { label: "Client Engagement", onClick: expect.any(Function) },
       { label: "McPherson Companies" },

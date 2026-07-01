@@ -190,6 +190,7 @@ describe("WorkflowInventory", () => {
     expect(screen.getAllByText("AWS Step").length).toBeGreaterThan(0);
     expect(screen.getAllByText("n8n bridge").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocked Not Ready").length).toBeGreaterThan(0);
+    expect(screen.queryByText("missing_secret")).toBeNull();
     expect(screen.queryByText("Step Functions routine")).toBeNull();
     expect(screen.queryByText("Version")).toBeNull();
     expect(screen.queryByText("Last run")).toBeNull();

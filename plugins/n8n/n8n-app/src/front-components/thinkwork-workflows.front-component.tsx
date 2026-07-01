@@ -188,7 +188,7 @@ export function ThinkWorkN8nWorkflowsApp({
           </p>
         </div>
 
-        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+        <div className="mb-3 flex shrink-0 items-center pt-0">
           {viewMode === "workflows" ? (
             <AppTableToolbar
               table={workflowTable}
