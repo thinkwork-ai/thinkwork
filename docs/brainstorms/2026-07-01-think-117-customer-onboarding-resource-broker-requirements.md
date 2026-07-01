@@ -35,9 +35,9 @@ or:
 > Show the governed dispatch recommendation for today's northwest route.
 
 For onboarding, ThinkWork responds through an MCP-accessible broker with a
-rendered Customer Onboarding Command Center. The view leads with one canonical
-blocker, shows confidence and evidence, includes source freshness and conflicts,
-and offers ThinkWork-only actions.
+rendered Customer Onboarding Command Center. The view leads with the most
+critical blocker, shows confidence and evidence, includes source freshness and
+conflicts, and offers ThinkWork-only actions.
 
 For dispatch, ThinkWork responds with a rendered Dispatch Optimization Surface.
 The surface shows the source driver, vehicle, and order inputs, invokes route
@@ -143,8 +143,9 @@ workflow control.
   - **Steps:** The external agent calls ThinkWork. ThinkWork resolves the
     caller, tenant, Space, customer, and policy context. ThinkWork gathers
     permitted data from Work Items, Company Brain, P21, and n8n. ThinkWork
-    compiles one canonical blocker plus supporting evidence and returns both a
-    concise model-readable answer and a rendered command center.
+    compiles a ranked blocker set led by the most critical blocker plus
+    supporting evidence and returns both a concise model-readable answer and a
+    rendered command center.
   - **Outcome:** A3 receives a clear answer and can inspect the evidence board
     without manually visiting every system.
   - **Covered by:** R1, R2, R3, R4, R5, R7, R8, R9, R12, R13, R28, R35, R40.
@@ -215,12 +216,22 @@ workflow control.
     If valid, ThinkWork updates P21 with the accepted routing solution and
     records the full approval and writeback evidence.
   - **Outcome:** P21 receives the routing update through a governed ThinkWork
-    action instead of an untracked agent-side write.
+    action instead of an untracked agent-side write. For the MVP this flow is
+    proven against the P21 sandbox/fixture writeback path; live customer
+    writeback is a post-MVP gate (see Scope Boundaries).
   - **Covered by:** R19, R20, R21, R23, R32, R35, R37, R41, R46.
 
 ---
 
 ## Requirements
+
+> **Wedge conditionality:** Most requirements below are wedge-agnostic core.
+> Onboarding-conditional: R5, R13, R17, R18. Dispatch-conditional (either
+> dispatch wedge): R6, R14, R47. Dispatch-writeback-conditional: R19, R20,
+> R46, R58. Conditional clusters become binding only if their wedge is
+> selected at the first planning milestone; per Outstanding Questions, no
+> implementation tickets may be cut from a conditional cluster before the
+> wedge selection resolves.
 
 **Product identity**
 
@@ -262,9 +273,12 @@ workflow control.
 
 - R12. The response to an external agent must include both model-readable
   context and a renderable work surface, not only plain text.
-- R13. The onboarding command center must show the canonical blocker,
-  confidence, source evidence, source freshness, conflicts, next internal
-  actions, and links or references back to source records when policy allows.
+- R13. The onboarding command center must show the ranked blocker set led by
+  the most critical blocker — or an explicit no-active-blocker state when
+  onboarding is on track — plus confidence, source evidence, source freshness,
+  conflicts, next internal actions, and links or references back to source
+  records when policy allows. Multiple concurrent genuine blockers must be
+  representable without arbitrarily promoting one to false certainty.
 - R14. The dispatch optimization surface must show route recommendations,
   drivers, vehicles, orders, constraints, exceptions, source freshness, and a
   preview of proposed P21 updates.
@@ -284,8 +298,11 @@ workflow control.
 - R19. The dispatch MVP may update P21 with an accepted routing solution only
   after user approval, policy validation, stale-data checks, and writeback audit
   capture.
-- R20. Dispatch writeback must be scoped to routing/dispatch fields approved
-  for the MVP. It must not become broad P21 mutation access.
+- R20. When dispatch writeback is in scope, it must be scoped to
+  routing/dispatch fields approved for the MVP. It must not become broad P21
+  mutation access, and any dispatcher-edited routing solution must re-run the
+  same constraint and exception validation as optimizer output before it is
+  eligible for approval.
 - R21. Any action from a work surface must be validated server-side against the
   source view, current user, Space policy, action constraints, and required
   approvals before it is accepted.
@@ -404,6 +421,54 @@ workflow control.
   deletion, and legal-hold behavior, enforce tenant and Space isolation, and
   prefer references or hashes when full source payloads are not required.
 
+**Compilation integrity, render targets, and approval provenance**
+
+- R50. The MVP must name at least one concrete external demonstration host and
+  render path (for example Claude with MCP Apps) plus the ThinkWork-owned UI
+  envelope as the render targets thesis validation is measured against.
+  Fallback-summary delivery does not count as proving the rendered-surface
+  differentiation.
+- R51. Governed writeback approval must not be finalizable purely through an
+  action callback from an unattested external host: at the transport layer an
+  LLM-initiated tool call is indistinguishable from a human click. Approval
+  capture requires a ThinkWork-authenticated surface (MCP App resource or
+  ThinkWork-owned UI) or a fresh step-up re-authentication that ThinkWork
+  verifies independently of the calling host. Text-only fallback hosts are
+  read-only for approval actions and must route the approver to a qualifying
+  surface.
+- R52. Model-readable context and text answers returned to external hosts are
+  subject to the same data-class redaction and minimum-necessary-data
+  discipline as rendered resources (R45), because they enter a host context
+  ThinkWork does not control that may hold independent exfiltration-capable
+  tools.
+- R53. Blocker and recommendation compilation must be validated against
+  known-ground-truth cases from the target customer before answers are
+  presented as canonical, and coordinator/dispatcher corrections must be
+  captured and measurable, with correction rate as the working accuracy
+  signal.
+- R54. Each compiled use case must have an operator-owned, declarative process
+  definition (steps, dependencies, owners, completion signals) alongside the
+  source map (R39) that blocker compilation reasons over. The definition is
+  data the compiler reads, not an executable workflow engine, preserving R25
+  by construction.
+- R55. Task access postures (R35, R36) must be enforced structurally:
+  compile/render modes must be incapable of invoking write or
+  external-communication tools at the code level, not merely denied by policy
+  lookup, because the broker internally combines untrusted source content,
+  credentials, and action capability.
+- R56. The broker must expose a compact, stable tool surface (on the order of
+  search-resources, query-context, render-resource-view, request-action,
+  remember-outcome, plus policy explanation and structured denials) with
+  progressive discovery for larger schemas, rather than one tool per source
+  system or capability (per the origin ideation doc's Resource Broker MVP).
+- R57. Company Brain retrieval is subject to the same task-scoped,
+  data-class-governed filtering as external source pulls (R28, R35):
+  aggregated memories are filtered by the calling user's permissions and data
+  class before inclusion in any compiled view.
+- R58. P21 writeback approval must use a distinct, higher-friction,
+  diff-reviewed confirmation interaction, not the same approval treatment used
+  for ThinkWork-only actions such as creating a Work Item or adding a note.
+
 ---
 
 ## Acceptance Examples
@@ -495,7 +560,9 @@ workflow control.
   P21, workflow status, and internal tasks.
 - A dispatcher can get a route recommendation from approved cross-system inputs,
   inspect the route optimization surface, and approve a governed P21 routing
-  update without handing raw write access to the external agent.
+  update without handing raw write access to the external agent. The MVP proof
+  of this criterion runs against the P21 sandbox/fixture writeback path; live
+  customer P21 writeback is a post-MVP gate.
 - An external agent can use ThinkWork as the company-resource authority without
   receiving raw, ungoverned access to every source system.
 - Core/power users can use ThinkWork's owned Agent UI for privileged workflows,
@@ -506,6 +573,9 @@ workflow control.
   governed action layer, and rendered workflow surface.
 - Users can see source coverage and known gaps before trusting an answer,
   recommendation, or writeback.
+- Compiled answers meet an agreed accuracy bar on known-ground-truth cases from
+  the target customer, and coordinator/dispatcher corrections are captured so
+  the correction rate serves as the ongoing accuracy signal.
 - Planning can proceed without inventing the first use cases, source sets, v1
   actions, render contract stance, writeback boundary, or state-machine
   boundary.
@@ -560,9 +630,10 @@ workflow control.
 - **Dispatch source set:** Driver, vehicle, and order data from approved
   systems such as P21, FleetIO, LastMile, and source-map-approved internal
   records.
-- **Truth posture:** Lead onboarding with one canonical blocker and dispatch
-  with one recommended routing solution, each with confidence and an evidence or
-  input board underneath.
+- **Truth posture:** Lead onboarding with a ranked blocker set headed by the
+  single most critical blocker — including an explicit no-active-blocker state
+  when onboarding is on track — and dispatch with one recommended routing
+  solution, each with confidence and an evidence or input board underneath.
 - **Surface posture:** ThinkWork has two product surfaces. The owned Agent UI is
   for core/power users, privileged workflows, approvals, corrections, source
   configuration, and audit. The MCP/API/CLI broker is for everyone else calling
@@ -600,9 +671,16 @@ workflow control.
   dispatch update behavior before any real customer environment is touched.
 - Company Brain has or can receive enough customer onboarding and dispatch
   context to make the shared picture useful.
-- Existing MCP App and `data-json-render` work gives ThinkWork a viable
-  rendered-output foundation, but the exact delivery shape should be validated
-  during planning.
+- Existing MCP App work is host-side (ThinkWork rendering external apps inside
+  its own web app) and `data-json-render` is consumed by ThinkWork's own
+  clients; serving renderable surfaces to external MCP hosts is a net-new
+  broker output path whose delivery shape must be designed during planning.
+- The existing customer-onboarding substrate (the spaces customer-onboarding
+  workflow with its P21 customer id and account-setup blocker fields, the
+  work-items customer-onboarding helpers, space checklist items, the
+  coordinator agent, and LastMile linked-task mirroring) is the expected
+  foundation for the onboarding blocker model and the R17 action set; planning
+  must extend it rather than build a parallel onboarding state model.
 - Current manual workaround is assumed to be calls, emails, waiting on people,
   and ad hoc reconciliation across systems; this must be validated against a
   target customer, role, or account before implementation tickets are created.
@@ -621,7 +699,10 @@ workflow control.
 
 - [Affects R1, R2, R4, R40, R43][Product] Which first learning wedge ships
   first: onboarding blocker compilation, dispatch read-only recommendation, or
-  dispatch writeback?
+  dispatch writeback? (Review recommendation 2026-07-01: onboarding blocker
+  compilation first — read-only, lowest security surface, purest test of
+  cross-system truth; dispatch read-only second; writeback last. Evidence from
+  a committed dispatch discovery customer can override.)
 - [Affects R1, R2, R4, R43][Product] Which target customer, account, or role
   proves the current workaround, problem frequency/cost, source systems, and why
   ThinkWork beats direct connectors or the horizontal agent alone?
@@ -633,6 +714,27 @@ workflow control.
 - [Affects R46, R47, R48, R49][Security] If dispatch writeback is in the first
   tranche, which sandbox, approval artifact, credential lifecycle, optimizer
   boundary, and retention policy make it safe?
+- [Affects R9, R10, R53][Technical] What is the compilation substrate —
+  deterministic read-model code, LLM synthesis, or a labeled hybrid — and what
+  latency budget must a synchronous broker call meet? LLM-compiled "canonical
+  truth" reintroduces the sampling/false-authority risk R28–R31 exist to
+  prevent; any LLM-synthesized portion must be labeled as such on the evidence
+  board.
+- [Affects R12, R15, R16, R50][Product] Which target external hosts render MCP
+  App resources today, verified empirically rather than from spec claims — and
+  what does the product claim become if the fallback text path is the majority
+  edge-user experience?
+- [Affects R40, R41, R42][Product] How does the ThinkWork-owned Agent UI relate
+  to the existing product (Pi agent, threads, Spaces, live tenants): are the
+  command centers new surfaces inside the current app, is the internal agent
+  the broker's first client so internal and external callers share one policy
+  enforcement path, and what does the broker repositioning mean for existing
+  tenant deployments?
+- [Affects R17, R18][Product] For the target customer, do the ThinkWork-only
+  actions in R17 meaningfully advance the majority of recurring onboarding
+  blockers, or does the trusted answer alone save quantified reconciliation
+  time? If neither holds, the onboarding action boundary must be revisited
+  before implementation tickets.
 
 ### Deferred to Planning
 
