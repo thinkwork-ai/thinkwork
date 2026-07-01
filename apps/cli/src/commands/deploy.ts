@@ -41,6 +41,7 @@ import {
   runChecks,
 } from "../lib/checks.js";
 import {
+  materializeBundle,
   releaseLambdaPrefix,
   resolveReleaseArtifacts,
   seedLambdaArtifacts,
@@ -494,7 +495,7 @@ export async function ensureReleaseArtifacts(
   identity: { account: string; region: string },
   stage: string,
   versionFlag?: string,
-): Promise<{ version: string; webAssetUrl: string | null }> {
+): Promise<{ version: string; webAssetSource: string | null }> {
   const tfvarsPath = join(cwd, "terraform.tfvars");
   const content = existsSync(tfvarsPath)
     ? readFileSync(tfvarsPath, "utf8")
@@ -507,7 +508,7 @@ export async function ensureReleaseArtifacts(
 
   // Source-checkout layouts build their own zips — nothing to resolve.
   if (assignments.lambda_zips_dir) {
-    return { version: "local-zips", webAssetUrl: null };
+    return { version: "local-zips", webAssetSource: null };
   }
 
   // Already pinned (rerun path): recover the version from the prefix so the
@@ -533,6 +534,20 @@ export async function ensureReleaseArtifacts(
     );
   }
 
+  // Real releases ship every zip inside one bundle (harness cycle-2 ledger
+  // entry): download + extract it once, then seed from the extraction root.
+  let bundleRoot: string | undefined;
+  const needsBundle = artifacts.lambdaZips.some((z) => !z.url);
+  if (needsBundle) {
+    if (!artifacts.bundle) {
+      throw new Error(
+        `Release ${version} has bundle-relative Lambda artifacts but no artifact bundle URL.`,
+      );
+    }
+    console.log(`  Downloading release bundle ${artifacts.bundle.fileName}...`);
+    bundleRoot = await materializeBundle(artifacts.bundle);
+  }
+
   const { target } = ensureStateBackend(
     identity.account,
     identity.region,
@@ -543,6 +558,7 @@ export async function ensureReleaseArtifacts(
     zips: artifacts.lambdaZips,
     bucket: target.bucket,
     prefix,
+    bundleRoot,
   });
   console.log(
     `  Release ${version}: ${seeded.uploaded} artifact(s) seeded, ${seeded.skipped} already present in s3://${target.bucket}/${prefix}`,
@@ -557,7 +573,15 @@ export async function ensureReleaseArtifacts(
   }
   writeFileSync(tfvarsPath, upsertTfvarsValues(content, pinned));
 
-  return { version, webAssetUrl: artifacts.webAssetUrl };
+  // Web asset source: a local path from the bundle, or a direct URL.
+  let webAssetSource: string | null = null;
+  if (artifacts.webAsset?.relativePath && bundleRoot) {
+    webAssetSource = join(bundleRoot, artifacts.webAsset.relativePath);
+  } else if (artifacts.webAsset?.url) {
+    webAssetSource = artifacts.webAsset.url;
+  }
+
+  return { version, webAssetSource };
 }
 
 /**
@@ -566,7 +590,7 @@ export async function ensureReleaseArtifacts(
  */
 async function publishWebAssets(
   cwd: string,
-  webAssetUrl: string,
+  webAssetSource: string,
 ): Promise<void> {
   const bucket = await terraformOutput(cwd, "app_bucket_name");
   if (!bucket) {
@@ -574,15 +598,23 @@ async function publishWebAssets(
       "Terraform output app_bucket_name is empty — cannot publish web assets.",
     );
   }
-  const response = await fetch(webAssetUrl, { redirect: "follow" });
-  if (!response.ok) {
-    throw new Error(
-      `Could not download web assets (${response.status}) from ${webAssetUrl}`,
-    );
-  }
   const tempDir = mkdtempSync(pathJoinTmp("thinkwork-web-assets-"));
-  const bundle = join(tempDir, "web.tar.gz");
-  writeFileSync(bundle, Buffer.from(await response.arrayBuffer()));
+  let bundle: string;
+  if (/^https?:\/\//.test(webAssetSource)) {
+    const response = await fetch(webAssetSource, { redirect: "follow" });
+    if (!response.ok) {
+      throw new Error(
+        `Could not download web assets (${response.status}) from ${webAssetSource}`,
+      );
+    }
+    bundle = join(tempDir, "web.tar.gz");
+    writeFileSync(bundle, Buffer.from(await response.arrayBuffer()));
+  } else {
+    if (!existsSync(webAssetSource)) {
+      throw new Error(`Web asset bundle not found at ${webAssetSource}.`);
+    }
+    bundle = webAssetSource;
+  }
 
   // The bundle tars the built dist contents at its root (`tar -C dist .`).
   const siteDir = join(tempDir, "site");
@@ -776,7 +808,7 @@ export async function runLocalTerraformDeploy(
 
   // ── Release artifacts (U9): packaged installs deploy a pinned release's
   //    application code, never placeholder mode. ──
-  let webAssetUrl: string | null = null;
+  let webAssetSource: string | null = null;
   if (scaffolded && identity) {
     const release = await ensureReleaseArtifacts(
       cwd0,
@@ -784,7 +816,7 @@ export async function runLocalTerraformDeploy(
       stage,
       opts.releaseVersion,
     );
-    webAssetUrl = release.webAssetUrl;
+    webAssetSource = release.webAssetSource;
   }
 
   for (let i = 0; i < tiers.length; i++) {
@@ -844,8 +876,8 @@ export async function runLocalTerraformDeploy(
 
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to
   //    the stage's app bucket (packaged installs have no web build step). ──
-  if (scaffolded && webAssetUrl) {
-    await publishWebAssets(cwd0, webAssetUrl);
+  if (scaffolded && webAssetSource) {
+    await publishWebAssets(cwd0, webAssetSource);
   }
 
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by

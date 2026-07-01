@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -10,128 +10,192 @@ import {
 } from "../src/lib/release.js";
 import type { ExecResult } from "../src/lib/state-backend.js";
 
-const MANIFEST = {
-  release: { version: "0.1.0-canary.200" },
+// Mirrors the real v0.1.0-canary.* manifest shape: zips live inside one
+// platform bundle (per-artifact url: null, relativePath set) — harness
+// cycle-2 ledger entry.
+const BUNDLED_MANIFEST = {
+  release: { version: "0.1.0-canary.307" },
   artifacts: [
     {
       name: "graphql-http",
       type: "lambda",
       fileName: "graphql-http.zip",
-      url: "https://example.com/graphql-http.zip",
+      relativePath: "lambdas/graphql-http.zip",
+      url: null,
       sha256: "abc",
     },
     {
       name: "job-trigger",
       type: "lambda",
       fileName: "job-trigger.zip",
-      url: "https://example.com/job-trigger.zip",
+      relativePath: "lambdas/job-trigger.zip",
+      url: null,
     },
     {
       name: "web",
-      type: "static",
+      type: "static-site",
       fileName: "web.tar.gz",
-      url: "https://example.com/web.tar.gz",
+      relativePath: "static/web.tar.gz",
+      url: null,
+    },
+  ],
+  artifactBundles: [
+    {
+      name: "platform",
+      fileName: "platform-artifacts.tar.gz",
+      url: "https://example.com/platform-artifacts.tar.gz",
     },
   ],
   runtimeImages: [
     {
-      name: "agentcore-pi",
-      repository: "public.ecr.aws/thinkwork/agentcore-pi",
-      tag: "0.1.0-canary.200",
+      name: "agentcore-pi-arm64",
+      repository: "ghcr.io/thinkwork-ai/thinkwork-agentcore",
+      tag: "0.1.0-canary.307",
       digest: "sha256:deadbeef",
       architecture: "arm64",
     },
     {
-      name: "lambda-base",
-      repository: "public.ecr.aws/thinkwork/lambda-base",
-      tag: "x",
+      name: "agentcore-pi-amd64",
+      repository: "ghcr.io/thinkwork-ai/thinkwork-agentcore",
+      tag: "0.1.0-canary.307",
       digest: "sha256:other",
       architecture: "amd64",
     },
   ],
 };
 
+const ok: ExecResult = { status: 0, stdout: "", stderr: "" };
+const missing: ExecResult = { status: 254, stdout: "", stderr: "Not Found" };
+
 describe("parseReleaseArtifacts", () => {
-  it("extracts lambda zips, the arm64 pi image (digest-pinned), and the web bundle", () => {
-    const artifacts = parseReleaseArtifacts(MANIFEST);
-    expect(artifacts.version).toBe("0.1.0-canary.200");
+  it("parses the real bundled-manifest shape: relative paths, bundle, arm64 pi image", () => {
+    const artifacts = parseReleaseArtifacts(BUNDLED_MANIFEST);
+    expect(artifacts.version).toBe("0.1.0-canary.307");
     expect(artifacts.lambdaZips.map((z) => z.name)).toEqual([
       "graphql-http",
       "job-trigger",
     ]);
-    expect(artifacts.piImageUri).toBe(
-      "public.ecr.aws/thinkwork/agentcore-pi@sha256:deadbeef",
+    expect(artifacts.lambdaZips[0].relativePath).toBe(
+      "lambdas/graphql-http.zip",
     );
-    expect(artifacts.webAssetUrl).toBe("https://example.com/web.tar.gz");
+    expect(artifacts.lambdaZips[0].url).toBeNull();
+    expect(artifacts.piImageUri).toBe(
+      "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:deadbeef",
+    );
+    expect(artifacts.webAsset).toEqual({
+      url: null,
+      relativePath: "static/web.tar.gz",
+    });
+    expect(artifacts.bundle).toEqual({
+      fileName: "platform-artifacts.tar.gz",
+      url: "https://example.com/platform-artifacts.tar.gz",
+    });
   });
 
-  it("returns nulls for a manifest without images or web bundle", () => {
+  it("still accepts unbundled manifests with per-artifact URLs", () => {
     const artifacts = parseReleaseArtifacts({
       release: { version: "0.0.1" },
-      artifacts: [],
+      artifacts: [
+        {
+          name: "graphql-http",
+          type: "lambda",
+          fileName: "graphql-http.zip",
+          url: "https://example.com/graphql-http.zip",
+        },
+      ],
     });
+    expect(artifacts.lambdaZips).toHaveLength(1);
+    expect(artifacts.lambdaZips[0].url).toBe(
+      "https://example.com/graphql-http.zip",
+    );
+    expect(artifacts.bundle).toBeNull();
+  });
+
+  it("returns empty/null for a manifest without artifacts", () => {
+    const artifacts = parseReleaseArtifacts({ release: { version: "0.0.1" } });
     expect(artifacts.lambdaZips).toEqual([]);
     expect(artifacts.piImageUri).toBeNull();
-    expect(artifacts.webAssetUrl).toBeNull();
+    expect(artifacts.webAsset).toBeNull();
   });
 });
 
 describe("seedLambdaArtifacts", () => {
-  const ok: ExecResult = { status: 0, stdout: "", stderr: "" };
-  const missing: ExecResult = { status: 254, stdout: "", stderr: "Not Found" };
+  it("seeds bundle-relative zips from the extraction root without fetching", async () => {
+    const bundleRoot = mkdtempSync(join(tmpdir(), "bundle-root-"));
+    mkdirSync(join(bundleRoot, "lambdas"), { recursive: true });
+    writeFileSync(join(bundleRoot, "lambdas", "graphql-http.zip"), "zip1");
+    writeFileSync(join(bundleRoot, "lambdas", "job-trigger.zip"), "zip2");
 
-  it("skips already-present objects and uploads the rest (idempotent)", async () => {
     const calls: string[][] = [];
     const exec = (args: string[]): ExecResult => {
       calls.push(args);
-      if (args[1] === "head-object") {
-        // First zip exists, second is missing.
-        return args.join(" ").includes("graphql-http.zip") ? ok : missing;
-      }
-      return ok;
+      return args[1] === "head-object" ? missing : ok;
     };
+    const fetchImpl = (async () => {
+      throw new Error("must not fetch when the bundle provides the file");
+    }) as unknown as typeof fetch;
+
+    const result = await seedLambdaArtifacts({
+      zips: parseReleaseArtifacts(BUNDLED_MANIFEST).lambdaZips,
+      bucket: "thinkwork-tfstate-123",
+      prefix: releaseLambdaPrefix("v0.1.0-canary.307"),
+      bundleRoot,
+      exec,
+      fetchImpl,
+    });
+    expect(result.uploaded).toBe(2);
+    const cp = calls.find((c) => c[0] === "s3" && c[1] === "cp")!;
+    expect(cp[2]).toContain("lambdas/graphql-http.zip");
+  });
+
+  it("skips already-present objects (idempotent reruns)", async () => {
+    const bundleRoot = mkdtempSync(join(tmpdir(), "bundle-root-"));
+    const exec = (): ExecResult => ok; // head-object succeeds for everything
+    const result = await seedLambdaArtifacts({
+      zips: parseReleaseArtifacts(BUNDLED_MANIFEST).lambdaZips,
+      bucket: "b",
+      prefix: "p",
+      bundleRoot,
+      exec,
+    });
+    expect(result.skipped).toBe(2);
+    expect(result.uploaded).toBe(0);
+  });
+
+  it("downloads per-URL zips when no bundle path exists", async () => {
     const fetched: string[] = [];
     const fetchImpl = (async (url: string) => {
       fetched.push(String(url));
       return new Response(Buffer.from("zipbytes"), { status: 200 });
     }) as unknown as typeof fetch;
-
     const result = await seedLambdaArtifacts({
-      zips: parseReleaseArtifacts(MANIFEST).lambdaZips,
-      bucket: "thinkwork-tfstate-123",
-      prefix: releaseLambdaPrefix("v0.1.0-canary.200"),
-      exec,
+      zips: [
+        {
+          name: "x",
+          fileName: "x.zip",
+          url: "https://example.com/x.zip",
+          relativePath: null,
+        },
+      ],
+      bucket: "b",
+      prefix: "p",
+      exec: (args) => (args[1] === "head-object" ? missing : ok),
       fetchImpl,
       tempDir: mkdtempSync(join(tmpdir(), "seed-test-")),
     });
-    expect(result.skipped).toBe(1);
     expect(result.uploaded).toBe(1);
-    expect(fetched).toEqual(["https://example.com/job-trigger.zip"]);
-    const cp = calls.find((c) => c[0] === "s3" && c[1] === "cp")!;
-    expect(cp[3]).toBe(
-      "s3://thinkwork-tfstate-123/release-artifacts/v0.1.0-canary.200/lambdas/job-trigger.zip",
-    );
+    expect(fetched).toEqual(["https://example.com/x.zip"]);
   });
 
-  it("throws on a failed download", async () => {
-    const fetchImpl = (async () =>
-      new Response("nope", { status: 404 })) as unknown as typeof fetch;
+  it("throws a named error when an artifact has neither URL nor bundle path", async () => {
     await expect(
       seedLambdaArtifacts({
-        zips: [
-          {
-            name: "x",
-            fileName: "x.zip",
-            url: "https://example.com/x.zip",
-          },
-        ],
+        zips: [{ name: "x", fileName: "x.zip", url: null, relativePath: null }],
         bucket: "b",
         prefix: "p",
-        exec: () => ({ status: 254, stdout: "", stderr: "" }),
-        fetchImpl,
-        tempDir: mkdtempSync(join(tmpdir(), "seed-test-")),
+        exec: () => missing,
       }),
-    ).rejects.toThrow(/404/);
+    ).rejects.toThrow(/neither a download URL nor a bundle path/);
   });
 });
 
@@ -152,9 +216,6 @@ describe("upsertTfvarsValues", () => {
     expect(out).toContain('db_password     = "secret"');
     expect(out).toContain("Release artifacts");
     expect(out).toContain('lambda_artifact_bucket = "thinkwork-tfstate-123"');
-    expect(out).toContain(
-      'lambda_artifact_prefix = "release-artifacts/v1/lambdas"',
-    );
   });
 
   it("updates existing keys in place without duplicating them", () => {
