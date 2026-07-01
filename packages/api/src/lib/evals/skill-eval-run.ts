@@ -37,7 +37,7 @@ import {
 } from "../../graphql/utils.js";
 import { evalRuns } from "@thinkwork/database-pg/schema";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
-import { DEFAULT_EVAL_MODEL_ID } from "./eval-defaults.js";
+import { getOrCreateDefaultEvalProfile } from "./eval-profiles.js";
 import { skillEvalDatasetSlug } from "./skill-dataset.js";
 import { resolveDatasetForLaunch } from "./run-launch.js";
 import {
@@ -169,9 +169,14 @@ export async function launchSkillEvalRun(args: {
     return { status: "unrated" };
   }
 
-  // 3. Resolve the model — the default eval model must be enabled in the
-  //    tenant catalog or the run can't be scored.
-  const model = DEFAULT_EVAL_MODEL_ID;
+  // 3. Resolve the tenant's default Eval Profile (THINK-107 F3) — gate
+  //    runs execute against it so "the score" is unambiguous once a
+  //    second profile exists. Get-or-create: a freshly provisioned tenant
+  //    synthesizes its default here (AE7) instead of failing. The
+  //    profile's model must be enabled in the tenant catalog or the run
+  //    can't be scored.
+  const profile = await getOrCreateDefaultEvalProfile(tenantId);
+  const model = profile.model;
   const catalogRow = await getTenantModelCatalogEntry({
     tenantId,
     modelId: model,
@@ -179,7 +184,7 @@ export async function launchSkillEvalRun(args: {
   if (!catalogRow) {
     return {
       status: "skipped",
-      reason: "default eval model not enabled in tenant catalog",
+      reason: "default eval profile model not enabled in tenant catalog",
     };
   }
 
@@ -194,6 +199,8 @@ export async function launchSkillEvalRun(args: {
       runtime_host: "aws-agentcore",
       model,
       dataset_id: datasetId,
+      // Profile stamps at creation (KTD1); the runner pins the snapshot.
+      profile_id: profile.id,
       // Scoring semantics stamped at creation — never inferred later.
       scoring_version: CURRENT_EVAL_SCORING_VERSION,
     })

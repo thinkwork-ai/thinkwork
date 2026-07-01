@@ -101,6 +101,23 @@ vi.mock("../model-catalog/tenant-catalog.js", () => ({
   getTenantModelCatalogEntry: mockGetTenantModelCatalogEntry,
 }));
 
+// Gate runs resolve the tenant's default Eval Profile (THINK-107 F3);
+// lifecycle behavior is covered in eval-profiles.test.ts.
+vi.mock("./eval-profiles.js", () => ({
+  getOrCreateDefaultEvalProfile: vi.fn().mockResolvedValue({
+    id: "profile-default",
+    tenant_id: "tenant-1",
+    name: "Default",
+    model: "moonshotai.kimi-k2.5",
+    judge_model: null,
+    trials: 1,
+    is_default: true,
+    archived_at: null,
+    created_at: new Date("2026-07-01T00:00:00Z"),
+    updated_at: new Date("2026-07-01T00:00:00Z"),
+  }),
+}));
+
 vi.mock("./eval-baseline-agent.js", () => ({
   claimEvalBaselineForRun: mockClaimEvalBaselineForRun,
   EvalBaselineBusyError: class EvalBaselineBusyError extends Error {
@@ -175,7 +192,7 @@ describe("launchSkillEvalRun", () => {
     });
     expect(result).toEqual({
       status: "skipped",
-      reason: "default eval model not enabled in tenant catalog",
+      reason: "default eval profile model not enabled in tenant catalog",
     });
     expect(insertValues).toHaveLength(0);
     expect(mockGetTenantModelCatalogEntry).toHaveBeenCalledWith({

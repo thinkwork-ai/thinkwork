@@ -21,7 +21,7 @@
  */
 
 import { and, db, eq, isNull, sql } from "../../graphql/utils.js";
-import { evalProfiles } from "@thinkwork/database-pg/schema";
+import { agentSkills, evalProfiles } from "@thinkwork/database-pg/schema";
 import { DEFAULT_EVAL_MODEL_ID } from "./eval-defaults.js";
 
 export interface EvalProfileRow {
@@ -319,6 +319,61 @@ export async function resolveEvalProfileForRun(
     );
   }
   return profile;
+}
+
+/**
+ * Installed-skills fingerprint of the agent a run executes against
+ * (KTD2 — recorded for attribution, never enforced in v1). Source: the
+ * derived agent_skills index (enabled rows), which tracks the composed
+ * AGENTS.md routing state the workspace materializes from. Sorted for
+ * stable comparison; null when capture is unavailable — a missing
+ * fingerprint renders as "unknown", never as "matches".
+ */
+export async function captureWorkspaceFingerprint(
+  agentId: string | null | undefined,
+): Promise<string[] | null> {
+  if (!agentId) return null;
+  try {
+    const rows = await db
+      .select({ skill_id: agentSkills.skill_id })
+      .from(agentSkills)
+      .where(
+        and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
+      );
+    return rows
+      .map((r) => String((r as { skill_id: string }).skill_id))
+      .sort();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the dispatch-time profile snapshot for a run (KTD1). Loads the
+ * run's stamped profile (falling back to the tenant default for runs
+ * created without one), and captures the executing agent's fingerprint.
+ * `modelOverride` carries the legacy StartEvalRunInput.model scalar so a
+ * back-compat launch records the model it actually ran.
+ */
+export async function resolveProfileSnapshotForRun(run: {
+  tenant_id: string;
+  agent_id: string | null;
+  profile_id?: string | null;
+  model?: string | null;
+}): Promise<EvalProfileSnapshot> {
+  const profile = run.profile_id
+    ? ((await getEvalProfile(run.profile_id)) ??
+      (await getOrCreateDefaultEvalProfile(run.tenant_id)))
+    : await getOrCreateDefaultEvalProfile(run.tenant_id);
+  const fingerprint = await captureWorkspaceFingerprint(run.agent_id);
+  return {
+    profileId: profile.id,
+    name: profile.name,
+    model: run.model?.trim() || profile.model,
+    judgeModel: profile.judge_model,
+    trials: profile.trials,
+    workspaceFingerprint: fingerprint,
+  };
 }
 
 function translateUniqueViolation(err: unknown, name: string): unknown {

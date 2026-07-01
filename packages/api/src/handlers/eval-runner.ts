@@ -23,6 +23,10 @@ import {
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import {
+  resolveProfileSnapshotForRun,
+  type EvalProfileSnapshot,
+} from "../lib/evals/eval-profiles.js";
+import {
   captureRunSnapshot,
   createEvalDatasetStorageFromConfig,
   type RunSnapshot,
@@ -267,6 +271,15 @@ async function dispatchDatasetRun(
     run = updatedRun ?? { ...run, agent_id: platformAgent.id };
   }
 
+  // Pin the profile snapshot at dispatch (KTD1/KTD2) — after the agent
+  // resolves so the workspace fingerprint reflects the agent this run
+  // actually executes against (platform agent, or the claimed
+  // eval-baseline agent on skill-gate runs). Pre-profile runs (created
+  // before profile stamping deployed) pin against the tenant default so
+  // in-flight runs finish with an honest record.
+  const profileSnapshot: EvalProfileSnapshot =
+    await resolveProfileSnapshotForRun(run);
+
   // Resolve the pinned dataset_case_ids to their index row uuids —
   // eval_results FK eval_test_cases for dedupe + trend history. The
   // mutation's drift-heal read just re-synced the index, and index rows
@@ -306,6 +319,8 @@ async function dispatchDatasetRun(
       status: "running",
       started_at: run.started_at ?? startedAt,
       dataset_version: snapshot.datasetVersion,
+      profile_id: profileSnapshot.profileId,
+      profile_snapshot: profileSnapshot,
       pinned_case_ids: pinnedCaseIds,
       // Belt-and-suspenders for legacy read paths (placeholder rows,
       // pre-pinning reconciler fallback): record the resolved uuids too.
@@ -456,11 +471,18 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       run = updatedRun ?? { ...run, agent_id: platformAgent.id };
     }
 
+    // Pin the profile snapshot on the legacy category/test-case path too
+    // (KTD1) — both dispatch paths record the agent-under-test config.
+    const profileSnapshot: EvalProfileSnapshot =
+      await resolveProfileSnapshotForRun(run);
+
     await db
       .update(evalRuns)
       .set({
         status: "running",
         started_at: run.started_at ?? startedAt,
+        profile_id: profileSnapshot.profileId,
+        profile_snapshot: profileSnapshot,
         total_tests: cases.length,
         passed: 0,
         failed: 0,

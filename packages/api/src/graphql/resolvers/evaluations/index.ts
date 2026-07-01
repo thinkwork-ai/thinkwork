@@ -42,6 +42,7 @@ import {
   skillEvalDatasetSlug,
 } from "../../../lib/evals/skill-dataset.js";
 import { readSkillEvalScore } from "../../../lib/evals/skill-eval-run.js";
+import { resolveEvalProfileForRun } from "../../../lib/evals/eval-profiles.js";
 import {
   getSkillEvalGateThreshold,
   setSkillEvalGateThreshold,
@@ -93,6 +94,16 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     // run snapshot. Null on legacy category/test-case launches.
     datasetId: row.dataset_id ?? null,
     datasetVersion: row.dataset_version ?? null,
+    // Eval Profile (THINK-107): profileId stamps at creation; the
+    // snapshot (and its name) pins at dispatch. Null on pre-profile runs
+    // — the UI renders those "Legacy (pre-profile)".
+    profileId: row.profile_id ?? null,
+    profileName:
+      (row.profile_snapshot as { name?: string } | null)?.name ?? null,
+    profileSnapshot: row.profile_snapshot
+      ? JSON.stringify(row.profile_snapshot)
+      : null,
+    expectedResultRows: row.expected_result_rows ?? null,
     totalTests: row.total_tests,
     passed: row.passed,
     failed: row.failed,
@@ -899,6 +910,13 @@ const skillEvalGate = async (
 
 interface StartEvalRunInput {
   computerId?: string | null;
+  /**
+   * Eval Profile to run against (THINK-107). Omit to use the tenant's
+   * default profile (synthesized when none exists). When set, the
+   * profile supplies model, judge pin, and trial count; the legacy
+   * `model` scalar is ignored.
+   */
+  profileId?: string | null;
   model?: string | null;
   categories?: string[] | null;
   testCaseIds?: string[] | null;
@@ -950,7 +968,22 @@ const startEvalRun = async (
     );
   }
 
-  const model = await resolveEvalModelId(args.tenantId, args.input.model);
+  // Resolve the Eval Profile (THINK-107): explicit profileId → tenant
+  // default (get-or-create, so no automatic consumer can fail on a
+  // missing default). The profile supplies the model; the legacy scalar
+  // still wins when a caller passes it WITHOUT a profileId, so
+  // pre-profile clients keep working and record the model they asked
+  // for. Either way the chosen model re-validates against the tenant
+  // catalog at launch (a profile's model may have been disabled since
+  // the profile was written).
+  const profile = await resolveEvalProfileForRun(
+    args.tenantId,
+    args.input.profileId,
+  );
+  const requestedModel = args.input.profileId
+    ? profile.model
+    : (args.input.model?.trim() || profile.model);
+  const model = await resolveEvalModelId(args.tenantId, requestedModel);
 
   // Dataset launch (Trust Core U6): resolve the dataset BEFORE the run
   // row exists — readEvalDataset drift-checks the index manifest_sha
@@ -990,6 +1023,9 @@ const startEvalRun = async (
       categories: args.input.categories ?? [],
       selected_test_case_ids: args.input.testCaseIds ?? [],
       dataset_id: datasetId,
+      // Profile stamps at creation (KTD1); the eval-runner pins the
+      // resolved profile_snapshot at dispatch alongside dataset_version.
+      profile_id: profile.id,
       // Scoring semantics are stamped at run creation — never inferred
       // later — so post-deploy code can't silently upgrade older runs.
       scoring_version: CURRENT_EVAL_SCORING_VERSION,
