@@ -582,7 +582,12 @@ export async function runLocalTerraformDeploy(
       if (lock) {
         await offerStaleLockRecovery(cwd, stage, tier, lock);
       }
-      printError(`Deploy failed for ${tier} (exit ${code})`);
+      printError(`Deploy failed at the ${tier} tier (exit ${code}).`);
+      console.log(
+        `\n  Partial state is a normal condition — rerun to converge:\n` +
+          `    thinkwork deploy -s ${stage}\n` +
+          `  Every tier re-applies idempotently; completed resources are untouched.\n`,
+      );
       process.exit(code);
     }
   }
