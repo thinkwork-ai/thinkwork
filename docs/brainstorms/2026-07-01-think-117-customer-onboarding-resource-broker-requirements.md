@@ -228,10 +228,13 @@ workflow control.
 > **Wedge conditionality:** Most requirements below are wedge-agnostic core.
 > Onboarding-conditional: R5, R13, R17, R18. Dispatch-conditional (either
 > dispatch wedge): R6, R14, R47. Dispatch-writeback-conditional: R19, R20,
-> R46, R58. Conditional clusters become binding only if their wedge is
-> selected at the first planning milestone; per Outstanding Questions, no
-> implementation tickets may be cut from a conditional cluster before the
-> wedge selection resolves.
+> R46, R58.
+>
+> **Wedge selection (decided 2026-07-01): onboarding blocker compilation
+> ships first.** The onboarding-conditional cluster is binding for the MVP.
+> The dispatch-conditional and dispatch-writeback-conditional clusters are
+> second and third tranche respectively and must not produce implementation
+> tickets in the first planning pass.
 
 **Product identity**
 
@@ -424,10 +427,11 @@ workflow control.
 **Compilation integrity, render targets, and approval provenance**
 
 - R50. The MVP must name at least one concrete external demonstration host and
-  render path (for example Claude with MCP Apps) plus the ThinkWork-owned UI
-  envelope as the render targets thesis validation is measured against.
-  Fallback-summary delivery does not count as proving the rendered-surface
-  differentiation.
+  render path plus the ThinkWork-owned UI envelope as the render targets
+  thesis validation is measured against. Decided 2026-07-01: the demonstration
+  target is Claude web + Desktop via MCP Apps custom connectors, with ChatGPT
+  as the standards-compliant fast-follow. Fallback-summary delivery does not
+  count as proving the rendered-surface differentiation.
 - R51. Governed writeback approval must not be finalizable purely through an
   action callback from an unattested external host: at the transport layer an
   LLM-initiated tool call is indistinguishable from a human click. Approval
@@ -622,6 +626,13 @@ workflow control.
 
 - **First proof points:** Customer onboarding and dispatch, not a generic P21
   viewer.
+- **First wedge (decided 2026-07-01):** Onboarding blocker compilation ships
+  first — read-only, lowest security surface, purest test of cross-system
+  truth. Dispatch read-only recommendation is the second tranche; governed P21
+  writeback is the third.
+- **Discovery customer (decided 2026-07-01):** TEI (LastMile orbit). Runs
+  Epicor P21; proves the onboarding wedge now and is the natural dispatch
+  second-tranche partner (FleetIO, LastMile MCP).
 - **Primary pain:** Fragmented cross-system operational truth, not connector
   absence.
 - **Primary actors:** Customer onboarding coordinator and dispatcher.
@@ -697,15 +708,17 @@ workflow control.
 
 ### Must Resolve Before Implementation Tickets
 
-- [Affects R1, R2, R4, R40, R43][Product] Which first learning wedge ships
-  first: onboarding blocker compilation, dispatch read-only recommendation, or
-  dispatch writeback? (Review recommendation 2026-07-01: onboarding blocker
-  compilation first — read-only, lowest security surface, purest test of
-  cross-system truth; dispatch read-only second; writeback last. Evidence from
-  a committed dispatch discovery customer can override.)
-- [Affects R1, R2, R4, R43][Product] Which target customer, account, or role
-  proves the current workaround, problem frequency/cost, source systems, and why
-  ThinkWork beats direct connectors or the horizontal agent alone?
+- **RESOLVED 2026-07-01** [Affects R1, R2, R4, R40, R43][Product] First
+  learning wedge: onboarding blocker compilation ships first; dispatch
+  read-only recommendation is second tranche; governed writeback is third.
+  Recorded in Key Decisions and the wedge-conditionality note.
+- **TARGET SELECTED 2026-07-01** [Affects R1, R2, R4, R43][Product] Discovery
+  customer: TEI (LastMile orbit) — runs Epicor P21 and covers both the
+  onboarding wedge now and the dispatch tranche later. Still to gather in
+  discovery: the current workaround, problem frequency/cost, the onboarding
+  coordinator role/owner, the source-system inventory, why ThinkWork beats
+  direct connectors or the horizontal agent alone, and the R17
+  action-boundary validation.
 - [Affects R39, R44, R45][Security] What is the first source map and external
   client consent model for the chosen wedge?
 - [Affects R40, R41, R42, R43][Design] Which interactions happen inside the
@@ -714,16 +727,25 @@ workflow control.
 - [Affects R46, R47, R48, R49][Security] If dispatch writeback is in the first
   tranche, which sandbox, approval artifact, credential lifecycle, optimizer
   boundary, and retention policy make it safe?
-- [Affects R9, R10, R53][Technical] What is the compilation substrate —
-  deterministic read-model code, LLM synthesis, or a labeled hybrid — and what
-  latency budget must a synchronous broker call meet? LLM-compiled "canonical
-  truth" reintroduces the sampling/false-authority risk R28–R31 exist to
-  prevent; any LLM-synthesized portion must be labeled as such on the evidence
-  board.
-- [Affects R12, R15, R16, R50][Product] Which target external hosts render MCP
-  App resources today, verified empirically rather than from spec claims — and
-  what does the product claim become if the fallback text path is the majority
-  edge-user experience?
+- **RESOLVED 2026-07-01** [Affects R9, R10, R53][Technical] Compilation
+  substrate: labeled hybrid, weighted heavily deterministic — pure-code
+  gather/normalize, deterministic blocker-selection rules over the R54 process
+  definition, and exactly three labeled LLM synthesis slots. Latency budget:
+  p50 ≤ 2.5 s / p95 ≤ 8 s / hard cap 15 s, served from pre-warmed P21/n8n
+  mirrors, with evidence-board `origin` discriminators (source_fact /
+  derived_rule / llm_synthesis). Full design:
+  `docs/brainstorms/2026-07-01-think-117-compilation-substrate-design-note.md`.
+- **RESOLVED 2026-07-01** [Affects R12, R15, R16, R50][Product] Empirical host
+  MCP App render support: Claude web + Desktop (paid plans, custom connectors
+  — no directory approval), ChatGPT (implements the ratified standard;
+  developer mode privately, directory publicly), VS Code Copilot Chat
+  (stable), Cursor 2.6+, and Microsoft 365 Copilot all render MCP Apps today.
+  Text-fallback surfaces are the coding CLIs (Claude Code, Codex), Claude
+  mobile (flaky viewer), and Claude Free tier — not the majority desktop/web
+  experience. R50's named demonstration target is Claude web + Desktop, with
+  ChatGPT as the fast-follow. The real adoption friction is enterprise admin
+  enablement (ChatGPT Enterprise apps off by default; M365 admin app upload) —
+  planning should include a per-host admin-enablement runbook.
 - [Affects R40, R41, R42][Product] How does the ThinkWork-owned Agent UI relate
   to the existing product (Pi agent, threads, Spaces, live tenants): are the
   command centers new surfaces inside the current app, is the internal agent
