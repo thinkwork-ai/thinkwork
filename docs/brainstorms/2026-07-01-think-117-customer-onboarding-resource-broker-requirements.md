@@ -633,6 +633,17 @@ workflow control.
 - **Discovery customer (decided 2026-07-01):** TEI (LastMile orbit). Runs
   Epicor P21; proves the onboarding wedge now and is the natural dispatch
   second-tranche partner (FleetIO, LastMile MCP).
+- **Delivery phasing (decided 2026-07-01):** The broker expands along two
+  orthogonal axes. Data axis: Phase 1 serves ThinkWork-native sources (Work
+  Items, Company Brain/memory, n8n and Twenty plugin status), evolving
+  `/mcp/context-engine` into the broker surface; the onboarding command
+  center ships at Phase 1 with P21 disclosed as a missing canonical source
+  per R29/R30. Phase 2 adds external sources (Epicor P21 via a pre-warmed
+  mirror, LastMile/FleetIO), completing onboarding coverage and enabling
+  dispatch read-only. The capability axis is unchanged: onboarding read →
+  dispatch read → governed writeback. The cross-system-conflict proof of the
+  thesis (work item vs P21 disagreement) lands at Phase 2; Phase 1 proves the
+  substrate, not the full thesis.
 - **Primary pain:** Fragmented cross-system operational truth, not connector
   absence.
 - **Primary actors:** Customer onboarding coordinator and dispatcher.
