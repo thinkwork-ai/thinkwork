@@ -9,6 +9,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import {
+  type BackendTarget,
+  backendConfigArgs,
+  backendMatches,
+  detectLocalStateOrphanRisk,
+  readRecordedBackend,
+} from "./lib/state-backend.js";
 
 export interface TerraformOptions {
   /** Stage name (maps to Terraform workspace) */
@@ -82,7 +89,26 @@ export function resolveTierDir(
   if (existsSync(path.join(cwdTf, "main.tf"))) {
     return cwdTf;
   }
-  return terraformDir;
+  // No recognizable layout: fail loudly rather than applying terraform against
+  // an arbitrary directory (a typo'd stage or wrong CWD must not reach apply).
+  throw new Error(
+    `No Terraform layout found for stage "${stage}" (tier "${tier}").\n` +
+      `  Looked for:\n` +
+      `    - ${envDir}\n` +
+      `    - ${greenfield}\n` +
+      `    - ${path.join(flat, "main.tf")}\n` +
+      `    - ${path.join(cwdTf, "main.tf")}\n` +
+      `  Run \`thinkwork init -s ${stage}\` to scaffold an environment, or run from its directory.`,
+  );
+}
+
+/** True when this directory is the init-scaffolded flat layout (not the repo greenfield). */
+export function isInitScaffoldedLayout(cwd: string): boolean {
+  return (
+    existsSync(path.join(cwd, "main.tf")) &&
+    !cwd.endsWith(path.join("examples", "greenfield")) &&
+    existsSync(path.join(cwd, "modules"))
+  );
 }
 
 /**
@@ -151,13 +177,80 @@ export function runTerraform(cwd: string, args: string[]): Promise<number> {
 
 /**
  * Run terraform init if not already initialized.
+ *
+ * With a `backend` target, init receives `-backend-config` args. Terraform
+ * only applies backend config during init, and the historical short-circuit
+ * ("`.terraform/` exists → skip") would leave a backend change silently inert
+ * — so when the recorded backend mismatches the target, this re-runs
+ * `terraform init -reconfigure`. If real local state would be orphaned by the
+ * switch, it fails loudly and names `-migrate-state` instead of proceeding.
  */
-export async function ensureInit(cwd: string): Promise<void> {
+export async function ensureInit(
+  cwd: string,
+  backend?: BackendTarget,
+): Promise<void> {
   const dotTerraform = path.join(cwd, ".terraform");
+  const backendArgs = backend ? backendConfigArgs(backend) : [];
+
   if (!existsSync(dotTerraform)) {
-    const code = await runTerraform(cwd, ["init"]);
+    const code = await runTerraform(cwd, ["init", ...backendArgs]);
     if (code !== 0) {
       throw new Error("terraform init failed");
     }
+    return;
   }
+
+  if (!backend) return;
+
+  const recorded = readRecordedBackend(cwd);
+  if (backendMatches(recorded, backend)) return;
+
+  if (detectLocalStateOrphanRisk(cwd)) {
+    throw new Error(
+      `This directory has local Terraform state with resources, but the deploy now targets the remote backend s3://${backend.bucket}/${backend.key}.\n` +
+        `  Switching with -reconfigure would orphan that state. Migrate it first:\n` +
+        `    terraform init -migrate-state ${backendConfigArgs(backend).join(" ")}\n` +
+        `  (run inside ${cwd})`,
+    );
+  }
+
+  console.log(
+    `  Backend changed (recorded: ${recorded ? `${recorded.type}${recorded.bucket ? ` s3://${recorded.bucket}/${recorded.key}` : ""}` : "none"} → s3://${backend.bucket}/${backend.key}); re-running terraform init -reconfigure`,
+  );
+  const code = await runTerraform(cwd, [
+    "init",
+    "-reconfigure",
+    ...backendArgs,
+  ]);
+  if (code !== 0) {
+    throw new Error("terraform init -reconfigure failed");
+  }
+}
+
+/**
+ * Run terraform with live output AND a captured transcript, so callers can
+ * pattern-match failures (e.g. stale state locks) without losing streaming UX.
+ */
+export function runTerraformTee(
+  cwd: string,
+  args: string[],
+): Promise<{ code: number; output: string }> {
+  return new Promise((resolve) => {
+    console.log(`\n  → terraform ${args.join(" ")}\n`);
+
+    const proc = spawn("terraform", args, {
+      cwd,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+    let output = "";
+    proc.stdout.on("data", (d: Buffer) => {
+      output += d.toString();
+      process.stdout.write(d);
+    });
+    proc.stderr.on("data", (d: Buffer) => {
+      output += d.toString();
+      process.stderr.write(d);
+    });
+    proc.on("close", (code) => resolve({ code: code ?? 1, output }));
+  });
 }

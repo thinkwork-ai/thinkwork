@@ -1,5 +1,11 @@
 import { Command } from "commander";
-import { existsSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  cpSync,
+} from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -7,6 +13,7 @@ import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { saveEnvironment } from "../environments.js";
 import { ensurePrerequisites } from "../prerequisites.js";
+import { backendConfigArgs, ensureStateBackend } from "../lib/state-backend.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
@@ -65,6 +72,72 @@ function findBundledTerraform(): string {
     "Terraform modules not found. The CLI package may be incomplete.\n" +
       "Try reinstalling: npm install -g thinkwork-cli@latest",
   );
+}
+
+/**
+ * Parse string-valued assignments from an existing terraform.tfvars.
+ * Throws when the file has content but no parseable `stage` assignment —
+ * a corrupt tfvars must never be silently overwritten (U4).
+ */
+export function parseTfvarsAssignments(
+  content: string,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    if (match) values[match[1]] = match[2];
+  }
+  const hasContent = content
+    .split("\n")
+    .some((l) => l.trim() && !l.trim().startsWith("#"));
+  if (hasContent && !values.stage) {
+    throw new Error(
+      "Existing terraform.tfvars is unreadable (no stage assignment found). " +
+        "Fix or remove it manually — init will not overwrite a file it cannot parse.",
+    );
+  }
+  return values;
+}
+
+/**
+ * Immutable answers (U4): an initialized directory is pinned to its stage,
+ * account, and region. Changing them requires destroy + re-init, not a rerun.
+ */
+export function guardImmutableAnswers(
+  existing: Record<string, string>,
+  requested: { stage: string; account: string },
+): { ok: boolean; error?: string } {
+  if (existing.stage && existing.stage !== requested.stage) {
+    return {
+      ok: false,
+      error:
+        `This directory is initialized for stage "${existing.stage}", not "${requested.stage}". ` +
+        `Run \`thinkwork destroy -s ${existing.stage}\` first, or init a new directory.`,
+    };
+  }
+  if (existing.account_id && existing.account_id !== requested.account) {
+    return {
+      ok: false,
+      error:
+        `This directory is initialized for AWS account ${existing.account_id}, but the current ` +
+        `credentials are account ${requested.account}. Switch profiles, or init a new directory.`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Rerunning init must never rotate live secrets out from under deployed
+ * resources: existing db_password/api_auth_secret are preserved byte-for-byte.
+ */
+export function mergePreservedSecrets(
+  config: Record<string, string>,
+  existing: Record<string, string>,
+): void {
+  if (existing.db_password) config.db_password = existing.db_password;
+  if (existing.api_auth_secret) {
+    config.api_auth_secret = existing.api_auth_secret;
+  }
 }
 
 function buildTfvars(config: Record<string, string>): string {
@@ -207,12 +280,36 @@ export function registerInitCommand(program: Command): void {
         const tfDir = join(targetDir, "terraform");
         const tfvarsPath = join(tfDir, "terraform.tfvars");
 
+        let existing: Record<string, string> | null = null;
         if (existsSync(tfvarsPath)) {
-          printWarning(`terraform.tfvars already exists at ${tfvarsPath}`);
-          const overwrite = await ask("Overwrite?", "N");
-          if (overwrite.toLowerCase() !== "y") {
-            console.log("  Aborted.");
-            return;
+          try {
+            existing = parseTfvarsAssignments(readFileSync(tfvarsPath, "utf8"));
+          } catch (err) {
+            printError((err as Error).message);
+            process.exit(1);
+          }
+
+          const guard = guardImmutableAnswers(existing!, {
+            stage,
+            account: identity.account,
+          });
+          if (!guard.ok) {
+            printError(guard.error!);
+            process.exit(1);
+          }
+
+          printWarning(
+            `Existing environment detected at ${tfvarsPath} — secrets and immutable settings (stage, account, region) are preserved.`,
+          );
+          if (!opts.defaults) {
+            const proceed = await ask(
+              "Regenerate terraform.tfvars with preserved secrets?",
+              "Y",
+            );
+            if (proceed.toLowerCase() === "n") {
+              console.log("  Aborted.");
+              return;
+            }
           }
           console.log("");
         }
@@ -225,10 +322,12 @@ export function registerInitCommand(program: Command): void {
           db_password: generateSecret(24),
           api_auth_secret: `tw-${stage}-${generateSecret(16)}`,
         };
+        if (existing) mergePreservedSecrets(config, existing);
 
         if (opts.defaults) {
           config.region =
-            identity.region !== "unknown" ? identity.region : "us-east-1";
+            existing?.region ??
+            (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.database_engine = "aurora-serverless";
           config.enable_hindsight = "true";
           config.google_oauth_client_id = "";
@@ -239,8 +338,16 @@ export function registerInitCommand(program: Command): void {
           console.log(chalk.bold("  Configure your Thinkwork environment\n"));
 
           const defaultRegion =
-            identity.region !== "unknown" ? identity.region : "us-east-1";
+            existing?.region ??
+            (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.region = await ask("AWS Region", defaultRegion);
+          if (existing?.region && config.region !== existing.region) {
+            printError(
+              `Region is immutable for an initialized environment (currently "${existing.region}"). ` +
+                `Run \`thinkwork destroy -s ${stage}\` and re-init to change it.`,
+            );
+            process.exit(1);
+          }
 
           console.log("");
           console.log(chalk.dim("  ── Database ──"));
@@ -359,6 +466,10 @@ export function registerInitCommand(program: Command): void {
 
 terraform {
   required_version = ">= 1.5"
+
+  # Partial backend: bucket/key/region/lock table are injected by the CLI via
+  # -backend-config at \`terraform init\` (per-account state bucket, R11).
+  backend "s3" {}
 
   required_providers {
     aws = {
@@ -808,9 +919,32 @@ output "agentcore_memory_id" {
 
         // ── Terraform init ─────────────────────────────────────────────
 
+        // ── State backend (R11): per-account bucket + lock table ────────
+        let initArgs = "";
+        try {
+          const ensured = ensureStateBackend(
+            config.account_id,
+            config.region,
+            config.stage,
+          );
+          initArgs = " " + backendConfigArgs(ensured.target).join(" ");
+          console.log(
+            `\n  State backend: s3://${ensured.target.bucket}/${ensured.target.key}` +
+              (ensured.createdBucket ? " (bucket created)" : ""),
+          );
+        } catch (err) {
+          printWarning(
+            `Could not provision the Terraform state backend now (${(err as Error).message.split("\n")[0]}). ` +
+              `\`thinkwork deploy -s ${stage}\` will provision it before applying.`,
+          );
+        }
+
         console.log("\n  Initializing Terraform...\n");
         try {
-          execSync("terraform init", { cwd: tfDir, stdio: "inherit" });
+          execSync(`terraform init${initArgs}`, {
+            cwd: tfDir,
+            stdio: "inherit",
+          });
         } catch {
           printWarning(
             "Terraform init failed. Run `thinkwork doctor -s " +
