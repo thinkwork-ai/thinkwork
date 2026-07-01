@@ -116,19 +116,18 @@ if [ ! -x "$CLI" ]; then
   echo "  Packed CLI unavailable — aborting cycle before any AWS mutation." >&2
   FAIL=$((FAIL + 1))
 else
-  # ── Scaffold a scratch stage dir (local state is a known U1 limitation; U2
-  #    swaps in the per-account injected backend and U8 updates this script) ──
+  # ── Scaffold a scratch stage dir. init + deploy provision the per-account
+  #    remote state backend automatically (U2), so cycles converge on rerun. ──
   step "init" bash -c "cd '$STAGE_DIR' && '$CLI' init -s '$STAGE' -d . --defaults"
 
-  # ── Deploy ──────────────────────────────────────────────────────────────────
+  # ── Deploy: preflight → apply → artifacts → schema → verify (U3/U9/U10/U6
+  #    all run inside deploy; a green deploy IS a verified stack) ─────────────
   step "deploy" bash -c "cd '$STAGE_DIR' && '$CLI' deploy -s '$STAGE' --yes"
 
-  # ── Verify v1: status probes + post-deploy script (replaced by `thinkwork
-  #    verify` when U6 lands) ─────────────────────────────────────────────────
-  step "verify-status" bash -c "cd '$STAGE_DIR' && '$CLI' status --json | grep -q '$STAGE'"
-  if [ -x "$ROOT/scripts/post-deploy.sh" ]; then
-    step "verify-post-deploy" bash "$ROOT/scripts/post-deploy.sh" --stage "$STAGE"
-  fi
+  # ── Standalone re-verify (U6): proves `thinkwork verify` agrees from a
+  #    cold start, not just as the deploy tail. ───────────────────────────────
+  API_SECRET="$(grep -E '^api_auth_secret' "$TFVARS" 2>/dev/null | sed 's/.*= *"\(.*\)"/\1/')"
+  step "verify" bash -c "cd '$STAGE_DIR' && '$CLI' verify -s '$STAGE' --api-auth-secret '$API_SECRET'"
 
   # ── Teardown (always attempted; account re-asserted) ───────────────────────
   assert_account "destroy"

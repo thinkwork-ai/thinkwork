@@ -190,18 +190,42 @@ thinkwork plan -s dev -c app     # only the app tier
 
 ## deploy
 
-Apply the Terraform plan.
+Run the full deploy pipeline: preflight checks → terraform apply →
+release-artifact resolution → schema migrations → post-deploy verification.
+Rerunning after any partial failure converges — partial state is a normal
+condition, never a stranded error.
 
 ```bash
 thinkwork deploy -s <stage> [options]
 ```
 
-| Flag                     | Description                                            |
-| ------------------------ | ------------------------------------------------------ |
-| `-s, --stage <name>`     | Stage name (required)                                  |
-| `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` (default: `all`) |
-| `-y, --yes`              | Skip confirmation (CI)                                 |
-| `-p, --profile <name>`   | AWS profile override                                   |
+| Flag                      | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| `-s, --stage <name>`      | Stage name (required)                                    |
+| `-c, --component <tier>`  | `foundation`, `data`, `app`, or `all` (default: `all`)   |
+| `-y, --yes`               | Skip confirmation (CI). Required for non-TTY sessions.   |
+| `--skip-preflight`        | Skip preflight account checks (not recommended)          |
+| `--release-version <tag>` | Pin a specific ThinkWork release for artifact resolution |
+| `-p, --profile <name>`    | AWS profile override                                     |
+
+Pipeline stages on init-scaffolded environments:
+
+1. **Preflight** — runs the `doctor` check registry (credentials + expiry
+   margin, Bedrock invocation, Lambda concurrency quota, state-backend
+   reachability, domain NS delegation) and reports **every** blocker before
+   any resource is created. SES production access is warn-tier: reported and
+   tracked, never blocking.
+2. **State backend** — provisions or verifies a per-account S3 state bucket
+   (versioned, encrypted, public-access-blocked) + DynamoDB lock table. A
+   stale lock from an interrupted run gets guided recovery on rerun.
+3. **Apply** — terraform apply per tier, streamed with a captured transcript.
+4. **Release artifacts** — pins a ThinkWork release, seeds its Lambda zips,
+   threads the Pi image, and publishes prebuilt web assets. Placeholder-mode
+   deploys fail loudly.
+5. **Schema** — applies the bundled journaled Drizzle migrations idempotently
+   via the Aurora Data API.
+6. **Verify** — the [`verify`](#verify) probes run; blocking failures fail
+   the deploy.
 
 **Examples:**
 
@@ -348,7 +372,10 @@ safe because it validates the repo contract before any API or AWS mutation.
 
 ## doctor
 
-Check AWS account prerequisites for a Thinkwork deployment (Bedrock access, IAM, etc.).
+Check AWS account prerequisites for a Thinkwork deployment: AWS + Terraform
+CLIs, credentials and their expiry margin, a live Bedrock model invocation,
+the Lambda concurrency quota, and (warn-tier) SES production access. `deploy`
+runs the same registry as its preflight.
 
 ```bash
 thinkwork doctor -s <stage>
@@ -358,6 +385,29 @@ thinkwork doctor -s <stage>
 | ---------------------- | --------------------- |
 | `-s, --stage <name>`   | Stage name (required) |
 | `-p, --profile <name>` | AWS profile override  |
+
+---
+
+## verify
+
+Prove a deployed stage actually works — `terraform apply` exiting 0 is not
+evidence. Runs automatically at the end of every deploy and on demand.
+
+```bash
+thinkwork verify -s <stage>
+```
+
+| Flag                        | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `-s, --stage <name>`        | Stage name (required)                      |
+| `--region <region>`         | AWS region (default `us-east-1`)           |
+| `--api-auth-secret <value>` | Service bearer for the authenticated probe |
+
+Probes: GraphQL API answers, an authenticated API call succeeds, the web app
+serves HTML, the database schema is applied (Data API), Hindsight `/health`,
+workspace seeding, and deployed-artifact evidence (Lambda env + code size vs
+placeholder). Pending external approvals — SES production access, domain DNS
+delegation — render as a tracked checklist and never fail verification.
 
 ---
 
@@ -381,6 +431,16 @@ thinkwork destroy -s <stage> [options]
 | `--wait`, `--no-wait`    | Wait or return after enterprise workflow dispatch           |
 | `--local-terraform`      | Force local Terraform destroy inside a deployment repo      |
 | `-y, --yes`              | Skip confirmation                                           |
+
+Local destroys tear down to a **redeployable clean slate**: stage buckets are
+pre-emptied (including all object versions), each tier gets a bounded retry
+for dependency-order errors, lingering Secrets Manager entries are
+force-deleted (no 7-day `AlreadyExists` window on redeploy), and a final
+orphan scan reports anything still carrying the stage prefix.
+
+Stages marked with `thinkwork config graduate <stage>` get the strongest
+guard: `--yes` requires an explicit `--stage`, and the recorded AWS account
+must match the caller's account.
 
 <Aside type="caution">
   `destroy` deletes your Aurora database, all S3 data, and all application
