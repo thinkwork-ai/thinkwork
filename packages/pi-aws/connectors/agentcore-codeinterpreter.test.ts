@@ -34,6 +34,7 @@ import {
 import {
   agentcoreCodeInterpreter,
   AgentcoreCodeInterpreterApi,
+  MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS,
 } from "./agentcore-codeinterpreter.js";
 
 const acMock = mockClient(BedrockAgentCoreClient);
@@ -423,6 +424,59 @@ describe("agentcoreCodeInterpreter — factory + SessionEnv shape (integration)"
     expect(typeof env.resolvePath).toBe("function");
     expect(typeof env.cwd).toBe("string");
     expect(env.cwd).toBe("/home/user");
+  });
+
+  it("defaults Code Interpreter sessions to the 8-hour AgentCore maximum", async () => {
+    acMock.on(InvokeCodeInterpreterCommand).resolves(
+      streamEvents([
+        {
+          result: {
+            structuredContent: { exitCode: 0, stdout: "", stderr: "" },
+          },
+        },
+      ]),
+    );
+
+    const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+    const factory = agentcoreCodeInterpreter(client, {
+      interpreterId: INTERPRETER_ID,
+    });
+    const env = await factory.createSessionEnv({ id: "sess-default-timeout" });
+
+    await env.exec("true");
+
+    const startInput = acMock.commandCalls(
+      StartCodeInterpreterSessionCommand,
+    )[0]!.args[0].input as { sessionTimeoutSeconds?: number };
+    expect(startInput.sessionTimeoutSeconds).toBe(
+      MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS,
+    );
+  });
+
+  it("keeps honoring an explicit Code Interpreter session timeout override", async () => {
+    acMock.on(InvokeCodeInterpreterCommand).resolves(
+      streamEvents([
+        {
+          result: {
+            structuredContent: { exitCode: 0, stdout: "", stderr: "" },
+          },
+        },
+      ]),
+    );
+
+    const client = new BedrockAgentCoreClient({ region: "us-east-1" });
+    const factory = agentcoreCodeInterpreter(client, {
+      interpreterId: INTERPRETER_ID,
+      sessionTimeoutSeconds: 600,
+    });
+    const env = await factory.createSessionEnv({ id: "sess-custom-timeout" });
+
+    await env.exec("true");
+
+    const startInput = acMock.commandCalls(
+      StartCodeInterpreterSessionCommand,
+    )[0]!.args[0].input as { sessionTimeoutSeconds?: number };
+    expect(startInput.sessionTimeoutSeconds).toBe(600);
   });
 
   it("createSessionEnv honors a caller-supplied cwd", async () => {
