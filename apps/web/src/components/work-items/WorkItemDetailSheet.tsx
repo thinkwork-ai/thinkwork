@@ -1,5 +1,6 @@
 import type React from "react";
 import { useRef, useState } from "react";
+import { formatBytes } from "@thinkwork/shared-utils";
 import { Link } from "@tanstack/react-router";
 import {
   Archive,
@@ -809,13 +810,7 @@ function isPreviewableDocument(document: WorkItemDocumentSummary) {
   return contentType.startsWith("text/") || contentType === "application/json";
 }
 
-function formatBytes(value?: number | null) {
-  const bytes = Number(value ?? 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
-  return `${Math.round(bytes / 104857.6) / 10} MB`;
-}
+
 
 function formatDate(value?: string | null) {
   if (!value) return "Updated recently";
