@@ -176,6 +176,48 @@ function buildTfvars(config: Record<string, string>): string {
     `api_auth_secret = "${config.api_auth_secret}"`,
   ];
 
+  if (config.customer_domain) {
+    lines.push(``);
+    lines.push(
+      `# ── Domain ────────────────────────────────────────────────────────`,
+    );
+    lines.push(
+      `# customer_domain_delegated stays false until the domain's NS records`,
+    );
+    lines.push(
+      `# point at the created hosted zone; flip it and rerun deploy to finish.`,
+    );
+    lines.push(`customer_domain           = "${config.customer_domain}"`);
+    lines.push(
+      `customer_domain_delegated = ${config.customer_domain_delegated === "true"}`,
+    );
+  }
+
+  if (config.platform_operator_emails) {
+    lines.push(``);
+    lines.push(
+      `platform_operator_emails = [${config.platform_operator_emails
+        .split(",")
+        .map((e) => `"${e.trim()}"`)
+        .filter((e) => e !== '""')
+        .join(", ")}]`,
+    );
+  }
+
+  if (config.ses_parent_domain) {
+    lines.push(``);
+    lines.push(
+      `# ── Email (SES) ───────────────────────────────────────────────────`,
+    );
+    lines.push(
+      `# SES production access is a manual AWS approval (~24h). Until granted,`,
+    );
+    lines.push(
+      `# email works in sandbox mode; \`thinkwork status\` tracks the approval.`,
+    );
+    lines.push(`ses_parent_domain = "${config.ses_parent_domain}"`);
+  }
+
   if (config.google_oauth_client_id) {
     lines.push(``);
     lines.push(
@@ -334,6 +376,11 @@ export function registerInitCommand(program: Command): void {
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
           config.mobile_scheme = "thinkwork";
+          config.customer_domain = existing?.customer_domain ?? "";
+          config.customer_domain_delegated = "false";
+          config.platform_operator_emails =
+            existing?.platform_operator_emails ?? "";
+          config.ses_parent_domain = existing?.ses_parent_domain ?? "";
         } else {
           console.log(chalk.bold("  Configure your Thinkwork environment\n"));
 
@@ -347,6 +394,56 @@ export function registerInitCommand(program: Command): void {
                 `Run \`thinkwork destroy -s ${stage}\` and re-init to change it.`,
             );
             process.exit(1);
+          }
+
+          console.log("");
+          console.log(chalk.dim("  ── Domain ──"));
+          console.log(
+            chalk.dim(
+              "  A full environment serves the web app on your domain. DNS",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  delegation happens after the first deploy creates the hosted",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  zone; leave empty for a trial on raw CloudFront/API URLs.",
+            ),
+          );
+          config.customer_domain = await ask(
+            "Domain (e.g. thinkwork.acme.com; empty to skip)",
+            existing?.customer_domain ?? "",
+          );
+          config.customer_domain_delegated = "false";
+
+          config.platform_operator_emails = await ask(
+            "Operator email(s), comma-separated",
+            existing?.platform_operator_emails ?? "",
+          );
+
+          console.log("");
+          console.log(chalk.dim("  ── Email (SES, optional) ──"));
+          console.log(
+            chalk.dim(
+              "  SES production access is a manual AWS approval (~24h) — the",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  deploy proceeds without it and `thinkwork status` tracks it.",
+            ),
+          );
+          const useSes = await ask("Configure SES email now? (y/N)", "N");
+          if (useSes.toLowerCase() === "y") {
+            config.ses_parent_domain = await ask(
+              "SES parent domain",
+              existing?.ses_parent_domain ?? config.customer_domain ?? "",
+            );
+          } else {
+            config.ses_parent_domain = existing?.ses_parent_domain ?? "";
           }
 
           console.log("");
@@ -489,6 +586,13 @@ terraform {
 
 provider "aws" {
   region = var.region
+}
+
+# us-east-1 alias required by the thinkwork module (configuration_aliases):
+# CloudFront ACM certificates must live in us-east-1 regardless of stack region.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
 }
 
 variable "stage" {
@@ -757,12 +861,72 @@ variable "mobile_logout_urls" {
   default = ["exp://localhost:8081", "thinkwork://"]
 }
 
+variable "memory_engine" {
+  type    = string
+  default = ""
+}
+
+variable "customer_domain" {
+  type    = string
+  default = ""
+}
+
+variable "customer_domain_delegated" {
+  type    = bool
+  default = false
+}
+
+variable "platform_operator_emails" {
+  type    = list(string)
+  default = []
+}
+
+variable "ses_parent_domain" {
+  type    = string
+  default = ""
+}
+
+variable "cognito_email_source_arn" {
+  type    = string
+  default = ""
+}
+
+variable "lambda_artifact_bucket" {
+  type    = string
+  default = ""
+}
+
+variable "lambda_artifact_prefix" {
+  type    = string
+  default = ""
+}
+
+variable "agentcore_pi_source_image_uri" {
+  type    = string
+  default = ""
+}
+
 module "thinkwork" {
   source = "./modules/thinkwork"
+
+  providers = {
+    aws.us_east_1 = aws.us_east_1
+  }
 
   stage      = var.stage
   region     = var.region
   account_id = var.account_id
+
+  memory_engine             = var.memory_engine
+  customer_domain           = var.customer_domain
+  customer_domain_delegated = var.customer_domain_delegated
+  platform_operator_emails  = var.platform_operator_emails
+  ses_parent_domain         = var.ses_parent_domain
+  cognito_email_source_arn  = var.cognito_email_source_arn
+
+  lambda_artifact_bucket        = var.lambda_artifact_bucket
+  lambda_artifact_prefix        = var.lambda_artifact_prefix
+  agentcore_pi_source_image_uri = var.agentcore_pi_source_image_uri
 
   db_password                = var.db_password
   database_engine            = var.database_engine
@@ -818,6 +982,10 @@ module "thinkwork" {
 
 output "api_endpoint" {
   value = module.thinkwork.api_endpoint
+}
+
+output "app_bucket_name" {
+  value = module.thinkwork.app_bucket_name
 }
 
 output "user_pool_id" {

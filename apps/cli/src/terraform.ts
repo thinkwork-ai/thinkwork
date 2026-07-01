@@ -227,6 +227,11 @@ export async function ensureInit(
   }
 }
 
+/** Read a single `terraform output -raw` value. */
+export function terraformOutput(cwd: string, key: string): Promise<string> {
+  return runTerraformRaw(cwd, ["output", "-raw", key]).then((v) => v.trim());
+}
+
 /**
  * Run terraform with live output AND a captured transcript, so callers can
  * pattern-match failures (e.g. stale state locks) without losing streaming UX.
