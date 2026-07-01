@@ -630,6 +630,9 @@ workflow control.
   first — read-only, lowest security surface, purest test of cross-system
   truth. Dispatch read-only recommendation is the second tranche; governed P21
   writeback is the third.
+- **Discovery customer (decided 2026-07-01):** TEI (LastMile orbit). Runs
+  Epicor P21; proves the onboarding wedge now and is the natural dispatch
+  second-tranche partner (FleetIO, LastMile MCP).
 - **Primary pain:** Fragmented cross-system operational truth, not connector
   absence.
 - **Primary actors:** Customer onboarding coordinator and dispatcher.
@@ -709,9 +712,13 @@ workflow control.
   learning wedge: onboarding blocker compilation ships first; dispatch
   read-only recommendation is second tranche; governed writeback is third.
   Recorded in Key Decisions and the wedge-conditionality note.
-- [Affects R1, R2, R4, R43][Product] Which target customer, account, or role
-  proves the current workaround, problem frequency/cost, source systems, and why
-  ThinkWork beats direct connectors or the horizontal agent alone?
+- **TARGET SELECTED 2026-07-01** [Affects R1, R2, R4, R43][Product] Discovery
+  customer: TEI (LastMile orbit) — runs Epicor P21 and covers both the
+  onboarding wedge now and the dispatch tranche later. Still to gather in
+  discovery: the current workaround, problem frequency/cost, the onboarding
+  coordinator role/owner, the source-system inventory, why ThinkWork beats
+  direct connectors or the horizontal agent alone, and the R17
+  action-boundary validation.
 - [Affects R39, R44, R45][Security] What is the first source map and external
   client consent model for the chosen wedge?
 - [Affects R40, R41, R42, R43][Design] Which interactions happen inside the
@@ -720,12 +727,14 @@ workflow control.
 - [Affects R46, R47, R48, R49][Security] If dispatch writeback is in the first
   tranche, which sandbox, approval artifact, credential lifecycle, optimizer
   boundary, and retention policy make it safe?
-- [Affects R9, R10, R53][Technical] What is the compilation substrate —
-  deterministic read-model code, LLM synthesis, or a labeled hybrid — and what
-  latency budget must a synchronous broker call meet? LLM-compiled "canonical
-  truth" reintroduces the sampling/false-authority risk R28–R31 exist to
-  prevent; any LLM-synthesized portion must be labeled as such on the evidence
-  board.
+- **RESOLVED 2026-07-01** [Affects R9, R10, R53][Technical] Compilation
+  substrate: labeled hybrid, weighted heavily deterministic — pure-code
+  gather/normalize, deterministic blocker-selection rules over the R54 process
+  definition, and exactly three labeled LLM synthesis slots. Latency budget:
+  p50 ≤ 2.5 s / p95 ≤ 8 s / hard cap 15 s, served from pre-warmed P21/n8n
+  mirrors, with evidence-board `origin` discriminators (source_fact /
+  derived_rule / llm_synthesis). Full design:
+  `docs/brainstorms/2026-07-01-think-117-compilation-substrate-design-note.md`.
 - **RESOLVED 2026-07-01** [Affects R12, R15, R16, R50][Product] Empirical host
   MCP App render support: Claude web + Desktop (paid plans, custom connectors
   — no directory approval), ChatGPT (implements the ratified standard;
