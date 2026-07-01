@@ -38,6 +38,8 @@ import type {
   ShellResult,
 } from "../src/sandbox-types.js";
 
+export const MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS = 28_800;
+
 // ─── Options ────────────────────────────────────────────────────────────────
 
 export interface AgentcoreCodeInterpreterOptions {
@@ -233,8 +235,7 @@ class AgentcoreCodeInterpreterApi implements SandboxApi {
     // readFiles structuredContent shape varies — try structured.files[0].text,
     // structured.content, then fall back to text blocks.
     const files = (result.structured?.files ?? result.structured?.content) as
-      | Array<{ text?: string; content?: string }>
-      | undefined;
+      Array<{ text?: string; content?: string }> | undefined;
     if (Array.isArray(files) && files[0]) {
       const first = files[0];
       if (typeof first.text === "string") return first.text;
@@ -273,8 +274,7 @@ class AgentcoreCodeInterpreterApi implements SandboxApi {
   async readdir(path: string): Promise<string[]> {
     const result = await this.invoke("listFiles", { directoryPath: path });
     const files = result.structured?.files as
-      | Array<string | { name?: string; path?: string }>
-      | undefined;
+      Array<string | { name?: string; path?: string }> | undefined;
     if (Array.isArray(files)) {
       return files
         .map((f) => (typeof f === "string" ? f : (f.name ?? f.path ?? "")))
@@ -401,7 +401,9 @@ export function agentcoreCodeInterpreter(
   client: BedrockAgentCoreClient,
   options: AgentcoreCodeInterpreterOptions,
 ): SandboxFactory {
-  const timeout = options.sessionTimeoutSeconds ?? 300;
+  const timeout =
+    options.sessionTimeoutSeconds ??
+    MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS;
   const defaultCwd = options.defaultCwd ?? "/home/user";
 
   return {
