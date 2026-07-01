@@ -770,6 +770,15 @@ export async function runLocalTerraformDeploy(
   const cwd0 = resolveTierDir(terraformDir, stage, tiers[0]);
   const scaffolded = isInitScaffoldedLayout(cwd0);
 
+  // Region resolution (harness cycle-3 ledger entry): a profile without a
+  // default region makes getAwsIdentity() report region "unknown", which
+  // produced AWS calls against https://dynamodb.unknown.amazonaws.com/. The
+  // stage's tfvars is authoritative; identity is a fallback only when real.
+  const region =
+    readTfvarsSignalsRaw(cwd0).region ||
+    (identity && identity.region !== "unknown" ? identity.region : "us-east-1");
+  const caller = identity ? { account: identity.account, region } : null;
+
   // ── Preflight (R6): report every detectable blocker before any resource is
   //    created. Warn-tier checks (SES) are reported but never block (AE3). ──
   if (!opts.skipPreflight) {
@@ -777,8 +786,8 @@ export async function runLocalTerraformDeploy(
     const signals = readTfvarsSignals(preflightCwd);
     const ctx: PreflightContext = {
       backend:
-        identity && scaffolded
-          ? backendTarget(identity.account, identity.region, stage)
+        caller && scaffolded
+          ? backendTarget(caller.account, caller.region, stage)
           : undefined,
       domain: signals.domain,
       sesConfigured: signals.sesConfigured,
@@ -809,10 +818,10 @@ export async function runLocalTerraformDeploy(
   // ── Release artifacts (U9): packaged installs deploy a pinned release's
   //    application code, never placeholder mode. ──
   let webAssetSource: string | null = null;
-  if (scaffolded && identity) {
+  if (scaffolded && caller) {
     const release = await ensureReleaseArtifacts(
       cwd0,
-      identity,
+      caller,
       stage,
       opts.releaseVersion,
     );
@@ -828,12 +837,8 @@ export async function runLocalTerraformDeploy(
     // Init-scaffolded layouts get the per-account remote backend (R11).
     // The repo greenfield layout keeps its own hardcoded backend for dev CI.
     let backend: BackendTarget | undefined;
-    if (identity && isInitScaffoldedLayout(cwd)) {
-      const ensured = ensureStateBackend(
-        identity.account,
-        identity.region,
-        stage,
-      );
+    if (caller && isInitScaffoldedLayout(cwd)) {
+      const ensured = ensureStateBackend(caller.account, caller.region, stage);
       backend = ensured.target;
       if (ensured.createdBucket || ensured.createdLockTable) {
         console.log(
@@ -870,8 +875,8 @@ export async function runLocalTerraformDeploy(
 
   // ── Schema (U10): apply journaled migrations before anything probes the
   //    database — terraform provisions an EMPTY cluster. ──
-  if (scaffolded && identity) {
-    await applySchemaMigrations(cwd0, identity, stage);
+  if (scaffolded && caller) {
+    await applySchemaMigrations(cwd0, caller, stage);
   }
 
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to
@@ -883,12 +888,12 @@ export async function runLocalTerraformDeploy(
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by
   //    terraform exiting 0. Blocking probe failures fail the deploy; pending
   //    external approvals (SES, DNS) are reported and tracked (R9/AE3). ──
-  if (identity) {
+  if (caller) {
     const signals = readTfvarsSignalsRaw(cwd0);
     const verification = await runStageVerification({
       stage,
-      region: identity.region !== "unknown" ? identity.region : "us-east-1",
-      accountId: identity.account,
+      region: caller.region,
+      accountId: caller.account,
       apiAuthSecret: signals.api_auth_secret,
       domain: signals.customer_domain || undefined,
       sesConfigured: Boolean(
