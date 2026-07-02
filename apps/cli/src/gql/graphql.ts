@@ -11206,6 +11206,41 @@ export type CliDeleteBudgetPolicyMutation = {
   deleteBudgetPolicy: boolean;
 };
 
+export type CliCapabilityInspectorQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+}>;
+
+export type CliCapabilityInspectorQuery = {
+  __typename?: "Query";
+  capabilityInspector: {
+    __typename?: "CapabilityInspection";
+    state: string;
+    stateDetail?: string | null;
+    agentId?: string | null;
+    noUserBaseline: boolean;
+    predicted?: {
+      __typename?: "EffectiveCapabilitySet";
+      computedAt: any;
+      configFingerprint: string;
+      items: Array<{
+        __typename?: "CapabilityItem";
+        capabilityClass: string;
+        capabilityId: string;
+        displayName?: string | null;
+        active: boolean;
+        provenance?: string | null;
+        reason?: string | null;
+        detail?: string | null;
+        tokenStatus?: string | null;
+      }>;
+    } | null;
+  };
+};
+
 export type CliCostSummaryQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
@@ -14091,6 +14126,185 @@ export const CliDeleteBudgetPolicyDocument = {
 } as unknown as DocumentNode<
   CliDeleteBudgetPolicyMutation,
   CliDeleteBudgetPolicyMutationVariables
+>;
+export const CliCapabilityInspectorDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliCapabilityInspector" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "spaceId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentProfileId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "perspectiveUserId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "capabilityInspector" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "spaceId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "spaceId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentProfileId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentProfileId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "perspectiveUserId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "perspectiveUserId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "state" } },
+                { kind: "Field", name: { kind: "Name", value: "stateDetail" } },
+                { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "noUserBaseline" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "predicted" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "computedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "configFingerprint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityClass" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "displayName" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "active" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "provenance" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "reason" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "detail" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "tokenStatus" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliCapabilityInspectorQuery,
+  CliCapabilityInspectorQueryVariables
 >;
 export const CliCostSummaryDocument = {
   kind: "Document",
