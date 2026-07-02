@@ -110,6 +110,14 @@ export const DOCTOR_BEDROCK_PROBE_MODEL_ID =
   "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
 /**
+ * Fallback probe model: per-model inference quotas are independent, so a
+ * throttle on the primary says "that model is busy here", not "no Bedrock
+ * access" — dev's steady Haiku traffic starved three graduation preflights.
+ */
+export const DOCTOR_BEDROCK_FALLBACK_MODEL_ID =
+  "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+
+/**
  * Interpret a Bedrock converse probe outcome. An entitlement listing is not
  * enough: the McPherson install (2026-06-12) green-checked an account whose
  * effective inference allowance was zero (new-account dynamic quota ramp) and
@@ -166,10 +174,15 @@ export function checkBedrockAccess(): Check {
       // backoff before treating throttle as a verdict (prod graduation was
       // blocked twice by one-shot probes). Persistent throttle still fails.
       let lastError: string | null = null;
+      const models = [
+        DOCTOR_BEDROCK_PROBE_MODEL_ID,
+        DOCTOR_BEDROCK_PROBE_MODEL_ID,
+        DOCTOR_BEDROCK_FALLBACK_MODEL_ID,
+      ];
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           execSync(
-            `aws bedrock-runtime converse --model-id ${DOCTOR_BEDROCK_PROBE_MODEL_ID} ` +
+            `aws bedrock-runtime converse --model-id ${models[attempt - 1]} ` +
               `--messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' ` +
               `--inference-config '{"maxTokens":1}' --output json --region ${region}`,
             {
