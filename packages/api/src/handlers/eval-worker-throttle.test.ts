@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   evalThrottleRetryAttempts,
   evalThrottleRetryBaseMs,
+  isRetryableEvalInfrastructureError,
   queueUrlFromEventSourceArn,
   throttleBackoffMs,
   throttleRedriveVisibilitySeconds,
@@ -109,6 +110,33 @@ describe("throttle backoff shapes", () => {
     expect(throttleRedriveVisibilitySeconds(5, () => 0)).toBe(60); // capped
     expect(throttleRedriveVisibilitySeconds(9, () => 1)).toBe(70); // cap + jitter
     expect(throttleRedriveVisibilitySeconds(Number.NaN, () => 0)).toBe(10);
+  });
+});
+
+describe("throttle classification", () => {
+  it("classifies the Pi runtime's 500-wrapped throttle as retryable (observed live)", () => {
+    // The runtime surfaces a Bedrock throttle as an HTTP 500 body; the
+    // eval invoke path rethrows it as `AgentCore 500: <body>` with no
+    // exception name and no 429. Unclassified, these burned straight to
+    // error/infra_other with no backoff and no redrive.
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error(
+          'AgentCore 500: {"error":"Throttling error: Too many requests, please wait before trying again.","runtime":"pi"}',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("Too many requests, please wait before trying again."),
+      ),
+    ).toBe(true);
+    // Ordinary runtime 500s stay non-retryable.
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error('AgentCore 500: {"error":"boom","runtime":"pi"}'),
+      ),
+    ).toBe(false);
   });
 });
 
