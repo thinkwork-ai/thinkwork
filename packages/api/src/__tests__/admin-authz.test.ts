@@ -25,11 +25,15 @@ const {
   mockMemberRows,
   mockResolveCallerUserId,
   mockResolveCallerTenantId,
+  mockReadAssignmentState,
+  mockResolvePrefix,
 } = vi.hoisted(() => ({
   mockAgentSkillsRows: vi.fn(),
   mockMemberRows: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockResolveCallerTenantId: vi.fn(),
+  mockReadAssignmentState: vi.fn(),
+  mockResolvePrefix: vi.fn(),
 }));
 
 // Route DB lookups through hoisted mocks keyed by which table the
@@ -60,6 +64,14 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
   resolveCallerTenantId: mockResolveCallerTenantId,
+}));
+
+// KTD-8 (plan U9): the allowlist reader prefers the workspace assignment
+// state file; default mocks keep every pre-existing test on the DB
+// fallback path (no prefix resolved → file read skipped).
+vi.mock("../lib/skills/assignment-state.js", () => ({
+  readSkillAssignmentState: mockReadAssignmentState,
+  resolveAgentWorkspacePrefix: mockResolvePrefix,
 }));
 
 // eslint-disable-next-line import/first
@@ -110,6 +122,8 @@ const FORBIDDEN = (msg: string) =>
 
 describe("requireAgentAllowsOperation — per-agent allowlist verifier", () => {
   beforeEach(() => {
+    mockResolvePrefix.mockResolvedValue(null);
+    mockReadAssignmentState.mockResolvedValue(null);
     mockAgentSkillsRows.mockReset();
     mockMemberRows.mockReset();
   });
@@ -450,5 +464,59 @@ describe("requireAdminOrServiceCaller — admin gate that admits bare service ca
         "update_tenant_settings",
       ),
     ).rejects.toMatchObject({ extensions: { code: "UNAUTHENTICATED" } });
+  });
+});
+
+describe("requireAgentAllowsOperation — workspace state file preferred (plan U9)", () => {
+  it("uses the assignment file when present and ignores the DB row", async () => {
+    mockResolvePrefix.mockResolvedValue("tenants/acme/agents/ada/");
+    mockReadAssignmentState.mockResolvedValue({
+      slug: "thinkwork-admin",
+      enabled: true,
+      permissions: { operations: ["createAgent"] },
+      updated_at: "2026-07-02T00:00:00.000Z",
+    });
+    // A contradictory DB row must NOT be consulted.
+    mockAgentSkillsRows.mockReturnValue([]);
+    await expect(
+      requireAgentAllowsOperation(
+        apikeyCtx({ agentId: "agent-1" }),
+        "createAgent",
+      ),
+    ).resolves.toBeUndefined();
+    expect(mockReadAssignmentState).toHaveBeenCalledWith(
+      "tenants/acme/agents/ada/",
+      "thinkwork-admin",
+    );
+  });
+
+  it("file-sourced disabled assignment refuses", async () => {
+    mockResolvePrefix.mockResolvedValue("tenants/acme/agents/ada/");
+    mockReadAssignmentState.mockResolvedValue({
+      slug: "thinkwork-admin",
+      enabled: false,
+      permissions: { operations: ["createAgent"] },
+      updated_at: "2026-07-02T00:00:00.000Z",
+    });
+    await expect(
+      requireAgentAllowsOperation(
+        apikeyCtx({ agentId: "agent-1" }),
+        "createAgent",
+      ),
+    ).rejects.toThrow(/disabled/);
+  });
+
+  it("falls back to the agent_skills row when no file exists (characterization)", async () => {
+    mockResolvePrefix.mockResolvedValue("tenants/acme/agents/ada/");
+    mockReadAssignmentState.mockResolvedValue(null);
+    mockAgentSkillsRows.mockReturnValue([
+      { enabled: true, permissions: { operations: ["createAgent"] } },
+    ]);
+    await expect(
+      requireAgentAllowsOperation(
+        apikeyCtx({ agentId: "agent-1" }),
+        "createAgent",
+      ),
+    ).resolves.toBeUndefined();
   });
 });

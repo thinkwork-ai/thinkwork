@@ -13,6 +13,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, or, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
+import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
 import {
   agentSkills,
   skillRuns,
@@ -1204,6 +1205,14 @@ async function saveSkillCredentials(
     .update(agentSkills)
     .set({ config: { ...currentConfig, secretRef: secretArn } })
     .where(eq(agentSkills.id, existing.id));
+
+  // KTD-8 dual-write (plan U9): mirror the secretRef into the workspace
+  // assignment state file (target store; row is the U10-era fallback).
+  await patchSkillAssignmentState({
+    agentId,
+    slug: skillId,
+    patch: { configMerge: { secretRef: secretArn } },
+  });
 
   return json({ ok: true, secretRef: secretArn });
 }

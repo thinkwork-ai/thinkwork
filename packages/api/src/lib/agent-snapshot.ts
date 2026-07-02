@@ -34,6 +34,7 @@ import {
   tenants,
 } from "../graphql/utils.js";
 import { regenerateManifest } from "./workspace-manifest.js";
+import { patchSkillAssignmentState } from "./skills/assignment-state.js";
 
 const s3 = new S3Client({
   region:
@@ -311,6 +312,23 @@ export async function restoreAgentFromSnapshot(
         enabled: s.enabled ?? true,
       })),
     );
+  }
+
+  // KTD-8 dual-write (plan U9): restore each skill's workspace
+  // assignment state file alongside the row replace above.
+  for (const s of skillsSnap as any[]) {
+    await patchSkillAssignmentState({
+      agentId,
+      slug: s.skill_id,
+      patch: {
+        replace: true,
+        configMerge: s.config ?? undefined,
+        permissions: s.permissions ?? undefined,
+        rate_limit_rpm: s.rate_limit_rpm ?? undefined,
+        model_override: s.model_override ?? undefined,
+        enabled: s.enabled ?? true,
+      },
+    });
   }
 
   // 3. Replace KBs

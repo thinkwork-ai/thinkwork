@@ -262,6 +262,21 @@ vi.mock("drizzle-orm", () => ({
   and: (...preds: unknown[]) => ({ op: "and", preds }),
 }));
 
+// KTD-8 (plan U9): the assignment-state workspace file store has its own
+// suite; here it is mocked so its prefix lookup (db) and file reads (S3)
+// never consume this harness's queued rows/responses. Default = no files,
+// which keeps every pre-existing test on the agent_skills fallback path.
+const { mockReadAssignmentStates, mockResolveWorkspacePrefix } = vi.hoisted(
+  () => ({
+    mockReadAssignmentStates: vi.fn(),
+    mockResolveWorkspacePrefix: vi.fn(),
+  }),
+);
+vi.mock("../skills/assignment-state.js", () => ({
+  readSkillAssignmentStates: mockReadAssignmentStates,
+  resolveAgentWorkspacePrefix: mockResolveWorkspacePrefix,
+}));
+
 vi.mock("../oauth-token.js", () => ({
   buildSkillEnvOverrides: mockBuildSkillEnvOverrides,
 }));
@@ -447,6 +462,8 @@ function piExtensionRuntimeRow(
 }
 
 beforeEach(() => {
+  mockResolveWorkspacePrefix.mockResolvedValue(null);
+  mockReadAssignmentStates.mockResolvedValue(new Map());
   rowsQueue.length = 0;
   whereCalls.length = 0;
   vi.clearAllMocks();
@@ -825,6 +842,60 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(
       cfg.skillsConfig.some((skill) => skill.skillId === "not-in-workspace"),
     ).toBe(false);
+  });
+
+  it("prefers workspace assignment-state file config over the agent_skills row (plan U9, KTD-8)", async () => {
+    vi.stubEnv("WORKSPACE_BUCKET", "workspace-bucket");
+    mockS3Send.mockImplementation(async (command: { input?: any }) => {
+      if (command.input?.Prefix) {
+        return {
+          Contents: [
+            {
+              Key: "tenants/acme/agents/ada/skills/github-issues/SKILL.md",
+            },
+          ],
+        };
+      }
+      return {
+        Body: {
+          transformToString: async () => "---\nname: GitHub Issues\n---\n",
+        },
+      };
+    });
+    mockResolveWorkspacePrefix.mockResolvedValue("tenants/acme/agents/ada/");
+    mockReadAssignmentStates.mockResolvedValue(
+      new Map([
+        [
+          "github-issues",
+          {
+            slug: "github-issues",
+            config: { secretRef: "secret/from-file", mcpServer: "gh-file" },
+            updated_at: "2026-07-02T00:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    mockBuildSkillEnvOverrides.mockResolvedValueOnce({});
+    stageAgentRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([
+      {
+        skill_id: "github-issues",
+        config: { secretRef: "secret/from-row", mcpServer: "gh-row" },
+      },
+    ]); // agent_skills metadata overlay (must lose to the file)
+    stageTrustedRuntimeSkillRows("github-issues");
+    rowsQueue.push([]); // kbs
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(
+      cfg.skillsConfig.find((skill) => skill.skillId === "github-issues"),
+    ).toMatchObject({ secretRef: "secret/from-file", mcpServer: "gh-file" });
   });
 
   it("uses the agent runtime selector when present", async () => {
