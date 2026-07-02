@@ -219,17 +219,19 @@ Lock Info:
     ).toBeNull();
   });
 
-  it("strips terraform's │-box decoration and trailing commas (cycle-7)", () => {
+  it("strips │-box decoration and never matches AWS RequestID lines (cycle-7)", () => {
     const text = `
 │ Error: Error acquiring the state lock
 │
+│ ConditionalCheckFailedException: The conditional request failed
+│ status code: 400, RequestID: P5TEVJVUAASR8TAE52HN87QUSBVV4KQNSO5AEMVJF66Q9ASUAAJG,
 │ Lock Info:
-│   ID:        P5TEVJVUAASR8TAE52HN87QUSBVV4KQNSO5AEMVJF66Q9ASUAAJG,
+│   ID:        0b70bfe5-0cf0-0839-4c03-f61890206d77
 │   Operation: OperationTypeApply,
 │   Who:       ericodom@Erics-Mac-mini.local,
 `;
     const lock = parseLockError(text);
-    expect(lock!.id).toBe("P5TEVJVUAASR8TAE52HN87QUSBVV4KQNSO5AEMVJF66Q9ASUAAJG");
+    expect(lock!.id).toBe("0b70bfe5-0cf0-0839-4c03-f61890206d77");
     expect(lock!.who).toBe("ericodom@Erics-Mac-mini.local");
     expect(lock!.operation).toBe("OperationTypeApply");
   });
