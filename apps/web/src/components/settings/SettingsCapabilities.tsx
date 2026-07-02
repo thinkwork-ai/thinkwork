@@ -26,6 +26,15 @@
  * (R11). Pi-extension assignment (which needs version identity the
  * inspector rows don't carry) stays on the Agents → Extensions surface,
  * which calls the same grant/detach mutations.
+ *
+ * Composer plan U2 adds the result-tree pane: a live, read-only preview of
+ * the rendered workspace for the same selection (profile-invariant — the
+ * Profile chip scopes the controls pane only), refreshed after each
+ * mutation confirmation resolves. Skill nodes jump-to-cause IN-PAGE: the
+ * focus first resets the State/Search filter tokens and switches to the
+ * target's capability-class tab, because the page defaults to Active-only
+ * rows on one tab and the diagnose flow (F2) targets exactly the rows
+ * those defaults hide.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -90,6 +99,7 @@ import {
   SettingsHeader,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { ComposerWorkspaceTree } from "@/components/settings/ComposerWorkspaceTree";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -255,6 +265,13 @@ export function SettingsCapabilities() {
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const syncPollCount = useRef(0);
+  // Result-tree refresh (U2, R5): bumped when a mutation confirmation
+  // resolves in a non-pending state — including sync-pending completion —
+  // so the preview refetches exactly once per settled write.
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
+  // In-page jump-to-cause target: the focused row renders highlighted and
+  // is scrolled into view after the filter/tab reset makes it visible.
+  const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
 
   const [spacesResult] = useQuery({
     query: SettingsSpacesListQuery,
@@ -438,6 +455,9 @@ export function SettingsCapabilities() {
     const row = items.find((item) => rowKeyOf(item) === confirmation.rowKey);
     if (row?.active) {
       setConfirmation({ ...confirmation, item: row, syncPending: false });
+      // Sync-pending completion: the materialization is visible — refetch
+      // the full preview so the tree's ghost node becomes the real folder.
+      setPreviewRefreshToken((token) => token + 1);
       return;
     }
     if (syncPollCount.current >= SYNC_POLL_ATTEMPTS) {
@@ -446,6 +466,7 @@ export function SettingsCapabilities() {
         item: row ?? confirmation.item,
         syncPending: false,
       });
+      setPreviewRefreshToken((token) => token + 1);
       return;
     }
     const timer = setTimeout(() => {
@@ -513,8 +534,44 @@ export function SettingsCapabilities() {
       item: fresh,
       syncPending,
     });
+    // Immediate preview refetch for settled writes; sync-pending writes
+    // refetch when the pending phase resolves (the tree shows an explicit
+    // pending affordance in between).
+    if (!syncPending) {
+      setPreviewRefreshToken((token) => token + 1);
+    }
     refetchInspection({ requestPolicy: "network-only" });
   }
+
+  /**
+   * In-page jump-to-cause landing (U2, KTD-5): before highlighting, reset
+   * the State/Search filter tokens (keeping the Space/Profile/User
+   * SELECTION tokens — they drive the query the tree is showing) and switch
+   * to the target's capability-class tab. The page defaults to Active-only
+   * rows on one tab, and the diagnose flow targets exactly the rows those
+   * defaults hide.
+   */
+  function focusCapabilityRow(capabilityClass: string, capabilityId: string) {
+    setColumnFilters((current) =>
+      current.filter(
+        (filter) =>
+          filter.id !== FILTER_COLUMNS.state &&
+          filter.id !== FILTER_COLUMNS.search,
+      ),
+    );
+    setActiveClass(capabilityClass);
+    setFocusedRowKey(`${capabilityClass}:${capabilityId}`);
+  }
+
+  // Scroll the focused row into view once the reset render makes it
+  // visible (scrollIntoView is absent in jsdom — guard the call).
+  useEffect(() => {
+    if (!focusedRowKey) return;
+    const row = document.querySelector(
+      '[data-testid="capability-row-focused"]',
+    );
+    row?.scrollIntoView?.({ block: "center" });
+  }, [focusedRowKey, activeClass, columnFilters]);
 
   function rowActions(item: InspectorItem) {
     if (!writeScope || !GRANT_CLASS[item.capabilityClass]) return null;
@@ -679,8 +736,15 @@ export function SettingsCapabilities() {
     );
   }
 
+  // Post-attach sync window (U2): surface the affected skill folder in the
+  // tree as an explicit pending node instead of a frozen view.
+  const pendingSkillSlug =
+    confirmation?.syncPending && confirmation.rowKey.startsWith("skill:")
+      ? confirmation.rowKey.slice("skill:".length)
+      : null;
+
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <SettingsHeader
         title="Capabilities"
         description="What the platform agent will actually get for a selection — every skill, tool, MCP server, extension, and plugin with its provenance and, when inactive, the exact gate that dropped it. Attach from the tenant pool or detach directly; every action ends on the item's live state."
@@ -818,118 +882,152 @@ export function SettingsCapabilities() {
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="space-y-3" data-testid="capability-loading">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
+      <div className="flex flex-col gap-6 lg:flex-row">
+        {/* Result tree (U2, R1/R2): live read-only preview of the rendered
+            workspace for this selection. Profile-invariant by design — the
+            Profile token is deliberately NOT passed (R4). */}
+        <div className="min-w-0 lg:w-[24rem] lg:shrink-0">
+          <ComposerWorkspaceTree
+            tenantId={tenantId ?? ""}
+            spaceId={spaceId}
+            perspectiveUserId={perspectiveUserId}
+            refreshToken={previewRefreshToken}
+            pendingSkillSlug={pendingSkillSlug}
+            onFocusCapabilityRow={focusCapabilityRow}
+          />
         </div>
-      ) : inspection.error ? (
-        <p className="text-sm text-destructive">
-          Couldn&apos;t load the capability set: {inspection.error.message}
-        </p>
-      ) : result?.state === "invalid_selection" ? (
-        <p className="text-sm text-destructive" data-testid="invalid-selection">
-          Invalid selection: {result.stateDetail}
-        </p>
-      ) : result?.state === "resolution_fault" ? (
-        <p className="text-sm text-destructive" data-testid="resolution-fault">
-          Resolution fault — this selection could not be composed:{" "}
-          {result.stateDetail}
-        </p>
-      ) : predicted ? (
-        <>
-          <Tabs value={activeTab} onValueChange={setActiveClass}>
-            <TabsList className="mb-3 flex-wrap">
-              {tabClasses.map((capabilityClass) => {
-                const classItems = byClass.get(capabilityClass) ?? [];
-                const activeCount = classItems.filter(
-                  (item) => item.active,
-                ).length;
-                return (
-                  <TabsTrigger
-                    key={capabilityClass}
-                    value={capabilityClass}
-                    data-testid={`capability-tab-${capabilityClass}`}
-                  >
-                    {CLASS_LABELS[capabilityClass] ?? capabilityClass}
-                    <span className="ml-1.5 text-xs font-semibold text-primary">
-                      {activeCount}
-                    </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
 
-          <SettingsSection>
-            {visibleItems.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">
-                Nothing in this category for the current selection.
-              </p>
-            ) : (
-              visibleItems.map((item) => (
-                <div
-                  key={rowKeyOf(item)}
-                  className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0"
-                  data-testid="capability-row"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                      {item.displayName || item.capabilityId}
-                    </p>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {item.tokenStatus ? (
-                        <Badge
-                          variant="outline"
-                          className="text-muted-foreground"
-                        >
-                          token: {item.tokenStatus}
-                        </Badge>
+        <div className="min-w-0 flex-1">
+          {loading ? (
+            <div className="space-y-3" data-testid="capability-loading">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : inspection.error ? (
+            <p className="text-sm text-destructive">
+              Couldn&apos;t load the capability set: {inspection.error.message}
+            </p>
+          ) : result?.state === "invalid_selection" ? (
+            <p
+              className="text-sm text-destructive"
+              data-testid="invalid-selection"
+            >
+              Invalid selection: {result.stateDetail}
+            </p>
+          ) : result?.state === "resolution_fault" ? (
+            <p
+              className="text-sm text-destructive"
+              data-testid="resolution-fault"
+            >
+              Resolution fault — this selection could not be composed:{" "}
+              {result.stateDetail}
+            </p>
+          ) : predicted ? (
+            <>
+              <Tabs value={activeTab} onValueChange={setActiveClass}>
+                <TabsList className="mb-3 flex-wrap">
+                  {tabClasses.map((capabilityClass) => {
+                    const classItems = byClass.get(capabilityClass) ?? [];
+                    const activeCount = classItems.filter(
+                      (item) => item.active,
+                    ).length;
+                    return (
+                      <TabsTrigger
+                        key={capabilityClass}
+                        value={capabilityClass}
+                        data-testid={`capability-tab-${capabilityClass}`}
+                      >
+                        {CLASS_LABELS[capabilityClass] ?? capabilityClass}
+                        <span className="ml-1.5 text-xs font-semibold text-primary">
+                          {activeCount}
+                        </span>
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </Tabs>
+
+              <SettingsSection>
+                {visibleItems.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-muted-foreground">
+                    Nothing in this category for the current selection.
+                  </p>
+                ) : (
+                  visibleItems.map((item) => (
+                    <div
+                      key={rowKeyOf(item)}
+                      className={cn(
+                        "flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0",
+                        focusedRowKey === rowKeyOf(item) &&
+                          "bg-primary/5 ring-1 ring-inset ring-primary/40",
+                      )}
+                      data-testid={
+                        focusedRowKey === rowKeyOf(item)
+                          ? "capability-row-focused"
+                          : "capability-row"
+                      }
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                          {item.displayName || item.capabilityId}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {item.tokenStatus ? (
+                            <Badge
+                              variant="outline"
+                              className="text-muted-foreground"
+                            >
+                              token: {item.tokenStatus}
+                            </Badge>
+                          ) : null}
+                          {deltaByRowKey.has(rowKeyOf(item)) ? (
+                            <Badge
+                              variant="destructive"
+                              data-testid={`delta-${rowKeyOf(item)}`}
+                            >
+                              not loaded last turn
+                            </Badge>
+                          ) : null}
+                          {stateChip(item)}
+                          {rowActions(item)}
+                        </div>
+                      </div>
+                      {item.provenance ? (
+                        <p className="text-xs text-muted-foreground">
+                          {item.provenance}
+                        </p>
                       ) : null}
-                      {deltaByRowKey.has(rowKeyOf(item)) ? (
-                        <Badge
-                          variant="destructive"
-                          data-testid={`delta-${rowKeyOf(item)}`}
-                        >
-                          not loaded last turn
-                        </Badge>
+                      {item.detail ? (
+                        <p className="text-xs text-muted-foreground">
+                          {item.detail}
+                        </p>
                       ) : null}
-                      {stateChip(item)}
-                      {rowActions(item)}
                     </div>
-                  </div>
-                  {item.provenance ? (
-                    <p className="text-xs text-muted-foreground">
-                      {item.provenance}
-                    </p>
-                  ) : null}
-                  {item.detail ? (
-                    <p className="text-xs text-muted-foreground">
-                      {item.detail}
-                    </p>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </SettingsSection>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              Computed {new Date(predicted.computedAt).toLocaleString()} ·
-              fingerprint{" "}
-              <span className="font-mono">
-                {predicted.configFingerprint.slice(0, 12)}
-              </span>
-            </span>
-            {divergenceChip()}
-            {extraInObserved.length > 0 ? (
-              <span data-testid="extra-in-observed">
-                +{extraInObserved.length} loaded at runtime only:{" "}
-                {extraInObserved.map((delta) => delta.capabilityId).join(", ")}
-              </span>
-            ) : null}
-          </div>
-        </>
-      ) : null}
+                  ))
+                )}
+              </SettingsSection>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  Computed {new Date(predicted.computedAt).toLocaleString()} ·
+                  fingerprint{" "}
+                  <span className="font-mono">
+                    {predicted.configFingerprint.slice(0, 12)}
+                  </span>
+                </span>
+                {divergenceChip()}
+                {extraInObserved.length > 0 ? (
+                  <span data-testid="extra-in-observed">
+                    +{extraInObserved.length} loaded at runtime only:{" "}
+                    {extraInObserved
+                      .map((delta) => delta.capabilityId)
+                      .join(", ")}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

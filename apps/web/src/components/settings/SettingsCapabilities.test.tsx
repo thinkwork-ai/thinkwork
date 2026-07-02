@@ -12,33 +12,61 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryState, refetchMock, grantMock, detachMock, toastMock, queryDocs } =
-  vi.hoisted(() => ({
-    queryState: {
-      inspector: {
-        data: undefined as unknown,
-        fetching: false,
-        error: undefined as { message: string } | undefined,
-      },
+const {
+  queryState,
+  refetchMock,
+  grantMock,
+  detachMock,
+  toastMock,
+  queryDocs,
+  previewRefetchMock,
+  navigateMock,
+} = vi.hoisted(() => ({
+  queryState: {
+    inspector: {
+      data: undefined as unknown,
+      fetching: false,
+      error: undefined as { message: string } | undefined,
     },
-    refetchMock: vi.fn(),
-    grantMock: vi.fn(),
-    detachMock: vi.fn(),
-    toastMock: { success: vi.fn(), error: vi.fn() },
-    queryDocs: {
-      SettingsCapabilityInspectorQuery: Symbol("capabilityInspector"),
-      SettingsSpacesListQuery: Symbol("spacesList"),
-      SettingsAgentProfilesQuery: Symbol("agentProfiles"),
-      SettingsTenantMembersQuery: Symbol("tenantMembers"),
-      SettingsGrantCapabilityMutation: Symbol("grantCapability"),
-      SettingsDetachCapabilityMutation: Symbol("detachCapability"),
+    preview: {
+      data: undefined as unknown,
+      fetching: false,
+      error: undefined as { message: string } | undefined,
     },
-  }));
+    previewFile: {
+      data: undefined as unknown,
+      fetching: false,
+      error: undefined as { message: string } | undefined,
+    },
+  },
+  refetchMock: vi.fn(),
+  grantMock: vi.fn(),
+  detachMock: vi.fn(),
+  toastMock: { success: vi.fn(), error: vi.fn() },
+  queryDocs: {
+    SettingsCapabilityInspectorQuery: Symbol("capabilityInspector"),
+    SettingsSpacesListQuery: Symbol("spacesList"),
+    SettingsAgentProfilesQuery: Symbol("agentProfiles"),
+    SettingsTenantMembersQuery: Symbol("tenantMembers"),
+    SettingsGrantCapabilityMutation: Symbol("grantCapability"),
+    SettingsDetachCapabilityMutation: Symbol("detachCapability"),
+    SettingsWorkspacePreviewQuery: Symbol("workspacePreview"),
+    SettingsWorkspacePreviewFileQuery: Symbol("workspacePreviewFile"),
+  },
+  previewRefetchMock: vi.fn(),
+  navigateMock: vi.fn(),
+}));
 
 vi.mock("urql", () => ({
   useQuery: ({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsCapabilityInspectorQuery) {
       return [queryState.inspector, refetchMock];
+    }
+    if (query === queryDocs.SettingsWorkspacePreviewQuery) {
+      return [queryState.preview, previewRefetchMock];
+    }
+    if (query === queryDocs.SettingsWorkspacePreviewFileQuery) {
+      return [queryState.previewFile, vi.fn()];
     }
     if (query === queryDocs.SettingsSpacesListQuery) {
       return [
@@ -76,6 +104,10 @@ vi.mock("urql", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: toastMock }));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigateMock,
+}));
 
 // The destructive-confirm dialog renders pass-through so its action button
 // is directly clickable (same approach as AgentLoopDetail.test.tsx).
@@ -210,6 +242,43 @@ function inspection(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const PREVIEW_FILES = [
+  { path: "AGENTS.md", owner: "agent", generated: true, size: 2048 },
+  {
+    path: "skills/approve-receipt/SKILL.md",
+    owner: "agent",
+    generated: false,
+    size: 300,
+  },
+  {
+    path: "skills/stale-skill/SKILL.md",
+    owner: "agent",
+    generated: false,
+    size: 120,
+  },
+  {
+    path: "Spaces/customer/CONTEXT.md",
+    owner: "space",
+    generated: true,
+    size: 800,
+  },
+];
+
+function previewData(overrides: Record<string, unknown> = {}) {
+  return {
+    workspacePreview: {
+      state: "ok",
+      stateDetail: null,
+      agentId: "agent-1",
+      spaceId: "space-1",
+      perspectiveUserId: null,
+      noUserBaseline: true,
+      files: PREVIEW_FILES,
+      ...overrides,
+    },
+  };
+}
+
 function grantResult(
   item: Record<string, unknown> | null,
   outcome = "applied",
@@ -232,6 +301,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   queryState.inspector = {
     data: inspection(),
+    fetching: false,
+    error: undefined,
+  };
+  queryState.preview = {
+    data: previewData(),
+    fetching: false,
+    error: undefined,
+  };
+  queryState.previewFile = {
+    data: undefined,
     fetching: false,
     error: undefined,
   };
@@ -302,8 +381,13 @@ describe("SettingsCapabilities (read surface)", () => {
       target: { value: "expenses" },
     });
     // Skills tab keeps the matching row; the non-matching active row drops.
-    expect(screen.getByText("Expenses")).toBeTruthy();
-    expect(screen.queryByText("approve-receipt")).toBeNull();
+    // (Scoped to capability rows — the result tree also names skill folders.)
+    const rowText = screen
+      .queryAllByTestId("capability-row")
+      .map((row) => row.textContent)
+      .join(" ");
+    expect(rowText).toContain("Expenses");
+    expect(rowText).not.toContain("approve-receipt");
   });
 
   it("explains the no-user baseline in the view-info dialog", () => {
@@ -650,5 +734,184 @@ describe("divergence surface (U13)", () => {
     expect(screen.getByTestId("divergence-chip").textContent).toContain(
       "no turn observed",
     );
+  });
+});
+
+describe("Composer result tree (U2)", () => {
+  it("renders the rendered-workspace tree beside the controls pane", () => {
+    render(<SettingsCapabilities />);
+    expect(screen.getByTestId("composer-tree")).toBeTruthy();
+    expect(screen.getByTestId("tree-node-skills/approve-receipt")).toBeTruthy();
+    expect(screen.getByTestId("tree-generated-AGENTS.md")).toBeTruthy();
+    // Controls pane still renders its tabs next to the tree.
+    expect(screen.getByTestId("capability-tab-skill")).toBeTruthy();
+  });
+
+  it("a settled grant confirmation refetches the preview and the new skill folder appears", async () => {
+    grantMock.mockResolvedValue(
+      grantResult({
+        capabilityClass: "skill",
+        capabilityId: "expenses",
+        displayName: "Expenses",
+        active: true,
+        provenance: "agent: workspace folder",
+        reason: null,
+        detail: null,
+        tokenStatus: null,
+      }),
+    );
+    const view = render(<SettingsCapabilities />);
+    clearDefaultFilters();
+    expect(previewRefetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("attach-skill:expenses"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("mutation-confirmation")).toBeTruthy(),
+    );
+    // Settled write (no sync window) → immediate full preview refetch.
+    expect(previewRefetchMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+
+    // The refetch lands: the new skill folder is in the tree.
+    queryState.preview = {
+      data: previewData({
+        files: [
+          ...PREVIEW_FILES,
+          {
+            path: "skills/expenses/SKILL.md",
+            owner: "agent",
+            generated: false,
+            size: 90,
+          },
+        ],
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    view.rerender(<SettingsCapabilities />);
+    expect(
+      screen.getByTestId("tree-file-skills/expenses/SKILL.md"),
+    ).toBeTruthy();
+  });
+
+  it("shows the pending affordance on the affected node during the sync window, then refetches on completion", async () => {
+    grantMock.mockResolvedValue(
+      grantResult({
+        capabilityClass: "skill",
+        capabilityId: "expenses",
+        displayName: "Expenses",
+        active: false,
+        provenance: "tenant catalog",
+        reason: "not_installed",
+        detail: null,
+        tokenStatus: null,
+      }),
+    );
+    const view = render(<SettingsCapabilities />);
+    clearDefaultFilters();
+    fireEvent.click(screen.getByTestId("attach-skill:expenses"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("sync-pending")).toBeTruthy(),
+    );
+    // The affected tree node is an explicit ghost — not a frozen view —
+    // and the full refetch intentionally waits for sync completion.
+    expect(
+      screen.getByTestId("tree-pending-skills/expenses").textContent,
+    ).toContain("syncing");
+    expect(previewRefetchMock).not.toHaveBeenCalled();
+
+    // Materialization lands in the inspector → the sync phase resolves and
+    // the preview refetch fires; the ghost is gone.
+    queryState.inspector = {
+      data: inspection({
+        predicted: {
+          variant: "PREDICTED",
+          computedAt: "2026-07-02T12:02:00.000Z",
+          configFingerprint: "fp-final",
+          items: BASE_ITEMS.map((item) =>
+            item.capabilityId === "expenses"
+              ? {
+                  ...item,
+                  active: true,
+                  reason: null,
+                  provenance: "agent: workspace folder",
+                }
+              : item,
+          ),
+        },
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    view.rerender(<SettingsCapabilities />);
+    await waitFor(() =>
+      expect(screen.queryByTestId("sync-pending")).toBeNull(),
+    );
+    expect(previewRefetchMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(screen.queryByTestId("tree-pending-skills/expenses")).toBeNull();
+  });
+
+  it("skill jump-to-cause resets the State/Search tokens and tab so the hidden row lands focused (F2)", () => {
+    render(<SettingsCapabilities />);
+    // Default toolbar state hides the diagnose target twice over: the
+    // Active-only State token drops the trust_gate row, and the current
+    // tab is a different capability class.
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-mcp_server"), {
+      button: 0,
+    });
+    expect(screen.queryByText("trust_gate")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("tree-jump-skills/stale-skill"));
+
+    // Filters/tab reset in-page: the row is visible and highlighted.
+    expect(screen.getByText("trust_gate")).toBeTruthy();
+    const focused = screen.getByTestId("capability-row-focused");
+    expect(focused.textContent).toContain("stale-skill");
+    // No route navigation for in-page focus.
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the selection tokens (the query) while resetting only State/Search on jump", () => {
+    render(<SettingsCapabilities />);
+    expandSearch();
+    fireEvent.change(screen.getByTestId("capability-search"), {
+      target: { value: "zzz-no-match" },
+    });
+    // Scoped to capability rows — the tree still names the skill folder.
+    expect(
+      screen
+        .queryAllByTestId("capability-row")
+        .map((row) => row.textContent)
+        .join(" "),
+    ).not.toContain("approve-receipt");
+
+    fireEvent.click(screen.getByTestId("tree-jump-skills/approve-receipt"));
+
+    // Search token cleared → the row is back and focused.
+    expect(screen.getByTestId("capability-row-focused").textContent).toContain(
+      "approve-receipt",
+    );
+  });
+
+  it("preview error states degrade consistently with the controls pane copy", () => {
+    queryState.preview = {
+      data: previewData({
+        state: "invalid_selection",
+        stateDetail: "space not found in tenant",
+        files: null,
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    expect(
+      screen.getByTestId("preview-invalid-selection").textContent,
+    ).toContain("space not found in tenant");
+    // The controls pane keeps rendering its own state independently.
+    expect(screen.getByTestId("capability-tab-skill")).toBeTruthy();
   });
 });

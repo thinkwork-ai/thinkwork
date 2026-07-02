@@ -15678,6 +15678,58 @@ export type SettingsCapabilityInspectorQuery = {
   };
 };
 
+export type SettingsWorkspacePreviewQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+}>;
+
+export type SettingsWorkspacePreviewQuery = {
+  __typename?: "Query";
+  workspacePreview: {
+    __typename?: "WorkspacePreview";
+    state: string;
+    stateDetail?: string | null;
+    agentId?: string | null;
+    spaceId?: string | null;
+    perspectiveUserId?: string | null;
+    noUserBaseline: boolean;
+    files?: Array<{
+      __typename?: "WorkspacePreviewEntry";
+      path: string;
+      owner: string;
+      generated: boolean;
+      size?: number | null;
+    }> | null;
+  };
+};
+
+export type SettingsWorkspacePreviewFileQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  path: Scalars["String"]["input"];
+}>;
+
+export type SettingsWorkspacePreviewFileQuery = {
+  __typename?: "Query";
+  workspacePreviewFile: {
+    __typename?: "WorkspacePreviewFilePayload";
+    state: string;
+    stateDetail?: string | null;
+    content?: string | null;
+    file?: {
+      __typename?: "WorkspacePreviewEntry";
+      path: string;
+      owner: string;
+      generated: boolean;
+      size?: number | null;
+    } | null;
+  };
+};
+
 export type TenantSkillCatalogQueryVariables = Exact<{
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
 }>;
@@ -33489,6 +33541,268 @@ export const SettingsCapabilityInspectorDocument = {
 } as unknown as DocumentNode<
   SettingsCapabilityInspectorQuery,
   SettingsCapabilityInspectorQueryVariables
+>;
+export const SettingsWorkspacePreviewDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsWorkspacePreview" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "spaceId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "perspectiveUserId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "workspacePreview" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "spaceId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "spaceId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "perspectiveUserId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "perspectiveUserId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "state" } },
+                { kind: "Field", name: { kind: "Name", value: "stateDetail" } },
+                { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "perspectiveUserId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "noUserBaseline" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "files" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "path" } },
+                      { kind: "Field", name: { kind: "Name", value: "owner" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "generated" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "size" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsWorkspacePreviewQuery,
+  SettingsWorkspacePreviewQueryVariables
+>;
+export const SettingsWorkspacePreviewFileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsWorkspacePreviewFile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "spaceId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "perspectiveUserId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "path" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "workspacePreviewFile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "spaceId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "spaceId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "perspectiveUserId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "perspectiveUserId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "path" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "path" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "state" } },
+                { kind: "Field", name: { kind: "Name", value: "stateDetail" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "file" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "path" } },
+                      { kind: "Field", name: { kind: "Name", value: "owner" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "generated" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "size" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "content" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsWorkspacePreviewFileQuery,
+  SettingsWorkspacePreviewFileQueryVariables
 >;
 export const TenantSkillCatalogDocument = {
   kind: "Document",
