@@ -461,17 +461,23 @@ function normalizeControllerDeployAction(
  */
 export function readTfvarsSignals(cwd: string): {
   domain?: string;
+  domainDelegated: boolean;
   sesConfigured: boolean;
 } {
   const tfvarsPath = join(cwd, "terraform.tfvars");
-  if (!existsSync(tfvarsPath)) return { sesConfigured: false };
+  if (!existsSync(tfvarsPath)) {
+    return { sesConfigured: false, domainDelegated: false };
+  }
   let domain: string | undefined;
+  let domainDelegated = false;
   let sesConfigured = false;
   for (const line of readFileSync(tfvarsPath, "utf8").split("\n")) {
-    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
+    // Bools are unquoted; capture both value shapes.
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"?([^"\n]*?)"?\s*$/);
     if (!match) continue;
     const [, key, value] = match;
     if (key === "customer_domain" && value) domain = value;
+    if (key === "customer_domain_delegated") domainDelegated = value === "true";
     if (
       (key === "ses_parent_domain" ||
         key === "ses_inbound_domain" ||
@@ -481,7 +487,7 @@ export function readTfvarsSignals(cwd: string): {
       sesConfigured = true;
     }
   }
-  return { domain, sesConfigured };
+  return { domain, domainDelegated, sesConfigured };
 }
 
 /**
@@ -1126,6 +1132,7 @@ export async function runLocalTerraformDeploy(
           ? backendTarget(caller.account, caller.region, stage)
           : undefined,
       domain: signals.domain,
+      domainDelegated: signals.domainDelegated,
       sesConfigured: signals.sesConfigured,
       agentcorePiSourceImage:
         readTfvarsSignalsRaw(preflightCwd).agentcore_pi_source_image_uri ||

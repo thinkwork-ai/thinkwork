@@ -164,7 +164,10 @@ describe("readTfvarsSignals", () => {
 
   it("returns no signals for a missing tfvars or empty values", () => {
     const dir = mkdtempSync(join(tmpdir(), "tfvars-signals-"));
-    expect(readTfvarsSignals(dir)).toEqual({ sesConfigured: false });
+    expect(readTfvarsSignals(dir)).toEqual({
+      sesConfigured: false,
+      domainDelegated: false,
+    });
     writeFileSync(
       join(dir, "terraform.tfvars"),
       ['customer_domain = ""', 'ses_parent_domain = ""'].join("\n"),
@@ -232,5 +235,33 @@ describe("AgentCore Pi source image probe", () => {
     expect(without.some((c) => c.name === "AgentCore image pullable")).toBe(
       false,
     );
+  });
+});
+
+describe("domain delegation gating (harness HCI test)", () => {
+  it("is warn-tier until customer_domain_delegated flips true", async () => {
+    const undelegated = checkDomainDelegation(
+      "hci.thinkwork.ai",
+      async () => [],
+      false,
+    );
+    expect(undelegated.blocking).toBe(false);
+    const delegated = checkDomainDelegation(
+      "hci.thinkwork.ai",
+      async () => [],
+      true,
+    );
+    expect(delegated.blocking).toBe(true);
+  });
+
+  it("reads customer_domain_delegated from tfvars", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tfvars-delegated-"));
+    writeFileSync(
+      join(dir, "terraform.tfvars"),
+      ['customer_domain = "hci.thinkwork.ai"', "customer_domain_delegated = true"].join("\n"),
+    );
+    const signals = readTfvarsSignals(dir);
+    expect(signals.domain).toBe("hci.thinkwork.ai");
+    expect(signals.domainDelegated).toBe(true);
   });
 });

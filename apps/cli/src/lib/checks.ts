@@ -384,9 +384,16 @@ export function evaluateDomainDelegation(
 export function checkDomainDelegation(
   domain: string,
   resolver: (domain: string) => Promise<string[]> = resolveNs,
+  delegated = true,
 ): Check {
   return {
     name: `Domain DNS delegation (${domain})`,
+    // Delegation is DESIGNED to happen after the first deploy creates the
+    // hosted zone (init says so verbatim). Until customer_domain_delegated
+    // flips true, no ACM cert is minted — so unresolvable NS records are a
+    // tracked pending item (R9/AE3), not a blocker. Blocking here made the
+    // documented first-deploy flow impossible (HCI test, cycle 12).
+    blocking: delegated,
     run: async () => {
       try {
         const records = await resolver(domain);
@@ -544,6 +551,8 @@ export interface PreflightContext {
   backend?: BackendTarget;
   /** customer_domain from the stage tfvars, when configured */
   domain?: string;
+  /** customer_domain_delegated from the stage tfvars */
+  domainDelegated?: boolean;
   /** true when the stage tfvars configure SES */
   sesConfigured?: boolean;
   /** agentcore_pi_source_image_uri from the stage tfvars, when pinned */
@@ -553,7 +562,11 @@ export interface PreflightContext {
 export function preflightChecks(ctx: PreflightContext): Check[] {
   const checks = doctorChecks();
   if (ctx.backend) checks.push(checkStateBackend(ctx.backend));
-  if (ctx.domain) checks.push(checkDomainDelegation(ctx.domain));
+  if (ctx.domain) {
+    checks.push(
+      checkDomainDelegation(ctx.domain, undefined, ctx.domainDelegated ?? true),
+    );
+  }
   if (ctx.sesConfigured) checks.push(checkSesStatus());
   if (ctx.agentcorePiSourceImage) {
     checks.push(checkAgentcorePiSourceImage(ctx.agentcorePiSourceImage));
