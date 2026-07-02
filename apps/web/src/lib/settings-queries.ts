@@ -2488,3 +2488,44 @@ export const SettingsConfigureWorkosAuthPluginMutation = graphql(`
     }
   }
 `);
+
+export const SettingsCapabilityInspectorQuery = graphql(`
+  query SettingsCapabilityInspector(
+    $tenantId: ID!
+    $agentId: ID
+    $spaceId: ID
+    $agentProfileId: ID
+    $perspectiveUserId: ID
+  ) {
+    capabilityInspector(
+      tenantId: $tenantId
+      agentId: $agentId
+      spaceId: $spaceId
+      agentProfileId: $agentProfileId
+      perspectiveUserId: $perspectiveUserId
+    ) {
+      state
+      stateDetail
+      agentId
+      spaceId
+      agentProfileId
+      perspectiveUserId
+      noUserBaseline
+      predicted {
+        variant
+        computedAt
+        configFingerprint
+        items {
+          capabilityClass
+          capabilityId
+          displayName
+          active
+          provenance
+          reason
+          detail
+          tokenStatus
+        }
+      }
+    }
+  }
+`);
