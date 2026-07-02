@@ -314,10 +314,16 @@ export function parseLockError(text: string): LockInfo | null {
   if (!/Error acquiring the state lock/i.test(text)) return null;
   const field = (name: string): string | undefined => {
     const match = text.match(new RegExp(`${name}:\\s*(.+)`, "i"));
-    return match?.[1]?.trim();
+    // Terraform renders the lock table inside │-boxed lines with trailing
+    // commas; strip the decoration or the suggested force-unlock command is
+    // copy-paste broken (harness cycle-7 ledger entry).
+    return match?.[1]?.replace(/[│,]/g, " ").trim();
   };
+  // Lock IDs are a single token — never spaces (guards against the regex
+  // over-capturing prose on the same line).
+  const rawId = field("ID");
   return {
-    id: field("ID"),
+    id: rawId?.split(/\s+/)[0],
     who: field("Who"),
     operation: field("Operation"),
     created: field("Created"),

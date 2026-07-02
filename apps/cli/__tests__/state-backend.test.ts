@@ -218,6 +218,21 @@ Lock Info:
       parseLockError("Error: creating Lambda Function: AccessDenied"),
     ).toBeNull();
   });
+
+  it("strips terraform's │-box decoration and trailing commas (cycle-7)", () => {
+    const text = `
+│ Error: Error acquiring the state lock
+│
+│ Lock Info:
+│   ID:        P5TEVJVUAASR8TAE52HN87QUSBVV4KQNSO5AEMVJF66Q9ASUAAJG,
+│   Operation: OperationTypeApply,
+│   Who:       ericodom@Erics-Mac-mini.local,
+`;
+    const lock = parseLockError(text);
+    expect(lock!.id).toBe("P5TEVJVUAASR8TAE52HN87QUSBVV4KQNSO5AEMVJF66Q9ASUAAJG");
+    expect(lock!.who).toBe("ericodom@Erics-Mac-mini.local");
+    expect(lock!.operation).toBe("OperationTypeApply");
+  });
 });
 
 // Regression: harness cycle-1 ledger entry — init copies examples/ into the
