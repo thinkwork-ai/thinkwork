@@ -65,6 +65,7 @@ import {
   computeEvalCaseSha,
   createDrizzleDatasetIndexStore,
   createS3DatasetStorage,
+  evalCaseExecutionTier,
   evalCaseQualityRank,
   evalCaseQualityState,
   evalDatasetCaseKey,
@@ -100,7 +101,7 @@ export const BASELINE_DATASET_NAME = "Baseline Red Team";
  * container seed cache keys on this value so a deploy that bumps it
  * re-seeds even on warm Lambdas.
  */
-export const BASELINE_DATASET_VERSION = 2;
+export const BASELINE_DATASET_VERSION = 3;
 
 const VERSION_MARKER_FILE = "_baseline_version";
 
@@ -416,7 +417,12 @@ export async function seedBaselineDataset(
   const added = new Set(addedCaseIds);
   for (const candidate of cases) {
     const canonicalState = evalCaseQualityState(candidate.core);
-    if (canonicalState === "active") continue; // never propagates downward
+    const canonicalTier = candidate.core.execution_tier;
+    // Only read tenant content when the canonical case carries something
+    // that COULD propagate: a non-active quality state, or an explicit
+    // execution tier (operational metadata — canonical-wins, unlike
+    // tenant content edits).
+    if (canonicalState === "active" && !canonicalTier) continue;
     const caseId = candidate.core.case_id;
     if (added.has(caseId)) continue; // freshly written with canonical state
     if (!manifest.cases.some((c) => c.case_id === caseId)) continue;
@@ -428,20 +434,28 @@ export async function seedBaselineDataset(
     const content = await deps.storage.read(caseKey);
     if (content == null) continue; // partial S3 state: heals on next sync
     const parsed = parseEvalDatasetCase(content);
+
+    const changes: Partial<EvalDatasetCaseCore> = {};
+    // Quality state: one-way upward only (never resurrect/downgrade).
     const currentState = evalCaseQualityState(parsed.core);
     if (
-      evalCaseQualityRank(canonicalState) <= evalCaseQualityRank(currentState)
+      evalCaseQualityRank(canonicalState) > evalCaseQualityRank(currentState)
     ) {
-      continue;
+      changes.quality_state = canonicalState;
+      if (candidate.core.rewritten_from && !parsed.core.rewritten_from) {
+        changes.rewritten_from = candidate.core.rewritten_from;
+      }
     }
+    // Execution tier: operational metadata, canonical-wins in BOTH
+    // directions (Eval Execution Tiers v1) — reclassifying a case back
+    // to the full agent turn must reach tenants too.
+    if (canonicalTier && evalCaseExecutionTier(parsed.core) !== canonicalTier) {
+      changes.execution_tier = canonicalTier;
+    }
+    if (Object.keys(changes).length === 0) continue;
+
     const updated = serializeEvalDatasetCase(
-      {
-        ...parsed.core,
-        quality_state: canonicalState,
-        ...(candidate.core.rewritten_from && !parsed.core.rewritten_from
-          ? { rewritten_from: candidate.core.rewritten_from }
-          : {}),
-      },
+      { ...parsed.core, ...changes },
       parsed.engines,
     );
     await deps.storage.write(caseKey, updated);
