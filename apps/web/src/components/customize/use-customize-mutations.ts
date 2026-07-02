@@ -2,19 +2,19 @@ import { useCallback, useState } from "react";
 import { useMutation, type AnyVariables, type TypedDocumentNode } from "urql";
 import { toast } from "sonner";
 import {
-  DisableSkillMutation,
   DisableWorkflowTemplateMutation,
-  EnableSkillMutation,
   EnableWorkflowTemplateMutation,
 } from "@/lib/graphql-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
+
+// useSkillMutation (the former Customize→Skills tab) was removed in
+// Composer plan U3 — skill wiring lives in Settings→Composer now. The
+// `disableSkill` GraphQL mutation stays in the schema until the U8 sweep.
 
 export interface UseToggleMutationResult {
   toggle: (key: string, nextConnected: boolean) => Promise<void>;
   pendingSlugs: ReadonlySet<string>;
 }
-
-const SKILL_TYPENAMES = ["AgentSkill", "CustomizeBindings"] as const;
 
 const WORKFLOW_TYPENAMES = [
   "Routine",
@@ -22,35 +22,17 @@ const WORKFLOW_TYPENAMES = [
   "CustomizeBindings",
 ] as const;
 
-/** Surfaced when the server rejects a built-in tool slug toggle. */
-export const BUILTIN_TOOL_HINT =
-  "Built-in skills are managed by your tenant template, not the Customize page.";
-
 interface ToggleMutationOptions {
   enableMutation: TypedDocumentNode<unknown, AnyVariables>;
   disableMutation: TypedDocumentNode<unknown, AnyVariables>;
   typenames: readonly string[];
   buildVariables: (agentId: string, key: string) => AnyVariables;
-  /** Map a server `extensions.code` to a sonner `toast.message` hint. */
-  errorCodeHints?: Readonly<Record<string, string>>;
 }
 
 // Per-wrapper option bags hoisted to module scope so each wrapper hook
 // passes a stable reference into useToggleMutation. Inline object
 // literals would invalidate `toggle`'s useCallback deps every render
 // and bust referential identity for downstream consumers.
-const SKILL_OPTS: ToggleMutationOptions = {
-  enableMutation: EnableSkillMutation,
-  disableMutation: DisableSkillMutation,
-  typenames: SKILL_TYPENAMES,
-  buildVariables: (agentId, skillId) => ({
-    input: { agentId, skillId },
-  }),
-  errorCodeHints: {
-    CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
-  },
-};
-
 const WORKFLOW_OPTS: ToggleMutationOptions = {
   enableMutation: EnableWorkflowTemplateMutation,
   disableMutation: DisableWorkflowTemplateMutation,
@@ -60,12 +42,11 @@ const WORKFLOW_OPTS: ToggleMutationOptions = {
 
 /**
  * Shared core for the Customize tab Connect / Disable buttons. Resolves
- * the caller's selected assigned Computer id once, owns the
- * pending-key Set so overlapping toggles don't clobber, and routes
- * server `extensions.code` errors to per-mutation hint messages when
- * present (otherwise falls back to `toast.error(message)`).
+ * the caller's selected assigned Computer id once and owns the
+ * pending-key Set so overlapping toggles don't clobber each other.
+ * Server errors surface via `toast.error(message)`.
  *
- * The skill / workflow-template hooks are thin wrappers around this helper.
+ * The workflow-template hook is a thin wrapper around this helper.
  * Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-4.
  */
 export function useToggleMutation(
@@ -99,14 +80,7 @@ export function useToggleMutation(
           ? await enable(variables, { additionalTypenames })
           : await disable(variables, { additionalTypenames });
         if (result.error) {
-          const codeRaw = result.error.graphQLErrors[0]?.extensions?.code;
-          const code = typeof codeRaw === "string" ? codeRaw : undefined;
-          const hint = code ? opts.errorCodeHints?.[code] : undefined;
-          if (hint) {
-            toast.message(hint);
-          } else {
-            toast.error(result.error.message);
-          }
+          toast.error(result.error.message);
         }
       } finally {
         setPendingSlugs((prev) => {
@@ -121,16 +95,6 @@ export function useToggleMutation(
   );
 
   return { toggle, pendingSlugs };
-}
-
-/**
- * urql wrapper for the Skills-tab Connect / Disable button. Composes
- * useToggleMutation with the skill mutation pair, the `SKILL_TYPENAMES`
- * invalidation set, and routes `CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE`
- * to BUILTIN_TOOL_HINT.
- */
-export function useSkillMutation(): UseToggleMutationResult {
-  return useToggleMutation(SKILL_OPTS);
 }
 
 /**

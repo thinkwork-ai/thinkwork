@@ -49,7 +49,7 @@ describe("CustomizeTabBody", () => {
   it("renders the empty message when no items match filters", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={[]}
         emptyMessage="Nothing yet"
         onAction={vi.fn()}
@@ -63,7 +63,7 @@ describe("CustomizeTabBody", () => {
   it("renders one row per item", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={vi.fn()}
       />,
@@ -74,7 +74,7 @@ describe("CustomizeTabBody", () => {
   it("filters by search text", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={vi.fn()}
       />,
@@ -89,7 +89,7 @@ describe("CustomizeTabBody", () => {
   it("renders the toolbar with search left, tabs centered, category right", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={vi.fn()}
       />,
@@ -109,7 +109,7 @@ describe("CustomizeTabBody", () => {
   it("renders Connected and Available status cells", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={vi.fn()}
       />,
@@ -121,7 +121,7 @@ describe("CustomizeTabBody", () => {
   it("opens the detail sheet when a row is clicked", () => {
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={vi.fn()}
       />,
@@ -137,7 +137,7 @@ describe("CustomizeTabBody", () => {
     const onAction = vi.fn();
     render(
       <CustomizeTabBody
-        activeTab="/customize/skills"
+        activeTab="/customize/workflows"
         items={items}
         onAction={onAction}
       />,

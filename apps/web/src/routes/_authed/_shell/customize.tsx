@@ -5,8 +5,9 @@ export const Route = createFileRoute("/_authed/_shell/customize")({
   component: CustomizeLayout,
 });
 
+// Skills moved to Settings→Composer (Composer plan U3); /customize/skills
+// redirects to the index for stale links.
 export const CUSTOMIZE_TABS = [
-  { to: "/customize/skills", label: "Skills" },
   { to: "/customize/workflows", label: "Workflow Templates" },
 ] as const;
 

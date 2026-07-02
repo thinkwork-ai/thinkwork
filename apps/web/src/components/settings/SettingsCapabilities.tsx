@@ -1,5 +1,7 @@
 /**
- * Capabilities area (capability-mapping plan U4 + U8).
+ * Composer — the capability-configuration home (capability-mapping plan
+ * U4 + U8; renamed from "Capabilities" in Composer plan U3, KTD-6 — the
+ * route path stays /settings/capabilities).
  *
  * One operator door: the effective merged capability set for a selection —
  * space, agent profile, perspective user — one tab per capability class,
@@ -746,7 +748,7 @@ export function SettingsCapabilities() {
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <SettingsHeader
-        title="Capabilities"
+        title="Composer"
         description="What the platform agent will actually get for a selection — every skill, tool, MCP server, extension, and plugin with its provenance and, when inactive, the exact gate that dropped it. Attach from the tenant pool or detach directly; every action ends on the item's live state."
       />
 
