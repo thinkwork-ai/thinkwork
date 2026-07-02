@@ -759,6 +759,24 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_cognee_worker" {
   security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
 }
 
+# Interface endpoints with private DNS capture the WHOLE VPC's traffic to the
+# covered AWS APIs (logs, ssm, sts, bedrock, ...): every workload in the VPC
+# resolves those hostnames to the endpoint's private IP, so per-source-SG
+# rules silently black-hole anything not enumerated — harness cycle-7's
+# Hindsight tasks died on "cannot find the CloudWatch log group ... connection
+# issue" because only the Lambda SG was admitted. Allow the VPC CIDR.
+resource "aws_security_group_rule" "okf_wiki_vpce_from_vpc" {
+  count = local.okf_wiki_private_endpoints_enabled ? 1 : 0
+
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = [module.vpc.vpc_cidr_block]
+  security_group_id = aws_security_group.okf_wiki_vpc_endpoint[0].id
+  description       = "All VPC workloads (private-DNS endpoints capture the whole VPC)"
+}
+
 resource "aws_security_group_rule" "okf_wiki_vpce_from_twenty" {
   count = local.okf_wiki_private_endpoints_enabled && local.twenty_provisioned ? 1 : 0
 
