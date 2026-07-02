@@ -281,11 +281,11 @@ Component boundaries: the state-backend helper and Check registry live in `apps/
 
 ### U10. Database schema application in the deploy tail
 
-- **Goal:** A fresh stage's database has the journaled Drizzle schema applied before verify runs — from a packaged install, with no monorepo checkout.
+- **Goal:** A fresh stage's database has the full schema applied before verify runs — from a packaged install, with no monorepo checkout.
 - **Requirements:** R4, R8.
 - **Dependencies:** U2 (runs inside the converging deploy tail).
-- **Files:** `apps/cli/src/lib/migrations.ts` (new — idempotent journaled-migration runner), `apps/cli/src/commands/deploy.ts` (schema step after apply, before verify), `apps/cli/package.json` + `apps/cli/scripts/` (bundle `packages/database-pg/drizzle/` journaled migrations into the published package), `apps/cli/__tests__/migrations.test.ts` (new).
-- **Approach:** Bundle the journaled migrations (those in `meta/_journal.json`) into the CLI package at build time; the deploy tail resolves the DB endpoint/secret via `terraform output` (the `bootstrap` command's pattern) and applies pending migrations idempotently, mirroring the controller runner's migration-ledger step. Hand-rolled non-journaled `.sql` files stay out of scope (see Deferred to Follow-Up Work).
+- **Files:** `apps/cli/src/lib/db-migrations.ts` (idempotent migration runner), `apps/cli/src/commands/deploy.ts` (schema step after apply, before verify), `apps/cli/package.json` + `apps/cli/scripts/` (bundle `packages/database-pg/drizzle/` migrations into the published package), `apps/cli/__tests__/migrations.test.ts`.
+- **Approach (revised after harness cycle 7 — the original journaled-only/Data API design could not work):** the journal is frozen at 0019 while ~200 hand-rolled files carry the real schema history (journaled 0019 depends on hand-rolled `0018_skill_runs`), and those files use psql-grade SQL (multi-statements, `DO $$` bodies, inline BEGIN/COMMIT) the Aurora Data API rejects. The runner now connects **directly to the cluster endpoint with node-postgres** (clusters are publicly accessible by platform design — `db:push` relies on the same posture) and replays **every non-rollback migration file** in numeric order: psql `\`-meta lines stripped, `:'stage'` interpolated, compliance role passwords resolved from (or minted into) the stage's Secrets Manager containers (folding `bootstrap-compliance-roles.sh` into deploy), and operator-only files that need hand-passed variables skipped with a warning. Hash tracking in `drizzle.__drizzle_migrations` is unchanged.
 - **Test scenarios:**
   - Happy path: fresh database → all journaled migrations apply in order; rerun → no-op.
   - Edge: partially-migrated database resumes from the journal position.
