@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
-import { File, Loader2 } from "lucide-react";
+import { File, Loader2, Lock } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import { languageForFile } from "../lib/codemirror-language.js";
+import { managedSectionHighlight } from "../lib/managed-section-decorations.js";
+import { managedSectionHeadingsPresent } from "../lib/managed-sections.js";
 
 const blackEditorSurface = EditorView.theme({
   "&": { backgroundColor: "black" },
@@ -30,6 +33,12 @@ export interface FileEditorPaneProps {
   loading: boolean;
   saving: boolean;
   readOnly?: boolean;
+  /**
+   * Managed-heading vocabulary. Bodies of these `## ` sections are recomputed
+   * by the composer, so they render marked/locked and edits inside them warn
+   * on save (Composer plan U7). Empty disables the affordance.
+   */
+  managedHeadings?: readonly string[];
   onChange: (value: string) => void;
   onSave: () => void;
   onDiscard: () => void;
@@ -42,10 +51,22 @@ export function FileEditorPane({
   loading,
   saving,
   readOnly = false,
+  managedHeadings,
   onChange,
   onSave,
   onDiscard,
 }: FileEditorPaneProps) {
+  const headings = managedHeadings ?? [];
+  const managedPresent = useMemo(
+    () =>
+      headings.length > 0 ? managedSectionHeadingsPresent(value, headings) : [],
+    [value, headings],
+  );
+  const managedExtension = useMemo(
+    () => (headings.length > 0 ? [managedSectionHighlight(headings)] : []),
+    [headings],
+  );
+
   if (!openFile) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -96,6 +117,21 @@ export function FileEditorPane({
           )}
         </div>
       </div>
+      {managedPresent.length > 0 ? (
+        <div
+          className="flex items-center gap-1.5 border-b bg-sky-500/5 px-3 py-1.5 text-[11px] text-muted-foreground"
+          data-testid="managed-sections-note"
+        >
+          <Lock className="h-3 w-3 shrink-0 text-sky-500" />
+          <span className="min-w-0">
+            Computed section{managedPresent.length > 1 ? "s" : ""} (recomposed
+            automatically — edits inside will not be saved):{" "}
+            <span className="font-medium text-foreground">
+              {managedPresent.join(", ")}
+            </span>
+          </span>
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-hidden bg-black [&>div]:h-full">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
@@ -109,6 +145,7 @@ export function FileEditorPane({
             theme={vscodeDark}
             extensions={[
               ...languageForFile(openFile),
+              ...managedExtension,
               EditorView.lineWrapping,
               blackEditorSurface,
             ]}
