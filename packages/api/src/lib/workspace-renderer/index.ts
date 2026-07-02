@@ -1,5 +1,6 @@
 export * from "./agents-md-composer.js";
 export * from "./compose-tuple.js";
+export * from "./managed-sections.js";
 export * from "./effective-policy-composer.js";
 export * from "./prefixes.js";
 export * from "./repository.js";

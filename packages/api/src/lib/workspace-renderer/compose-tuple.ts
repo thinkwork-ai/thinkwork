@@ -17,7 +17,6 @@ import { DrizzleWorkspaceTupleRepository } from "./repository.js";
 import { S3WorkspaceRendererObjectStore } from "./s3-store.js";
 import {
   EMPTY_PLUGIN_GATE,
-  filterContextRoutingEntries,
   isNamespacedPluginSkillPath,
   pluginGateExcludesWorkspacePath,
   pluginGateHasExclusions,
@@ -30,6 +29,7 @@ import {
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
 import { composeAgentsMdWithRouting } from "./agents-md-composer.js";
+import { composeGeneratedContextMd } from "./managed-sections.js";
 import type {
   WorkspaceAgentProfileRoutingEntry,
   WorkspaceHydrateFile,
@@ -791,7 +791,10 @@ export async function renderWorkspaceTuple(
   // Routing entries for plugin skills are CONTEXT.md lines appended at
   // install time (not render-generated) — for a gated requester the
   // blocked lines are filtered into a generated per-thread CONTEXT.md
-  // replacement. See gating.ts module doc for the AGENTS.md finding.
+  // replacement produced through the managed-sections composer seam
+  // (Composer plan U4; the computed Routing section itself stays inert
+  // until U5 per KTD-9). See gating.ts module doc for the AGENTS.md
+  // finding.
   let gatedContextFile: GeneratedWorkspaceFile | null = null;
   if (pluginGateHasExclusions(pluginGate)) {
     const contextObject = agentSource.objects.find(
@@ -803,15 +806,15 @@ export async function renderWorkspaceTuple(
         key: contextObject.key,
       });
       if (rawContext !== null) {
-        const filteredContext = filterContextRoutingEntries(
-          rawContext,
+        const composedContext = composeGeneratedContextMd({
+          baseline: rawContext,
           pluginGate,
-        );
-        if (filteredContext.changed) {
+        });
+        if (composedContext.changed) {
           gatedContextFile = {
             path: "CONTEXT.md",
             key: `${renderedPrefix}CONTEXT.md`,
-            content: filteredContext.content,
+            content: composedContext.content,
             owner: "agent",
           };
         }
