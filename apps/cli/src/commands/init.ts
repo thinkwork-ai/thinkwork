@@ -1065,6 +1065,10 @@ output "admin_client_id_out" {
   value = module.thinkwork.admin_client_id
 }
 
+output "app_distribution_id" {
+  value = module.thinkwork.app_distribution_id
+}
+
 output "app_bucket_name" {
   value = module.thinkwork.app_bucket_name
 }

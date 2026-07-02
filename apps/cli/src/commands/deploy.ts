@@ -694,6 +694,26 @@ async function publishRuntimeConfig(
     );
   }
   printSuccess(`Runtime config published to s3://${bucket}/thinkwork-runtime-config.json`);
+
+  // CloudFront's SPA fallback (403/404 → index.html) may have cached an HTML
+  // response for this path before the object existed — invalidate so the
+  // app's boot fetch sees JSON immediately (HCI test).
+  const distributionId = await output("app_distribution_id");
+  if (distributionId) {
+    spawnSync(
+      "aws",
+      [
+        "cloudfront",
+        "create-invalidation",
+        "--distribution-id",
+        distributionId,
+        "--paths",
+        "/thinkwork-runtime-config.json",
+        "/index.html",
+      ],
+      { encoding: "utf8" },
+    );
+  }
 }
 
 /**
