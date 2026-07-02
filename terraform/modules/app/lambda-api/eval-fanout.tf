@@ -62,7 +62,10 @@ resource "aws_lambda_event_source_mapping" "eval_fanout" {
   function_response_types = ["ReportBatchItemFailures"]
 
   scaling_config {
-    maximum_concurrency = 20
+    # Keep in lockstep with EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS
+    # (handlers.tf): FIFO delivers one in-flight message per group, so
+    # effective concurrency = min(lanes, maximum_concurrency).
+    maximum_concurrency = 40
   }
 }
 

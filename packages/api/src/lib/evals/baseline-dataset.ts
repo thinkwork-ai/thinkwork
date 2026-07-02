@@ -101,7 +101,7 @@ export const BASELINE_DATASET_NAME = "Baseline Red Team";
  * container seed cache keys on this value so a deploy that bumps it
  * re-seeds even on warm Lambdas.
  */
-export const BASELINE_DATASET_VERSION = 3;
+export const BASELINE_DATASET_VERSION = 4;
 
 const VERSION_MARKER_FILE = "_baseline_version";
 
