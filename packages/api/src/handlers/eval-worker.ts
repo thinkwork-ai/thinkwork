@@ -317,6 +317,117 @@ export function isFinalSqsReceive(
   return count >= maxReceiveCount;
 }
 
+// ---------------------------------------------------------------------------
+// Throttle absorption (eval throughput fix)
+//
+// A Bedrock/Lambda throttle used to cost FIVE MINUTES of lane time: the
+// worker rethrew, the message redrove, and the FIFO lane sat blocked for
+// the queue's full 300s visibility timeout (FIFO delivers nothing else
+// from a group while one of its messages is in flight or invisible).
+// Under sustained throttling that collapsed a 20-lane fan-out to
+// near-serial throughput. Two-layer fix:
+//   1. Retry throttles IN-WORKER with short exponential backoff — most
+//      throttles clear in seconds, no redrive needed.
+//   2. When a redrive IS needed, shorten the message's remaining
+//      visibility to seconds (ChangeMessageVisibility) so the lane
+//      frees immediately instead of parking for 300s.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_EVAL_THROTTLE_RETRY_ATTEMPTS = 2;
+const DEFAULT_EVAL_THROTTLE_RETRY_BASE_MS = 8_000;
+
+/** Extra in-worker tries after the first throttle (0 disables). */
+export function evalThrottleRetryAttempts(
+  value = process.env.EVAL_THROTTLE_RETRY_ATTEMPTS,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_EVAL_THROTTLE_RETRY_ATTEMPTS;
+  }
+  return Math.floor(parsed);
+}
+
+export function evalThrottleRetryBaseMs(
+  value = process.env.EVAL_THROTTLE_RETRY_BASE_MS,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_EVAL_THROTTLE_RETRY_BASE_MS;
+  }
+  return Math.floor(parsed);
+}
+
+/** Backoff before in-worker retry N (1-based): base * 2^(N-1) + 0–25% jitter. */
+export function throttleBackoffMs(
+  attempt: number,
+  baseMs = evalThrottleRetryBaseMs(),
+  random: () => number = Math.random,
+): number {
+  const exponential = baseMs * 2 ** Math.max(0, attempt - 1);
+  return Math.round(exponential * (1 + random() * 0.25));
+}
+
+/**
+ * Remaining visibility (seconds) applied to a throttled message before
+ * its redrive: grows with the receive count so repeat offenders back off
+ * harder, jittered so a burst of throttled lanes doesn't thunder back in
+ * lockstep, and capped far below the queue's 300s default — the whole
+ * point is releasing the FIFO lane fast.
+ */
+export function throttleRedriveVisibilitySeconds(
+  receiveCount: number,
+  random: () => number = Math.random,
+): number {
+  const count = Number.isFinite(receiveCount) ? Math.max(1, receiveCount) : 1;
+  const base = Math.min(10 * 2 ** (count - 1), 60);
+  return Math.round(base + random() * 10);
+}
+
+/** SQS queue URL derived from the record's event source ARN (no env plumbing). */
+export function queueUrlFromEventSourceArn(arn: string): string | null {
+  const match = arn.match(/^arn:aws:sqs:([^:]+):(\d+):(.+)$/);
+  if (!match) return null;
+  return `https://sqs.${match[1]}.amazonaws.com/${match[2]}/${match[3]}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Run `fn` with in-worker throttle retries. `fn` receives whether this
+ * is the LAST in-worker attempt — the caller uses that to restore its
+ * record-instead-of-rethrow behavior (final SQS receive) only once
+ * in-worker retries are exhausted, so a throttle on the final receive
+ * still gets absorbed before the case records error/throttle.
+ */
+export async function withEvalThrottleRetries<T>(
+  fn: (lastAttempt: boolean) => Promise<T>,
+  opts: {
+    attempts?: number;
+    baseMs?: number;
+    sleeper?: (ms: number) => Promise<void>;
+    random?: () => number;
+  } = {},
+): Promise<T> {
+  const extraAttempts = opts.attempts ?? evalThrottleRetryAttempts();
+  const totalAttempts = Math.max(1, extraAttempts + 1);
+  const sleeper = opts.sleeper ?? sleep;
+  for (let attempt = 1; ; attempt++) {
+    const lastAttempt = attempt >= totalAttempts;
+    try {
+      return await fn(lastAttempt);
+    } catch (err) {
+      if (lastAttempt || !isRetryableEvalInfrastructureError(err)) throw err;
+      const delayMs = throttleBackoffMs(attempt, opts.baseMs, opts.random);
+      console.warn(
+        `[eval-worker] throttled; in-worker retry ${attempt}/${totalAttempts - 1} in ${delayMs}ms`,
+      );
+      await sleeper(delayMs);
+    }
+  }
+}
+
 function evaluatorCostUsd(evaluatorResults: unknown): number {
   if (!Array.isArray(evaluatorResults)) return 0;
   return evaluatorResults.reduce((total, result) => {
@@ -642,6 +753,27 @@ export async function loadReplayToolOverrides(
     toolName: row.tool_name,
     mode: row.mode === "block" ? "block" : "allow",
   }));
+}
+
+/**
+ * executeCase with in-worker throttle absorption. Until the LAST
+ * in-worker attempt, `finalReceive` is forced false so a throttle
+ * rethrows into the retry loop even on the message's final SQS receive —
+ * only the exhausted last attempt restores the caller's real
+ * finalReceive, letting executeCase record error/throttle instead of
+ * dead-lettering the case without a result row.
+ */
+async function executeCaseAbsorbingThrottles(
+  run: typeof evalRuns.$inferSelect,
+  tc: ExecutionCase,
+  message: EvalWorkerMessage,
+  options: { finalReceive: boolean },
+): Promise<CaseOutcome> {
+  return withEvalThrottleRetries((lastAttempt) =>
+    executeCase(run, tc, message, {
+      finalReceive: lastAttempt ? options.finalReceive : false,
+    }),
+  );
 }
 
 async function executeCase(
@@ -1046,10 +1178,20 @@ async function handleMessage(
       };
     } else {
       executionCase = pinned.executionCase;
-      outcome = await executeCase(run, executionCase, message, options);
+      outcome = await executeCaseAbsorbingThrottles(
+        run,
+        executionCase,
+        message,
+        options,
+      );
     }
   } else {
-    outcome = await executeCase(run, executionCase, message, options);
+    outcome = await executeCaseAbsorbingThrottles(
+      run,
+      executionCase,
+      message,
+      options,
+    );
   }
 
   const [freshRun] = await db
@@ -1112,6 +1254,30 @@ function recordsFromEvent(event: SQSEvent): SQSRecord[] {
   return Array.isArray(event.Records) ? event.Records : [];
 }
 
+/**
+ * Release a throttled message's FIFO lane fast: without this, a failed
+ * batch item stays invisible for the queue's full 300s visibility
+ * timeout and its whole lane is parked with it. Fail-soft — a visibility
+ * change failure just means the slow legacy redrive behavior.
+ */
+async function shortenThrottleRedriveVisibility(
+  record: SQSRecord,
+): Promise<void> {
+  const queueUrl = queueUrlFromEventSourceArn(record.eventSourceARN ?? "");
+  if (!queueUrl || !record.receiptHandle) return;
+  const receiveCount = Number(record.attributes?.ApproximateReceiveCount ?? 1);
+  const { SQSClient, ChangeMessageVisibilityCommand } =
+    await import("@aws-sdk/client-sqs");
+  const client = new SQSClient({});
+  await client.send(
+    new ChangeMessageVisibilityCommand({
+      QueueUrl: queueUrl,
+      ReceiptHandle: record.receiptHandle,
+      VisibilityTimeout: throttleRedriveVisibilitySeconds(receiveCount),
+    }),
+  );
+}
+
 export async function handler(event: SQSEvent): Promise<{
   batchItemFailures: Array<{ itemIdentifier: string }>;
 }> {
@@ -1124,6 +1290,18 @@ export async function handler(event: SQSEvent): Promise<{
       });
     } catch (err) {
       console.error("[eval-worker] infrastructure failure:", err);
+      if (isRetryableEvalInfrastructureError(err)) {
+        await shortenThrottleRedriveVisibility(record).catch(
+          (visibilityErr) => {
+            console.warn(
+              "[eval-worker] could not shorten redrive visibility (lane parks for the full timeout):",
+              visibilityErr instanceof Error
+                ? visibilityErr.message
+                : String(visibilityErr),
+            );
+          },
+        );
+      }
       batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }
