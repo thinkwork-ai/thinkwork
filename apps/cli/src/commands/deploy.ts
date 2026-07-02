@@ -48,7 +48,8 @@ import {
   seedLambdaArtifacts,
   upsertTfvarsValues,
 } from "../lib/release.js";
-import { applyMigrations } from "../lib/db-migrations.js";
+import { applyMigrations, type PgConnection } from "../lib/db-migrations.js";
+import { ensureOwnerTenant } from "../lib/owner-tenant.js";
 import { runWorkspaceBootstrap } from "./bootstrap.js";
 import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
@@ -888,6 +889,36 @@ async function applySchemaMigrations(
     return;
   }
 
+  const connection = await resolveStageDbConnection(cwd, identity, stage);
+
+  console.log("\n  Applying database schema (full migration history)...");
+  const summary = await applyMigrations({
+    drizzleDir,
+    stage,
+    region: identity.region,
+    connection,
+    log: (line) => console.log(`    ${line}`),
+  });
+  console.log(
+    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present` +
+      (summary.skippedFiles.length > 0
+        ? `, ${summary.skippedFiles.length} operator-only file(s) skipped`
+        : "") +
+      ".",
+  );
+}
+
+/**
+ * Direct-connection credentials for the stage database (clusters are
+ * publicly accessible by platform design — password auth, same posture
+ * `db:push` relies on). Shared by schema application and the owner-tenant
+ * pre-provision.
+ */
+async function resolveStageDbConnection(
+  cwd: string,
+  identity: { account: string; region: string },
+  stage: string,
+): Promise<PgConnection> {
   const endpoint = await terraformOutput(cwd, "db_cluster_endpoint");
   if (!endpoint) {
     throw new Error(
@@ -925,27 +956,13 @@ async function applySchemaMigrations(
     );
   }
 
-  console.log("\n  Applying database schema (full migration history)...");
-  const summary = await applyMigrations({
-    drizzleDir,
-    stage,
-    region: identity.region,
-    connection: {
-      host: endpoint,
-      port: 5432,
-      user: parsed.username,
-      password: parsed.password,
-      database: "thinkwork",
-    },
-    log: (line) => console.log(`    ${line}`),
-  });
-  console.log(
-    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present` +
-      (summary.skippedFiles.length > 0
-        ? `, ${summary.skippedFiles.length} operator-only file(s) skipped`
-        : "") +
-      ".",
-  );
+  return {
+    host: endpoint,
+    port: 5432,
+    user: parsed.username,
+    password: parsed.password,
+    database: "thinkwork",
+  };
 }
 
 /**
@@ -1198,6 +1215,40 @@ export async function runLocalTerraformDeploy(
     await applySchemaMigrations(cwd0, caller, stage);
   }
 
+  // ── Owner tenant + user: the first Cognito sign-in claims the instance
+  //    through bootstrapUser's pending_owner_email claim path, so deploy must
+  //    leave both a pending tenant and a Cognito user behind. Runs BEFORE the
+  //    workspace bootstrap so per-tenant workspace seeding sees the tenant. ──
+  let ownerUser: { email: string; tempPassword: string | null } | null = null;
+  if (scaffolded && caller) {
+    const operatorEmail = (
+      readTfvarsSignalsRaw(cwd0).platform_operator_emails ?? ""
+    )
+      .split(",")[0]
+      ?.trim();
+    if (operatorEmail) {
+      try {
+        const connection = await resolveStageDbConnection(cwd0, caller, stage);
+        const ownerTenant = await ensureOwnerTenant({
+          stage,
+          email: operatorEmail,
+          connection,
+        });
+        if (ownerTenant.created) {
+          printSuccess(
+            `Owner tenant "${ownerTenant.slug}" pre-provisioned — first sign-in by ${ownerTenant.email} claims it.`,
+          );
+        }
+      } catch (err) {
+        printWarning(
+          `Could not pre-provision the owner tenant: ${err instanceof Error ? err.message : String(err)}. ` +
+            `First sign-in will show "No tenant assigned" until this is resolved — rerun the deploy.`,
+        );
+      }
+    }
+    ownerUser = await ensureOwnerUser(cwd0, caller.region);
+  }
+
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to
   //    the stage's app bucket (packaged installs have no web build step). ──
   if (scaffolded && webAssetSource) {
@@ -1226,22 +1277,6 @@ export async function runLocalTerraformDeploy(
     await runWorkspaceBootstrap(cwd0, stage, caller.region);
   }
 
-  // ── Owner user: the first Cognito sign-in claims the instance. ──
-  let ownerUser: { email: string; tempPassword: string | null } | null = null;
-  if (scaffolded && caller) {
-    ownerUser = await ensureOwnerUser(cwd0, caller.region);
-    if (ownerUser?.tempPassword) {
-      console.log("");
-      printSuccess(`Owner user created: ${ownerUser.email}`);
-      console.log(
-        `    Temporary password (shown ONCE — Cognito requires a change at first sign-in):`,
-      );
-      console.log(`      ${ownerUser.tempPassword}`);
-    } else if (ownerUser) {
-      console.log(`  Owner user ${ownerUser.email} already exists.`);
-    }
-  }
-
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by
   //    terraform exiting 0. Blocking probe failures fail the deploy; pending
   //    external approvals (SES, DNS) are reported and tracked (R9/AE3). ──
@@ -1258,6 +1293,10 @@ export async function runLocalTerraformDeploy(
       ),
     });
     if (!verification.passed) {
+      // The temporary password must survive a failed verify — the user was
+      // already created, so a rerun won't mint a new one (HCI test: the
+      // password printed mid-scroll, verify failed, and it was gone).
+      printOwnerCredentials(ownerUser);
       printError(
         `Deploy applied but the stack failed verification (${verification.failures.length} probe(s)). ` +
           `Fix the items above and rerun \`thinkwork deploy -s ${stage}\` — reruns converge.`,
@@ -1276,6 +1315,27 @@ export async function runLocalTerraformDeploy(
   await runPostDeployProbe(stage);
 
   printSummary("deploy", stage, tiers, startTime);
+
+  // Owner-user credentials LAST: the one-time temporary password must be the
+  // final thing on screen, not buried in the scrollback.
+  printOwnerCredentials(ownerUser);
+}
+
+/** One-time owner credentials — printed at the very end of every deploy exit
+ * path (success AND failed verify) so they cannot be lost to scrollback. */
+function printOwnerCredentials(
+  ownerUser: { email: string; tempPassword: string | null } | null,
+): void {
+  if (ownerUser?.tempPassword) {
+    console.log("");
+    printSuccess(`Owner user created: ${ownerUser.email}`);
+    console.log(
+      `    Temporary password (shown ONCE — Cognito requires a change at first sign-in):`,
+    );
+    console.log(`      ${ownerUser.tempPassword}`);
+  } else if (ownerUser) {
+    console.log(`  Owner user ${ownerUser.email} already exists.`);
+  }
 }
 
 /**

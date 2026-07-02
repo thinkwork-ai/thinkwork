@@ -279,7 +279,7 @@ export interface SqlRunner {
  * CONCURRENTLY autocommit, dollar quoting, COMMIT-ing procedures. `init`
  * auto-installs it alongside the AWS CLI and Terraform.
  */
-function connectPsql(connection: PgConnection): Promise<SqlRunner> {
+export function connectPsql(connection: PgConnection): Promise<SqlRunner> {
   const url = `postgresql://${encodeURIComponent(connection.user)}:${encodeURIComponent(connection.password)}@${connection.host}:${connection.port}/${connection.database}?sslmode=prefer`;
   const tempDir = mkdtempSync(join(tmpdir(), "thinkwork-psql-"));
   let seq = 0;

@@ -9,6 +9,9 @@
  * mobile Settings consume this.
  *
  *   200 → { email, userId, tenantId, role, name }
+ *         (+ pendingClaim when the caller has no user row: true iff a
+ *          tenants row holds this email in pending_owner_email, i.e. a
+ *          Stripe- or deploy-pre-provisioned owner who may bootstrapUser)
  *   401 → unauthenticated
  *   403 → authenticated but no tenant resolved (pre-bootstrap state)
  *
@@ -22,13 +25,13 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
-const { users, tenantMembers } = schema;
+const { users, tenantMembers, tenants } = schema;
 
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -57,6 +60,17 @@ export async function handler(
     .limit(1);
 
   if (!userRow) {
+    // Pre-provisioned owner claim (Stripe checkout or `thinkwork deploy`):
+    // a tenants row carrying this email in pending_owner_email means the
+    // caller is the designated first owner and the web shell may safely
+    // call bootstrapUser — its claim path attaches ONLY to this row, so
+    // this does not reopen ADV-9's auto-provisioning hole.
+    const [pendingTenant] = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(sql`lower(${tenants.pending_owner_email})`, emailLower))
+      .limit(1);
+
     return json(
       {
         email: auth.email,
@@ -64,6 +78,7 @@ export async function handler(
         tenantId: null,
         role: null,
         name: null,
+        pendingClaim: Boolean(pendingTenant),
         note: "user_not_bootstrapped",
       },
       200,
