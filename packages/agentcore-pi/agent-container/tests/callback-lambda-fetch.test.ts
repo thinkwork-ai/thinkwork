@@ -91,6 +91,81 @@ describe("createLambdaCallbackFetch", () => {
     });
   });
 
+  it("invokes the manifest-log Lambda for capability manifest posts", async () => {
+    const invocations: RecordedInvoke[] = [];
+    const fallbackFetch = vi.fn();
+    const fetchImpl = createLambdaCallbackFetch({
+      fallbackFetch: fallbackFetch as unknown as typeof fetch,
+      lambdaClient: makeLambdaClient(invocations),
+      finalizeFunctionName: "finalize-fn",
+      activityFunctionName: "activity-fn",
+      manifestFunctionName: "thinkwork-dev-api-manifest-log",
+    });
+
+    const response = await fetchImpl(
+      "https://api.thinkwork.ai/api/runtime/manifests",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer manifest-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ session_id: "session-1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(fallbackFetch).not.toHaveBeenCalled();
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.input.FunctionName).toBe(
+      "thinkwork-dev-api-manifest-log",
+    );
+    expect(invocations[0]?.event).toMatchObject({
+      routeKey: "POST /api/runtime/manifests",
+      rawPath: "/api/runtime/manifests",
+      body: JSON.stringify({ session_id: "session-1" }),
+    });
+    expect(
+      (invocations[0]?.event.headers as Record<string, string>).authorization,
+    ).toBe("Bearer manifest-secret");
+    expect(
+      (invocations[0]?.event.requestContext as { http: { method: string } })
+        .http.method,
+    ).toBe("POST");
+    expect(invocations[0]?.event.pathParameters).toBeUndefined();
+  });
+
+  it("falls back to fetch for manifest posts when manifestFunctionName is empty", async () => {
+    const invocations: RecordedInvoke[] = [];
+    const fallbackResponse = new Response("ok", { status: 202 });
+    const fallbackFetch = vi.fn(async () => fallbackResponse);
+    const logger = vi.fn();
+    const fetchImpl = createLambdaCallbackFetch({
+      fallbackFetch: fallbackFetch as unknown as typeof fetch,
+      lambdaClient: makeLambdaClient(invocations),
+      finalizeFunctionName: "finalize-fn",
+      activityFunctionName: "activity-fn",
+      manifestFunctionName: "",
+      logger,
+    });
+
+    const response = await fetchImpl(
+      "https://api.thinkwork.ai/api/runtime/manifests",
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(202);
+    expect(fallbackFetch).toHaveBeenCalledOnce();
+    expect(invocations).toHaveLength(0);
+    expect(logger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "lambda_callback_fetch_missing_function_name",
+        target: "manifest",
+      }),
+    );
+  });
+
   it("falls back to fetch for unrelated URLs", async () => {
     const invocations: RecordedInvoke[] = [];
     const fallbackResponse = new Response("ok", { status: 200 });
