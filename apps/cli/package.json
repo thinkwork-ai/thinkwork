@@ -1,7 +1,7 @@
 {
   "name": "thinkwork-cli",
   "version": "0.12.13",
-  "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
+  "description": "Thinkwork CLI \u2014 deploy, manage, and interact with your Thinkwork stack",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -28,14 +28,14 @@
     "graphql": "^16.10.0",
     "jszip": "^3.10.1",
     "ora": "^9.3.0",
-    "pg": "^8.22.0"
+    "pg": "8.20.0"
   },
   "devDependencies": {
     "@graphql-codegen/cli": "^5.0.6",
     "@graphql-codegen/client-preset": "^4.8.2",
     "@thinkwork/admin-ops": "workspace:*",
     "@types/node": "^25.6.0",
-    "@types/pg": "^8.20.0",
+    "@types/pg": "8.20.0",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0",
