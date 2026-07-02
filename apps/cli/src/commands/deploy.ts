@@ -48,6 +48,7 @@ import {
   upsertTfvarsValues,
 } from "../lib/release.js";
 import { applyMigrations } from "../lib/db-migrations.js";
+import { runWorkspaceBootstrap } from "./bootstrap.js";
 import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
 import { confirm } from "../prompt.js";
@@ -982,6 +983,13 @@ export async function runLocalTerraformDeploy(
   //    the stage's app bucket (packaged installs have no web build step). ──
   if (scaffolded && webAssetSource) {
     await publishWebAssets(cwd0, webAssetSource);
+  }
+
+  // ── Workspace defaults (harness cycle-7): a fresh stack must pass the
+  //    workspace-seeding probe without a separate manual bootstrap step. ──
+  if (scaffolded && caller) {
+    console.log("\n  Seeding workspace defaults...");
+    await runWorkspaceBootstrap(cwd0, stage);
   }
 
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by

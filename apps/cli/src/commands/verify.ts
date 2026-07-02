@@ -164,8 +164,10 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
             Origin: string;
             Domain: string;
           }[];
+          // The end-user app bucket is named ...-computer (legacy naming);
+          // admin/app cover older stacks (harness cycle-7 ledger entry).
           const admin = dists.find((d) =>
-            /thinkwork-.+-(admin|app)/.test(d.Origin),
+            /thinkwork-.+-(admin|app|computer)/.test(d.Origin),
           );
           if (admin) url = `https://${admin.Domain}`;
         } catch {
@@ -227,10 +229,23 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
   checks.push({
     name: "Hindsight health",
     run: () => {
-      const running = awsText(
-        `ecs describe-services --cluster thinkwork-${ctx.stage}-cluster --services thinkwork-${ctx.stage}-hindsight --region ${ctx.region} --query "services[0].runningCount" --output text`,
+      const counts = awsText(
+        `ecs describe-services --cluster thinkwork-${ctx.stage}-cluster --services thinkwork-${ctx.stage}-hindsight --region ${ctx.region} --query "services[0].[runningCount,desiredCount]" --output text`,
       );
-      if (!running || running === "0") {
+      if (!counts) {
+        return { pass: true, detail: "Hindsight not enabled — skipped" };
+      }
+      const [running, desired] = counts.split(/\s+/);
+      // A provisioned service with zero running tasks is a FAILURE, not
+      // "not enabled" — cycle-7's stack sat at desired=1/running=0 (tasks
+      // could not reach CloudWatch) and the probe reported it as skipped.
+      if (running === "0" && desired !== "0") {
+        return {
+          pass: false,
+          detail: `Hindsight service desired=${desired} but running=0 — tasks are failing to start (check stopped-task reasons).`,
+        };
+      }
+      if (running === "0") {
         return { pass: true, detail: "Hindsight not enabled — skipped" };
       }
       const alb = awsText(

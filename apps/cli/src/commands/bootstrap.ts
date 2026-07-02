@@ -44,6 +44,46 @@ function runScript(scriptPath: string, args: string[]): Promise<number> {
   });
 }
 
+/**
+ * Seed workspace defaults for a stage (shared by the bootstrap command and
+ * the deploy tail — harness cycle-7: a fresh deploy must not require a
+ * separate manual bootstrap step to pass verification).
+ */
+export async function runWorkspaceBootstrap(
+  cwd: string,
+  stage: string,
+): Promise<void> {
+  const bucket = await getTerraformOutput(cwd, "bucket_name");
+  const dbEndpoint = await getTerraformOutput(cwd, "db_cluster_endpoint");
+  const secretArn = await getTerraformOutput(cwd, "db_secret_arn");
+  const { execSync } = await import("node:child_process");
+  const secretJson = execSync(
+    `aws secretsmanager get-secret-value --secret-id "${secretArn}" --query SecretString --output text`,
+    { encoding: "utf-8" },
+  ).trim();
+  const secret = JSON.parse(secretJson) as { password: string };
+  const databaseUrl = `postgresql://thinkwork_admin:${encodeURIComponent(secret.password)}@${dbEndpoint}:5432/thinkwork?sslmode=no-verify`;
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const terraformDir = resolveTerraformRoot();
+  const candidates = [
+    resolve(here, "scripts/bootstrap-workspace.sh"),
+    resolve(terraformDir, "scripts/bootstrap-workspace.sh"),
+    resolve(terraformDir, "..", "scripts/bootstrap-workspace.sh"),
+  ];
+  const scriptPath = candidates.find((c) => existsSync(c));
+  if (!scriptPath) {
+    throw new Error(
+      `bootstrap-workspace.sh not found (looked in the CLI bundle and ${terraformDir}). ` +
+        "Reinstall the CLI: npm install -g thinkwork-cli@latest",
+    );
+  }
+  const code = await runScript(scriptPath, [stage, bucket, databaseUrl]);
+  if (code !== 0) {
+    throw new Error(`Workspace bootstrap failed (exit ${code}).`);
+  }
+}
+
 export function registerBootstrapCommand(program: Command): void {
   program
     .command("bootstrap")
