@@ -2366,21 +2366,8 @@ export const ComputerKnowledgeBaseDetailQuery = gql`
 `;
 
 // ─── Customize page (apps/web Customize) ─────────────────────────────
-
-export const SkillCatalogQuery = gql`
-  query SkillCatalog {
-    skillCatalog {
-      id
-      skillId
-      displayName
-      description
-      category
-      icon
-      source
-      enabled
-    }
-  }
-`;
+// The Skills tab (SkillCatalogQuery + enable/disableSkill documents) was
+// removed in Composer plan U3 — skill wiring lives in Settings→Composer.
 
 export const WorkflowTemplateCatalogQuery = gql`
   query WorkflowTemplateCatalog {
@@ -2402,27 +2389,8 @@ export const CustomizeBindingsQuery = gql`
   query CustomizeBindings {
     customizeBindings {
       agentId
-      connectedSkillIds
       connectedWorkflowTemplateSlugs
     }
-  }
-`;
-
-export const EnableSkillMutation = gql`
-  mutation EnableSkill($input: EnableSkillInput!) {
-    enableSkill(input: $input) {
-      id
-      tenantId
-      agentId
-      skillId
-      enabled
-    }
-  }
-`;
-
-export const DisableSkillMutation = gql`
-  mutation DisableSkill($input: DisableSkillInput!) {
-    disableSkill(input: $input)
   }
 `;
 

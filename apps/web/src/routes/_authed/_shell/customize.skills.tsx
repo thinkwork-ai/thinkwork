@@ -1,37 +1,11 @@
-import { useCallback } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { CustomizeTabBody } from "@/components/customize/CustomizeTabBody";
-import { useSkillItems } from "@/components/customize/use-customize-data";
-import { useSkillMutation } from "@/components/customize/use-customize-mutations";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// The Customize→Skills tab was removed in Composer plan U3 (R10): skill
+// wiring now happens in Settings→Composer (/settings/capabilities). The
+// route survives only as a redirect so stale links land on the Customize
+// index instead of a 404.
 export const Route = createFileRoute("/_authed/_shell/customize/skills")({
-  component: SkillsTab,
+  beforeLoad: () => {
+    throw redirect({ to: "/customize", replace: true });
+  },
 });
-
-function SkillsTab() {
-  const { items, fetching, error } = useSkillItems();
-  const { toggle } = useSkillMutation();
-
-  const handleAction = useCallback(
-    (skillId: string, nextConnected: boolean) => {
-      void toggle(skillId, nextConnected);
-    },
-    [toggle],
-  );
-
-  return (
-    <CustomizeTabBody
-      activeTab="/customize/skills"
-      items={items}
-      onAction={handleAction}
-      searchPlaceholder="Search skills…"
-      emptyMessage={
-        error
-          ? `Couldn't load skills: ${error.message}`
-          : fetching
-            ? "Loading skills…"
-            : "No skills match your filters."
-      }
-    />
-  );
-}

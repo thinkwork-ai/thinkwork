@@ -121,8 +121,11 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: Bot,
     operatorOnly: true,
   },
+  // Composer (Composer plan U3): the capability-configuration home. The
+  // route path stays /settings/capabilities (KTD-6) — only the label,
+  // heading, and nav entry are renamed.
   {
-    label: "Capabilities",
+    label: "Composer",
     to: "/settings/capabilities",
     icon: ClipboardCheck,
     operatorOnly: true,
