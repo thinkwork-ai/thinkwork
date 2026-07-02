@@ -2212,6 +2212,7 @@ export async function handleInvocation(
       lambdaClient: deps.lambdaClientFactory(env.awsRegion),
       finalizeFunctionName: env.chatAgentFinalizeFnName || "",
       activityFunctionName: env.chatAgentActivityFnName || "",
+      manifestFunctionName: env.manifestLogFnName || "",
       logger: callbackLogger,
     });
   const workspaceBucket =

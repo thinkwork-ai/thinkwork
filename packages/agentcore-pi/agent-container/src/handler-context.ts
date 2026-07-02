@@ -158,6 +158,14 @@ export interface RuntimeEnvSnapshot {
    */
   chatAgentFinalizeFnName?: string;
   chatAgentActivityFnName?: string;
+  /**
+   * Name of the API's `manifest-log` Lambda
+   * (`thinkwork-${stage}-api-manifest-log`). The per-turn capability
+   * manifest POST routes through the same direct Lambda invoke path as the
+   * chat callbacks — the runtime has no HTTP egress to the public API URL.
+   * Empty string falls back to HTTP fetch for local/debug invocations.
+   */
+  manifestLogFnName?: string;
   dbClusterArn: string;
   dbSecretArn: string;
   dbName: string;
@@ -198,6 +206,7 @@ export function snapshotRuntimeEnv(
     memoryRetainFnName: env.MEMORY_RETAIN_FN_NAME || "",
     chatAgentFinalizeFnName: env.CHAT_AGENT_FINALIZE_FN_NAME || "",
     chatAgentActivityFnName: env.CHAT_AGENT_ACTIVITY_FN_NAME || "",
+    manifestLogFnName: env.MANIFEST_LOG_FUNCTION_NAME || "",
     dbClusterArn: env.DB_CLUSTER_ARN || "",
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",
@@ -551,10 +560,7 @@ export function logStructured(
 }
 
 export type AgentCorePhaseStatus =
-  | "started"
-  | "completed"
-  | "failed"
-  | "skipped";
+  "started" | "completed" | "failed" | "skipped";
 
 export interface AgentCorePhaseLogFields {
   phase: string;
