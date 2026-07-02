@@ -238,6 +238,9 @@ export async function applyMigrations(options: {
       skipped: 0,
       skippedFiles: [],
     };
+
+    // Resolve each file to runnable SQL (or a skip) up front.
+    const pending: { file: string; hash: string; sql: string }[] = [];
     for (const file of files) {
       const raw = readFileSync(join(options.drizzleDir, file), "utf8");
       const hash = migrationHash(raw);
@@ -271,23 +274,47 @@ export async function applyMigrations(options: {
         );
         continue;
       }
+      pending.push({ file, hash, sql });
+    }
 
-      log(`applying ${file}`);
-      try {
-        // One query() call per file: node-postgres' simple protocol runs the
-        // statements sequentially with the file's own BEGIN/COMMIT honored —
-        // the same semantics as `psql -f`, which these files were written for.
-        await runner.query(sql);
-      } catch (err) {
-        throw new Error(
-          `Migration ${file} failed (rerun \`thinkwork deploy\` to resume from this point): ` +
-            `${err instanceof Error ? err.message : String(err)}`,
+    // Deferred-retry rounds: numeric file order is NOT reliable application
+    // order — recent files sometimes take low numbers (0021_crm_work_links
+    // depends on spaces from 0105; harness cycle-7 ledger entry). Apply what
+    // succeeds, requeue what fails, and loop while progress is being made:
+    // dependency order emerges by trial. Safe because each file runs in the
+    // simple protocol's implicit transaction — a failed file rolls back.
+    const errors = new Map<string, string>();
+    while (pending.length > 0) {
+      let progressed = false;
+      for (let i = 0; i < pending.length; ) {
+        const { file, hash, sql } = pending[i];
+        try {
+          await runner.query(sql);
+        } catch (err) {
+          errors.set(file, err instanceof Error ? err.message : String(err));
+          i += 1;
+          continue;
+        }
+        await runner.query(
+          `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES (${sqlLiteral(hash)}, ${Date.now()});`,
         );
+        log(`applying ${file}`);
+        summary.applied.push(file.replace(/\.sql$/, ""));
+        errors.delete(file);
+        pending.splice(i, 1);
+        progressed = true;
       }
-      await runner.query(
-        `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES (${sqlLiteral(hash)}, ${Date.now()});`,
+      if (!progressed) break;
+    }
+    if (pending.length > 0) {
+      const detail = pending
+        .slice(0, 3)
+        .map(({ file }) => `${file}: ${errors.get(file) ?? "unknown error"}`)
+        .join("\n    ");
+      throw new Error(
+        `${pending.length} migration(s) failed after dependency-order retries ` +
+          `(rerun \`thinkwork deploy\` to resume from this point):\n    ${detail}`,
       );
-      summary.applied.push(file.replace(/\.sql$/, ""));
     }
     return summary;
   } finally {

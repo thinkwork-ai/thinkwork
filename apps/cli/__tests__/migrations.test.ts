@@ -234,7 +234,44 @@ describe("applyMigrations (direct pg)", () => {
         },
         connect: async () => runner,
       }),
-    ).rejects.toThrow(/0000_a.sql failed \(rerun/);
+    ).rejects.toThrow(/failed after dependency-order retries/);
+  });
+});
+
+describe("dependency-order retries", () => {
+  it("applies out-of-order files once their dependencies land (0021 vs 0105)", async () => {
+    const dir = makeDrizzleDir({
+      "0021_crm_work_links.sql": "ALTER TABLE spaces ADD COLUMN crm text;",
+      "0105_spaces_domain.sql": "CREATE TABLE spaces (id int);",
+    });
+    const created = new Set<string>();
+    const queries: string[] = [];
+    const runner: SqlRunner = {
+      async query(sql: string) {
+        queries.push(sql);
+        if (sql.includes("SELECT hash FROM")) return { rows: [] };
+        if (sql.includes("ALTER TABLE spaces") && !created.has("spaces")) {
+          throw new Error('relation "public.spaces" does not exist');
+        }
+        if (sql.includes("CREATE TABLE spaces")) created.add("spaces");
+        return { rows: [] };
+      },
+      async end() {},
+    };
+    const summary = await applyMigrations({
+      drizzleDir: dir,
+      stage: "hp1",
+      region: "us-east-1",
+      connection: {
+        host: "h",
+        port: 5432,
+        user: "u",
+        password: "p",
+        database: "thinkwork",
+      },
+      connect: async () => runner,
+    });
+    expect(summary.applied).toEqual(["0105_spaces_domain", "0021_crm_work_links"]);
   });
 });
 
