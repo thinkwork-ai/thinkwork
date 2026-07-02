@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eval Execution Tiers — Requirements</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1d2129; --text: #e6e9ef;
+    --muted: #9aa3b2; --accent: #4ade80; --accent2: #60a5fa; --warn: #fbbf24;
+    --tier0: #a78bfa; --tier1: #60a5fa; --tier2: #f87171; --border: #2a2f3a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f7f8fa; --panel:#ffffff; --panel2:#f1f3f7; --text:#1a2233;
+      --muted:#5b6577; --border:#dde2ea; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font: 16px/1.6 -apple-system, "SF Pro Text", Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 48px 28px 96px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin-bottom: 32px; }
+  .meta { display:flex; gap:10px; flex-wrap:wrap; margin: 18px 0 36px; }
+  .chip { background:var(--panel2); border:1px solid var(--border); border-radius:999px;
+    padding: 3px 12px; font-size:.8rem; color:var(--muted); }
+  .chip b { color: var(--text); font-weight:600; }
+  h2 { font-size:1.25rem; margin: 44px 0 12px; padding-bottom:8px;
+    border-bottom:1px solid var(--border); letter-spacing:-0.01em; }
+  h3 { font-size:1rem; margin: 24px 0 8px; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  code { background:var(--panel2); border:1px solid var(--border); border-radius:5px;
+    padding:1px 6px; font: 0.85em ui-monospace, "SF Mono", Menlo, monospace; }
+  table { width:100%; border-collapse: collapse; margin: 16px 0; font-size:.92rem; }
+  th, td { text-align:left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight:600; font-size:.8rem; text-transform:uppercase;
+    letter-spacing:.04em; }
+  tr:last-child td { border-bottom:none; }
+  .card { background: var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding: 20px 24px; margin: 16px 0; }
+  .tiers { display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin:20px 0; }
+  @media (max-width: 760px) { .tiers { grid-template-columns:1fr; } }
+  .tier { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:18px 20px; border-top:3px solid var(--border); }
+  .tier.t0 { border-top-color: var(--tier0); }
+  .tier.t1 { border-top-color: var(--tier1); }
+  .tier.t2 { border-top-color: var(--tier2); }
+  .tier h3 { margin: 0 0 2px; }
+  .tier .tag { font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; }
+  .t0 .tag { color: var(--tier0); } .t1 .tag { color: var(--tier1); } .t2 .tag { color: var(--tier2); }
+  .tier .stats { font-size:.85rem; color:var(--muted); margin-top:10px; }
+  .req { display:flex; gap:12px; margin: 10px 0; }
+  .req .id { flex:0 0 42px; font-weight:700; color:var(--accent2); font-size:.9rem; padding-top:2px; }
+  .good { color: var(--accent); font-weight:600; }
+  .warnc { color: var(--warn); font-weight:600; }
+  .q { background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--accent2);
+    border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 14px 0; }
+  .q b.qid { color: var(--accent2); }
+  .rec { display:inline-block; margin-top:6px; font-size:.85rem; color:var(--accent); }
+  .footer { margin-top:56px; color:var(--muted); font-size:.85rem; border-top:1px solid var(--border);
+    padding-top:16px; }
+  .big { font-size:1.6rem; font-weight:700; letter-spacing:-0.02em; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Eval Execution Tiers</h1>
+  <div class="sub">Requirements — phase 2 of the Evaluation Framework (THINK-107)</div>
+  <div class="meta">
+    <span class="chip"><b>type</b> feat</span>
+    <span class="chip"><b>date</b> 2026-07-02</span>
+    <span class="chip"><b>readiness</b> requirements-only</span>
+    <span class="chip"><b>contract</b> ce-unified-plan/v1</span>
+    <span class="chip"><b>authority</b> Eric Odom</span>
+  </div>
+
+  <div class="card">
+    <b>Objective.</b> Make evaluation volume scale by matching each test case to the
+    <i>cheapest execution that can honestly answer it</i> — a unit / component / integration
+    tier split — so “thousands of evals against multiple profiles” stops meaning thousands
+    of full agent turns.
+    <p class="muted" style="margin-bottom:0">Trigger: the 2026-07-02 dev benchmarks. Even after the
+    throughput fixes (#3191, #3195), a 189-case full-agent baseline run costs ~23 min and ~$1.20
+    per profile, bounded by Bedrock quota. Workable for one baseline — not for thousands.</p>
+  </div>
+
+  <h2>Measured cost baseline <span class="muted" style="font-weight:400;font-size:.85rem">(dev, 2026-07-02 — runs e4276b9d · 605f3d73 · 7998dc7f)</span></h2>
+  <table>
+    <tr><th>Execution shape</th><th>Latency p50</th><th>$/case</th><th>189 × 1 profile</th><th>189 × 4 profiles × 3 trials</th></tr>
+    <tr><td>Full agent turn <span class="muted">(today's only tier)</span></td><td>~7.5s</td><td>~$0.006</td><td>~23 min / $1.20</td><td class="warnc">~9+ hours / ~$14</td></tr>
+    <tr><td>Bare model call <span class="muted">(projected)</span></td><td>~1–2s</td><td>~$0.001–2</td><td>~3–4 min / $0.30</td><td class="good">~45 min / ~$3.50</td></tr>
+    <tr><td>Deterministic over stored output <span class="muted">(projected)</span></td><td>~ms</td><td>~$0</td><td>seconds</td><td class="good">seconds</td></tr>
+  </table>
+  <p class="muted">The judge isn't the problem — evaluator cost is a small fraction. The problem is that
+  <b>every case pays for a full AgentCore turn</b> (workspace bootstrap, skill materialization, MCP wiring,
+  memory plumbing) whether or not the behavior under test needs any of it.</p>
+
+  <h2>The tier model</h2>
+  <div class="tiers">
+    <div class="tier t0">
+      <div class="tag">Tier 0 · unit</div>
+      <h3><code>static</code></h3>
+      Score an <b>already-recorded output</b>. Flagged-thread snapshots; regression re-scoring after
+      rubric edits. Zero model invokes on the response side.
+      <div class="stats">~ms · ~$0 · no Bedrock dependency</div>
+    </div>
+    <div class="tier t1">
+      <div class="tag">Tier 1 · component</div>
+      <h3><code>model</code></h3>
+      <b>One stateless Converse call</b> — profile's model + composed prompt + case query. No workspace,
+      no tools, no MCP, no memory. Batched N-per-worker: “a single agent running a bunch of tests.”
+      Fits most refusal-shaped baseline cases.
+      <div class="stats">~1–2s · ~$0.001–2/case · batched</div>
+    </div>
+    <div class="tier t2">
+      <div class="tag">Tier 2 · integration</div>
+      <h3><code>agent</code></h3>
+      Today's <b>full Pi turn via AgentCore</b>. Required when behavior depends on tools, skills,
+      workspace state, MCP boundaries, or multi-message replay. Skill evals and thread replays stay here.
+      <div class="stats">~7.5s · ~$0.006/case · ground truth</div>
+    </div>
+  </div>
+  <p class="muted">Scoring is orthogonal and unchanged: deterministic assertions always run; llm-rubric judges
+  run per the case; trials/unstable apply regardless of tier. Profiles, pinning, telemetry, comparisons — all
+  phase-1 substrate carries over untouched.</p>
+
+  <h2>Requirements</h2>
+  <div class="req"><div class="id">R1</div><div>Case schema (seed packs, dataset files, Studio) gains <code>execution_tier: static | model | agent</code>. <b>Missing = <code>agent</code></b> — nothing silently gets cheaper.</div></div>
+  <div class="req"><div class="id">R2</div><div>The runner fans out by tier: tier-2 keeps per-case messages; tier-1 batches N-per-message into the same FIFO/profile machinery; tier-0 scores inline or in one batch.</div></div>
+  <div class="req"><div class="id">R3</div><div>Tier-1 uses the pinned profile's model and records identical per-case telemetry (tokens, cost, duration) — the comparison view stays honest with no changes.</div></div>
+  <div class="req"><div class="id">R4</div><div>One-time classification pass over the 189 baseline cases → adjudication PR (same channel as the quality_state audit). Expected: ~80% tier-1, ~20% tier-2.</div></div>
+  <div class="req"><div class="id">R5</div><div><b>Tier is visible</b>: result rows carry the executed tier; run detail badges it; cross-tier comparisons flag non-comparable (extends the KTD6 gate).</div></div>
+  <div class="req"><div class="id">R6</div><div><b>Honesty guard</b>: cases asserting on tool calls, guard events, or workspace projections reject cheap tiers at authoring/adjudication — a tier-1 execution can't produce that evidence.</div></div>
+  <div class="req"><div class="id">R7</div><div>Mixed-tier runs finalize correctly: expected-row accounting, trials, and the reconciler treat tier as an execution detail of a row, not a new lifecycle.</div></div>
+
+  <h2>Acceptance examples</h2>
+  <div class="grid2">
+    <div class="card"><b>AE1</b> — Post-classification baseline run: tier-1 majority executes in minutes; run detail shows tier badges; pass-rate math unchanged.</div>
+    <div class="card"><b>AE2</b> — A case with a <code>workspace-projection-*</code> assertion cannot be saved as tier <code>model</code>; authoring surfaces the conflict.</div>
+    <div class="card"><b>AE3</b> — Comparing runs whose tier map changed between them renders a non-comparable flag, like dataset-version drift.</div>
+    <div class="card"><b>AE4</b> — A flagged-thread case re-scored as tier-0 after a rubric edit yields a new result row with zero agent cost and the recorded output as evidence.</div>
+    <div class="card"><b>AE5</b> — 4 profiles × baseline × trials 3 completes <b>within an hour</b> on dev at current quotas (vs ~9h today).</div>
+  </div>
+
+  <h2>Success criteria</h2>
+  <ol>
+    <li>Baseline per-profile wall clock: ~23 min → <b class="good">single digits</b>, no quota change.</li>
+    <li>Cost per baseline run drops <b class="good">≥ 60%</b>.</li>
+    <li><b>Zero honesty regressions</b>: no case scores under a tier that can't produce its required evidence; tier visible everywhere verdicts are.</li>
+  </ol>
+
+  <h2>Open questions — need Eric's call before planning</h2>
+  <div class="q"><b class="qid">Q1 · Tier-1 system prompt.</b> Case's own prompt, the tenant's composed agent prompt, or a neutral harness prompt?
+    <br><span class="rec">▸ Recommend: composed prompt captured once per run (pinned like the profile snapshot) — representative behavior, one bootstrap per run instead of 189.</span></div>
+  <div class="q"><b class="qid">Q2 · Where does tier live?</b> On the case (curated, adjudicated) vs on the run vs both.
+    <br><span class="rec">▸ Recommend: on the case + a run-level “force full-agent” override — nightly runs tier-mixed and cheap, weekly all-agent audit catches drift the cheap tier misses.</span></div>
+  <div class="q"><b class="qid">Q3 · Batch failure isolation.</b> N cases per tier-1 message — one case's throttle/timeout must not fail the batch (per-case try/catch, partial results written). What's the right N?</div>
+  <div class="q"><b class="qid">Q4 · Tier-0 storage.</b> Likely none needed — flagged payloads already persist; the worker needs a “score this stored output” path, not new capture.</div>
+
+  <div class="footer">
+    Handoff: on confirmation, <code>ce-plan</code> enriches this artifact in place to implementation-ready.
+    Prior art: the ScoringEngine seam (<code>packages/evals-core/src/engine.ts</code>), runner batching,
+    the quality_state adjudication channel, and the KTD6 comparability gate this extends.<br>
+    Markdown source: <code>docs/plans/2026-07-02-001-feat-eval-execution-tiers-plan.md</code>
+  </div>
+</div>
+</body>
+</html>

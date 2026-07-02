@@ -359,6 +359,28 @@ export function evalCaseQualityState(core: {
 }
 
 /**
+ * HOW a case's response is produced (Eval Execution Tiers v1):
+ * 'agent' = full Pi turn via AgentCore (workspace, tools, MCP);
+ * 'model' = one stateless Bedrock Converse call with the run's pinned
+ * composed prompt. Missing = 'agent' — nothing silently gets cheaper.
+ * Scoring is tier-agnostic; the tier changes only the invoke.
+ */
+export type EvalCaseExecutionTier = "agent" | "model";
+
+export function isEvalCaseExecutionTier(
+  value: unknown,
+): value is EvalCaseExecutionTier {
+  return value === "agent" || value === "model";
+}
+
+/** Effective execution tier of a case file (missing field = agent). */
+export function evalCaseExecutionTier(core: {
+  execution_tier?: EvalCaseExecutionTier;
+}): EvalCaseExecutionTier {
+  return core.execution_tier ?? "agent";
+}
+
+/**
  * One-way ordering for seed-pack propagation (KTD8): a transition only
  * propagates when the canonical rank is HIGHER — never retired → active,
  * never retired → needs-revision.
@@ -399,6 +421,11 @@ export interface EvalDatasetCaseCore {
    */
   quality_state?: EvalCaseQualityState;
   rewritten_from?: string;
+  /**
+   * Execution tier (Eval Execution Tiers v1) — preserved on round-trip
+   * only when present (missing = agent).
+   */
+  execution_tier?: EvalCaseExecutionTier;
 }
 
 export interface EvalDatasetCaseEngines {
@@ -503,6 +530,12 @@ export function parseEvalDatasetCase(content: string): ParsedEvalDatasetCase {
     rest.rewritten_from.length > 0
   ) {
     core.rewritten_from = rest.rewritten_from;
+  }
+
+  // Execution tier (Eval Execution Tiers v1) — preserved only when
+  // present; unrecognized values drop to the safe default (agent).
+  if (isEvalCaseExecutionTier(rest.execution_tier)) {
+    core.execution_tier = rest.execution_tier;
   }
 
   return {

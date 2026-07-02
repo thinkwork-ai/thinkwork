@@ -353,6 +353,13 @@ export const evalResults = pgTable(
     // existing convention of app-level identity on this table. Legacy
     // single-trial rows carry 0 via the column default.
     trial_index: integer("trial_index").notNull().default(0),
+    // execution_tier: HOW the response was produced (Eval Execution Tiers
+    // v1): 'agent' = full Pi turn via AgentCore (workspace, tools, MCP);
+    // 'model' = one stateless Bedrock Converse call with the run's pinned
+    // composed prompt. An execution detail of the row, not a lifecycle —
+    // scoring/trials/verdicts are tier-agnostic. Default 'agent' so
+    // nothing silently got cheaper. Hand-rolled migration 0200.
+    execution_tier: text("execution_tier").notNull().default("agent"),
     // score: 0.0–1.0 aggregated across evaluators; null if no scorer ran
     score: numeric("score", { precision: 5, scale: 4 }),
     duration_ms: integer("duration_ms"),

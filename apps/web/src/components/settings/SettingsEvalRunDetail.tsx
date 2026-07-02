@@ -106,6 +106,10 @@ interface EvalResultRow {
   // Which trial of the case this row is (Eval Profiles U4); 0 on legacy
   // single-trial rows.
   trialIndex: number;
+  // Which tier actually executed (Eval Execution Tiers v1): 'model' =
+  // stateless call against the run's pinned composed prompt; 'agent' =
+  // full Pi turn. Historical rows predate the column ('agent').
+  executionTier: string;
   score: number | null;
   durationMs: number | null;
   agentSessionId: string | null;
@@ -342,6 +346,15 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     cell: ({ row }) => (
       <div className="flex items-center gap-1">
         {statusBadge(row.original.effectiveStatus ?? row.original.status)}
+        {row.original.executionTier === "model" && (
+          <Badge
+            variant="outline"
+            className="text-[10px] text-muted-foreground"
+            title="Executed as one stateless model call against the run's pinned composed prompt — no tools, no workspace."
+          >
+            model call
+          </Badge>
+        )}
         {row.original.overrideStatus && (
           <Badge
             variant="outline"
