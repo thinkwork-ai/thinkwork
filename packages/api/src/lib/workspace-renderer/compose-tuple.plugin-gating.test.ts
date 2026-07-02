@@ -235,6 +235,52 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     ]);
   });
 
+  it("read-only compose exposes the gated CONTEXT.md byte-identical to the persisting write (Composer U1)", async () => {
+    const gate = gateFor({ "install-lastmile": true });
+
+    const persistingStore = seededStore();
+    await render(persistingStore, "user-other", gate);
+    const persistedContext = persistingStore.puts.find(
+      (put) => put.key === `${THREAD_PREFIX}CONTEXT.md`,
+    );
+    const persistedAgentsMd = persistingStore.puts.find(
+      (put) => put.key === `${THREAD_PREFIX}AGENTS.md`,
+    );
+    expect(persistedContext).toBeDefined();
+
+    const readOnlyStore = seededStore();
+    const readOnly = await renderWorkspaceTuple(
+      {
+        tenantId: TENANT,
+        agentId: "agent-1",
+        spaceId: "default-space",
+        threadId: "thread-1",
+        userId: "user-other",
+      },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(),
+        objectStore: readOnlyStore,
+        pluginGateResolver: gate,
+        now: () => new Date("2026-06-12T10:00:00.000Z"),
+        persist: false,
+        includeGeneratedContents: true,
+      },
+    );
+
+    // Purity: not a single put — the gated CONTEXT.md exists only in memory.
+    expect(readOnlyStore.puts).toEqual([]);
+    const generatedContext = readOnly.generatedFiles?.find(
+      (file) => file.path === "CONTEXT.md",
+    );
+    expect(generatedContext?.content).toBe(persistedContext?.content);
+    expect(generatedContext?.content).not.toContain("lastmile--crm-basics");
+    const generatedAgentsMd = readOnly.generatedFiles?.find(
+      (file) => file.path === "AGENTS.md",
+    );
+    expect(generatedAgentsMd?.content).toBe(persistedAgentsMd?.content);
+  });
+
   it("NO resolvable requester excludes ALL plugin skill folders (fail closed)", async () => {
     const store = seededStore();
     const result = await render(

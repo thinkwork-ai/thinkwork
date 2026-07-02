@@ -91,6 +91,79 @@ extend type Query {
   ): CapabilityInspection!
 }
 
+# ── Workspace preview read surface (Composer plan U1, KTD-3) ────────────────
+#
+# Two operator-gated queries expose the workspace a selection tuple renders —
+# computed through `renderWorkspaceTuple` with `persist: false`, so the view
+# is byte-identical to what a real turn renders without writing a byte to S3.
+# The tuple carries no Agent Profile dimension: the rendered workspace is
+# profile-invariant (the Profile chip scopes the controls pane only, R4).
+# Tree and per-file content are separate queries to bound payload size for
+# large workspaces.
+
+type WorkspacePreviewEntry {
+  # Path inside the rendered workspace as the runtime mounts it
+  # (e.g. "AGENTS.md", "skills/<slug>/SKILL.md", "Spaces/<slug>/CONTEXT.md",
+  # "User/USER.md").
+  path: String!
+  # agent | space | user | thread_goal | thread_notes — the owning layer.
+  # With `generated`, determines the jump-to-cause surface client-side
+  # (KTD-5): skill folders → attach row, Spaces/<slug>/ → space source
+  # editor, User/ → user detail, generated → the producing layer's template.
+  owner: String!
+  # True for render-generated files (AGENTS.md, gated CONTEXT.md): their
+  # content exists only in the compose result, never at a source key.
+  generated: Boolean!
+  size: Int
+}
+
+type WorkspacePreview {
+  # ok | invalid_selection | resolution_fault
+  state: String!
+  stateDetail: String
+  # Echo of the resolved selection (agentId/spaceId are filled in when
+  # defaulted).
+  agentId: ID
+  spaceId: ID
+  perspectiveUserId: ID
+  # True when no perspective user was selected: the render mirrors a real
+  # no-invoker (scheduled/wakeup) turn — private-Space access via the
+  # space-trigger service identity, plugin folders fail closed.
+  noUserBaseline: Boolean!
+  files: [WorkspacePreviewEntry!]
+}
+
+type WorkspacePreviewFilePayload {
+  # ok | invalid_selection | resolution_fault | not_found
+  state: String!
+  stateDetail: String
+  file: WorkspacePreviewEntry
+  content: String
+}
+
+extend type Query {
+  workspacePreview(
+    tenantId: ID!
+    # Defaults to the tenant's platform agent when omitted.
+    agentId: ID
+    # Defaults to the agent's default Space (runtime_config.defaultSpaceId)
+    # when omitted — the same Space a spaceless turn renders in.
+    spaceId: ID
+    perspectiveUserId: ID
+  ): WorkspacePreview!
+  workspacePreviewFile(
+    tenantId: ID!
+    agentId: ID
+    spaceId: ID
+    perspectiveUserId: ID
+    # RELATIVE rendered-workspace path from the preview tree. The S3 key is
+    # re-derived server-side from the resolved tuple; a client-supplied
+    # sourceKey is never accepted, and a path resolving outside the tuple's
+    # own tenant prefixes is rejected.
+    path: String!
+  ): WorkspacePreviewFilePayload!
+}
+
 # ── Grant/detach mutations (capability-mapping plan U7, KTD-5) ─────────────
 #
 # Every Phase B assignment action is a documented, matrix-conformant GraphQL

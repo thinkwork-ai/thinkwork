@@ -81,12 +81,7 @@ export interface WorkspaceTupleRepository {
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
 export type WorkspaceHydrateOwner =
-  | "agent"
-  | "space"
-  | "user"
-  | "thread_notes"
-  | "thread_goal"
-  | "system";
+  "agent" | "space" | "user" | "thread_notes" | "thread_goal" | "system";
 
 export interface WorkspaceHydrateSource {
   owner: Exclude<WorkspaceHydrateOwner, "system">;
@@ -154,12 +149,27 @@ export interface WorkspaceAgentProfileRoutingEntry {
   routingGuidance: string | null;
 }
 
+export interface RenderedWorkspaceGeneratedFile {
+  path: string;
+  owner: Exclude<WorkspaceHydrateOwner, "system">;
+  content: string;
+}
+
 export interface RenderedWorkspaceTuple {
   renderedPrefix: string;
   cacheStatus: WorkspaceRenderCacheStatus;
   sourcePrefixes: string[];
   writtenFiles: string[];
   hydrateManifest: WorkspaceHydrateManifest;
+  /**
+   * Generated-file contents (AGENTS.md, gated CONTEXT.md), present only when
+   * `RenderWorkspaceTupleDeps.includeGeneratedContents` opts in (Composer
+   * plan U1, KTD-3). Under `persist: false` nothing exists at the manifest's
+   * rendered keys, so the in-memory compose result is the only place
+   * generated content can be served from. Populated on both the cache-hit
+   * and cache-miss return paths.
+   */
+  generatedFiles?: RenderedWorkspaceGeneratedFile[];
   activeSpace: {
     id: string;
     slug: string;

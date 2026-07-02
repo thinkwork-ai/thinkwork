@@ -681,6 +681,80 @@ describe("renderWorkspaceTuple", () => {
     expect(store.puts.length).toBe(putsAfterPrime);
   });
 
+  it("exposes generated-file contents only when opted in, byte-identical to the persisting write (Composer U1)", async () => {
+    const input = {
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      spaceId: "space-1",
+    };
+    const deps = (store: FakeStore) => ({
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    // Default off: runtime render results stay lean.
+    const defaultStore = new FakeStore(seedObjects());
+    const withoutFlag = await renderWorkspaceTuple(input, {
+      ...deps(defaultStore),
+      persist: false,
+    });
+    expect(withoutFlag.generatedFiles).toBeUndefined();
+
+    // Opt-in read-only render: still zero writes, contents present.
+    const readOnlyStore = new FakeStore(seedObjects());
+    const readOnly = await renderWorkspaceTuple(input, {
+      ...deps(readOnlyStore),
+      persist: false,
+      includeGeneratedContents: true,
+    });
+    expect(readOnlyStore.puts).toEqual([]);
+    expect(readOnly.generatedFiles?.map((file) => file.path)).toEqual([
+      "AGENTS.md",
+    ]);
+    expect(readOnly.generatedFiles?.[0]?.owner).toBe("agent");
+
+    // Byte parity: the exposed content is exactly what a persisting render
+    // writes at the rendered AGENTS.md key for the same tuple.
+    const persistingStore = new FakeStore(seedObjects());
+    await renderWorkspaceTuple(input, deps(persistingStore));
+    const persistedAgentsMd = persistingStore.puts.find((put) =>
+      put.key.endsWith("/AGENTS.md"),
+    );
+    expect(readOnly.generatedFiles?.[0]?.content).toBe(
+      persistedAgentsMd?.content,
+    );
+  });
+
+  it("exposes generated-file contents on the cache-hit path too (Composer U1)", async () => {
+    const store = new FakeStore(seedObjects());
+    const deps = {
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    };
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps,
+    );
+    const primedAgentsMd = store.puts.find((put) =>
+      put.key.endsWith("/AGENTS.md"),
+    )?.content;
+    const putsAfterPrime = store.puts.length;
+
+    const hit = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      { ...deps, persist: false, includeGeneratedContents: true },
+    );
+    expect(hit.cacheStatus).toBe("hit");
+    expect(store.puts.length).toBe(putsAfterPrime);
+    expect(hit.generatedFiles).toEqual([
+      { path: "AGENTS.md", owner: "agent", content: primedAgentsMd },
+    ]);
+  });
+
   it("writes a write-once content-addressed AGENTS.md history copy recoverable by sha", async () => {
     const store = new FakeStore(seedObjects());
     const result = await renderWorkspaceTuple(
