@@ -11,8 +11,10 @@
  *
  * The cluster is publicly accessible by platform design (password auth;
  * `db:push` relies on the same posture), so this runner connects directly
- * with node-postgres and applies EVERY migration file in numeric order with
- * full psql semantics:
+ * with psql (auto-installed by `init` alongside the AWS CLI and Terraform —
+ * a node `pg` dependency re-keys drizzle-orm's workspace peer resolution)
+ * and applies EVERY migration file in numeric order with full psql
+ * semantics:
  *
  *   - `*_rollback.sql` files are excluded;
  *   - `\`-prefixed psql meta lines (\set, \echo, \if...) are stripped;
@@ -29,7 +31,14 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExecResult } from "./state-backend.js";
 
@@ -258,15 +267,41 @@ export interface SqlRunner {
   end(): Promise<void>;
 }
 
-async function connectPg(connection: PgConnection): Promise<SqlRunner> {
-  const { default: pg } = await import("pg");
-  const client = new pg.Client({
-    ...connection,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 20000,
-  });
-  await client.connect();
-  return client;
+/**
+ * psql-backed runner (harness cycle 7): a node `pg` dependency re-keys
+ * drizzle-orm's peer resolution across the workspace (broke company-brain's
+ * typecheck), and psql natively speaks everything the migration files use —
+ * CONCURRENTLY autocommit, dollar quoting, COMMIT-ing procedures. `init`
+ * auto-installs it alongside the AWS CLI and Terraform.
+ */
+function connectPsql(connection: PgConnection): Promise<SqlRunner> {
+  const url = `postgresql://${encodeURIComponent(connection.user)}:${encodeURIComponent(connection.password)}@${connection.host}:${connection.port}/${connection.database}?sslmode=require`;
+  const tempDir = mkdtempSync(join(tmpdir(), "thinkwork-psql-"));
+  let seq = 0;
+  const runner: SqlRunner = {
+    async query(sql: string) {
+      const file = join(tempDir, `stmt-${seq++}.sql`);
+      writeFileSync(file, sql);
+      const proc = spawnSync(
+        "psql",
+        [url, "-v", "ON_ERROR_STOP=1", "-X", "-q", "-t", "-A", "-f", file],
+        { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+      );
+      if (proc.status !== 0) {
+        throw new Error(
+          (proc.stderr || proc.stdout || "psql failed").trim().slice(0, 600),
+        );
+      }
+      const rows = (proc.stdout ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((hash) => ({ hash }));
+      return { rows };
+    },
+    async end() {},
+  };
+  return Promise.resolve(runner);
 }
 
 function rowsOf(result: unknown): { hash?: string }[] {
@@ -293,7 +328,7 @@ export async function applyMigrations(options: {
   const log = options.log ?? (() => {});
   const exec = options.exec ?? defaultExec;
   const files = listMigrationFiles(options.drizzleDir);
-  const runner = await (options.connect ?? connectPg)(options.connection);
+  const runner = await (options.connect ?? connectPsql)(options.connection);
 
   try {
     await runner.query(
@@ -366,17 +401,16 @@ export async function applyMigrations(options: {
       for (let i = 0; i < pending.length; ) {
         const { file, hash, sql } = pending[i];
         try {
-          if (requiresAutocommit(sql)) {
-            // CONCURRENTLY (and COMMIT-ing procedures) refuse transaction
-            // blocks — run the file one statement at a time in autocommit,
-            // as psql -f would. These files are written idempotent
-            // (IF NOT EXISTS) so a mid-file failure reruns cleanly.
-            for (const statement of splitSqlStatements(sql)) {
-              await runner.query(statement);
-            }
-          } else {
-            await runner.query(sql);
-          }
+          // psql executes statements in autocommit; wrap files that neither
+          // manage their own transaction nor use CONCURRENTLY (which refuses
+          // transaction blocks) so a mid-file failure rolls back and the
+          // retry rounds stay safe.
+          const selfManaged = /^\s*BEGIN\s*;/im.test(sql);
+          const wrapped =
+            requiresAutocommit(sql) || selfManaged
+              ? sql
+              : `BEGIN;\n${sql}\nCOMMIT;`;
+          await runner.query(wrapped);
         } catch (err) {
           errors.set(file, err instanceof Error ? err.message : String(err));
           i += 1;

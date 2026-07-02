@@ -323,11 +323,13 @@ describe("splitSqlStatements", () => {
   });
 });
 
-describe("autocommit execution for CONCURRENTLY files (0148)", () => {
-  it("runs CONCURRENTLY files statement-by-statement", async () => {
+describe("transaction wrapping (psql autocommit semantics)", () => {
+  it("wraps plain files in BEGIN/COMMIT but leaves CONCURRENTLY files unwrapped", async () => {
     const dir = makeDrizzleDir({
+      "0147_plain.sql": "ALTER TABLE t ADD COLUMN a int;",
       "0148_x.sql":
-        "ALTER TABLE t ADD COLUMN IF NOT EXISTS a int;\nCREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (a);",
+        "ALTER TABLE t ADD COLUMN IF NOT EXISTS b int;\nCREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (b);",
+      "0149_self.sql": "BEGIN;\nALTER TABLE t ADD COLUMN c int;\nCOMMIT;",
     });
     const { runner, queries } = fakeRunner();
     const summary = await applyMigrations({
@@ -343,11 +345,14 @@ describe("autocommit execution for CONCURRENTLY files (0148)", () => {
       },
       connect: async () => runner,
     });
-    expect(summary.applied).toEqual(["0148_x"]);
-    const applied = queries.filter(
-      (q) => q.includes("ALTER TABLE t") || q.includes("CONCURRENTLY"),
-    );
-    expect(applied).toHaveLength(2);
+    expect(summary.applied).toEqual(["0147_plain", "0148_x", "0149_self"]);
+    const plain = queries.find((q) => q.includes("ADD COLUMN a"))!;
+    expect(plain.startsWith("BEGIN;")).toBe(true);
+    expect(plain.trimEnd().endsWith("COMMIT;")).toBe(true);
+    const concurrent = queries.find((q) => q.includes("CONCURRENTLY"))!;
+    expect(concurrent.startsWith("BEGIN;")).toBe(false);
+    const self = queries.find((q) => q.includes("ADD COLUMN c"))!;
+    expect(self.match(/BEGIN;/g)).toHaveLength(1);
   });
 
   it("requiresAutocommit detects create/drop index concurrently", () => {
