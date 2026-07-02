@@ -349,8 +349,11 @@ locals {
     # queue until U3; eval-worker is a throwing inert stub that redrives
     # accidental traffic to the DLQ.
     "eval-runner" = {
-      EVAL_FANOUT_QUEUE_URL                = local.eval_fanout_queue_url
-      EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "20"
+      EVAL_FANOUT_QUEUE_URL = local.eval_fanout_queue_url
+      # 40 lanes to match the fan-out event source mapping's
+      # maximum_concurrency (eval-fanout.tf) — FIFO delivers at most one
+      # in-flight message per group, so lanes < concurrency wastes workers.
+      EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "40"
       # SSM parameter name for the Pi Bedrock AgentCore Runtime ID. deploy.yml's
       # runtime update job writes this in `update-agentcore-runtime-image.sh`;
       # eval-runner reads it via `loadRuntimeId(runtimeType)`.
