@@ -101,6 +101,24 @@ export const resolvedCapabilityManifests = pgTable(
     template_id: uuid("template_id"),
     /** Cognito principal / authenticated user id. Nullable for system-attributed sessions. */
     user_id: uuid("user_id"),
+    /**
+     * Turn/context identity (capability-mapping plan U11). Plain uuids —
+     * deliberately NOT foreign keys, matching template_id/user_id above: this
+     * is an append-only audit table and its context ids must survive deletion
+     * of the source rows. All nullable because the columns are additive over
+     * pre-U11 rows; the U12 producer populates every one it knows.
+     */
+    thread_id: uuid("thread_id"),
+    thread_turn_id: uuid("thread_turn_id"),
+    space_id: uuid("space_id"),
+    /** Active Agent Profile for delegated-profile turns; null for default-agent turns. */
+    agent_profile_id: uuid("agent_profile_id"),
+    /**
+     * Resolved-config fingerprint forwarded opaquely from the dispatch
+     * payload. The inspector stamps the same fingerprint on predicted sets;
+     * divergence (R15) is only asserted when fingerprints match.
+     */
+    config_fingerprint: text("config_fingerprint"),
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
@@ -131,6 +149,17 @@ export const resolvedCapabilityManifests = pgTable(
     index("idx_rcm_agent").on(table.agent_id),
     index("idx_rcm_template").on(table.template_id),
     index("idx_rcm_created_at").on(table.created_at),
+    // Covering index for "newest manifest matching context" (U11/U13):
+    // equality on tenant+agent+space+profile, then created_at for the
+    // ORDER BY ... DESC LIMIT 1 retrieval. Also serves the retention sweep's
+    // tenant + created_at range delete via the leading columns.
+    index("idx_rcm_context").on(
+      table.tenant_id,
+      table.agent_id,
+      table.space_id,
+      table.agent_profile_id,
+      table.created_at,
+    ),
   ],
 );
 
