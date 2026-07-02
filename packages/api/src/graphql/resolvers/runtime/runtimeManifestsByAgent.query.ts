@@ -27,7 +27,13 @@ const MAX_LIMIT = 50;
 
 export async function runtimeManifestsByAgent(
   _parent: unknown,
-  args: { agentId: string; limit?: number | null },
+  args: {
+    agentId: string;
+    limit?: number | null;
+    spaceId?: string | null;
+    agentProfileId?: string | null;
+    threadId?: string | null;
+  },
   ctx: GraphQLContext,
 ): Promise<Record<string, unknown>[]> {
   const tenantId = await resolveCallerTenantId(ctx);
@@ -50,15 +56,29 @@ export async function runtimeManifestsByAgent(
 
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 
+  // Context-keyed retrieval (U11): filters are exact-match when provided.
+  // Rows predating U11 carry null context columns and simply don't match a
+  // filtered query — callers wanting everything omit the filters.
+  const predicates = [
+    eq(resolvedCapabilityManifests.agent_id, args.agentId),
+    eq(resolvedCapabilityManifests.tenant_id, tenantId),
+  ];
+  if (args.spaceId) {
+    predicates.push(eq(resolvedCapabilityManifests.space_id, args.spaceId));
+  }
+  if (args.agentProfileId) {
+    predicates.push(
+      eq(resolvedCapabilityManifests.agent_profile_id, args.agentProfileId),
+    );
+  }
+  if (args.threadId) {
+    predicates.push(eq(resolvedCapabilityManifests.thread_id, args.threadId));
+  }
+
   const rows = await db
     .select()
     .from(resolvedCapabilityManifests)
-    .where(
-      and(
-        eq(resolvedCapabilityManifests.agent_id, args.agentId),
-        eq(resolvedCapabilityManifests.tenant_id, tenantId),
-      ),
-    )
+    .where(and(...predicates))
     .orderBy(desc(resolvedCapabilityManifests.created_at))
     .limit(limit);
 

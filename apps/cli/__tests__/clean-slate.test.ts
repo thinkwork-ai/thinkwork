@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deleteStageLogGroups,
   disableClusterDeletionProtection,
   emptyBucket,
   forceDeleteStageSecrets,
@@ -173,5 +174,25 @@ describe("secret prefix coverage (dash- and slash-style)", () => {
     scanOrphans("hprod-1", "us-east-1", exec);
     expect(query).toContain("'thinkwork/hprod-1/'");
     expect(query).toContain("'/thinkwork/hprod-1/'");
+  });
+});
+
+describe("deleteStageLogGroups", () => {
+  it("deletes both lambda-auto and module log group prefixes", () => {
+    const calls: string[][] = [];
+    const exec = (args: string[]): ExecResult => {
+      calls.push(args);
+      if (args[1] === "describe-log-groups") {
+        const prefix = args[args.indexOf("--log-group-name-prefix") + 1];
+        return ok(JSON.stringify([`${prefix}graphql-http`]));
+      }
+      return ok();
+    };
+    const deleted = deleteStageLogGroups("hp1", "us-east-1", exec);
+    expect(deleted).toEqual([
+      "/aws/lambda/thinkwork-hp1-graphql-http",
+      "/thinkwork/hp1/graphql-http",
+    ]);
+    expect(calls.filter((c) => c[1] === "delete-log-group")).toHaveLength(2);
   });
 });

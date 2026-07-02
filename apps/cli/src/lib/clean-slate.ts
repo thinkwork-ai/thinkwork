@@ -185,6 +185,56 @@ export function disableClusterDeletionProtection(
   return { found: true, disabled: modify.status === 0 };
 }
 
+/**
+ * Delete stage log groups. Lambda auto-creates /aws/lambda/<fn> groups at
+ * first invocation OUTSIDE terraform, so every destroyed stage leaves them
+ * behind (harness cycle-7 orphan scans). /thinkwork/<stage>/ covers module-
+ * created groups whose deletion raced.
+ */
+export function deleteStageLogGroups(
+  stage: string,
+  region: string,
+  exec: AwsExec = defaultExec,
+): string[] {
+  const deleted: string[] = [];
+  for (const prefix of [
+    `/aws/lambda/thinkwork-${stage}-`,
+    `/thinkwork/${stage}/`,
+  ]) {
+    const res = exec([
+      "logs",
+      "describe-log-groups",
+      "--region",
+      region,
+      "--log-group-name-prefix",
+      prefix,
+      "--query",
+      "logGroups[].logGroupName",
+      "--output",
+      "json",
+    ]);
+    if (res.status !== 0) continue;
+    let names: string[] = [];
+    try {
+      names = JSON.parse(res.stdout) as string[];
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const del = exec([
+        "logs",
+        "delete-log-group",
+        "--log-group-name",
+        name,
+        "--region",
+        region,
+      ]);
+      if (del.status === 0) deleted.push(name);
+    }
+  }
+  return deleted;
+}
+
 export interface OrphanReport {
   lambdas: string[];
   buckets: string[];

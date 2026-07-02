@@ -1,0 +1,81 @@
+# Capability matrix conformance (capability-mapping plan U6).
+#
+# The matrix doc (docs/src/content/docs/concepts/capability-matrix.mdx) is the
+# reviewed contract for capability class × assignment layer × injection
+# destination. PRs that touch capability-wiring code must either update the
+# matrix in the same PR or carry an explicit body marker naming the cells
+# reviewed:
+#
+#   matrix-no-change: skills×space and mcp×profile reviewed — refactor only
+#
+# A bare "matrix-no-change:" with no cell text does NOT pass — the marker is a
+# statement that specific cells were checked, not a ritual bypass.
+name: Capability Matrix
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/capability-matrix.yml"
+      - "scripts/check-capability-matrix.mjs"
+      - "docs/src/content/docs/concepts/capability-matrix.mdx"
+      - "packages/api/src/lib/resolve-agent-runtime-config.ts"
+      - "packages/api/src/lib/capability-diagnostics.ts"
+      - "packages/api/src/lib/mcp-configs.ts"
+      - "packages/api/src/lib/plugins/gating.ts"
+      - "packages/api/src/lib/workspace-renderer/**"
+      - "packages/database-pg/src/schema/pi-extensions.ts"
+      - "packages/database-pg/src/schema/capability-catalog.ts"
+      - "packages/database-pg/graphql/types/capabilities.graphql"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  conformance:
+    name: Matrix vocabulary + wiring conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Matrix vocabulary check
+        run: node scripts/check-capability-matrix.mjs
+
+      - name: Wiring changes must touch the matrix or carry a named marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          CHANGED_FILES=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" --paginate -q '.[].filename')
+
+          WIRING_PATTERN='^(packages/api/src/lib/(resolve-agent-runtime-config\.ts|capability-diagnostics\.ts|mcp-configs\.ts|plugins/gating\.ts|workspace-renderer/)|packages/database-pg/src/schema/(pi-extensions|capability-catalog)\.ts|packages/database-pg/graphql/types/capabilities\.graphql)'
+
+          if ! echo "$CHANGED_FILES" | grep -qE "$WIRING_PATTERN"; then
+            echo "No capability-wiring files changed — conformance not required."
+            exit 0
+          fi
+
+          if echo "$CHANGED_FILES" | grep -qx 'docs/src/content/docs/concepts/capability-matrix.mdx'; then
+            echo "Matrix doc updated alongside wiring changes — OK."
+            exit 0
+          fi
+
+          PR_BODY=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" -q '.body // ""')
+          # Marker must be followed by non-whitespace on the same line: it has
+          # to name the cells reviewed, not just exist.
+          if echo "$PR_BODY" | grep -qE 'matrix-no-change:[[:blank:]]*[^[:space:]]'; then
+            echo "matrix-no-change marker present with named cells — OK."
+            echo "$PR_BODY" | grep -E 'matrix-no-change:' | head -3
+            exit 0
+          fi
+
+          echo "::error::This PR changes capability-wiring code but neither updates docs/src/content/docs/concepts/capability-matrix.mdx nor carries a 'matrix-no-change: <cells reviewed>' marker in the PR body."
+          echo "Wiring files changed:"
+          echo "$CHANGED_FILES" | grep -E "$WIRING_PATTERN" | sed 's/^/  - /'
+          exit 1

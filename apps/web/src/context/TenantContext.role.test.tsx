@@ -24,6 +24,13 @@ vi.mock("@/lib/api-fetch", () => {
 });
 vi.mock("@/lib/graphql-client", () => ({
   setGraphqlTenantId: setGraphqlTenantIdMock,
+  graphqlClient: {
+    mutation: vi.fn(() => ({
+      toPromise: async () => ({
+        error: new Error("claim not expected in role tests"),
+      }),
+    })),
+  },
 }));
 
 beforeEach(() => {

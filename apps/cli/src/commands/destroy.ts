@@ -9,7 +9,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
-  resolveTerraformRoot,
+  resolveTerraformRootForStage,
   ensureInit,
   ensureWorkspace,
   runTerraform,
@@ -27,6 +27,7 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
 import { loadEnvironment } from "../environments.js";
 import {
+  deleteStageLogGroups,
   disableClusterDeletionProtection,
   emptyBucket,
   forceDeleteStageSecrets,
@@ -174,7 +175,10 @@ export async function runLocalTerraformDestroy(
     }
   }
 
-  const terraformDir = resolveTerraformRoot();
+  const terraformDir = resolveTerraformRootForStage(
+    stage,
+    localEnv?.terraformDir,
+  );
   const tiers = expandComponent(opts.component as Component).reverse();
 
   // Drop RDS deletion protection (U7): Aurora deploys protected by default,
@@ -246,6 +250,15 @@ export async function runLocalTerraformDestroy(
     if (deleted.length > 0) {
       console.log(
         `  Force-deleted ${deleted.length} lingering secret(s) (no recovery window).`,
+      );
+    }
+
+    // Lambda auto-creates its log groups outside terraform — every destroyed
+    // stage leaves them behind otherwise (harness cycle-7 orphan scans).
+    const logGroups = deleteStageLogGroups(stage, region);
+    if (logGroups.length > 0) {
+      console.log(
+        `  Deleted ${logGroups.length} stage log group(s) (Lambda-auto-created).`,
       );
     }
 

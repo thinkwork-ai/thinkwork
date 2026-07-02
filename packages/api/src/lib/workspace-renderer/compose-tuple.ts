@@ -87,6 +87,16 @@ export interface RenderWorkspaceTupleDeps {
   pluginGateResolver?: (
     args: ResolvePluginGateArgs,
   ) => Promise<PluginActivationGate>;
+  /**
+   * Read-only compose seam (capability-mapping plan U2). When false, the
+   * full pre-write composition runs unchanged — sources, plugin gate,
+   * generated AGENTS.md, hydrate manifest, effective policy — but no S3
+   * object is ever written: the miss path skips every put and reports
+   * `writtenFiles: []`. The capability inspector (U3) composes through this
+   * so its view is byte-identical to what a persisting render would produce,
+   * without mutating the thread's rendered workspace. Defaults to true.
+   */
+  persist?: boolean;
 }
 
 interface SourceObject extends WorkspaceObjectMetadata {
@@ -944,40 +954,45 @@ export async function renderWorkspaceTuple(
           generatedFiles,
           tuple,
         });
-  const writtenFiles = [
-    ...generatedFiles.map((generatedFile) => generatedFile.path),
-    HYDRATE_MANIFEST_PATH,
-  ];
-  for (const generatedFile of generatedFiles) {
+  const persist = deps.persist !== false;
+  const writtenFiles = persist
+    ? [
+        ...generatedFiles.map((generatedFile) => generatedFile.path),
+        HYDRATE_MANIFEST_PATH,
+      ]
+    : [];
+  if (persist) {
+    for (const generatedFile of generatedFiles) {
+      await objectStore.putText({
+        bucket,
+        key: generatedFile.key,
+        content: generatedFile.content,
+        contentType: "text/markdown; charset=utf-8",
+      });
+    }
+    // Write-once content-addressed copy of this render's AGENTS.md so the turn's
+    // exact content stays recoverable after later re-renders overwrite the live
+    // key. Identical content across turns dedups to one object. Only on the miss
+    // path: any content that ever rendered post-deploy was first produced here.
     await objectStore.putText({
       bucket,
-      key: generatedFile.key,
-      content: generatedFile.content,
+      key: agentsMdHistoryKey(renderedPrefix, agentsMdContentSha(agentsMd)),
+      content: agentsMd,
       contentType: "text/markdown; charset=utf-8",
     });
+    await objectStore.putText({
+      bucket,
+      key: manifestKey,
+      content: `${JSON.stringify(nextHydrateManifest, null, 2)}\n`,
+      contentType: "application/json",
+    });
+    await objectStore.putText({
+      bucket,
+      key: markerKey,
+      content: generatedAt,
+      contentType: "text/plain; charset=utf-8",
+    });
   }
-  // Write-once content-addressed copy of this render's AGENTS.md so the turn's
-  // exact content stays recoverable after later re-renders overwrite the live
-  // key. Identical content across turns dedups to one object. Only on the miss
-  // path: any content that ever rendered post-deploy was first produced here.
-  await objectStore.putText({
-    bucket,
-    key: agentsMdHistoryKey(renderedPrefix, agentsMdContentSha(agentsMd)),
-    content: agentsMd,
-    contentType: "text/markdown; charset=utf-8",
-  });
-  await objectStore.putText({
-    bucket,
-    key: manifestKey,
-    content: `${JSON.stringify(nextHydrateManifest, null, 2)}\n`,
-    contentType: "application/json",
-  });
-  await objectStore.putText({
-    bucket,
-    key: markerKey,
-    content: generatedAt,
-    contentType: "text/plain; charset=utf-8",
-  });
 
   return {
     renderedPrefix,

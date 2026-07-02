@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Check,
   APPLY_ESTIMATE_MINUTES,
+  evaluateAgentcorePiImageProbe,
   evaluateBackendProbe,
   evaluateCredentialExpiry,
   evaluateDomainDelegation,
@@ -12,6 +13,8 @@ import {
   checkDomainDelegation,
   checkSesStatus,
   checkStateBackend,
+  parseEcrImageUri,
+  preflightChecks,
   runChecks,
 } from "../src/lib/checks.js";
 import { backendTarget } from "../src/lib/state-backend.js";
@@ -169,5 +172,65 @@ describe("readTfvarsSignals", () => {
     const signals = readTfvarsSignals(dir);
     expect(signals.domain).toBeUndefined();
     expect(signals.sesConfigured).toBe(false);
+  });
+});
+
+describe("AgentCore Pi source image probe", () => {
+  it("parses ECR image URIs", () => {
+    expect(
+      parseEcrImageUri(
+        "424337058806.dkr.ecr.us-east-1.amazonaws.com/thinkwork-hci-agentcore:pi-latest",
+      ),
+    ).toEqual({
+      registry: "424337058806.dkr.ecr.us-east-1.amazonaws.com",
+      region: "us-east-1",
+    });
+    expect(
+      parseEcrImageUri("ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"),
+    ).toBeNull();
+  });
+
+  it("passes without docker (the apply-time seed is the authority)", () => {
+    const result = evaluateAgentcorePiImageProbe({
+      uri: "ghcr.io/x/y:z",
+      dockerAvailable: false,
+      reachable: false,
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it("passes when the manifest is reachable", () => {
+    const result = evaluateAgentcorePiImageProbe({
+      uri: "ghcr.io/x/y:z",
+      dockerAvailable: true,
+      reachable: true,
+    });
+    expect(result.pass).toBe(true);
+    expect(result.detail).toContain("ghcr.io/x/y:z");
+  });
+
+  it("fails with remediation when the image is unreachable", () => {
+    const result = evaluateAgentcorePiImageProbe({
+      uri: "ghcr.io/x/y:z",
+      dockerAvailable: true,
+      reachable: false,
+      error: "unexpected status from HEAD request: 403 Forbidden\nmore",
+    });
+    expect(result.pass).toBe(false);
+    expect(result.detail).toContain("403 Forbidden");
+    expect(result.detail).toContain("agentcore_pi_source_image_uri");
+  });
+
+  it("joins preflight only when a source image is pinned", () => {
+    const withImage = preflightChecks({
+      agentcorePiSourceImage: "ghcr.io/x/y:z",
+    });
+    expect(withImage.some((c) => c.name === "AgentCore image pullable")).toBe(
+      true,
+    );
+    const without = preflightChecks({});
+    expect(without.some((c) => c.name === "AgentCore image pullable")).toBe(
+      false,
+    );
   });
 });

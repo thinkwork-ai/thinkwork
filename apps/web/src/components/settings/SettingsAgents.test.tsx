@@ -189,9 +189,10 @@ describe("SettingsAgents page", () => {
     expect(queriesSource).toContain(
       "mutation SettingsRejectPiExtensionVersion",
     );
-    expect(queriesSource).toContain(
-      "mutation SettingsUpdatePiExtensionAssignment",
-    );
+    // Assignment writes route through the unified capability mutations
+    // (capability-mapping plan U8, KTD-5).
+    expect(queriesSource).toContain("mutation SettingsGrantCapability");
+    expect(queriesSource).toContain("mutation SettingsDetachCapability");
     expect(agentExtensionsSource).toContain(
       "SettingsImportPiExtensionFromGitHubMutation",
     );
@@ -201,9 +202,8 @@ describe("SettingsAgents page", () => {
     expect(agentExtensionsSource).toContain(
       "SettingsRejectPiExtensionVersionMutation",
     );
-    expect(agentExtensionsSource).toContain(
-      "SettingsUpdatePiExtensionAssignmentMutation",
-    );
+    expect(agentExtensionsSource).toContain("SettingsGrantCapabilityMutation");
+    expect(agentExtensionsSource).toContain("SettingsDetachCapabilityMutation");
   });
 
   it("uses Pi extension language and disables assignments outside approved state", () => {

@@ -164,10 +164,53 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
             Origin: string;
             Domain: string;
           }[];
-          const admin = dists.find((d) =>
-            /thinkwork-.+-(admin|app)/.test(d.Origin),
+          // The end-user app bucket is named ...-computer (legacy naming);
+          // admin/app cover older stacks. Probe EVERY candidate — a crashed
+          // apply can leave orphan distributions without OAC bucket grants
+          // (403), and taking the first match reported the working stack as
+          // broken (harness cycle-7 ledger entry).
+          const candidates = dists.filter((d) =>
+            /thinkwork-.+-(admin|app|computer)/.test(d.Origin),
           );
-          if (admin) url = `https://${admin.Domain}`;
+          for (const c of candidates) {
+            const probe = httpProbe(`https://${c.Domain}/`);
+            if (probe.status === 200) {
+              url = `https://${c.Domain}`;
+              break;
+            }
+          }
+          // The bundle is stage-agnostic: without a populated runtime config
+          // the app renders "Sign-in options are unavailable" even though /
+          // serves 200 (HCI test). Require the config's Cognito client id.
+          if (url) {
+            const cfg = httpProbe(`${url}/thinkwork-runtime-config.json`);
+            if (cfg.status !== 200 || !cfg.body.includes("cognitoClientId")) {
+              return {
+                pass: false,
+                detail: `${url} serves HTML but /thinkwork-runtime-config.json is ${cfg.status === 200 ? "incomplete" : "missing"} — the app cannot sign in. Rerun thinkwork deploy to publish it.`,
+              };
+            }
+            const parsed = (() => {
+              try {
+                return JSON.parse(cfg.body) as {
+                  viteEnv?: { VITE_COGNITO_CLIENT_ID?: string };
+                };
+              } catch {
+                return {};
+              }
+            })();
+            // The app consumes ONLY viteEnv — an outer-profile check passed
+            // while sign-in stayed dead (HCI test).
+            if (!parsed.viteEnv?.VITE_COGNITO_CLIENT_ID) {
+              return {
+                pass: false,
+                detail: `${url} runtime config has no viteEnv.VITE_COGNITO_CLIENT_ID — sign-in would be unavailable.`,
+              };
+            }
+          }
+          if (!url && candidates.length > 0) {
+            url = `https://${candidates[0].Domain}`;
+          }
         } catch {
           /* fall through */
         }
@@ -227,10 +270,23 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
   checks.push({
     name: "Hindsight health",
     run: () => {
-      const running = awsText(
-        `ecs describe-services --cluster thinkwork-${ctx.stage}-cluster --services thinkwork-${ctx.stage}-hindsight --region ${ctx.region} --query "services[0].runningCount" --output text`,
+      const counts = awsText(
+        `ecs describe-services --cluster thinkwork-${ctx.stage}-cluster --services thinkwork-${ctx.stage}-hindsight --region ${ctx.region} --query "services[0].[runningCount,desiredCount]" --output text`,
       );
-      if (!running || running === "0") {
+      if (!counts) {
+        return { pass: true, detail: "Hindsight not enabled — skipped" };
+      }
+      const [running, desired] = counts.split(/\s+/);
+      // A provisioned service with zero running tasks is a FAILURE, not
+      // "not enabled" — cycle-7's stack sat at desired=1/running=0 (tasks
+      // could not reach CloudWatch) and the probe reported it as skipped.
+      if (running === "0" && desired !== "0") {
+        return {
+          pass: false,
+          detail: `Hindsight service desired=${desired} but running=0 — tasks are failing to start (check stopped-task reasons).`,
+        };
+      }
+      if (running === "0") {
         return { pass: true, detail: "Hindsight not enabled — skipped" };
       }
       const alb = awsText(
@@ -255,11 +311,17 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
   checks.push({
     name: "Workspace seeded",
     run: () => {
+      // A fresh stack has zero tenants until first signup — deploy-time
+      // seeding evidence is the workspace-defaults/ prefix the bootstrap
+      // uploads (harness cycle-7 ledger entry: probing tenants/ failed
+      // every fresh install by design).
       const objects = awsText(
-        `s3api list-objects-v2 --bucket thinkwork-${ctx.stage}-storage --prefix tenants/ --max-items 1 --query "KeyCount" --output text --region ${ctx.region}`,
+        // --max-keys (server-side), NOT --max-items: client-side pagination
+        // nulls KeyCount and the probe read "None" (harness cycle-7).
+        `s3api list-objects-v2 --bucket thinkwork-${ctx.stage}-storage --prefix workspace-defaults/ --max-keys 1 --query "KeyCount" --output text --region ${ctx.region}`,
       );
       if (objects && Number.parseInt(objects, 10) > 0) {
-        return { pass: true, detail: "tenant workspace objects present" };
+        return { pass: true, detail: "workspace defaults seeded" };
       }
       return {
         pass: false,

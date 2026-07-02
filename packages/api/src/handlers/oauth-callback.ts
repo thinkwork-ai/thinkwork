@@ -19,6 +19,7 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
+import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -32,7 +33,7 @@ import {
 } from "../lib/oauth-client-credentials.js";
 import { upsertSlackUserLink } from "../lib/slack/user-link-store.js";
 
-const { connections, connectProviders, credentials, agentSkills } = schema;
+const { connections, connectProviders, credentials } = schema;
 
 const STAGE = process.env.STAGE || "dev";
 function oauthCallbackUrl(): string {
@@ -414,48 +415,35 @@ export async function handler(
                   ? "MSCAL_CONNECTION_ID"
                   : `${skillId.toUpperCase().replace(/-/g, "_")}_CONNECTION_ID`;
 
-        // Upsert agent_skill — insert if missing, update config if exists
+        // KTD-8 (plan U10): OAuth wiring lands in the workspace
+        // assignment state file only — the agent_skills mirror is
+        // retired, and the file is what the authz / runtime-config
+        // readers prefer.
         const skillConfig: Record<string, unknown> = {
           connectionId: conn.id,
           tokenEnvVar,
           connectionIdVar,
         };
 
-        const [existingSkill] = await db
-          .select({ id: agentSkills.id, config: agentSkills.config })
-          .from(agentSkills)
-          .where(
-            and(
-              eq(agentSkills.agent_id, agentId),
-              eq(agentSkills.skill_id, skillId),
-            ),
+        const ok = await patchSkillAssignmentState({
+          agentId,
+          slug: skillId,
+          patch: { configMerge: skillConfig, enabled: true },
+        });
+        if (!ok) {
+          console.error(
+            `[oauth-callback] Failed to write assignment state for ${agentId}/${skillId}`,
           );
-
-        if (existingSkill) {
-          const existingConfig =
-            (existingSkill.config as Record<string, unknown>) || {};
-          await db
-            .update(agentSkills)
-            .set({
-              config: { ...existingConfig, ...skillConfig },
-            })
-            .where(eq(agentSkills.id, existingSkill.id));
         } else {
-          // Skill wasn't pre-added — create the agent_skill row
-          await db.insert(agentSkills).values({
-            agent_id: agentId,
-            tenant_id: conn.tenant_id,
-            skill_id: skillId,
-            config: skillConfig,
-            enabled: true,
-          });
+          console.log(
+            `[oauth-callback] Linked connection ${conn.id} to skill assignment ${agentId}/${skillId}`,
+          );
         }
-
-        console.log(
-          `[oauth-callback] Linked connection ${conn.id} to agent_skill ${agentId}/${skillId}`,
-        );
       } catch (linkErr) {
-        console.error(`[oauth-callback] Failed to link agent_skill:`, linkErr);
+        console.error(
+          `[oauth-callback] Failed to link skill assignment:`,
+          linkErr,
+        );
         // Non-fatal — connection is still active
       }
     }

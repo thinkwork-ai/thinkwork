@@ -5,7 +5,7 @@
  */
 
 import type { AdminOpsClient } from "./client.js";
-import { AGENT_FIELDS, SKILL_FIELDS, CAPABILITY_FIELDS } from "./_fields.js";
+import { AGENT_FIELDS, CAPABILITY_FIELDS } from "./_fields.js";
 
 export interface Agent {
   id: string;
@@ -18,16 +18,6 @@ export interface Agent {
   humanPairId: string | null;
   parentAgentId: string | null;
   createdAt: string;
-}
-
-export interface AgentSkill {
-  agentId: string;
-  skillId: string;
-  config: Record<string, unknown> | null;
-  permissions: Record<string, unknown> | null;
-  rateLimitRpm: number | null;
-  modelOverride: string | null;
-  enabled: boolean;
 }
 
 export interface AgentCapability {
@@ -127,30 +117,6 @@ export async function createAgent(
     { input },
   );
   return data.createAgent;
-}
-
-export interface AgentSkillInput {
-  skillId: string;
-  config?: Record<string, unknown>;
-  permissions?: Record<string, unknown>;
-  rateLimitRpm?: number;
-  modelOverride?: string;
-  enabled?: boolean;
-}
-
-export async function setAgentSkills(
-  client: AdminOpsClient,
-  agentId: string,
-  skills: AgentSkillInput[],
-  idempotencyKey?: string,
-): Promise<AgentSkill[]> {
-  const data = await client.graphql<{ setAgentSkills: AgentSkill[] }>(
-    `mutation($agentId: ID!, $skills: [AgentSkillInput!]!, $idempotencyKey: String) {
-			setAgentSkills(agentId: $agentId, skills: $skills, idempotencyKey: $idempotencyKey) { ${SKILL_FIELDS} }
-		}`,
-    { agentId, skills, idempotencyKey },
-  );
-  return data.setAgentSkills ?? [];
 }
 
 export interface AgentCapabilityInput {
