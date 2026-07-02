@@ -164,10 +164,7 @@ describe("readTfvarsSignals", () => {
 
   it("returns no signals for a missing tfvars or empty values", () => {
     const dir = mkdtempSync(join(tmpdir(), "tfvars-signals-"));
-    expect(readTfvarsSignals(dir)).toEqual({
-      sesConfigured: false,
-      domainDelegated: false,
-    });
+    expect(readTfvarsSignals(dir)).toEqual({ sesConfigured: false });
     writeFileSync(
       join(dir, "terraform.tfvars"),
       ['customer_domain = ""', 'ses_parent_domain = ""'].join("\n"),
@@ -263,5 +260,39 @@ describe("domain delegation gating (harness HCI test)", () => {
     const signals = readTfvarsSignals(dir);
     expect(signals.domain).toBe("hci.thinkwork.ai");
     expect(signals.domainDelegated).toBe(true);
+  });
+
+  it("tolerates inline # comments on quoted and bare values (review BUG_0001/0002)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tfvars-comments-"));
+    writeFileSync(
+      join(dir, "terraform.tfvars"),
+      [
+        'customer_domain = "hci.thinkwork.ai" # apex delegated to Route53',
+        "customer_domain_delegated = true # flipped after NS cutover",
+        'ses_parent_domain = "thinkwork.ai"   # invite email',
+      ].join("\n"),
+    );
+    const signals = readTfvarsSignals(dir);
+    expect(signals.domain).toBe("hci.thinkwork.ai");
+    expect(signals.domainDelegated).toBe(true);
+    expect(signals.sesConfigured).toBe(true);
+  });
+
+  it("keeps the domain check BLOCKING when customer_domain_delegated is absent (pre-existing stages)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tfvars-legacy-"));
+    writeFileSync(
+      join(dir, "terraform.tfvars"),
+      'customer_domain = "acme.example.com"',
+    );
+    const signals = readTfvarsSignals(dir);
+    expect(signals.domainDelegated).toBeUndefined();
+    // preflightChecks defaults undefined → blocking, so stages that predate
+    // the variable keep the legacy hard gate.
+    const checks = preflightChecks({
+      domain: signals.domain,
+      domainDelegated: signals.domainDelegated,
+    });
+    const domainCheck = checks.find((c) => c.name.startsWith("Domain DNS"));
+    expect(domainCheck?.blocking).not.toBe(false);
   });
 });

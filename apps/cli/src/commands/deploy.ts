@@ -458,22 +458,31 @@ function normalizeControllerDeployAction(
 /**
  * Preflight signals from the stage tfvars: whether a customer domain and SES
  * are configured. Uncommented assignments only.
+ *
+ * `domainDelegated` is tri-state on purpose: `undefined` when the key is
+ * absent (pre-existing stages that predate the variable keep the legacy
+ * BLOCKING domain check), `false`/`true` when explicitly written (init
+ * always writes it for new stages, so greenfield installs get the
+ * warn-until-claimed behavior).
  */
 export function readTfvarsSignals(cwd: string): {
   domain?: string;
-  domainDelegated: boolean;
+  domainDelegated?: boolean;
   sesConfigured: boolean;
 } {
   const tfvarsPath = join(cwd, "terraform.tfvars");
   if (!existsSync(tfvarsPath)) {
-    return { sesConfigured: false, domainDelegated: false };
+    return { sesConfigured: false };
   }
   let domain: string | undefined;
-  let domainDelegated = false;
+  let domainDelegated: boolean | undefined;
   let sesConfigured = false;
   for (const line of readFileSync(tfvarsPath, "utf8").split("\n")) {
-    // Bools are unquoted; capture both value shapes.
-    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"?([^"\n]*?)"?\s*$/);
+    // Two value shapes, each tolerating a trailing `# comment`:
+    // quoted strings, and bare bools/numbers (never contain spaces or '#').
+    const match =
+      line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"\s*(?:#.*)?$/) ??
+      line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*([^"\s#]+)\s*(?:#.*)?$/);
     if (!match) continue;
     const [, key, value] = match;
     if (key === "customer_domain" && value) domain = value;
