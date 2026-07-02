@@ -287,7 +287,9 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
       // uploads (harness cycle-7 ledger entry: probing tenants/ failed
       // every fresh install by design).
       const objects = awsText(
-        `s3api list-objects-v2 --bucket thinkwork-${ctx.stage}-storage --prefix workspace-defaults/ --max-items 1 --query "KeyCount" --output text --region ${ctx.region}`,
+        // --max-keys (server-side), NOT --max-items: client-side pagination
+        // nulls KeyCount and the probe read "None" (harness cycle-7).
+        `s3api list-objects-v2 --bucket thinkwork-${ctx.stage}-storage --prefix workspace-defaults/ --max-keys 1 --query "KeyCount" --output text --region ${ctx.region}`,
       );
       if (objects && Number.parseInt(objects, 10) > 0) {
         return { pass: true, detail: "workspace defaults seeded" };
