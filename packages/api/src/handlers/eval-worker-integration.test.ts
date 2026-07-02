@@ -217,6 +217,10 @@ function makeMemoryStorage(): MemoryStorage {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.EVAL_FANOUT_MAX_RECEIVE_COUNT = "5";
+  // These suites pin the SQS REDRIVE contract; in-worker throttle
+  // absorption (real backoff sleeps) is disabled here and covered by
+  // eval-worker-throttle.test.ts.
+  process.env.EVAL_THROTTLE_RETRY_ATTEMPTS = "0";
   delete process.env.EVAL_LLM_JUDGE;
   state = {
     run: {
