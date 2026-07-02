@@ -995,6 +995,22 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
+export type CapabilityDivergence = {
+  __typename?: "CapabilityDivergence";
+  deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
+  manifestCreatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  manifestFingerprint?: Maybe<Scalars["String"]["output"]>;
+  manifestId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+};
+
+export type CapabilityDivergenceDelta = {
+  __typename?: "CapabilityDivergenceDelta";
+  capabilityClass: Scalars["String"]["output"];
+  capabilityId: Scalars["String"]["output"];
+  kind: Scalars["String"]["output"];
+};
+
 export enum CapabilityGrantClass {
   McpServer = "MCP_SERVER",
   PiExtension = "PI_EXTENSION",
@@ -1012,7 +1028,9 @@ export type CapabilityInspection = {
   __typename?: "CapabilityInspection";
   agentId?: Maybe<Scalars["ID"]["output"]>;
   agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  divergence?: Maybe<CapabilityDivergence>;
   noUserBaseline: Scalars["Boolean"]["output"];
+  observed?: Maybe<EffectiveCapabilitySet>;
   perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
   predicted?: Maybe<EffectiveCapabilitySet>;
   spaceId?: Maybe<Scalars["ID"]["output"]>;

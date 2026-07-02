@@ -30,11 +30,13 @@ function takeRows(): unknown[] {
 
 function chainResult() {
   const promise = Promise.resolve(takeRows());
-  return {
+  const chain = {
     limit: () => promise,
+    orderBy: () => chain,
     then: promise.then.bind(promise),
     catch: promise.catch.bind(promise),
   };
+  return chain;
 }
 
 vi.mock("../../utils.js", () => ({
@@ -43,6 +45,18 @@ vi.mock("../../utils.js", () => ({
   },
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
   and: (...preds: unknown[]) => ({ op: "and", preds }),
+  desc: (col: unknown) => ({ op: "desc", col }),
+  isNull: (col: unknown) => ({ op: "isNull", col }),
+  resolvedCapabilityManifests: {
+    id: "rcm.id",
+    tenant_id: "rcm.tenant_id",
+    agent_id: "rcm.agent_id",
+    space_id: "rcm.space_id",
+    agent_profile_id: "rcm.agent_profile_id",
+    config_fingerprint: "rcm.config_fingerprint",
+    manifest_json: "rcm.manifest_json",
+    created_at: "rcm.created_at",
+  },
   agents: {
     id: "agents.id",
     tenant_id: "agents.tenant_id",
@@ -642,5 +656,110 @@ describe("fingerprint + fault states", () => {
         reason: "resolution_fault",
       }),
     );
+  });
+});
+
+describe("observed set + divergence (U13)", () => {
+  function manifestRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "rcm-1",
+      created_at: new Date("2026-07-02T12:00:00.000Z"),
+      config_fingerprint: "unknown",
+      manifest_json: {
+        schema_version: 2,
+        loaded: {
+          skills: ["approve-receipt", "ratio-review"],
+          builtInTools: ["bash"],
+          mcpServers: ["github", "prod-db"],
+          piExtensions: ["assignment-1"],
+        },
+        gated: [
+          {
+            capabilityClass: "pi_extension",
+            capabilityId: "assignment-9",
+            reason: "unavailable_provider",
+            detail: "container will skip",
+          },
+        ],
+      },
+      ...overrides,
+    };
+  }
+
+  async function learnFingerprint(): Promise<string> {
+    stageHappyPath();
+    rowsQueue.push([]); // manifest lookup — none yet
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    return res.predicted!.configFingerprint;
+  }
+
+  it("no manifest rows → no_manifest_yet, observed null", async () => {
+    stageHappyPath();
+    rowsQueue.push([]); // manifest lookup
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    expect(res.divergence).toEqual({ state: "no_manifest_yet" });
+    expect(res.observed).toBeNull();
+  });
+
+  it("fingerprint mismatch → config_changed_since_turn, never divergent", async () => {
+    stageHappyPath();
+    rowsQueue.push([manifestRow({ config_fingerprint: "stale-fp" })]);
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    expect(res.divergence?.state).toBe("config_changed_since_turn");
+    expect(res.observed?.variant).toBe("OBSERVED");
+    // Observed gated entries render with their container reasons verbatim.
+    expect(res.observed?.items).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "assignment-9",
+        active: false,
+        reason: "unavailable_provider",
+      }),
+    );
+  });
+
+  it("fingerprint match + identical sets → in_sync", async () => {
+    const fingerprint = await learnFingerprint();
+    stageHappyPath();
+    rowsQueue.push([manifestRow({ config_fingerprint: fingerprint })]);
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    expect(res.divergence?.state).toBe("in_sync");
+    expect(res.divergence?.deltas ?? null).toBeNull();
+  });
+
+  it("covers AE4: fingerprint match + skill missing from loaded → divergent naming the skill", async () => {
+    const fingerprint = await learnFingerprint();
+    stageHappyPath();
+    const row = manifestRow({ config_fingerprint: fingerprint });
+    (row.manifest_json as Record<string, any>).loaded.skills = [
+      "approve-receipt",
+    ];
+    rowsQueue.push([row]);
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    expect(res.divergence?.state).toBe("divergent");
+    expect(res.divergence?.deltas).toContainEqual({
+      capabilityClass: "skill",
+      capabilityId: "ratio-review",
+      kind: "missing_in_observed",
+    });
   });
 });

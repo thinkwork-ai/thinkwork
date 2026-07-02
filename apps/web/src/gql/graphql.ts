@@ -995,6 +995,22 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
+export type CapabilityDivergence = {
+  __typename?: "CapabilityDivergence";
+  deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
+  manifestCreatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  manifestFingerprint?: Maybe<Scalars["String"]["output"]>;
+  manifestId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+};
+
+export type CapabilityDivergenceDelta = {
+  __typename?: "CapabilityDivergenceDelta";
+  capabilityClass: Scalars["String"]["output"];
+  capabilityId: Scalars["String"]["output"];
+  kind: Scalars["String"]["output"];
+};
+
 export enum CapabilityGrantClass {
   McpServer = "MCP_SERVER",
   PiExtension = "PI_EXTENSION",
@@ -1012,7 +1028,9 @@ export type CapabilityInspection = {
   __typename?: "CapabilityInspection";
   agentId?: Maybe<Scalars["ID"]["output"]>;
   agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  divergence?: Maybe<CapabilityDivergence>;
   noUserBaseline: Scalars["Boolean"]["output"];
+  observed?: Maybe<EffectiveCapabilitySet>;
   perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
   predicted?: Maybe<EffectiveCapabilitySet>;
   spaceId?: Maybe<Scalars["ID"]["output"]>;
@@ -15567,6 +15585,36 @@ export type SettingsCapabilityInspectorQuery = {
         detail?: string | null;
         tokenStatus?: string | null;
       }>;
+    } | null;
+    observed?: {
+      __typename?: "EffectiveCapabilitySet";
+      variant: CapabilitySetVariant;
+      computedAt: any;
+      configFingerprint: string;
+      items: Array<{
+        __typename?: "CapabilityItem";
+        capabilityClass: string;
+        capabilityId: string;
+        displayName?: string | null;
+        active: boolean;
+        provenance?: string | null;
+        reason?: string | null;
+        detail?: string | null;
+        tokenStatus?: string | null;
+      }>;
+    } | null;
+    divergence?: {
+      __typename?: "CapabilityDivergence";
+      state: string;
+      manifestId?: string | null;
+      manifestCreatedAt?: any | null;
+      manifestFingerprint?: string | null;
+      deltas?: Array<{
+        __typename?: "CapabilityDivergenceDelta";
+        capabilityClass: string;
+        capabilityId: string;
+        kind: string;
+      }> | null;
     } | null;
   };
 };
@@ -33219,6 +33267,111 @@ export const SettingsCapabilityInspectorDocument = {
                             {
                               kind: "Field",
                               name: { kind: "Name", value: "tokenStatus" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "observed" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "variant" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "computedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "configFingerprint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityClass" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "displayName" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "active" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "provenance" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "reason" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "detail" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "tokenStatus" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "divergence" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "state" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestCreatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestFingerprint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "deltas" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityClass" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "kind" },
                             },
                           ],
                         },
