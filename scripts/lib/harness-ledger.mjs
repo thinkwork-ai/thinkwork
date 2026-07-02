@@ -91,6 +91,10 @@ export function upsertEntry(
     existing.lastSeen = now;
     existing.occurrences += 1;
     existing.stage = stage;
+    // Refresh the excerpt: rendering a prior cycle's log tail under the
+    // current cycle's stage misattributes the evidence (cycle-5 diagnosis
+    // was briefly derailed by a cycle-4 excerpt naming a different stage).
+    existing.excerpt = excerpt;
     return { entry: existing, isNew: false };
   }
   const entry = {
