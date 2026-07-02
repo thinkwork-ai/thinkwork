@@ -54,6 +54,30 @@ type CapabilityInspection {
   # (fail closed), direct OAuth via the agent's human pair (KTD-4).
   noUserBaseline: Boolean!
   predicted: EffectiveCapabilitySet
+  # U13: the latest matching turn's runtime truth, projected from its
+  # capability manifest into the same shape (KTD-9) so diffing is structural.
+  observed: EffectiveCapabilitySet
+  divergence: CapabilityDivergence
+}
+
+type CapabilityDivergence {
+  # no_manifest_yet | config_changed_since_turn | in_sync | divergent
+  # Divergence is only asserted on fingerprint equality (KTD-3); a
+  # fingerprint mismatch is always config_changed_since_turn, never divergent.
+  state: String!
+  manifestId: ID
+  manifestCreatedAt: AWSDateTime
+  manifestFingerprint: String
+  # Present only when state = divergent: the exact per-capability deltas.
+  deltas: [CapabilityDivergenceDelta!]
+}
+
+type CapabilityDivergenceDelta {
+  capabilityClass: String!
+  capabilityId: String!
+  # missing_in_observed (predicted active, runtime never loaded it — AE4) |
+  # extra_in_observed (runtime loaded something prediction lacks)
+  kind: String!
 }
 
 extend type Query {

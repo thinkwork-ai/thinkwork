@@ -145,6 +145,12 @@ type InspectorItem = {
   tokenStatus?: string | null;
 };
 
+type DivergenceDelta = {
+  capabilityClass: string;
+  capabilityId: string;
+  kind: string;
+};
+
 type Confirmation = {
   rowKey: string;
   label: string;
@@ -299,6 +305,25 @@ export function SettingsCapabilities() {
   const items = useMemo(
     () => (predicted?.items ?? []) as InspectorItem[],
     [predicted?.items],
+  );
+
+  const divergence = result?.divergence ?? null;
+  const deltas = useMemo(
+    () => (divergence?.deltas ?? []) as DivergenceDelta[],
+    [divergence?.deltas],
+  );
+  const deltaByRowKey = useMemo(
+    () =>
+      new Map(
+        deltas
+          .filter((delta) => delta.kind === "missing_in_observed")
+          .map((delta) => [rowKeyOf(delta), delta.kind]),
+      ),
+    [deltas],
+  );
+  const extraInObserved = useMemo(
+    () => deltas.filter((delta) => delta.kind === "extra_in_observed"),
+    [deltas],
   );
 
   const members = useMemo(
@@ -609,6 +634,51 @@ export function SettingsCapabilities() {
     });
   }
 
+  // Divergence summary (U13, R15): asserted only on fingerprint equality
+  // (KTD-3) — a fingerprint mismatch renders as "config changed", never
+  // as divergent.
+  function divergenceChip() {
+    if (!divergence) return null;
+    if (divergence.state === "in_sync") {
+      return (
+        <Badge
+          variant="outline"
+          className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          data-testid="divergence-chip"
+        >
+          runtime in sync
+        </Badge>
+      );
+    }
+    if (divergence.state === "divergent") {
+      return (
+        <Badge variant="destructive" data-testid="divergence-chip">
+          divergent — {deltas.length} {deltas.length === 1 ? "delta" : "deltas"}
+        </Badge>
+      );
+    }
+    if (divergence.state === "config_changed_since_turn") {
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+          data-testid="divergence-chip"
+        >
+          config changed since last turn
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="outline"
+        className="text-muted-foreground"
+        data-testid="divergence-chip"
+      >
+        no turn observed yet
+      </Badge>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
       <SettingsHeader
@@ -816,6 +886,14 @@ export function SettingsCapabilities() {
                           token: {item.tokenStatus}
                         </Badge>
                       ) : null}
+                      {deltaByRowKey.has(rowKeyOf(item)) ? (
+                        <Badge
+                          variant="destructive"
+                          data-testid={`delta-${rowKeyOf(item)}`}
+                        >
+                          not loaded last turn
+                        </Badge>
+                      ) : null}
                       {stateChip(item)}
                       {rowActions(item)}
                     </div>
@@ -834,13 +912,22 @@ export function SettingsCapabilities() {
               ))
             )}
           </SettingsSection>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Computed {new Date(predicted.computedAt).toLocaleString()} ·
-            fingerprint{" "}
-            <span className="font-mono">
-              {predicted.configFingerprint.slice(0, 12)}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Computed {new Date(predicted.computedAt).toLocaleString()} ·
+              fingerprint{" "}
+              <span className="font-mono">
+                {predicted.configFingerprint.slice(0, 12)}
+              </span>
             </span>
-          </p>
+            {divergenceChip()}
+            {extraInObserved.length > 0 ? (
+              <span data-testid="extra-in-observed">
+                +{extraInObserved.length} loaded at runtime only:{" "}
+                {extraInObserved.map((delta) => delta.capabilityId).join(", ")}
+              </span>
+            ) : null}
+          </div>
         </>
       ) : null}
     </div>
