@@ -663,8 +663,7 @@ describe("resolveAgentRuntimeConfig", () => {
         },
         {
           skillId: "tag-vendor",
-          s3Key:
-            "tenants/acme/agents/ada/workspaces/finance/skills/tag-vendor",
+          s3Key: "tenants/acme/agents/ada/workspaces/finance/skills/tag-vendor",
         },
       ]),
     );
@@ -2044,6 +2043,311 @@ describe("loadAgentProfileRuntimeConfigs space-local profiles (U7)", () => {
         sourceSpaceId: null,
         shadowedCentralProfileId: null,
         availability: { scope: "global", spaceIds: [] },
+      }),
+    ]);
+  });
+});
+
+// ─── Capability diagnostics channel (capability-mapping plan U1) ────────────
+// Opt-in via `collectDiagnostics`; the flag-off path must be byte-identical
+// to today's output and issue no additional queries (the scriptable rowsQueue
+// enforces the query count — an unconditional new select would desync every
+// staged test above).
+
+describe("capability diagnostics channel (U1)", () => {
+  function stageHappyPath() {
+    stageAgentRow();
+    stageTemplateRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+  }
+
+  it("flag off: output carries no capabilityDiagnostics key and is unchanged", async () => {
+    stageHappyPath();
+    const flagOff = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect("capabilityDiagnostics" in flagOff).toBe(false);
+
+    stageHappyPath();
+    const flagOn = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+    const { capabilityDiagnostics, ...flagOnRest } = flagOn;
+    expect(capabilityDiagnostics).toEqual([]);
+    expect(flagOnRest).toEqual(flagOff);
+  });
+
+  it("happy path with active capabilities yields an empty drop list", async () => {
+    stageHappyPath();
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+    expect(cfg.capabilityDiagnostics).toEqual([]);
+    expect(cfg.skillsConfig.length).toBeGreaterThan(0);
+  });
+
+  it("blocked-tools filter emits one blocked_by_policy row per removed skill", async () => {
+    stageAgentRow({ blocked_tools: ["artifacts"] });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+    expect(cfg.skillsConfig.some((s) => s.skillId === "artifacts")).toBe(false);
+    expect(cfg.capabilityDiagnostics).toEqual([
+      {
+        capabilityClass: "skill",
+        capabilityId: "artifacts",
+        reason: "blocked_by_policy",
+        detail: "agent blocked_tools",
+      },
+    ]);
+  });
+
+  it("trust gate emits trust_gate rows for untrusted catalog skills", async () => {
+    stageAgentRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skill trust gate — nothing trusted
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+    expect(cfg.skillsConfig).toEqual([]);
+    const reasons = cfg.capabilityDiagnostics ?? [];
+    expect(reasons).toHaveLength(DEFAULT_RUNTIME_SKILL_IDS.length);
+    for (const skillId of DEFAULT_RUNTIME_SKILL_IDS) {
+      expect(reasons).toContainEqual(
+        expect.objectContaining({
+          capabilityClass: "skill",
+          capabilityId: skillId,
+          reason: "trust_gate",
+        }),
+      );
+    }
+  });
+
+  it("profile drops emit exactly one reason row each: disabled, model_unavailable, space_mismatch, shadowed", async () => {
+    const SPACE_B = "space-bbbb";
+    rowsQueue.push([
+      {
+        id: "p-disabled",
+        slug: "disabled-profile",
+        name: "Disabled",
+        description: null,
+        routing_guidance: null,
+        instructions: "x",
+        model_id: PROFILE_MODEL_ID,
+        enabled: false,
+        built_in_key: null,
+        source_space_id: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "p-missing-model",
+        slug: "missing-model",
+        name: "Missing Model",
+        description: null,
+        routing_guidance: null,
+        instructions: "x",
+        model_id: "missing-model",
+        enabled: true,
+        built_in_key: null,
+        source_space_id: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "p-central-research",
+        slug: "research",
+        name: "Research (central)",
+        description: null,
+        routing_guidance: null,
+        instructions: "x",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        source_space_id: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "p-space-research",
+        slug: "research",
+        name: "Research (space B)",
+        description: null,
+        routing_guidance: null,
+        instructions: "x",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        source_space_id: SPACE_B,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+      {
+        id: "p-other-space",
+        slug: "finance-only",
+        name: "Finance Only",
+        description: null,
+        routing_guidance: null,
+        instructions: "x",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        source_space_id: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+    ]);
+    mockListTenantModelCatalogByIds.mockResolvedValueOnce([
+      { modelId: PROFILE_MODEL_ID },
+    ]);
+    rowsQueue.push([
+      { profile_id: "p-space-research", space_id: SPACE_B },
+      { profile_id: "p-other-space", space_id: "space-finance" },
+    ]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const { createCapabilityDiagnostics } =
+      await import("../capability-diagnostics.js");
+    const diagnostics = createCapabilityDiagnostics();
+    const configs = await loadAgentProfileRuntimeConfigs({
+      tenantId: TENANT_ID,
+      spaceId: SPACE_B,
+      mcpConfigs: [],
+      logPrefix: "[test]",
+      diagnostics,
+    });
+
+    // Winners: the space-local research profile only.
+    expect(configs.map((c) => c.id)).toEqual(["p-space-research"]);
+    const bySlug = (slug: string) =>
+      diagnostics.drops.filter((d) => d.capabilityId === slug);
+    expect(bySlug("disabled-profile")).toEqual([
+      expect.objectContaining({ reason: "profile_disabled" }),
+    ]);
+    expect(bySlug("missing-model")).toEqual([
+      expect.objectContaining({
+        reason: "model_unavailable",
+        detail: expect.stringContaining("missing-model"),
+      }),
+    ]);
+    expect(bySlug("research")).toEqual([
+      expect.objectContaining({ reason: "shadowed_by_space_local" }),
+    ]);
+    expect(bySlug("finance-only")).toEqual([
+      expect.objectContaining({ reason: "space_mismatch" }),
+    ]);
+    expect(diagnostics.drops).toHaveLength(4);
+  });
+
+  it("extension diagnostics: disabled, not approved, validation failure, unavailable_provider prediction", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    const stale = piExtensionRuntimeRow({
+      assignment_id: "assignment-stale",
+      artifact_hash: "stale-artifact-hash",
+    });
+    rowsQueue.push([
+      piExtensionRuntimeRow(), // approved, granted ["network"] → unavailable_provider prediction
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-disabled",
+        enabled: false,
+      }),
+      piExtensionRuntimeRow({
+        assignment_id: "assignment-unapproved",
+        status: "needs_review",
+      }),
+      stale,
+    ]);
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+
+    // The approved extension still ships — the prediction is advisory.
+    expect(cfg.piExtensions).toHaveLength(1);
+    const drops = cfg.capabilityDiagnostics ?? [];
+    expect(drops).toContainEqual(
+      expect.objectContaining({
+        capabilityClass: "pi_extension",
+        capabilityId: "assignment-1",
+        reason: "unavailable_provider",
+      }),
+    );
+    expect(drops).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "assignment-disabled",
+        reason: "extension_disabled",
+      }),
+    );
+    expect(drops).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "assignment-unapproved",
+        reason: "extension_not_approved",
+        detail: expect.stringContaining("needs_review"),
+      }),
+    );
+    expect(drops).toContainEqual(
+      expect.objectContaining({
+        capabilityId: "assignment-stale",
+        reason: "extension_validation_failed",
+        detail: expect.stringContaining("artifact hash is stale"),
+      }),
+    );
+  });
+
+  it("extension resolution fault degrades to empty extensions and carries resolution_fault", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([]);
+    rowsQueue.push(new Error("pi extension table unavailable"));
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      collectDiagnostics: true,
+    });
+
+    expect(cfg.piExtensions).toEqual([]);
+    expect(cfg.capabilityDiagnostics).toEqual([
+      expect.objectContaining({
+        capabilityClass: "pi_extension",
+        capabilityId: "*",
+        reason: "resolution_fault",
+        detail: expect.stringContaining("pi extension table unavailable"),
       }),
     ]);
   });
