@@ -623,6 +623,64 @@ describe("renderWorkspaceTuple", () => {
     expect(composed).not.toContain("\nold");
   });
 
+  it("read-only compose (persist: false) performs zero writes and matches the persisting output (U2)", async () => {
+    const input = {
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      spaceId: "space-1",
+    };
+    const deps = (store: FakeStore) => ({
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    });
+
+    const readOnlyStore = new FakeStore(seedObjects());
+    const readOnly = await renderWorkspaceTuple(input, {
+      ...deps(readOnlyStore),
+      persist: false,
+    });
+
+    // Purity: not a single putText call on the miss path.
+    expect(readOnlyStore.puts).toEqual([]);
+    expect(readOnly.cacheStatus).toBe("miss");
+    expect(readOnly.writtenFiles).toEqual([]);
+
+    const persistingStore = new FakeStore(seedObjects());
+    const persisted = await renderWorkspaceTuple(input, deps(persistingStore));
+    expect(persistingStore.puts.length).toBeGreaterThan(0);
+
+    // Byte-identical composition: same effective policy and same manifest.
+    expect(readOnly.effectivePolicy).toEqual(persisted.effectivePolicy);
+    expect(readOnly.hydrateManifest).toEqual(persisted.hydrateManifest);
+    expect(readOnly.sourcePrefixes).toEqual(persisted.sourcePrefixes);
+    expect(readOnly.activeSpace).toEqual(persisted.activeSpace);
+  });
+
+  it("read-only compose still reports cache hits without writes (U2)", async () => {
+    const store = new FakeStore(seedObjects());
+    const deps = {
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+    };
+    // Prime the cache with a persisting render.
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps,
+    );
+    const putsAfterPrime = store.puts.length;
+
+    const readOnly = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      { ...deps, persist: false },
+    );
+    expect(readOnly.cacheStatus).toBe("hit");
+    expect(store.puts.length).toBe(putsAfterPrime);
+  });
+
   it("writes a write-once content-addressed AGENTS.md history copy recoverable by sha", async () => {
     const store = new FakeStore(seedObjects());
     const result = await renderWorkspaceTuple(
