@@ -130,20 +130,21 @@ export async function applyMigrations(options: {
   const tempDir = mkdtempSync(join(tmpdir(), "thinkwork-migrations-"));
   const entries = readJournal(options.drizzleDir);
 
-  const bootstrapSql =
-    "CREATE SCHEMA IF NOT EXISTS drizzle; " +
+  // One statement per ExecuteStatement call — the Data API rejects
+  // multi-statement SQL with "Multistatements aren't supported" (harness
+  // cycle-7 ledger entry).
+  const bootstrapStatements = [
+    "CREATE SCHEMA IF NOT EXISTS drizzle;",
     "CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations " +
-    "(id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);";
-  const bootstrap = executeStatement(
-    options.target,
-    bootstrapSql,
-    exec,
-    tempDir,
-  );
-  if (bootstrap.status !== 0) {
-    throw new Error(
-      `Could not prepare the migrations table via the Data API: ${bootstrap.stderr.trim().slice(0, 300)}`,
-    );
+      "(id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);",
+  ];
+  for (const sql of bootstrapStatements) {
+    const bootstrap = executeStatement(options.target, sql, exec, tempDir);
+    if (bootstrap.status !== 0) {
+      throw new Error(
+        `Could not prepare the migrations table via the Data API: ${bootstrap.stderr.trim().slice(0, 300)}`,
+      );
+    }
   }
 
   const appliedRes = executeStatement(
