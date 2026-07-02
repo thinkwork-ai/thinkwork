@@ -117,7 +117,7 @@ export function N8nWorkflowOperationsApp({
     documentTitle: `${pluginDisplayName} · ${appDisplayName}`,
     breadcrumbs: [
       {
-        label: "Apps",
+        label: "Applications",
         onClick: () => {
           void navigate({ to: "/apps" });
         },

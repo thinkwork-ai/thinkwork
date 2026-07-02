@@ -85,7 +85,10 @@ export function N8nPluginWorkflows({
       ]),
     );
     return serverWorkflows.map((workflow) =>
-      mergeWorkflowDiscovery(workflow, browserById.get(workflow.externalWorkflowId)),
+      mergeWorkflowDiscovery(
+        workflow,
+        browserById.get(workflow.externalWorkflowId),
+      ),
     );
   }, [browserDiscoveredWorkflows, serverWorkflows]);
   const visibleWorkflows = useMemo(() => {
@@ -114,7 +117,7 @@ export function N8nPluginWorkflows({
     onDiscoveryStateChange(
       browserDiscoveredWorkflows.length && !serverWorkflows.length
         ? "ready"
-        : discovery?.readinessState ?? null,
+        : (discovery?.readinessState ?? null),
       result.fetching || browserDiscoveryFetching,
     );
   }, [
@@ -132,12 +135,7 @@ export function N8nPluginWorkflows({
   }, [installId, refresh, refreshNonce]);
 
   useEffect(() => {
-    if (
-      !import.meta.env.DEV ||
-      !installId ||
-      !launchUrl ||
-      result.fetching
-    ) {
+    if (!import.meta.env.DEV || !installId || !launchUrl || result.fetching) {
       return;
     }
     const apiKey = window.sessionStorage.getItem(
@@ -173,44 +171,48 @@ export function N8nPluginWorkflows({
     serverWorkflows.length,
   ]);
 
-  const connect = useCallback(async (workflow: (typeof workflows)[number]) => {
-    if (!installId) return;
-    const response = await connectWorkflow({
-      input: {
-        installId,
-        externalWorkflowId: workflow.externalWorkflowId,
-        externalWorkflowName: workflow.name,
-        active: workflow.active,
-        triggerTypes: workflow.triggerTypes,
-        lastModifiedAt: workflow.lastModifiedAt,
-        idempotencyKey: [
-          "n8n",
-          "connect",
-          workflow.externalWorkflowId,
-          Date.now().toString(36),
-        ].join("-"),
-      },
-    });
-    if (response.error) {
-      toast.error(`Could not connect workflow: ${response.error.message}`);
-      return;
-    }
-    toast.success(
-      response.data?.connectN8nWorkflow.created
-        ? "Workflow connected."
-        : "Workflow connection refreshed.",
-    );
-    refresh({ requestPolicy: "network-only" });
-  }, [connectWorkflow, installId, refresh]);
+  const connect = useCallback(
+    async (workflow: (typeof workflows)[number]) => {
+      if (!installId) return;
+      const response = await connectWorkflow({
+        input: {
+          installId,
+          externalWorkflowId: workflow.externalWorkflowId,
+          externalWorkflowName: workflow.name,
+          active: workflow.active,
+          triggerTypes: workflow.triggerTypes,
+          lastModifiedAt: workflow.lastModifiedAt,
+          idempotencyKey: [
+            "n8n",
+            "connect",
+            workflow.externalWorkflowId,
+            Date.now().toString(36),
+          ].join("-"),
+        },
+      });
+      if (response.error) {
+        toast.error(`Could not connect workflow: ${response.error.message}`);
+        return;
+      }
+      toast.success(
+        response.data?.connectN8nWorkflow.created
+          ? "Workflow connected."
+          : "Workflow connection refreshed.",
+      );
+      refresh({ requestPolicy: "network-only" });
+    },
+    [connectWorkflow, installId, refresh],
+  );
 
   const columns = useMemo<ColumnDef<(typeof workflows)[number]>[]>(
     () => [
       {
         accessorKey: "name",
         header: "Workflow",
+        size: 640,
         meta: {
-          headClassName: "w-full min-w-[200px]",
-          cellClassName: "w-full min-w-[200px] max-w-0",
+          headClassName: "min-w-0",
+          cellClassName: "min-w-0 max-w-0",
         },
         cell: ({ row }) => (
           <button
@@ -224,44 +226,9 @@ export function N8nPluginWorkflows({
         ),
       },
       {
-        accessorKey: "externalWorkflowId",
-        header: "Workflow ID",
-        meta: {
-          headClassName: "w-px whitespace-nowrap",
-          cellClassName: "w-px whitespace-nowrap",
-        },
-        cell: ({ row }) => {
-          const workflowUrl = n8nWorkflowUiUrl(
-            launchUrl,
-            row.original.externalWorkflowId,
-          );
-          const content = (
-            <code
-              className="block truncate font-mono text-xs"
-              title={row.original.externalWorkflowId}
-            >
-              {row.original.externalWorkflowId}
-            </code>
-          );
-          return workflowUrl ? (
-            <a
-              href={workflowUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block max-w-full text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {content}
-            </a>
-          ) : (
-            <span className="block max-w-full text-muted-foreground">
-              {content}
-            </span>
-          );
-        },
-      },
-      {
         accessorKey: "triggerTypes",
         header: "Triggers",
+        size: 220,
         meta: {
           headClassName: "w-px whitespace-nowrap text-center",
           cellClassName: "w-px whitespace-nowrap text-center",
@@ -283,6 +250,7 @@ export function N8nPluginWorkflows({
       {
         accessorKey: "readinessState",
         header: "Readiness",
+        size: 170,
         meta: {
           headClassName: "w-px whitespace-nowrap text-center",
           cellClassName: "w-px whitespace-nowrap text-center",
@@ -294,6 +262,7 @@ export function N8nPluginWorkflows({
       {
         id: "connect",
         header: "",
+        size: 56,
         meta: {
           headClassName: "w-px",
           cellClassName: "w-px whitespace-nowrap text-right",
@@ -305,8 +274,12 @@ export function N8nPluginWorkflows({
               type="button"
               size="icon-sm"
               variant="ghost"
-              aria-label={connected ? "Refresh workflow connection" : "Connect workflow"}
-              title={connected ? "Refresh workflow connection" : "Connect workflow"}
+              aria-label={
+                connected ? "Refresh workflow connection" : "Connect workflow"
+              }
+              title={
+                connected ? "Refresh workflow connection" : "Connect workflow"
+              }
               className="text-muted-foreground hover:text-foreground"
               disabled={connectState.fetching}
               onClick={() => void connect(row.original)}
@@ -317,7 +290,7 @@ export function N8nPluginWorkflows({
         },
       },
     ],
-    [connect, connectState.fetching, launchUrl],
+    [connect, connectState.fetching],
   );
 
   if (!installId) {
@@ -331,8 +304,8 @@ export function N8nPluginWorkflows({
   }
 
   return (
-    <div className="min-h-0 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -348,7 +321,10 @@ export function N8nPluginWorkflows({
           variant="outline"
           size="sm"
         >
-          <ToggleGroupItem value="unlinked" aria-label="Show unlinked workflows">
+          <ToggleGroupItem
+            value="unlinked"
+            aria-label="Show unlinked workflows"
+          >
             Unlinked
           </ToggleGroupItem>
           <ToggleGroupItem value="all" aria-label="Show all workflows">
@@ -359,8 +335,11 @@ export function N8nPluginWorkflows({
       <DataTable
         columns={columns}
         data={visibleWorkflows}
-        pageSize={10}
-        tableClassName="w-full table-auto"
+        pageSize={25}
+        scrollable
+        allowHorizontalScroll={false}
+        tableClassName="w-full table-fixed"
+        emptyStatePlacement="container"
         emptyState={
           result.fetching || browserDiscoveryFetching
             ? "Loading n8n workflows..."
@@ -420,7 +399,10 @@ function WorkflowDetailSheet({
             </SheetHeader>
             <div className="space-y-6 p-6">
               <DetailSection title="Workflow">
-                <DetailRow label="Workflow ID" value={workflow.externalWorkflowId} />
+                <DetailRow
+                  label="Workflow ID"
+                  value={workflow.externalWorkflowId}
+                />
                 <DetailRow
                   label="State"
                   value={workflow.active === false ? "Inactive" : "Active"}
@@ -447,7 +429,10 @@ function WorkflowDetailSheet({
                 />
               </DetailSection>
               <DetailSection title="Timeline">
-                <DetailRow label="Created" value={formatDate(workflow.createdAt)} />
+                <DetailRow
+                  label="Created"
+                  value={formatDate(workflow.createdAt)}
+                />
                 <DetailRow
                   label="Modified"
                   value={formatDate(workflow.lastModifiedAt)}
@@ -518,11 +503,19 @@ function DetailSection({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <div className="flex min-w-0 justify-between gap-4 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate text-right text-foreground">{value}</span>
+      <span className="min-w-0 truncate text-right text-foreground">
+        {value}
+      </span>
     </div>
   );
 }
@@ -660,7 +653,9 @@ function n8nWorkflowFromApiRecord(entry: unknown): N8nWorkflowRow[] {
         nestedString(record.meta, "description") ??
         nestedString(record.settings, "description"),
       active: typeof record.active === "boolean" ? record.active : null,
-      triggerTypes: triggerTypes.length ? triggerTypes : inferTriggerTypes(nodes),
+      triggerTypes: triggerTypes.length
+        ? triggerTypes
+        : inferTriggerTypes(nodes),
       createdAt: stringFromUnknown(record.createdAt),
       lastModifiedAt:
         stringFromUnknown(record.updatedAt) ??

@@ -56,6 +56,12 @@ export async function n8nAppData(
       }),
     ]);
     const bridgeRunsByExecution = bridgeRunsByExecutionId(bridgeRuns);
+    const workflowNameById = new Map(
+      workflowResult.workflows.map((workflow) => [
+        workflow.externalWorkflowId,
+        workflow.name,
+      ]),
+    );
     return {
       installId: args.installId,
       workflowReadinessState: workflowResult.readinessState,
@@ -72,13 +78,23 @@ export async function n8nAppData(
             )
           : null,
       })),
-      executions: executionResult.executions.map((execution) => ({
-        ...execution,
-        bridgeRuns:
-          bridgeRunsByExecution.get(execution.externalExecutionId)?.filter(
-            (run) => run.workflowId === execution.externalWorkflowId,
-          ) ?? [],
-      })),
+      executions: executionResult.executions.map((execution) => {
+        const executionBridgeRuns =
+          bridgeRunsByExecution
+            .get(execution.externalExecutionId)
+            ?.filter(
+              (run) => run.workflowId === execution.externalWorkflowId,
+            ) ?? [];
+        return {
+          ...execution,
+          workflowName:
+            execution.workflowName ??
+            workflowNameById.get(execution.externalWorkflowId) ??
+            executionBridgeRuns.find((run) => run.workflowName)?.workflowName ??
+            null,
+          bridgeRuns: executionBridgeRuns,
+        };
+      }),
     };
   } catch (error) {
     throw new GraphQLError((error as Error).message, {

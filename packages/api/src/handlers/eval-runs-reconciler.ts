@@ -11,10 +11,11 @@
  */
 
 import type { ScheduledEvent } from "aws-lambda";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   costEvents,
+  evalCaseOverrides,
   evalResults,
   evalRuns,
   evalTestCases,
@@ -23,6 +24,12 @@ import {
   CURRENT_EVAL_SCORING_VERSION,
   summarizeEvalStatuses,
 } from "@thinkwork/evals-core";
+import {
+  summarizeEvalRunVerdicts,
+  summaryScoringVersionFor,
+  type EvalRunCaseOverrideRow,
+} from "../lib/evals/case-verdicts.js";
+import type { EvalTrialPlanEntry } from "./eval-runner.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
 const STALE_AFTER_MINUTES = envNumber("EVAL_RUN_STALE_AFTER_MINUTES", 15);
@@ -44,7 +51,17 @@ type EvalRunCandidate = {
    */
   dataset_id: string | null;
   pinned_case_ids: string[] | null;
+  /**
+   * Trial-plan runs (Eval Profiles U4): [{ caseId, trials }] where
+   * caseId is the eval_test_cases row uuid the fan-out messages carried.
+   * When present, the expected result-row set is reconstructed from this
+   * immutable plan — one row per (case, trial 0..trials-1). Null on
+   * pre-trial runs, which keep the per-case reconstruction.
+   */
+  pinned_trial_plan: EvalTrialPlanEntry[] | null;
   total_tests: number;
+  /** True fan-out count; completion compares COALESCE(this, total_tests). */
+  expected_result_rows: number | null;
   scoring_version: number | null;
   started_at: Date | null;
   last_result_at: Date | null;
@@ -55,8 +72,15 @@ type EvalResultSummary = {
   passed: number;
   failed: number;
   errored: number | null;
+  unstable: number | null;
   passRate: number | null;
   totalCostUsd: number;
+  /**
+   * Cost honesty (Eval Profiles U5, R6): true when any row is missing a
+   * priced agent-turn cost — reconciler-synthesized rows always are —
+   * so totalCostUsd understates real spend and must render as partial.
+   */
+  costPartial: boolean;
 };
 
 type ReconciledRun = {
@@ -72,13 +96,19 @@ export function shouldReconcileEvalRun(
   row: Pick<
     EvalRunCandidate,
     "status" | "total_tests" | "started_at" | "last_result_at" | "result_count"
-  >,
+  > &
+    Partial<Pick<EvalRunCandidate, "expected_result_rows">>,
   now: Date,
   staleAfterMs = STALE_AFTER_MINUTES * 60_000,
 ): boolean {
   if (row.status !== "running") return false;
   if (row.total_tests <= 0) return false;
-  if (row.result_count >= row.total_tests) return true;
+  // Completion arithmetic reads the pinned fan-out count when present
+  // (Eval Profiles U4); pre-trial and in-flight runs fall back to the
+  // case count.
+  if (row.result_count >= (row.expected_result_rows ?? row.total_tests)) {
+    return true;
+  }
   const lastProgressAt = row.last_result_at ?? row.started_at;
   if (!lastProgressAt) return false;
   return now.getTime() - new Date(lastProgressAt).getTime() >= staleAfterMs;
@@ -118,17 +148,21 @@ export function buildReconcilerErrorRow(
     assertions: unknown;
     /** dataset_case_id, when the case came from a pinned run scope. */
     pinnedCaseId?: string | null;
+    /** Which trial the synthetic row terminates (0-based); default 0. */
+    trialIndex?: number;
   },
   staleMessage: string,
 ) {
+  const trialIndex = testCase.trialIndex ?? 0;
   return {
     run_id: runId,
     test_case_id: testCase.id,
     status: "error",
     error_cause: "reconciler",
+    trial_index: trialIndex,
     score: null,
     duration_ms: 0,
-    agent_session_id: `reconciler:${runId}:${testCase.id ?? testCase.pinnedCaseId ?? "unknown"}`,
+    agent_session_id: `reconciler:${runId}:${testCase.id ?? testCase.pinnedCaseId ?? "unknown"}${trialIndex > 0 ? `:trial-${trialIndex}` : ""}`,
     input: testCase.query,
     expected: null,
     actual_output: "",
@@ -153,6 +187,7 @@ export function summarizeEvalRowsForReconciler(
     status: string;
     override_status?: string | null;
     evaluator_results: unknown;
+    agent_cost_usd?: string | null;
   }>,
   scoringVersion: number | null,
 ): EvalResultSummary {
@@ -164,12 +199,87 @@ export function summarizeEvalRowsForReconciler(
     passed,
     failed,
     errored,
+    // Row-level (pre-trial) summary shape — the trial-aware paths below
+    // compute unstable through the shared aggregation layer instead.
+    unstable: null,
     passRate,
-    totalCostUsd: rows.reduce(
-      (total, row) => total + evaluatorCostUsd(row.evaluator_results),
-      0,
-    ),
+    totalCostUsd: rows.reduce((total, row) => total + rowCostUsd(row), 0),
+    costPartial: rows.some((row) => row.agent_cost_usd == null),
   };
+}
+
+type SummaryResultRow = {
+  testCaseId: string | null;
+  trialIndex?: number | null;
+  status: string;
+  override_status?: string | null;
+  evaluator_results: unknown;
+  /** Priced agent-turn cost (U5); null/absent rows make the run cost partial. */
+  agent_cost_usd?: string | null;
+};
+
+/**
+ * A row's contribution to the run total (U5): evaluator cost + the
+ * priced agent-turn cost. Rows without a priced agent cost contribute
+ * only evaluator cost — the caller marks the total partial (R6).
+ */
+function rowCostUsd(row: {
+  evaluator_results: unknown;
+  agent_cost_usd?: string | null;
+}): number {
+  return (
+    evaluatorCostUsd(row.evaluator_results) +
+    (row.agent_cost_usd ? Number(row.agent_cost_usd) : 0)
+  );
+}
+
+/**
+ * Trial-aware summary for the reconciler's write paths (Eval Profiles
+ * U4): routes through the SAME evals-core aggregation layer the worker's
+ * finalization and the override recompute consume, so run counters are
+ * CASE verdicts everywhere. Legacy runs (null scoringVersion) keep the
+ * historical row math inside the shared helper.
+ */
+function summarizeRunRowsForWrite(
+  rows: SummaryResultRow[],
+  caseOverrides: EvalRunCaseOverrideRow[],
+  scoringVersion: number | null,
+): EvalResultSummary {
+  const verdictSummary = summarizeEvalRunVerdicts(
+    rows.map((row) => ({
+      test_case_id: row.testCaseId,
+      trial_index: row.trialIndex ?? 0,
+      status: row.status,
+      override_status: row.override_status,
+    })),
+    caseOverrides,
+    scoringVersion,
+  );
+  return {
+    passed: verdictSummary.passed,
+    failed: verdictSummary.failed,
+    errored: verdictSummary.errored,
+    unstable: verdictSummary.unstable,
+    passRate: verdictSummary.passRate,
+    totalCostUsd: rows.reduce((total, row) => total + rowCostUsd(row), 0),
+    costPartial: rows.some((row) => row.agent_cost_usd == null),
+  };
+}
+
+/** Case-level overrides for a run (KTD9); versioned runs only. */
+async function loadCaseOverridesForRun(
+  executor: Pick<ReturnType<typeof getDb>, "select">,
+  runId: string,
+  scoringVersion: number | null,
+): Promise<EvalRunCaseOverrideRow[]> {
+  if (scoringVersion === null) return [];
+  return executor
+    .select({
+      test_case_id: evalCaseOverrides.test_case_id,
+      override_status: evalCaseOverrides.override_status,
+    })
+    .from(evalCaseOverrides)
+    .where(eq(evalCaseOverrides.run_id, runId));
 }
 
 export async function handler(
@@ -242,7 +352,11 @@ export async function resummarizeDivergentRuns(): Promise<number> {
     .where(
       and(
         eq(evalRuns.status, "completed"),
-        eq(evalRuns.scoring_version, CURRENT_EVAL_SCORING_VERSION),
+        // v2 and v3 share the errors-out-of-denominator rule (KTD4), so
+        // this code can honestly recompute either; runs stamped with a
+        // version NEWER than this code knows are left for newer code.
+        gte(evalRuns.scoring_version, 2),
+        lte(evalRuns.scoring_version, CURRENT_EVAL_SCORING_VERSION),
         sql`${evalRuns.summary_scoring_version} IS DISTINCT FROM ${evalRuns.scoring_version}`,
       ),
     )
@@ -252,22 +366,40 @@ export async function resummarizeDivergentRuns(): Promise<number> {
   for (const run of divergent) {
     const rows = await db
       .select({
+        testCaseId: evalResults.test_case_id,
+        trialIndex: evalResults.trial_index,
         status: evalResults.status,
         override_status: evalResults.override_status,
         evaluator_results: evalResults.evaluator_results,
       })
       .from(evalResults)
       .where(eq(evalResults.run_id, run.id));
-    const summary = summarizeEvalRowsForReconciler(rows, run.scoring_version);
+    const caseOverrides = await loadCaseOverridesForRun(
+      db,
+      run.id,
+      run.scoring_version,
+    );
+    const summary = summarizeRunRowsForWrite(
+      rows,
+      caseOverrides,
+      run.scoring_version,
+    );
     const updated = await db
       .update(evalRuns)
       .set({
         passed: summary.passed,
         failed: summary.failed,
         errored: summary.errored,
+        unstable: summary.unstable,
         pass_rate:
           summary.passRate === null ? null : summary.passRate.toFixed(4),
-        summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+        // Record the run's OWN stamped semantics (≤ this code's version
+        // by the filter above) so the recompute converges instead of
+        // staying divergent forever.
+        summary_scoring_version: summaryScoringVersionFor(
+          run.scoring_version,
+          CURRENT_EVAL_SCORING_VERSION,
+        ),
       })
       .where(and(eq(evalRuns.id, run.id), eq(evalRuns.status, "completed")))
       .returning({ id: evalRuns.id });
@@ -285,7 +417,7 @@ export async function resummarizeDivergentRuns(): Promise<number> {
       passRate: summary.passRate ?? undefined,
     });
     console.log(
-      `[eval-runs-reconciler] resummarized runId=${run.id} under scoring_version=${CURRENT_EVAL_SCORING_VERSION}`,
+      `[eval-runs-reconciler] resummarized runId=${run.id} under scoring_version=${run.scoring_version}`,
     );
   }
   return resummarized;
@@ -303,7 +435,9 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       run.selected_test_case_ids,
       run.dataset_id,
       run.pinned_case_ids,
+      run.pinned_trial_plan,
       run.total_tests,
+      run.expected_result_rows,
       run.scoring_version,
       run.started_at,
       MAX(result.created_at) AS last_result_at,
@@ -335,7 +469,13 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       pinned_case_ids: Array.isArray(record.pinned_case_ids)
         ? record.pinned_case_ids.map(String)
         : null,
+      pinned_trial_plan: parsePinnedTrialPlan(record.pinned_trial_plan),
       total_tests: Number(record.total_tests) || 0,
+      expected_result_rows:
+        record.expected_result_rows === null ||
+        record.expected_result_rows === undefined
+          ? null
+          : Number(record.expected_result_rows),
       scoring_version:
         record.scoring_version === null || record.scoring_version === undefined
           ? null
@@ -362,10 +502,100 @@ type ExpectedReconcileCase = {
   query: string;
   assertions: unknown;
   pinnedCaseId?: string | null;
+  /** Expected trial index (0-based); 0 on pre-trial reconstructions. */
+  trialIndex: number;
 };
 
 /**
+ * Parse a run row's pinned_trial_plan jsonb ([{ caseId, trials }],
+ * caseId = eval_test_cases uuid). Null when absent/malformed — the
+ * reconstruction then falls back to the pre-trial per-case paths.
+ */
+export function parsePinnedTrialPlan(
+  value: unknown,
+): EvalTrialPlanEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const entries: EvalTrialPlanEntry[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const { caseId, trials } = raw as { caseId?: unknown; trials?: unknown };
+    if (typeof caseId !== "string" || caseId.length === 0) return null;
+    if (typeof trials !== "number" || !Number.isFinite(trials) || trials < 1) {
+      return null;
+    }
+    entries.push({ caseId, trials: Math.floor(trials) });
+  }
+  return entries;
+}
+
+/**
+ * Trial-plan reconstruction (Eval Profiles U4): the immutable pinned
+ * plan IS the expected result-row set — for each { caseId, trials }
+ * entry, trial indexes 0..trials-1. Case content (query/assertions for
+ * the synthetic rows) resolves from the index rows by uuid with NO
+ * enabled filter; a plan uuid whose row was hard-deleted still
+ * synthesizes terminating rows (null FK), mirroring the pinned-case
+ * path. Never re-derived from live assertions.
+ */
+async function expectedCasesFromTrialPlan(
+  candidate: EvalRunCandidate,
+  plan: EvalTrialPlanEntry[],
+): Promise<ExpectedReconcileCase[]> {
+  const db = getDb();
+  const caseIds = plan.map((entry) => entry.caseId);
+  const rows =
+    caseIds.length > 0
+      ? await db
+          .select({
+            id: evalTestCases.id,
+            query: evalTestCases.query,
+            assertions: evalTestCases.assertions,
+          })
+          .from(evalTestCases)
+          .where(
+            and(
+              eq(evalTestCases.tenant_id, candidate.tenant_id),
+              inArray(evalTestCases.id, caseIds),
+            ),
+          )
+      : [];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  const expected: ExpectedReconcileCase[] = [];
+  for (const entry of plan) {
+    const row = byId.get(entry.caseId);
+    if (!row) {
+      console.warn(
+        `[eval-runs-reconciler] runId=${candidate.id}: trial-plan case ${entry.caseId} has no index row; synthesizing without FK`,
+      );
+    }
+    for (let trialIndex = 0; trialIndex < entry.trials; trialIndex++) {
+      expected.push(
+        row
+          ? {
+              id: row.id,
+              query: row.query,
+              assertions: row.assertions,
+              trialIndex,
+            }
+          : {
+              id: null,
+              query: "",
+              assertions: [],
+              pinnedCaseId: entry.caseId,
+              trialIndex,
+            },
+      );
+    }
+  }
+  return expected;
+}
+
+/**
  * Reconstruct the run's expected case set.
+ *
+ * Trial-plan runs (Eval Profiles U4): reconstructed from the immutable
+ * pinned_trial_plan — one expected row per (case, trial).
  *
  * Pinned runs (Trust Core U6): the launch-time pinned_case_ids list is
  * the truth — joined to the dataset's index rows by
@@ -381,6 +611,10 @@ async function expectedCasesForCandidate(
   candidate: EvalRunCandidate,
 ): Promise<ExpectedReconcileCase[] | null> {
   const db = getDb();
+
+  if (candidate.pinned_trial_plan !== null) {
+    return expectedCasesFromTrialPlan(candidate, candidate.pinned_trial_plan);
+  }
 
   if (candidate.pinned_case_ids !== null && candidate.dataset_id) {
     const rows = await db
@@ -413,13 +647,20 @@ async function expectedCasesForCandidate(
         console.warn(
           `[eval-runs-reconciler] runId=${candidate.id}: pinned case ${caseId} has no index row; synthesizing without FK`,
         );
-        return { id: null, query: "", assertions: [], pinnedCaseId: caseId };
+        return {
+          id: null,
+          query: "",
+          assertions: [],
+          pinnedCaseId: caseId,
+          trialIndex: 0,
+        };
       }
       return {
         id: row.id,
         query: row.query,
         assertions: row.assertions,
         pinnedCaseId: caseId,
+        trialIndex: 0,
       };
     });
   }
@@ -445,6 +686,9 @@ async function expectedCasesForCandidate(
       and(
         eq(evalTestCases.tenant_id, candidate.tenant_id),
         eq(evalTestCases.enabled, true),
+        // Mirrors the runner's legacy-path curation filter (U7) so the
+        // reconstruction matches what dispatch actually fanned out.
+        eq(evalTestCases.quality_state, "active"),
         candidate.selected_test_case_ids.length > 0
           ? inArray(evalTestCases.id, candidate.selected_test_case_ids)
           : inArray(evalTestCases.category, candidate.categories),
@@ -458,7 +702,7 @@ async function expectedCasesForCandidate(
     );
     return null;
   }
-  return testCases;
+  return testCases.map((testCase) => ({ ...testCase, trialIndex: 0 }));
 }
 
 async function reconcileRun(
@@ -481,26 +725,36 @@ async function reconcileRun(
       .select({
         status: evalRuns.status,
         total_tests: evalRuns.total_tests,
+        expected_result_rows: evalRuns.expected_result_rows,
       })
       .from(evalRuns)
       .where(eq(evalRuns.id, candidate.id));
     if (!freshRun || freshRun.status !== "running") return null;
 
     const existingRows = await tx
-      .select({ testCaseId: evalResults.test_case_id })
+      .select({
+        testCaseId: evalResults.test_case_id,
+        trialIndex: evalResults.trial_index,
+      })
       .from(evalResults)
       .where(eq(evalResults.run_id, candidate.id));
-    const existingIds = new Set(
+    // Result-row identity is (case, trial) — Eval Profiles U4; pre-trial
+    // rows carry trial_index 0 via the column default.
+    const existingKeys = new Set(
       existingRows
-        .map((row) => row.testCaseId)
-        .filter((id): id is string => Boolean(id)),
+        .filter((row): row is typeof row & { testCaseId: string } =>
+          Boolean(row.testCaseId),
+        )
+        .map((row) => `${row.testCaseId}:${row.trialIndex ?? 0}`),
     );
 
     // A null-id expected case (pinned id whose index row vanished) can
     // never have a worker-written result row — workers FK the row uuid —
     // so it is always missing.
     const missingCases = testCases.filter(
-      (testCase) => testCase.id === null || !existingIds.has(testCase.id),
+      (testCase) =>
+        testCase.id === null ||
+        !existingKeys.has(`${testCase.id}:${testCase.trialIndex}`),
     );
     if (missingCases.length > 0) {
       await tx
@@ -514,16 +768,28 @@ async function reconcileRun(
 
     const rows = await tx
       .select({
+        testCaseId: evalResults.test_case_id,
+        trialIndex: evalResults.trial_index,
         status: evalResults.status,
         override_status: evalResults.override_status,
         evaluator_results: evalResults.evaluator_results,
+        agent_cost_usd: evalResults.agent_cost_usd,
       })
       .from(evalResults)
       .where(eq(evalResults.run_id, candidate.id));
-    if (rows.length < freshRun.total_tests) return null;
+    // Completion compares against the pinned fan-out count when present.
+    if (rows.length < (freshRun.expected_result_rows ?? freshRun.total_tests)) {
+      return null;
+    }
 
-    const summary = summarizeEvalRowsForReconciler(
+    const caseOverrides = await loadCaseOverridesForRun(
+      tx,
+      candidate.id,
+      candidate.scoring_version,
+    );
+    const summary = summarizeRunRowsForWrite(
       rows,
+      caseOverrides,
       candidate.scoring_version,
     );
     const completedAt = new Date();
@@ -535,16 +801,20 @@ async function reconcileRun(
         passed: summary.passed,
         failed: summary.failed,
         errored: summary.errored,
+        unstable: summary.unstable,
         pass_rate:
           summary.passRate === null ? null : summary.passRate.toFixed(4),
         // Preserve the run's stamped semantics: legacy runs stay
-        // unversioned, stamped runs record the version this code
-        // computed under.
-        summary_scoring_version:
-          candidate.scoring_version === null
-            ? null
-            : CURRENT_EVAL_SCORING_VERSION,
+        // unversioned; stamped runs record their own version (capped at
+        // the version this code knows — deploy-window guard).
+        summary_scoring_version: summaryScoringVersionFor(
+          candidate.scoring_version,
+          CURRENT_EVAL_SCORING_VERSION,
+        ),
         cost_usd: summary.totalCostUsd.toFixed(6),
+        // Reconciler-synthesized rows never carry priced agent cost, so
+        // a reconciled run is cost-partial by construction (R6).
+        cost_partial: summary.costPartial,
         error_message:
           missingCases.length > 0
             ? `Reconciled ${missingCases.length} missing eval result(s)`

@@ -20,11 +20,15 @@ import redTeamComputerSafetyScope from "../../../../seeds/eval-test-cases/red-te
 import redTeamSkillGithub from "../../../../seeds/eval-test-cases/red-team-skill-github.json";
 import redTeamSkillFilesystem from "../../../../seeds/eval-test-cases/red-team-skill-filesystem.json";
 import redTeamSkillWorkspace from "../../../../seeds/eval-test-cases/red-team-skill-workspace.json";
+import seedTombstones from "../../../../seeds/eval-test-cases/_tombstones.json";
 
 export interface SeedAssertion {
   type: string;
   value: string | null;
 }
+
+/** Curation disposition carried by seed-pack cases (Eval Profiles U7). */
+export type SeedQualityState = "active" | "retired" | "needs-revision";
 
 export interface SeedTestCase {
   name: string;
@@ -42,7 +46,36 @@ export interface SeedTestCase {
   assertions: SeedAssertion[];
   agentcore_evaluator_ids?: string[];
   threshold?: number;
+  /**
+   * Curation state (U7 / KTD8). Missing = "active". The seeder
+   * propagates transitions one-way per tenant (never retired → active);
+   * non-active cases keep their result history but never dispatch.
+   */
+  quality_state?: SeedQualityState;
+  /**
+   * Rewrite linkage (R14): the case `name` this case supersedes. The
+   * predecessor id must appear in _tombstones.json so tenants tombstone
+   * the old identity while gaining this one.
+   */
+  rewritten_from?: string;
 }
+
+/**
+ * Pack-level tombstone (U7): a case id removed from the canonical packs
+ * — usually because a rewrite minted a successor identity
+ * (`rewritten_to`). The seeder moves the id from each tenant manifest's
+ * live cases to its tombstones; the index row survives disabled so
+ * historical eval_results keep resolving.
+ */
+export interface SeedTombstone {
+  case_id: string;
+  /** Successor case name when the removal was a rewrite; null otherwise. */
+  rewritten_to?: string | null;
+  reason?: string;
+}
+
+export const EVAL_SEED_TOMBSTONES: SeedTombstone[] =
+  seedTombstones as SeedTombstone[];
 
 export const BUILT_IN_EVAL_SEED_SOURCE = "yaml-seed" as const;
 export const CUSTOMER_OVERLAY_EVAL_SOURCE = "customer-overlay" as const;

@@ -36,6 +36,18 @@ DATABASE_URL="${3:?Usage: bootstrap-workspace.sh <stage> <bucket> <database-url>
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Workspace defaults live in the repo checkout OR the CLI bundle (dist/
+# layout: dist/scripts/ + dist/workspace-defaults/files — packaged installs
+# have no packages/ tree; harness cycle-7 ledger entry).
+DEFAULTS_DIR="$REPO_ROOT/packages/workspace-defaults/files"
+if [ ! -d "$DEFAULTS_DIR" ]; then
+  DEFAULTS_DIR="$REPO_ROOT/workspace-defaults/files"
+fi
+if [ ! -d "$DEFAULTS_DIR" ]; then
+  echo "ERROR: workspace defaults not found (looked in packages/workspace-defaults/files and workspace-defaults/files under $REPO_ROOT)" >&2
+  exit 1
+fi
+
 echo "=== Thinkwork Workspace Bootstrap ==="
 echo "  Stage:  $STAGE"
 echo "  Bucket: $BUCKET"
@@ -50,7 +62,7 @@ echo "── Uploading workspace defaults to S3 ──"
 # Single loop over the consolidated source dir. Plan §008 U2 moved every
 # canonical seed into `packages/workspace-defaults/files/`; the S3 key shape
 # (`workspace-defaults/<basename>`) is unchanged so consumers keep working.
-for f in "$REPO_ROOT/packages/workspace-defaults/files/"*.md; do
+for f in "$DEFAULTS_DIR/"*.md; do
   fname=$(basename "$f")
   aws s3 cp "$f" "s3://$BUCKET/workspace-defaults/$fname" --quiet
   echo "  ✓ $fname"
@@ -106,7 +118,7 @@ bootstrap_status=0
       echo "  → Seeding defaults for $slug..."
       upload_ok=1
       # Consolidated workspace defaults
-      for f in "$REPO_ROOT/packages/workspace-defaults/files/"*.md; do
+      for f in "$DEFAULTS_DIR/"*.md; do
         aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet || upload_ok=0
       done
       # Memory stubs

@@ -481,6 +481,10 @@ describe("dataset case mutations", () => {
 
   it("updateEvalDatasetCase merges partial input over the existing case file", async () => {
     selectQueue.push([tenantSlugRow]);
+    // Curation guard source check (U7) reads dataset + case rows first…
+    selectQueue.push([datasetRow]);
+    selectQueue.push([caseRow]);
+    // …then the post-put reload reads them again.
     selectQueue.push([datasetRow]);
     selectQueue.push([caseRow]);
     mockGetCase.mockResolvedValue({
@@ -523,6 +527,76 @@ describe("dataset case mutations", () => {
     expect(engines).toEqual({
       agentcore: { evaluator_ids: ["Builtin.Helpfulness"] },
     });
+  });
+
+  it("updateEvalDatasetCase rejects CONTENT edits of canonical yaml-seed cases with a curation-channel pointer (U7)", async () => {
+    selectQueue.push([tenantSlugRow]);
+    selectQueue.push([datasetRow]);
+    selectQueue.push([{ ...caseRow, source: "yaml-seed" }]);
+    mockGetCase.mockResolvedValue({
+      core: {
+        case_id: "case-alpha",
+        name: "Alpha",
+        category: "red-team",
+        query: "original query",
+        system_prompt: null,
+        expected_behavior: null,
+        assertions: [],
+        tags: [],
+        enabled: true,
+      },
+      engines: null,
+    });
+
+    await expect(
+      evalDatasetMutations.updateEvalDatasetCase(
+        {},
+        {
+          tenantId: "tenant-1",
+          datasetSlug: "flagged",
+          caseId: "case-alpha",
+          input: { query: "edited query" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/seed packs/);
+    expect(mockPutCase).not.toHaveBeenCalled();
+  });
+
+  it("updateEvalDatasetCase still allows enable/disable of yaml-seed cases (guard is content-only)", async () => {
+    selectQueue.push([tenantSlugRow]);
+    // enabled-only input skips the guard's source check entirely — only
+    // the post-put reload consumes dataset + case rows.
+    selectQueue.push([datasetRow]);
+    selectQueue.push([{ ...caseRow, source: "yaml-seed" }]);
+    mockGetCase.mockResolvedValue({
+      core: {
+        case_id: "case-alpha",
+        name: "Alpha",
+        category: "red-team",
+        query: "original query",
+        system_prompt: null,
+        expected_behavior: null,
+        assertions: [],
+        tags: [],
+        enabled: true,
+      },
+      engines: null,
+    });
+
+    await evalDatasetMutations.updateEvalDatasetCase(
+      {},
+      {
+        tenantId: "tenant-1",
+        datasetSlug: "flagged",
+        caseId: "case-alpha",
+        input: { enabled: false },
+      },
+      adminCtx,
+    );
+
+    const [, core] = mockPutCase.mock.calls[0];
+    expect(core).toMatchObject({ enabled: false, query: "original query" });
   });
 
   it("updateEvalDatasetCase on a missing case is NOT_FOUND with no write", async () => {

@@ -78,24 +78,28 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 
 ### Deploy
 
-| Command                          | Description                                            |
-| -------------------------------- | ------------------------------------------------------ |
-| `thinkwork plan -s <stage>`      | Preview infrastructure changes                         |
-| `thinkwork deploy -s <stage>`    | Deploy infrastructure (terraform apply)                |
-| `thinkwork bootstrap -s <stage>` | Seed workspace defaults and per-tenant workspace files |
-| `thinkwork destroy -s <stage>`   | Tear down infrastructure                               |
+| Command                          | Description                                                                                                                                                            |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thinkwork plan -s <stage>`      | Preview infrastructure changes                                                                                                                                         |
+| `thinkwork deploy -s <stage>`    | Full deploy pipeline: preflight checks → terraform apply → release artifacts → schema migrations → post-deploy verification. Reruns converge from any partial failure. |
+| `thinkwork verify -s <stage>`    | Prove a deployed stage works: GraphQL, authenticated call, web, database schema, Hindsight, seeding, deployed-artifact evidence, pending-approvals checklist           |
+| `thinkwork bootstrap -s <stage>` | Seed workspace defaults and per-tenant workspace files                                                                                                                 |
+| `thinkwork destroy -s <stage>`   | Tear down to a redeployable clean slate: buckets pre-emptied (all versions), bounded retry, lingering secrets force-deleted, orphan scan                               |
+
+`deploy` details: preflight runs the `doctor` check registry (credentials + expiry margin, Bedrock invocation, Lambda quota, state backend, domain DNS delegation) and reports **all** blockers before any resource is created (`--skip-preflight` to bypass). Init-scaffolded environments get a per-account Terraform state backend (versioned, encrypted S3 + DynamoDB locking) and deploy a pinned ThinkWork release (`--release-version <tag>` to override). SES production access pending approval never blocks — it's tracked as a checklist item. A stale state lock from an interrupted run gets guided recovery on the next deploy.
 
 ### Manage
 
-| Command                                         | Description                                                |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| `thinkwork status`                              | Discover all deployed environments in AWS (clickable URLs) |
-| `thinkwork status -s <stage>`                   | Detailed view for one environment                          |
-| `thinkwork outputs -s <stage>`                  | Show deployment outputs (API URL, Cognito IDs, etc.)       |
-| `thinkwork config list`                         | List all initialized environments                          |
-| `thinkwork config list -s <stage>`              | Show full config for an environment (secrets masked)       |
-| `thinkwork config get <key> -s <stage>`         | Read a configuration value                                 |
-| `thinkwork config set <key> <value> -s <stage>` | Update a configuration value                               |
+| Command                                         | Description                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `thinkwork status`                              | Discover all deployed environments in AWS (clickable URLs)                          |
+| `thinkwork status -s <stage>`                   | Detailed view for one environment                                                   |
+| `thinkwork outputs -s <stage>`                  | Show deployment outputs (API URL, Cognito IDs, etc.)                                |
+| `thinkwork config list`                         | List all initialized environments                                                   |
+| `thinkwork config list -s <stage>`              | Show full config for an environment (secrets masked)                                |
+| `thinkwork config get <key> -s <stage>`         | Read a configuration value                                                          |
+| `thinkwork config set <key> <value> -s <stage>` | Update a configuration value                                                        |
+| `thinkwork config graduate <stage>`             | Mark a stage as a graduated persistent environment (arms destroy's strongest guard) |
 
 ### Wiki (Compounding Memory)
 

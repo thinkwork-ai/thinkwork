@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   connectN8nWorkflow,
+  disconnectN8nWorkflow,
   discoverN8nWorkflows,
   n8nWorkflowSlug,
 } from "./n8n-discovery.js";
@@ -247,5 +248,37 @@ describe("n8n workflow discovery", () => {
 
   it("normalizes external workflow ids into stable slugs", () => {
     expect(n8nWorkflowSlug("CRM / Enrich #1")).toBe("n8n-crm-enrich-1");
+  });
+
+  it("archives the ThinkWork projection when unlinking a missing n8n workflow", async () => {
+    selectQueue.push([{ id: "binding-1", workflow_id: "workflow-1" }]);
+
+    const result = await disconnectN8nWorkflow(fakeDb(), {
+      tenantId: "tenant-1",
+      workflowId: "workflow-1",
+    });
+
+    expect(result).toEqual({
+      workflowId: "workflow-1",
+      bindingId: "binding-1",
+    });
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        binding_status: "archived",
+        readiness_state: "disabled",
+      }),
+    );
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        readiness_state: "disabled",
+      }),
+    );
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lifecycle_status: "archived",
+        readiness_state: "disabled",
+      }),
+    );
   });
 });

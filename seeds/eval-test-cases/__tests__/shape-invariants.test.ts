@@ -266,8 +266,11 @@ function expectNewRedTeamShape(
 
 describe("eval seed shape invariants", () => {
   it("ships only explicitly red-team seed files and categories", () => {
-    const fileNames = readdirSync(seedsDir).filter((name) =>
-      name.endsWith(".json"),
+    // Underscore-prefixed files are curation metadata, not case packs
+    // (Eval Profiles U7): _tombstones.json lists case ids removed from
+    // the packs (rewrites) for the seeder's per-tenant tombstoning.
+    const fileNames = readdirSync(seedsDir).filter(
+      (name) => name.endsWith(".json") && !name.startsWith("_"),
     );
 
     expect(fileNames.sort()).toEqual(

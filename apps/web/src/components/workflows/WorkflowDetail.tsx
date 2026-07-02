@@ -1,8 +1,18 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMemo } from "react";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
+import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
   Badge,
   Button,
   DataTable,
@@ -11,12 +21,17 @@ import {
   TabsList,
   TabsTrigger,
 } from "@thinkwork/ui";
+import { Unlink } from "lucide-react";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { SettingsWorkflowQuery } from "@/lib/graphql-queries";
+import {
+  DeleteWorkflowMutation,
+  DisconnectN8nWorkflowMutation,
+  SettingsWorkflowQuery,
+} from "@/lib/graphql-queries";
 import {
   DefinitionList,
   formatDateTime,
@@ -24,6 +39,7 @@ import {
   InfoCard,
   JsonPreview,
   primaryBinding,
+  readinessReasonText,
   sourceLabel,
   SourceBadge,
   titleize,
@@ -86,13 +102,59 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     variables: { id: workflowId, runLimit: 25 },
     requestPolicy: "cache-and-network",
   });
+  const [disconnectState, disconnectWorkflow] = useMutation(
+    DisconnectN8nWorkflowMutation,
+  );
+  const [deleteState, deleteWorkflowMutation] = useMutation(
+    DeleteWorkflowMutation,
+  );
 
   const workflow = result.data?.workflow ?? null;
   const binding = primaryBinding(workflow?.bindings);
+  const readinessReason = readinessReasonText(workflow?.readinessReasons);
+  const canUnlinkN8nWorkflow = Boolean(
+    workflow &&
+    binding?.bindingType === "n8n_bridge" &&
+    binding.bindingStatus !== "archived" &&
+    workflow.lifecycleStatus !== "archived",
+  );
   const routineId =
     binding?.bindingType === "step_functions_routine"
       ? binding.routineId
       : null;
+
+  async function unlinkN8nWorkflow() {
+    if (!workflow || !binding) return;
+    const response = await disconnectWorkflow({
+      input: {
+        workflowId: workflow.id,
+        bindingId: binding.id,
+        idempotencyKey: [
+          "n8n",
+          "disconnect",
+          workflow.id,
+          Date.now().toString(36),
+        ].join("-"),
+      },
+    });
+    if (response.error) {
+      toast.error(`Could not unlink workflow: ${response.error.message}`);
+      return;
+    }
+    toast.success("Workflow unlinked.");
+    void navigate({ to: "/settings/workflows" });
+  }
+
+  async function deleteWorkflow() {
+    if (!workflow) return;
+    const response = await deleteWorkflowMutation({ id: workflow.id });
+    if (response.error) {
+      toast.error(`Could not delete workflow: ${response.error.message}`);
+      return;
+    }
+    toast.success("Workflow deleted.");
+    void navigate({ to: "/settings/workflows" });
+  }
 
   usePageHeaderActions({
     title: workflow?.name ?? "Workflow",
@@ -100,13 +162,7 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
       { label: "Workflows", href: "/settings/workflows" },
       { label: workflow?.name ?? "Workflow" },
     ],
-    action: workflow ? (
-      <WorkflowReadinessBadge
-        state={workflow.readinessState}
-        reasons={workflow.readinessReasons}
-      />
-    ) : undefined,
-    actionKey: `workflow:${workflowId}:${workflow?.readinessState ?? "loading"}`,
+    actionKey: `workflow:${workflowId}:${workflow?.updatedAt ?? "loading"}`,
   });
 
   const runColumns = useMemo<ColumnDef<WorkflowRunSummary>[]>(
@@ -187,17 +243,93 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-6">
       <SettingsPageTitle
         title={workflow.name}
-        description={workflow.description ?? "No description provided."}
         badge={<SourceBadge binding={binding} />}
         actions={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => refetch({ requestPolicy: "network-only" })}
-          >
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={deleteState.fetching}
+                >
+                  Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this workflow?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {workflow.name} and its ThinkWork workflow records will be
+                    permanently removed. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleteState.fetching}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deleteState.fetching}
+                    className="bg-destructive text-white hover:bg-destructive/90"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void deleteWorkflow();
+                    }}
+                  >
+                    Delete workflow
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {canUnlinkN8nWorkflow ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={disconnectState.fetching}
+                  >
+                    <Unlink className="mr-2 size-4" />
+                    Unlink
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Unlink n8n workflow?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This archives the ThinkWork workflow projection and n8n
+                      bridge binding. Run history and evidence remain available,
+                      but the workflow will no longer appear as an active
+                      ThinkWork workflow.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={disconnectState.fetching}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void unlinkN8nWorkflow();
+                      }}
+                    >
+                      Unlink workflow
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => refetch({ requestPolicy: "network-only" })}
+            >
+              Refresh
+            </Button>
+          </div>
         }
       />
       <Tabs
@@ -239,9 +371,18 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                       <WorkflowReadinessBadge
                         state={workflow.readinessState}
                         reasons={workflow.readinessReasons}
+                        showReason={false}
                       />
                     ),
                   },
+                  ...(readinessReason
+                    ? [
+                        {
+                          label: "Readiness details",
+                          value: readinessReason,
+                        },
+                      ]
+                    : []),
                   {
                     label: "Trigger",
                     value: titleize(workflow.primaryTriggerFamily),

@@ -3,6 +3,7 @@ import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   buildReconcilerErrorRow,
   missingEvalTestCaseIds,
+  parsePinnedTrialPlan,
   shouldReconcileEvalRun,
   summarizeEvalRowsForReconciler,
 } from "./eval-runs-reconciler.js";
@@ -72,6 +73,65 @@ describe("eval-runs-reconciler stale detection", () => {
         15 * 60_000,
       ),
     ).toBe(false);
+  });
+
+  it("compares completion against expected_result_rows on trial-plan runs (U4)", () => {
+    const base = {
+      status: "running",
+      total_tests: 2,
+      started_at: new Date("2026-05-16T22:29:00.000Z"),
+      last_result_at: new Date("2026-05-16T22:29:30.000Z"),
+    };
+    // Case count reached but trial fan-out (6 rows) not yet complete —
+    // the pre-U4 check would have reconciled at 2.
+    expect(
+      shouldReconcileEvalRun(
+        { ...base, result_count: 2, expected_result_rows: 6 },
+        now,
+        15 * 60_000,
+      ),
+    ).toBe(false);
+    // All fan-out rows written, no finalizer → reconcile.
+    expect(
+      shouldReconcileEvalRun(
+        { ...base, result_count: 6, expected_result_rows: 6 },
+        now,
+        15 * 60_000,
+      ),
+    ).toBe(true);
+    // Null expected (pre-trial run) keeps the case-count arithmetic.
+    expect(
+      shouldReconcileEvalRun(
+        { ...base, result_count: 2, expected_result_rows: null },
+        now,
+        15 * 60_000,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("eval-runs-reconciler pinned trial plan parsing (U4)", () => {
+  it("parses a valid plan and floors fractional trial counts", () => {
+    expect(
+      parsePinnedTrialPlan([
+        { caseId: "uuid-a", trials: 3 },
+        { caseId: "uuid-b", trials: 1.0 },
+      ]),
+    ).toEqual([
+      { caseId: "uuid-a", trials: 3 },
+      { caseId: "uuid-b", trials: 1 },
+    ]);
+    expect(parsePinnedTrialPlan([])).toEqual([]);
+  });
+
+  it("returns null for absent or malformed plans (legacy reconstruction applies)", () => {
+    expect(parsePinnedTrialPlan(null)).toBeNull();
+    expect(parsePinnedTrialPlan(undefined)).toBeNull();
+    expect(parsePinnedTrialPlan("not-a-plan")).toBeNull();
+    expect(parsePinnedTrialPlan([{ caseId: "", trials: 3 }])).toBeNull();
+    expect(parsePinnedTrialPlan([{ caseId: "uuid-a", trials: 0 }])).toBeNull();
+    expect(parsePinnedTrialPlan([{ caseId: "uuid-a" }])).toBeNull();
+    expect(parsePinnedTrialPlan([null])).toBeNull();
   });
 });
 
@@ -178,5 +238,24 @@ describe("eval-runs-reconciler synthetic rows", () => {
     expect(summary.failed).toBe(0);
     expect(summary.errored).toBe(1);
     expect(summary.passRate).toBe(1);
+  });
+
+  it("records the trial index on synthesized rows and disambiguates their session ids (U4)", () => {
+    const trialRow = buildReconcilerErrorRow(
+      "run-1",
+      { id: "case-1", query: "q", assertions: [], trialIndex: 2 },
+      "Reconciler recorded missing eval result",
+    );
+    expect(trialRow.trial_index).toBe(2);
+    expect(trialRow.agent_session_id).toBe("reconciler:run-1:case-1:trial-2");
+
+    // Trial 0 (and the default) keep the historical session-id shape.
+    const defaultRow = buildReconcilerErrorRow(
+      "run-1",
+      { id: "case-1", query: "q", assertions: [] },
+      "Reconciler recorded missing eval result",
+    );
+    expect(defaultRow.trial_index).toBe(0);
+    expect(defaultRow.agent_session_id).toBe("reconciler:run-1:case-1");
   });
 });

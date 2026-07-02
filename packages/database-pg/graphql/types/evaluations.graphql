@@ -153,6 +153,51 @@ type SkillAttributionCandidates {
 }
 
 # ────────────────────────────────────────────────────────────────────
+# Eval Profiles (THINK-107 — the agent-under-test as named config)
+#
+# A profile bundles agent model + pinned judge model + trial count. Runs
+# stamp profileId at insert and pin the resolved profileSnapshot at
+# dispatch, so later profile edits never reinterpret past runs. Exactly
+# one default per tenant; the resolution seam synthesizes a default when
+# none exists. Profiles soft-archive; archiving the current default is
+# rejected. Distinct from the unrelated "Agent Profile" prompt presets.
+# ────────────────────────────────────────────────────────────────────
+
+type EvalProfile {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  # Bedrock model id of the agent under test (tenant-catalog validated).
+  model: String!
+  # Pinned LLM-judge model for llm-rubric scoring; null = deployed default.
+  judgeModel: String
+  # Trial count applied to llm-rubric cases only (>= 1). Deterministic-only
+  # cases always run once.
+  trials: Int!
+  isDefault: Boolean!
+  archivedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateEvalProfileInput {
+  name: String!
+  model: String!
+  judgeModel: String
+  trials: Int
+}
+
+input UpdateEvalProfileInput {
+  name: String
+  model: String
+  judgeModel: String
+  # Explicit null is not distinguishable from omitted for judgeModel; pass
+  # clearJudgeModel: true to reset the judge pin to the deployed default.
+  clearJudgeModel: Boolean
+  trials: Int
+}
+
+# ────────────────────────────────────────────────────────────────────
 # Runs
 # ────────────────────────────────────────────────────────────────────
 
@@ -177,12 +222,27 @@ type EvalRun {
   # on legacy category/test-case launches.
   datasetId: ID
   datasetVersion: Int
+  # Eval Profile the run executed against (THINK-107). profileId stamps at
+  # run creation; profileSnapshot ({ model, judgeModel, trials,
+  # workspaceFingerprint }) pins at dispatch. Null on pre-profile runs —
+  # the UI renders those "Legacy (pre-profile)".
+  profileId: ID
+  profileName: String
+  profileSnapshot: AWSJSON
+  # True fan-out count (sum of per-case trial counts); null on pre-profile
+  # runs, where completion arithmetic falls back to totalTests.
+  expectedResultRows: Int
   totalTests: Int!
   passed: Int!
   failed: Int!
   # Count of error-status results (infra noise — excluded from passRate).
   # Null on legacy runs, where errors are folded into `failed`.
   errored: Int
+  # Count of unstable CASE verdicts (Eval Profiles U4): scored trials
+  # splitting with no majority. Excluded from passRate and gate math
+  # exactly like errors. Null on legacy runs and on runs finalized before
+  # trial aggregation shipped.
+  unstable: Int
   # Scoring-semantics version stamped at run creation
   # (CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core). Null = legacy
   # run scored under the old denominator (errors counted as failed).
@@ -195,7 +255,21 @@ type EvalRun {
   # "no score", never 0%.
   passRate: Float
   regression: Boolean!
+  # Aggregate run cost: evaluator cost + priced agent-turn cost (U5).
   costUsd: Float
+  # Cost honesty flag (U5, R6): true when any result row is missing a
+  # priced agent-turn cost (usage absent on an older runtime envelope or
+  # an errored invoke, or tokens recorded with catalog pricing
+  # unresolved) — costUsd then understates real spend and must render
+  # flagged, never as a confident total. Also true for runs finalized
+  # before agent-turn telemetry shipped (evaluator-only cost) and while
+  # a run is still in flight.
+  costPartial: Boolean!
+  # Run-level latency percentiles over per-result durationMs (U5, R7),
+  # computed at query time via PERCENTILE_CONT (KTD6) — only when
+  # requested. Null until the run has results with recorded durations.
+  latencyP50Ms: Int
+  latencyP95Ms: Int
   errorMessage: String
   startedAt: AWSDateTime
   completedAt: AWSDateTime
@@ -213,8 +287,18 @@ type EvalResult {
   testCaseName: String
   category: String
   status: String!
+  # Which trial of the case this row is (0-based). 0 on legacy
+  # single-trial rows.
+  trialIndex: Int!
   score: Float
   durationMs: Int
+  # Agent-turn telemetry (THINK-107 U5): token usage of the agent
+  # invocation itself, priced against the run's snapshot model. Tokens
+  # without resolved catalog pricing carry null cost (summary marks cost
+  # partial — never a false zero).
+  agentInputTokens: Int
+  agentOutputTokens: Int
+  agentCostUsd: Float
   agentSessionId: String
   input: String
   expected: String
@@ -492,9 +576,29 @@ input OverrideEvalResultInput {
   reason: String
 }
 
+input OverrideEvalCaseVerdictInput {
+  runId: ID!
+  testCaseId: ID!
+  # 'pass' | 'fail' to set (or re-set — last write wins) the case-level
+  # override; null/omitted CLEARS an existing override, restoring the
+  # aggregated verdict. The aggregation layer applies this LAST, so it can
+  # settle an `unstable` case or overturn a majority.
+  overrideStatus: String
+  # Required non-empty (after trim) when setting an override; ignored
+  # when clearing. The overriding caller's identity is derived from the
+  # authenticated context, never from input.
+  reason: String
+}
+
 input StartEvalRunInput {
-  # Optional model override for the direct-AgentCore eval run. Omit to use
-  # Kimi K2.5; non-default overrides must be available in model_catalog.
+  # Eval Profile to run against (THINK-107). Omit to use the tenant's
+  # default profile (synthesized when none exists). When set, the profile
+  # supplies model, judge pin, and trial count; the legacy `model` scalar
+  # below is ignored.
+  profileId: ID
+  # Legacy model override, superseded by profileId. Omit to use the
+  # resolved profile's model; non-default overrides must be available in
+  # model_catalog.
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.
   categories: [String!]
@@ -544,6 +648,9 @@ extend type Query {
   # the cached tenant_mcp_servers.tools list (approved + enabled servers); no
   # live MCP discovery.
   evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
+  # Eval Profiles (THINK-107). Default listing hides archived profiles;
+  # pass includeArchived to see them (historical runs resolve either way).
+  evalProfiles(tenantId: ID!, includeArchived: Boolean): [EvalProfile!]!
   # Per-skill eval score + regression (Skill Tests & Evals U5).
   # Operator-gated; tenant-scoped. Returns an "unrated" score (rated:
   # false) for a skill with no enabled cases — never null.
@@ -565,6 +672,16 @@ extend type Query {
 }
 
 extend type Mutation {
+  # Eval Profile CRUD (THINK-107). Operator-gated; model and judgeModel
+  # validate against the tenant model catalog. archiveEvalProfile rejects
+  # the current default (designate another first); setDefaultEvalProfile
+  # swaps atomically; duplicateEvalProfile copies all fields under a
+  # derived name.
+  createEvalProfile(tenantId: ID!, input: CreateEvalProfileInput!): EvalProfile!
+  updateEvalProfile(id: ID!, input: UpdateEvalProfileInput!): EvalProfile!
+  duplicateEvalProfile(id: ID!, name: String): EvalProfile!
+  archiveEvalProfile(id: ID!): EvalProfile!
+  setDefaultEvalProfile(id: ID!): EvalProfile!
   startEvalRun(tenantId: ID!, input: StartEvalRunInput!): EvalRun!
   cancelEvalRun(id: ID!): EvalRun!
   deleteEvalRun(id: ID!): Boolean!
@@ -619,6 +736,15 @@ extend type Mutation {
   # stamped scoring_version (legacy runs recompute under legacy
   # semantics), and pushes notifyEvalRunUpdate.
   overrideEvalResult(input: OverrideEvalResultInput!): EvalResult!
+  # CASE-level verdict override (Eval Profiles U4, KTD9). Multi-trial
+  # cases have no single result row to override — the case verdict
+  # (including `unstable`) exists only in the trial-aggregation layer, so
+  # the override lives in eval_case_overrides and is applied last there.
+  # Gate is row-derived (run → tenant admin); writing recomputes the run
+  # summary under the run-level advisory lock and pushes
+  # notifyEvalRunUpdate. Row-level overrideEvalResult remains the path
+  # for legacy/single-trial rows and rejects rows of multi-trial cases.
+  overrideEvalCaseVerdict(input: OverrideEvalCaseVerdictInput!): Boolean!
   # MCP replay tool override (Trust Core U14). Operator-gated
   # (requireTenantAdmin). mode 'allow' force-allows a write the heuristic
   # blocks; mode 'block' force-blocks a read the heuristic allows. Upserts

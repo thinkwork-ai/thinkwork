@@ -1,6 +1,7 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentSkills, and, db, eq, routines, isNotNull } from "../../utils.js";
+import { and, db, eq, routines, isNotNull } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import { listEnabledAgentWorkspaceSkillSlugs } from "../../../lib/skills/workspace-skill-index.js";
 import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
@@ -27,13 +28,16 @@ export async function customizeBindings(
     throw err;
   }
 
-  const [skillRows, workflowRows] = await Promise.all([
-    db
-      .select({ skill_id: agentSkills.skill_id })
-      .from(agentSkills)
-      .where(
-        and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
-      ),
+  // KTD-8 (plan U10): connected skills come from the agent workspace —
+  // `skills/<slug>/SKILL.md` presence gated by `.assignment.json` enabled
+  // state — not the retired agent_skills mirror. An unresolvable
+  // workspace degrades to "nothing connected" rather than failing the
+  // Customize page.
+  const [workspaceSkillSlugs, workflowRows] = await Promise.all([
+    listEnabledAgentWorkspaceSkillSlugs(agentId).catch((err) => {
+      console.warn("[customizeBindings] workspace skill read failed:", err);
+      return null;
+    }),
     db
       .select({ catalog_slug: routines.catalog_slug })
       .from(routines)
@@ -46,9 +50,7 @@ export async function customizeBindings(
       ),
   ]);
 
-  const connectedSkillIds = Array.from(
-    new Set(skillRows.map((row) => row.skill_id)),
-  );
+  const connectedSkillIds = workspaceSkillSlugs ?? [];
   const connectedWorkflowSlugs = Array.from(
     new Set(
       workflowRows

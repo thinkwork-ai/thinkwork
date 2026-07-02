@@ -43,7 +43,7 @@ export interface ResolveSandboxFactoryOptions {
    * (leave AgentCore session running until its TTL).
    */
   cleanup?: boolean;
-  /** Pass-through. Defaults to 300 inside the connector. */
+  /** Pass-through. Defaults to the 8-hour AgentCore maximum inside the connector. */
   sessionTimeoutSeconds?: number;
 }
 

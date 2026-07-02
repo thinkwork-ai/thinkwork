@@ -1,11 +1,19 @@
 import { GraphQLError } from "graphql";
+import { S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
-import { and, db, eq, spaceMembers, spaces } from "../../utils.js";
+import { and, db, eq, spaceMembers, spaces, tenants } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { normalizeSpaceSlug } from "../../../lib/spaces/space-slug.js";
+import { ensureSpaceMdSourceFile } from "../../../lib/spaces/space-md-source-file.js";
 import { parseSpaceAccessMode, toGraphqlSpace } from "./shared.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
+
+const s3 = new S3Client({
+  region:
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+});
 
 type CreateSpaceInput = {
   tenantId: string;
@@ -35,6 +43,7 @@ export async function createSpace(
     normalizeSpaceSlug(name),
   );
   const folderName = await nextAvailableSpaceFolderName(input.tenantId, name);
+  const tenantSlug = await tenantSlugForSpace(input.tenantId);
 
   const [row] = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -73,7 +82,47 @@ export async function createSpace(
     return [created];
   });
 
+  await seedSpaceMdSourceFile({
+    bucket: getConfig("WORKSPACE_BUCKET") || "",
+    tenantSlug,
+    spaceSlug: folderName,
+    spaceName: name,
+    description,
+  });
+
   return toGraphqlSpace(row);
+}
+
+async function seedSpaceMdSourceFile(input: {
+  bucket: string;
+  tenantSlug: string | null;
+  spaceSlug: string;
+  spaceName: string;
+  description: string | null;
+}) {
+  if (!input.bucket || !input.tenantSlug) return;
+  try {
+    await ensureSpaceMdSourceFile({
+      ...input,
+      tenantSlug: input.tenantSlug,
+      overwrite: false,
+      s3Client: s3,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[createSpace] SPACE.md seed failed for ${input.tenantSlug}/${input.spaceSlug}: ${message}`,
+    );
+  }
+}
+
+async function tenantSlugForSpace(tenantId: string): Promise<string | null> {
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  return tenant?.slug ?? null;
 }
 
 async function nextAvailableSpaceFolderName(

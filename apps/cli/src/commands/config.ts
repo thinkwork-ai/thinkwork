@@ -13,6 +13,7 @@ import {
   loadEnvironment,
   listEnvironments,
   resolveTerraformDir,
+  saveEnvironment,
 } from "../environments.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { resolveStage } from "../lib/resolve-stage.js";
@@ -64,6 +65,33 @@ export function registerConfigCommand(program: Command): void {
   const config = program
     .command("config")
     .description("View or change stack configuration");
+
+  // thinkwork config graduate <stage> — mark a stage as a persistent
+  // (graduated) environment. Destroy's strongest guard keys on this persisted
+  // identity (U7): --yes then requires an explicit --stage and the recorded
+  // account must match the caller's account.
+  config
+    .command("graduate <stage>")
+    .description(
+      "Mark a stage as a graduated persistent environment (arms destroy's strongest guard)",
+    )
+    .action((stage: string) => {
+      const env = loadEnvironment(stage);
+      if (!env) {
+        printError(
+          `No local environment config for stage "${stage}". Run \`thinkwork init -s ${stage}\` first.`,
+        );
+        process.exit(1);
+      }
+      saveEnvironment({
+        ...env,
+        graduated: true,
+        updatedAt: new Date().toISOString(),
+      });
+      printSuccess(
+        `Stage "${stage}" marked as graduated — destroy now requires explicit --stage with --yes and asserts account ${env.accountId}.`,
+      );
+    });
 
   // thinkwork config list [-s <stage>]
   config

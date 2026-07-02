@@ -16,11 +16,17 @@ export const DEFAULT_PASS_THRESHOLD = 0.7;
  * run creation. Version 2 = "errors leave the pass rate": `failed`
  * counts only status='fail', errors land in `errored`, and
  * pass_rate = passed / (passed + failed) (null when nothing scoreable).
+ * Version 3 (Eval Profiles U4) = "case verdicts over trials": run
+ * counters aggregate per-trial rows into case verdicts (majority of
+ * scored trials; disagreement → `unstable`, excluded from the pass rate
+ * exactly like errors — see trial-aggregation.ts). v2 and v3 share the
+ * errors-out-of-denominator rule, so read paths accept `>= 2`;
+ * v2-stamped runs (all single-trial) remain valid as-is.
  * Legacy rows carry a null stamp (~v1: errors fold into `failed`,
  * pass_rate = passed / total) and are never recomputed under new
  * semantics.
  */
-export const CURRENT_EVAL_SCORING_VERSION = 2;
+export const CURRENT_EVAL_SCORING_VERSION = 3;
 
 /**
  * A result row as the aggregation seam sees it. `override_status` is

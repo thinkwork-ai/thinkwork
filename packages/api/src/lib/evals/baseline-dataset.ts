@@ -20,6 +20,12 @@
  *    Tenant edits to baseline cases live in S3 (the canonical artifact)
  *    and therefore WIN over re-seeds; tenant-removed (tombstoned) cases
  *    are never re-added; tenant-disabled cases stay disabled.
+ *  - Curation (Eval Profiles U7 / KTD8) rides the same version bump:
+ *    quality_state transitions propagate ONE-WAY (never retired →
+ *    active — fixes ship as rewrites with a new case identity), and
+ *    pack-level tombstones (_tombstones.json) retire superseded ids per
+ *    tenant while the rewrite's new id arrives through the additive
+ *    merge with its rewritten_from linkage.
  *  - Re-homing existing tenants is an in-place UPDATE that sets
  *    dataset_id / dataset_case_id on the existing eval_test_cases rows.
  *    Row ids are preserved (eval_results FK history + trend queries
@@ -38,7 +44,9 @@ import { S3Client } from "@aws-sdk/client-s3";
 import {
   BUILT_IN_EVAL_SEED_SOURCE,
   EVAL_SEEDS,
+  EVAL_SEED_TOMBSTONES,
   type SeedTestCase,
+  type SeedTombstone,
 } from "../eval-seeds.js";
 import {
   db,
@@ -57,10 +65,13 @@ import {
   computeEvalCaseSha,
   createDrizzleDatasetIndexStore,
   createS3DatasetStorage,
+  evalCaseQualityRank,
+  evalCaseQualityState,
   evalDatasetCaseKey,
   evalDatasetManifestKey,
   evalDatasetPrefix,
   evalDatasetSentinelKey,
+  isEvalCaseQualityState,
   parseEvalDatasetCase,
   parseEvalDatasetManifest,
   serializeEvalDatasetCase,
@@ -167,6 +178,10 @@ export function buildBaselineDatasetCases(
         assertions: seed.assertions,
         tags: baselineSeedTags(seed),
         enabled: true,
+        // Curation block (U7) — carried only when present so pre-curation
+        // case shas don't churn.
+        ...(seed.quality_state ? { quality_state: seed.quality_state } : {}),
+        ...(seed.rewritten_from ? { rewritten_from: seed.rewritten_from } : {}),
       },
       engines: { agentcore: { evaluator_ids: baselineEvaluatorIds(seed) } },
     };
@@ -223,6 +238,10 @@ export interface BaselineSeedResult {
   rehomed: number;
   /** Index rows newly inserted (source='yaml-seed', linked). */
   inserted: number;
+  /** Case ids whose quality_state propagated one-way this run (U7). */
+  stateTransitions: string[];
+  /** Case ids tombstoned from the pack-level tombstone list this run (U7). */
+  tombstoned: string[];
 }
 
 function parseMarkerVersion(content: string | null): number {
@@ -254,6 +273,14 @@ function caseFromIndexRow(
       assertions: row.assertions,
       tags: row.tags,
       enabled: row.enabled,
+      // Curation is canonical-pack truth (U7): first materialization of a
+      // case the packs already retired/flagged lands with that state.
+      ...(canonical.core.quality_state
+        ? { quality_state: canonical.core.quality_state }
+        : {}),
+      ...(canonical.core.rewritten_from
+        ? { rewritten_from: canonical.core.rewritten_from }
+        : {}),
     },
     engines:
       row.agentcore_evaluator_ids.length > 0
@@ -273,10 +300,12 @@ export async function seedBaselineDataset(
     cases?: BaselineDatasetCase[];
     targetVersion?: number;
     categories?: string[] | null;
+    tombstones?: SeedTombstone[];
   } = {},
 ): Promise<BaselineSeedResult> {
   const targetVersion = opts.targetVersion ?? BASELINE_DATASET_VERSION;
   const allCases = opts.cases ?? buildBaselineDatasetCases();
+  const seedTombstones = opts.tombstones ?? EVAL_SEED_TOMBSTONES;
   const cases =
     opts.categories && opts.categories.length > 0
       ? allCases.filter((c) => opts.categories!.includes(c.core.category))
@@ -293,7 +322,14 @@ export async function seedBaselineDataset(
   const markerKey = baselineVersionMarkerKey(ctx.tenantSlug);
   const markerVersion = parseMarkerVersion(await deps.storage.read(markerKey));
   if (markerVersion >= targetVersion) {
-    return { action: "current", addedCaseIds: [], rehomed: 0, inserted: 0 };
+    return {
+      action: "current",
+      addedCaseIds: [],
+      rehomed: 0,
+      inserted: 0,
+      stateTransitions: [],
+      tombstoned: [],
+    };
   }
 
   // 2. Load (or initialize) the manifest.
@@ -316,14 +352,34 @@ export async function seedBaselineDataset(
       }
     : parseEvalDatasetManifest(manifestContent);
 
-  // 3. Existing tenant rows (legacy yaml-seed): their content wins over
+  // 3. Pack-level tombstone propagation (U7): a case id the canonical
+  //    packs removed — usually superseded by a rewrite — moves from each
+  //    tenant manifest's live cases to its tombstones. The index row
+  //    survives disabled (the post-merge sync flips it) so historical
+  //    eval_results keep resolving; the additive merge below never
+  //    re-adds a tombstoned id, so removals are permanent per tenant.
+  const tombstoned: string[] = [];
+  for (const tomb of seedTombstones) {
+    if (!manifest.cases.some((c) => c.case_id === tomb.case_id)) continue;
+    await deps.storage.delete(
+      evalDatasetCaseKey(ctx.tenantSlug, BASELINE_DATASET_SLUG, tomb.case_id),
+    );
+    manifest.cases = manifest.cases.filter((c) => c.case_id !== tomb.case_id);
+    manifest.tombstones = [
+      ...manifest.tombstones.filter((t) => t.case_id !== tomb.case_id),
+      { case_id: tomb.case_id, removed_at: new Date().toISOString() },
+    ];
+    tombstoned.push(tomb.case_id);
+  }
+
+  // 4. Existing tenant rows (legacy yaml-seed): their content wins over
   //    the canonical pack when a case is first materialized into S3 —
   //    tenant edits and disables survive the migration.
   const existingRows = await deps.index.listSeedRowContentByName(
     cases.map((c) => c.core.case_id),
   );
 
-  // 4. Additive merge by case id: live and tombstoned ids are never
+  // 5. Additive merge by case id: live and tombstoned ids are never
   //    touched (tenant edits win; tenant removals stay removed).
   const liveIds = new Set(manifest.cases.map((c) => c.case_id));
   const tombstonedIds = new Set(manifest.tombstones.map((t) => t.case_id));
@@ -347,7 +403,53 @@ export async function seedBaselineDataset(
     addedCaseIds.push(caseId);
   }
 
-  // 5. Sentinel (empty-folder materialization) + manifest write — only
+  // 6. One-way quality-state propagation (U7 / KTD8): for cases already
+  //    live in the tenant manifest, ONLY the curation state moves — and
+  //    only upward (active → needs-revision → retired). Tenant content
+  //    edits stay untouched, and a tenant case is never resurrected or
+  //    downgraded by a re-seed; fixes ship as rewrites with a new
+  //    identity, not in-place reversals.
+  const stateTransitions: string[] = [];
+  const added = new Set(addedCaseIds);
+  for (const candidate of cases) {
+    const canonicalState = evalCaseQualityState(candidate.core);
+    if (canonicalState === "active") continue; // never propagates downward
+    const caseId = candidate.core.case_id;
+    if (added.has(caseId)) continue; // freshly written with canonical state
+    if (!manifest.cases.some((c) => c.case_id === caseId)) continue;
+    const caseKey = evalDatasetCaseKey(
+      ctx.tenantSlug,
+      BASELINE_DATASET_SLUG,
+      caseId,
+    );
+    const content = await deps.storage.read(caseKey);
+    if (content == null) continue; // partial S3 state: heals on next sync
+    const parsed = parseEvalDatasetCase(content);
+    const currentState = evalCaseQualityState(parsed.core);
+    if (
+      evalCaseQualityRank(canonicalState) <= evalCaseQualityRank(currentState)
+    ) {
+      continue;
+    }
+    const updated = serializeEvalDatasetCase(
+      {
+        ...parsed.core,
+        quality_state: canonicalState,
+        ...(candidate.core.rewritten_from && !parsed.core.rewritten_from
+          ? { rewritten_from: candidate.core.rewritten_from }
+          : {}),
+      },
+      parsed.engines,
+    );
+    await deps.storage.write(caseKey, updated);
+    const sha = computeEvalCaseSha(updated);
+    manifest.cases = manifest.cases.map((c) =>
+      c.case_id === caseId ? { case_id: caseId, content_sha: sha } : c,
+    );
+    stateTransitions.push(caseId);
+  }
+
+  // 7. Sentinel (empty-folder materialization) + manifest write — only
   //    when state actually changed, so a no-add version bump doesn't
   //    churn the manifest version.
   if (isNewDataset) {
@@ -356,7 +458,11 @@ export async function seedBaselineDataset(
       "",
     );
   }
-  if (isNewDataset || addedCaseIds.length > 0) {
+  const manifestChanged =
+    addedCaseIds.length > 0 ||
+    stateTransitions.length > 0 ||
+    tombstoned.length > 0;
+  if (isNewDataset || manifestChanged) {
     manifest.version += 1;
     manifest.updated_at = new Date().toISOString();
     await deps.storage.write(
@@ -365,7 +471,7 @@ export async function seedBaselineDataset(
     );
   }
 
-  // 6. Index linkage BEFORE sync (U5 KTD): re-homed rows keep their row
+  // 8. Index linkage BEFORE sync (U5 KTD): re-homed rows keep their row
   //    ids AND source='yaml-seed'; the U4 sync keyed on
   //    (dataset_id, dataset_case_id) then treats them as updates.
   const { id: datasetId } = await deps.index.upsertDatasetRow({
@@ -389,12 +495,13 @@ export async function seedBaselineDataset(
       ? await deps.index.insertSeedRows(datasetId, missingRows)
       : 0;
 
-  // 7. Full-state sync from S3 (advisory-locked inside the store) —
-  //    projects manifest_sha and reconciles any remaining drift.
+  // 9. Full-state sync from S3 (advisory-locked inside the store) —
+  //    projects manifest_sha (including quality_state / rewrite linkage
+  //    columns) and flips tombstoned rows enabled=false.
   await syncEvalDatasetFromS3(dctx, deps.storage, deps.store, { force: true });
 
-  // 8. Marker — stamped only on full (unfiltered) seeds so a categories-
-  //    filtered partial seed can't suppress the remaining cases forever.
+  // 10. Marker — stamped only on full (unfiltered) seeds so a categories-
+  //     filtered partial seed can't suppress the remaining cases forever.
   if (fullSeed) {
     await deps.storage.write(
       markerKey,
@@ -405,7 +512,14 @@ export async function seedBaselineDataset(
     );
   }
 
-  return { action: "seeded", addedCaseIds, rehomed, inserted };
+  return {
+    action: "seeded",
+    addedCaseIds,
+    rehomed,
+    inserted,
+    stateTransitions,
+    tombstoned,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +558,8 @@ export function createDrizzleBaselineIndexOps(
           tags: evalTestCases.tags,
           agentcore_evaluator_ids: evalTestCases.agentcore_evaluator_ids,
           enabled: evalTestCases.enabled,
+          quality_state: evalTestCases.quality_state,
+          rewritten_from_id: evalTestCases.rewritten_from_id,
         })
         .from(evalTestCases)
         .where(
@@ -468,6 +584,10 @@ export function createDrizzleBaselineIndexOps(
             tags: r.tags ?? [],
             agentcore_evaluator_ids: r.agentcore_evaluator_ids ?? [],
             enabled: r.enabled,
+            quality_state: isEvalCaseQualityState(r.quality_state)
+              ? r.quality_state
+              : "active",
+            rewritten_from_id: r.rewritten_from_id,
           } satisfies DatasetCaseIndexRow,
         ]),
       );
@@ -525,6 +645,8 @@ export function createDrizzleBaselineIndexOps(
             tags: r.tags,
             agentcore_evaluator_ids: r.agentcore_evaluator_ids,
             enabled: r.enabled,
+            quality_state: r.quality_state,
+            rewritten_from_id: r.rewritten_from_id,
             source: BUILT_IN_EVAL_SEED_SOURCE,
           })),
         )
@@ -556,7 +678,14 @@ export async function ensureBaselineDatasetSeeded(
     console.warn(
       `[baseline-dataset] tenant ${tenantId} has no slug; skipping baseline seeding`,
     );
-    return { action: "skipped", addedCaseIds: [], rehomed: 0, inserted: 0 };
+    return {
+      action: "skipped",
+      addedCaseIds: [],
+      rehomed: 0,
+      inserted: 0,
+      stateTransitions: [],
+      tombstoned: [],
+    };
   }
   const bucket = getConfig("WORKSPACE_BUCKET");
   if (!bucket) {

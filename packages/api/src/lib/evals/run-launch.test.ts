@@ -458,6 +458,27 @@ describe("captureRunSnapshot", () => {
     expect(snapshot.cases).toEqual([]);
     expect(snapshot.datasetVersion).toBe(3);
   });
+
+  it("excludes retired and needs-revision cases from the pinned scope (U7 / KTD8)", async () => {
+    seedDataset(storage, [
+      makeCore("case-active"),
+      makeCore("case-retired", { quality_state: "retired" }),
+      makeCore("case-flagged", { quality_state: "needs-revision" }),
+    ]);
+    const snapshot = await captureRunSnapshot(ctx, RUN_ID, storage);
+    expect(snapshot.cases.map((c) => c.caseId)).toEqual(["case-active"]);
+    // Excluded cases are sha-verified but never copied into the run prefix.
+    expect(
+      storage.objects.has(
+        evalRunSnapshotCaseKey(ctx.tenantSlug, RUN_ID, "case-retired"),
+      ),
+    ).toBe(false);
+    expect(
+      storage.objects.has(
+        evalRunSnapshotCaseKey(ctx.tenantSlug, RUN_ID, "case-flagged"),
+      ),
+    ).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

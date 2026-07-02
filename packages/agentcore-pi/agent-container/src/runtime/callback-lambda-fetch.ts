@@ -9,34 +9,45 @@ export interface LambdaCallbackFetchOptions {
   lambdaClient: Pick<LambdaClient, "send">;
   finalizeFunctionName: string;
   activityFunctionName: string;
+  manifestFunctionName?: string;
   logger?: (entry: Record<string, unknown>) => void;
 }
 
-type CallbackTarget = "activity" | "finalize";
+type CallbackTarget = "activity" | "finalize" | "manifest";
 
 interface CallbackRoute {
-  threadId: string;
+  threadId?: string;
   target: CallbackTarget;
 }
 
 function callbackRoute(url: URL): CallbackRoute | null {
-  const match = url.pathname.match(
+  const threadMatch = url.pathname.match(
     /^\/api\/threads\/([^/]+)\/(activity|finalize)$/,
   );
-  if (!match) return null;
-  return {
-    threadId: decodeURIComponent(match[1] ?? ""),
-    target: match[2] as CallbackTarget,
-  };
+  if (threadMatch) {
+    return {
+      threadId: decodeURIComponent(threadMatch[1] ?? ""),
+      target: threadMatch[2] as CallbackTarget,
+    };
+  }
+  if (/^\/api\/runtime\/manifests$/.test(url.pathname)) {
+    return { target: "manifest" };
+  }
+  return null;
 }
 
 function functionNameForRoute(
   route: CallbackRoute,
   options: LambdaCallbackFetchOptions,
 ): string {
-  return route.target === "activity"
-    ? options.activityFunctionName
-    : options.finalizeFunctionName;
+  switch (route.target) {
+    case "activity":
+      return options.activityFunctionName;
+    case "finalize":
+      return options.finalizeFunctionName;
+    case "manifest":
+      return options.manifestFunctionName ?? "";
+  }
 }
 
 function normalizeHeaders(
@@ -102,7 +113,10 @@ function buildApiGatewayEvent(args: {
   headers: Record<string, string>;
   body: string | undefined;
 }): Record<string, unknown> {
-  const routeKey = `POST /api/threads/{threadId}/${args.route.target}`;
+  const routeKey =
+    args.route.target === "manifest"
+      ? "POST /api/runtime/manifests"
+      : `POST /api/threads/{threadId}/${args.route.target}`;
   const now = Date.now();
   return {
     version: "2.0",
@@ -133,7 +147,10 @@ function buildApiGatewayEvent(args: {
       time: new Date(now).toUTCString(),
       timeEpoch: now,
     },
-    pathParameters: { threadId: args.route.threadId },
+    pathParameters:
+      args.route.threadId !== undefined
+        ? { threadId: args.route.threadId }
+        : undefined,
     body: args.body,
     isBase64Encoded: false,
   };
@@ -141,8 +158,9 @@ function buildApiGatewayEvent(args: {
 
 /**
  * Pi runs in the private application VPC. Public execute-api/custom-domain HTTP
- * callbacks are not reliable from there, so production chat callbacks invoke
- * the API Lambdas directly. Non-chat-callback URLs still use normal fetch.
+ * callbacks are not reliable from there, so production chat callbacks and the
+ * per-turn capability-manifest POST invoke the API Lambdas directly.
+ * Unmatched URLs still use normal fetch.
  */
 export function createLambdaCallbackFetch(
   options: LambdaCallbackFetchOptions,

@@ -921,6 +921,12 @@ variable "n8n_service_credential_secret_arn" {
   default     = ""
 }
 
+variable "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge."
+  type        = string
+  default     = ""
+}
+
 variable "n8n_storage_bucket_name" {
   description = "S3 bucket name used for n8n managed artifacts and optional storage mode objects. Required when n8n_provisioned = true."
   type        = string
@@ -1178,6 +1184,18 @@ variable "agentcore_pi_source_image_uri" {
   description = "Optional release image URI copied into the stage AgentCore ECR repository before creating the Pi Lambda."
   type        = string
   default     = ""
+}
+
+variable "skill_trust_runner_enabled" {
+  description = "Deploy the skill-trust-runner container Lambda. Requires the <ecr-repo>:skill-trust-runner-latest image to already exist (CI seeds it for repo-managed stages); releases do not yet publish this image, so init-scaffolded installs must leave it disabled (harness cycle-5 ledger entry)."
+  type        = bool
+  default     = true
+}
+
+variable "manage_bedrock_invocation_logging" {
+  description = "Own the account/region-level Bedrock model-invocation logging (log group /thinkwork/bedrock/model-invocations, IAM role, and the account logging configuration). Exactly ONE stage per account+region may manage it — a second stack collides on the log group and would clobber/destroy the account-level config (harness cycle-5 ledger entry)."
+  type        = bool
+  default     = true
 }
 
 variable "require_lambda_artifacts" {

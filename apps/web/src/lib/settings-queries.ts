@@ -1127,6 +1127,12 @@ export const SettingsUpdateSpaceMutation = graphql(`
   }
 `);
 
+export const SettingsDeleteSpaceMutation = graphql(`
+  mutation SettingsDeleteSpace($tenantId: ID!, $id: ID!) {
+    deleteSpace(tenantId: $tenantId, id: $id)
+  }
+`);
+
 // ─── Agent config (operator-only section) ────────────────────────────────
 
 export const SettingsTenantAgentQuery = graphql(`
@@ -1522,16 +1528,6 @@ export const SettingsRejectPiExtensionVersionMutation = graphql(`
     $input: RejectPiExtensionVersionInput!
   ) {
     rejectPiExtensionVersion(input: $input) {
-      ...SettingsPiExtensionFields
-    }
-  }
-`);
-
-export const SettingsUpdatePiExtensionAssignmentMutation = graphql(`
-  mutation SettingsUpdatePiExtensionAssignment(
-    $input: UpdatePiExtensionAssignmentInput!
-  ) {
-    updatePiExtensionAssignment(input: $input) {
       ...SettingsPiExtensionFields
     }
   }
@@ -2478,6 +2474,118 @@ export const SettingsConfigureWorkosAuthPluginMutation = graphql(`
         status
         hostnames
         publicOptionLabel
+      }
+    }
+  }
+`);
+
+// Grant/detach mutations (capability-mapping plan U8, KTD-5): every
+// assignment write in the web app goes through these two — the legacy
+// surfaces are clients of the same contract.
+export const SettingsGrantCapabilityMutation = graphql(`
+  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {
+    grantCapability(input: $input) {
+      outcome
+      inspectionState
+      computedAt
+      configFingerprint
+      item {
+        capabilityClass
+        capabilityId
+        displayName
+        active
+        provenance
+        reason
+        detail
+        tokenStatus
+      }
+    }
+  }
+`);
+
+export const SettingsDetachCapabilityMutation = graphql(`
+  mutation SettingsDetachCapability($input: DetachCapabilityInput!) {
+    detachCapability(input: $input) {
+      outcome
+      inspectionState
+      computedAt
+      configFingerprint
+      item {
+        capabilityClass
+        capabilityId
+        displayName
+        active
+        provenance
+        reason
+        detail
+        tokenStatus
+      }
+    }
+  }
+`);
+
+export const SettingsCapabilityInspectorQuery = graphql(`
+  query SettingsCapabilityInspector(
+    $tenantId: ID!
+    $agentId: ID
+    $spaceId: ID
+    $agentProfileId: ID
+    $perspectiveUserId: ID
+  ) {
+    capabilityInspector(
+      tenantId: $tenantId
+      agentId: $agentId
+      spaceId: $spaceId
+      agentProfileId: $agentProfileId
+      perspectiveUserId: $perspectiveUserId
+    ) {
+      state
+      stateDetail
+      agentId
+      spaceId
+      agentProfileId
+      perspectiveUserId
+      noUserBaseline
+      predicted {
+        variant
+        computedAt
+        configFingerprint
+        items {
+          capabilityClass
+          capabilityId
+          displayName
+          active
+          provenance
+          reason
+          detail
+          tokenStatus
+        }
+      }
+      observed {
+        variant
+        computedAt
+        configFingerprint
+        items {
+          capabilityClass
+          capabilityId
+          displayName
+          active
+          provenance
+          reason
+          detail
+          tokenStatus
+        }
+      }
+      divergence {
+        state
+        manifestId
+        manifestCreatedAt
+        manifestFingerprint
+        deltas {
+          capabilityClass
+          capabilityId
+          kind
+        }
       }
     }
   }

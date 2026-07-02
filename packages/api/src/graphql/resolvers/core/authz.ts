@@ -19,6 +19,10 @@
  * `thinkwork-admin` assigned.
  */
 
+import {
+  readSkillAssignmentState,
+  resolveAgentWorkspacePrefix,
+} from "../../../lib/skills/assignment-state.js";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
@@ -163,25 +167,44 @@ export async function requireAgentAllowsOperation(
   if (!agentId) {
     throw forbidden("Agent identity required for admin-skill operations");
   }
-  const [row] = await dbOrTx
-    .select({
-      enabled: agentSkills.enabled,
-      permissions: agentSkills.permissions,
-    })
-    .from(agentSkills)
-    .where(
-      and(
-        eq(agentSkills.agent_id, agentId),
-        eq(agentSkills.skill_id, "thinkwork-admin"),
-      ),
-    );
-  if (!row) {
-    throw forbidden("Agent is not assigned thinkwork-admin");
+  // KTD-8 (plan U9): the workspace state file is the target source of
+  // truth; the agent_skills row is the fallback for assignments that
+  // predate the file. This path only runs on apikey admin-skill
+  // mutations, so the S3 read is off the general request path.
+  let enabled: boolean | null | undefined;
+  let permissions: unknown;
+  const targetPrefix = await resolveAgentWorkspacePrefix(agentId).catch(
+    () => null,
+  );
+  const fileState = targetPrefix
+    ? await readSkillAssignmentState(targetPrefix, "thinkwork-admin")
+    : null;
+  if (fileState) {
+    enabled = fileState.enabled ?? true;
+    permissions = fileState.permissions ?? null;
+  } else {
+    const [row] = await dbOrTx
+      .select({
+        enabled: agentSkills.enabled,
+        permissions: agentSkills.permissions,
+      })
+      .from(agentSkills)
+      .where(
+        and(
+          eq(agentSkills.agent_id, agentId),
+          eq(agentSkills.skill_id, "thinkwork-admin"),
+        ),
+      );
+    if (!row) {
+      throw forbidden("Agent is not assigned thinkwork-admin");
+    }
+    enabled = row.enabled;
+    permissions = row.permissions;
   }
-  if (row.enabled === false) {
+  if (enabled === false) {
     throw forbidden("Agent's thinkwork-admin assignment is disabled");
   }
-  const operations = (row.permissions as { operations?: unknown } | null)
+  const operations = (permissions as { operations?: unknown } | null)
     ?.operations;
   if (!Array.isArray(operations) || !operations.includes(operationName)) {
     throw forbidden(`Operation not in agent's allowlist: ${operationName}`);

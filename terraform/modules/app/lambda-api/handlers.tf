@@ -211,7 +211,7 @@ locals {
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
     }
     "trace-invocation-reconciler" = {
-      BEDROCK_INVOCATION_LOG_GROUP = aws_cloudwatch_log_group.bedrock_model_invocations.name
+      BEDROCK_INVOCATION_LOG_GROUP = local.bedrock_invocation_log_group_name
     }
     "job-schedule-manager" = {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
@@ -397,7 +397,10 @@ locals {
 }
 
 resource "aws_lambda_function" "skill_trust_runner" {
-  count = local.deploy_lambda_handlers && trimspace(var.ecr_repository_url) != "" ? 1 : 0
+  # Gated on the static ecr_repository_provisioned flag: the repository URL is
+  # an apply-time-unknown attribute in a fresh account, and count cannot
+  # depend on it ("Invalid count argument" — THINK-118 harness cycle 4).
+  count = local.deploy_lambda_handlers && var.ecr_repository_provisioned ? 1 : 0
 
   function_name = "thinkwork-${var.stage}-skill-trust-runner"
   role          = aws_iam_role.lambda.arn
@@ -1612,9 +1615,43 @@ resource "aws_scheduler_schedule" "trace_invocation_reconciler" {
 # Bedrock model invocation logs are the provider-observed evidence source for
 # trace invocation reconciliation. The Bedrock setting is account/region scoped,
 # so keep the destination stage-neutral and let each stage's reconciler match
-# only rows present in its own database.
+# only rows present in its own database. Because both the log group name and
+# the account logging configuration are singletons per account+region, only
+# ONE stage may manage them (var.manage_bedrock_invocation_logging) — a second
+# stack collides on the log group and would clobber, then destroy, the
+# account-level config out from under the managing stage (harness cycle-5).
+locals {
+  bedrock_invocation_log_group_name = "/thinkwork/bedrock/model-invocations"
+  bedrock_invocation_log_group_arn  = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/thinkwork/bedrock/model-invocations"
+}
+
+# Adding count re-addressed these resources (`x` → `x[0]`); without moved
+# blocks, existing states (dev) plan destroy+create — losing invocation-log
+# history and racing the same-name recreate (the private_nat
+# RouteAlreadyExists failure class from the cycle-4 fix).
+moved {
+  from = aws_cloudwatch_log_group.bedrock_model_invocations
+  to   = aws_cloudwatch_log_group.bedrock_model_invocations[0]
+}
+
+moved {
+  from = aws_iam_role.bedrock_model_invocation_logging
+  to   = aws_iam_role.bedrock_model_invocation_logging[0]
+}
+
+moved {
+  from = aws_iam_role_policy.bedrock_model_invocation_logging
+  to   = aws_iam_role_policy.bedrock_model_invocation_logging[0]
+}
+
+moved {
+  from = aws_bedrock_model_invocation_logging_configuration.this
+  to   = aws_bedrock_model_invocation_logging_configuration.this[0]
+}
+
 resource "aws_cloudwatch_log_group" "bedrock_model_invocations" {
-  name              = "/thinkwork/bedrock/model-invocations"
+  count             = var.manage_bedrock_invocation_logging ? 1 : 0
+  name              = local.bedrock_invocation_log_group_name
   retention_in_days = 30
 
   tags = {
@@ -1625,7 +1662,8 @@ resource "aws_cloudwatch_log_group" "bedrock_model_invocations" {
 }
 
 resource "aws_iam_role" "bedrock_model_invocation_logging" {
-  name = "thinkwork-${var.stage}-bedrock-model-invocation-logging"
+  count = var.manage_bedrock_invocation_logging ? 1 : 0
+  name  = "thinkwork-${var.stage}-bedrock-model-invocation-logging"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -1653,8 +1691,9 @@ resource "aws_iam_role" "bedrock_model_invocation_logging" {
 }
 
 resource "aws_iam_role_policy" "bedrock_model_invocation_logging" {
-  name = "write-bedrock-model-invocation-logs"
-  role = aws_iam_role.bedrock_model_invocation_logging.id
+  count = var.manage_bedrock_invocation_logging ? 1 : 0
+  name  = "write-bedrock-model-invocation-logs"
+  role  = aws_iam_role.bedrock_model_invocation_logging[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -1668,9 +1707,9 @@ resource "aws_iam_role_policy" "bedrock_model_invocation_logging" {
           "logs:PutLogEvents",
         ]
         Resource = [
-          aws_cloudwatch_log_group.bedrock_model_invocations.arn,
-          "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:log-stream:aws/bedrock/modelinvocations",
-          "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:log-stream:aws/bedrock/modelinvocations*",
+          local.bedrock_invocation_log_group_arn,
+          "${local.bedrock_invocation_log_group_arn}:log-stream:aws/bedrock/modelinvocations",
+          "${local.bedrock_invocation_log_group_arn}:log-stream:aws/bedrock/modelinvocations*",
         ]
       },
       {
@@ -1693,6 +1732,8 @@ resource "aws_iam_role_policy" "bedrock_model_invocation_logging" {
 }
 
 resource "aws_bedrock_model_invocation_logging_configuration" "this" {
+  count = var.manage_bedrock_invocation_logging ? 1 : 0
+
   logging_config {
     text_data_delivery_enabled      = true
     image_data_delivery_enabled     = false
@@ -1700,8 +1741,8 @@ resource "aws_bedrock_model_invocation_logging_configuration" "this" {
     video_data_delivery_enabled     = false
 
     cloudwatch_config {
-      log_group_name = aws_cloudwatch_log_group.bedrock_model_invocations.name
-      role_arn       = aws_iam_role.bedrock_model_invocation_logging.arn
+      log_group_name = aws_cloudwatch_log_group.bedrock_model_invocations[0].name
+      role_arn       = aws_iam_role.bedrock_model_invocation_logging[0].arn
 
       large_data_delivery_s3_config {
         bucket_name = var.bucket_name
@@ -2089,20 +2130,16 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
     Statement = [{
       Effect = "Allow"
       Action = ["lambda:InvokeFunction"]
-      # Includes every for_each handler PLUS the standalone Phase 3 U8a
-      # anchor Lambda (which is intentionally outside the for_each set
-      # because it uses the U7 IAM role, not the shared aws_iam_role.lambda).
-      # Splat (`[*]`) expansion handles count=0 cleanly when handlers are
-      # disabled; an indexed reference (`[0].arn`) would throw on graph eval.
-      # Phase 3 U8b — watchdog moved to standalone resource; its ARN must
-      # be added to the splat list explicitly (SEC-U8B-005). The splat
-      # `[*].arn` form handles count = 0 cleanly when handlers are disabled;
-      # an indexed `[0].arn` would throw on graph eval.
-      Resource = local.deploy_lambda_handlers ? concat(
-        [for k, v in aws_lambda_function.handler : v.arn],
-        aws_lambda_function.compliance_anchor[*].arn,
-        aws_lambda_function.compliance_anchor_watchdog[*].arn,
-      ) : []
+      # One name-pattern wildcard instead of enumerating every handler ARN:
+      # the enumerated form scaled with handler count × stage-name length and
+      # blew IAM's 10,240-byte inline-policy cap for stages ≥ ~11 characters
+      # (harness cycle-7 ledger entry; dev's 3-char stage never saw it). The
+      # api- prefix covers every for_each handler plus the standalone
+      # compliance-anchor and watchdog Lambdas (all named
+      # thinkwork-<stage>-api-*).
+      Resource = local.deploy_lambda_handlers ? [
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-*",
+      ] : []
     }]
   })
 }

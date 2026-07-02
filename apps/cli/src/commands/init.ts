@@ -1,5 +1,11 @@
 import { Command } from "commander";
-import { existsSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  cpSync,
+} from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -7,6 +13,7 @@ import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { saveEnvironment } from "../environments.js";
 import { ensurePrerequisites } from "../prerequisites.js";
+import { backendConfigArgs, ensureStateBackend } from "../lib/state-backend.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
@@ -67,6 +74,77 @@ function findBundledTerraform(): string {
   );
 }
 
+/**
+ * Parse string-valued assignments from an existing terraform.tfvars.
+ * Throws when the file has content but no parseable `stage` assignment —
+ * a corrupt tfvars must never be silently overwritten (U4).
+ */
+export function parseTfvarsAssignments(
+  content: string,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    // Quoted strings AND unquoted bools/numbers — customer_domain_delegated
+    // is a bare bool, and missing it made init reruns silently flip it back
+    // to false, destroying the live cert + domain aliases (HCI test).
+    const match = line.match(
+      /^\s*([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|(true|false|[0-9]+))\s*$/,
+    );
+    if (match) values[match[1]] = match[2] ?? match[3];
+  }
+  const hasContent = content
+    .split("\n")
+    .some((l) => l.trim() && !l.trim().startsWith("#"));
+  if (hasContent && !values.stage) {
+    throw new Error(
+      "Existing terraform.tfvars is unreadable (no stage assignment found). " +
+        "Fix or remove it manually — init will not overwrite a file it cannot parse.",
+    );
+  }
+  return values;
+}
+
+/**
+ * Immutable answers (U4): an initialized directory is pinned to its stage,
+ * account, and region. Changing them requires destroy + re-init, not a rerun.
+ */
+export function guardImmutableAnswers(
+  existing: Record<string, string>,
+  requested: { stage: string; account: string },
+): { ok: boolean; error?: string } {
+  if (existing.stage && existing.stage !== requested.stage) {
+    return {
+      ok: false,
+      error:
+        `This directory is initialized for stage "${existing.stage}", not "${requested.stage}". ` +
+        `Run \`thinkwork destroy -s ${existing.stage}\` first, or init a new directory.`,
+    };
+  }
+  if (existing.account_id && existing.account_id !== requested.account) {
+    return {
+      ok: false,
+      error:
+        `This directory is initialized for AWS account ${existing.account_id}, but the current ` +
+        `credentials are account ${requested.account}. Switch profiles, or init a new directory.`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Rerunning init must never rotate live secrets out from under deployed
+ * resources: existing db_password/api_auth_secret are preserved byte-for-byte.
+ */
+export function mergePreservedSecrets(
+  config: Record<string, string>,
+  existing: Record<string, string>,
+): void {
+  if (existing.db_password) config.db_password = existing.db_password;
+  if (existing.api_auth_secret) {
+    config.api_auth_secret = existing.api_auth_secret;
+  }
+}
+
 function buildTfvars(config: Record<string, string>): string {
   const lines: string[] = [
     `# Thinkwork — ${config.stage} stage`,
@@ -102,6 +180,68 @@ function buildTfvars(config: Record<string, string>): string {
     `# ── Auth ──────────────────────────────────────────────────────────`,
     `api_auth_secret = "${config.api_auth_secret}"`,
   ];
+
+  if (config.customer_domain) {
+    lines.push(``);
+    lines.push(
+      `# ── Domain ────────────────────────────────────────────────────────`,
+    );
+    lines.push(
+      `# customer_domain_delegated stays false until the domain's NS records`,
+    );
+    lines.push(
+      `# point at the created hosted zone; flip it and rerun deploy to finish.`,
+    );
+    lines.push(`customer_domain           = "${config.customer_domain}"`);
+    lines.push(
+      `customer_domain_delegated = ${config.customer_domain_delegated === "true"}`,
+    );
+  }
+
+  if (config.stage === "prod" || config.stage === "production") {
+    lines.push(``);
+    lines.push(
+      `# ── Compliance (prod requirement) ─────────────────────────────────`,
+    );
+    lines.push(
+      `# Object Lock COMPLIANCE is REQUIRED for prod-named stages (terraform`,
+    );
+    lines.push(
+      `# precondition). Retention is irreversible until it expires — even AWS`,
+    );
+    lines.push(
+      `# root cannot delete anchors early. Raise retention for audit posture.`,
+    );
+    lines.push(`compliance_anchor_object_lock_mode = "COMPLIANCE"`);
+    lines.push(
+      `compliance_anchor_retention_days   = ${config.compliance_anchor_retention_days || "30"}`,
+    );
+  }
+
+  if (config.platform_operator_emails) {
+    lines.push(``);
+    lines.push(
+      `platform_operator_emails = "${config.platform_operator_emails
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .join(",")}"`,
+    );
+  }
+
+  if (config.ses_parent_domain) {
+    lines.push(``);
+    lines.push(
+      `# ── Email (SES) ───────────────────────────────────────────────────`,
+    );
+    lines.push(
+      `# SES production access is a manual AWS approval (~24h). Until granted,`,
+    );
+    lines.push(
+      `# email works in sandbox mode; \`thinkwork status\` tracks the approval.`,
+    );
+    lines.push(`ses_parent_domain = "${config.ses_parent_domain}"`);
+  }
 
   if (config.google_oauth_client_id) {
     lines.push(``);
@@ -207,12 +347,36 @@ export function registerInitCommand(program: Command): void {
         const tfDir = join(targetDir, "terraform");
         const tfvarsPath = join(tfDir, "terraform.tfvars");
 
+        let existing: Record<string, string> | null = null;
         if (existsSync(tfvarsPath)) {
-          printWarning(`terraform.tfvars already exists at ${tfvarsPath}`);
-          const overwrite = await ask("Overwrite?", "N");
-          if (overwrite.toLowerCase() !== "y") {
-            console.log("  Aborted.");
-            return;
+          try {
+            existing = parseTfvarsAssignments(readFileSync(tfvarsPath, "utf8"));
+          } catch (err) {
+            printError((err as Error).message);
+            process.exit(1);
+          }
+
+          const guard = guardImmutableAnswers(existing!, {
+            stage,
+            account: identity.account,
+          });
+          if (!guard.ok) {
+            printError(guard.error!);
+            process.exit(1);
+          }
+
+          printWarning(
+            `Existing environment detected at ${tfvarsPath} — secrets and immutable settings (stage, account, region) are preserved.`,
+          );
+          if (!opts.defaults) {
+            const proceed = await ask(
+              "Regenerate terraform.tfvars with preserved secrets?",
+              "Y",
+            );
+            if (proceed.toLowerCase() === "n") {
+              console.log("  Aborted.");
+              return;
+            }
           }
           console.log("");
         }
@@ -225,22 +389,89 @@ export function registerInitCommand(program: Command): void {
           db_password: generateSecret(24),
           api_auth_secret: `tw-${stage}-${generateSecret(16)}`,
         };
+        if (existing) mergePreservedSecrets(config, existing);
 
         if (opts.defaults) {
           config.region =
-            identity.region !== "unknown" ? identity.region : "us-east-1";
+            existing?.region ??
+            (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.database_engine = "aurora-serverless";
           config.enable_hindsight = "true";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
           config.mobile_scheme = "thinkwork";
+          config.customer_domain = existing?.customer_domain ?? "";
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
+          config.platform_operator_emails =
+            existing?.platform_operator_emails ?? "";
+          config.ses_parent_domain = existing?.ses_parent_domain ?? "";
         } else {
           console.log(chalk.bold("  Configure your Thinkwork environment\n"));
 
           const defaultRegion =
-            identity.region !== "unknown" ? identity.region : "us-east-1";
+            existing?.region ??
+            (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.region = await ask("AWS Region", defaultRegion);
+          if (existing?.region && config.region !== existing.region) {
+            printError(
+              `Region is immutable for an initialized environment (currently "${existing.region}"). ` +
+                `Run \`thinkwork destroy -s ${stage}\` and re-init to change it.`,
+            );
+            process.exit(1);
+          }
+
+          console.log("");
+          console.log(chalk.dim("  ── Domain ──"));
+          console.log(
+            chalk.dim(
+              "  A full environment serves the web app on your domain. DNS",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  delegation happens after the first deploy creates the hosted",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  zone; leave empty for a trial on raw CloudFront/API URLs.",
+            ),
+          );
+          config.customer_domain = await ask(
+            "Domain (e.g. thinkwork.acme.com; empty to skip)",
+            existing?.customer_domain ?? "",
+          );
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
+
+          config.platform_operator_emails = await ask(
+            "Operator email(s), comma-separated",
+            existing?.platform_operator_emails ?? "",
+          );
+
+          console.log("");
+          console.log(chalk.dim("  ── Email (SES, optional) ──"));
+          console.log(
+            chalk.dim(
+              "  SES production access is a manual AWS approval (~24h) — the",
+            ),
+          );
+          console.log(
+            chalk.dim(
+              "  deploy proceeds without it and `thinkwork status` tracks it.",
+            ),
+          );
+          const useSes = await ask("Configure SES email now? (y/N)", "N");
+          if (useSes.toLowerCase() === "y") {
+            config.ses_parent_domain = await ask(
+              "SES parent domain",
+              existing?.ses_parent_domain ?? config.customer_domain ?? "",
+            );
+          } else {
+            config.ses_parent_domain = existing?.ses_parent_domain ?? "";
+          }
 
           console.log("");
           console.log(chalk.dim("  ── Database ──"));
@@ -344,12 +575,40 @@ export function registerInitCommand(program: Command): void {
         }
 
         // Write terraform.tfvars at the root terraform/ dir (flat layout)
-        const tfvars = buildTfvars(config);
+        let tfvars = buildTfvars(config);
+        // Preserve assignments init does not manage (deploy-pinned release
+        // artifacts, Pi image override, bedrock-logging ownership pin, …):
+        // regenerating tfvars used to silently drop them, which re-pinned a
+        // fresh deploy to the manifest's unpullable ghcr image (prod
+        // graduation).
+        const generatedKeys = new Set(
+          [...tfvars.matchAll(/^\s*([a-zA-Z0-9_]+)\s*=/gm)].map((m) => m[1]),
+        );
+        const preserved = Object.entries(existing ?? {}).filter(
+          ([key]) => !generatedKeys.has(key),
+        );
+        if (preserved.length > 0) {
+          tfvars +=
+            `\n# ── Preserved from previous configuration (init rerun) ────────────\n` +
+            preserved
+              .map(([key, value]) =>
+                /^(true|false|[0-9]+)$/.test(value)
+                  ? `${key} = ${value}`
+                  : `${key} = "${value}"`,
+              )
+              .join("\n") +
+            `\n`;
+        }
         writeFileSync(tfvarsPath, tfvars);
 
-        // Also write a main.tf that sources the composite module
+        // Also write a main.tf that sources the composite module. ALWAYS
+        // regenerated: the file is a machine-owned template (user state
+        // lives in terraform.tfvars), and skip-if-exists meant CLI updates
+        // could never ship template fixes to existing environments — the
+        // prod scaffold kept a stale template without the compliance-lock
+        // threading (THINK-118 graduation).
         const mainTfPath = join(tfDir, "main.tf");
-        if (!existsSync(mainTfPath)) {
+        {
           writeFileSync(
             mainTfPath,
             `################################################################################
@@ -359,6 +618,10 @@ export function registerInitCommand(program: Command): void {
 
 terraform {
   required_version = ">= 1.5"
+
+  # Partial backend: bucket/key/region/lock table are injected by the CLI via
+  # -backend-config at \`terraform init\` (per-account state bucket, R11).
+  backend "s3" {}
 
   required_providers {
     aws = {
@@ -378,6 +641,13 @@ terraform {
 
 provider "aws" {
   region = var.region
+}
+
+# us-east-1 alias required by the thinkwork module (configuration_aliases):
+# CloudFront ACM certificates must live in us-east-1 regardless of stack region.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
 }
 
 variable "stage" {
@@ -646,12 +916,105 @@ variable "mobile_logout_urls" {
   default = ["exp://localhost:8081", "thinkwork://"]
 }
 
+variable "memory_engine" {
+  type    = string
+  default = ""
+}
+
+variable "customer_domain" {
+  type    = string
+  default = ""
+}
+
+variable "customer_domain_delegated" {
+  type    = bool
+  default = false
+}
+
+variable "platform_operator_emails" {
+  # Comma-separated string — the module forwards it verbatim to graphql-http
+  # as THINKWORK_PLATFORM_OPERATOR_EMAILS (harness cycle-2 ledger entry:
+  # list(string) here failed module validation, "string required").
+  type    = string
+  default = ""
+}
+
+variable "ses_parent_domain" {
+  type    = string
+  default = ""
+}
+
+variable "cognito_email_source_arn" {
+  type    = string
+  default = ""
+}
+
+variable "lambda_artifact_bucket" {
+  type    = string
+  default = ""
+}
+
+variable "lambda_artifact_prefix" {
+  type    = string
+  default = ""
+}
+
+variable "agentcore_pi_source_image_uri" {
+  type    = string
+  default = ""
+}
+
+# Object Lock posture for the compliance anchor bucket. Stages named
+# prod/production REQUIRE "COMPLIANCE" (terraform precondition) — set
+# automatically by init for those stage names. COMPLIANCE retention is
+# irreversible until it expires (even AWS root cannot delete early).
+variable "compliance_anchor_object_lock_mode" {
+  type    = string
+  default = "GOVERNANCE"
+}
+
+variable "compliance_anchor_retention_days" {
+  type    = number
+  default = 365
+}
+
+# Pinned by \`thinkwork deploy\`: true only when this stage is the first
+# ThinkWork stack in the account+region (the Bedrock invocation-logging
+# resources are account-scoped singletons).
+variable "manage_bedrock_invocation_logging" {
+  type    = bool
+  default = true
+}
+
 module "thinkwork" {
   source = "./modules/thinkwork"
+
+  providers = {
+    aws.us_east_1 = aws.us_east_1
+  }
 
   stage      = var.stage
   region     = var.region
   account_id = var.account_id
+
+  memory_engine             = var.memory_engine
+  customer_domain           = var.customer_domain
+  customer_domain_delegated = var.customer_domain_delegated
+  platform_operator_emails  = var.platform_operator_emails
+  ses_parent_domain         = var.ses_parent_domain
+  cognito_email_source_arn  = var.cognito_email_source_arn
+
+  lambda_artifact_bucket        = var.lambda_artifact_bucket
+  lambda_artifact_prefix        = var.lambda_artifact_prefix
+  agentcore_pi_source_image_uri = var.agentcore_pi_source_image_uri
+
+  # Releases publish no skill-trust-runner image yet; only CI-seeded
+  # (repo-managed) stages can run it.
+  skill_trust_runner_enabled        = false
+  manage_bedrock_invocation_logging = var.manage_bedrock_invocation_logging
+
+  compliance_anchor_object_lock_mode = var.compliance_anchor_object_lock_mode
+  compliance_anchor_retention_days   = var.compliance_anchor_retention_days
 
   db_password                = var.db_password
   database_engine            = var.database_engine
@@ -707,6 +1070,42 @@ module "thinkwork" {
 
 output "api_endpoint" {
   value = module.thinkwork.api_endpoint
+}
+
+# Outputs consumed by \`thinkwork deploy\`'s web runtime-config generation —
+# the web app fetches /thinkwork-runtime-config.json at boot; without these
+# the published bundle renders "Sign-in options are unavailable".
+output "app_url" {
+  value = module.thinkwork.app_url
+}
+
+output "auth_domain" {
+  value = module.thinkwork.auth_domain
+}
+
+output "appsync_api_url" {
+  value = module.thinkwork.appsync_api_url
+}
+
+output "appsync_realtime_url" {
+  value = module.thinkwork.appsync_realtime_url
+}
+
+output "appsync_api_key" {
+  value     = module.thinkwork.appsync_api_key
+  sensitive = true
+}
+
+output "admin_client_id_out" {
+  value = module.thinkwork.admin_client_id
+}
+
+output "app_distribution_id" {
+  value = module.thinkwork.app_distribution_id
+}
+
+output "app_bucket_name" {
+  value = module.thinkwork.app_bucket_name
 }
 
 output "user_pool_id" {
@@ -808,9 +1207,32 @@ output "agentcore_memory_id" {
 
         // ── Terraform init ─────────────────────────────────────────────
 
+        // ── State backend (R11): per-account bucket + lock table ────────
+        let initArgs = "";
+        try {
+          const ensured = ensureStateBackend(
+            config.account_id,
+            config.region,
+            config.stage,
+          );
+          initArgs = " " + backendConfigArgs(ensured.target).join(" ");
+          console.log(
+            `\n  State backend: s3://${ensured.target.bucket}/${ensured.target.key}` +
+              (ensured.createdBucket ? " (bucket created)" : ""),
+          );
+        } catch (err) {
+          printWarning(
+            `Could not provision the Terraform state backend now (${(err as Error).message.split("\n")[0]}). ` +
+              `\`thinkwork deploy -s ${stage}\` will provision it before applying.`,
+          );
+        }
+
         console.log("\n  Initializing Terraform...\n");
         try {
-          execSync("terraform init", { cwd: tfDir, stdio: "inherit" });
+          execSync(`terraform init${initArgs}`, {
+            cwd: tfDir,
+            stdio: "inherit",
+          });
         } catch {
           printWarning(
             "Terraform init failed. Run `thinkwork doctor -s " +

@@ -345,6 +345,7 @@ const SECRET_KEY_PATTERN =
   /(?:authorization|bearer|token|secret|password|api[_-]?key|access[_-]?token|refresh[_-]?token)/i;
 const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const OPTIONAL_EPHEMERAL_TOOL_NAMES = new Set(["file_read"]);
+const WORKSPACE_SKILL_TOOL_NAME = "workspace_skill";
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -550,6 +551,10 @@ export function compileAgentProfileRunRequest(
   const model = cleanString(args.profile.modelId);
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
 
+  const skills = compileSkills({
+    policy: args.profile.toolPolicy,
+    availableSkillNames: args.availableSkillNames,
+  });
   const tools = unique([
     ...compileToolAllowlist({
       policy: args.profile.toolPolicy,
@@ -557,10 +562,22 @@ export function compileAgentProfileRunRequest(
     }),
     ...(args.dynamicExtensionToolNames ?? []),
   ]);
-  const skills = compileSkills({
-    policy: args.profile.toolPolicy,
-    availableSkillNames: args.availableSkillNames,
-  });
+  if (
+    skills.length > 0 &&
+    !tools.includes(WORKSPACE_SKILL_TOOL_NAME) &&
+    args.availableToolNames.includes(WORKSPACE_SKILL_TOOL_NAME)
+  ) {
+    tools.push(WORKSPACE_SKILL_TOOL_NAME);
+  }
+  if (
+    skills.length > 0 &&
+    !args.availableToolNames.includes(WORKSPACE_SKILL_TOOL_NAME)
+  ) {
+    throw new AgentProfileAdapterError(
+      "TOOL_NOT_AVAILABLE",
+      `Agent profile references skills but ${WORKSPACE_SKILL_TOOL_NAME} is unavailable.`,
+    );
+  }
   const mcpOperations = compileMcpOperations({
     grants: args.profile.toolPolicy?.mcpServers ?? [],
     registry: args.mcpRegistry,

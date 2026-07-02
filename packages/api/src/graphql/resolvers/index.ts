@@ -44,12 +44,17 @@ import {
   evaluationsQueries,
   evaluationsMutations,
   evalResultTypeResolvers,
+  evalRunTypeResolvers,
   skillEvalScoreTypeResolvers,
 } from "./evaluations/index.js";
 import {
   evalDatasetQueries,
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
+import {
+  evalProfileQueries,
+  evalProfileMutations,
+} from "./evaluations/profiles.js";
 import {
   flagThreadMutations,
   flagThreadQueries,
@@ -70,6 +75,10 @@ import {
   skillCreatorQueries,
 } from "./skill-creator/index.js";
 import { runtimeQueries } from "./runtime/index.js";
+import {
+  capabilityQueries,
+  capabilityMutations,
+} from "./capabilities/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
@@ -158,6 +167,7 @@ export const queryResolvers: Record<string, any> = {
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
+  ...evalProfileQueries,
   ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
@@ -166,6 +176,7 @@ export const queryResolvers: Record<string, any> = {
   ...skillCatalogQueries,
   ...skillCreatorQueries,
   ...runtimeQueries,
+  ...capabilityQueries,
   ...workspaceQueries,
   ...routineQueries,
   ...workflowQueries,
@@ -192,6 +203,7 @@ export const mutationResolvers: Record<string, any> = {
   _empty: () => null,
   ...tenantAgentMutations,
   ...agentProfileMutations,
+  ...capabilityMutations,
   ...goalMutations,
   ...coreMutations,
   ...messageMutations,
@@ -209,6 +221,7 @@ export const mutationResolvers: Record<string, any> = {
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,
+  ...evalProfileMutations,
   ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
   ...wikiMutations,
@@ -258,6 +271,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   EvalResult: evalResultTypeResolvers,
+  EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,

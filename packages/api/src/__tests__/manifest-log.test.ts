@@ -8,10 +8,13 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockTenantRow, mockInsertedRow } = vi.hoisted(() => ({
-  mockTenantRow: vi.fn(),
-  mockInsertedRow: vi.fn(),
-}));
+const { mockTenantRow, mockInsertedRow, insertedValues, mockDeleteWhere } =
+  vi.hoisted(() => ({
+    mockTenantRow: vi.fn(),
+    mockInsertedRow: vi.fn(),
+    insertedValues: [] as Record<string, unknown>[],
+    mockDeleteWhere: vi.fn(),
+  }));
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
@@ -26,12 +29,16 @@ vi.mock("@thinkwork/database-pg", () => ({
       }),
     }),
     insert: () => ({
-      values: () => ({
+      values: (values: Record<string, unknown>) => ({
         returning: () => {
+          insertedValues.push(values);
           const row = mockInsertedRow();
           return Promise.resolve(row ? [row] : []);
         },
       }),
+    }),
+    delete: () => ({
+      where: (...args: unknown[]) => Promise.resolve(mockDeleteWhere(...args)),
     }),
   }),
 }));
@@ -39,6 +46,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 vi.mock("@thinkwork/database-pg/schema", () => ({
   resolvedCapabilityManifests: {
     id: "rcm.id",
+    tenant_id: "rcm.tenant_id",
     created_at: "rcm.created_at",
   },
   tenants: { id: "tenants.id" },
@@ -46,6 +54,11 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 
 vi.mock("drizzle-orm", () => ({
   eq: (..._args: unknown[]) => ({ _eq: _args }),
+  and: (...preds: unknown[]) => ({ _and: preds }),
+  lt: (..._args: unknown[]) => ({ _lt: _args }),
+  sql: Object.assign((..._args: unknown[]) => ({ _sql: _args }), {
+    raw: (text: string) => ({ _raw: text }),
+  }),
 }));
 
 // eslint-disable-next-line import/first
@@ -55,6 +68,30 @@ const TENANT_A = "11111111-1111-1111-1111-111111111111";
 const AGENT_A = "22222222-2222-2222-2222-222222222222";
 const TEMPLATE_A = "33333333-3333-3333-3333-333333333333";
 const USER_A = "44444444-4444-4444-4444-444444444444";
+const THREAD_A = "55555555-5555-5555-5555-555555555555";
+const TURN_A = "66666666-6666-6666-6666-666666666666";
+const SPACE_A = "77777777-7777-7777-7777-777777777777";
+const PROFILE_A = "88888888-8888-8888-8888-888888888888";
+
+/** Minimal valid U11 (schema_version 2) manifest body. */
+function v2Manifest(overrides: Record<string, unknown> = {}) {
+  return {
+    schema_version: 2,
+    resolved: {
+      skills: ["greet"],
+      builtInTools: [],
+      mcpServers: [],
+      piExtensions: [],
+    },
+    loaded: {
+      skills: ["greet"],
+      builtInTools: [],
+      mcpServers: [],
+      piExtensions: [],
+    },
+    ...overrides,
+  };
+}
 
 function ev(
   body: unknown,
@@ -81,16 +118,18 @@ function ev(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  insertedValues.length = 0;
   process.env.API_AUTH_SECRET = "secret";
   mockTenantRow.mockReturnValue({ id: TENANT_A });
   mockInsertedRow.mockReturnValue({
     id: "rcm-1",
     created_at: new Date("2026-04-24T00:00:00Z"),
   });
+  mockDeleteWhere.mockReturnValue(undefined);
 });
 
 describe("POST /api/runtime/manifests", () => {
-  it("happy path: persists manifest + returns 201 with id", async () => {
+  it("happy path: persists a v2 manifest + returns 201 with id", async () => {
     const res = await handler(
       ev({
         session_id: "sess-abc",
@@ -98,14 +137,7 @@ describe("POST /api/runtime/manifests", () => {
         agent_id: AGENT_A,
         template_id: TEMPLATE_A,
         user_id: USER_A,
-        manifest_json: {
-          skills: [{ slug: "greet", version: "1.0.0", source: "builtin" }],
-          tools: [],
-          mcp_servers: [],
-          workspace_files: [],
-          blocks: { tenant_disabled_builtins: [], template_blocked_tools: [] },
-          runtime_version: "v1.0.0",
-        },
+        manifest_json: v2Manifest(),
       }),
     );
     expect(res.statusCode).toBe(201);
@@ -114,15 +146,124 @@ describe("POST /api/runtime/manifests", () => {
     expect(body.created_at).toBeTruthy();
   });
 
-  it("accepts minimal payload (only session_id + tenant_id + manifest_json)", async () => {
+  it("accepts minimal payload (only session_id + tenant_id + v2 manifest_json)", async () => {
     const res = await handler(
       ev({
         session_id: "sess-min",
         tenant_id: TENANT_A,
-        manifest_json: { runtime_version: "v1.0.0" },
+        manifest_json: v2Manifest(),
       }),
     );
     expect(res.statusCode).toBe(201);
+  });
+
+  it("persists turn/context identity + fingerprint columns (U11)", async () => {
+    const res = await handler(
+      ev({
+        session_id: "sess-ctx",
+        tenant_id: TENANT_A,
+        agent_id: AGENT_A,
+        thread_id: THREAD_A,
+        thread_turn_id: TURN_A,
+        space_id: SPACE_A,
+        agent_profile_id: PROFILE_A,
+        config_fingerprint: "fp-abc123",
+        manifest_json: v2Manifest(),
+      }),
+    );
+    expect(res.statusCode).toBe(201);
+    expect(insertedValues[0]).toMatchObject({
+      thread_id: THREAD_A,
+      thread_turn_id: TURN_A,
+      space_id: SPACE_A,
+      agent_profile_id: PROFILE_A,
+      config_fingerprint: "fp-abc123",
+    });
+  });
+
+  it("runs the 30-day retention sweep after a successful write (best-effort)", async () => {
+    const res = await handler(
+      ev({
+        session_id: "sess-sweep",
+        tenant_id: TENANT_A,
+        manifest_json: v2Manifest(),
+      }),
+    );
+    expect(res.statusCode).toBe(201);
+    expect(mockDeleteWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it("a sweep failure never fails the write", async () => {
+    mockDeleteWhere.mockImplementation(() => {
+      throw new Error("delete blew up");
+    });
+    const res = await handler(
+      ev({
+        session_id: "sess-sweep-fail",
+        tenant_id: TENANT_A,
+        manifest_json: v2Manifest(),
+      }),
+    );
+    expect(res.statusCode).toBe(201);
+  });
+});
+
+describe("manifest_json shape (U11)", () => {
+  it.each([
+    ["shapeless empty object", {}],
+    ["wrong schema_version", { schema_version: 1, resolved: {}, loaded: {} }],
+    ["missing resolved", { schema_version: 2, loaded: {} }],
+    ["missing loaded", { schema_version: 2, resolved: {} }],
+    ["resolved is an array", { schema_version: 2, resolved: [], loaded: {} }],
+    [
+      "gated is not an array",
+      { schema_version: 2, resolved: {}, loaded: {}, gated: {} },
+    ],
+  ])("400 on %s", async (_name, manifest_json) => {
+    const res = await handler(
+      ev({ session_id: "s", tenant_id: TENANT_A, manifest_json }),
+    );
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("400 on cross-actor aggregates (single-actor scoping, KTD-7)", async () => {
+    const res = await handler(
+      ev({
+        session_id: "s",
+        tenant_id: TENANT_A,
+        manifest_json: v2Manifest({
+          users: [{ id: USER_A }, { id: TENANT_A }],
+        }),
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain("cross-actor");
+  });
+
+  it("400 when a context id is present but not a UUID", async () => {
+    const res = await handler(
+      ev({
+        session_id: "s",
+        tenant_id: TENANT_A,
+        space_id: "not-a-uuid",
+        manifest_json: v2Manifest(),
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("400 when config_fingerprint is empty or oversized", async () => {
+    for (const config_fingerprint of ["", "x".repeat(300)]) {
+      const res = await handler(
+        ev({
+          session_id: "s",
+          tenant_id: TENANT_A,
+          config_fingerprint,
+          manifest_json: v2Manifest(),
+        }),
+      );
+      expect(res.statusCode).toBe(400);
+    }
   });
 });
 
@@ -219,7 +360,7 @@ describe("tenant isolation", () => {
       ev({
         session_id: "s",
         tenant_id: TENANT_A,
-        manifest_json: { runtime_version: "v1" },
+        manifest_json: v2Manifest(),
       }),
     );
     expect(res.statusCode).toBe(404);

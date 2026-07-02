@@ -75,7 +75,7 @@ function compile(overrides: Partial<AgentProfileConfig> = {}) {
     task: "Find current sources",
     parentThreadTurnId: "turn-parent",
     parentModelId: "anthropic/claude-sonnet-4-5",
-    availableToolNames: ["web_search", "web_extract", "read"],
+    availableToolNames: ["web_search", "web_extract", "read", "workspace_skill"],
     availableSkillNames: ["source-review"],
     mcpRegistry: registryWithTwentyTools(),
     idFactory: () => "profile-run-1",
@@ -180,7 +180,12 @@ describe("agent profile adapter", () => {
           task: "Find current sources",
           parentThreadTurnId: "turn-parent",
           parentModelId: "anthropic/claude-sonnet-4-5",
-          availableToolNames: ["web_search", "web_extract", "read"],
+          availableToolNames: [
+            "web_search",
+            "web_extract",
+            "read",
+            "workspace_skill",
+          ],
           availableSkillNames: ["source-review"],
           mcpRegistry: registryWithTwentyTools(),
           requestedOverrides: {
@@ -202,7 +207,12 @@ describe("agent profile adapter", () => {
         task: "Find current sources",
         parentThreadTurnId: "turn-parent",
         parentModelId: "anthropic/claude-sonnet-4-5",
-        availableToolNames: ["web_search", "web_extract", "read"],
+        availableToolNames: [
+          "web_search",
+          "web_extract",
+          "read",
+          "workspace_skill",
+        ],
         availableSkillNames: ["source-review"],
         mcpRegistry: registryWithTwentyTools(),
       }).model,
@@ -221,6 +231,22 @@ describe("agent profile adapter", () => {
           parentModelId: "anthropic/claude-sonnet-4-5",
           availableToolNames: ["web_search"],
           availableSkillNames: [],
+          mcpRegistry: registryWithTwentyTools(),
+        }),
+      "TOOL_NOT_AVAILABLE",
+    );
+  });
+
+  it("requires workspace_skill when a profile grants workspace skills", () => {
+    expectAdapterErrorCode(
+      () =>
+        compileAgentProfileRunRequest({
+          profile: researchProfile(),
+          task: "Apply the source review skill.",
+          parentThreadTurnId: "turn-parent",
+          parentModelId: "anthropic/claude-sonnet-4-5",
+          availableToolNames: ["web_search", "web_extract", "read"],
+          availableSkillNames: ["source-review"],
           mcpRegistry: registryWithTwentyTools(),
         }),
       "TOOL_NOT_AVAILABLE",
@@ -248,7 +274,7 @@ describe("agent profile adapter", () => {
   it("compiles MCP server grants into operation allowlists", () => {
     const request = compile();
 
-    expect(request.tools).toEqual(["web_search", "read"]);
+    expect(request.tools).toEqual(["web_search", "read", "workspace_skill"]);
     expect(request.skills).toEqual(["source-review"]);
     expect(request.mcpOperations).toEqual([
       {

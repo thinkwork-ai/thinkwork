@@ -258,6 +258,7 @@ extend type Query {
 extend type Mutation {
   createSpace(input: CreateSpaceInput!): Space!
   updateSpace(input: UpdateSpaceInput!): Space!
+  deleteSpace(tenantId: ID!, id: ID!): Boolean!
   updateSpaceEmailTrigger(input: UpdateSpaceEmailTriggerInput!): Space!
   setSpaceEmailTriggers(spaceId: ID!, enabled: Boolean!): Space!
   setSpaceRuntimeOverrides(

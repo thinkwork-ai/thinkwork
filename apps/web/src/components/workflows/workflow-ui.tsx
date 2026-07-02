@@ -126,9 +126,11 @@ export function nestedString(value: unknown, ...path: string[]): string | null {
 export function WorkflowReadinessBadge({
   state,
   reasons,
+  showReason = true,
 }: {
   state: string;
   reasons?: unknown;
+  showReason?: boolean;
 }) {
   const reason = readinessReasonText(reasons);
   const status =
@@ -136,7 +138,7 @@ export function WorkflowReadinessBadge({
   return (
     <span className="inline-flex min-w-0 flex-col gap-0.5">
       <StatusBadge status={status} size="sm" />
-      {reason ? (
+      {showReason && reason ? (
         <span className="max-w-[18rem] truncate text-xs text-muted-foreground">
           {reason}
         </span>

@@ -1,28 +1,23 @@
 /**
- * Validator + pure functions for agent_skills.permissions.operations.
+ * Validator + pure functions for the per-assignment
+ * `permissions.operations` allowlist (stored in the workspace
+ * `skills/<slug>/.assignment.json` state file — KTD-8/U10; formerly
+ * `agent_skills.permissions`).
  *
  * Enforces the invariant from
  * `docs/plans/2026-04-22-008-feat-agent-skill-permissions-ui-plan.md`:
  *
  *   agent.ops ⊆ template.ops ⊆ manifest.ops
  *
- * Called from the `setAgentSkills` resolver at write time — once per
- * incoming skill entry whose manifest declares
- * `permissions_model: operations`. A non-UI caller (CLI, direct
- * GraphQL, the thinkwork-admin skill's own `set_agent_skills` wrapper)
- * cannot widen an agent above its template's ceiling because this
- * validator runs at the resolver boundary, not only in the UI.
- *
- * Write-boundary invariant: the only permitted writers of
- * `agent_skills.permissions.operations` are:
- *   1. `setAgentSkills` (this validation path)
- *   2. `syncTemplateToAgent` via `intersectPermissions` (which is a
- *      subset by construction)
- * Any future writer must go through one of these paths.
+ * Historical note: the retired `setAgentSkills` resolver was the
+ * validation call site. Any future writer of `permissions.operations`
+ * must run this validator at its write boundary so a non-UI caller
+ * (CLI, direct GraphQL, the thinkwork-admin skill) cannot widen an
+ * agent above its template's ceiling.
  *
  * Shape mirrors `validateTemplateSandbox` at
  * `packages/api/src/lib/templates/sandbox-config.ts` — returns a
- * discriminated union so the resolver can surface the error string
+ * discriminated union so the caller can surface the error string
  * verbatim as `BAD_USER_INPUT`.
  */
 
@@ -95,8 +90,7 @@ function parsePermissions(raw: unknown): ParsedPermissions {
 }
 
 export type PermissionsValidationResult =
-  | { ok: true }
-  | { ok: false; error: string };
+  { ok: true } | { ok: false; error: string };
 
 /**
  * Enforces `agent.ops ⊆ template.ops ⊆ manifest.ops` at resolver

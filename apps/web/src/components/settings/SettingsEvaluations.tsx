@@ -7,7 +7,9 @@ import {
   CalendarClock,
   Cloud,
   Database,
+  GitCompareArrows,
   History,
+  Layers,
   Loader2,
   Play,
   RefreshCw,
@@ -43,7 +45,6 @@ import {
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
-import { ModelSelect } from "@/components/agents/ModelSelect";
 import { MetricCard } from "@/components/MetricCard";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
@@ -53,12 +54,14 @@ import {
 import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
   EvalDatasetsQuery,
+  EvalProfilesQuery,
   EvalRunsQuery,
   EvalSummaryQuery,
   EvalTimeSeriesQuery,
   OnEvalRunUpdatedSubscription,
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
+import { shortModelLabel } from "@/components/settings/SettingsEvalProfiles";
 import { cn, relativeTime } from "@/lib/utils";
 import {
   evalRunPassRateDisplay,
@@ -129,12 +132,21 @@ type RunRow = {
   // Infra/judge errors (Trust Core U2) — excluded from the score; null
   // on legacy runs where errors were folded into `failed`.
   errored: number | null;
+  // Unstable case verdicts (Eval Profiles U4) — scored trials splitting
+  // with no majority; excluded from the score like errors.
+  unstable: number | null;
   isLegacyScoring: boolean;
   datasetId: string | null;
   datasetVersion: number | null;
+  // Eval Profile the run executed against (THINK-107); null on
+  // pre-profile runs, which render "Legacy (pre-profile)".
+  profileId: string | null;
+  profileName: string | null;
   totalTests: number | null;
   passRate: number | null;
   costUsd: number | null;
+  // Cost honesty (U5): true when costUsd understates real spend.
+  costPartial: boolean;
   completedAt: string | null;
   startedAt: string | null;
   createdAt: string;
@@ -144,30 +156,33 @@ type RunRow = {
 
 export function isStartEvaluationDisabled(input: {
   submitting: boolean;
-  selectedModel: string;
+  selectedProfileId: string;
 }): boolean {
-  return input.submitting || !input.selectedModel;
+  return input.submitting || !input.selectedProfileId;
 }
 
 /**
- * startEvalRun input builder: a dataset launch (Trust Core U6) is
- * mutually exclusive with the categories filter — picking a dataset
- * drops the category selection from the payload entirely.
+ * startEvalRun input builder: runs launch against an Eval Profile
+ * (THINK-107) — the profile supplies model, judge pin, and trial count,
+ * so the legacy scalar model override is gone from this surface. A
+ * dataset launch (Trust Core U6) stays mutually exclusive with the
+ * categories filter — picking a dataset drops the category selection
+ * from the payload entirely.
  */
 export function buildStartEvalRunInput(opts: {
-  model: string;
+  profileId: string;
   categories: string[];
   datasetSlug: string | null;
 }): {
-  model: string;
+  profileId: string;
   categories?: string[] | null;
   datasetSlug?: string;
 } {
   if (opts.datasetSlug) {
-    return { model: opts.model, datasetSlug: opts.datasetSlug };
+    return { profileId: opts.profileId, datasetSlug: opts.datasetSlug };
   }
   return {
-    model: opts.model,
+    profileId: opts.profileId,
     // Empty selection = "All Categories" (run everything).
     categories: opts.categories.length > 0 ? opts.categories : null,
   };
@@ -269,22 +284,38 @@ const runsColumns: ColumnDef<RunRow>[] = [
     },
   },
   {
+    accessorKey: "profileName",
+    header: "Profile",
+    cell: ({ row }) => {
+      // Pre-profile runs (THINK-107) have no pinned profile — labeled,
+      // never blended silently into profile comparisons.
+      if (!row.original.profileId) {
+        return (
+          <Badge
+            variant="outline"
+            className="text-[10px] text-muted-foreground"
+          >
+            Legacy (pre-profile)
+          </Badge>
+        );
+      }
+      return (
+        <span className="text-xs whitespace-nowrap">
+          {row.original.profileName ?? "—"}
+        </span>
+      );
+    },
+  },
+  {
     accessorKey: "model",
     header: "Model",
     cell: ({ row }) => {
       const model = row.original.model;
       if (!model)
         return <span className="text-xs text-muted-foreground">—</span>;
-      const short = model
-        .replace(/^us\.anthropic\./, "")
-        .replace(/^anthropic\./, "")
-        .replace(/^moonshotai\./, "")
-        .replace(/^amazon\./, "")
-        .replace(/-v\d+:\d+$/, "")
-        .replace(/-\d{8}$/, "");
       return (
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {short}
+          {shortModelLabel(model)}
         </span>
       );
     },
@@ -349,13 +380,39 @@ const runsColumns: ColumnDef<RunRow>[] = [
     },
   },
   {
+    accessorKey: "unstable",
+    header: "Unstable",
+    cell: ({ row }) => {
+      const unstable = row.original.unstable ?? 0;
+      if (unstable <= 0)
+        return <span className="text-xs text-muted-foreground">—</span>;
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 border-purple-500/50 text-purple-600 dark:text-purple-400 tabular-nums"
+          title="Cases whose scored trials split with no majority — excluded from the score like errors."
+        >
+          {unstable}
+        </Badge>
+      );
+    },
+  },
+  {
     accessorKey: "costUsd",
     header: "Cost",
     cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
+      <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
         {row.original.costUsd != null
           ? `$${Number(row.original.costUsd).toFixed(4)}`
           : "—"}
+        {row.original.costUsd != null && row.original.costPartial && (
+          <span
+            className="ml-1 text-amber-600 dark:text-amber-400"
+            title="Some result rows are missing priced agent-turn cost — this total understates real spend."
+          >
+            (partial)
+          </span>
+        )}
       </span>
     ),
   },
@@ -510,6 +567,30 @@ export function SettingsEvaluations() {
           asChild
           variant="ghost"
           size="icon-sm"
+          title="Profiles"
+          aria-label="Profiles"
+          className={desktopToolbarButtonClassName}
+        >
+          <Link to="/settings/evaluations/profiles">
+            <Layers className="size-4" />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          title="Compare profiles"
+          aria-label="Compare profiles"
+          className={desktopToolbarButtonClassName}
+        >
+          <Link to="/settings/evaluations/compare">
+            <GitCompareArrows className="size-4" />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
           title="Studio"
           aria-label="Studio"
           className={desktopToolbarButtonClassName}
@@ -658,8 +739,6 @@ export function SettingsEvaluations() {
   );
 }
 
-const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
-
 function RunEvaluationButton({
   tenantId,
   onStarted,
@@ -670,7 +749,7 @@ function RunEvaluationButton({
   const [open, setOpen] = useState(false);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_EVAL_MODEL_ID);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
@@ -682,6 +761,23 @@ function RunEvaluationButton({
     pause: !open,
   });
   const datasets = datasetsResult.data?.evalDatasets ?? [];
+
+  // Eval Profiles (THINK-107): the run executes against a profile —
+  // model, judge pin, and trial count all come from it. Archived
+  // profiles are excluded server-side; the tenant default preselects.
+  const [profilesResult] = useQuery({
+    query: EvalProfilesQuery,
+    variables: { tenantId },
+    pause: !open,
+  });
+  const profiles = profilesResult.data?.evalProfiles ?? [];
+  const selectedProfile =
+    profiles.find((p) => p.id === selectedProfileId) ?? null;
+  useEffect(() => {
+    if (selectedProfileId || profiles.length === 0) return;
+    const preselected = profiles.find((p) => p.isDefault) ?? profiles[0];
+    if (preselected) setSelectedProfileId(preselected.id);
+  }, [profiles, selectedProfileId]);
 
   function toggleCat(id: string) {
     setSelectedDataset(null);
@@ -701,7 +797,7 @@ function RunEvaluationButton({
       const res = await startEvalRun({
         tenantId,
         input: buildStartEvalRunInput({
-          model: selectedModel,
+          profileId: selectedProfileId,
           categories: selectedCats,
           datasetSlug: selectedDataset,
         }),
@@ -738,15 +834,43 @@ function RunEvaluationButton({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Model</Label>
-              <ModelSelect
-                value={selectedModel}
-                onValueChange={setSelectedModel}
-                className="w-full"
-              />
+          <div className="flex flex-col gap-2">
+            <Label>Profile</Label>
+            <p className="text-xs text-muted-foreground">
+              The run executes against a profile — its model, judge pin, and
+              trial count are pinned at dispatch.{" "}
+              <Link
+                to="/settings/evaluations/profiles"
+                className="underline underline-offset-2"
+                onClick={() => setOpen(false)}
+              >
+                Manage profiles
+              </Link>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {profiles.map((profile) => (
+                <Chip
+                  key={profile.id}
+                  selected={selectedProfileId === profile.id}
+                  onClick={() => setSelectedProfileId(profile.id)}
+                >
+                  {profile.name}
+                  {profile.isDefault && (
+                    <span className="ml-1 text-xs opacity-70">default</span>
+                  )}
+                </Chip>
+              ))}
             </div>
+            {selectedProfile && (
+              <p className="text-xs text-muted-foreground">
+                Model {shortModelLabel(selectedProfile.model)} · Judge{" "}
+                {selectedProfile.judgeModel
+                  ? shortModelLabel(selectedProfile.judgeModel)
+                  : "platform default"}{" "}
+                · {selectedProfile.trials}{" "}
+                {selectedProfile.trials === 1 ? "trial" : "trials"}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -814,7 +938,7 @@ function RunEvaluationButton({
             onClick={handleStart}
             disabled={isStartEvaluationDisabled({
               submitting,
-              selectedModel,
+              selectedProfileId,
             })}
           >
             {submitting ? "Starting…" : "Start Evaluation"}

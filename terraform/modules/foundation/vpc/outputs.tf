@@ -27,3 +27,8 @@ output "nat_gateway_id" {
   description = "NAT Gateway ID when enable_nat_gateway is true and route tables are available"
   value       = local.nat_gateway_enabled ? aws_nat_gateway.main[0].id : null
 }
+
+output "vpc_cidr_block" {
+  description = "The VPC's CIDR block (for endpoint/SG rules that must admit the whole VPC)"
+  value       = var.cidr_block
+}

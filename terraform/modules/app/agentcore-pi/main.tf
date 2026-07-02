@@ -24,6 +24,8 @@ locals {
   chat_agent_finalize_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_finalize_fn_name}"
   chat_agent_activity_fn_name = "thinkwork-${var.stage}-api-chat-agent-activity"
   chat_agent_activity_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_activity_fn_name}"
+  manifest_log_fn_name        = "thinkwork-${var.stage}-api-manifest-log"
+  manifest_log_fn_arn         = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.manifest_log_fn_name}"
   pi_image_uri                = "${var.ecr_repository_url}:pi-latest"
   cognee_vpc_enabled          = length(var.cognee_subnet_ids) > 0 && length(var.cognee_security_group_ids) > 0
   okf_efs_vpc_enabled         = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
@@ -246,8 +248,9 @@ resource "aws_iam_role_policy" "agentcore_pi" {
       },
       {
         # Invoke API Lambdas from Pi's private VPC. Memory retain is queued
-        # async; chat activity/finalize are RequestResponse callbacks because
-        # public API Gateway endpoints are not reachable reliably from this VPC.
+        # async; chat activity/finalize and the per-turn capability-manifest
+        # POST are RequestResponse callbacks because public API Gateway
+        # endpoints are not reachable reliably from this VPC.
         Sid    = "ApiLambdaInvoke"
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
@@ -255,6 +258,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
           local.memory_retain_fn_arn,
           local.chat_agent_finalize_fn_arn,
           local.chat_agent_activity_fn_arn,
+          local.manifest_log_fn_arn,
         ]
       },
       {
@@ -349,10 +353,25 @@ resource "terraform_data" "seed_pi_image" {
         source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
         docker tag "$source_id" "${local.pi_image_uri}"
       else
+        # Unreachable source must not fail a stack whose target tag is already
+        # seeded (rerun after a partial deploy, or a registry that went
+        # private) — the Lambda only consumes the target ECR tag.
+        repo_name="$(basename "${var.ecr_repository_url}")"
+        if aws ecr describe-images --repository-name "$repo_name" --image-ids imageTag=pi-latest --region ${var.region} >/dev/null 2>&1; then
+          echo "WARN: could not pull ${var.source_image_uri}; ${local.pi_image_uri} is already seeded — keeping the existing image."
+          exit 0
+        fi
+        dockerfile="$repo_root/packages/agentcore-pi/agent-container/Dockerfile"
+        if [[ ! -f "$dockerfile" ]]; then
+          echo "ERROR: could not pull ${var.source_image_uri} and there is no repo checkout at $repo_root to build from." >&2
+          echo "The pinned release image must be pullable by this machine (public registry, or docker login to its registry)." >&2
+          echo "Alternatively set agentcore_pi_source_image_uri in terraform.tfvars to an image this AWS account can pull." >&2
+          exit 1
+        fi
         echo "Unable to pull release image ${var.source_image_uri}; building Pi image from $repo_root"
         docker build \
           --platform linux/amd64 \
-          -f "$repo_root/packages/agentcore-pi/agent-container/Dockerfile" \
+          -f "$dockerfile" \
           -t "${local.pi_image_uri}" \
           "$repo_root"
       fi
@@ -382,6 +401,7 @@ resource "aws_lambda_function" "agentcore_pi" {
       MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
       CHAT_AGENT_FINALIZE_FN_NAME            = local.chat_agent_finalize_fn_name
       CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
+      MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
       THINKWORK_API_URL                      = var.api_endpoint
       API_AUTH_SECRET                        = var.api_auth_secret

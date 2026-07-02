@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildExecuteCodeTool } from "../src/runtime/tools/execute-code.js";
-import type { SandboxFactory, SessionEnv } from "@thinkwork/pi-aws";
+import {
+  MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS,
+  type SandboxFactory,
+  type SessionEnv,
+} from "@thinkwork/pi-aws";
 
 describe("buildExecuteCodeTool", () => {
   it("executes Python code through the Pi sandbox factory", async () => {
@@ -38,7 +42,10 @@ describe("buildExecuteCodeTool", () => {
     expect(session.rm).not.toHaveBeenCalled();
     expect(session.exec).toHaveBeenCalledWith(
       expect.stringContaining("python3 - <<'PY'"),
-      expect.objectContaining({ cwd: "/home/user" }),
+      expect.objectContaining({
+        cwd: "/home/user",
+        timeout: MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS * 1000,
+      }),
     );
     const command = vi.mocked(session.exec).mock.calls[0]?.[0] ?? "";
     expect(command).toContain("base64.b64decode");

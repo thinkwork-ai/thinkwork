@@ -13,6 +13,7 @@ const {
   updateResults,
   deleteWheres,
   executeCalls,
+  executeResults,
   mockFetchSpansForSession,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
@@ -41,6 +42,7 @@ const {
   const updateResults: unknown[][] = [];
   const deleteWheres: unknown[] = [];
   const executeCalls: unknown[] = [];
+  const executeResults: unknown[][] = [];
   return {
     selectQueue,
     selectWheres,
@@ -51,6 +53,7 @@ const {
     updateResults,
     deleteWheres,
     executeCalls,
+    executeResults,
     mockFetchSpansForSession: vi.fn(),
     mockResolveCallerTenantId: vi.fn(),
     mockResolveCallerUserId: vi.fn(),
@@ -81,6 +84,7 @@ const {
       updateResults.length = 0;
       deleteWheres.length = 0;
       executeCalls.length = 0;
+      executeResults.length = 0;
     },
   };
 });
@@ -129,6 +133,17 @@ vi.mock("../../utils.js", () => {
                 reject,
               ),
           }),
+          onConflictDoUpdate: () => ({
+            returning: () => Promise.resolve(insertResults.shift() ?? []),
+            then: (
+              resolve: (rows: unknown[]) => unknown,
+              reject: (err: unknown) => unknown,
+            ) =>
+              Promise.resolve(insertResults.shift() ?? []).then(
+                resolve,
+                reject,
+              ),
+          }),
         };
       },
     }),
@@ -158,7 +173,7 @@ vi.mock("../../utils.js", () => {
     }),
     execute: (query: unknown) => {
       executeCalls.push(query);
-      return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rows: executeResults.shift() ?? [] });
     },
   };
   return {
@@ -255,6 +270,15 @@ vi.mock("../../../lib/evals/skill-eval-run.js", () => ({
   readSkillEvalScore: mockReadSkillEvalScore,
 }));
 
+// Profile resolution (THINK-107 U3) goes through the lib's own db wiring;
+// lifecycle invariants are unit-tested in eval-profiles.test.ts. Here it's
+// a spy returning a plain default profile so startEvalRun's routing and
+// model resolution stay observable against the queue-driven db fake.
+const mockResolveEvalProfileForRun = vi.hoisted(() => vi.fn());
+vi.mock("../../../lib/evals/eval-profiles.js", () => ({
+  resolveEvalProfileForRun: mockResolveEvalProfileForRun,
+}));
+
 vi.mock("../../../lib/evals/skill-dataset.js", () => ({
   // Pure helpers reimplemented faithfully (no heavy deps) so routing logic
   // runs for real; the S3/DB-touching seed/archive are spies.
@@ -293,6 +317,7 @@ import {
   evalResultSpans,
   evaluationsMutations,
   evaluationsQueries,
+  evalRunTypeResolvers,
   placeholderStatusForEvalRun,
   shouldIncludePlannedEvalRows,
   skillEvalScoreTypeResolvers,
@@ -313,6 +338,18 @@ beforeEach(() => {
   process.env.EVAL_RUNNER_FN = "thinkwork-test-api-eval-runner";
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-admin-1");
+  mockResolveEvalProfileForRun.mockResolvedValue({
+    id: "profile-1",
+    tenant_id: "tenant-1",
+    name: "Default",
+    model: "model-1",
+    judge_model: null,
+    trials: 1,
+    is_default: true,
+    archived_at: null,
+    created_at: new Date("2026-07-01T00:00:00Z"),
+    updated_at: new Date("2026-07-01T00:00:00Z"),
+  });
   mockNotifyEvalRunUpdate.mockResolvedValue(undefined);
   mockRequireTenantAdmin.mockResolvedValue("admin");
   mockGetTenantModelCatalogEntry.mockResolvedValue({ model_id: "model-1" });
@@ -1458,13 +1495,13 @@ describe("cross-run aggregates scoring-version hygiene", () => {
 
     const fields = JSON.stringify(selectFields[0]);
     // Both rate aggregates pin status='completed' (excludes cancelled)
-    // and the current scoring_version (excludes legacy denominators).
-    expect(fields).toContain("scoring_version =");
+    // and versioned scoring (>= 2 — v2 and v3 share the clean
+    // denominator; legacy null-version runs stay excluded).
+    expect(fields).toContain("scoring_version >= 2");
     expect(fields).toContain("status = 'completed'");
-    expect(fields).toContain(String(CURRENT_EVAL_SCORING_VERSION));
   });
 
-  it("evalTimeSeries filters to current-version completed runs", async () => {
+  it("evalTimeSeries filters to versioned (>= 2) completed runs so v2 history survives the v3 bump", async () => {
     await evaluationsQueries.evalTimeSeries(
       {},
       { tenantId: "tenant-1", days: 30 },
@@ -1474,9 +1511,11 @@ describe("cross-run aggregates scoring-version hygiene", () => {
     expect(executeCalls).toHaveLength(1);
     const query = JSON.stringify(executeCalls[0]);
     expect(query).toContain("status = 'completed'");
-    expect(query).toContain("scoring_version =");
-    const values = (executeCalls[0] as { sql: unknown[] }).sql.slice(1);
-    expect(values).toContain(CURRENT_EVAL_SCORING_VERSION);
+    // scoring_version 2 runs remain in the series after the version bump
+    // (KTD4): the filter is >= 2, never equality on the current version.
+    expect(query).toContain("scoring_version >= 2");
+    expect(query).not.toContain("scoring_version =");
+    expect(CURRENT_EVAL_SCORING_VERSION).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -1536,7 +1575,8 @@ describe("operator verdict override (U9)", () => {
     ]);
     // Inside the locked recompute transaction:
     // 4. fresh run read, 5. result rows (override included)
-    selectQueue.push([options?.run ?? completedRunRow]);
+    const run = options?.run ?? completedRunRow;
+    selectQueue.push([run]);
     selectQueue.push(
       options?.rowsAfterOverride ?? [
         { status: "pass", override_status: null },
@@ -1545,6 +1585,8 @@ describe("operator verdict override (U9)", () => {
         { status: "error", override_status: null },
       ],
     );
+    // 5.5 case-level overrides load (versioned runs only, U4/KTD9)
+    if (run.scoring_version !== null) selectQueue.push([]);
     // 6. counters update (no returning; consumed via then)
     updateResults.push([]);
     // 7. test-case name/category for the returned row
@@ -1770,6 +1812,7 @@ describe("operator verdict override (U9)", () => {
       { status: "fail", override_status: null },
       { status: "error", override_status: null },
     ]);
+    selectQueue.push([]); // case-level overrides (none)
     updateResults.push([]);
     selectQueue.push([{ name: "Case 1", category: "red-team" }]);
 
@@ -1835,6 +1878,7 @@ describe("operator verdict override (U9)", () => {
       { status: "pass", override_status: null },
       { status: "error", override_status: null }, // reconciler synthetic
     ]);
+    selectQueue.push([]); // case-level overrides (none)
     updateResults.push([]);
     selectQueue.push([{ name: "Case 1", category: "red-team" }]);
 
@@ -1870,6 +1914,7 @@ describe("operator verdict override (U9)", () => {
       { status: "fail", override_status: "pass" },
       { status: "pass", override_status: null },
     ]);
+    selectQueue.push([]); // case-level overrides (none)
     selectQueue.push([{ name: "Case 1", category: "red-team" }]);
 
     await evaluationsMutations.overrideEvalResult(
@@ -1885,6 +1930,307 @@ describe("operator verdict override (U9)", () => {
     expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-1", status: "running", passed: 2 }),
     );
+  });
+
+  it("rejects a row-level override on a multi-trial case (pinned plan says trials > 1) with case-mutation guidance", async () => {
+    selectQueue.push([
+      { id: "result-1", runId: "run-1", testCaseId: "case-9", status: "fail" },
+    ]);
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        pinnedTrialPlan: [{ caseId: "case-9", trials: 3 }],
+      },
+    ]);
+
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/overrideEvalCaseVerdict/);
+    expect(updateSets).toHaveLength(0);
+    expect(mockNotifyEvalRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a row-level override when sibling trial rows exist (plan-less belt-and-suspenders)", async () => {
+    selectQueue.push([
+      { id: "result-1", runId: "run-1", testCaseId: "case-9", status: "fail" },
+    ]);
+    selectQueue.push([{ tenantId: "tenant-1", pinnedTrialPlan: null }]);
+    // Sibling probe finds a trial_index > 0 row for the case.
+    selectQueue.push([{ id: "result-2" }]);
+
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/multi-trial case/);
+    expect(updateSets).toHaveLength(0);
+  });
+
+  it("still allows row-level overrides on single-trial cases of a trial-plan run (trials = 1)", async () => {
+    selectQueue.push([
+      { id: "result-1", runId: "run-1", testCaseId: "case-1", status: "fail" },
+    ]);
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        pinnedTrialPlan: [
+          { caseId: "case-1", trials: 1 },
+          { caseId: "case-9", trials: 3 },
+        ],
+      },
+    ]);
+    updateResults.push([{ ...failedResultRow, override_status: "pass" }]);
+    selectQueue.push([completedRunRow]);
+    selectQueue.push([{ status: "pass", override_status: "pass" }]);
+    selectQueue.push([]); // case-level overrides (none)
+    updateResults.push([]);
+    selectQueue.push([{ name: "Case 1", category: "red-team" }]);
+
+    const result = await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: { resultId: "result-1", overrideStatus: "pass", reason: "ok" },
+      },
+      adminCtx,
+    );
+    expect(result).toMatchObject({ overrideStatus: "pass" });
+  });
+});
+
+describe("case-level verdict override (U4/KTD9)", () => {
+  const completedRunRow = {
+    id: "run-1",
+    tenant_id: "tenant-1",
+    agent_id: "agent-1",
+    status: "completed",
+    total_tests: 3,
+    expected_result_rows: 5,
+    scoring_version: CURRENT_EVAL_SCORING_VERSION,
+    summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+  };
+
+  // Trial rows for the recompute read: case-9 ran 3 trials and split
+  // (pass/fail/error → unstable without an override); case-1 and case-2
+  // are single-trial.
+  const trialRows = [
+    {
+      test_case_id: "case-9",
+      trial_index: 0,
+      status: "pass",
+      override_status: null,
+    },
+    {
+      test_case_id: "case-9",
+      trial_index: 1,
+      status: "fail",
+      override_status: null,
+    },
+    {
+      test_case_id: "case-9",
+      trial_index: 2,
+      status: "error",
+      override_status: null,
+    },
+    {
+      test_case_id: "case-1",
+      trial_index: 0,
+      status: "pass",
+      override_status: null,
+    },
+    {
+      test_case_id: "case-2",
+      trial_index: 0,
+      status: "fail",
+      override_status: null,
+    },
+  ];
+
+  it("settles an unstable case to fail and recomputes CASE counters (override applied last)", async () => {
+    // 1. run tenant gate load, 2. case-has-rows probe
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    selectQueue.push([{ id: "result-1" }]);
+    // Recompute tx: 3. fresh run, 4. trial rows, 5. case overrides (the
+    // row just upserted), 6. counters update
+    selectQueue.push([completedRunRow]);
+    selectQueue.push(trialRows);
+    selectQueue.push([{ test_case_id: "case-9", override_status: "fail" }]);
+    updateResults.push([]);
+
+    const result = await evaluationsMutations.overrideEvalCaseVerdict(
+      {},
+      {
+        input: {
+          runId: "run-1",
+          testCaseId: "case-9",
+          overrideStatus: "fail",
+          reason: "Judge disagreement resolved by hand-review",
+        },
+      },
+      adminCtx,
+    );
+    expect(result).toBe(true);
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-1");
+    // Upsert carries the audit fields; actor is the authenticated caller.
+    const upsert = insertValues[0] as Record<string, unknown>;
+    expect(upsert).toMatchObject({
+      run_id: "run-1",
+      test_case_id: "case-9",
+      override_status: "fail",
+      overridden_by: "user-admin-1",
+      override_reason: "Judge disagreement resolved by hand-review",
+    });
+
+    // Counters are CASE verdicts with the override applied last:
+    // case-9 fail (was unstable), case-1 pass, case-2 fail.
+    const counterSet = updateSets[0] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(1);
+    expect(counterSet.failed).toBe(2);
+    expect(counterSet.errored).toBe(0);
+    expect(counterSet.unstable).toBe(0);
+    expect(counterSet.pass_rate).toBe("0.3333");
+
+    expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-1",
+        status: "completed",
+        passed: 1,
+        failed: 2,
+      }),
+    );
+  });
+
+  it("without an override, the split case lands in the unstable counter, excluded from the pass rate", async () => {
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    selectQueue.push([{ id: "result-1" }]);
+    selectQueue.push([completedRunRow]);
+    selectQueue.push(trialRows);
+    selectQueue.push([]); // the clear removed the override
+    updateResults.push([]);
+
+    // Clearing goes through the delete path, then recomputes.
+    const result = await evaluationsMutations.overrideEvalCaseVerdict(
+      {},
+      { input: { runId: "run-1", testCaseId: "case-9", overrideStatus: null } },
+      adminCtx,
+    );
+    expect(result).toBe(true);
+    expect(deleteWheres).toHaveLength(1);
+    expect(insertValues).toHaveLength(0);
+
+    const counterSet = updateSets[0] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(1);
+    expect(counterSet.failed).toBe(1);
+    expect(counterSet.errored).toBe(0);
+    expect(counterSet.unstable).toBe(1);
+    // Unstable is out of the denominator exactly like error: 1/(1+1).
+    expect(counterSet.pass_rate).toBe("0.5000");
+  });
+
+  it("requires a non-empty reason when setting, before any read or write", async () => {
+    await expect(
+      evaluationsMutations.overrideEvalCaseVerdict(
+        {},
+        {
+          input: {
+            runId: "run-1",
+            testCaseId: "case-9",
+            overrideStatus: "fail",
+            reason: "  ",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/reason is required/);
+    expect(selectWheres).toHaveLength(0);
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it("rejects override statuses outside pass|fail", async () => {
+    await expect(
+      evaluationsMutations.overrideEvalCaseVerdict(
+        {},
+        {
+          input: {
+            runId: "run-1",
+            testCaseId: "case-9",
+            overrideStatus: "unstable",
+            reason: "x",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/must be 'pass' or 'fail'/);
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it("reports not found for a missing run or a case with no results in the run", async () => {
+    selectQueue.push([]); // run lookup misses
+    await expect(
+      evaluationsMutations.overrideEvalCaseVerdict(
+        {},
+        {
+          input: {
+            runId: "nope",
+            testCaseId: "case-9",
+            overrideStatus: "fail",
+            reason: "x",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow("eval run nope not found");
+
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    selectQueue.push([]); // no result rows for the case
+    await expect(
+      evaluationsMutations.overrideEvalCaseVerdict(
+        {},
+        {
+          input: {
+            runId: "run-1",
+            testCaseId: "case-ghost",
+            overrideStatus: "fail",
+            reason: "x",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/no results for test case/);
+    expect(insertValues).toHaveLength(0);
+    expect(mockNotifyEvalRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("cross-tenant case override is forbidden via the row-derived gate, no write", async () => {
+    selectQueue.push([{ tenantId: "tenant-2" }]);
+    mockRequireTenantAdmin.mockRejectedValueOnce(forbidden);
+
+    await expect(
+      evaluationsMutations.overrideEvalCaseVerdict(
+        {},
+        {
+          input: {
+            runId: "run-1",
+            testCaseId: "case-9",
+            overrideStatus: "fail",
+            reason: "x",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow("Tenant admin role required");
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-2");
+    expect(insertValues).toHaveLength(0);
   });
 });
 
@@ -2172,5 +2518,36 @@ describe("skillEvalScoreTypeResolvers (run eligibility)", () => {
       "tenant-1",
       "research-dashboard",
     );
+  });
+});
+
+describe("evalRunTypeResolvers (run latency percentiles, U5)", () => {
+  it("resolves p50/p95 from the PERCENTILE_CONT aggregate, rounded to ms", async () => {
+    executeResults.push([{ p50: 1234.4, p95: "5678.9" }]);
+    const parent = { id: "run-1" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBe(1234);
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBe(5679);
+  });
+
+  it("memoizes: both fields share one aggregate query per parent run", async () => {
+    executeResults.push([{ p50: 100, p95: 200 }]);
+    const before = executeCalls.length;
+    const parent = { id: "run-2" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBe(100);
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBe(200);
+    expect(executeCalls.length - before).toBe(1);
+  });
+
+  it("returns nulls for a run with no recorded durations, and never queries without an id", async () => {
+    executeResults.push([{ p50: null, p95: null }]);
+    const parent = { id: "run-3" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBeNull();
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBeNull();
+
+    const before = executeCalls.length;
+    const idless = {} as { id?: string | null };
+    expect(await evalRunTypeResolvers.latencyP50Ms(idless)).toBeNull();
+    expect(await evalRunTypeResolvers.latencyP95Ms(idless)).toBeNull();
+    expect(executeCalls.length).toBe(before);
   });
 });

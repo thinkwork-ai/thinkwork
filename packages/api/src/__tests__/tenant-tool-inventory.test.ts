@@ -9,10 +9,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSelectRows, mockResolveCaller } = vi.hoisted(() => ({
-  mockSelectRows: vi.fn(),
-  mockResolveCaller: vi.fn(),
-}));
+const { mockSelectRows, mockResolveCaller, mockListEnabledSkills } = vi.hoisted(
+  () => ({
+    mockSelectRows: vi.fn(),
+    mockResolveCaller: vi.fn(),
+    mockListEnabledSkills: vi.fn(),
+  }),
+);
 
 type Rows = Record<string, unknown>[];
 
@@ -36,6 +39,11 @@ vi.mock("../graphql/utils.js", () => ({
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
   resolveCaller: mockResolveCaller,
+}));
+
+// Workspace-backed skill inventory (capability-mapping plan U10).
+vi.mock("../lib/skills/workspace-skill-index.js", () => ({
+  listEnabledAgentWorkspaceSkillSlugs: mockListEnabledSkills,
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
@@ -105,6 +113,8 @@ const ctx = { auth: {} } as unknown as Parameters<
 beforeEach(() => {
   mockSelectRows.mockReset();
   mockResolveCaller.mockReset();
+  mockListEnabledSkills.mockReset();
+  mockListEnabledSkills.mockResolvedValue(null);
 });
 
 function queueResultsInOrder(...sets: Rows[]) {
@@ -134,7 +144,7 @@ describe("tenantToolInventory", () => {
       userId: "u1",
       tenantId: "tenant-a",
     });
-    queueResultsInOrder([], [], [], [], [], []);
+    queueResultsInOrder([], [], [], [], []);
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out.agents).toEqual([]);
     expect(out.tools).toEqual([]);
@@ -166,14 +176,14 @@ describe("tenantToolInventory", () => {
         },
       ],
       [{ id: "builtin-1", tool_slug: "web_search", provider: "exa" }],
-      [
-        { skill_id: "deep-research" },
-        { skill_id: "deep-research" },
-        { skill_id: "finance-audit-xls" },
-      ],
       [],
       [],
     );
+    // Workspace skills for agent-1 (deduped + sorted by the resolver).
+    mockListEnabledSkills.mockResolvedValue([
+      "deep-research",
+      "finance-audit-xls",
+    ]);
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
 
     expect(out.agents).toEqual([
@@ -220,7 +230,6 @@ describe("tenantToolInventory", () => {
       [],
       [],
       [],
-      [],
       [
         {
           id: "routine-tenant",
@@ -257,7 +266,6 @@ describe("tenantToolInventory", () => {
       auth: { agentId: "agent-1" },
     } as unknown as Parameters<typeof tenantToolInventory>[2];
     queueResultsInOrder(
-      [],
       [],
       [],
       [],

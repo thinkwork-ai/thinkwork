@@ -1,10 +1,15 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { SandboxFactory, SessionEnv } from "@thinkwork/pi-aws";
+import {
+  MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS,
+  type SandboxFactory,
+  type SessionEnv,
+} from "@thinkwork/pi-aws";
 import { Type } from "typebox";
 
 const STDOUT_LIMIT_BYTES = 256 * 1024;
 const STDERR_LIMIT_BYTES = 32 * 1024;
-const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS =
+  MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS * 1000;
 
 function truncate(
   value: string,

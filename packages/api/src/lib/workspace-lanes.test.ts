@@ -16,6 +16,9 @@ describe("workspace contract v1 lane mapping", () => {
     expect(workspacePathOwner("User/USER.md")).toBe("user");
     expect(workspacePathOwner("User/memory/preferences.md")).toBe("user");
     expect(workspacePathOwner("Spaces/customer/docs/a.md")).toBe("space");
+    expect(workspacePathOwner("Spaces/customer/skills/ratio/SKILL.md")).toBe(
+      "space",
+    );
     expect(workspacePathOwner("Spaces/customer/workflows/onboard.md")).toBe(
       "space",
     );
@@ -30,6 +33,9 @@ describe("workspace contract v1 lane mapping", () => {
     expect(workspaceSourcePath("AGENTS.md")).toBe("AGENTS.md");
     expect(workspaceSourcePath("User/USER.md")).toBe("USER.md");
     expect(workspaceSourcePath("Spaces/customer/docs/a.md")).toBe("docs/a.md");
+    expect(workspaceSourcePath("Spaces/customer/skills/ratio/SKILL.md")).toBe(
+      "skills/ratio/SKILL.md",
+    );
     expect(workspaceSourcePath("Thread/notes/finding.md")).toBe(
       "notes/finding.md",
     );
@@ -95,6 +101,13 @@ describe("workspace contract v1 lane mapping", () => {
     });
     expect(
       workspacePathContract("Spaces/customer/plans/kickoff.md"),
+    ).toMatchObject({
+      owner: "space",
+      writeLane: "space_source",
+      readOnly: false,
+    });
+    expect(
+      workspacePathContract("Spaces/customer/skills/ratio/SKILL.md"),
     ).toMatchObject({
       owner: "space",
       writeLane: "space_source",

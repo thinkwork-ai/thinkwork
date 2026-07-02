@@ -48,6 +48,9 @@ The ThinkWork-owned contract (case + agent response in, verdicts out) behind whi
 ### Eval dataset
 A per-tenant, versioned collection of eval cases stored as an S3 artifact with a derived DB index. Each tenant gets a `baseline-red-team` dataset (the seeded red-team suite) at install; operators curate custom datasets by flagging threads. Case identity is stable across dataset versions so trend history survives.
 
+### Eval Profile
+The agent-under-test as a named, reusable configuration: agent model, pinned judge model, and a trial count for judge-scored cases. Eval runs execute against a profile and pin its contents (plus a recorded fingerprint of the executing agent's installed skills) at dispatch, so two runs are comparable exactly when they share dataset version, scoring version, and judge pin — fingerprint drift is flagged, not silently compared. Each tenant designates one default profile, which automatic consumers (skill-eval gate, scheduled runs) score against; a missing default is synthesized on first resolution. Subsumes the older per-run `model` scalar override. Distinct from the unrelated "Agent Profile" (model+prompt presets at agent creation).
+
 ## Work Tracking
 
 ### Work Item

@@ -62,6 +62,7 @@ import {
   regenerateAgentsMdDerivedSections,
 } from "./src/lib/workspace-map-generator.js";
 import { spaceSourcePrefix } from "./src/lib/spaces/template-migration.js";
+import { ensureSpaceMdSourceFile } from "./src/lib/spaces/space-md-source-file.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 import {
   isPinnedWorkspacePath,
@@ -69,10 +70,6 @@ import {
 } from "./src/lib/pinned-versions.js";
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
 import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
-import {
-  deriveAgentSkills,
-  type DeriveResult,
-} from "./src/lib/derive-agent-skills.js";
 import {
   isBuiltinToolSlug,
   isBuiltinToolWorkspacePath,
@@ -380,6 +377,8 @@ interface SpaceTarget {
   tenantSlug: string;
   spaceSlug: string;
   spaceId: string;
+  spaceName: string;
+  description: string | null;
   prefix: string;
   readPrefixes?: string[];
   key: (path: string) => string;
@@ -516,6 +515,8 @@ async function resolveSpaceTarget(
     .select({
       id: spaces.id,
       slug: spaces.slug,
+      name: spaces.name,
+      description: spaces.description,
       workspaceFolderName: spaces.workspace_folder_name,
       tenant_id: spaces.tenant_id,
     })
@@ -537,9 +538,33 @@ async function resolveSpaceTarget(
     tenantSlug: tSlug,
     spaceSlug: spaceFolderName,
     spaceId: space.id,
+    spaceName: space.name ?? space.slug,
+    description: space.description ?? null,
     prefix,
     key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
   };
+}
+
+async function ensureSpaceMinimumFiles(target: Target): Promise<boolean> {
+  if (target.kind !== "space") return false;
+  try {
+    const result = await ensureSpaceMdSourceFile({
+      bucket: bucket(),
+      tenantSlug: target.tenantSlug,
+      spaceSlug: target.spaceSlug,
+      spaceName: target.spaceName,
+      description: target.description,
+      overwrite: false,
+      s3Client: s3,
+    });
+    return result.written;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[workspace-files] SPACE.md minimum file check failed for ${target.tenantSlug}/${target.spaceSlug}: ${message}`,
+    );
+    return false;
+  }
 }
 
 async function resolveThreadTarget(
@@ -952,6 +977,9 @@ async function handleGet(
   // defaults / user context) reads its own prefix directly. No overlay walk, no
   // template/defaults fallback for agents — the agent prefix is the
   // source of truth.
+  if (target.kind === "space" && logicalPath === "SPACE.md") {
+    await ensureSpaceMinimumFiles(target);
+  }
   const { content } = await readWorkspaceObject(target, logicalPath);
   return json(200, {
     ok: true,
@@ -973,6 +1001,16 @@ async function handleList(
   // filtered so callers don't accidentally treat them as workspace
   // files.
   const visibleObjects = await listVisibleWorkspaceObjects(target);
+  if (
+    target.kind === "space" &&
+    !visibleObjects.some((object) => object.path === "SPACE.md") &&
+    (await ensureSpaceMinimumFiles(target))
+  ) {
+    visibleObjects.push({
+      path: "SPACE.md",
+      readKey: target.key("SPACE.md"),
+    });
+  }
   const visiblePaths = visibleObjects.map((object) => object.path);
 
   if (target.kind === "catalog") {
@@ -1932,7 +1970,9 @@ async function handleFixSkillTrustEvidence(
   });
 }
 
-function isPublishableSkillSignature(report: SkillTrustPipelineReport): boolean {
+function isPublishableSkillSignature(
+  report: SkillTrustPipelineReport,
+): boolean {
   return (
     report.evidence.signature === "verified" ||
     report.evidence.signature === "approved_unverified"
@@ -2596,48 +2636,6 @@ function isSkillMarkerPath(path: string): boolean {
   return /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(path);
 }
 
-function summarizeDerivedAgentSkills(
-  target: AgentTarget,
-  result: DeriveResult,
-): string {
-  return (
-    `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-    `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-    `removed=${result.removedSlugs.join(",") || "-"}`
-  );
-}
-
-async function syncDerivedAgentSkills(
-  target: AgentTarget,
-  tenantId: string,
-  action: string,
-  failureContext: string,
-): Promise<
-  | { ok: true; result: DeriveResult }
-  | { ok: false; response: APIGatewayProxyResult }
-> {
-  try {
-    const result = await deriveAgentSkills({ tenantId }, target.agentId);
-    console.log(
-      `[derive-agent-skills] ${action} ${summarizeDerivedAgentSkills(
-        target,
-        result,
-      )}`,
-    );
-    return { ok: true, result };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] ${action} failed: ${message}`);
-    return {
-      ok: false,
-      response: json(500, {
-        ok: false,
-        error: `${failureContext}: ${message}`,
-      }),
-    };
-  }
-}
-
 /**
  * Top-level governance / identity / capability files that, when
  * edited, materially change agent behavior. Edits to these files emit
@@ -2676,7 +2674,7 @@ function rejectSpaceCapabilityWrite(
     code: "space_capability_file_rejected",
     error:
       `Spaces cannot contain capability files such as ${path}. ` +
-      "Put skills, TOOLS.md, and MCP.md under master/workspaces/ instead.",
+      "Put tool and MCP policy files under the agent workspace instead.",
   });
 }
 
@@ -2886,6 +2884,9 @@ async function handlePut(
       );
       if (refreshError) return refreshError;
     }
+    if (isSkillMarkerPath(cleanPath)) {
+      await refreshSpaceSkillInventory(target);
+    }
     if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
       // Space-local Agent Profile projection (plan 2026-06-12-002 U7):
       // operator puts to a Space source's agents/<slug>.md project into a
@@ -3000,21 +3001,8 @@ async function handlePut(
     }
 
     if (isSkillMarkerPath(cleanPath)) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        tenantId,
-        "PUT",
-        "Skill file persisted but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
       const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
       if (refreshError) return refreshError;
-      if (derive.result.warnings.length > 0) {
-        return json(200, {
-          ok: true,
-          deriveWarnings: derive.result.warnings,
-        });
-      }
       return json(200, { ok: true });
     }
 
@@ -3185,25 +3173,11 @@ async function handleCreateSubAgent(
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "create-sub-agent",
-    "AGENTS.md persisted but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
-
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "create-sub-agent",
   );
   if (refreshError) return refreshError;
-  if (derive.result.warnings.length > 0) {
-    return json(200, {
-      ok: true,
-      deriveWarnings: derive.result.warnings,
-    });
-  }
   return json(200, { ok: true });
 }
 
@@ -3260,18 +3234,12 @@ async function handleDelete(
     if (isAgentProfileWorkspacePath(cleanPath)) {
       await deleteAgentProfileProjectionForFile({ tenantId, path: cleanPath });
     }
-    if (isSkillMarkerPath(cleanPath)) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        tenantId,
-        "DELETE",
-        "Skill file deleted but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
-    }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
   } else if (target.kind === "space") {
+    if (isSkillMarkerPath(cleanPath)) {
+      await refreshSpaceSkillInventory(target);
+    }
     if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
       // Mirror the central agents/<slug>.md delete: removing the file
       // removes the space-local projection row (plan 2026-06-12-002 U7).
@@ -3475,19 +3443,89 @@ async function stageGatedSkillUpdate(
   }
 }
 
+const SPACE_SKILLS_SECTION_START = "<!-- BEGIN THINKWORK SPACE SKILLS -->";
+const SPACE_SKILLS_SECTION_END = "<!-- END THINKWORK SPACE SKILLS -->";
+
+async function refreshSpaceSkillInventory(target: SpaceTarget): Promise<void> {
+  const installedPaths = await listPrefix(target.prefix);
+  const skillSlugs = [
+    ...new Set(
+      installedPaths
+        .map((path) => {
+          const match = /^skills\/([^/]+)\/SKILL\.md$/.exec(path);
+          return match?.[1] ?? "";
+        })
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const spaceMdKey = target.key("SPACE.md");
+  let existing = "";
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({ Bucket: bucket(), Key: spaceMdKey }),
+    );
+    existing = (await response.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNoSuchKey(err)) throw err;
+  }
+
+  const next = replaceSpaceSkillsSection(existing, skillSlugs);
+  if (next === existing) return;
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: spaceMdKey,
+      Body: next,
+      ContentType: "text/markdown; charset=utf-8",
+    }),
+  );
+}
+
+function replaceSpaceSkillsSection(
+  content: string,
+  skillSlugs: string[],
+): string {
+  const stripped = stripSpaceSkillsSection(content).trimEnd();
+  if (skillSlugs.length === 0) return stripped ? `${stripped}\n` : "";
+
+  const lines = [
+    SPACE_SKILLS_SECTION_START,
+    "## Skills",
+    "",
+    "The active Space has these workspace skills installed. Use the `workspace_skill` " +
+      "tool to read a skill's full `SKILL.md` instructions before applying it.",
+    "",
+    ...skillSlugs.map((slug) => `- \`${slug}\` (\`skills/${slug}/SKILL.md\`)`),
+    SPACE_SKILLS_SECTION_END,
+  ];
+  const section = lines.join("\n");
+  return stripped ? `${stripped}\n\n${section}\n` : `${section}\n`;
+}
+
+function stripSpaceSkillsSection(content: string): string {
+  const start = content.indexOf(SPACE_SKILLS_SECTION_START);
+  if (start === -1) return content;
+  const end = content.indexOf(SPACE_SKILLS_SECTION_END, start);
+  if (end === -1) return content;
+  return (
+    content.slice(0, start).trimEnd() +
+    "\n\n" +
+    content.slice(end + SPACE_SKILLS_SECTION_END.length).trimStart()
+  );
+}
+
 async function handleInstallSkill(
   deps: HandlerDeps,
   slug: string,
   wiringChoice: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "space") {
-    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
-  }
-  if (target.kind !== "agent") {
+  if (target.kind !== "agent" && target.kind !== "space") {
     return json(400, {
       ok: false,
-      error: "install-skill requires an agent target",
+      error: "install-skill requires an agent or space target",
       code: "unsupported_target",
     });
   }
@@ -3514,17 +3552,11 @@ async function handleInstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "install-skill",
-    "Skill installed but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "install-skill",
@@ -3534,9 +3566,6 @@ async function handleInstallSkill(
   const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
     ...installResult,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalSync,
   });
 }
@@ -3574,17 +3603,11 @@ async function handleUninstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "uninstall-skill",
-    "Skill uninstalled but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "uninstall-skill",
@@ -3593,9 +3616,6 @@ async function handleUninstallSkill(
   const evalArchive = await archiveSkillEvalDataset(tenantId, slug);
   return json(200, {
     ...result,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalArchive,
   });
 }
@@ -3605,13 +3625,10 @@ async function handleReinstallSkill(
   slug: string,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind === "space") {
-    return rejectSpaceCapabilityWrite(`skills/${slug}/SKILL.md`)!;
-  }
-  if (target.kind !== "agent") {
+  if (target.kind !== "agent" && target.kind !== "space") {
     return json(400, {
       ok: false,
-      error: "reinstall-skill requires an agent target",
+      error: "reinstall-skill requires an agent or space target",
       code: "unsupported_target",
     });
   }
@@ -3704,17 +3721,11 @@ async function handleReinstallSkill(
   }
 
   if (target.kind !== "agent") {
+    await refreshSpaceSkillInventory(target);
     return json(200, result);
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "reinstall-skill",
-    "Skill reinstalled but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "reinstall-skill",
@@ -3724,9 +3735,6 @@ async function handleReinstallSkill(
   const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
     ...reinstallResult,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalSync,
   });
 }
@@ -3975,20 +3983,6 @@ async function handleSingleFileMove(
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-    const fromIsAgentsMd = pathBasename(cleanFrom) === "AGENTS.md";
-    const destIsAgentsMd = pathBasename(finalDest) === "AGENTS.md";
-    const fromIsSkillMd = isSkillMarkerPath(cleanFrom);
-    const destIsSkillMd = isSkillMarkerPath(finalDest);
-    if (fromIsAgentsMd || destIsAgentsMd || fromIsSkillMd || destIsSkillMd) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        deps.tenantId,
-        "move",
-        "Move succeeded but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
-    }
-
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
@@ -4078,8 +4072,6 @@ async function handleFolderMove(
   // for shape parity with single-file moves; a richer
   // template-inheritance-aware detach metric is a follow-up.
   let detachedPinnedCount = 0;
-  let touchesAgentsMd = false;
-  let touchesSkillMd = false;
 
   for (const rel of folderListing) {
     const sourceKey = sourcePrefix + rel;
@@ -4095,8 +4087,6 @@ async function handleFolderMove(
     if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
       detachedPinnedCount++;
     }
-    if (pathBasename(sourceRelPath) === "AGENTS.md") touchesAgentsMd = true;
-    if (isSkillMarkerPath(sourceRelPath)) touchesSkillMd = true;
   }
 
   // Phase 2: delete every source object. We accumulate per-object delete
@@ -4140,16 +4130,6 @@ async function handleFolderMove(
 
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-
-    if (touchesAgentsMd || touchesSkillMd) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        deps.tenantId,
-        "folder-move",
-        "Move succeeded but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
-    }
 
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
@@ -4335,10 +4315,6 @@ async function handleSingleFileRename(
     cleanTo,
     movedCount: 1,
     detachedPinnedCount,
-    touchesAgentsMd:
-      pathBasename(cleanFrom) === "AGENTS.md" ||
-      pathBasename(cleanTo) === "AGENTS.md",
-    touchesSkillMd: isSkillMarkerPath(cleanFrom) || isSkillMarkerPath(cleanTo),
   });
   if (finalized) return finalized;
 
@@ -4368,8 +4344,6 @@ async function handleFolderRename(
   }
 
   let detachedPinnedCount = 0;
-  let touchesAgentsMd = false;
-  let touchesSkillMd = false;
 
   for (const rel of folderListing) {
     const sourceKey = sourcePrefix + rel;
@@ -4382,18 +4356,8 @@ async function handleFolderRename(
       }),
     );
     const sourceRelPath = cleanFrom + "/" + rel;
-    const destRelPath = cleanTo + "/" + rel;
     if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
       detachedPinnedCount++;
-    }
-    if (
-      pathBasename(sourceRelPath) === "AGENTS.md" ||
-      pathBasename(destRelPath) === "AGENTS.md"
-    ) {
-      touchesAgentsMd = true;
-    }
-    if (isSkillMarkerPath(sourceRelPath) || isSkillMarkerPath(destRelPath)) {
-      touchesSkillMd = true;
     }
   }
 
@@ -4428,8 +4392,6 @@ async function handleFolderRename(
     cleanTo,
     movedCount: folderListing.length,
     detachedPinnedCount,
-    touchesAgentsMd,
-    touchesSkillMd,
   });
   if (finalized) return finalized;
 
@@ -4448,24 +4410,12 @@ async function finalizeRenameSideEffects(
     cleanTo: string;
     movedCount: number;
     detachedPinnedCount: number;
-    touchesAgentsMd: boolean;
-    touchesSkillMd: boolean;
   },
 ): Promise<APIGatewayProxyResult | null> {
   const { target } = deps;
   if (target.kind !== "agent") return null;
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-
-  if (input.touchesAgentsMd || input.touchesSkillMd) {
-    const derive = await syncDerivedAgentSkills(
-      target,
-      deps.tenantId,
-      "rename",
-      "Rename succeeded but agent_skills derive failed",
-    );
-    if (!derive.ok) return derive.response;
-  }
 
   return await refreshAgentAgentsMdSections(target, "rename");
 }

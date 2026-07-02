@@ -12,6 +12,7 @@
 export {
   agentcoreCodeInterpreter,
   AgentcoreCodeInterpreterApi,
+  MAX_AGENTCORE_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS,
 } from "../connectors/agentcore-codeinterpreter.js";
 export type { AgentcoreCodeInterpreterOptions } from "../connectors/agentcore-codeinterpreter.js";
 

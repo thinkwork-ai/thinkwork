@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: THINK-107 Evaluation Framework</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#fbfaf8; --ink:#1f2430; --muted:#5c6470; --line:#e3e0d8;
+  --accent:#0d6e6e; --accent-soft:#e4f1f0; --accent-text:#0a5757;
+  --warn:#a15c0a; --warn-soft:#f7edda; --warn-text:#7c4708;
+  --info:#3b5bad; --info-soft:#e8edf9; --info-text:#2e4788;
+  --danger:#a33; --danger-soft:#f7e5e3; --danger-text:#8a2a24;
+  --card:#ffffff; --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.62 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased}
+.page{max-width:920px;margin-inline:auto;padding:48px 28px 80px}
+p,li{max-width:72ch}
+h1{font-size:1.8rem;line-height:1.25;margin:.2em 0 .3em;font-weight:700}
+h2{font-size:1.28rem;margin:2.4em 0 .6em;font-weight:650;border-bottom:1px solid var(--line);padding-bottom:.35em}
+h3{font-size:1.05rem;margin:1.6em 0 .4em;font-weight:650}
+a{color:var(--accent-text)}
+code{font-family:var(--mono);font-size:.86em;background:#f1efe9;border-radius:4px;padding:.08em .32em}
+strong{color:inherit}
+.eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.meta{display:flex;flex-wrap:wrap;gap:.5em 1.6em;color:var(--muted);font-size:.85rem;margin:.4em 0 1.4em}
+.meta b{color:var(--ink);font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:12px;margin:1.4em 0 .4em}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 18px;min-width:120px}
+.stat .n{font-size:1.35rem;font-weight:700;color:var(--accent-text)}
+.stat .l{font-size:.74rem;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.jump{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 20px;margin:1em 0 1.6em}
+.jump ul{margin:.3em 0 0;padding-left:1.2em}
+.jump li{margin:.18em 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 26px;margin:1.2em 0}
+.card h3{margin-top:0}
+.chiprow{display:flex;flex-wrap:wrap;gap:8px;margin:.4em 0 1em}
+.chip{font-size:.74rem;font-weight:600;border-radius:999px;padding:.22em .8em;border:1px solid transparent}
+.chip.rank{background:var(--ink);color:#fff}
+.chip.axis{background:var(--info-soft);color:var(--info-text)}
+.chip.conf-hi{background:var(--accent-soft);color:var(--accent-text)}
+.chip.conf-md{background:var(--warn-soft);color:var(--warn-text)}
+.chip.cx{background:#efedе7;background:#efede7;color:#555c66}
+.fields dt{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:650;margin-top:.9em}
+.fields dd{margin:.2em 0 0}
+.callout{border-radius:10px;padding:12px 18px;margin:1.2em 0;font-size:.92rem}
+.callout.win{background:var(--accent-soft)}
+.callout.win .eyebrow{color:var(--accent-text)}
+.callout.note{background:var(--info-soft)}
+.callout.note .eyebrow{color:var(--info-text)}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem}
+th{text-align:left;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--line);padding:8px 10px}
+td{border-bottom:1px solid var(--line);padding:9px 10px;vertical-align:top}
+figure{margin:1.3em 0}
+figure svg{display:block;max-width:100%;height:auto}
+figcaption{font-size:.8rem;color:var(--muted);margin-top:.4em}
+footer.composition-signal{margin-top:4em;padding-top:1.2em;border-top:1px solid var(--line);font-size:.8rem;color:var(--muted)}
+ul.axes{list-style:none;padding:0}
+ul.axes li{padding:.35em 0;border-bottom:1px dashed var(--line)}
+ul.axes li:last-child{border-bottom:none}
+ul.axes .slug{font-family:var(--mono);font-size:.82em;color:var(--accent-text);font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+<div class="eyebrow">Ideation · Compound Engineering</div>
+<h1>Ideation: THINK-107 Evaluation Framework</h1>
+<div class="meta">
+<span><b>Date</b> <time datetime="2026-07-01">2026-07-01</time></span>
+<span><b>Topic</b> think-107-eval-framework</span>
+<span><b>Mode</b> repo-grounded</span>
+<span><b>Focus</b> Reliable eval runs for all categories · skill evals · flagging threads into eval datasets (<a href="https://linear.app/thinkworkai/issue/THINK-107/evaluation-framework">THINK-107</a>)</span>
+</div>
+<div class="stats">
+<div class="stat"><div class="n">37</div><div class="l">Raw ideas</div></div>
+<div class="stat"><div class="n">20</div><div class="l">Deduped</div></div>
+<div class="stat"><div class="n">7</div><div class="l">Survivors</div></div>
+<div class="stat"><div class="n">5</div><div class="l">Axes covered</div></div>
+<div class="stat"><div class="n">17/20</div><div class="l">Bases verified sound</div></div>
+</div>
+</header>
+
+<section id="grounding-context">
+<h2>Grounding Context</h2>
+<p><strong>Codebase context.</strong> The eval framework is not a greenfield mess — it is a substantial, recently shipped system (THNK-2 "Trust Core" + skill evals, June 2026) whose pain concentrates in a few specific seams. What exists: an S3-canonical dataset store with versioning and drift detection (<code>packages/api/src/lib/evals/dataset-store.ts</code>); SQS per-case fan-out execution (<code>eval-runner.ts</code> dispatcher → <code>eval-worker.ts</code> → <code>eval-runs-reconciler.ts</code> stall backstop); the settled <code>pass | fail | error</code> verdict taxonomy with five <code>error_cause</code> classes excluded from pass-rate math; a pluggable, engine-neutral <code>ScoringEngine</code> contract whose only live engine is the in-house scorer (deterministic string assertions + LLM rubric judge) — the AgentCore Evaluations adapter is a stub that makes no API calls; per-skill datasets with an isolated eval-baseline agent, advisory-lock serialization, and an update-swap gate (migration 0168); a <code>flagThread</code> flow converting bad production threads into eval cases with workspace-projection snapshots; and a 189-case red-team baseline covering four security categories, seeded at install and never refreshed.</p>
+<p><strong>Where it hurts</strong> (from five evidence dossiers over the eval code): the framework's only true-crash alarm has <code>alarm_actions = []</code>; every case runs exactly once with no trial concept; every case pays a hardcoded 30-second span-propagation sleep; batch skill installs score only the first skill (busy → marked <em>failed</em>, never retried); the skill gate compares two single-trial pass rates against one per-tenant absolute threshold; flagging is manual-only with flag-time evidence capture that races trace retention; the <code>attribution:fallback</code> quarantine tag is written but consumed by nothing; performance-as-a-category was shipped in U7 and deleted in U19; agent-turn cost is invisible (only evaluator tokens are priced); and the UI surfaces pass-rate only.</p>
+<p><strong>Direction of interest.</strong> Eric's research comment on <a href="https://linear.app/thinkworkai/issue/THINK-107/evaluation-framework">THINK-107</a> (2026-06-30) points at a Harbor-style harness: task = initial environment + instruction + deterministic verifier script; attempts/trials with aggregate scoring; a pluggable AWS-native sandbox provider (AgentCore Code Interpreter vs Lambda MicroVMs); security/functionality/performance/cost in the result schema from the start. External research strongly corroborates the shape: Inspect AI's decoupled Task→Solver→Scorer with pluggable sandboxes, Terminal-Bench's all-or-nothing verifiers averaged over 5 trials, SkillsBench's paired with-skill/no-skill methodology, the LangSmith/Braintrust production-traces→annotation-queue→regression-suite loop, and AWS's own guidance to prefer code-based evaluators over LLM judges for anything deterministic.</p>
+<p><strong>Institutional guardrails</strong> honored throughout: the verdict taxonomy is settled (don't relitigate); "rated ≠ evaluable" is a named pattern; write-safe replay is a two-layer defense; Trust Core's deferrals (live sampling, deploy gates, AgentCore activation) are <em>sequenced, not rejected</em>; scoring stack stays AWS-native.</p>
+</section>
+
+<section id="topic-axes">
+<h2>Topic Axes</h2>
+<ul class="axes">
+<li><span class="slug">run-execution-reliability</span> — runner/worker/reconciler, stalls, verdict taxonomy, scope correctness, observability of run health</li>
+<li><span class="slug">skill-evals</span> — isolated baseline agent, gate, seeding, eligibility, attribution, skill-eval UX</li>
+<li><span class="slug">thread-flagging-dataset-curation</span> — flag flow, provenance, dataset versioning/freshness, promotion pipelines</li>
+<li><span class="slug">scoring-verifiers</span> — ScoringEngine, deterministic verifiers vs LLM judges, trials/aggregation, AgentCore adapter</li>
+<li><span class="slug">category-coverage</span> — security, functionality, performance, cost dimensions for Agents and Skills</li>
+</ul>
+</section>
+
+<section id="ranked-ideas">
+<h2>Ranked Ideas</h2>
+
+<div class="callout win"><span class="eyebrow">Quick win — do this regardless of direction</span><br>
+The eval fan-out DLQ alarm — the one signal that means "a worker crashed without recording a result" — is wired to nobody: <code>alarm_actions = []</code>, verified at <a href="https://github.com/thinkwork-ai/thinkwork/blob/main/terraform/modules/app/lambda-api/eval-fanout.tf"><code>terraform/modules/app/lambda-api/eval-fanout.tf:90</code></a>. Wiring it to SNS→Slack is a same-sprint fix folded into idea 5 below.</div>
+
+<div class="jump">
+<span class="eyebrow">Ranked survivors</span>
+<ul>
+<li><a href="#idea1">1. Deterministic-first scoring ladder</a> — verdicts from state and events; the judge becomes the exception, and gets calibrated</li>
+<li><a href="#idea2">2. Skill certification pipeline</a> — eval passports at publish, delta-based gating, parallel isolated runs</li>
+<li><a href="#idea3">3. Dataset flywheel</a> — production traffic continuously nominates cases; only reproduced, attributed ones gate</li>
+<li><a href="#idea4">4. Trial economics: the 10-second eval × k-trials</a> — kill the 30s sleep, then afford real trials with flake quarantine</li>
+<li><a href="#idea5">5. Verified run bundle</a> — pre-flight scope contract, wired alarms, error-cause anomaly signals</li>
+<li><a href="#idea6">6. Performance + cost as universal telemetry</a> — two of THINK-107's four dimensions with zero new test cases</li>
+<li><a href="#idea7">7. Per-category trust budgets</a> — retire the pass-rate headline</li>
+</ul>
+</div>
+
+<article class="card" id="idea1">
+<h3>1. Deterministic-first scoring ladder</h3>
+<div class="chiprow"><span class="chip rank">Rank 1</span><span class="chip axis">scoring-verifiers</span><span class="chip conf-hi">Confidence 85%</span><span class="chip cx">Complexity Low→Medium</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Make deterministic evidence the default verdict source and demote the LLM judge to the cases that genuinely need semantic judgment — then calibrate the judge itself. Three moves, all behind existing seams: <strong>(a)</strong> add a <code>verifier</code> ScoringEngine — a deterministic script (sandboxed Lambda) that inspects post-run state: workspace files, the tool-call trace ledger, captured artifacts — as a third engine behind the existing engine-neutral <code>ScoringEngine</code> contract, generalizing the already-shipped <code>workspace-projection-assertions</code> miniature. <strong>(b)</strong> Emit the write-guard events the replay allowlist already produces (every blocked write attempt, every guarded-prefix read) as first-class scoring inputs, so tool-misuse and data-boundary cases verdict deterministically: pass iff zero violations — no judge call at all. <strong>(c)</strong> Turn operator verdict overrides (stored immutably next to judge verdicts today, used for nothing) into the judge-calibration corpus: publish a judge-agreement rate, and gate <code>scoring_version</code> bumps on the new judge matching the override ground truth.</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> <code>engine.ts:90-94</code> — "Scoring sits behind this ThinkWork-owned seam so engine-specific concepts can never leak into the dataset format or the verdict taxonomy" (the stub AgentCore engine proves the seam tolerates inert engines); <code>replay-allowlist.ts</code> already classifies and blocks every tool call during eval; <code>in-house.ts:200-213</code> — the heuristic judge fails closed on non-refusal rubrics when the LLM is unavailable, making the judge the single point of fragility; overrides kept immutable at <code>resolvers/evaluations/index.ts:1413-1425</code>. <code>external:</code> Inspect AI (Task→Solver→Scorer, pluggable sandboxes); Terminal-Bench all-or-nothing verifiers; AgentProp-Bench — judge errors cascade through multi-step trajectories, so step-level deterministic checks beat end-to-end LLM verdicts; AWS's own AgentCore Evaluations guidance: code-based evaluators for anything deterministic.</dd>
+<dt>Rationale</dt>
+<dd>This is the concrete on-ramp to the Harbor direction in Eric's THINK-107 comment <em>without</em> a rearchitecture: task-plus-verifier becomes expressible inside the current runner/worker pipeline, proving the verifier contract before any sandbox-pool investment. It attacks reliability at the root — every verdict moved off the judge is a verdict that cannot be judge-flaky — and an attempted forbidden write is strictly stronger evidence of tool misuse than a judge's reading of the transcript. It also unlocks the functionality category (idea 3's golden cases need verifiers like "the agent actually updated the file," which <code>contains</code>-assertions on prose cannot express).</dd>
+<dt>Downsides</dt>
+<dd>Verifier scripts are a new authoring surface (skill authors and operators must learn to write them); guard-event scoring crosses the eval-worker/Pi-runtime boundary, so both owners are involved; judge calibration needs enough override volume to be meaningful and overrides may be biased toward disagreements.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 250" role="img" aria-label="Verdict sources ordered from deterministic to semantic, with the judge calibrated by operator overrides">
+<style>text{font-family:'Inter',sans-serif;fill:#1f2430}.lbl{font-size:13px;font-weight:600}.sub{font-size:11px;fill:#5c6470}.tag{font-size:10px;font-weight:600;letter-spacing:.08em;fill:#5c6470}</style>
+<text x="20" y="26" class="tag">VERDICT SOURCE LADDER — TRY DETERMINISTIC FIRST</text>
+<rect x="20" y="44" width="220" height="64" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="36" y="70" class="lbl">Verifier scripts</text>
+<text x="36" y="90" class="sub">inspect files · state · artifacts</text>
+<rect x="270" y="44" width="220" height="64" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="286" y="70" class="lbl">Guard events</text>
+<text x="286" y="90" class="sub">blocked writes = misuse evidence</text>
+<rect x="520" y="44" width="220" height="64" rx="10" fill="#f7edda" stroke="#a15c0a"/>
+<text x="536" y="70" class="lbl">LLM judge</text>
+<text x="536" y="90" class="sub">semantic rubrics only</text>
+<path d="M240 76 L266 76" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr)"/>
+<path d="M490 76 L516 76" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr)"/>
+<rect x="520" y="160" width="220" height="60" rx="10" fill="#e8edf9" stroke="#3b5bad"/>
+<text x="536" y="184" class="lbl">Operator overrides</text>
+<text x="536" y="203" class="sub">immutable ground truth, today unused</text>
+<path d="M630 160 L630 112" stroke="#3b5bad" stroke-width="1.6" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<text x="642" y="140" class="sub">calibrates · gates scoring_version</text>
+<text x="20" y="190" class="sub">Most cases resolve on the left — deterministic, free, cannot be judge-flaky.</text>
+<text x="20" y="208" class="sub">Only genuinely semantic rubrics reach the judge, and the judge is measured.</text>
+<defs><marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#5c6470"/></marker></defs>
+</svg>
+<figcaption>Illustrative: verdicts come from state and events wherever possible; the judge handles the semantic remainder and is calibrated against operator overrides.</figcaption>
+</figure>
+</article>
+
+<article class="card" id="idea2">
+<h3>2. Skill certification pipeline</h3>
+<div class="chiprow"><span class="chip rank">Rank 2</span><span class="chip axis">skill-evals</span><span class="chip conf-hi">Confidence 82%</span><span class="chip cx">Complexity Medium→High</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Rebuild skill-eval trust as a pipeline with three stages. <strong>(a) Eval passport at publish:</strong> mint a certification per skill-version content SHA when a skill enters the catalog — WIRING.md present, materializes cleanly into the isolated workspace, smoke fixtures pass, scoring version stamped. Activation and the "Run evals" button check passport validity instead of lazily probing S3 at click time, making the shipped "rated but not evaluable" failure unrepresentable. <strong>(b) Paired-condition delta gating:</strong> run the same cases with-skill and no-skill (the control arm already exists as the post-purge, pre-install workspace state) and gate skill updates on the <em>delta</em>, not the single per-tenant absolute threshold — the only measurement that can catch a net-negative skill. <strong>(c) Concurrency:</strong> replace <code>EvalBaselineBusyError → marked failed</code> with, minimally, a per-tenant fair queue (surfacing "queued," retrying automatically), and, fully, a bounded pool of ephemeral isolated eval environments per Eric's sandbox-pool note — turning batch installs from "only the first skill gets scored" into parallel certification.</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> the rated≠evaluable pattern doc (<a href="https://github.com/thinkwork-ai/thinkwork/blob/main/docs/solutions/architecture-patterns/skill-eval-rated-does-not-mean-evaluable-2026-06-15.md"><code>docs/solutions/architecture-patterns/skill-eval-rated-does-not-mean-evaluable-2026-06-15.md</code></a>): "Clicking Run evals now then failed in the backend because the catalog skill had no WIRING.md"; <code>skill-eval-run.ts:207-217</code> (verified verbatim): busy is treated identically to permanent failure; migration 0168's single per-tenant <code>numeric(5,4)</code> threshold; regression = a two-run pass-rate comparison at <code>skill-eval-run.ts:285-314</code>. <code>external:</code> SkillsBench (arXiv 2602.12670) — paired-condition skill eval as the core primitive; skill value is wildly domain-dependent (+4.5pp on SWE vs +51.9pp on healthcare tasks) so no absolute bar generalizes, and self-generated skills were net <em>negative</em>; Anthropic's skill-authoring guidance — every skill ships its own eval fixture.</dd>
+<dt>Rationale</dt>
+<dd>This is the direct answer to "the skill eval feature has been particularly problematic." Each documented failure maps to a stage: rated-but-not-evaluable → passport; a gate that can't tell "mediocre because the domain is hard" from "actively worse than no skill" → delta; batch installs silently under-delivering → queue/pool. Certification keyed by the same content-SHA drift machinery the catalog already uses makes it auditable, and it becomes the natural enforcement point for requiring future catalog skills to ship eval fixtures.</dd>
+<dt>Downsides</dt>
+<dd>Paired runs double skill-eval cost and duration; a publish-time hard gate changes the skill-contributor workflow (needs a clear authoring error surface, or it just moves the frustration); the ephemeral-pool leg carries real infra cost (IAM, provisioning latency, provider bake-off) — hence the fair-queue interim.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 240" role="img" aria-label="Skill certification pipeline from publish to gated activation">
+<style>text{font-family:'Inter',sans-serif;fill:#1f2430}.lbl{font-size:13px;font-weight:600}.sub{font-size:11px;fill:#5c6470}.tag{font-size:10px;font-weight:600;letter-spacing:.08em;fill:#5c6470}</style>
+<text x="20" y="26" class="tag">SKILL LIFECYCLE — PROVE EVALUABILITY, THEN PROVE VALUE</text>
+<rect x="20" y="48" width="180" height="66" rx="10" fill="#ffffff" stroke="#5c6470"/>
+<text x="36" y="74" class="lbl">Publish</text>
+<text x="36" y="94" class="sub">skill folder + evals/*.json</text>
+<rect x="235" y="48" width="200" height="66" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="251" y="74" class="lbl">Passport minted</text>
+<text x="251" y="94" class="sub">WIRING ✓ · materializes ✓ · SHA-keyed</text>
+<rect x="470" y="48" width="270" height="66" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="486" y="74" class="lbl">Paired runs (pool / queue)</text>
+<text x="486" y="94" class="sub">no-skill control vs with-skill treatment</text>
+<path d="M200 81 L231 81" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr2)"/>
+<path d="M435 81 L466 81" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr2)"/>
+<rect x="235" y="158" width="200" height="60" rx="10" fill="#e8edf9" stroke="#3b5bad"/>
+<text x="251" y="182" class="lbl">Gate on delta</text>
+<text x="251" y="201" class="sub">lift &gt; floor — not absolute pass-rate</text>
+<path d="M560 114 C560 150 460 178 439 185" stroke="#5c6470" stroke-width="1.6" fill="none" marker-end="url(#arr2)"/>
+<text x="20" y="190" class="sub">Delta ≤ 0 = dead weight or harmful —</text>
+<text x="20" y="208" class="sub">invisible to any absolute threshold.</text>
+<defs><marker id="arr2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#5c6470"/></marker></defs>
+</svg>
+<figcaption>Illustrative: evaluability certified at publish; value measured as with-skill vs no-skill lift; activation gated on the delta.</figcaption>
+</figure>
+</article>
+
+<article class="card" id="idea3">
+<h3>3. Dataset flywheel</h3>
+<div class="chiprow"><span class="chip rank">Rank 3</span><span class="chip axis">thread-flagging-dataset-curation</span><span class="chip conf-hi">Confidence 80%</span><span class="chip cx">Complexity Medium→High</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Turn "flagging threads for evaluation dataset" from a manual button into a closed loop with four stages. <strong>(a) Capture at dispatch, not at flag:</strong> THNK-10 already writes the workspace projection into <code>thread_turns.context_snapshot</code> at dispatch — extend that to a complete eval-ready capture (history refs, trace pointers, active skills) on every turn, so flagging becomes promoting an existing immutable snapshot and the flag-time evidence-rot gap codes become impossible for new threads. <strong>(b) Sentinel sampling:</strong> a cheap always-on scorer (deterministic trace checks — failed tool calls, guard blocks, error loops — plus budgeted LLM sampling) over completed production turns routes low scorers into a triage queue; the flag flow becomes review of machine-nominated candidates, not archaeology. This un-defers Trust Core's explicitly "sequenced, not rejected" live-sampling deferral. <strong>(c) Reproduce-before-gate quarantine:</strong> a flagged case enters as "reported," is replayed once as a positive control, and only counts toward gates once the failure reproduces under its captured snapshot — giving the <code>attribution:fallback</code> tag (written today, consumed by nothing — verified by grep) its promised audit consumer. <strong>(d) Golden promotion:</strong> flag <em>good</em> threads too — successful production threads become functionality cases via the existing <code>resolution_target</code> / <code>outcome_kind</code> fields, bootstrapping THINK-107's never-scoped functionality category from real tenant workloads instead of hand authoring.</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> <code>thread-snapshot.ts</code> — "captures everything replay (U8) needs into self-contained payload objects" (a callable module, currently human-triggered only); flag-time gap code "Trace ledger evidence lookup failed at flag time"; <code>flag-thread.ts:96-104</code> quarantine intent with zero consumers; <code>dataset-store.ts:351-435</code> — <code>resolution_target</code>/<code>outcome_kind: security | quality</code> already parse; the 189-case baseline is "seeded at install, never auto-refreshed." <code>external:</code> LangSmith/Braintrust closed loop — online scorers → annotation queue → ~100–200 annotated traces recalibrate the judge → the annotated set becomes the deploy-gating regression suite; Braintrust code-defined dataset pipelines for bulk promotion.</dd>
+<dt>Rationale</dt>
+<dd>Every downstream component (snapshot capture, three-way attribution, S3-canonical sync, drift healing) is already built and fed by human attention alone. Automating discovery is the highest-leverage change to the pipeline Eric named, and quarantine is what makes it safe: without reproduce-before-gate, auto-nominated cases would pour unverified provenance into the datasets that block skill updates. The flywheel compounds — every day of production traffic grows the corpus, and every fixed bug leaves a regression tripwire behind.</dd>
+<dt>Downsides</dt>
+<dd>Always-on scoring is a new cost/privacy surface over production traffic (needs sampling budgets and tenant consent posture); dispatch-time capture increases per-turn storage; quarantine adds a state machine to case lifecycle; snapshot content is still unredacted (a Trust Core deferral this would inherit).</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 300" role="img" aria-label="Closed loop from production threads through sampling, quarantine, datasets, and gates back to production">
+<style>text{font-family:'Inter',sans-serif;fill:#1f2430}.lbl{font-size:12.5px;font-weight:600}.sub{font-size:10.5px;fill:#5c6470}.tag{font-size:10px;font-weight:600;letter-spacing:.08em;fill:#5c6470}</style>
+<text x="20" y="24" class="tag">THE FLYWHEEL — TRAFFIC IN, TRUSTED CASES OUT</text>
+<rect x="30" y="52" width="190" height="58" rx="10" fill="#ffffff" stroke="#5c6470"/>
+<text x="46" y="76" class="lbl">Production turns</text>
+<text x="46" y="94" class="sub">snapshot captured at dispatch</text>
+<rect x="300" y="52" width="190" height="58" rx="10" fill="#e8edf9" stroke="#3b5bad"/>
+<text x="316" y="76" class="lbl">Sentinel scorer</text>
+<text x="316" y="94" class="sub">trace checks + sampled judge</text>
+<rect x="562" y="52" width="178" height="58" rx="10" fill="#e8edf9" stroke="#3b5bad"/>
+<text x="578" y="76" class="lbl">Triage queue</text>
+<text x="578" y="94" class="sub">operator review + goldens</text>
+<rect x="562" y="170" width="178" height="58" rx="10" fill="#f7edda" stroke="#a15c0a"/>
+<text x="578" y="194" class="lbl">Quarantine</text>
+<text x="578" y="212" class="sub">must reproduce on replay</text>
+<rect x="300" y="170" width="190" height="58" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="316" y="194" class="lbl">Datasets</text>
+<text x="316" y="212" class="sub">baseline · skill · golden</text>
+<rect x="30" y="170" width="190" height="58" rx="10" fill="#e4f1f0" stroke="#0d6e6e"/>
+<text x="46" y="194" class="lbl">Gates &amp; runs</text>
+<text x="46" y="212" class="sub">skill updates · regressions</text>
+<path d="M220 81 L296 81" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)"/>
+<path d="M490 81 L558 81" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)"/>
+<path d="M651 110 L651 166" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)"/>
+<path d="M562 199 L494 199" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)"/>
+<path d="M300 199 L224 199" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)"/>
+<path d="M125 170 L125 114" stroke="#5c6470" stroke-width="1.6" marker-end="url(#arr3)" stroke-dasharray="5 4"/>
+<text x="20" y="266" class="sub">Dashed: gate outcomes shape what ships back into production — the loop closes.</text>
+<text x="20" y="284" class="sub">Only reproduced, attributed cases ever reach gate math.</text>
+<defs><marker id="arr3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#5c6470"/></marker></defs>
+</svg>
+<figcaption>Illustrative: machine-nominated candidates flow through human triage and a reproduce-before-gate quarantine before joining any dataset that gates.</figcaption>
+</figure>
+</article>
+
+<article class="card" id="idea4">
+<h3>4. Trial economics: the 10-second eval × k-trials</h3>
+<div class="chiprow"><span class="chip rank">Rank 4</span><span class="chip axis">run-execution-reliability</span><span class="chip conf-hi">Confidence 80%</span><span class="chip cx">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Two moves that only make sense together. <strong>(a) Make cases fast:</strong> the runner always sleeps 30 seconds for CloudWatch span propagation even when spans are already available — the documented dominant stage at every percentile. Score deterministic assertions against the direct invocation response immediately (a provisional verdict in seconds) and let LLM-judge/span-dependent enrichment refine asynchronously — a two-phase verdict. <strong>(b) Then afford trials:</strong> add a <code>trial_index</code> to the existing per-case SQS message (already batch-size-1 with advisory-lock dedup), fan out k messages per case, and aggregate binary reward in the unchanged last-writer finalization. Verdict instability across identical trials becomes a new <code>unstable</code> state — quarantined from pass-rate and gate math the same way <code>error</code> already is, extending the settled taxonomy rather than relitigating it.</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> <a href="https://github.com/thinkwork-ai/thinkwork/blob/main/docs/solutions/diagnostics/eval-runner-stall-findings-2026-05-16.md"><code>docs/solutions/diagnostics/eval-runner-stall-findings-2026-05-16.md</code></a> (verified by the Phase-3 checker): "the runner always sleeps for the 30 second initial span wait even when spans are available" — ~30s at p50/p95/max; single-trial design confirmed across <code>eval-worker.ts</code>/<code>eval-runner.ts</code> (no trial concept exists); fan-out mechanics at <code>eval-fanout.tf:33-50</code>. <code>external:</code> Terminal-Bench 2.0 — binary reward averaged over 5 trials as the reliability standard for agent evals.</dd>
+<dt>Rationale</dt>
+<dd>Per-case wall time is the hidden tax on every other idea in this document — trials, paired-condition runs, and sentinel sampling all multiply case count, so cutting the floor 3–5× changes what is affordable. And the skill gate currently compares two single-trial pass rates: noise gating noise. Trials make the gate statistically honest, flake quarantine separates "flaky case" from "real regression" (a large share of the felt mess), and attempts/trials is an explicit requirement in Eric's Harbor note.</dd>
+<dt>Downsides</dt>
+<dd>k-trials multiplies compute cost on gate-triggering runs (mitigated by only applying k&gt;1 to LLM-rubric cases — deterministic verdicts don't flake); two-phase verdicts change result-row semantics and need UI treatment for "provisional"; the async enrichment path adds a completion state to reconcile.</dd>
+</dl>
+</article>
+
+<article class="card" id="idea5">
+<h3>5. Verified run bundle</h3>
+<div class="chiprow"><span class="chip rank">Rank 5</span><span class="chip axis">run-execution-reliability</span><span class="chip conf-hi">Confidence 85%</span><span class="chip cx">Complexity Small→Medium</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Make run trust visible without re-architecting execution. <strong>(a) Pre-flight scope contract:</strong> the runner writes a signed manifest — exact case IDs, dataset version, scoring version, eval-workspace content SHA — as the run's first artifact; fan-out is blocked until it validates against the request; finalization diffs results against it, and any delta becomes a loud <code>scope_mismatch</code> terminal state instead of today's <code>console.warn</code> plus an eternally "running" run. The UI renders "N of exactly M contracted cases." <strong>(b) Wire the DLQ alarm</strong> (<code>alarm_actions = []</code> today) to SNS→Slack/PagerDuty and auto-run the existing stall-probe's per-phase latency breakdown on trigger, so the operator starts from the bottleneck, not a silent dashboard tile. <strong>(c) Simple anomaly signals on <code>error_cause</code>:</strong> per-run rates of timeout/throttle/evaluator_error charted with plain thresholds on the existing 30-day trend — the taxonomy exists precisely to separate infra noise, but nothing consumes it as a signal today.</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> <code>eval-fanout.tf:90</code> <code>alarm_actions = []</code> (verified in-repo by the Phase-3 checker) on the alarm whose own description says "operator must inspect"; <code>eval-runs-reconciler.test.ts:455-460</code> — a scope discrepancy today produces a warn-and-skip; two shipped silent-scope incidents (a single-case run expanded to 96; a full run silently executed 135/189) documented in <code>docs/solutions/logic-errors/</code>. <code>reasoned:</code> a gate that silently evaluated the wrong thing is worse than no gate — pre-flight echo of effective scope is the only mechanism that catches this class at t=0; the pinning machinery (<code>pinned_case_ids</code>, content SHAs) already computes everything the manifest needs.</dd>
+<dt>Rationale</dt>
+<dd>Scope bugs are the most trust-corrosive failure mode a gating system can have, and this converts the scariest historical bug class into an impossible state mostly by promoting internal state to a verified, surfaced invariant. The alarm fix is the single cheapest reliability win in the framework. Together they answer "reliably run evals" for the runs that already exist.</dd>
+<dt>Downsides</dt>
+<dd>A hard pre-dispatch gate can fail runs that today would (incorrectly) proceed — the team must agree that failing loud beats running wrong; anomaly thresholds need tuning at current low run volumes (full SPC/control-chart statistics were rejected as scale-mismatched — see rejections).</dd>
+</dl>
+</article>
+
+<article class="card" id="idea6">
+<h3>6. Performance + cost as universal telemetry, not authored categories</h3>
+<div class="chiprow"><span class="chip rank">Rank 6</span><span class="chip axis">category-coverage</span><span class="chip conf-hi">Confidence 82%</span><span class="chip cx">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Stop treating performance and cost as test-case categories to author — that approach shipped in U7 and was deleted in U19 ("not true red-team"). Instead, attach latency and cost as automatic instrumentation on every eval that already runs: per-tool-call and per-turn spans (tokens, cost, wall time) stored in result evidence; p50/p95 latency and cost-per-case trends computed across the 189 red-team cases and every skill run; regression detected against rolling per-case baselines (2× spike rule). A cost ceiling gate clones the proven presence-gated threshold-table pattern from <code>skill-eval-gate.ts</code>. Skill evals gain a cost-lift axis for free: does this skill make the agent cheaper or 3× more expensive?</dd>
+<dt>Basis</dt>
+<dd><code>direct:</code> <code>duration_ms</code> is "captured per result but not aggregated or surfaced in run summaries"; "cost aggregation is Bedrock evaluator token-based only; no per-case agent invocation cost tracked"; the U7-shipped/U19-deleted performance category is documented in the plan history; <code>skill-eval-gate.ts:38-53</code> — gate-row presence = enabled. <code>external:</code> cost-regression tooling convergence (Traceloop, Braintrust, TrueFoundry): span-level token capture per tool call, rolling-baseline spike detection, cost as a fourth CI gate alongside pass-rate/latency/security.</dd>
+<dt>Rationale</dt>
+<dd>Two of THINK-107's four demanded dimensions light up with zero new test cases, sidestepping the exact failure mode that got the U7 attempt deleted. Category becomes a filter over universal metrics instead of a content-creation burden competing with red-team authoring, and the rolling baselines it establishes are prerequisites for any future cost/latency gate.</dd>
+<dt>Downsides</dt>
+<dd>Requires threading token/cost capture through the agent-invocation path (the <code>cost_events</code> wiring that was never finished); latency measured under eval conditions differs from production latency (fine for regression, misleading as an absolute); adds result-row width that the schema should absorb deliberately (see idea 7).</dd>
+</dl>
+</article>
+
+<article class="card" id="idea7">
+<h3>7. Per-category trust budgets replace the pass-rate headline</h3>
+<div class="chiprow"><span class="chip rank">Rank 7</span><span class="chip axis">category-coverage</span><span class="chip conf-md">Confidence 68%</span><span class="chip cx">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt>
+<dd>Retire the single pass-rate as the tenant-facing headline. Each category gets a budget contract with its own semantics: <strong>security</strong> = zero successful injections (any fail is a breach — 99% is not a pass); <strong>functionality</strong> = golden-case delta ≥ 0; <strong>performance</strong> = p95 ≤ bound; <strong>cost</strong> = per-case cost ≤ rolling baseline × 2. The dashboard renders contracts met/breached; pass-rate survives only as a drill-down inside categories where averaging is meaningful. This is the reporting layer over ideas 1 and 6, and it decides the result-schema shape Eric's Harbor note says must be right "from the start."</dd>
+<dt>Basis</dt>
+<dd><code>reasoned:</code> a mean over incommensurable categories destroys information — one successful prompt injection amid 188 passes renders as 99.5% ("excellent") when it is a critical breach, while ten flaky timeouts render as a five-point regression when nothing behavioral changed. The institutional record shows this misreading already burned the team once: the documented 95%→62% slide that triggered Trust Core "blends real failures, brittle assertions, and infra noise indistinguishably." Budget-per-category is how CI already treats security scanners vs perf benchmarks. <code>external:</code> cost-tooling convergence on cost as a fourth gate, not a dashboard.</dd>
+<dt>Rationale</dt>
+<dd>Defines what "MUCH better coverage" actually means to a tenant and forces the right result-schema decision before the other ideas harden it. Without this, every improvement upstream still funnels into a metric that invites the wrong conclusion.</dd>
+<dt>Downsides</dt>
+<dd>A genuine product/UX redesign of the evaluations surface, not a backend change; per-category semantics need agreement (what counts as a security "breach" vs a heuristic false positive); Medium confidence because the *shape* is right but the specific budget definitions need design work with real data.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 226" role="img" aria-label="Contrast between a single pass-rate headline hiding a breach and per-category budget contracts exposing it">
+<style>text{font-family:'Inter',sans-serif;fill:#1f2430}.lbl{font-size:13px;font-weight:600}.sub{font-size:11px;fill:#5c6470}.tag{font-size:10px;font-weight:600;letter-spacing:.08em;fill:#5c6470}.big{font-size:26px;font-weight:700}</style>
+<text x="20" y="24" class="tag">SAME RUN, TWO HEADLINES</text>
+<rect x="20" y="44" width="340" height="150" rx="12" fill="#ffffff" stroke="#e3e0d8"/>
+<text x="40" y="74" class="lbl">Today: one scalar</text>
+<text x="40" y="122" class="big" fill="#0a5757">99.5%</text>
+<text x="40" y="148" class="sub">188 of 189 passed — reads “excellent”</text>
+<text x="40" y="170" class="sub">…the 1 fail was a successful prompt injection.</text>
+<rect x="400" y="44" width="340" height="150" rx="12" fill="#ffffff" stroke="#e3e0d8"/>
+<text x="420" y="74" class="lbl">Proposed: budget contracts</text>
+<rect x="420" y="90" width="145" height="30" rx="8" fill="#f7e5e3"/><text x="432" y="110" class="sub" fill="#8a2a24" font-weight="600">SECURITY · BREACHED</text>
+<rect x="577" y="90" width="145" height="30" rx="8" fill="#e4f1f0"/><text x="589" y="110" class="sub" fill="#0a5757" font-weight="600">FUNCTIONALITY · MET</text>
+<rect x="420" y="130" width="145" height="30" rx="8" fill="#e4f1f0"/><text x="432" y="150" class="sub" fill="#0a5757" font-weight="600">PERFORMANCE · MET</text>
+<rect x="577" y="130" width="145" height="30" rx="8" fill="#e4f1f0"/><text x="589" y="150" class="sub" fill="#0a5757" font-weight="600">COST · MET</text>
+<text x="420" y="182" class="sub">The breach is the headline, not a rounding error.</text>
+</svg>
+<figcaption>Illustrative: the same eval run summarized as a scalar versus as per-category contracts.</figcaption>
+</figure>
+</article>
+
+</section>
+
+<section id="rejection-summary">
+<h2>Rejection Summary</h2>
+<p>37 raw ideas from five framed generators were deduped to 20 candidates plus 4 cross-frame syntheses, then adversarially verified by a fresh-context checker (17 of 20 sound; the highest-stakes <code>direct:</code> quotes were re-read in the repo). Merged candidates are not listed — ideas 1–7 above absorb fifteen of them. Cut with reasons:</p>
+<table>
+<thead><tr><th>#</th><th>Idea</th><th>Reason rejected</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Activate the AgentCore Evaluations adapter (16 built-in evaluators) behind a cost governor</td><td>Sound basis — the strongest verified quote in the set ("ACTIVATION IS DEFERRED… makes NO API calls") — but it runs counter to survivor 1's deterministic-first direction: activating 16 LLM-judge built-ins adds judge surface exactly where the evidence says to shrink it. Revisit selectively if a semantic-rubric gap remains after idea 1 lands. The "reuse existing hypothetical-cost estimation code" detail did not verify.</td></tr>
+<tr><td>2</td><td>Generated red-team probes from the tenant's live tool manifest (Garak/PyRIT-style templates per installed connector, regenerated on install/uninstall)</td><td>Strongest runner-up — sound and exciting, but a full generation engine is premature before guard-event verdicts (idea 1) provide its deterministic verifier. Sequence as a phase 2 of category coverage.</td></tr>
+<tr><td>3</td><td>Replace the runner/worker/reconciler triad with a Step Functions state machine</td><td>Verifier: overstates the problem — the reconciler is a working, unit-tested mitigation for exactly the cited failure modes, not a leaking gap. Lighter moves (idea 5's scope contract; two-phase verdicts) address the felt symptoms without a migration.</td></tr>
+<tr><td>4</td><td>SPC control charts (Western Electric rules) on <code>error_cause</code></td><td>Scale mismatch — per-tenant run volume is too sparse for control-chart statistics; folded into idea 5 as simple threshold anomaly signals.</td></tr>
+<tr><td>5</td><td>Standalone ephemeral-sandbox-pool rearchitecture</td><td>Not rejected on merits — folded into idea 2 as its concurrency leg, with the per-tenant fair queue as the cheap interim so the batch-install bug doesn't wait on infrastructure.</td></tr>
+<tr><td>6</td><td>Formalize the execution triad as a named shared kernel</td><td>Real hygiene, but below the decision bar on its own — it is a refactoring stance, and idea 1's engine seam already provides the extension point new verifier surfaces need.</td></tr>
+</tbody>
+</table>
+<p>Axis coverage: all five axes carry at least one survivor — no deliberate gaps. One verifier finding was overruled with cause: the checker flagged "Eric's Harbor note" as unverifiable because the only Harbor mention in <code>docs/</code> scopes it out (2026-06-01); the note is Eric's own comment on <a href="https://linear.app/thinkworkai/issue/THINK-107/evaluation-framework">THINK-107</a> dated 2026-06-30, which postdates that plan and is quoted directly in this run's grounding.</p>
+</section>
+
+<footer class="composition-signal">Composed 2026-07-01 by ce-ideate from Linear <a href="https://linear.app/thinkworkai/issue/THINK-107/evaluation-framework">THINK-107</a> and repo evidence dossiers (run e7a3f19c)</footer>
+
+</div>
+</body>
+</html>

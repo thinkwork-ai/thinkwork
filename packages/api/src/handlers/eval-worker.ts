@@ -16,6 +16,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   costEvents,
+  evalCaseOverrides,
   evalReplayToolAllowlist,
   evalResults,
   evalRuns,
@@ -37,18 +38,28 @@ import {
 import { createHash } from "crypto";
 import {
   AgentCoreEvalInvocationTimeoutError,
+  evalModelId,
   invokeAgentCoreForEval,
+  type EvalAgentUsage,
   type EvalReplayToolOverride,
   type EvalReplayHistoryMessage,
 } from "../lib/evals/agentcore-direct.js";
+import {
+  getTenantModelPricing,
+  type TenantModelPricing,
+} from "../lib/model-catalog/tenant-catalog.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
 import {
-  bedrockLlmJudge,
+  createBedrockLlmJudge,
   createInHouseScoringEngine,
   EvalJudgeInvocationError,
   heuristicFallbackJudge,
   llmJudgeEnabled,
 } from "../lib/evals/engines/in-house.js";
+import {
+  summarizeEvalRunVerdicts,
+  summaryScoringVersionFor,
+} from "../lib/evals/case-verdicts.js";
 import { createAgentCoreScoringEngine } from "../lib/evals/engines/agentcore.js";
 
 // Engine-seam extractions (Trust Core U10): the judge + gate symbols
@@ -57,6 +68,7 @@ import { createAgentCoreScoringEngine } from "../lib/evals/engines/agentcore.js"
 export { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
 export {
   bedrockLlmJudge,
+  createBedrockLlmJudge,
   EVAL_IN_HOUSE_ENGINE_ID,
   EVAL_JUDGE_SYSTEM_PROMPT,
   EvalJudgeInvocationError,
@@ -64,6 +76,7 @@ export {
   heuristicFallbackJudge,
   llmJudgeEnabled,
   parseEvalJudgeVerdict,
+  resolveEvalJudgeModelId,
   type EvalJudgeVerdict,
 } from "../lib/evals/engines/in-house.js";
 export {
@@ -96,6 +109,13 @@ export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
   index?: number;
+  /**
+   * Which trial of the case this message executes (0-based; Eval
+   * Profiles U4). Part of the result-row identity
+   * (run_id, test_case_id, trial_index) — the dedup check and advisory
+   * lock incorporate it. Absent on legacy in-flight messages (= 0).
+   */
+  trialIndex?: number;
   /**
    * Dataset-pinned launches (Trust Core U6): the run-scoped S3 key the
    * worker loads the case content from, plus its expected sha. Absent on
@@ -154,6 +174,17 @@ interface CaseOutcome {
   durationMs: number;
   errorMessage: string | null;
   costUsd: number;
+  /**
+   * Agent-turn telemetry (Eval Profiles U5): token usage of the agent
+   * invocation itself (not evaluator tokens), priced against the run's
+   * snapshot model. All null when the runtime envelope carried no usage
+   * (older image, errored invoke); cost null when usage is present but
+   * catalog pricing is unresolved — tokens are still recorded and the
+   * run summary marks cost partial, never zero (R6).
+   */
+  agentInputTokens: number | null;
+  agentOutputTokens: number | null;
+  agentCostUsd: number | null;
   sessionId: string;
   /**
    * Thread turn this execution corresponds to — set when the case's
@@ -189,6 +220,8 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
     runId: parsed.runId,
     testCaseId: parsed.testCaseId,
     index: typeof parsed.index === "number" ? parsed.index : undefined,
+    trialIndex:
+      typeof parsed.trialIndex === "number" ? parsed.trialIndex : undefined,
     snapshotKey:
       typeof parsed.snapshotKey === "string" && parsed.snapshotKey.length > 0
         ? parsed.snapshotKey
@@ -284,6 +317,117 @@ export function isFinalSqsReceive(
   return count >= maxReceiveCount;
 }
 
+// ---------------------------------------------------------------------------
+// Throttle absorption (eval throughput fix)
+//
+// A Bedrock/Lambda throttle used to cost FIVE MINUTES of lane time: the
+// worker rethrew, the message redrove, and the FIFO lane sat blocked for
+// the queue's full 300s visibility timeout (FIFO delivers nothing else
+// from a group while one of its messages is in flight or invisible).
+// Under sustained throttling that collapsed a 20-lane fan-out to
+// near-serial throughput. Two-layer fix:
+//   1. Retry throttles IN-WORKER with short exponential backoff — most
+//      throttles clear in seconds, no redrive needed.
+//   2. When a redrive IS needed, shorten the message's remaining
+//      visibility to seconds (ChangeMessageVisibility) so the lane
+//      frees immediately instead of parking for 300s.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_EVAL_THROTTLE_RETRY_ATTEMPTS = 2;
+const DEFAULT_EVAL_THROTTLE_RETRY_BASE_MS = 8_000;
+
+/** Extra in-worker tries after the first throttle (0 disables). */
+export function evalThrottleRetryAttempts(
+  value = process.env.EVAL_THROTTLE_RETRY_ATTEMPTS,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_EVAL_THROTTLE_RETRY_ATTEMPTS;
+  }
+  return Math.floor(parsed);
+}
+
+export function evalThrottleRetryBaseMs(
+  value = process.env.EVAL_THROTTLE_RETRY_BASE_MS,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_EVAL_THROTTLE_RETRY_BASE_MS;
+  }
+  return Math.floor(parsed);
+}
+
+/** Backoff before in-worker retry N (1-based): base * 2^(N-1) + 0–25% jitter. */
+export function throttleBackoffMs(
+  attempt: number,
+  baseMs = evalThrottleRetryBaseMs(),
+  random: () => number = Math.random,
+): number {
+  const exponential = baseMs * 2 ** Math.max(0, attempt - 1);
+  return Math.round(exponential * (1 + random() * 0.25));
+}
+
+/**
+ * Remaining visibility (seconds) applied to a throttled message before
+ * its redrive: grows with the receive count so repeat offenders back off
+ * harder, jittered so a burst of throttled lanes doesn't thunder back in
+ * lockstep, and capped far below the queue's 300s default — the whole
+ * point is releasing the FIFO lane fast.
+ */
+export function throttleRedriveVisibilitySeconds(
+  receiveCount: number,
+  random: () => number = Math.random,
+): number {
+  const count = Number.isFinite(receiveCount) ? Math.max(1, receiveCount) : 1;
+  const base = Math.min(10 * 2 ** (count - 1), 60);
+  return Math.round(base + random() * 10);
+}
+
+/** SQS queue URL derived from the record's event source ARN (no env plumbing). */
+export function queueUrlFromEventSourceArn(arn: string): string | null {
+  const match = arn.match(/^arn:aws:sqs:([^:]+):(\d+):(.+)$/);
+  if (!match) return null;
+  return `https://sqs.${match[1]}.amazonaws.com/${match[2]}/${match[3]}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Run `fn` with in-worker throttle retries. `fn` receives whether this
+ * is the LAST in-worker attempt — the caller uses that to restore its
+ * record-instead-of-rethrow behavior (final SQS receive) only once
+ * in-worker retries are exhausted, so a throttle on the final receive
+ * still gets absorbed before the case records error/throttle.
+ */
+export async function withEvalThrottleRetries<T>(
+  fn: (lastAttempt: boolean) => Promise<T>,
+  opts: {
+    attempts?: number;
+    baseMs?: number;
+    sleeper?: (ms: number) => Promise<void>;
+    random?: () => number;
+  } = {},
+): Promise<T> {
+  const extraAttempts = opts.attempts ?? evalThrottleRetryAttempts();
+  const totalAttempts = Math.max(1, extraAttempts + 1);
+  const sleeper = opts.sleeper ?? sleep;
+  for (let attempt = 1; ; attempt++) {
+    const lastAttempt = attempt >= totalAttempts;
+    try {
+      return await fn(lastAttempt);
+    } catch (err) {
+      if (lastAttempt || !isRetryableEvalInfrastructureError(err)) throw err;
+      const delayMs = throttleBackoffMs(attempt, opts.baseMs, opts.random);
+      console.warn(
+        `[eval-worker] throttled; in-worker retry ${attempt}/${totalAttempts - 1} in ${delayMs}ms`,
+      );
+      await sleeper(delayMs);
+    }
+  }
+}
+
 function evaluatorCostUsd(evaluatorResults: unknown): number {
   if (!Array.isArray(evaluatorResults)) return 0;
   return evaluatorResults.reduce((total, result) => {
@@ -324,8 +468,15 @@ export function _setScoringEnginesForTests(
  * agentCoreEvaluatorsEnabled() is consulted inside the adapter. Engines
  * are resolved per case so env-driven judge enablement is read at
  * execution time, exactly like the pre-contract path.
+ *
+ * `pinnedJudgeModel` is the run's profile_snapshot.judgeModel (Eval
+ * Profiles U4, KTD11) — threaded into the Bedrock judge so two profiles
+ * with different judge pins genuinely score under different judges; null
+ * falls back to the deployed default (EVAL_JUDGE_MODEL_ID).
  */
-function resolveScoringEngines(): ScoringEngines {
+function resolveScoringEngines(
+  pinnedJudgeModel: string | null = null,
+): ScoringEngines {
   return {
     inHouse:
       scoringEnginesForTests?.inHouse ??
@@ -336,11 +487,71 @@ function resolveScoringEngines(): ScoringEngines {
         // rubrics (red-team) and throws EvalJudgeInvocationError →
         // error/evaluator_error for non-refusal rubrics, so a quality
         // rubric is recorded unscored rather than vacuously passed.
-        judge: llmJudgeEnabled() ? bedrockLlmJudge : heuristicFallbackJudge,
+        judge: llmJudgeEnabled()
+          ? createBedrockLlmJudge(pinnedJudgeModel)
+          : heuristicFallbackJudge,
       }),
     agentCore:
       scoringEnginesForTests?.agentCore ?? createAgentCoreScoringEngine(),
   };
+}
+
+/**
+ * Extract the pinned judge model from the run's dispatch-time profile
+ * snapshot (KTD11). Null when the run predates profiles or the profile
+ * left the judge unpinned — the deployed default judge applies.
+ */
+export function pinnedJudgeModelForRun(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot">,
+): string | null {
+  const snapshot = run.profile_snapshot;
+  if (typeof snapshot !== "object" || snapshot === null) return null;
+  const judgeModel = (snapshot as { judgeModel?: unknown }).judgeModel;
+  return typeof judgeModel === "string" && judgeModel.trim().length > 0
+    ? judgeModel
+    : null;
+}
+
+/**
+ * The model the agent under test actually ran as, for pricing its turn
+ * (Eval Profiles U5): the dispatch-pinned profile_snapshot.model, falling
+ * back to the run's informational scalar, normalized through the same
+ * default (`evalModelId`) the invoke path applies — so pre-profile runs
+ * with a null model price against the deployed eval default, not nothing.
+ */
+export function agentModelForRunPricing(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot" | "model">,
+): string {
+  const snapshot = run.profile_snapshot;
+  const snapshotModel =
+    typeof snapshot === "object" && snapshot !== null
+      ? (snapshot as { model?: unknown }).model
+      : null;
+  const pinnedModel =
+    typeof snapshotModel === "string" && snapshotModel.trim().length > 0
+      ? snapshotModel
+      : null;
+  return evalModelId(pinnedModel ?? run.model);
+}
+
+/**
+ * Price an agent turn's token usage against resolved tenant-catalog
+ * pricing (per-million-token rates). Null pricing → null cost (R6):
+ * tokens are still recorded but the run summary marks cost partial —
+ * an unresolved catalog entry must NEVER read as a free turn.
+ */
+export function agentUsageCostUsd(
+  usage: EvalAgentUsage,
+  pricing: Pick<
+    TenantModelPricing,
+    "inputPerMillion" | "outputPerMillion"
+  > | null,
+): number | null {
+  if (!pricing) return null;
+  return (
+    (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
+    (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
+  );
 }
 
 /**
@@ -544,6 +755,27 @@ export async function loadReplayToolOverrides(
   }));
 }
 
+/**
+ * executeCase with in-worker throttle absorption. Until the LAST
+ * in-worker attempt, `finalReceive` is forced false so a throttle
+ * rethrows into the retry loop even on the message's final SQS receive —
+ * only the exhausted last attempt restores the caller's real
+ * finalReceive, letting executeCase record error/throttle instead of
+ * dead-lettering the case without a result row.
+ */
+async function executeCaseAbsorbingThrottles(
+  run: typeof evalRuns.$inferSelect,
+  tc: ExecutionCase,
+  message: EvalWorkerMessage,
+  options: { finalReceive: boolean },
+): Promise<CaseOutcome> {
+  return withEvalThrottleRetries((lastAttempt) =>
+    executeCase(run, tc, message, {
+      finalReceive: lastAttempt ? options.finalReceive : false,
+    }),
+  );
+}
+
 async function executeCase(
   run: typeof evalRuns.$inferSelect,
   tc: ExecutionCase,
@@ -559,6 +791,7 @@ async function executeCase(
   const assertionResults: EvalAssertionResult[] = [];
   const evaluatorResults: EvalEvaluatorResult[] = [];
   let costUsd = 0;
+  let agentUsage: EvalAgentUsage | null = null;
   let threadTurnId: string | null = null;
 
   try {
@@ -594,6 +827,10 @@ async function executeCase(
     actualOutput = inv.output;
     durationMs = inv.durationMs;
     systemPrompt = inv.composedSystemPrompt;
+    // Agent-turn telemetry (U5): undefined on envelopes from older
+    // runtime images — the row then records null tokens/cost and the
+    // run summary marks cost partial, never zero.
+    agentUsage = inv.usage ?? null;
 
     const assertions = (tc.assertions ?? []) as EvalAssertion[];
     // `workspace-projection-*` assertions read STORED turn snapshots (never
@@ -608,7 +845,7 @@ async function executeCase(
     // EvalEngineContractViolationError (classified error/evaluator_error
     // below); engine-thrown errors propagate raw so throttles stay
     // SQS-retryable.
-    const engines = resolveScoringEngines();
+    const engines = resolveScoringEngines(pinnedJudgeModelForRun(run));
     const response = { output: actualOutput, durationMs, sessionId };
     const inHouseResult = await runScoringEngine(engines.inHouse, {
       query: tc.query,
@@ -699,6 +936,26 @@ async function executeCase(
     errorCause,
   });
 
+  // Price the agent turn against the run's snapshot model (U5). Outside
+  // the execution try/catch by design: a pricing-lookup failure must
+  // degrade to a null cost (tokens still recorded, summary cost-partial)
+  // — never reclassify a scored case as an infrastructure error.
+  let agentCostUsd: number | null = null;
+  if (agentUsage) {
+    try {
+      const pricing = await getTenantModelPricing({
+        tenantId: run.tenant_id,
+        modelId: agentModelForRunPricing(run),
+      });
+      agentCostUsd = agentUsageCostUsd(agentUsage, pricing);
+    } catch (err) {
+      console.warn(
+        `[eval-worker] agent-turn pricing lookup failed for run ${run.id}; recording tokens with null cost:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   return {
     status: scoredOutcome.status,
     errorCause: scoredOutcome.errorCause,
@@ -710,6 +967,9 @@ async function executeCase(
     durationMs,
     errorMessage,
     costUsd,
+    agentInputTokens: agentUsage?.inputTokens ?? null,
+    agentOutputTokens: agentUsage?.outputTokens ?? null,
+    agentCostUsd,
     sessionId,
     threadTurnId,
   };
@@ -722,14 +982,51 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
 
   const rows = await db
     .select({
+      test_case_id: evalResults.test_case_id,
+      trial_index: evalResults.trial_index,
       status: evalResults.status,
       override_status: evalResults.override_status,
       evaluator_results: evalResults.evaluator_results,
+      agent_cost_usd: evalResults.agent_cost_usd,
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
-  const summary = summarizeEvalResults(rows, run.scoring_version);
-  const isComplete = summary.completed >= run.total_tests;
+  // Case-level overrides (KTD9) apply LAST in the aggregation layer;
+  // legacy (unversioned) runs never consult them.
+  const caseOverrides =
+    run.scoring_version === null
+      ? []
+      : await db
+          .select({
+            test_case_id: evalCaseOverrides.test_case_id,
+            override_status: evalCaseOverrides.override_status,
+          })
+          .from(evalCaseOverrides)
+          .where(eq(evalCaseOverrides.run_id, runId));
+  // Counters are CASE verdicts (trial aggregation, KTD4); completion is
+  // per-trial row arithmetic against the pinned fan-out count —
+  // pre-profile / in-flight runs (null expected_result_rows) keep
+  // finalizing at case count.
+  const summary = summarizeEvalRunVerdicts(
+    rows,
+    caseOverrides,
+    run.scoring_version,
+  );
+  // Run cost = evaluator cost + priced agent-turn cost (U5). Any row
+  // missing a priced agent cost — usage absent (older runtime envelope,
+  // errored invoke) or tokens recorded with pricing unresolved — makes
+  // the total PARTIAL (R6): it understates real spend and must render
+  // flagged, never as a confident number or a false zero.
+  const totalCostUsd = rows.reduce(
+    (total, row) =>
+      total +
+      evaluatorCostUsd(row.evaluator_results) +
+      (row.agent_cost_usd ? Number(row.agent_cost_usd) : 0),
+    0,
+  );
+  const costPartial = rows.some((row) => row.agent_cost_usd == null);
+  const expectedRows = run.expected_result_rows ?? run.total_tests;
+  const isComplete = summary.completed >= expectedRows;
   const completedAt = new Date();
 
   const updated = await db
@@ -740,21 +1037,26 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
       passed: summary.passed,
       failed: summary.failed,
       errored: summary.errored,
+      unstable: summary.unstable,
       pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
-      cost_usd: summary.totalCostUsd.toFixed(6),
+      cost_usd: totalCostUsd.toFixed(6),
+      cost_partial: costPartial,
       // Record the semantics this summary was computed under. Legacy
-      // runs (null stamp) keep a null summary version; stamped runs get
-      // the version this code actually knows — if the run was stamped by
-      // newer code, the divergence makes the reconciler/read path
-      // recompute once that code is warm (deploy-window guard).
-      summary_scoring_version:
-        run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+      // runs (null stamp) keep a null summary version; runs stamped at or
+      // below the deployed version record their own stamp (v2 and v3
+      // share the denominator rule); runs stamped by newer code record
+      // this code's version — the divergence makes the reconciler/read
+      // path recompute once that code is warm (deploy-window guard).
+      summary_scoring_version: summaryScoringVersionFor(
+        run.scoring_version,
+        CURRENT_EVAL_SCORING_VERSION,
+      ),
     })
     .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, "running")))
     .returning({ id: evalRuns.id });
   if (updated.length === 0) return;
 
-  if (isComplete && summary.totalCostUsd > 0 && run.agent_id) {
+  if (isComplete && totalCostUsd > 0 && run.agent_id) {
     await db
       .insert(costEvents)
       .values({
@@ -762,7 +1064,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
         agent_id: run.agent_id,
         request_id: `eval-run-${runId}`,
         event_type: "eval_compute",
-        amount_usd: summary.totalCostUsd.toFixed(6),
+        amount_usd: totalCostUsd.toFixed(6),
         metadata: {
           source: "eval-worker",
           run_id: runId,
@@ -783,7 +1085,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     passRate: summary.passRate ?? undefined,
   });
   console.log(
-    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed, ${summary.errored ?? 0} errored of ${run.total_tests}`,
+    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed, ${summary.errored ?? 0} errored, ${summary.unstable ?? 0} unstable of ${run.total_tests} cases (${summary.completed}/${expectedRows} rows)`,
   );
 }
 
@@ -808,6 +1110,9 @@ async function handleMessage(
     return;
   }
 
+  // Result-row identity is (run, case, trial) — Eval Profiles U4. A
+  // legacy in-flight message without trialIndex is trial 0.
+  const trialIndex = message.trialIndex ?? 0;
   const [existing] = await db
     .select({ id: evalResults.id })
     .from(evalResults)
@@ -815,6 +1120,7 @@ async function handleMessage(
       and(
         eq(evalResults.run_id, message.runId),
         eq(evalResults.test_case_id, message.testCaseId),
+        eq(evalResults.trial_index, trialIndex),
       ),
     );
   if (existing) {
@@ -860,6 +1166,9 @@ async function handleMessage(
         durationMs: 0,
         errorMessage: pinned.errorMessage,
         costUsd: 0,
+        agentInputTokens: null,
+        agentOutputTokens: null,
+        agentCostUsd: null,
         sessionId: uniqueSessionId(
           message.runId,
           message.testCaseId,
@@ -869,10 +1178,20 @@ async function handleMessage(
       };
     } else {
       executionCase = pinned.executionCase;
-      outcome = await executeCase(run, executionCase, message, options);
+      outcome = await executeCaseAbsorbingThrottles(
+        run,
+        executionCase,
+        message,
+        options,
+      );
     }
   } else {
-    outcome = await executeCase(run, executionCase, message, options);
+    outcome = await executeCaseAbsorbingThrottles(
+      run,
+      executionCase,
+      message,
+      options,
+    );
   }
 
   const [freshRun] = await db
@@ -882,10 +1201,12 @@ async function handleMessage(
   if (freshRun?.status === "cancelled") return;
 
   await db.transaction(async (tx) => {
+    // The lock key combines the case with the trial index (KTD5) so
+    // concurrent trials of one case serialize per trial, not per case.
     await tx.execute(sql`
 			SELECT pg_advisory_xact_lock(
 				hashtext(${message.runId}),
-				hashtext(${message.testCaseId})
+				hashtext(${`${message.testCaseId}:${trialIndex}`})
 			)
 		`);
     const [duplicate] = await tx
@@ -895,6 +1216,7 @@ async function handleMessage(
         and(
           eq(evalResults.run_id, message.runId),
           eq(evalResults.test_case_id, message.testCaseId),
+          eq(evalResults.trial_index, trialIndex),
         ),
       );
     if (duplicate) return;
@@ -902,10 +1224,17 @@ async function handleMessage(
     await tx.insert(evalResults).values({
       run_id: message.runId,
       test_case_id: message.testCaseId,
+      trial_index: trialIndex,
       status: outcome.status,
       error_cause: outcome.errorCause,
       score: outcome.score === null ? null : outcome.score.toFixed(4),
       duration_ms: outcome.durationMs,
+      // Agent-turn telemetry (U5). Tokens without resolved pricing keep
+      // a null cost — the run summary marks cost partial, never zero.
+      agent_input_tokens: outcome.agentInputTokens,
+      agent_output_tokens: outcome.agentOutputTokens,
+      agent_cost_usd:
+        outcome.agentCostUsd === null ? null : outcome.agentCostUsd.toFixed(6),
       agent_session_id: outcome.sessionId,
       thread_turn_id: outcome.threadTurnId,
       input: executionCase.query,
@@ -925,6 +1254,30 @@ function recordsFromEvent(event: SQSEvent): SQSRecord[] {
   return Array.isArray(event.Records) ? event.Records : [];
 }
 
+/**
+ * Release a throttled message's FIFO lane fast: without this, a failed
+ * batch item stays invisible for the queue's full 300s visibility
+ * timeout and its whole lane is parked with it. Fail-soft — a visibility
+ * change failure just means the slow legacy redrive behavior.
+ */
+async function shortenThrottleRedriveVisibility(
+  record: SQSRecord,
+): Promise<void> {
+  const queueUrl = queueUrlFromEventSourceArn(record.eventSourceARN ?? "");
+  if (!queueUrl || !record.receiptHandle) return;
+  const receiveCount = Number(record.attributes?.ApproximateReceiveCount ?? 1);
+  const { SQSClient, ChangeMessageVisibilityCommand } =
+    await import("@aws-sdk/client-sqs");
+  const client = new SQSClient({});
+  await client.send(
+    new ChangeMessageVisibilityCommand({
+      QueueUrl: queueUrl,
+      ReceiptHandle: record.receiptHandle,
+      VisibilityTimeout: throttleRedriveVisibilitySeconds(receiveCount),
+    }),
+  );
+}
+
 export async function handler(event: SQSEvent): Promise<{
   batchItemFailures: Array<{ itemIdentifier: string }>;
 }> {
@@ -937,6 +1290,18 @@ export async function handler(event: SQSEvent): Promise<{
       });
     } catch (err) {
       console.error("[eval-worker] infrastructure failure:", err);
+      if (isRetryableEvalInfrastructureError(err)) {
+        await shortenThrottleRedriveVisibility(record).catch(
+          (visibilityErr) => {
+            console.warn(
+              "[eval-worker] could not shorten redrive visibility (lane parks for the full timeout):",
+              visibilityErr instanceof Error
+                ? visibilityErr.message
+                : String(visibilityErr),
+            );
+          },
+        );
+      }
       batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }

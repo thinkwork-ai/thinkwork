@@ -129,13 +129,68 @@ When I talk with you from Slack, treat Slack as a delivery surface for the selec
 /**
  * Mirror of `packages/workspace-defaults/files/SPACE.md`.
  */
-const SPACE_MD = `# SPACE.md - Active Shared Context
+const SPACE_MD = `# SPACE.md - Shared Space Context
 
-_This file is replaced at render time with the active Space's context._
+Use this file for context that belongs to everyone working in this Space.
+\`AGENTS.md\` is the always-loaded map; this file is loaded through that map when
+the active turn is in this Space.
 
-Use this file as the first stop for assumptions that belong to the current shared Space: project goals, working agreements, connected data, and tool constraints. User-specific preferences stay in \`USER.md\`; agent identity and routing stay in \`AGENTS.md\`.
+Do not put secrets here. Enable tools, MCP servers, skills, and execution
+policy on the Agent or Agent Profiles. SPACE.md can mention which profile,
+skill, or tool should be used for a kind of work, but it does not grant that
+capability by itself.
 
-When a turn is rendered, active Space files live under \`space/\`. The platform may also preserve a provenance copy under \`spaces/<space-slug>/\` while older runtime paths are phased out.
+## Start Here
+
+- Read \`CONTEXT.md\` for the main workflow and operating context when this Space
+  has one.
+- Use attached folders such as \`docs/\`, \`plans/\`, \`goals/\`, and \`artifacts/\`
+  as source material when relevant.
+- Keep this file short. Link to detailed source files instead of duplicating
+  long-running procedures here.
+
+## Purpose
+
+Describe what this Space is for and when agents should rely on it.
+
+- Work this Space owns:
+- Work this Space does not own:
+- Current priority:
+
+## Working Context
+
+Capture durable facts, decisions, constraints, source links, and assumptions
+that should shape answers in this Space.
+
+- Current goal:
+- Important constraints:
+- Source of truth:
+- Recent decisions:
+
+## Key Files
+
+- \`CONTEXT.md\` - main workflow/context file.
+
+## Routing Notes
+
+Point agents toward the right Agent Profile, skill, or specialist workspace.
+These are instructions for routing and behavior, not capability grants.
+
+- Use @Analyst for finance, spreadsheet, and general-ledger analysis.
+- Use @Reviewer for review-only passes before shipping or publishing.
+- Use specific skills only when the selected Agent Profile exposes them.
+
+## Operating Agreements
+
+Record team preferences for this Space.
+
+- Ask before:
+- Act without asking when:
+- Report back with:
+
+## Open Questions
+
+-
 `;
 
 /**
@@ -278,14 +333,16 @@ const AGENTS_MD = `# AGENTS.md
 
 ## What This Is
 
-This is the always-loaded map for the agent. It explains who the agent is, how
-the root folder is organized, where specialist workspaces live, and which skills
-are available. The runtime, \`delegate_to_workspace\`, and the agent builder all
-read the derived sections below.
+This is the always-loaded map for the agent. Start here on every turn. It
+explains who the agent is, how the root folder is organized, where Space and
+User context live, where specialist workspaces live, and which skills are
+available. The runtime, \`delegate_to_workspace\`, and the agent builder all read
+the derived sections below.
 
 The folder is the agent: specialization comes from files under this tree, not
-from a separate agent registry. Detailed work instructions belong in
-\`CONTEXT.md\`, specialist workspace folders, or the active Space.
+from a separate agent registry. \`AGENTS.md\` is the map; detailed instructions
+belong in the files it routes you to, such as active Space context, requester
+profile context, \`CONTEXT.md\`, or specialist workspace folders.
 
 ## Personality
 
@@ -548,19 +605,27 @@ No skills discovered yet.
 
 ## Quick Navigation
 
-- Start with \`CONTEXT.md\` for the agent's top-level scope.
-- Read route/path \`User/USER.md\` for requester personalization and user-scoped
-  facts. \`USER.md\` at the Agent root is retired and should not be created.
-- Read the Workspace Routing section at the bottom of \`AGENTS.md\` to see the
-  active Space and other authorized Spaces.
-- Read \`Spaces/<active-space>/SPACE.md\` and
-  \`Spaces/<active-space>/CONTEXT.md\` for the active shared Space context.
+- Start with \`AGENTS.md\`; it is the always-loaded routing map.
+- Read the Workspace Routing section at the bottom of this file to see the
+  active Space, authorized Spaces, requester, participants, and Agent Profiles.
+- Read route/path \`User/USER.md\` only when requester personalization or
+  user-scoped facts are relevant. \`USER.md\` at the Agent root is retired and
+  should not be created.
+- Read \`Spaces/<active-space>/SPACE.md\` when Space-specific assumptions,
+  decisions, goals, or routing notes matter. SPACE.md can point you toward
+  Agent Profiles, skills, tools, or specialist workspaces, but it does not grant
+  those capabilities by itself.
+- Read \`Spaces/<active-space>/CONTEXT.md\` only when the Space map or task asks
+  for deeper Space context.
+- Read root \`CONTEXT.md\` only when you need the agent's deeper top-level scope;
+  do not treat it as the default entrypoint.
 - Read \`Thread/PROGRESS.md\` and \`Thread/TASKS.md\` for generated current-thread
   progress context. Use task/status tools for status changes; do not edit those
   generated files directly.
 - Write raw findings and compounding candidates to \`Thread/notes/\` when they
   belong to this thread rather than the durable Agent, User, or Space source.
-- Use \`workspaces/<slug>/CONTEXT.md\` for specialist routing.
+- Use \`workspaces/<slug>/CONTEXT.md\` for specialist routing after \`AGENTS.md\` or
+  SPACE.md points you there.
 - Use root \`memory/\` only for durable working notes that belong to this agent.
 
 ## ID & Naming Conventions

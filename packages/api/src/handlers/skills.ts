@@ -13,8 +13,9 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, or, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
+import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
+import { listAgentWorkspaceSkills } from "../lib/skills/workspace-skill-index.js";
 import {
-  agentSkills,
   skillRuns,
   tenantMcpServers,
   tenantMcpContextTools,
@@ -1187,23 +1188,24 @@ async function saveSkillCredentials(
     }
   }
 
-  // Update agent_skills.config with secretRef
-  const [existing] = await db
-    .select({ id: agentSkills.id, config: agentSkills.config })
-    .from(agentSkills)
-    .where(
-      and(eq(agentSkills.agent_id, agentId), eq(agentSkills.skill_id, skillId)),
-    );
-
-  if (!existing) {
+  // KTD-8 (plan U10): the secretRef lands in the workspace assignment
+  // state file only — the agent_skills mirror is retired. "Attached" =
+  // the skill folder is installed in the agent workspace.
+  const workspaceSkills = await listAgentWorkspaceSkills(agentId).catch(
+    () => null,
+  );
+  if (!workspaceSkills?.some((skill) => skill.slug === skillId)) {
     return error("Skill not attached to this agent", 404);
   }
 
-  const currentConfig = (existing.config as Record<string, unknown>) || {};
-  await db
-    .update(agentSkills)
-    .set({ config: { ...currentConfig, secretRef: secretArn } })
-    .where(eq(agentSkills.id, existing.id));
+  const ok = await patchSkillAssignmentState({
+    agentId,
+    slug: skillId,
+    patch: { configMerge: { secretRef: secretArn } },
+  });
+  if (!ok) {
+    return error("Failed to write skill assignment state", 500);
+  }
 
   return json({ ok: true, secretRef: secretArn });
 }

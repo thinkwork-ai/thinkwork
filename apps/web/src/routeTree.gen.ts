@@ -31,6 +31,7 @@ import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_auth
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
 import { Route as AuthedSettingsContextDiagnosticsRouteImport } from "./routes/_authed/settings.context-diagnostics";
+import { Route as AuthedSettingsCapabilitiesRouteImport } from "./routes/_authed/settings.capabilities";
 import { Route as AuthedSettingsBrainOperationsRouteImport } from "./routes/_authed/settings.brain-operations";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
@@ -80,6 +81,8 @@ import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_authed/settings.knowledge-bases.$kbId";
+import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
+import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_authed/settings.evaluations.compare";
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
@@ -231,6 +234,12 @@ const AuthedSettingsContextDiagnosticsRoute =
   AuthedSettingsContextDiagnosticsRouteImport.update({
     id: "/context-diagnostics",
     path: "/context-diagnostics",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsCapabilitiesRoute =
+  AuthedSettingsCapabilitiesRouteImport.update({
+    id: "/capabilities",
+    path: "/capabilities",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsBrainOperationsRoute =
@@ -514,6 +523,18 @@ const AuthedSettingsKnowledgeBasesKbIdRoute =
     path: "/knowledge-bases/$kbId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsEvaluationsProfilesRoute =
+  AuthedSettingsEvaluationsProfilesRouteImport.update({
+    id: "/evaluations/profiles",
+    path: "/evaluations/profiles",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsEvaluationsCompareRoute =
+  AuthedSettingsEvaluationsCompareRouteImport.update({
+    id: "/evaluations/compare",
+    path: "/evaluations/compare",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsEvaluationsRunIdRoute =
   AuthedSettingsEvaluationsRunIdRouteImport.update({
     id: "/evaluations/$runId",
@@ -763,6 +784,7 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -796,6 +818,8 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
+  "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
+  "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
@@ -868,6 +892,7 @@ export interface FileRoutesByTo {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -901,6 +926,8 @@ export interface FileRoutesByTo {
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
+  "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
+  "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
@@ -981,6 +1008,7 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/_authed/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -1014,6 +1042,8 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
+  "/_authed/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
+  "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/_authed/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
@@ -1093,6 +1123,7 @@ export interface FileRouteTypes {
     | "/settings/artifacts"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/capabilities"
     | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
@@ -1126,6 +1157,8 @@ export interface FileRouteTypes {
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
+    | "/settings/evaluations/compare"
+    | "/settings/evaluations/profiles"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/memory/knowledge-bases"
@@ -1198,6 +1231,7 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/capabilities"
     | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
@@ -1231,6 +1265,8 @@ export interface FileRouteTypes {
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
+    | "/settings/evaluations/compare"
+    | "/settings/evaluations/profiles"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/memory/knowledge-bases"
@@ -1310,6 +1346,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
     | "/_authed/settings/brain-operations"
+    | "/_authed/settings/capabilities"
     | "/_authed/settings/context-diagnostics"
     | "/_authed/settings/crm"
     | "/_authed/settings/general"
@@ -1343,6 +1380,8 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
+    | "/_authed/settings/evaluations/compare"
+    | "/_authed/settings/evaluations/profiles"
     | "/_authed/settings/knowledge-bases/$kbId"
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/memory/knowledge-bases"
@@ -1567,6 +1606,13 @@ declare module "@tanstack/react-router" {
       path: "/context-diagnostics";
       fullPath: "/settings/context-diagnostics";
       preLoaderRoute: typeof AuthedSettingsContextDiagnosticsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/capabilities": {
+      id: "/_authed/settings/capabilities";
+      path: "/capabilities";
+      fullPath: "/settings/capabilities";
+      preLoaderRoute: typeof AuthedSettingsCapabilitiesRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/brain-operations": {
@@ -1910,6 +1956,20 @@ declare module "@tanstack/react-router" {
       path: "/knowledge-bases/$kbId";
       fullPath: "/settings/knowledge-bases/$kbId";
       preLoaderRoute: typeof AuthedSettingsKnowledgeBasesKbIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/evaluations/profiles": {
+      id: "/_authed/settings/evaluations/profiles";
+      path: "/evaluations/profiles";
+      fullPath: "/settings/evaluations/profiles";
+      preLoaderRoute: typeof AuthedSettingsEvaluationsProfilesRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/evaluations/compare": {
+      id: "/_authed/settings/evaluations/compare";
+      path: "/evaluations/compare";
+      fullPath: "/settings/evaluations/compare";
+      preLoaderRoute: typeof AuthedSettingsEvaluationsCompareRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/evaluations/$runId": {
@@ -2416,6 +2476,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsBrainOperationsRoute: typeof AuthedSettingsBrainOperationsRoute;
+  AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
   AuthedSettingsContextDiagnosticsRoute: typeof AuthedSettingsContextDiagnosticsRoute;
   AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
@@ -2434,6 +2495,8 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
+  AuthedSettingsEvaluationsCompareRoute: typeof AuthedSettingsEvaluationsCompareRoute;
+  AuthedSettingsEvaluationsProfilesRoute: typeof AuthedSettingsEvaluationsProfilesRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
   AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
@@ -2477,6 +2540,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsBrainOperationsRoute: AuthedSettingsBrainOperationsRoute,
+  AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
   AuthedSettingsContextDiagnosticsRoute: AuthedSettingsContextDiagnosticsRoute,
   AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
@@ -2498,6 +2562,9 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,
+  AuthedSettingsEvaluationsCompareRoute: AuthedSettingsEvaluationsCompareRoute,
+  AuthedSettingsEvaluationsProfilesRoute:
+    AuthedSettingsEvaluationsProfilesRoute,
   AuthedSettingsKnowledgeBasesKbIdRoute: AuthedSettingsKnowledgeBasesKbIdRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
   AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,

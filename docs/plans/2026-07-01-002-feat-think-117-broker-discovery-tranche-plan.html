@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan: THINK-117 Broker Discovery Tranche</title>
+<style>
+  :root {
+    --bg: #faf9f7; --ink: #1a1d1c; --muted: #6b7280; --line: #e5e3de;
+    --accent: #14532d; --card: #ffffff; --code-bg: #eeece7; --amber: #92400e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 64px 32px 96px; }
+  .kicker { font-size: 13px; letter-spacing: .18em; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+  h1 { font-size: 44px; line-height: 1.12; margin: 10px 0 18px; letter-spacing: -.015em; }
+  .meta { font-size: 15.5px; color: var(--ink); margin-bottom: 6px; }
+  .meta b { margin-right: 4px; }
+  .meta span + b { margin-left: 18px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin: 30px 0 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 16px 14px; }
+  .tile .n { font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .tile .l { font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 8px; font-weight: 600; }
+  h2 { font-size: 27px; margin: 56px 0 6px; letter-spacing: -.01em; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+  h3 { font-size: 19.5px; margin: 34px 0 8px; }
+  h4 { font-size: 16px; margin: 24px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  p, li { font-size: 17px; }
+  ul { padding-left: 24px; } li { margin: 5px 0; }
+  code { background: var(--code-bg); border-radius: 5px; padding: 1.5px 6px; font: 14.5px ui-monospace, "SF Mono", Menlo, monospace; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 15.5px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: #f4f2ee; }
+  th, td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .callout { background: #f2efe9; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 18px 0; font-size: 16px; }
+  .warn { border-left-color: var(--amber); }
+  .unit { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 22px 26px; margin: 22px 0; }
+  .unit h3 { margin-top: 0; }
+  .field { margin: 10px 0; }
+  .field b.fl { display: inline-block; color: var(--accent); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; }
+  .pill { display: inline-block; background: var(--code-bg); border-radius: 999px; padding: 2px 12px; font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 10px; vertical-align: middle; }
+  figure { margin: 26px 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .id { color: var(--accent); font-weight: 700; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 48px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="kicker">Plan &middot; Compound Engineering</div>
+<h1>THINK-117 Broker Discovery Tranche</h1>
+<div class="meta"><b>Date</b> 2026-07-01 <b>Type</b> feat <b>Readiness</b> implementation-ready <b>Execution</b> code</div>
+<div class="meta"><b>Origin</b> <code>docs/brainstorms/2026-07-01-think-117-customer-onboarding-resource-broker-requirements.md</code> (<a href="https://linear.app/thinkworkai/issue/THINK-117">THINK-117</a>)</div>
+
+<div class="tiles">
+  <div class="tile"><div class="n">5</div><div class="l">Units</div></div>
+  <div class="tile"><div class="n">7</div><div class="l">Requirements</div></div>
+  <div class="tile"><div class="n">5</div><div class="l">Key Decisions</div></div>
+  <div class="tile"><div class="n">1</div><div class="l">Code Spike</div></div>
+  <div class="tile"><div class="n">12</div><div class="l">Review Fixes Applied</div></div>
+</div>
+
+<h2>Goal Capsule</h2>
+<ul>
+  <li><b>Objective:</b> Close the remaining THINK-117 discovery gates and prove the rendered path end-to-end, producing the evidence the implementation-ticket planning pass needs. Deliverables: TEI discovery brief, Claude MCP App rendered-path spike on dev, owned-UI identity decision memo, source-map/consent skeleton, and a re-gated origin doc.</li>
+  <li><b>Authority hierarchy:</b> origin requirements doc &gt; this plan &gt; repo conventions.</li>
+  <li><b>Stop conditions:</b> No implementation tickets for the origin's wedge-conditional clusters — that is the next planning pass. No live P21, n8n, or external writeback connectivity. If Claude host-side rendering resists reasonable debugging, stop and record findings rather than building workarounds.</li>
+  <li><b>Execution profile:</b> Mixed — one code unit (the spike), three document deliverables, one origin-doc edit. Spike lands via PR to <code>main</code> (dev is continuous-CD from main).</li>
+</ul>
+
+<h2>Product Contract</h2>
+
+<h3>Summary</h3>
+<p>Execute the discovery tranche the origin doc's Outstanding Questions gate prescribes: instrument the TEI conversation, prove the net-new broker render path with a fixture-only Claude MCP App spike, put the owned-UI identity decision in front of the operator, and skeleton the source-map/consent model — then fold the evidence back into the origin doc and re-check the gates.</p>
+
+<h3>Problem Frame</h3>
+<p>The External Agent Resource Broker requirements doc is fully specified but discovery-gated: implementation tickets are forbidden until the remaining must-resolve questions close. Two of those (TEI evidence, identity decision) need structured instruments to resolve efficiently; one (the rendered output path) is a technical assumption the codebase cannot currently prove. The origin's host-render gate is resolved — Claude web/Desktop and peers render MCP Apps today — but ThinkWork has never <em>served</em> one: existing MCP App code is host-side only, and Claude custom-connector serving has documented flakiness (ext-apps #615/#671) to QA before any customer demo. The spike proves ThinkWork's own serving path, not host capability.</p>
+
+<h3>Requirements</h3>
+<h4>Discovery instruments</h4>
+<ul>
+  <li><span class="id">R1.</span> A TEI discovery brief maps every question to the origin gate it resolves: current workaround and frequency/cost, the onboarding coordinator role/owner, source-system inventory (feeding the source map), why the broker beats direct connectors, whether the origin's ThinkWork-only action set advances TEI's real recurring blockers, and who at TEI administers Claude paid-plan custom connectors.</li>
+  <li><span class="id">R2.</span> An identity decision memo frames the owned-UI question for decision: is the internal Pi agent the broker's first client (one policy enforcement path), do command centers land as new surfaces in the existing web app, and what does the repositioning mean for existing tenants. The memo also proposes the host-vs-owned-UI interaction split — which interactions happen in the external host, which require ThinkWork-owned UI, what returns to the external agent — so the origin's persona-channel-map gate has evidence at re-gate. Carries a recommendation; the decision is recorded back into the origin doc's Key Decisions.</li>
+  <li><span class="id">R3.</span> A source-map + consent-model skeleton exists as a design doc with a directional type sketch — canonical/optional sources, required fields, freshness thresholds, blind-spot labels, per-client consent records — structured so TEI's actual source inventory fills it. No code, no migrations.</li>
+</ul>
+<h4>Rendered-path spike</h4>
+<ul>
+  <li><span class="id">R4.</span> A broker spike MCP endpoint on the dev stack serves one tool returning a fixture Onboarding Command Center: mandatory text content (the fallback contract), structured content, and an MCP App <code>ui://</code> resource, registered and rendering as a Claude web + Desktop custom connector.</li>
+  <li><span class="id">R5.</span> The spike is inert and isolated: fixture data only, read-only, no live source fetches, no writes, no coupling into the chat runtime or existing MCP surfaces beyond auth reuse.</li>
+  <li><span class="id">R6.</span> Spike findings — render success/failure per surface, flakiness reproductions, fallback behavior — are recorded durably (a <code>docs/solutions/</code> entry) whether or not rendering succeeds.</li>
+</ul>
+<h4>Closure</h4>
+<ul>
+  <li><span class="id">R7.</span> After the TEI conversation and spike, the origin doc's remaining gates are each marked resolved or explicitly blocked, and a readiness verdict states whether the implementation-ticket planning pass can start.</li>
+</ul>
+
+<h3>Scope Boundaries</h3>
+<ul>
+  <li><b>Deferred to the next planning pass:</b> all implementation of the onboarding blocker compiler (origin Layers A/B/C), the real broker tool surface, source-map persistence/schema, per-task-mode token scoping, and anything in the origin's dispatch or writeback clusters.</li>
+  <li><b>Outside this tranche:</b> ChatGPT/M365/Cursor host certification (Claude is the named demonstration target), live P21/n8n connectivity, and the per-host admin-enablement runbook (captured as a TEI brief question only).</li>
+</ul>
+
+<h3>Outstanding Questions</h3>
+<ul>
+  <li>Deferred (non-blocking): whether the spike endpoint is deleted or evolved into the real broker endpoint — decided at re-gate (U5) with the findings in hand.</li>
+</ul>
+
+<h2>Planning Contract</h2>
+
+<h3>Key Technical Decisions</h3>
+<ul>
+  <li><span class="id">KTD-1.</span> <b>Spike deploys through <code>main</code> to dev as an isolated, inert endpoint.</b> Dev is continuous-CD from main and branch deploys revert within minutes; Claude custom connectors require public HTTPS + OAuth, so a local tunnel is not viable in this AWS-only stack. Follows the ship-inert convention: new module lands with tests, no live wiring into existing surfaces.</li>
+  <li><span class="id">KTD-2.</span> <b>Separate Lambda handler, not a route on an existing one.</b> Mirrors the <code>mcp-context-engine</code> handler shape but stays its own function: zero blast radius on existing MCP consumers, and avoids the documented 4KB env ceiling risk on shared handlers. Requires the paired Terraform + build-script entries (a handler missing either blocks every deploy).</li>
+  <li><span class="id">KTD-3.</span> <b>Auth reuses the existing MCP OAuth path with three scoped, additive edits</b> to <code>packages/api/src/handlers/mcp-oauth.ts</code>: (1) add the spike's resource path to the hardcoded <code>MCP_RESOURCE_PATHS</code> allowlist — <code>authorize()</code> rejects unlisted resources with <code>invalid_target</code>, and protected-resource metadata silently falls back to <code>/mcp/user-memory</code>, so tokens can never bind to the new endpoint without this; (2) extend <code>isAllowedRedirectUri()</code> with an explicit allowlist of Claude's documented custom-connector callback origin(s) — it currently accepts only localhost <code>http://</code>, so Claude's hosted callback fails registration outright; do <em>not</em> open it to arbitrary <code>https://</code> (open-redirect risk on a handler shared with live MCP resources); (3) add a narrow spike scope (e.g., <code>broker_spike:read</code>) to <code>SUPPORTED_SCOPES</code> rather than inheriting the broad default scope string. Per-task-mode scoping (origin R44) remains real-broker work. OPTIONS preflight must bypass auth.</li>
+  <li><span class="id">KTD-4.</span> <b>Render contract targets the ratified MCP Apps spec (2026-01-26).</b> Tool result carries mandatory text content plus UI-resource metadata pointing at a <code>ui://</code> resource the host fetches; the resource is a self-contained fixture HTML command center. The origin's host research (load-bearing) fixes Claude web + Desktop as the validation target and predicts the failure mode: capability negotiates but the iframe silently text-falls-back (ext-apps #615/#671) — the spike's manual checklist tests for exactly that.</li>
+  <li><span class="id">KTD-5.</span> <b>Document deliverables live in <code>docs/brainstorms/</code>; decisions flow back into the origin doc.</b> The origin doc stays the single source of truth for gate state; sibling docs are instruments and memos, not competing authorities.</li>
+</ul>
+
+<h3>Assumptions</h3>
+<div class="callout warn">Unconfirmed bets this plan proceeds on (scoping confirmation was auto-proceeded): the spike ships via main rather than any sandbox/tunnel alternative; the spike serves fixture data only — proving compilation is explicitly not its job; the source-map/consent skeleton stays code-free until TEI discovery supplies the source inventory; the identity memo's recommendation is internal-Pi-as-first-client with command centers inside the existing web app — the operator may decide otherwise, and U5 honors whatever is recorded.</div>
+
+<h3>Phased Delivery</h3>
+<p>Broker delivery expands along two orthogonal axes (recorded in the origin doc's Key Decisions, 2026-07-01). <b>Data axis — Phase 1: ThinkWork-native sources</b> (Work Items, Company Brain/memory via recall, n8n and Twenty plugin status), evolving <code>/mcp/context-engine</code> into the broker surface; the onboarding command center ships at Phase 1 with P21 disclosed as a missing canonical source per the origin's coverage requirements — an honest, useful v1. <b>Phase 2: external sources</b> — the pre-warmed P21 mirror and LastMile/FleetIO, completing onboarding coverage and enabling dispatch read-only. The <b>capability axis</b> is unchanged: onboarding read &rarr; dispatch read &rarr; governed writeback. This tranche is Phase 0 on both axes; the spike's fixture rehearses the Phase-1 payload shape.</p>
+
+<h3>High-Level Technical Design</h3>
+<figure>
+<svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Inter,sans-serif" font-size="13">
+  <defs><marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#1a1d1c"/></marker></defs>
+  <!-- lanes -->
+  <rect x="20" y="14" width="200" height="34" rx="8" fill="#14532d"/><text x="120" y="36" fill="#fff" text-anchor="middle" font-weight="600">Claude web / Desktop</text>
+  <rect x="280" y="14" width="200" height="34" rx="8" fill="#3f6212"/><text x="380" y="36" fill="#fff" text-anchor="middle" font-weight="600">mcp-oauth (Cognito DCR)</text>
+  <rect x="540" y="14" width="200" height="34" rx="8" fill="#1e3a8a"/><text x="640" y="36" fill="#fff" text-anchor="middle" font-weight="600">mcp-broker-spike Lambda</text>
+  <line x1="120" y1="48" x2="120" y2="330" stroke="#c9c6bf" stroke-dasharray="4 4"/>
+  <line x1="380" y1="48" x2="380" y2="150" stroke="#c9c6bf" stroke-dasharray="4 4"/>
+  <line x1="640" y1="48" x2="640" y2="330" stroke="#c9c6bf" stroke-dasharray="4 4"/>
+  <!-- messages -->
+  <line x1="120" y1="72" x2="376" y2="72" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="66">1. dynamic client registration + OAuth (allowlisted callback origin)</text>
+  <line x1="380" y1="100" x2="124" y2="100" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="94">2. access token (audience = broker-spike resource, scope broker_spike:read)</text>
+  <line x1="120" y1="138" x2="636" y2="138" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="132">3. initialize — negotiate MCP Apps extension capability</text>
+  <line x1="120" y1="176" x2="636" y2="176" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="170">4. tools/call get_onboarding_command_center</text>
+  <line x1="640" y1="214" x2="124" y2="214" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="208">5. text (fallback) + structuredContent + ui:// metadata (3 key variants)</text>
+  <line x1="120" y1="252" x2="636" y2="252" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="246">6. resources/read ui://onboarding/command-center</text>
+  <line x1="640" y1="290" x2="124" y2="290" stroke="#1a1d1c" stroke-width="1.4" marker-end="url(#a)"/><text x="130" y="284">7. fixture HTML resource</text>
+  <rect x="34" y="304" width="330" height="26" rx="6" fill="#f2efe9" stroke="#c9c6bf"/><text x="44" y="321" font-weight="600">8. sandboxed iframe render — or silent text fallback (under test)</text>
+</svg>
+<figcaption>Spike request path. The seam being proven is host-side resource resolution (steps 6–8), which no existing ThinkWork code exercises. Steps 1–2 require the three KTD-3 edits to <code>mcp-oauth.ts</code>.</figcaption>
+</figure>
+
+<h2>Implementation Units</h2>
+
+<div class="unit">
+<h3><span class="id">U1.</span> TEI discovery brief <span class="pill">doc</span></h3>
+<div class="field"><b class="fl">Goal</b> A ready-to-run conversation guide for the TEI discovery call, each question traced to the origin gate it resolves.</div>
+<div class="field"><b class="fl">Requirements</b> R1 &middot; <b class="fl">Depends</b> none</div>
+<div class="field"><b class="fl">Files</b> <code>docs/brainstorms/2026-07-01-think-117-tei-discovery-brief.md</code></div>
+<div class="field"><b class="fl">Approach</b> Structure by evidence target: (1) workaround pain — process, frequency, cost, who swivels between systems; (2) actors — onboarding coordinator and P21/n8n owners; (3) source inventory — systems, record types, freshness, canonical-vs-optional (pre-populates U4); (4) action boundary — enumerate TEI's top recurring blockers and test whether ThinkWork-only actions advance a majority; (5) broker-vs-direct-connector counterfactual; (6) Claude workspace administration and custom-connector enablement. Includes an evidence-capture template so answers land in a shape U5 can fold back into the origin doc.</div>
+<div class="field"><b class="fl">Verification</b> Every unresolved gate naming TEI evidence has a mapped question; self-contained for a call run without this session's context.</div>
+</div>
+
+<div class="unit">
+<h3><span class="id">U2.</span> Rendered-path spike: broker MCP endpoint + Claude custom connector <span class="pill">code</span></h3>
+<div class="field"><b class="fl">Goal</b> Prove ThinkWork can serve an MCP App resource that Claude web/Desktop renders; flush the known custom-connector flakiness before any customer demo.</div>
+<div class="field"><b class="fl">Requirements</b> R4, R5, R6 &middot; <b class="fl">Depends</b> none</div>
+<div class="field"><b class="fl">Files</b> <code>packages/api/src/handlers/mcp-broker-spike.ts</code> (new), <code>mcp-broker-spike.test.ts</code> (new), <code>mcp-broker-spike-fixture.ts</code> (new — synthetic blocker set + command-center HTML), <code>mcp-oauth.ts</code> (allowlist/redirect/scope edits per KTD-3, with protected-resource metadata + audience tests), <code>terraform/modules/app/lambda-api/handlers.tf</code> (handler list + route map, mirroring mcp-context-engine rows), <code>scripts/build-lambdas.sh</code> entry, <code>docs/solutions/</code> findings entry.</div>
+<div class="field"><b class="fl">Approach</b> Mirror <code>mcp-context-engine.ts</code>'s server shape. The pattern is hand-rolled JSON-RPC — <code>packages/api</code> intentionally has no MCP SDK — so <code>resources/read</code> (plus <code>resources/list</code> if Claude probes it) and the MCP Apps capability are new cases in the method switch. One tool, <code>get_onboarding_command_center</code>: concise text answer (mandatory fallback), structuredContent (ranked fixture blocker set mirroring the origin's evidence-board shape), and UI-resource metadata emitting all three key variants the LastMile-proven server used (<code>openai/outputTemplate</code>, <code>ui/resourceUri</code>, nested <code>ui.resourceUri</code>) so a render failure can't be a metadata-shape miss. <code>resources/read</code> serves a self-contained HTML command center — ranked blockers, confidence, freshness chips, coverage summary, no actions. All fixture text synthetic — no real TEI or customer identifiers, including in screenshots.</div>
+<div class="field"><b class="fl">Execution note</b> Spike posture — optimize for learning speed and honest findings; still lands with tests and green checks since it merges to main.</div>
+<div class="field"><b class="fl">Test scenarios</b> tools/call returns non-empty text + valid structuredContent + UI metadata; resources/read resolves with stable content type; text is meaningful standalone (fallback contract); unauthenticated calls get structured auth errors, not 500s; unknown <code>ui://</code> URI returns proper not-found; manual checklist — register connector, verify render on Claude web and Desktop, capture render-vs-silent-fallback per surface and which metadata variant resolved.</div>
+<div class="field"><b class="fl">Verification</b> Package suite green; deployed via main with post-merge Deploy green; manual checklist executed against dev with results (including failures) in the findings entry.</div>
+</div>
+
+<div class="unit">
+<h3><span class="id">U3.</span> Owned-UI identity decision memo <span class="pill">doc</span></h3>
+<div class="field"><b class="fl">Goal</b> Put the owned-UI vs existing-product question in front of the operator with a concrete recommendation; get the decision recorded.</div>
+<div class="field"><b class="fl">Requirements</b> R2 &middot; <b class="fl">Depends</b> none</div>
+<div class="field"><b class="fl">Files</b> <code>docs/brainstorms/2026-07-01-think-117-owned-ui-identity-memo.md</code>; origin doc Key Decisions (edited once decided).</div>
+<div class="field"><b class="fl">Approach</b> Four sections: internal Pi agent as the broker's first client (one enforcement path); command centers inside the existing web app vs a new console; what repositioning means for existing tenants; and the host-vs-owned-UI interaction split (the origin's persona-channel-map gate), informed by the spike's render findings. Carries the standing recommendation with rationale and counter-arguments; ends with a decision block.</div>
+<div class="field"><b class="fl">Verification</b> All four sub-questions covered; decision written into origin Key Decisions and the gate marked resolved.</div>
+</div>
+
+<div class="unit">
+<h3><span class="id">U4.</span> Source-map + consent-model skeleton <span class="pill">doc</span></h3>
+<div class="field"><b class="fl">Goal</b> A fillable design skeleton for the operator-owned source map and external-client consent model, ready to receive TEI's source inventory.</div>
+<div class="field"><b class="fl">Requirements</b> R3 &middot; <b class="fl">Depends</b> none for drafting — but reuses U1's evidence-template field names so brief answers slot in directly; population awaits U1's TEI evidence (consumed at U5).</div>
+<div class="field"><b class="fl">Files</b> <code>docs/brainstorms/2026-07-01-think-117-source-map-consent-skeleton.md</code></div>
+<div class="field"><b class="fl">Approach</b> Source map: per-use-case entries (canonical/optional source, required fields, freshness threshold, permitted sampling, blind-spot label, owner) as a directional type sketch plus a worked onboarding example. Consent model: registered-client record shape (client, user, tenant, Space, task mode, expiry, revocation), structured-denial contract, composition with mcp-oauth registration. Explicitly directional — no schema or migration until the next planning pass.</div>
+<div class="field"><b class="fl">Verification</b> A slot for every field the origin's source-map requirement names; fillable from U1's captured evidence without re-deriving structure.</div>
+</div>
+
+<div class="unit">
+<h3><span class="id">U5.</span> Re-gate the origin doc <span class="pill">doc</span></h3>
+<div class="field"><b class="fl">Goal</b> Fold TEI evidence and spike findings back into the origin doc; mark each remaining gate resolved or blocked; issue the readiness verdict.</div>
+<div class="field"><b class="fl">Requirements</b> R7 &middot; <b class="fl">Depends</b> U1, U2, U3, U4 (U1's evidence requires the TEI call)</div>
+<div class="field"><b class="fl">Files</b> origin requirements doc (gate edits); Linear THINK-117 (summary comment).</div>
+<div class="field"><b class="fl">Approach</b> Per-gate resolutions with evidence references (brief answers, spike findings, memo decision). Decide the spike's fate (delete vs evolve) and record it. Close with an explicit verdict: ready for the implementation-ticket planning pass, or blocked on named items.</div>
+<div class="field"><b class="fl">Verification</b> No must-resolve gate left unannotated; the verdict names the next action unambiguously.</div>
+</div>
+
+<h2>Verification Contract</h2>
+<table>
+  <tr><th>Gate</th><th>Command / check</th><th>Applies to</th></tr>
+  <tr><td>Unit tests</td><td><code>pnpm --filter @thinkwork/api test</code> (full package suite, not just new tests)</td><td>U2</td></tr>
+  <tr><td>Types + lint + format</td><td><code>pnpm typecheck &amp;&amp; pnpm lint &amp;&amp; pnpm format:check</code> (tsc is a separate gate from vitest)</td><td>U2</td></tr>
+  <tr><td>Deploy health</td><td>Post-merge Deploy run on <code>main</code> green (<code>gh run list --branch main</code>)</td><td>U2</td></tr>
+  <tr><td>Render validation</td><td>Manual Claude web + Desktop checklist against dev; results in the findings entry</td><td>U2</td></tr>
+  <tr><td>Gate coverage</td><td>Every origin must-resolve gate mapped to a brief question or resolution</td><td>U1, U5</td></tr>
+  <tr><td>Skeleton fillability</td><td>Every origin source-map/consent field has a slot, using U1's template field names</td><td>U4</td></tr>
+  <tr><td>Decision recorded</td><td>Identity decision written into origin Key Decisions</td><td>U3, U5</td></tr>
+</table>
+
+<h2>Definition of Done</h2>
+<ul>
+  <li>TEI discovery brief exists and covers every open origin gate needing customer evidence (U1).</li>
+  <li>Spike deployed to dev, tests green, Claude web + Desktop render checklist executed with findings recorded durably — success or documented failure both count as done (U2).</li>
+  <li>Identity memo delivered and the operator's decision recorded in the origin doc (U3).</li>
+  <li>Source-map/consent skeleton exists and is fillable from the brief's evidence template (U4).</li>
+  <li>Origin doc re-gated with per-gate resolutions and an explicit readiness verdict; Linear THINK-117 updated (U5).</li>
+  <li>Cleanup: the spike's fate (delete vs evolve) decided and recorded at U5; no other experimental code remains on main.</li>
+</ul>
+
+<div class="callout">Residual risks carried from review: the spike is production-shaped infrastructure that becomes de facto permanent if U5's fate decision slips; Claude's connector may require a GET/SSE channel or a newer <code>protocolVersion</code> at initialize — both surface only at the manual checklist and belong in the findings template.</div>
+
+</div>
+</body>
+</html>

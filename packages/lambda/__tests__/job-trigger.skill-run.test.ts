@@ -23,6 +23,7 @@ const {
   mockEnsureThreadForWork,
   mockLambdaSend,
   mockSfnSend,
+  s3Store,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   mockInsert: vi.fn(),
@@ -32,6 +33,7 @@ const {
   mockEnsureThreadForWork: vi.fn(),
   mockLambdaSend: vi.fn(),
   mockSfnSend: vi.fn(),
+  s3Store: new Map<string, string>(),
 }));
 
 // Rows returned by `db.select().from().where()` — routed by a tag the caller
@@ -122,7 +124,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agentLoopIterations: {
     id: "agent_loop_iterations.id",
   },
-  agents: { id: "agents.id", runtime_config: "agents.runtime_config" },
+  agents: {
+    id: "agents.id",
+    slug: "agents.slug",
+    workspace_folder_name: "agents.workspace_folder_name",
+    tenant_id: "agents.tenant_id",
+    runtime_config: "agents.runtime_config",
+  },
+  tenants: { id: "tenants.id", slug: "tenants.slug" },
   spaces: {
     id: "spaces.id",
     tenant_id: "spaces.tenant_id",
@@ -306,6 +315,27 @@ vi.mock("@aws-sdk/client-sfn", () => ({
   StartExecutionCommand: vi.fn().mockImplementation((input) => ({ input })),
 }));
 
+// Workspace reads for the skill-enablement check (capability-mapping
+// plan U10): presence = skills/<slug>/SKILL.md, enabled =
+// skills/<slug>/.assignment.json.
+vi.mock("@aws-sdk/client-s3", () => {
+  class GetObjectCommand {
+    constructor(public input: { Bucket: string; Key: string }) {}
+  }
+  class S3Client {
+    async send(command: { input: { Key: string } }) {
+      const body = s3Store.get(command.input.Key);
+      if (body === undefined) {
+        const err = new Error("no such key");
+        (err as { name: string }).name = "NoSuchKey";
+        throw err;
+      }
+      return { Body: { transformToString: async () => body } };
+    }
+  }
+  return { S3Client, GetObjectCommand };
+});
+
 // After mocks — import the handler + exported pure helpers.
 import {
   buildRoutineExecutionInput,
@@ -356,8 +386,22 @@ const pushTenantSettings = (
   mockSelect.mockReturnValueOnce([{ features }]);
 };
 
+// Enablement is workspace-backed (plan U10): two selects resolve the
+// agent workspace prefix (agents + tenants), then S3 reads answer
+// presence/enabled. null = skill not installed in the workspace.
+const SKILL_PREFIX = "tenants/acme/agents/agent-a1/skills/sales-prep/";
 const pushAgentSkillEnablement = (enabled: boolean | null): void => {
-  mockSelect.mockReturnValueOnce(enabled === null ? [] : [{ enabled }]);
+  mockSelect.mockReturnValueOnce([
+    { slug: "agent-a1", workspace_folder_name: null, tenant_id: "T1" },
+  ]);
+  mockSelect.mockReturnValueOnce([{ slug: "acme" }]);
+  if (enabled !== null) {
+    s3Store.set(`${SKILL_PREFIX}SKILL.md`, "---\nname: sales-prep\n---\n");
+    s3Store.set(
+      `${SKILL_PREFIX}.assignment.json`,
+      JSON.stringify({ slug: "sales-prep", enabled }),
+    );
+  }
 };
 
 const AGENT_LOOP_JOB = (
@@ -415,6 +459,8 @@ const AGENT_LOOP_VERSION_ROW = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  s3Store.clear();
+  process.env.WORKSPACE_BUCKET = "workspace-bucket";
   process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
   process.env.THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME =
     "thinkwork-dev-api-thread-idle-memory-learning";
@@ -966,7 +1012,7 @@ describe("job-trigger skill_run skill-disabled path", () => {
     expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 
-  it("writes skipped_disabled row when agent_skills row is absent", async () => {
+  it("writes skipped_disabled row when the skill is not installed in the workspace", async () => {
     pushJobLookup();
     pushInvokerLookup(true);
     pushTenantSettings({});
@@ -1075,7 +1121,7 @@ describe("job-trigger skill_run invoke-failure path", () => {
 });
 
 describe("job-trigger skill_run no-agent path", () => {
-  it("skips the agent_skills check when no agentId is configured", async () => {
+  it("skips the skill-enablement check when no agentId is configured", async () => {
     pushJobLookup(JOB_CONFIG({ agentId: undefined }));
     pushInvokerLookup(true);
     pushTenantSettings({});
@@ -1085,7 +1131,7 @@ describe("job-trigger skill_run no-agent path", () => {
     await handler(BASE_EVENT as never);
 
     // Five selects: scheduledJobs + budget user/policy + invoker +
-    // tenantSettings. No agent_skills.
+    // tenantSettings. No workspace-enablement agent/tenant lookups.
     expect(mockSelect).toHaveBeenCalledTimes(5);
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
   });

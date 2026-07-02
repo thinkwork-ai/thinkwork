@@ -185,6 +185,37 @@ export async function ensureTerraform(): Promise<boolean> {
 }
 
 /**
+ * psql applies the bundled schema migrations and seeds workspace defaults
+ * (harness cycle 7: the migration files need psql-grade SQL semantics, and a
+ * node pg dependency re-keys drizzle-orm's peer resolution across the whole
+ * workspace). libpq ships just the client.
+ */
+export async function ensurePsql(): Promise<boolean> {
+  if (isInstalled("psql")) return true;
+
+  console.log(`  ${chalk.yellow("psql not found.")} Installing...`);
+  if (hasBrew()) {
+    const result = run("brew install libpq && brew link --force libpq");
+    if (result !== null && isInstalled("psql")) {
+      console.log(`  ${chalk.green("✓")} psql installed via Homebrew (libpq)`);
+      return true;
+    }
+  }
+  if (isInstalled("apt-get")) {
+    const result = run("sudo apt-get install -y postgresql-client");
+    if (result !== null && isInstalled("psql")) {
+      console.log(`  ${chalk.green("✓")} psql installed via apt`);
+      return true;
+    }
+  }
+  console.log(`  ${chalk.red("✗")} Could not auto-install psql.`);
+  console.log(
+    `    Install manually: ${chalk.cyan("brew install libpq")} (macOS) or ${chalk.cyan("apt install postgresql-client")} (Linux)`,
+  );
+  return false;
+}
+
+/**
  * Ensure all prerequisites are installed. Called by `init` before doing anything.
  */
 export async function ensurePrerequisites(): Promise<boolean> {
@@ -192,8 +223,9 @@ export async function ensurePrerequisites(): Promise<boolean> {
 
   const awsOk = await ensureAwsCli();
   const tfOk = await ensureTerraform();
+  const psqlOk = await ensurePsql();
 
-  if (awsOk && tfOk) {
+  if (awsOk && tfOk && psqlOk) {
     console.log("");
     return true;
   }

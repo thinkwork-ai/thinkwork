@@ -63,7 +63,7 @@ describe("n8nAppData", () => {
             {
               externalExecutionId: "exec-1",
               externalWorkflowId: "wf-1",
-              workflowName: "Fulfillment follow-up",
+              workflowName: null,
               status: "success",
               mode: "webhook",
               startedAt: new Date("2026-06-20T12:00:00.000Z"),
@@ -157,6 +157,10 @@ describe("n8nAppData", () => {
     expect(result.workflows[0]).toMatchObject({
       externalWorkflowId: "wf-1",
       nativeWorkflowUrl: "https://n8n.example.test/workflow/wf-1",
+    });
+    expect(result.executions[0]).toMatchObject({
+      externalExecutionId: "exec-1",
+      workflowName: "Fulfillment follow-up",
     });
     expect(result.executions[0].bridgeRuns).toHaveLength(1);
     expect(result.executions[0].bridgeRuns[0]).toMatchObject({

@@ -164,7 +164,8 @@ vi.mock("./data/twentyEngagementApi", () => ({
 vi.mock("urql", () => ({
   useQuery: ({ variables }: { variables?: Record<string, unknown> }) => {
     const input = variables?.input as
-      { providerRecordType?: string; providerRecordId?: string } | undefined;
+      | { providerRecordType?: string; providerRecordId?: string }
+      | undefined;
     if (
       input?.providerRecordType === "opportunity" ||
       input?.providerRecordType === "app"
@@ -263,12 +264,27 @@ describe("TwentyClientEngagementApp", () => {
     );
 
     expect(await screen.findByText("McPherson Companies")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Client Engagement" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Review Twenty CRM accounts, opportunity coverage, mapped layers, and readiness.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Search accounts" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    expect(screen.getByRole("button", { name: "Readiness" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Opportunities" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mapped" })).toBeTruthy();
     expect(usePageHeaderActionsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         title: "Client Engagement",
         documentTitle: "Twenty CRM · Client Engagement",
         breadcrumbs: [
-          { label: "Apps", onClick: expect.any(Function) },
+          { label: "Applications", onClick: expect.any(Function) },
           { label: "Twenty CRM" },
           { label: "Client Engagement", onClick: undefined },
         ],
@@ -299,7 +315,7 @@ describe("TwentyClientEngagementApp", () => {
     expect(screen.getByRole("tab", { name: "Opportunities (1)" })).toBeTruthy();
     expect(screen.queryByText("1 active opportunity")).toBeNull();
     expect(latestHeaderActions().breadcrumbs).toEqual([
-      { label: "Apps", onClick: expect.any(Function) },
+      { label: "Applications", onClick: expect.any(Function) },
       { label: "Twenty CRM" },
       { label: "Client Engagement", onClick: expect.any(Function) },
       { label: "McPherson Companies" },
