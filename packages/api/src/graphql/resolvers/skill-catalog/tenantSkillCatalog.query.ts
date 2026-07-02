@@ -4,7 +4,8 @@
  * such as the slash-command force-pin popup.
  *
  * When `agentId` is provided:
- *  - `installed` is annotated from the agent's agent_skills rows.
+ *  - `installed` is annotated from the agent's workspace tree
+ *    (`skills/<slug>/SKILL.md` markers — KTD-8/U10).
  *  - skills in the agent's blocked_tools are omitted entirely (KD4 — the popup
  *    never offers a blocked skill). This is a UX filter; the authoritative
  *    blocklist guardrail is enforced again at dispatch (U2), so bypassing the
@@ -16,7 +17,8 @@
 
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, and, skillCatalog, agents, agentSkills } from "../../utils.js";
+import { db, eq, and, skillCatalog, agents } from "../../utils.js";
+import { listAgentWorkspaceSkills } from "../../../lib/skills/workspace-skill-index.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 interface TenantSkillCatalogArgs {
@@ -79,16 +81,19 @@ export const tenantSkillCatalog = async (
         : [],
     );
 
-    const installed = await db
-      .select({ skillId: agentSkills.skill_id })
-      .from(agentSkills)
-      .where(
-        and(
-          eq(agentSkills.agent_id, args.agentId),
-          eq(agentSkills.tenant_id, tenantId),
-        ),
-      );
-    installedSlugs = new Set(installed.map((r) => r.skillId));
+    // KTD-8 (plan U10): installed = workspace presence, not the retired
+    // agent_skills mirror. Fail soft — an unresolvable workspace
+    // annotates nothing as installed rather than failing the picker.
+    const workspaceSkills = await listAgentWorkspaceSkills(args.agentId).catch(
+      (err) => {
+        console.warn(
+          `[tenantSkillCatalog] workspace skill read failed for agent ${args.agentId}:`,
+          err,
+        );
+        return null;
+      },
+    );
+    installedSlugs = new Set((workspaceSkills ?? []).map((s) => s.slug));
   }
 
   return rows

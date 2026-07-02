@@ -56,14 +56,6 @@ export const AgentQuery = graphql(`
         config
         enabled
       }
-      skills {
-        id
-        skillId
-        config
-        permissions
-        rateLimitRpm
-        enabled
-      }
       budgetPolicy {
         id
         period
@@ -129,20 +121,6 @@ export const SetAgentCapabilitiesMutation = graphql(`
       capabilities {
         id
         capability
-        config
-        enabled
-      }
-    }
-  }
-`);
-
-export const SetAgentSkillsMutation = graphql(`
-  mutation SetAgentSkills($tenantId: ID!) {
-    updateTenantAgent(tenantId: $tenantId, input: {}) {
-      id
-      skills {
-        id
-        skillId
         config
         enabled
       }

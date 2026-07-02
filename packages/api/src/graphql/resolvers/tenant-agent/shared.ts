@@ -1,7 +1,6 @@
 import { GraphQLError } from "graphql";
 import {
   agentCapabilities,
-  agentSkills,
   agentToCamel,
   and,
   budgetPolicies,
@@ -26,12 +25,11 @@ export function notFound(message: string): GraphQLError {
 export async function loadTenantAgentForGraphql(tenantId: string) {
   try {
     const row = await resolveTenantPlatformAgent(tenantId, db);
-    const [caps, skills, policies] = await Promise.all([
+    const [caps, policies] = await Promise.all([
       db
         .select()
         .from(agentCapabilities)
         .where(eq(agentCapabilities.agent_id, row.id)),
-      db.select().from(agentSkills).where(eq(agentSkills.agent_id, row.id)),
       db
         .select()
         .from(budgetPolicies)
@@ -45,7 +43,6 @@ export async function loadTenantAgentForGraphql(tenantId: string) {
     return {
       ...agentToCamel(row),
       capabilities: caps.map(snakeToCamel),
-      skills: skills.map(snakeToCamel),
       budgetPolicy: policies.length > 0 ? snakeToCamel(policies[0]) : null,
     };
   } catch (error) {

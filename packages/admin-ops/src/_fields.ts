@@ -32,9 +32,6 @@ export const TEAM_AGENT_FIELDS = "id teamId agentId tenantId role joinedAt";
 
 export const TEAM_USER_FIELDS = "id teamId userId tenantId role joinedAt";
 
-export const SKILL_FIELDS =
-  "agentId skillId config permissions rateLimitRpm modelOverride enabled";
-
 export const CAPABILITY_FIELDS = "agentId capability config enabled";
 
 export const ARTIFACT_FIELDS =

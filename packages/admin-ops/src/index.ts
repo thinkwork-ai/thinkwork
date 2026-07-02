@@ -18,12 +18,10 @@ export type {
 export * as agents from "./agents.js";
 export type {
   Agent,
-  AgentSkill,
   AgentCapability,
   ListAgentsInput,
   ListAllTenantAgentsInput,
   CreateAgentInput,
-  AgentSkillInput,
   AgentCapabilityInput,
 } from "./agents.js";
 

@@ -24,6 +24,8 @@ locals {
   chat_agent_finalize_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_finalize_fn_name}"
   chat_agent_activity_fn_name = "thinkwork-${var.stage}-api-chat-agent-activity"
   chat_agent_activity_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_activity_fn_name}"
+  manifest_log_fn_name        = "thinkwork-${var.stage}-api-manifest-log"
+  manifest_log_fn_arn         = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.manifest_log_fn_name}"
   pi_image_uri                = "${var.ecr_repository_url}:pi-latest"
   cognee_vpc_enabled          = length(var.cognee_subnet_ids) > 0 && length(var.cognee_security_group_ids) > 0
   okf_efs_vpc_enabled         = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
@@ -246,8 +248,9 @@ resource "aws_iam_role_policy" "agentcore_pi" {
       },
       {
         # Invoke API Lambdas from Pi's private VPC. Memory retain is queued
-        # async; chat activity/finalize are RequestResponse callbacks because
-        # public API Gateway endpoints are not reachable reliably from this VPC.
+        # async; chat activity/finalize and the per-turn capability-manifest
+        # POST are RequestResponse callbacks because public API Gateway
+        # endpoints are not reachable reliably from this VPC.
         Sid    = "ApiLambdaInvoke"
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
@@ -255,6 +258,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
           local.memory_retain_fn_arn,
           local.chat_agent_finalize_fn_arn,
           local.chat_agent_activity_fn_arn,
+          local.manifest_log_fn_arn,
         ]
       },
       {
@@ -389,6 +393,7 @@ resource "aws_lambda_function" "agentcore_pi" {
       MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
       CHAT_AGENT_FINALIZE_FN_NAME            = local.chat_agent_finalize_fn_name
       CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
+      MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
       THINKWORK_API_URL                      = var.api_endpoint
       API_AUTH_SECRET                        = var.api_auth_secret

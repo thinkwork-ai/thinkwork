@@ -12,7 +12,7 @@
  *   { triggerId, triggerType, tenantId, agentId?, spaceId?, routineId?, prompt?, scheduleName?, oneTime? }
  */
 
-import { getApiAuthSecret } from "@thinkwork/runtime-config";
+import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
   dispatchAgentLoop,
@@ -28,7 +28,6 @@ import {
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
-  agentSkills,
   budgetPolicies,
   costEvents,
   evalRuns,
@@ -37,6 +36,7 @@ import {
   routines,
   scheduledJobs,
   skillRuns,
+  tenants,
   tenantSettings,
   threadIdleLearningRuns,
   threadIdleLearningState,
@@ -51,7 +51,88 @@ import {
   workflows,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, gte, sql } from "drizzle-orm";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+
+// ---------------------------------------------------------------------------
+// Workspace skill enablement (capability-mapping plan U10, KTD-8).
+//
+// The agent_skills mirror table is retired: presence = the installed
+// `skills/<slug>/SKILL.md` marker in the agent workspace, enabled = the
+// `skills/<slug>/.assignment.json` state file (absent file/flag =
+// enabled). This is a compact local read — packages/lambda doesn't
+// depend on @thinkwork/api, so it can't share the api-side
+// workspace-skill-index helper.
+// ---------------------------------------------------------------------------
+
+let workspaceS3: S3Client | null = null;
+function workspaceS3Client(): S3Client {
+  workspaceS3 ??= new S3Client({
+    region:
+      process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  });
+  return workspaceS3;
+}
+
+async function readWorkspaceObject(
+  bucket: string,
+  key: string,
+): Promise<string | null> {
+  try {
+    const resp = await workspaceS3Client().send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    return (await resp.Body?.transformToString()) ?? "";
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw err;
+  }
+}
+
+async function workspaceSkillEnablement(
+  db: ReturnType<typeof getDb>,
+  agentId: string,
+  skillId: string,
+): Promise<"enabled" | "disabled" | "not_installed"> {
+  const bucket = getConfig("WORKSPACE_BUCKET");
+  if (!bucket) {
+    throw new Error("WORKSPACE_BUCKET not configured");
+  }
+  const [agent] = await db
+    .select({
+      slug: agents.slug,
+      workspace_folder_name: agents.workspace_folder_name,
+      tenant_id: agents.tenant_id,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  if (!agent?.slug || !agent.tenant_id) return "not_installed";
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id))
+    .limit(1);
+  if (!tenant?.slug) return "not_installed";
+  const folder = agent.workspace_folder_name ?? agent.slug;
+  const prefix = `tenants/${tenant.slug}/agents/${folder}/skills/${skillId}/`;
+
+  const marker = await readWorkspaceObject(bucket, `${prefix}SKILL.md`);
+  if (marker === null) return "not_installed";
+
+  const stateRaw = await readWorkspaceObject(
+    bucket,
+    `${prefix}.assignment.json`,
+  );
+  if (stateRaw === null) return "enabled";
+  try {
+    const state = JSON.parse(stateRaw) as { enabled?: boolean } | null;
+    return state?.enabled === false ? "disabled" : "enabled";
+  } catch {
+    return "enabled";
+  }
+}
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 // Mirrors CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core (this
@@ -1289,16 +1370,12 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       // not gated to a specific agent (webhook-style, no agentId) skip
       // this check — the container validates at dispatch time.
       if (targetAgentId) {
-        const [enablement] = await db
-          .select({ enabled: agentSkills.enabled })
-          .from(agentSkills)
-          .where(
-            and(
-              eq(agentSkills.agent_id, targetAgentId),
-              eq(agentSkills.skill_id, skillId),
-            ),
-          );
-        if (!enablement || enablement.enabled === false) {
+        const enablement = await workspaceSkillEnablement(
+          db,
+          targetAgentId,
+          skillId,
+        );
+        if (enablement !== "enabled") {
           await db.insert(skillRuns).values({
             tenant_id: tenantId,
             agent_id: targetAgentId,
@@ -1310,9 +1387,10 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             resolved_inputs: resolvedInputs,
             resolved_inputs_hash: hashResolvedInputs(resolvedInputs),
             status: "skipped_disabled",
-            failure_reason: enablement
-              ? "skill is disabled for this agent"
-              : "skill is not enabled for this agent",
+            failure_reason:
+              enablement === "disabled"
+                ? "skill is disabled for this agent"
+                : "skill is not enabled for this agent",
             finished_at: new Date(),
           });
           console.log(

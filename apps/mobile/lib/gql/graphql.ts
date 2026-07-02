@@ -206,7 +206,6 @@ export type Agent = {
   runtimeConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
   sandbox?: Maybe<Scalars["AWSJSON"]["output"]>;
   sendEmail?: Maybe<Scalars["AWSJSON"]["output"]>;
-  skills: Array<AgentSkill>;
   slug?: Maybe<Scalars["String"]["output"]>;
   source?: Maybe<Scalars["String"]["output"]>;
   status: AgentStatus;
@@ -609,29 +608,6 @@ export enum AgentRuntime {
   Flue = "FLUE",
 }
 
-export type AgentSkill = {
-  __typename?: "AgentSkill";
-  agentId: Scalars["ID"]["output"];
-  config?: Maybe<Scalars["AWSJSON"]["output"]>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  modelOverride?: Maybe<Scalars["String"]["output"]>;
-  permissions?: Maybe<Scalars["AWSJSON"]["output"]>;
-  rateLimitRpm?: Maybe<Scalars["Int"]["output"]>;
-  skillId: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-};
-
-export type AgentSkillInput = {
-  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
-  modelOverride?: InputMaybe<Scalars["String"]["input"]>;
-  permissions?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  rateLimitRpm?: InputMaybe<Scalars["Int"]["input"]>;
-  skillId: Scalars["String"]["input"];
-};
-
 export enum AgentStatus {
   Busy = "BUSY",
   Error = "ERROR",
@@ -1019,6 +995,19 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
+export enum CapabilityGrantClass {
+  McpServer = "MCP_SERVER",
+  PiExtension = "PI_EXTENSION",
+  Skill = "SKILL",
+}
+
+export enum CapabilityGrantScope {
+  Agent = "AGENT",
+  AgentProfile = "AGENT_PROFILE",
+  Space = "SPACE",
+  User = "USER",
+}
+
 export type CapabilityInspection = {
   __typename?: "CapabilityInspection";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -1041,6 +1030,15 @@ export type CapabilityItem = {
   provenance?: Maybe<Scalars["String"]["output"]>;
   reason?: Maybe<Scalars["String"]["output"]>;
   tokenStatus?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type CapabilityMutationResult = {
+  __typename?: "CapabilityMutationResult";
+  computedAt: Scalars["AWSDateTime"]["output"];
+  configFingerprint?: Maybe<Scalars["String"]["output"]>;
+  inspectionState: Scalars["String"]["output"];
+  item?: Maybe<CapabilityItem>;
+  outcome: Scalars["String"]["output"];
 };
 
 export enum CapabilitySetVariant {
@@ -1208,6 +1206,8 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentCreated = "AGENT_CREATED",
   AgentDeleted = "AGENT_DELETED",
+  AgentExtensionDetached = "AGENT_EXTENSION_DETACHED",
+  AgentExtensionGranted = "AGENT_EXTENSION_GRANTED",
   AgentMigrated = "AGENT_MIGRATED",
   AgentSkillsChanged = "AGENT_SKILLS_CHANGED",
   ApprovalRecorded = "APPROVAL_RECORDED",
@@ -1217,6 +1217,8 @@ export enum ComplianceEventType {
   AuthSignout = "AUTH_SIGNOUT",
   DataExportInitiated = "DATA_EXPORT_INITIATED",
   McpAdded = "MCP_ADDED",
+  McpDetached = "MCP_DETACHED",
+  McpGranted = "MCP_GRANTED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
@@ -1234,6 +1236,8 @@ export enum ComplianceEventType {
   PolicyBypassed = "POLICY_BYPASSED",
   PolicyEvaluated = "POLICY_EVALUATED",
   SkillActivated = "SKILL_ACTIVATED",
+  SkillDetached = "SKILL_DETACHED",
+  SkillGranted = "SKILL_GRANTED",
   UserCreated = "USER_CREATED",
   UserDeleted = "USER_DELETED",
   UserDisabled = "USER_DISABLED",
@@ -1889,6 +1893,15 @@ export type DeploymentStatus = {
   twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
+export type DetachCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type DisableSkillInput = {
   agentId: Scalars["ID"]["input"];
   skillId: Scalars["String"]["input"];
@@ -2423,6 +2436,18 @@ export type FlagThreadForEvalResult = {
   case: EvalTestCase;
   completeness: EvalCaseCompleteness;
   dataset: EvalDataset;
+};
+
+export type GrantCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  grantedPermissions?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+  toolAllowlist?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  wiringChoice?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type HandleJsonRenderActionInput = {
@@ -3722,6 +3747,7 @@ export type Mutation = {
   deleteWebhook: Scalars["Boolean"]["output"];
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
+  detachCapability: CapabilityMutationResult;
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
@@ -3731,6 +3757,7 @@ export type Mutation = {
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
+  grantCapability: CapabilityMutationResult;
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
@@ -4376,6 +4403,10 @@ export type MutationDeleteWorkflowArgs = {
   id: Scalars["ID"]["input"];
 };
 
+export type MutationDetachCapabilityArgs = {
+  input: DetachCapabilityInput;
+};
+
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -4411,6 +4442,10 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
+};
+
+export type MutationGrantCapabilityArgs = {
+  input: GrantCapabilityInput;
 };
 
 export type MutationHandleJsonRenderActionArgs = {
@@ -11090,15 +11125,6 @@ export type AgentQuery = {
       config?: any | null;
       enabled: boolean;
     }>;
-    skills: Array<{
-      __typename?: "AgentSkill";
-      id: string;
-      skillId: string;
-      config?: any | null;
-      permissions?: any | null;
-      rateLimitRpm?: number | null;
-      enabled: boolean;
-    }>;
     budgetPolicy?: {
       __typename?: "AgentBudgetPolicy";
       id: string;
@@ -11183,25 +11209,6 @@ export type SetAgentCapabilitiesMutation = {
       __typename?: "AgentCapability";
       id: string;
       capability: string;
-      config?: any | null;
-      enabled: boolean;
-    }>;
-  };
-};
-
-export type SetAgentSkillsMutationVariables = Exact<{
-  tenantId: Scalars["ID"]["input"];
-}>;
-
-export type SetAgentSkillsMutation = {
-  __typename?: "Mutation";
-  updateTenantAgent: {
-    __typename?: "Agent";
-    id: string;
-    skills: Array<{
-      __typename?: "AgentSkill";
-      id: string;
-      skillId: string;
       config?: any | null;
       enabled: boolean;
     }>;
@@ -13062,36 +13069,6 @@ export const AgentDocument = {
                 },
                 {
                   kind: "Field",
-                  name: { kind: "Name", value: "skills" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "skillId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "config" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "permissions" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "rateLimitRpm" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: "Field",
                   name: { kind: "Name", value: "budgetPolicy" },
                   selectionSet: {
                     kind: "SelectionSet",
@@ -13468,84 +13445,6 @@ export const SetAgentCapabilitiesDocument = {
 } as unknown as DocumentNode<
   SetAgentCapabilitiesMutation,
   SetAgentCapabilitiesMutationVariables
->;
-export const SetAgentSkillsDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SetAgentSkills" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "tenantId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "updateTenantAgent" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "tenantId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "tenantId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: { kind: "ObjectValue", fields: [] },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "skills" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "skillId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "config" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "enabled" },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SetAgentSkillsMutation,
-  SetAgentSkillsMutationVariables
 >;
 export const SetAgentBudgetPolicyDocument = {
   kind: "Document",
