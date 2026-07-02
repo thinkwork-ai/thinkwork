@@ -4,6 +4,7 @@ import type {
 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
+import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { db } from "../lib/db.js";
@@ -257,6 +258,21 @@ async function handleCapabilities(
             body.enabled !== undefined ? (body.enabled as boolean) : true,
         })
         .returning();
+      // KTD-8 dual-write (plan U9): full-state write to the workspace
+      // assignment file (config + permissions + enabled).
+      await patchSkillAssignmentState({
+        agentId,
+        slug: body.skill_id as string,
+        patch: {
+          replace: true,
+          configMerge: (body.config as Record<string, unknown>) ?? undefined,
+          permissions:
+            (body.permissions as Record<string, unknown>) ?? undefined,
+          rate_limit_rpm: (body.rate_limit_rpm as number) ?? undefined,
+          enabled:
+            body.enabled !== undefined ? (body.enabled as boolean) : true,
+        },
+      });
       return json(row, 201);
     }
     case "DELETE": {

@@ -1,5 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
+import { patchSkillAssignmentState } from "../../../lib/skills/assignment-state.js";
 import { agentSkills, and, db, eq } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
@@ -64,6 +65,14 @@ export async function disableSkill(
         eq(agentSkills.skill_id, skillId),
       ),
     );
+
+  // KTD-8 dual-write (plan U9): disabled state also lands in the
+  // workspace assignment file the migrated readers prefer.
+  await patchSkillAssignmentState({
+    agentId: resolvedAgentId,
+    slug: skillId,
+    patch: { enabled: false },
+  });
 
   await renderWorkspaceAfterCustomize("disableSkill", resolvedAgentId);
 
