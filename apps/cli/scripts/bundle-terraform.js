@@ -65,6 +65,17 @@ for (const script of ["bootstrap-workspace.sh", "post-deploy.sh"]) {
 }
 console.log("✓ Operational scripts bundled into dist/scripts/");
 
+// Workspace default files (harness cycle-7): bootstrap-workspace.sh seeds
+// these into the stage bucket; packaged installs have no packages/ tree.
+const wsDefaultsSrc = resolve(repoRoot, "packages/workspace-defaults/files");
+const wsDefaultsDst = resolve(cliRoot, "dist/workspace-defaults/files");
+if (existsSync(wsDefaultsSrc)) {
+  rmSync(wsDefaultsDst, { recursive: true, force: true });
+  mkdirSync(wsDefaultsDst, { recursive: true });
+  cpSync(wsDefaultsSrc, wsDefaultsDst, { recursive: true });
+  console.log("✓ Workspace defaults bundled into dist/workspace-defaults/files/");
+}
+
 // Drizzle migrations (U10, reworked after harness cycle 7): the deploy tail
 // applies the FULL migration history to fresh stages — the journal froze at
 // 0019 while hand-rolled files carry the real schema evolution, so a
