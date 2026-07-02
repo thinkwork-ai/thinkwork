@@ -2590,3 +2590,65 @@ export const SettingsCapabilityInspectorQuery = graphql(`
     }
   }
 `);
+
+// Workspace preview read surface (Composer plan U2, KTD-3): the rendered
+// workspace tree for a selection tuple plus lazy per-file content. Both are
+// computed through the runtime's own `persist:false` render path, and both
+// are profile-invariant — the Profile chip scopes the controls pane only
+// (R4), so no agentProfileId variable exists here by design.
+export const SettingsWorkspacePreviewQuery = graphql(`
+  query SettingsWorkspacePreview(
+    $tenantId: ID!
+    $agentId: ID
+    $spaceId: ID
+    $perspectiveUserId: ID
+  ) {
+    workspacePreview(
+      tenantId: $tenantId
+      agentId: $agentId
+      spaceId: $spaceId
+      perspectiveUserId: $perspectiveUserId
+    ) {
+      state
+      stateDetail
+      agentId
+      spaceId
+      perspectiveUserId
+      noUserBaseline
+      files {
+        path
+        owner
+        generated
+        size
+      }
+    }
+  }
+`);
+
+export const SettingsWorkspacePreviewFileQuery = graphql(`
+  query SettingsWorkspacePreviewFile(
+    $tenantId: ID!
+    $agentId: ID
+    $spaceId: ID
+    $perspectiveUserId: ID
+    $path: String!
+  ) {
+    workspacePreviewFile(
+      tenantId: $tenantId
+      agentId: $agentId
+      spaceId: $spaceId
+      perspectiveUserId: $perspectiveUserId
+      path: $path
+    ) {
+      state
+      stateDetail
+      file {
+        path
+        owner
+        generated
+        size
+      }
+      content
+    }
+  }
+`);
