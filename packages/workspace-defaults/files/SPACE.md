@@ -1,30 +1,34 @@
 # SPACE.md - Shared Space Context
 
 Use this file for context that belongs to everyone working in this Space.
-`AGENTS.md` is the always-loaded map; this file is loaded through that map when
-the active turn is in this Space.
+`AGENTS.md` is the always-loaded map; this file is the Space's own context
+layer, loaded through that map when the active turn is in this Space. It
+should let an agent drop in, read it, do the work, and exit.
 
 Do not put secrets here. Enable tools, MCP servers, skills, and execution
 policy on the Agent or Agent Profiles. SPACE.md can mention which profile,
 skill, or tool should be used for a kind of work, but it does not grant that
 capability by itself.
 
-## Start Here
+## What This Space Is
 
-- Read `CONTEXT.md` for the main workflow and operating context when this Space
-  has one.
-- Use attached folders such as `docs/`, `plans/`, `goals/`, and `artifacts/`
-  as source material when relevant.
-- Keep this file short. Link to detailed source files instead of duplicating
-  long-running procedures here.
-
-## Purpose
-
-Describe what this Space is for and when agents should rely on it.
+One or two sentences: what work happens here, what feeds into it, and where
+its output goes.
 
 - Work this Space owns:
 - Work this Space does not own:
 - Current priority:
+
+## What to Load
+
+One row per task type. The "Skip" column matters as much as the "Load"
+column — not loading the wrong thing saves tokens and prevents confusion.
+Read `CONTEXT.md` for the main workflow when this Space has one, and use
+attached folders such as `docs/`, `plans/`, `goals/`, and `artifacts/` as
+source material when relevant.
+
+| Task | Load These | Skip These |
+| ---- | ---------- | ---------- |
 
 ## Working Context
 
@@ -36,14 +40,22 @@ that should shape answers in this Space.
 - Source of truth:
 - Recent decisions:
 
-## Key Files
+## The Process
 
-- `CONTEXT.md` - main workflow/context file.
+How work happens here — numbered steps for pipeline work, or a loose approach
+for creative work. Match the shape of the work; keep this short and link to
+detailed source files instead of duplicating long-running procedures.
 
-## Routing Notes
+1.
 
-Point agents toward the right Agent Profile, skill, or specialist workspace.
-These are instructions for routing and behavior, not capability grants.
+## Skills & Tools
+
+When to use which capability inside this Space's workflow. Every row needs a
+trigger condition — "available" is not a trigger; "before anything ships" is.
+These are routing and behavior instructions, not capability grants.
+
+| Skill / Tool | When to Use | Purpose |
+| ------------ | ----------- | ------- |
 
 - Use @Analyst for finance, spreadsheet, and general-ledger analysis.
 - Use @Reviewer for review-only passes before shipping or publishing.
@@ -57,6 +69,9 @@ Record team preferences for this Space.
 - Act without asking when:
 - Report back with:
 
-## Open Questions
+## What NOT to Do
+
+Anti-patterns earned from real work in this Space — add one when you see the
+mistake happen, don't try to predict them all up front.
 
 -
