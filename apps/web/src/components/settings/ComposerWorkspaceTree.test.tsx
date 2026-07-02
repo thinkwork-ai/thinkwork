@@ -1,13 +1,24 @@
 /**
- * Composer result tree tests (Composer plan U2).
+ * Composer result tree tests (Composer plan U2 + U7).
  *
  * The tree is a READ-ONLY preview backed by `workspacePreview` /
  * `workspacePreviewFile`; every node resolves jump-to-cause client-side
  * from `{owner, path, generated}` (KTD-5). The preview is profile-invariant
  * — no agentProfileId variable exists on either query by construction.
+ *
+ * U7: generated agent/space files open SPLIT — the producing layer's
+ * editable source (via the existing workspace-files put path) beside the
+ * rendered output; saves refetch the preview; edits inside managed section
+ * bodies warn before saving.
  */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -17,6 +28,9 @@ const {
   navigateMock,
   queryDocs,
   useQueryCalls,
+  tenantState,
+  getFileMock,
+  putFileMock,
 } = vi.hoisted(() => ({
   queryState: {
     preview: {
@@ -42,6 +56,9 @@ const {
     variables: Record<string, unknown>;
     pause?: boolean;
   }>,
+  tenantState: { isOperator: true, roleResolved: true },
+  getFileMock: vi.fn(),
+  putFileMock: vi.fn(),
 }));
 
 vi.mock("urql", () => ({
@@ -63,6 +80,51 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
+
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: () => tenantState,
+}));
+
+vi.mock("@/lib/workspace-files-api", () => ({
+  spacesWorkspaceFilesClient: {
+    getFile: getFileMock,
+    putFile: putFileMock,
+  },
+}));
+
+// Keep the real managed-sections helpers (the warn-on-save guard under test)
+// but stub the CodeMirror editor pane down to a plain textarea.
+vi.mock("@thinkwork/workspace-editor", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/workspace-editor")>();
+  return {
+    ...actual,
+    FileEditorPane: (props: {
+      openFile: string | null;
+      value: string;
+      loading: boolean;
+      readOnly?: boolean;
+      onChange: (value: string) => void;
+      onSave: () => void;
+    }) => (
+      <div
+        data-testid="stub-source-editor"
+        data-loading={String(props.loading)}
+        data-readonly={String(props.readOnly ?? false)}
+      >
+        <textarea
+          aria-label="source-editor"
+          value={props.value}
+          readOnly={props.readOnly}
+          onChange={(event) => props.onChange(event.target.value)}
+        />
+        <button type="button" onClick={props.onSave}>
+          save-source
+        </button>
+      </div>
+    ),
+  };
+});
 
 import { ComposerWorkspaceTree, causeOf } from "./ComposerWorkspaceTree";
 
@@ -144,6 +206,14 @@ beforeEach(() => {
     error: undefined,
   };
   queryState.file = { data: undefined, fetching: false, error: undefined };
+  tenantState.isOperator = true;
+  tenantState.roleResolved = true;
+  getFileMock.mockResolvedValue({
+    content: "# Source\n\nProse.\n",
+    source: "agent",
+    sha256: "abc",
+  });
+  putFileMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => cleanup());
@@ -354,7 +424,7 @@ describe("pending affordance (sync window)", () => {
 });
 
 describe("read-only file viewer", () => {
-  it("loads content lazily via workspacePreviewFile and renders it read-only (no put path)", () => {
+  it("loads content lazily via workspacePreviewFile and renders non-generated files single-pane read-only (no put path)", () => {
     renderTree();
     // Nothing fetched until a file is clicked (the file query is paused).
     expect(lastFileCall()?.pause).toBe(true);
@@ -364,23 +434,28 @@ describe("read-only file viewer", () => {
           state: "ok",
           stateDetail: null,
           file: {
-            path: "AGENTS.md",
+            path: "CAPABILITIES.md",
             owner: "agent",
-            generated: true,
-            size: 2048,
+            generated: false,
+            size: 512,
           },
-          content: "# Rendered AGENTS.md body",
+          content: "# Capabilities body",
         },
       },
       fetching: false,
       error: undefined,
     };
-    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
     expect(lastFileCall()?.pause).toBe(false);
-    expect(lastFileCall()?.variables).toMatchObject({ path: "AGENTS.md" });
+    expect(lastFileCall()?.variables).toMatchObject({
+      path: "CAPABILITIES.md",
+    });
     expect(screen.getByTestId("composer-file-content").textContent).toContain(
-      "# Rendered AGENTS.md body",
+      "# Capabilities body",
     );
+    // Single pane: no source editor for a non-generated file (U7).
+    expect(screen.queryByTestId("composer-split-view")).toBeNull();
+    expect(screen.queryByTestId("composer-source-pane")).toBeNull();
     // Read-only: preformatted output, no editor surface, no save path.
     expect(screen.getByText("read-only")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
@@ -408,6 +483,160 @@ describe("read-only file viewer", () => {
     expect(screen.getByTestId("composer-file-error").textContent).toContain(
       "source object no longer exists",
     );
+  });
+});
+
+describe("split view for generated files (U7)", () => {
+  const MANAGED_SOURCE = [
+    "# Agent",
+    "",
+    "Prose intro.",
+    "",
+    "## Folder Structure",
+    "",
+    "- skills/",
+    "",
+    "## Notes",
+    "",
+    "Trailing prose.",
+    "",
+  ].join("\n");
+
+  function openGeneratedAgentsMd() {
+    queryState.file = {
+      data: {
+        workspacePreviewFile: {
+          state: "ok",
+          stateDetail: null,
+          file: {
+            path: "AGENTS.md",
+            owner: "agent",
+            generated: true,
+            size: 2048,
+          },
+          content: "# Rendered AGENTS.md body",
+        },
+      },
+      fetching: false,
+      error: undefined,
+    };
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+  }
+
+  it("opens a generated agent file split: editable source beside the rendered output", async () => {
+    renderTree();
+    openGeneratedAgentsMd();
+    expect(screen.getByTestId("composer-split-view")).toBeTruthy();
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
+    // Rendered pane still shows the read-only output.
+    expect(screen.getByTestId("composer-file-content").textContent).toContain(
+      "# Rendered AGENTS.md body",
+    );
+    // Source loads from the AGENT source tree at the same relative path.
+    expect(getFileMock).toHaveBeenCalledWith({ agentId: "agent-1" }, "AGENTS.md");
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("source-editor") as HTMLTextAreaElement).value,
+      ).toContain("# Source"),
+    );
+  });
+
+  it("resolves a generated space file to the SPACE source tree with the space-relative path", () => {
+    renderTree();
+    fireEvent.click(
+      screen.getByTestId("tree-file-Spaces/customer-success/CONTEXT.md"),
+    );
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
+    expect(getFileMock).toHaveBeenCalledWith(
+      { spaceId: "space-1" },
+      "CONTEXT.md",
+    );
+  });
+
+  it("saving a prose edit writes through the put path and refetches the preview", async () => {
+    renderTree();
+    openGeneratedAgentsMd();
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("source-editor") as HTMLTextAreaElement).value,
+      ).toContain("Prose"),
+    );
+    fireEvent.change(screen.getByLabelText("source-editor"), {
+      target: { value: "# Source\n\nProse, revised.\n" },
+    });
+    fireEvent.click(screen.getByText("save-source"));
+    await waitFor(() =>
+      expect(putFileMock).toHaveBeenCalledWith(
+        { agentId: "agent-1" },
+        "AGENTS.md",
+        "# Source\n\nProse, revised.\n",
+      ),
+    );
+    // Save refetches both the tree and the open rendered file (R9).
+    await waitFor(() =>
+      expect(previewRefetchMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+    expect(fileRefetchMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("warns before saving an edit inside a managed section body, then saves on confirm", async () => {
+    getFileMock.mockResolvedValue({
+      content: MANAGED_SOURCE,
+      source: "agent",
+      sha256: "abc",
+    });
+    renderTree();
+    openGeneratedAgentsMd();
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("source-editor") as HTMLTextAreaElement).value,
+      ).toContain("## Folder Structure"),
+    );
+    fireEvent.change(screen.getByLabelText("source-editor"), {
+      target: { value: MANAGED_SOURCE.replace("- skills/", "- hacked/") },
+    });
+    fireEvent.click(screen.getByText("save-source"));
+    // The guard fires instead of the write.
+    expect(putFileMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Edit inside a computed section"),
+    ).toBeTruthy();
+    expect(screen.getByText(/"Folder Structure"/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Save anyway"));
+    await waitFor(() => expect(putFileMock).toHaveBeenCalled());
+  });
+
+  it("keeps the source pane read-only for non-operators", async () => {
+    tenantState.isOperator = false;
+    renderTree();
+    openGeneratedAgentsMd();
+    await waitFor(() =>
+      expect(
+        screen
+          .getByTestId("stub-source-editor")
+          .getAttribute("data-readonly"),
+      ).toBe("true"),
+    );
+  });
+
+  it("renders user-owned generated files single-pane (USER.md is server-managed)", () => {
+    queryState.preview = {
+      data: previewData({
+        files: [
+          ...FILES,
+          { path: "User/PROFILE.md", owner: "user", generated: true, size: 64 },
+        ],
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-User/PROFILE.md"));
+    expect(screen.queryByTestId("composer-source-pane")).toBeNull();
   });
 });
 

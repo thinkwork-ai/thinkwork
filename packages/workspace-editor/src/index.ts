@@ -4,6 +4,13 @@ export { FolderTree, buildWorkspaceTree } from "./components/FolderTree.js";
 export type {
   WorkspaceFileEditorProps,
 } from "./components/WorkspaceFileEditor.js";
+export {
+  MANAGED_HEADINGS_BY_BASENAME,
+  findManagedSectionRanges,
+  managedHeadingsForFile,
+  managedSectionsEdited,
+} from "./lib/managed-sections.js";
+export type { ManagedSectionRange } from "./lib/managed-sections.js";
 export type {
   WorkspaceFilesClient,
   WorkspaceFileMeta,

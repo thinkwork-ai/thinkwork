@@ -48,6 +48,7 @@ import {
   replacePathPrefix,
   validateInlineBasename,
 } from "../lib/workspace-tree-actions.js";
+import { managedSectionsEdited } from "../lib/managed-sections.js";
 import type {
   WorkspaceFilesClient,
   WorkspaceFileSource,
@@ -121,6 +122,9 @@ export function WorkspaceFileEditor<TTarget>({
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] =
     useState<DeleteConfirmTarget | null>(null);
+  const [managedWarnHeadings, setManagedWarnHeadings] = useState<
+    string[] | null
+  >(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const openFileRef = useRef<string | null>(null);
   const fileListRequestId = useRef(0);
@@ -473,7 +477,7 @@ export function WorkspaceFileEditor<TTarget>({
     }
   };
 
-  const handleSave = useCallback(async () => {
+  const performSave = useCallback(async () => {
     if (!openFile || readOnly) return;
     const savedPath = openFile;
     const savedValue = editValue;
@@ -494,6 +498,20 @@ export function WorkspaceFileEditor<TTarget>({
       setSaving(false);
     }
   }, [client, editValue, fetchFiles, openFile, readOnly, stableTarget]);
+
+  // Managed-section guard (Composer plan U7): section bodies under managed
+  // headings are recomputed from the effective capability set on the next
+  // recomposition, so an edit inside one is silently destroyed. Warn and
+  // require explicit confirmation before saving such an edit.
+  const handleSave = useCallback(async () => {
+    if (!openFile || readOnly) return;
+    const touched = managedSectionsEdited(openFile, content, editValue);
+    if (touched.length > 0) {
+      setManagedWarnHeadings(touched);
+      return;
+    }
+    await performSave();
+  }, [content, editValue, openFile, performSave, readOnly]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -724,6 +742,14 @@ export function WorkspaceFileEditor<TTarget>({
           </ResizablePanelGroup>
         </div>
       )}
+      <ManagedSectionWarnDialog
+        headings={managedWarnHeadings}
+        onCancel={() => setManagedWarnHeadings(null)}
+        onConfirm={() => {
+          setManagedWarnHeadings(null);
+          void performSave();
+        }}
+      />
       <DeleteConfirmDialog
         target={deleteConfirmTarget}
         deleting={
@@ -751,6 +777,51 @@ function collectFolderPathsFromFiles(files: string[]): Set<string> {
     }
   }
   return out;
+}
+
+function ManagedSectionWarnDialog({
+  headings,
+  onCancel,
+  onConfirm,
+}: {
+  headings: string[] | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog
+      open={headings !== null}
+      onOpenChange={(open) => !open && onCancel()}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Edit inside a computed section</AlertDialogTitle>
+          <AlertDialogDescription>
+            {`Your change touches ${
+              headings && headings.length > 1
+                ? "computed sections"
+                : "the computed section"
+            } ${(headings ?? [])
+              .map((heading) => `"${heading}"`)
+              .join(
+                ", ",
+              )}. These bodies are regenerated from the capability set, so this edit will be overwritten the next time they recompute. Save anyway?`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+          >
+            Save anyway
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 function DeleteConfirmDialog({

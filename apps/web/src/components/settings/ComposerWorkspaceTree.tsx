@@ -19,13 +19,16 @@
  *                           (/settings/spaces/$spaceId?view=workspace);
  *   - `User/…`            → the perspective user's detail page;
  *   - generated files     → the producing layer's SOURCE file in the agent
- *                           workspace editor (pre-templating, KTD-7; the
- *                           side-by-side template view arrives in U7).
+ *                           workspace editor (KTD-7), and opening a generated
+ *                           file in the tree shows the U7 split view: the
+ *                           editable source beside the rendered output.
  *
  * File content loads lazily via `workspacePreviewFile` into a read-only
  * viewer (pre-rendered, no put path) — the ProjectedWorkspacePanel pattern,
  * which fits a query-backed tree with less adaptation than the
- * client-backed `WorkspaceFileEditor`.
+ * client-backed `WorkspaceFileEditor`. Generated files additionally get an
+ * editable source pane (`ComposerSourcePane`) whose saves ride the existing
+ * workspace-files put path and refetch the preview (R9).
  *
  * During the post-attach sync-pending window the affected skill folder
  * renders as an explicit ghost node with a "syncing…" badge rather than
@@ -33,7 +36,7 @@
  * confirmation completes, which refetches the whole preview.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronRight,
@@ -44,7 +47,29 @@ import {
   X,
 } from "lucide-react";
 import { useQuery } from "urql";
-import { Badge, Button, Skeleton, cn } from "@thinkwork/ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+  Skeleton,
+  cn,
+} from "@thinkwork/ui";
+import {
+  FileEditorPane,
+  managedSectionsEdited,
+} from "@thinkwork/workspace-editor";
+import { useTenant } from "@/context/TenantContext";
+import {
+  spacesWorkspaceFilesClient,
+  type WorkspaceFilesTarget,
+} from "@/lib/workspace-files-api";
 import {
   SettingsWorkspacePreviewFileQuery,
   SettingsWorkspacePreviewQuery,
@@ -172,6 +197,37 @@ export function causeOf(entry: PreviewEntry): JumpCause {
     // producing layer's source file — same relative path in the agent
     // source tree (KTD-7); plain agent source files open themselves.
     return { kind: "agent_source", file: entry.path };
+  }
+  return null;
+}
+
+/**
+ * The producing layer's SOURCE file for a generated entry (U7): agent-owned
+ * generated files map to the same relative path in the agent source tree;
+ * `Spaces/<slug>/…` generated files map to the space source tree. User-owned
+ * generated files (USER.md is server-managed) have no editable source.
+ */
+export function sourceBindingFor(
+  entry: PreviewEntry,
+  resolved: { agentId?: string | null; spaceId?: string | null },
+): { target: WorkspaceFilesTarget; targetKey: string; path: string } | null {
+  if (!entry.generated) return null;
+  const segments = entry.path.split("/");
+  if (segments[0] === "Spaces" && segments.length > 2) {
+    if (!resolved.spaceId) return null;
+    return {
+      target: { spaceId: resolved.spaceId },
+      targetKey: `space:${resolved.spaceId}`,
+      path: segments.slice(2).join("/"),
+    };
+  }
+  if (entry.owner === "agent") {
+    if (!resolved.agentId) return null;
+    return {
+      target: { agentId: resolved.agentId },
+      targetKey: `agent:${resolved.agentId}`,
+      path: entry.path,
+    };
   }
   return null;
 }
@@ -489,23 +545,207 @@ export function ComposerWorkspaceTree({
             )}
           </div>
           {selectedPath ? (
-            <ComposerFileViewer
-              path={selectedPath}
-              entry={selectedEntry}
-              fetching={fileResult.fetching}
-              errorMessage={fileResult.error?.message ?? null}
-              payload={
-                (fileResult.data?.workspacePreviewFile ?? null) as {
-                  state: string;
-                  stateDetail?: string | null;
-                  content?: string | null;
-                } | null
-              }
-              onClose={() => setSelectedPath(null)}
-            />
+            (() => {
+              const binding = selectedEntry
+                ? sourceBindingFor(selectedEntry, {
+                    agentId: result?.agentId,
+                    spaceId: result?.spaceId ?? spaceId,
+                  })
+                : null;
+              const viewer = (
+                <ComposerFileViewer
+                  path={selectedPath}
+                  entry={selectedEntry}
+                  fetching={fileResult.fetching}
+                  errorMessage={fileResult.error?.message ?? null}
+                  payload={
+                    (fileResult.data?.workspacePreviewFile ?? null) as {
+                      state: string;
+                      stateDetail?: string | null;
+                      content?: string | null;
+                    } | null
+                  }
+                  onClose={() => setSelectedPath(null)}
+                />
+              );
+              // Generated files open split: the producing layer's editable
+              // source beside the rendered output (R9, F3). Everything else
+              // stays single-pane read-only.
+              return binding ? (
+                <div
+                  className="grid gap-3 xl:grid-cols-2"
+                  data-testid="composer-split-view"
+                >
+                  <ComposerSourcePane
+                    target={binding.target}
+                    targetKey={binding.targetKey}
+                    path={binding.path}
+                    onSaved={() => {
+                      refetchPreview({ requestPolicy: "network-only" });
+                      refetchFile({ requestPolicy: "network-only" });
+                    }}
+                  />
+                  {viewer}
+                </div>
+              ) : (
+                viewer
+              );
+            })()
           ) : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Editable source pane for the Composer split view (U7): the producing
+ * layer's real source file, written through the existing workspace-files
+ * put path (no new write API). Managed-section bodies render locked in the
+ * embedded editor (via the shared FileEditorPane affordance) and an edit
+ * inside one warns before saving — the same guard WorkspaceFileEditor
+ * applies, because both write the same recomposed files.
+ */
+export function ComposerSourcePane({
+  target,
+  targetKey,
+  path,
+  onSaved,
+}: {
+  target: WorkspaceFilesTarget;
+  targetKey: string;
+  path: string;
+  onSaved: () => void;
+}) {
+  const { isOperator, roleResolved } = useTenant();
+  const [content, setContent] = useState("");
+  const [value, setValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warnHeadings, setWarnHeadings] = useState<string[] | null>(null);
+  const loadRequestId = useRef(0);
+
+  useEffect(() => {
+    const requestId = loadRequestId.current + 1;
+    loadRequestId.current = requestId;
+    setLoading(true);
+    setError(null);
+    spacesWorkspaceFilesClient
+      .getFile(target, path)
+      .then((data) => {
+        if (loadRequestId.current !== requestId) return;
+        const fileContent = data.content ?? "";
+        setContent(fileContent);
+        setValue(fileContent);
+      })
+      .catch((err: unknown) => {
+        if (loadRequestId.current !== requestId) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setContent("");
+        setValue("");
+      })
+      .finally(() => {
+        if (loadRequestId.current === requestId) setLoading(false);
+      });
+    // targetKey stands in for the target object's identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey, path]);
+
+  const performSave = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await spacesWorkspaceFilesClient.putFile(target, path, value);
+      setContent(value);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey, path, value, onSaved]);
+
+  const handleSave = useCallback(() => {
+    const touched = managedSectionsEdited(path, content, value);
+    if (touched.length > 0) {
+      setWarnHeadings(touched);
+      return;
+    }
+    void performSave();
+  }, [content, path, performSave, value]);
+
+  return (
+    <div
+      className="flex flex-col rounded-md border border-border"
+      data-testid="composer-source-pane"
+    >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <span className="min-w-0 truncate font-mono text-xs text-foreground">
+          {path}
+        </span>
+        <Badge
+          variant="outline"
+          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+        >
+          source
+        </Badge>
+      </div>
+      {error ? (
+        <p
+          className="px-3 py-2 text-xs text-destructive"
+          data-testid="composer-source-error"
+        >
+          {error}
+        </p>
+      ) : null}
+      <div className="flex min-h-80 flex-1 flex-col">
+        <FileEditorPane
+          openFile={path}
+          content={content}
+          value={value}
+          loading={loading}
+          saving={saving}
+          readOnly={!(isOperator && roleResolved)}
+          onChange={setValue}
+          onSave={handleSave}
+          onDiscard={() => setValue(content)}
+        />
+      </div>
+      <AlertDialog
+        open={warnHeadings !== null}
+        onOpenChange={(open) => !open && setWarnHeadings(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit inside a computed section</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Your change touches ${
+                warnHeadings && warnHeadings.length > 1
+                  ? "computed sections"
+                  : "the computed section"
+              } ${(warnHeadings ?? [])
+                .map((heading) => `"${heading}"`)
+                .join(
+                  ", ",
+                )}. These bodies are regenerated from the capability set, so this edit will be overwritten the next time they recompute. Save anyway?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                setWarnHeadings(null);
+                void performSave();
+              }}
+            >
+              Save anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

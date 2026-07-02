@@ -4,6 +4,8 @@ import { EditorView } from "@codemirror/view";
 import { File, Loader2 } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import { languageForFile } from "../lib/codemirror-language.js";
+import { managedRegionExtension } from "../lib/managed-region-extension.js";
+import { managedHeadingsForFile } from "../lib/managed-sections.js";
 
 const blackEditorSurface = EditorView.theme({
   "&": { backgroundColor: "black" },
@@ -56,6 +58,7 @@ export function FileEditorPane({
 
   const fileName = openFile.split("/").pop() ?? openFile;
   const hasPendingChanges = value !== content;
+  const hasManagedSections = managedHeadingsForFile(openFile).length > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -111,6 +114,7 @@ export function FileEditorPane({
               ...languageForFile(openFile),
               EditorView.lineWrapping,
               blackEditorSurface,
+              ...(hasManagedSections ? [managedRegionExtension(openFile)] : []),
             ]}
             editable={!readOnly}
             style={{ fontSize: "12px", backgroundColor: "black" }}
