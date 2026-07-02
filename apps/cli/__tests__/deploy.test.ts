@@ -175,6 +175,10 @@ describe("buildRuntimeConfig (HCI test — stage-agnostic web bundle)", () => {
     expect(config.cognitoClientId).toBe("client123");
     expect(config.deploymentId).toBe("thinkwork-hci");
     expect(config.controller).toBeNull();
+    const viteEnv = config.viteEnv as Record<string, string>;
+    expect(viteEnv.VITE_COGNITO_CLIENT_ID).toBe("client123");
+    expect(viteEnv.VITE_GRAPHQL_WS_URL).toContain("appsync-realtime");
+    expect(viteEnv.VITE_STAGE).toBe("hci");
   });
 
   it("passes through already-https cognito domains and empty endpoints", () => {

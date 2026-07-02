@@ -636,6 +636,27 @@ export function buildRuntimeConfig(values: {
     cognitoClientId: values.adminClientId,
     controller: null,
     issuedAt: values.issuedAt,
+    // The web app consumes ONLY this map (runtime-config.ts reads
+    // raw.viteEnv) — the outer profile is for tooling. Omitting it kept the
+    // sign-in screen dead even with the file published (HCI test).
+    viteEnv: {
+      VITE_API_URL: values.apiEndpoint,
+      VITE_GRAPHQL_HTTP_URL: api ? `${api}/graphql` : "",
+      VITE_GRAPHQL_URL: values.appsyncUrl,
+      VITE_GRAPHQL_WS_URL: values.appsyncRealtimeUrl,
+      VITE_GRAPHQL_API_KEY: values.appsyncApiKey,
+      VITE_COGNITO_DOMAIN: cognitoDomain,
+      VITE_COGNITO_USER_POOL_ID: values.userPoolId,
+      VITE_COGNITO_CLIENT_ID: values.adminClientId,
+      VITE_DEPLOYMENT_ID: `thinkwork-${values.stage}`,
+      VITE_DEPLOYMENT_DISPLAY_NAME: "ThinkWork",
+      VITE_DEPLOYMENT_PROFILE_ISSUED_AT: values.issuedAt,
+      VITE_SPACES_URL: values.appUrl,
+      VITE_STAGE: values.stage,
+      VITE_AWS_REGION: values.region,
+      VITE_AWS_ACCOUNT_ID: values.accountId,
+      VITE_RELEASE_VERSION: values.releaseVersion ?? "",
+    },
   };
 }
 

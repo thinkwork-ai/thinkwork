@@ -192,15 +192,19 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
             }
             const parsed = (() => {
               try {
-                return JSON.parse(cfg.body) as { cognitoClientId?: string };
+                return JSON.parse(cfg.body) as {
+                  viteEnv?: { VITE_COGNITO_CLIENT_ID?: string };
+                };
               } catch {
                 return {};
               }
             })();
-            if (!parsed.cognitoClientId) {
+            // The app consumes ONLY viteEnv — an outer-profile check passed
+            // while sign-in stayed dead (HCI test).
+            if (!parsed.viteEnv?.VITE_COGNITO_CLIENT_ID) {
               return {
                 pass: false,
-                detail: `${url} runtime config has no cognitoClientId — sign-in would be unavailable.`,
+                detail: `${url} runtime config has no viteEnv.VITE_COGNITO_CLIENT_ID — sign-in would be unavailable.`,
               };
             }
           }
