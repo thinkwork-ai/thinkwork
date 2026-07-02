@@ -313,11 +313,23 @@ export interface LockInfo {
 export function parseLockError(text: string): LockInfo | null {
   if (!/Error acquiring the state lock/i.test(text)) return null;
   const field = (name: string): string | undefined => {
-    const match = text.match(new RegExp(`${name}:\\s*(.+)`, "i"));
-    return match?.[1]?.trim();
+    // Field names must not match inside longer words: a bare `ID:` pattern
+    // matches AWS's `RequestID:` line first, which sits ABOVE the Lock Info
+    // block — the suggested force-unlock then targets a DynamoDB request ID
+    // and silently releases nothing (harness cycle-7 ledger entry).
+    const match = text.match(
+      new RegExp(`(?:^|[^A-Za-z])${name}:\\s*(.+)`, "i"),
+    );
+    // Terraform renders the lock table inside │-boxed lines with trailing
+    // commas; strip the decoration or the suggested force-unlock command is
+    // copy-paste broken.
+    return match?.[1]?.replace(/[│,]/g, " ").trim();
   };
+  // Lock IDs are a single token — never spaces (guards against the regex
+  // over-capturing prose on the same line).
+  const rawId = field("ID");
   return {
-    id: field("ID"),
+    id: rawId?.split(/\s+/)[0],
     who: field("Who"),
     operation: field("Operation"),
     created: field("Created"),
