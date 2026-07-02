@@ -66,3 +66,82 @@ extend type Query {
     perspectiveUserId: ID
   ): CapabilityInspection!
 }
+
+# ── Grant/detach mutations (capability-mapping plan U7, KTD-5) ─────────────
+#
+# Every Phase B assignment action is a documented, matrix-conformant GraphQL
+# mutation — the Capabilities UI and the CLI are clients, never a second
+# write path. Matrix conformance (R2) is enforced HERE: class × scope cells
+# the matrix (docs/src/content/docs/concepts/capability-matrix.mdx) marks
+# unassignable are rejected with a MATRIX_VIOLATION error. Grant scopes are
+# agent and agent-profile only (R11); SPACE and USER exist in the enum so
+# the rejection is expressible, not because they are grantable.
+
+# Capability classes with a grant/detach surface. Built-in tools are
+# restrict-only (workspace TOOLS.md policy), plugins install through the
+# plugin mutations, and context/memory is filesystem-carried — none of those
+# route through these mutations.
+enum CapabilityGrantClass {
+  SKILL
+  MCP_SERVER
+  PI_EXTENSION
+}
+
+enum CapabilityGrantScope {
+  AGENT
+  AGENT_PROFILE
+  SPACE
+  USER
+}
+
+input GrantCapabilityInput {
+  tenantId: ID!
+  capabilityClass: CapabilityGrantClass!
+  scope: CapabilityGrantScope!
+  # AGENT scope: defaults to the tenant's platform agent when omitted.
+  agentId: ID
+  # Required for AGENT_PROFILE scope.
+  agentProfileId: ID
+  # SKILL: catalog slug · MCP_SERVER: tenant server id or slug ·
+  # PI_EXTENSION: extension version id.
+  capabilityRef: String!
+  # SKILL at agent scope: WIRING.md option id (defaults to the first).
+  wiringChoice: String
+  # MCP_SERVER at agent scope: per-server tool allowlist. Profile scope
+  # rejects it — the profile allowlist passes through from the agent-level
+  # server config (tool_policy.mcpServers carries slugs only).
+  toolAllowlist: [String!]
+  # PI_EXTENSION: granted permission classes (defaults to the version's
+  # requested classes, per the THINK-114 assignment contract).
+  grantedPermissions: [String!]
+}
+
+input DetachCapabilityInput {
+  tenantId: ID!
+  capabilityClass: CapabilityGrantClass!
+  scope: CapabilityGrantScope!
+  agentId: ID
+  agentProfileId: ID
+  capabilityRef: String!
+}
+
+type CapabilityMutationResult {
+  # applied | noop (idempotent re-grant / already-absent detach)
+  outcome: String!
+  # The touched item's FRESH inspector state (R12's substrate) — recomputed
+  # through the U3 inspector after the write, never assembled by hand. Null
+  # when the item no longer renders a row (e.g. a detached extension).
+  item: CapabilityItem
+  computedAt: AWSDateTime!
+  # Fingerprint of the post-mutation predicted set (null when the inspector
+  # could not recompute — surfaced via inspectionState).
+  configFingerprint: String
+  # ok | invalid_selection | resolution_fault — state of the post-write
+  # inspector recompute.
+  inspectionState: String!
+}
+
+extend type Mutation {
+  grantCapability(input: GrantCapabilityInput!): CapabilityMutationResult!
+  detachCapability(input: DetachCapabilityInput!): CapabilityMutationResult!
+}
