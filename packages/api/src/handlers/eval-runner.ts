@@ -198,7 +198,14 @@ export function evalWorkerMessageGroupIdForMessage(
 
   const safeShardCount = Math.max(1, Math.floor(shardCount));
   const shard = message.index % safeShardCount;
-  return `eval-agentcore:${run.agent_id ?? run.id}:${shard}`;
+  // Lanes are RUN-scoped (eval throughput fix): keying on agent_id made
+  // every concurrent run of the same agent (all baseline runs share the
+  // eval-baseline agent) fight over ONE set of FIFO lanes, serializing
+  // runs against each other. Total concurrency stays capped by the
+  // worker's event-source maximum_concurrency, so per-run lanes cannot
+  // stampede downstream capacity — they only stop cross-run head-of-line
+  // blocking.
+  return `eval-agentcore:${run.id}:${shard}`;
 }
 
 export function excludesComputerSurfaceByDefault(
