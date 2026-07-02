@@ -37,17 +37,14 @@
  * plugin-key prefixes cover Agent Skills compliant plugin folders when the
  * store is reachable.
  *
- * AGENTS.md routing finding (documented per U7): plugin skill routing
- * entries are NOT generated at render time. `installCatalogSkill` appends
- * the WIRING.md snippet ("… read skills/<slug>/SKILL.md and follow it")
- * to the agent workspace's CONTEXT.md at install time, and the runtime
- * activates skills by walking materialized `skills/<slug>/SKILL.md`
- * files. The render-time AGENTS.md composition only rewrites
- * the Active Space section and mentionable-workspace tables — it carries
- * no per-skill rows. The gate therefore filters (a) the skill FOLDERS
- * out of the hydrate manifest (which removes runtime activation), and
- * (b) the per-skill routing LINES out of CONTEXT.md via a generated,
- * per-thread-render replacement file.
+ * CONTEXT.md routing (Composer plan U5): per-skill routing rows are
+ * COMPUTED at render time into the generated CONTEXT.md `## Routing`
+ * managed section (`composeGeneratedContextMd` in
+ * workspace-renderer/managed-sections.ts) — install-time snippet appends
+ * are retired. The gate therefore filters (a) the skill FOLDERS out of
+ * the hydrate manifest (which removes runtime activation), and (b) the
+ * computed routing ROWS via `computeContextRoutingRows`, which applies
+ * `pluginGateExcludesWorkspacePath` fail-closed per requester.
  */
 
 import type {
@@ -257,34 +254,6 @@ export function pluginGateExcludesWorkspacePath(
   return gate.blockedSkillFolderPrefixes.some((prefix) =>
     relPath.startsWith(prefix),
   );
-}
-
-/** Matches `skills/<slug>/` references inside routing/markdown lines. */
-const SKILL_FOLDER_REFERENCE_RE = /skills\/([a-z0-9][a-z0-9-]*)\//g;
-
-/**
- * Filter per-skill routing entries out of CONTEXT.md for a gated
- * requester. Routing entries are the WIRING.md snippet lines appended by
- * `installCatalogSkill` (each references `skills/<slug>/…`); any line
- * referencing a gate-excluded skill folder is dropped. Lines referencing
- * non-plugin skills (or allowed plugin skills) pass through verbatim.
- */
-export function filterContextRoutingEntries(
-  content: string,
-  gate: PluginActivationGate,
-): { content: string; changed: boolean } {
-  if (!pluginGateHasExclusions(gate)) return { content, changed: false };
-  const lines = content.split("\n");
-  const kept = lines.filter((line) => {
-    for (const match of line.matchAll(SKILL_FOLDER_REFERENCE_RE)) {
-      if (pluginGateExcludesWorkspacePath(gate, `skills/${match[1]}/`)) {
-        return false;
-      }
-    }
-    return true;
-  });
-  if (kept.length === lines.length) return { content, changed: false };
-  return { content: kept.join("\n"), changed: true };
 }
 
 // ---------------------------------------------------------------------------

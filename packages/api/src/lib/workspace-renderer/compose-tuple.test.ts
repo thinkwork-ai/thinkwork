@@ -455,6 +455,7 @@ describe("renderWorkspaceTuple", () => {
     ]);
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.sources).toEqual([
@@ -588,6 +589,7 @@ describe("renderWorkspaceTuple", () => {
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
+      "tenants/acme/threads/thread-1/CONTEXT.md",
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -712,6 +714,7 @@ describe("renderWorkspaceTuple", () => {
     expect(readOnlyStore.puts).toEqual([]);
     expect(readOnly.generatedFiles?.map((file) => file.path)).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
     ]);
     expect(readOnly.generatedFiles?.[0]?.owner).toBe("agent");
 
@@ -742,6 +745,9 @@ describe("renderWorkspaceTuple", () => {
     const primedAgentsMd = store.puts.find((put) =>
       put.key.endsWith("/AGENTS.md"),
     )?.content;
+    const primedContextMd = store.puts.find((put) =>
+      put.key.endsWith("/CONTEXT.md"),
+    )?.content;
     const putsAfterPrime = store.puts.length;
 
     const hit = await renderWorkspaceTuple(
@@ -752,6 +758,7 @@ describe("renderWorkspaceTuple", () => {
     expect(store.puts.length).toBe(putsAfterPrime);
     expect(hit.generatedFiles).toEqual([
       { path: "AGENTS.md", owner: "agent", content: primedAgentsMd },
+      { path: "CONTEXT.md", owner: "agent", content: primedContextMd },
     ]);
   });
 
@@ -1211,6 +1218,7 @@ modelRouting:
     expect(result.cacheStatus).toBe("miss");
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);
     const manifestPut = store.puts.find((put) =>
@@ -1261,6 +1269,7 @@ modelRouting:
     expect(result.cacheStatus).toBe("miss");
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);
     const putKeys = store.puts.map((put) => put.key);
@@ -1270,6 +1279,7 @@ modelRouting:
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
+      "tenants/acme/threads/thread-1/CONTEXT.md",
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -1323,6 +1333,7 @@ modelRouting:
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
+      "tenants/acme/threads/thread-1/CONTEXT.md",
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -1429,6 +1440,7 @@ modelRouting:
     expect(result.renderedPrefix).toBe("tenants/acme/threads/thread-1/");
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.files).toEqual(

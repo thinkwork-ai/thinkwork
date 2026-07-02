@@ -1,16 +1,24 @@
 /**
- * compose-tuple plugin activation gating tests (plan 2026-06-12-001 U7).
+ * compose-tuple plugin activation gating tests (plan 2026-06-12-001 U7;
+ * computed CONTEXT.md Routing activation per Composer plan U5, KTD-9).
  *
  * Plugin-installed skills materialize as namespaced
  * `skills/<pluginKey>--<slug>/` folders in the agent workspace source;
- * the render must exclude those folders — and their CONTEXT.md routing
- * lines — from the hydrate manifest for requesters without an ACTIVE
- * activation, while leaving non-plugin skills untouched. No requester →
- * exclude ALL plugin folders (fail closed).
+ * the render must exclude those folders from the hydrate manifest for
+ * requesters without an ACTIVE activation, while leaving non-plugin
+ * skills untouched. No requester → exclude ALL plugin folders (fail
+ * closed).
+ *
+ * Since U5 the rendered CONTEXT.md is GENERATED on every render: its
+ * `## Routing` managed section is computed from the gate-filtered skill
+ * folders, so a gated requester's rendered CONTEXT.md omits blocked
+ * plugin-skill rows — the computed rows are the only gate enforcement
+ * (install-time snippet lines no longer exist).
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { renderWorkspaceTuple } from "./compose-tuple.js";
+import { getMarkdownSectionBody } from "./managed-sections.js";
 import {
   FAIL_CLOSED_PLUGIN_GATE,
   resolvePluginGate,
@@ -30,13 +38,9 @@ const TENANT = "tenant-1";
 const AGENT_PREFIX = "tenants/acme/agents/platform-agent/";
 const THREAD_PREFIX = "tenants/acme/threads/thread-1/";
 
-const CONTEXT_MD = [
-  "# Context",
-  "",
-  "- For tasks covered by the `lastmile--crm-basics` skill, read skills/lastmile--crm-basics/SKILL.md and follow it.",
-  "- For tasks covered by the `notes-helper` skill, read skills/notes-helper/SKILL.md and follow it.",
-  "",
-].join("\n");
+// Post-U5 source shape: operator prose only — routing rows are computed
+// into the generated file, never appended to source at install time.
+const CONTEXT_MD = "# Context\n\nOperator routing prose stays.\n";
 
 class FakeRepository implements WorkspaceTupleRepository {
   async resolve(
@@ -179,8 +183,12 @@ function filePaths(result: Awaited<ReturnType<typeof render>>): string[] {
   return result.hydrateManifest.files.map((file) => file.path).sort();
 }
 
+async function renderedContext(store: FakeStore): Promise<string> {
+  return (await store.getText({ key: `${THREAD_PREFIX}CONTEXT.md` }))!;
+}
+
 describe("renderWorkspaceTuple — plugin activation gating", () => {
-  it("an ACTIVATED requester gets plugin skill folders and untouched CONTEXT.md routing entries", async () => {
+  it("an ACTIVATED requester gets plugin skill folders and computed routing rows for both skills", async () => {
     const store = seededStore();
     const result = await render(
       store,
@@ -196,16 +204,22 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     const context = result.hydrateManifest.files.find(
       (file) => file.path === "CONTEXT.md",
     )!;
-    // CONTEXT.md hydrates straight from the agent source — not generated.
-    expect(context.sourceKey).toBe(`${AGENT_PREFIX}CONTEXT.md`);
-    expect(context.generated).toBeUndefined();
+    // CONTEXT.md is generated per render (computed Routing section, U5).
+    expect(context.generated).toBe(true);
+    expect(context.sourceKey).toBe(`${THREAD_PREFIX}CONTEXT.md`);
+    const generated = await renderedContext(store);
+    expect(generated.startsWith(CONTEXT_MD)).toBe(true);
+    const routing = getMarkdownSectionBody(generated, "Routing")!;
+    expect(routing).toContain("skills/lastmile--crm-basics/SKILL.md");
+    expect(routing).toContain("skills/notes-helper/SKILL.md");
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
+      "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);
   });
 
-  it("a NON-activated requester gets neither the plugin folders nor their routing entries; non-plugin skills unaffected", async () => {
+  it("a gated requester's rendered CONTEXT.md omits blocked plugin-skill rows (fail-closed); non-plugin skills unaffected", async () => {
     const store = seededStore();
     const result = await render(
       store,
@@ -222,12 +236,12 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     const context = result.hydrateManifest.files.find(
       (file) => file.path === "CONTEXT.md",
     )!;
-    // Routing entries are filtered via a generated per-thread CONTEXT.md.
     expect(context.generated).toBe(true);
     expect(context.sourceKey).toBe(`${THREAD_PREFIX}CONTEXT.md`);
-    const generatedContext = await store.getText({ key: context.sourceKey });
-    expect(generatedContext).not.toContain("lastmile--crm-basics");
-    expect(generatedContext).toContain("skills/notes-helper/SKILL.md");
+    const generated = await renderedContext(store);
+    expect(generated).not.toContain("lastmile--crm-basics");
+    expect(generated).toContain("skills/notes-helper/SKILL.md");
+    expect(generated.startsWith(CONTEXT_MD)).toBe(true);
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
@@ -235,7 +249,25 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     ]);
   });
 
-  it("read-only compose exposes the gated CONTEXT.md byte-identical to the persisting write (Composer U1)", async () => {
+  it("a disabled skill assignment carries no computed routing row", async () => {
+    const store = seededStore();
+    store.set(
+      `${AGENT_PREFIX}skills/notes-helper/.assignment.json`,
+      JSON.stringify({ slug: "notes-helper", enabled: false }),
+    );
+    await render(
+      store,
+      "user-activated",
+      gateFor({ "install-lastmile": true }),
+    );
+
+    const generated = await renderedContext(store);
+    const routing = getMarkdownSectionBody(generated, "Routing")!;
+    expect(routing).not.toContain("notes-helper");
+    expect(routing).toContain("skills/lastmile--crm-basics/SKILL.md");
+  });
+
+  it("read-only compose exposes the generated CONTEXT.md byte-identical to the persisting write (Composer U1)", async () => {
     const gate = gateFor({ "install-lastmile": true });
 
     const persistingStore = seededStore();
@@ -268,7 +300,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
       },
     );
 
-    // Purity: not a single put — the gated CONTEXT.md exists only in memory.
+    // Purity: not a single put — the generated CONTEXT.md exists only in memory.
     expect(readOnlyStore.puts).toEqual([]);
     const generatedContext = readOnly.generatedFiles?.find(
       (file) => file.path === "CONTEXT.md",
@@ -281,7 +313,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(generatedAgentsMd?.content).toBe(persistedAgentsMd?.content);
   });
 
-  it("NO resolvable requester excludes ALL plugin skill folders (fail closed)", async () => {
+  it("NO resolvable requester excludes ALL plugin skill folders and routing rows (fail closed)", async () => {
     const store = seededStore();
     const result = await render(
       store,
@@ -293,9 +325,12 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
       false,
     );
     expect(paths).toContain("skills/notes-helper/SKILL.md");
+    const generated = await renderedContext(store);
+    expect(generated).not.toContain("lastmile--crm-basics");
+    expect(generated).toContain("skills/notes-helper/SKILL.md");
   });
 
-  it("a degraded fail-closed gate (resolution error) pattern-excludes namespaced folders, never fails open", async () => {
+  it("a degraded fail-closed gate (resolution error) pattern-excludes namespaced folders and rows, never fails open", async () => {
     const store = seededStore();
     const result = await render(store, "user-activated", async () => {
       return FAIL_CLOSED_PLUGIN_GATE;
@@ -305,6 +340,8 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
       false,
     );
     expect(paths).toContain("skills/notes-helper/SKILL.md");
+    const generated = await renderedContext(store);
+    expect(generated).not.toContain("lastmile--crm-basics");
   });
 
   it("the gate resolver is NOT consulted when the agent source has no plugin-namespaced folders", async () => {
@@ -315,6 +352,11 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     const resolver = vi.fn();
     await render(store, "user-activated", resolver);
     expect(resolver).not.toHaveBeenCalled();
+    // The computed Routing section still renders for non-plugin skills.
+    const generated = await renderedContext(store);
+    expect(getMarkdownSectionBody(generated, "Routing")).toContain(
+      "skills/notes-helper/SKILL.md",
+    );
   });
 
   it("CACHE REGRESSION: a manifest cached for an activated requester never serves a cache hit to a gated requester (no superset fail-open)", async () => {
@@ -341,6 +383,9 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(
       persisted.files.some((file) => file.path.startsWith("skills/lastmile--")),
     ).toBe(false);
+    // The persisted generated CONTEXT.md matches the gated view too.
+    const generated = await renderedContext(store);
+    expect(generated).not.toContain("lastmile--crm-basics");
   });
 
   it("a repeat render for the SAME gated requester is a cache hit with the gated manifest", async () => {
@@ -357,7 +402,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     ).toBe(false);
   });
 
-  it("an activation flip between renders re-renders and restores the plugin folders", async () => {
+  it("an activation flip between renders re-renders and restores the plugin folders and routing rows", async () => {
     const store = seededStore();
 
     const blocked = await render(
@@ -368,6 +413,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(
       filePaths(blocked).some((path) => path.startsWith("skills/lastmile--")),
     ).toBe(false);
+    expect(await renderedContext(store)).not.toContain("lastmile--crm-basics");
 
     const allowed = await render(
       store,
@@ -378,10 +424,9 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(filePaths(allowed)).toContain(
       "skills/lastmile--crm-basics/SKILL.md",
     );
-    const context = allowed.hydrateManifest.files.find(
-      (file) => file.path === "CONTEXT.md",
-    )!;
-    expect(context.sourceKey).toBe(`${AGENT_PREFIX}CONTEXT.md`);
+    expect(await renderedContext(store)).toContain(
+      "skills/lastmile--crm-basics/SKILL.md",
+    );
   });
 
   it("INTEGRATION SHAPE: the rendered file set diverges from the gate report nowhere", async () => {

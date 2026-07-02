@@ -56,12 +56,6 @@ function body(content: string) {
   };
 }
 
-function noSuchKey() {
-  const err = new Error("NoSuchKey");
-  err.name = "NoSuchKey";
-  return err;
-}
-
 function mockCatalogSkill(): void {
   s3Mock
     .on(ListObjectsV2Command, {
@@ -115,19 +109,34 @@ function installOptions() {
   };
 }
 
+/** Composer plan U5 (R8): install NEVER reads or writes CONTEXT.md. */
+function expectContextMdUntouched(): void {
+  expect(
+    s3Mock
+      .commandCalls(GetObjectCommand)
+      .some(
+        (call) =>
+          call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+      ),
+  ).toBe(false);
+  expect(
+    s3Mock
+      .commandCalls(PutObjectCommand)
+      .some(
+        (call) =>
+          call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+      ),
+  ).toBe(false);
+}
+
 describe("installCatalogSkill", () => {
-  it("copies catalog files, writes a catalog ref, and appends CONTEXT.md", async () => {
+  it("copies catalog files and writes a catalog ref — CONTEXT.md is left untouched (U5)", async () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
         Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).resolves({});
     s3Mock.on(PutObjectCommand).resolves({});
 
@@ -135,7 +144,6 @@ describe("installCatalogSkill", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      context_md_changed_path: "CONTEXT.md",
       installed_paths: [
         "skills/finance-audit-xls/.catalog-ref.json",
         "skills/finance-audit-xls/SKILL.md",
@@ -165,12 +173,12 @@ describe("installCatalogSkill", () => {
     ]);
 
     const puts = s3Mock.commandCalls(PutObjectCommand);
+    // The only put is the catalog ref — the wiring snippet stays recorded
+    // there (it carries the wiring choice and powers the legacy-snippet
+    // migration), but is never appended to CONTEXT.md.
+    expect(puts).toHaveLength(1);
     const refPut = puts.find((call) =>
       String(call.args[0].input.Key).endsWith(".catalog-ref.json"),
-    );
-    const contextPut = puts.find(
-      (call) =>
-        call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
     );
     expect(JSON.parse(String(refPut?.args[0].input.Body))).toMatchObject({
       slug: "finance-audit-xls",
@@ -178,10 +186,7 @@ describe("installCatalogSkill", () => {
       wiring_choice: "stage-3-gate",
       snippet: "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
     });
-    expect(String(contextPut?.args[0].input.Body)).toBe(`# Context
-
-| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |
-`);
+    expectContextMdUntouched();
   });
 
   it("rejects re-install when the skill folder already exists", async () => {
@@ -222,47 +227,13 @@ describe("installCatalogSkill", () => {
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("creates CONTEXT.md when it is missing", async () => {
+  it("rolls back copied files when the catalog-ref write fails — CONTEXT.md untouched", async () => {
     mockCatalogSkill();
     s3Mock
       .on(ListObjectsV2Command, {
         Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .rejects(noSuchKey());
-    s3Mock.on(CopyObjectCommand).resolves({});
-    s3Mock.on(PutObjectCommand).resolves({});
-
-    const result = await installCatalogSkill(installOptions());
-
-    expect(result.context_md_changed_path).toBe("CONTEXT.md");
-    const contextPut = s3Mock
-      .commandCalls(PutObjectCommand)
-      .find(
-        (call) =>
-          call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
-      );
-    expect(String(contextPut?.args[0].input.Body)).toBe(
-      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
-    );
-  });
-
-  it("rolls back copied files when a later write fails", async () => {
-    mockCatalogSkill();
-    s3Mock
-      .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
-      })
-      .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).resolves({});
     s3Mock
       .on(PutObjectCommand, {
@@ -294,6 +265,7 @@ describe("installCatalogSkill", () => {
         Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
       }),
     ]);
+    expectContextMdUntouched();
   });
 
   it("rolls back only copied files when a mid-copy failure happens", async () => {
@@ -303,11 +275,6 @@ describe("installCatalogSkill", () => {
         Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
       .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .resolves(body("# Context\n"));
     s3Mock.on(CopyObjectCommand).callsFake((input) => {
       if (String(input.Key).endsWith("/WIRING.md")) {
         throw new Error("copy failed");
@@ -330,50 +297,6 @@ describe("installCatalogSkill", () => {
         Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       }),
     ]);
-    expect(
-      s3Mock
-        .commandCalls(PutObjectCommand)
-        .some(
-          (call) =>
-            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
-        ),
-    ).toBe(false);
-  });
-
-  it("does not try to restore CONTEXT.md when its final write fails", async () => {
-    mockCatalogSkill();
-    s3Mock
-      .on(ListObjectsV2Command, {
-        Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
-      })
-      .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .rejects(noSuchKey());
-    s3Mock.on(CopyObjectCommand).resolves({});
-    s3Mock.on(PutObjectCommand).callsFake((input) => {
-      if (input.Key === "tenants/acme/agents/marco/CONTEXT.md") {
-        throw new Error("context put failed");
-      }
-      return {};
-    });
-    s3Mock.on(DeleteObjectCommand).resolves({});
-
-    await expect(installCatalogSkill(installOptions())).rejects.toMatchObject({
-      status: 500,
-      code: "install_failed",
-      message: expect.stringContaining("context put failed"),
-    } satisfies Partial<CatalogInstallError>);
-    expect(
-      s3Mock
-        .commandCalls(DeleteObjectCommand)
-        .map((call) => call.args[0].input),
-    ).not.toContainEqual(
-      expect.objectContaining({
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      }),
-    );
+    expectContextMdUntouched();
   });
 });

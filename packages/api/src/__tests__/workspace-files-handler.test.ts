@@ -3623,15 +3623,16 @@ describe("agent install-skill action", () => {
         Key: "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
       }),
     ]);
-    const contextPut = s3Mock
-      .commandCalls(PutObjectCommand)
-      .find(
-        (call) =>
-          call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
-      );
-    expect(String(contextPut?.args[0].input.Body)).toContain(
-      "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |",
-    );
+    // Composer U5 (R8): install leaves CONTEXT.md untouched — routing rows
+    // are computed into the rendered CONTEXT.md at render time.
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .some(
+          (call) =>
+            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+        ),
+    ).toBe(false);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
@@ -3786,8 +3787,6 @@ describe("agent uninstall-skill action", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({
       ok: true,
-      context_md_strip: "removed",
-      context_md_changed_path: "CONTEXT.md",
       deleted_paths: [
         "skills/finance-audit-xls/.catalog-ref.json",
         "skills/finance-audit-xls/SKILL.md",
@@ -3803,6 +3802,15 @@ describe("agent uninstall-skill action", () => {
       "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
     ]);
+    // Composer U5 (R8): uninstall leaves CONTEXT.md untouched.
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .some(
+          (call) =>
+            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+        ),
+    ).toBe(false);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
   });
 
@@ -3836,7 +3844,7 @@ describe("agent uninstall-skill action", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.context_md_strip).toBe("removed");
+    expect(res.body.ok).toBe(true);
     expect(
       s3Mock
         .commandCalls(DeleteObjectCommand)

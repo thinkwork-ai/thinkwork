@@ -102,13 +102,11 @@ function deps(
     install: vi.fn(async () => ({
       ok: true as const,
       installed_paths: [],
-      context_md_changed_path: "CONTEXT.md" as const,
       source_sha256: "a".repeat(64),
     })),
     uninstall: vi.fn(async () => ({
       ok: true as const,
       deleted_paths: [],
-      context_md_strip: "removed" as const,
     })),
     reindex: vi.fn(async () => ({ slug: "x", action: "upserted" as const })),
     regenerate: vi.fn(async () => undefined),
@@ -241,7 +239,6 @@ describe("provisionPluginSkillsComponent", () => {
         return {
           ok: true as const,
           installed_paths: [],
-          context_md_changed_path: "CONTEXT.md" as const,
           source_sha256: "a".repeat(64),
           eval_cases: [],
         };

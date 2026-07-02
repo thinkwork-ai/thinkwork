@@ -265,7 +265,6 @@ beforeEach(() => {
   mockUninstallCatalogSkill.mockResolvedValue({
     ok: true,
     deleted_paths: ["skills/expenses/SKILL.md"],
-    context_md_strip: "removed",
   });
   mockRegenerateManifest.mockResolvedValue(undefined);
   mockParseWiringMd.mockReturnValue({ suggestions: [{ id: "default" }] });
@@ -487,7 +486,6 @@ describe("skill @ agent (catalog install)", () => {
     mockUninstallCatalogSkill.mockResolvedValue({
       ok: true,
       deleted_paths: [],
-      context_md_strip: "catalog_ref_missing",
     });
     const second = await detachCapability(
       null,

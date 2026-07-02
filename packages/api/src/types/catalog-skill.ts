@@ -11,9 +11,10 @@
  *   references/...
  *
  * Installing a catalog skill copies that package into a workspace scope at
- * skills/<slug>/ and writes skills/<slug>/.catalog-ref.json. The ref stores the
- * exact CONTEXT.md snippet that was appended so uninstall can remove it by
- * byte-for-byte match instead of guessing from the slug.
+ * skills/<slug>/ and writes skills/<slug>/.catalog-ref.json. The ref records
+ * the selected wiring snippet verbatim; since Composer plan U5 the snippet is
+ * never appended to CONTEXT.md (routing rows are computed at render time) —
+ * the stored copy powers the legacy-snippet migration's byte-for-byte strip.
  */
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;

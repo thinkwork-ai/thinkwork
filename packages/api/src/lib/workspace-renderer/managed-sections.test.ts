@@ -6,9 +6,9 @@
  * sections, KTD-8), the fail-closed plugin gate on computed CONTEXT.md
  * Routing rows, immediate attach/detach reflection, round-trips of
  * prose-only and sections-only files, and legacy agents without a root
- * CONTEXT.md. The computed Routing section is INERT in the live render
- * until U5 (KTD-9) — `composeGeneratedContextMd` stays byte-identical to
- * the legacy snippet-line filter, characterized here.
+ * CONTEXT.md. Since U5 (KTD-9) the computed Routing section IS the live
+ * render seam — `composeGeneratedContextMd` composes the managed
+ * sections; the legacy snippet-line filter is retired.
  */
 
 import { describe, expect, it } from "vitest";
@@ -31,7 +31,6 @@ import { composeAgentsMdWithRouting } from "./agents-md-composer.js";
 import {
   EMPTY_PLUGIN_GATE,
   FAIL_CLOSED_PLUGIN_GATE,
-  filterContextRoutingEntries,
   type PluginActivationGate,
 } from "../plugins/gating.js";
 
@@ -370,35 +369,48 @@ describe("composeContextMdManagedSections (engine — INERT in live render until
   });
 });
 
-describe("composeGeneratedContextMd — live render seam (KTD-9 characterization)", () => {
-  const CONTEXT_MD = [
-    "# Context",
-    "",
-    "- For tasks covered by the `lastmile--crm-basics` skill, read skills/lastmile--crm-basics/SKILL.md and follow it.",
-    "- For tasks covered by the `notes-helper` skill, read skills/notes-helper/SKILL.md and follow it.",
-    "",
-  ].join("\n");
+describe("composeGeneratedContextMd — live render seam (ACTIVE since U5)", () => {
+  const SKILLS = [
+    { slug: "notes-helper" },
+    {
+      slug: "lastmile--crm-basics",
+      skillFolderPath: "skills/lastmile--crm-basics/",
+    },
+  ] as const;
 
-  it("is byte-identical to the legacy snippet-line filter (zero rendered-output change in U4)", () => {
+  it("composes the managed sections engine — identical bytes to composeContextMdManagedSections", () => {
+    const baseline = "# Context\n\nOperator prose stays.\n";
     for (const pluginGate of [
       EMPTY_PLUGIN_GATE,
       FAIL_CLOSED_PLUGIN_GATE,
       gateBlocking(["skills/lastmile--", "skills/lastmile-"]),
     ]) {
       expect(
-        composeGeneratedContextMd({ baseline: CONTEXT_MD, pluginGate }),
-      ).toEqual(filterContextRoutingEntries(CONTEXT_MD, pluginGate));
+        composeGeneratedContextMd({
+          baseline,
+          skills: [...SKILLS],
+          pluginGate,
+        }),
+      ).toBe(
+        composeContextMdManagedSections({
+          baseline,
+          skills: [...SKILLS],
+          pluginGate,
+        }),
+      );
     }
   });
 
-  it("drops a gated requester's excluded plugin routing line and keeps the rest verbatim", () => {
-    const result = composeGeneratedContextMd({
-      baseline: CONTEXT_MD,
+  it("a gated requester's rendered CONTEXT.md omits blocked plugin-skill rows (fail-closed) and keeps prose verbatim", () => {
+    const baseline = "# Context\n\nOperator prose stays.\n";
+    const output = composeGeneratedContextMd({
+      baseline,
+      skills: [...SKILLS],
       pluginGate: gateBlocking(["skills/lastmile--", "skills/lastmile-"]),
     });
-    expect(result.changed).toBe(true);
-    expect(result.content).not.toContain("lastmile--crm-basics");
-    expect(result.content).toContain(
+    expect(output.startsWith(baseline)).toBe(true);
+    expect(output).not.toContain("lastmile--crm-basics");
+    expect(getMarkdownSectionBody(output, "Routing")).toContain(
       "- For tasks covered by the `notes-helper` skill, read skills/notes-helper/SKILL.md and follow it.",
     );
   });

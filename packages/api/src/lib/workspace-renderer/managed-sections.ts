@@ -31,19 +31,18 @@
  * into the per-tuple generated file — the map path writes
  * perspective-neutral bodies and never bakes gate state into source.
  *
- * KTD-9 (inert in U4): the computed CONTEXT.md `## Routing` section —
- * `computeContextRoutingRows` / `composeContextMdManagedSections` — is
- * NOT wired into the live render output in this unit. The live render
- * seam (`composeGeneratedContextMd`) still delegates to the legacy
- * install-snippet line filter so rendered CONTEXT.md bytes are unchanged
- * for existing tenants. U5 activates the computed section in the same
- * deploy that retires install-time snippet appends, so no render ever
- * carries both legacy snippet lines and computed rows.
+ * KTD-9 (ACTIVE since U5): the computed CONTEXT.md `## Routing` section —
+ * `computeContextRoutingRows` / `composeContextMdManagedSections` — IS the
+ * live render output. U5 activated it in the same deploy that retired
+ * install-time snippet appends (catalog-install no longer touches
+ * CONTEXT.md; the one-shot snippet migration strips legacy appends), so
+ * no render carries both legacy snippet lines and computed rows. The
+ * computed rows are the ONLY plugin-gate enforcement for CONTEXT.md
+ * routing.
  */
 
 import {
   EMPTY_PLUGIN_GATE,
-  filterContextRoutingEntries,
   pluginGateExcludesWorkspacePath,
   type PluginActivationGate,
 } from "../plugins/gating.js";
@@ -341,11 +340,6 @@ export interface ComposeContextMdManagedSectionsInput {
  * Compose CONTEXT.md with its computed `## Routing` managed section.
  * Operator prose outside the Routing section survives byte-for-byte; an
  * absent heading is appended in canonical order.
- *
- * INERT in U4 (KTD-9): exercised by tests only. U5 wires this into the
- * live render seam (`composeGeneratedContextMd`) in the same deploy that
- * retires install-time snippet appends — at which point these computed
- * rows become the ONLY plugin-gate enforcement for CONTEXT.md routing.
  */
 export function composeContextMdManagedSections(
   input: ComposeContextMdManagedSectionsInput,
@@ -369,16 +363,16 @@ export function composeContextMdManagedSections(
 // ---------------------------------------------------------------------------
 
 /**
- * The render path's generated-CONTEXT.md producer (`compose-tuple.ts`
- * `gatedContextFile`). In U4 this delegates to the legacy snippet-line
- * filter so rendered CONTEXT.md is byte-identical for existing tenants
- * (KTD-9 characterization gate). U5 replaces the body of this function
- * with `composeContextMdManagedSections` when it activates the computed
- * Routing section and strips legacy snippets in one deploy.
+ * The render path's generated-CONTEXT.md producer (`compose-tuple.ts`).
+ * ACTIVE since U5 (KTD-9): composes the source CONTEXT.md with the
+ * per-requester computed `## Routing` section. The legacy install-snippet
+ * line filter (`filterContextRoutingEntries`) is retired — with install-
+ * time snippet appends gone there are no snippet lines to filter, and
+ * these computed rows are the only plugin-gate enforcement for CONTEXT.md
+ * routing (fail-closed via `computeContextRoutingRows`).
  */
-export function composeGeneratedContextMd(input: {
-  baseline: string;
-  pluginGate: PluginActivationGate;
-}): { content: string; changed: boolean } {
-  return filterContextRoutingEntries(input.baseline, input.pluginGate);
+export function composeGeneratedContextMd(
+  input: ComposeContextMdManagedSectionsInput,
+): string {
+  return composeContextMdManagedSections(input);
 }
