@@ -1,0 +1,78 @@
+---
+title: Capability Mapping Matrix
+description: "The canonical contract for agent capabilities: capability class × assignment layer × injection destination. A combination absent from this matrix is not offered anywhere in the product."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The capability mapping matrix is the product's single contract for **"what does the agent get, and from where."** Every capability class (skills, built-in tools, MCP servers, Pi extensions, plugins, context/memory) crossed with every assignment layer (default agent, Agent Profile, Space, user) has exactly one answer here: assignable or not, with which verb, landing in which injection destination.
+
+<Aside type="caution" title="This matrix is a reviewed contract">
+  A class/layer combination not in this matrix is not offered anywhere in the
+  product — no assignment UI, API, or runtime path may implement one. Changes to
+  capability wiring must update this document in the same pull request (or carry
+  an explicit `matrix-no-change:` marker naming the cells reviewed); the
+  `capability-matrix` CI check enforces this.
+</Aside>
+
+## The two verbs: grant vs shape
+
+- The **default agent** and **Agent Profiles** _grant_ reach — skills, MCP servers, extensions, built-in tools.
+- **Spaces** and **users** _shape_ behavior without granting reach: a Space carries context, skills, and restrictive overrides (blocked tools, model/budget/guardrails); a user carries identity, memory, and self-serve connections (OAuth, plugin activations) and is never directly assigned capabilities.
+
+## The matrix
+
+| Class                   | Agent (default)                                 | Agent Profile                                                           | Space                                                     | User                                                              |
+| ----------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- |
+| Skills                  | Grant — catalog install / workspace folder      | Grant — `skill_policy.skillSlugs` subset                                | Carry — space `skills/` folder; same-slug overrides agent | Never assigned — plugin activation gates visibility per user      |
+| Built-in tools          | On by default; restrictable via `blocked_tools` | Grant — subset via `tool_policy.builtInTools`                           | Restrict only — blocked tools                             | Never                                                             |
+| MCP servers             | Grant — registry row + enablement               | Grant — subset via `tool_policy.mcpServers` + per-server tool allowlist | Restrict only — blocked/allowed servers                   | Self-serve auth only — per-user OAuth tokens                      |
+| Pi extensions (bundled) | Platform-wired — capability flags               | Never                                                                   | Never                                                     | Never                                                             |
+| Pi extensions (dynamic) | Grant — assignment with target `default_agent`  | Grant — assignment with target `agent_profile`                          | Never                                                     | Never                                                             |
+| Plugins (apps)          | Install — tenant-wide                           | Never                                                                   | Never                                                     | Activate per-user — OAuth; activation gates plugin skills/servers |
+| Context / memory        | Carry — agent workspace root                    | Carry — profile instructions                                            | Carry — Space folder (SPACE.md, files)                    | Carry — `users/<slug>/` (USER.md, memory)                         |
+
+## Injection destinations
+
+Where each assignable cell actually lands at agent startup — the rendered per-thread filesystem and the injected runtime config:
+
+| Class                   | Injection destination                                                                                                                            | Gating applied on the way in                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Skills                  | Rendered workspace `skills/<slug>/` folders + CONTEXT.md routing lines; runtime `skillsConfig`                                                   | Trust gate (current passed trust report), agent `blocked_tools` filter, plugin activation gate (per requester)                                                  |
+| Built-in tools          | Runtime `skillsConfig` env overlays + tool allowlist in the agent session                                                                        | Template opt-in + tenant credential row + `blocked_tools`                                                                                                       |
+| MCP servers             | `mcp_configs` in the invoke payload → runtime MCP tools                                                                                          | Approved + enabled registry row; per-user OAuth resolution (fail closed for plugin servers with no requester); TOOLS.md policy filter                           |
+| Pi extensions (bundled) | Extension factories + tool-allowlist fold in the container                                                                                       | Capability flags                                                                                                                                                |
+| Pi extensions (dynamic) | `pi_extensions` in the invoke payload → proxy loader                                                                                             | Approved version + verification report + artifact integrity; container permission gate (`missing_granted_provider` / `unavailable_provider`); runner enablement |
+| Plugins (apps)          | Plugin-projected MCP rows + namespaced `skills/<key>--<slug>/` folders                                                                           | Per-user activation gate (fail closed with no requester)                                                                                                        |
+| Context / memory        | Rendered per-thread workspace mounts: agent → root, space → `Spaces/<slug>/`, user → `User/`, participants → `Users/<slug>/`, thread → `Thread/` | Space access mode (membership check); renderable-path filters                                                                                                   |
+
+## Precedence and merge semantics
+
+These are the current rules, documented — not new behavior:
+
+- **Blocked tools:** union across layers (agent ∪ space).
+- **Allowed tools:** intersection across layers.
+- **Blocked wins over allowed.**
+- **Same-slug skills:** a Space skill overrides an agent skill with the same slug.
+- **Model routing:** precedence order agent (10) → space (20) → active workspace (30) → user (40); higher precedence overwrites per key.
+- **Agent Profiles:** a space-local profile (projected from a Space source's `agents/` folder) shadows a central profile with the same slug while its Space is active.
+
+## Cell vocabulary
+
+Every matrix cell begins with one of the canonical verbs, enforced by `scripts/check-capability-matrix.mjs`:
+
+| Verb             | Meaning                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| `Grant`          | This layer can attach the capability, extending agent reach        |
+| `Carry`          | This layer contributes content/behavior without granting new reach |
+| `Restrict`       | This layer can only narrow what other layers granted               |
+| `Never`          | Not assignable at this layer, by product decision                  |
+| `On`             | Enabled by default at this layer (restrictable)                    |
+| `Install`        | Tenant-wide installation act (operator)                            |
+| `Activate`       | Per-user activation act (self-serve)                               |
+| `Self-serve`     | User-owned connection/auth only, no capability grant               |
+| `Platform-wired` | Wired by platform capability flags, not operator-assignable        |
+
+## Verifying against reality
+
+The [capability inspector](/concepts/agents/) renders the effective merged capability set for any agent × Space × profile × user selection, computed through the runtime's own composer — and per-turn capability manifests record what the runtime actually loaded. Divergence between this matrix, the inspector, and the manifests is a defect: report it against the cell it violates.
