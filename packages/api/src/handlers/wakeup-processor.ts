@@ -958,7 +958,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       if (bt.toolSlug === "web-search" && !templateWebSearchEnabled) {
         continue;
       }
-      // If a hand-installed agent_skills row already provided this tool,
+      // If a workspace-installed skill already provided this tool,
       // overlay our env overrides onto it so the provider + key still win.
       const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
       if (existing) {

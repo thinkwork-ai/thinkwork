@@ -32,7 +32,6 @@ import {
   Copy,
   Check,
   User,
-  Zap,
   ArrowUpCircle,
   Bot,
   BarChart3,
@@ -298,12 +297,8 @@ export function AgentDetailContent({
   const agentDetail = agentDetailData?.agent ?? undefined;
   // TODO: listRuntimeModels action not yet available via GraphQL
   const [modelCatalog, setModelCatalog] = useState<any[] | null>(null);
-  // TODO: agentBudgets, githubApp, agentSkills, getToken, teamReleases, getMyTeamRole not yet available via GraphQL
+  // TODO: agentBudgets, githubApp, getToken, teamReleases, getMyTeamRole not yet available via GraphQL
   const budgetStatus: any = undefined;
-  const agentSkillsQuery: any[] | undefined = undefined;
-  const installedSkillCount = agentSkillsQuery?.length ?? 0;
-  const skillsLoading = agentSkillsQuery === undefined;
-  const skillsError: string | null = null;
   const canEdit = (agentDetail as any)?.capabilities?.canEdit !== false;
   const gatewayToken: any = undefined;
   const agentInstanceId =
@@ -660,33 +655,6 @@ export function AgentDetailContent({
               }
             />
           </Pressable>
-
-          {/* Skills — full row tappable */}
-          {gateway.baseUrl && (
-            <Pressable onPress={() => router.push(`/agents/${id}/skills`)}>
-              <InfoRow
-                label="Skills"
-                labelIcon={<Zap size={16} color="#0ea5e9" />}
-                valueComponent={
-                  <View className="flex-row items-center gap-2">
-                    {skillsLoading ? (
-                      <ActivityIndicator size="small" color="#737373" />
-                    ) : (
-                      <View className="bg-neutral-200 dark:bg-neutral-700 rounded-full px-2 py-0.5 min-w-[24px] items-center">
-                        <Text className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                          {skillsError ? "!" : installedSkillCount}
-                        </Text>
-                      </View>
-                    )}
-                    {skillsError ? (
-                      <Text className="text-xs text-red-500">Read error</Text>
-                    ) : null}
-                    <ChevronRight size={20} color="#a3a3a3" />
-                  </View>
-                }
-              />
-            </Pressable>
-          )}
 
           {/* Files — full row tappable */}
           {gateway.baseUrl && (

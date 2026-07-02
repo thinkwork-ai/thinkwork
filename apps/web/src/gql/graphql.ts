@@ -206,7 +206,6 @@ export type Agent = {
   runtimeConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
   sandbox?: Maybe<Scalars["AWSJSON"]["output"]>;
   sendEmail?: Maybe<Scalars["AWSJSON"]["output"]>;
-  skills: Array<AgentSkill>;
   slug?: Maybe<Scalars["String"]["output"]>;
   source?: Maybe<Scalars["String"]["output"]>;
   status: AgentStatus;
@@ -608,29 +607,6 @@ export type AgentProfileSpaceAssignment = {
 export enum AgentRuntime {
   Flue = "FLUE",
 }
-
-export type AgentSkill = {
-  __typename?: "AgentSkill";
-  agentId: Scalars["ID"]["output"];
-  config?: Maybe<Scalars["AWSJSON"]["output"]>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  modelOverride?: Maybe<Scalars["String"]["output"]>;
-  permissions?: Maybe<Scalars["AWSJSON"]["output"]>;
-  rateLimitRpm?: Maybe<Scalars["Int"]["output"]>;
-  skillId: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-};
-
-export type AgentSkillInput = {
-  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
-  modelOverride?: InputMaybe<Scalars["String"]["input"]>;
-  permissions?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  rateLimitRpm?: InputMaybe<Scalars["Int"]["input"]>;
-  skillId: Scalars["String"]["input"];
-};
 
 export enum AgentStatus {
   Busy = "BUSY",
