@@ -25,6 +25,7 @@ import {
   computeEvalCaseSha,
   createEvalDataset,
   createS3DatasetStorage,
+  evalCaseExecutionTier,
   evalCaseQualityState,
   evalDatasetCaseKey,
   evalDatasetCasePayloadKey,
@@ -929,5 +930,29 @@ describe("createS3DatasetStorage", () => {
       "tenants/acme/eval-datasets/ds/cases/a.json",
       "tenants/acme/eval-datasets/ds/cases/b.json",
     ]);
+  });
+});
+
+describe("execution tier round-trip (Eval Execution Tiers v1)", () => {
+  it("preserves execution_tier only when present; unrecognized values drop to agent", () => {
+    const plain = parseEvalDatasetCase(
+      serializeEvalDatasetCase(makeCase(), null),
+    );
+    expect(plain.core).not.toHaveProperty("execution_tier");
+    expect(evalCaseExecutionTier(plain.core)).toBe("agent");
+
+    const model = parseEvalDatasetCase(
+      serializeEvalDatasetCase(
+        { ...makeCase(), execution_tier: "model" },
+        null,
+      ),
+    );
+    expect(model.core.execution_tier).toBe("model");
+    expect(evalCaseExecutionTier(model.core)).toBe("model");
+
+    const invalid = parseEvalDatasetCase(
+      JSON.stringify({ ...makeCase(), execution_tier: "quantum" }),
+    );
+    expect(evalCaseExecutionTier(invalid.core)).toBe("agent");
   });
 });

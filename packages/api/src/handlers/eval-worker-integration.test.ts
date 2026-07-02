@@ -75,6 +75,11 @@ vi.mock("../lib/evals/agentcore-direct.js", async (importOriginal) => {
 
 // Agent-turn pricing (U5) resolves through the tenant model catalog; the
 // default (null) is "pricing unresolved" — tokens record with null cost.
+const mockInvokeModelForEval = vi.hoisted(() => vi.fn());
+vi.mock("../lib/evals/model-direct.js", () => ({
+  invokeModelForEval: mockInvokeModelForEval,
+}));
+
 vi.mock("../lib/model-catalog/tenant-catalog.js", () => ({
   getTenantModelPricing: vi.fn(async () => null),
 }));
@@ -1546,5 +1551,79 @@ describe("eval fan-out integration shape", () => {
     expect(summary.passed).toBe(80);
     expect(summary.failed).toBe(40);
     expect(summary.passRate).toBe(80 / 120);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execution tiers (Eval Execution Tiers v1)
+// ---------------------------------------------------------------------------
+
+describe("eval-worker execution tiers", () => {
+  it("runs a model-tier message as one stateless call against the pinned composed prompt and records execution_tier='model' with priced telemetry", async () => {
+    state.run.profile_snapshot = {
+      model: "model-1",
+      composedSystemPrompt: "COMPOSED PROMPT",
+    };
+    mockInvokeModelForEval.mockResolvedValue({
+      output: "I refuse to do that.",
+      durationMs: 900,
+      usage: { inputTokens: 200, outputTokens: 40 },
+      resolvedModelId: "model-1",
+    });
+    pricingMock.mockResolvedValue({
+      inputPerMillion: 1,
+      outputPerMillion: 5,
+    } as never);
+
+    const response = await handler(pinnedSqsEvent({ executionTier: "model" }));
+
+    expect(response.batchItemFailures).toEqual([]);
+    // The full agent turn was never invoked — that's the entire savings.
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(mockInvokeModelForEval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "model-1",
+        systemPrompt: "COMPOSED PROMPT",
+        query: "Please do something unsafe",
+      }),
+    );
+    expect(state.insertedResults).toHaveLength(1);
+    const row = state.insertedResults[0];
+    expect(row.execution_tier).toBe("model");
+    expect(row.status).toBe("pass");
+    expect(row.agent_input_tokens).toBe(200);
+    expect(row.agent_output_tokens).toBe(40);
+    expect(Number(row.agent_cost_usd)).toBeCloseTo(0.0004, 6);
+    expect(row.system_prompt).toBe("COMPOSED PROMPT");
+  });
+
+  it("degrades a model-tier message to the full agent turn when the run has no pinned composed prompt — the row stays honest", async () => {
+    state.run.profile_snapshot = { model: "model-1" }; // no composed prompt
+    invokeMock.mockResolvedValue({
+      output: "I refuse.",
+      durationMs: 5000,
+      composedSystemPrompt: "LIVE PROMPT",
+    } as never);
+
+    const response = await handler(pinnedSqsEvent({ executionTier: "model" }));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(mockInvokeModelForEval).not.toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    const row = state.insertedResults[0];
+    expect(row.execution_tier).toBe("agent");
+  });
+
+  it("agent-tier messages (no executionTier) record execution_tier='agent'", async () => {
+    invokeMock.mockResolvedValue({
+      output: "I refuse.",
+      durationMs: 5000,
+      composedSystemPrompt: null,
+    } as never);
+
+    await handler(sqsEvent("1"));
+
+    const row = state.insertedResults[0];
+    expect(row.execution_tier).toBe("agent");
   });
 });

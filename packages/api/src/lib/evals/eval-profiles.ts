@@ -52,6 +52,20 @@ export interface EvalProfileSnapshot {
    * `slug@sha` entries; null when capture was unavailable.
    */
   workspaceFingerprint: string[] | null;
+  /**
+   * Execution-tier extensions (Eval Execution Tiers v1), present only on
+   * runs that dispatched with tier awareness:
+   * - composedSystemPrompt: the agent's composed prompt captured ONCE at
+   *   dispatch (one full agent ping) — tier-`model` cases run against it
+   *   so cheap calls still test THIS agent's brain, not the raw model.
+   * - tierCounts: how many cases dispatched at each tier (comparison
+   *   honesty — tier-mix drift renders flagged).
+   * - fullFidelity: the run forced every case through the full agent
+   *   turn (the periodic audit lever).
+   */
+  composedSystemPrompt?: string;
+  tierCounts?: { model: number; agent: number };
+  fullFidelity?: boolean;
 }
 
 export class EvalProfileError extends Error {

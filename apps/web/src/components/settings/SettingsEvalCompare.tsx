@@ -53,26 +53,36 @@ type RunDetail = {
 export type ProfileSnapshotFields = {
   judgeModel: string | null;
   workspaceFingerprint: string[] | null;
+  tierCounts: { model: number; agent: number } | null;
 };
 
 export function parseProfileSnapshot(
   raw: string | null | undefined,
 ): ProfileSnapshotFields {
-  if (!raw) return { judgeModel: null, workspaceFingerprint: null };
+  if (!raw)
+    return { judgeModel: null, workspaceFingerprint: null, tierCounts: null };
   try {
     const parsed = JSON.parse(raw) as {
       judgeModel?: unknown;
       workspaceFingerprint?: unknown;
     };
+    const tierCounts = (parsed as { tierCounts?: unknown }).tierCounts as
+      { model?: unknown; agent?: unknown } | undefined;
     return {
       judgeModel:
         typeof parsed.judgeModel === "string" ? parsed.judgeModel : null,
       workspaceFingerprint: Array.isArray(parsed.workspaceFingerprint)
         ? parsed.workspaceFingerprint.map(String)
         : null,
+      tierCounts:
+        tierCounts &&
+        typeof tierCounts.model === "number" &&
+        typeof tierCounts.agent === "number"
+          ? { model: tierCounts.model, agent: tierCounts.agent }
+          : null,
     };
   } catch {
-    return { judgeModel: null, workspaceFingerprint: null };
+    return { judgeModel: null, workspaceFingerprint: null, tierCounts: null };
   }
 }
 
@@ -125,6 +135,20 @@ export function comparabilityFlags(
   if (fingerprints.size > 1) {
     flags.push(
       "Workspace fingerprints differ — the agents under test had different skills enabled.",
+    );
+  }
+  // Tier-mix drift (Eval Execution Tiers v1): a run that executed most
+  // cases as stateless model calls is not directly comparable to one
+  // that ran everything through the full agent turn.
+  const tierMixes = new Set(
+    details.map((d) => {
+      const counts = parseProfileSnapshot(d.profileSnapshot).tierCounts;
+      return counts ? `${counts.model}/${counts.agent}` : "pre-tier";
+    }),
+  );
+  if (tierMixes.size > 1) {
+    flags.push(
+      "Execution tiers differ — the runs produced responses through different execution paths (model call vs full agent turn).",
     );
   }
   if (details.some((d) => d.status !== "completed")) {

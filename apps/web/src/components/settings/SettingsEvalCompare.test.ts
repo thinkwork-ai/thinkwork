@@ -30,14 +30,17 @@ describe("parseProfileSnapshot", () => {
     ).toEqual({
       judgeModel: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       workspaceFingerprint: ["a", "b"],
+      tierCounts: null,
     });
     expect(parseProfileSnapshot(null)).toEqual({
       judgeModel: null,
       workspaceFingerprint: null,
+      tierCounts: null,
     });
     expect(parseProfileSnapshot("not json")).toEqual({
       judgeModel: null,
       workspaceFingerprint: null,
+      tierCounts: null,
     });
   });
 });
@@ -97,5 +100,34 @@ describe("comparabilityFlags (KTD6 gate)", () => {
   it("fewer than two runs never flags — the empty/single states carry guidance instead", () => {
     expect(comparabilityFlags([detail()])).toEqual([]);
     expect(comparabilityFlags([])).toEqual([]);
+  });
+});
+
+describe("tier-mix drift (Eval Execution Tiers v1)", () => {
+  it("flags runs whose execution tier mixes differ; identical mixes stay clean", () => {
+    const tiered = (model: number, agent: number) =>
+      detail({
+        profileSnapshot: JSON.stringify({
+          judgeModel: null,
+          workspaceFingerprint: ["skill-a"],
+          tierCounts: { model, agent },
+        }),
+      });
+    expect(
+      comparabilityFlags([tiered(150, 39), tiered(0, 189)]).some((f) =>
+        f.includes("Execution tiers differ"),
+      ),
+    ).toBe(true);
+    expect(
+      comparabilityFlags([tiered(150, 39), tiered(150, 39)]).some((f) =>
+        f.includes("Execution tiers differ"),
+      ),
+    ).toBe(false);
+    // A pre-tier run vs a tiered run also flags.
+    expect(
+      comparabilityFlags([detail(), tiered(150, 39)]).some((f) =>
+        f.includes("Execution tiers differ"),
+      ),
+    ).toBe(true);
   });
 });

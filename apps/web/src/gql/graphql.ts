@@ -2319,6 +2319,7 @@ export type EvalResult = {
   errorCause?: Maybe<Scalars["String"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   evaluatorResults: Scalars["AWSJSON"]["output"];
+  executionTier: Scalars["String"]["output"];
   expected?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
   input?: Maybe<Scalars["String"]["output"]>;
@@ -8617,6 +8618,7 @@ export type StartDeploymentReleaseUpdateInput = {
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
+  fullFidelity?: InputMaybe<Scalars["Boolean"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   profileId?: InputMaybe<Scalars["ID"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
@@ -11095,6 +11097,18 @@ export type SaveAppletStateMutation = {
   };
 };
 
+export type TenantContextClaimPendingTenantMutationVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type TenantContextClaimPendingTenantMutation = {
+  __typename?: "Mutation";
+  bootstrapUser: {
+    __typename?: "BootstrapResult";
+    tenant: { __typename?: "Tenant"; id: string };
+  };
+};
+
 export type SpacesThreadActivitySubscriptionVariables = Exact<{
   userId: Scalars["ID"]["input"];
 }>;
@@ -11281,6 +11295,7 @@ export type EvalRunResultsQuery = {
     category?: string | null;
     status: string;
     trialIndex: number;
+    executionTier: string;
     score?: number | null;
     durationMs?: number | null;
     agentInputTokens?: number | null;
@@ -15970,6 +15985,43 @@ export const SaveAppletStateDocument = {
   SaveAppletStateMutation,
   SaveAppletStateMutationVariables
 >;
+export const TenantContextClaimPendingTenantDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "TenantContextClaimPendingTenant" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "bootstrapUser" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "tenant" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  TenantContextClaimPendingTenantMutation,
+  TenantContextClaimPendingTenantMutationVariables
+>;
 export const SpacesThreadActivityDocument = {
   kind: "Document",
   definitions: [
@@ -16649,6 +16701,10 @@ export const EvalRunResultsDocument = {
                 { kind: "Field", name: { kind: "Name", value: "category" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
                 { kind: "Field", name: { kind: "Name", value: "trialIndex" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "executionTier" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "score" } },
                 { kind: "Field", name: { kind: "Name", value: "durationMs" } },
                 {

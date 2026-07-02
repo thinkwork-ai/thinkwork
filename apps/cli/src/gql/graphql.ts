@@ -2319,6 +2319,7 @@ export type EvalResult = {
   errorCause?: Maybe<Scalars["String"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   evaluatorResults: Scalars["AWSJSON"]["output"];
+  executionTier: Scalars["String"]["output"];
   expected?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
   input?: Maybe<Scalars["String"]["output"]>;
@@ -8617,6 +8618,7 @@ export type StartDeploymentReleaseUpdateInput = {
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
+  fullFidelity?: InputMaybe<Scalars["Boolean"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   profileId?: InputMaybe<Scalars["ID"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
