@@ -21,7 +21,8 @@
  */
 
 import { and, db, eq, isNull, sql } from "../../graphql/utils.js";
-import { agentSkills, evalProfiles } from "@thinkwork/database-pg/schema";
+import { evalProfiles } from "@thinkwork/database-pg/schema";
+import { listEnabledAgentWorkspaceSkillSlugs } from "../skills/workspace-skill-index.js";
 import { DEFAULT_EVAL_MODEL_ID } from "./eval-defaults.js";
 
 export interface EvalProfileRow {
@@ -324,25 +325,19 @@ export async function resolveEvalProfileForRun(
 /**
  * Installed-skills fingerprint of the agent a run executes against
  * (KTD2 — recorded for attribution, never enforced in v1). Source: the
- * derived agent_skills index (enabled rows), which tracks the composed
- * AGENTS.md routing state the workspace materializes from. Sorted for
- * stable comparison; null when capture is unavailable — a missing
- * fingerprint renders as "unknown", never as "matches".
+ * agent workspace tree — `skills/<slug>/SKILL.md` presence gated by
+ * `.assignment.json` enabled state (KTD-8/U10; the derived agent_skills
+ * mirror is retired). Sorted for stable comparison; null when capture is
+ * unavailable — a missing fingerprint renders as "unknown", never as
+ * "matches".
  */
 export async function captureWorkspaceFingerprint(
   agentId: string | null | undefined,
 ): Promise<string[] | null> {
   if (!agentId) return null;
   try {
-    const rows = await db
-      .select({ skill_id: agentSkills.skill_id })
-      .from(agentSkills)
-      .where(
-        and(eq(agentSkills.agent_id, agentId), eq(agentSkills.enabled, true)),
-      );
-    return rows
-      .map((r) => String((r as { skill_id: string }).skill_id))
-      .sort();
+    const slugs = await listEnabledAgentWorkspaceSkillSlugs(agentId);
+    return slugs ? [...slugs].sort() : null;
   } catch {
     return null;
   }

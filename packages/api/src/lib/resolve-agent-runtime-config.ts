@@ -67,6 +67,10 @@ import {
   piExtensionVersions,
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
+import {
+  readSkillAssignmentStates,
+  resolveAgentWorkspacePrefix,
+} from "./skills/assignment-state.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
 import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
 import {
@@ -140,6 +144,8 @@ export interface McpConfig {
   tools?: string[];
   availableTools?: string[];
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /** Probe-mode only (U3): stored token status; never set on runtime resolutions. */
+  tokenStatus?: "active" | "expired" | "configured";
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;
@@ -322,6 +328,14 @@ export interface ResolveAgentRuntimeConfigOptions {
    * profiles are filtered out in SQL), and those run only under the flag.
    */
   collectDiagnostics?: boolean;
+  /**
+   * MCP token resolution mode (capability-mapping plan U3, KTD-1). Default
+   * "resolve" — the runtime path, which refreshes expired OAuth tokens.
+   * The capability inspector passes "probe": token status is classified from
+   * stored metadata only, with zero Secrets Manager reads and zero token
+   * writes. Never set on runtime/dispatch callers.
+   */
+  mcpTokenMode?: "resolve" | "probe";
   /**
    * Logging prefix (e.g. "[chat-agent-invoke]", "[skill-run-dispatcher]") so
    * logs trace back to the caller context.
@@ -804,6 +818,7 @@ export async function resolveAgentRuntimeConfig(
       requesterUserId: opts.currentUserId ?? null,
     },
     logPrefix,
+    { tokenMode: opts.mcpTokenMode, diagnostics },
   );
 
   const resolvedConfig: AgentRuntimeConfig = {
@@ -1668,13 +1683,41 @@ export async function applyAgentSkillMetadata(input: {
     .from(agentSkills)
     .where(eq(agentSkills.agent_id, input.agentId));
 
-  if (skillRows.length === 0) return input.skillsConfig;
+  // KTD-8 (plan U9): per-assignment config now lives in the workspace
+  // state file (`skills/<slug>/.assignment.json`); the agent_skills row
+  // is the fallback for assignments that predate the file. Reads are
+  // parallel and fail soft — a missing/unreadable file means DB config.
+  const workspacePrefix = await resolveAgentWorkspacePrefix(
+    input.agentId,
+  ).catch(() => null);
+  const fileStates = workspacePrefix
+    ? await readSkillAssignmentStates(
+        workspacePrefix,
+        input.skillsConfig.map((skill) => skill.skillId),
+      )
+    : new Map<string, { config?: Record<string, unknown> }>();
+
+  if (skillRows.length === 0 && fileStates.size === 0) {
+    return input.skillsConfig;
+  }
 
   const bySkillId = new Map(
     input.skillsConfig.map((skill) => [skill.skillId, { ...skill }]),
   );
+  const dbConfigBySkillId = new Map(
+    skillRows.map((row) => [row.skill_id, row.config]),
+  );
+  const slugsToApply = new Set([
+    ...skillRows.map((row) => row.skill_id),
+    ...fileStates.keys(),
+  ]);
 
-  for (const row of skillRows) {
+  for (const slug of slugsToApply) {
+    const row = {
+      skill_id: slug,
+      config:
+        fileStates.get(slug)?.config ?? dbConfigBySkillId.get(slug) ?? null,
+    };
     const skill = bySkillId.get(row.skill_id);
     if (!skill) continue;
     const config = (row.config as Record<string, unknown>) || {};

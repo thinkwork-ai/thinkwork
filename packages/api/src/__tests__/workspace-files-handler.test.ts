@@ -91,7 +91,7 @@ vi.mock("../graphql/utils.js", () => {
     db: {
       select: vi.fn().mockImplementation(() => chain()),
       // U5: handler now calls db.transaction(fn) for governance file
-      // edits + the post-derive `agent.skills_changed` emit. The
+      // edits. The
       // emitAuditEvent helper is mocked at module scope so the tx
       // callback only needs a permissive `tx` value — the S3 put
       // inside the callback uses the s3 mock client, not tx.
@@ -250,16 +250,6 @@ const { bootstrapAgentWorkspaceMock } = vi.hoisted(() => ({
 
 vi.mock("../lib/workspace-bootstrap.js", () => ({
   bootstrapAgentWorkspace: bootstrapAgentWorkspaceMock,
-}));
-
-// ─── Mock deriveAgentSkills compatibility sync for workspace skill edits.
-
-const { deriveMockImpl } = vi.hoisted(() => ({
-  deriveMockImpl: vi.fn(),
-}));
-
-vi.mock("../lib/derive-agent-skills.js", () => ({
-  deriveAgentSkills: deriveMockImpl,
 }));
 
 const { refreshAgentsMdSectionsMock } = vi.hoisted(() => ({
@@ -631,14 +621,6 @@ beforeEach(() => {
     written: 1,
     skipped: 0,
     total: 1,
-  });
-  deriveMockImpl.mockReset();
-  deriveMockImpl.mockResolvedValue({
-    changed: false,
-    addedSlugs: [],
-    removedSlugs: [],
-    agentsMdPathsScanned: [],
-    warnings: [],
   });
   upsertAgentProfileProjectionMock.mockReset();
   upsertAgentProfileProjectionMock.mockResolvedValue({ id: "profile-row" });
@@ -3679,13 +3661,9 @@ describe("agent install-skill action", () => {
     queueAdminSpaceTargetRows();
     const targetPrefix = "tenants/acme/spaces/engineering/";
     mockCatalogInstallS3(targetPrefix);
-    s3Mock
-      .on(ListObjectsV2Command, { Prefix: targetPrefix })
-      .resolves({
-        Contents: [
-          { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
-        ],
-      });
+    s3Mock.on(ListObjectsV2Command, { Prefix: targetPrefix }).resolves({
+      Contents: [{ Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` }],
+    });
     s3Mock
       .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
       .resolves(body("# Engineering\n"));
@@ -3718,7 +3696,6 @@ describe("agent install-skill action", () => {
     expect(String(spaceMdPut?.args[0].input.Body)).toContain(
       "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
     );
-    expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 
@@ -3837,10 +3814,8 @@ describe("agent uninstall-skill action", () => {
     s3Mock
       .on(ListObjectsV2Command, { Prefix: targetPrefix })
       .resolves({ Contents: [] });
-    s3Mock
-      .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
-      .resolves(
-        body(`# Engineering
+    s3Mock.on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` }).resolves(
+      body(`# Engineering
 
 <!-- BEGIN THINKWORK SPACE SKILLS -->
 ## Skills
@@ -3848,7 +3823,7 @@ describe("agent uninstall-skill action", () => {
 - \`finance-audit-xls\` (\`skills/finance-audit-xls/SKILL.md\`)
 <!-- END THINKWORK SPACE SKILLS -->
 `),
-      );
+    );
 
     const res = await parse(
       await handler(
@@ -3875,7 +3850,6 @@ describe("agent uninstall-skill action", () => {
       .commandCalls(PutObjectCommand)
       .find((call) => call.args[0].input.Key === `${targetPrefix}SPACE.md`);
     expect(String(spaceMdPut?.args[0].input.Body)).toBe("# Engineering\n");
-    expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 
@@ -4027,13 +4001,9 @@ describe("agent reinstall-skill action", () => {
     queueAdminSpaceTargetRows();
     const targetPrefix = "tenants/acme/spaces/engineering/";
     mockCatalogReinstallS3(targetPrefix);
-    s3Mock
-      .on(ListObjectsV2Command, { Prefix: targetPrefix })
-      .resolves({
-        Contents: [
-          { Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` },
-        ],
-      });
+    s3Mock.on(ListObjectsV2Command, { Prefix: targetPrefix }).resolves({
+      Contents: [{ Key: `${targetPrefix}skills/finance-audit-xls/SKILL.md` }],
+    });
     s3Mock
       .on(GetObjectCommand, { Key: `${targetPrefix}SPACE.md` })
       .resolves(body("# Engineering\n"));
@@ -4073,7 +4043,6 @@ describe("agent reinstall-skill action", () => {
     expect(String(spaceMdPut?.args[0].input.Body)).toContain(
       "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
     );
-    expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 
@@ -4740,18 +4709,17 @@ describe("pinned-file write guard", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(s3Mock.commandCalls(PutObjectCommand)[0].args[0].input).toMatchObject(
-      {
-        Key: "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
-        Body: "# Finance Audit\n",
-      },
-    );
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Key: "tenants/acme/spaces/engineering/skills/finance-audit-xls/SKILL.md",
+      Body: "# Finance Audit\n",
+    });
     const spaceMdPut = s3Mock
       .commandCalls(PutObjectCommand)
       .find(
         (call) =>
-          call.args[0].input.Key ===
-          "tenants/acme/spaces/engineering/SPACE.md",
+          call.args[0].input.Key === "tenants/acme/spaces/engineering/SPACE.md",
       );
     expect(String(spaceMdPut?.args[0].input.Body)).toContain(
       "`finance-audit-xls` (`skills/finance-audit-xls/SKILL.md`)",
@@ -5296,7 +5264,6 @@ describe("agent MOVE (Unit 1: single-file)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(0);
   });
 
   it("returns 400 when fromPath is missing", async () => {
@@ -5644,7 +5611,6 @@ describe("agent MOVE (Unit 2: folder moves)", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).toHaveBeenCalledTimes(0);
   });
 
   it("rejects moving a folder into itself or a subfolder of itself with 400", async () => {
@@ -6799,10 +6765,6 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
   });
 
   it("PUT on a sub-agent skill marker refreshes AGENTS.md derived sections", async () => {
@@ -6826,13 +6788,9 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
   });
 
-  it("PUT on CONTEXT.md refreshes AGENTS.md derived sections without deriving DB rows", async () => {
+  it("PUT on CONTEXT.md refreshes AGENTS.md derived sections", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -6853,10 +6811,9 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
-    expect(deriveMockImpl).not.toHaveBeenCalled();
   });
 
-  it("PUT on expenses/CONTEXT.md refreshes AGENTS.md derived sections without deriving DB rows", async () => {
+  it("PUT on expenses/CONTEXT.md refreshes AGENTS.md derived sections", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -6877,7 +6834,6 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
-    expect(deriveMockImpl).not.toHaveBeenCalled();
   });
 
   it("AGENTS.md refresh failure → 500 with error message; S3 put already happened", async () => {
@@ -6928,10 +6884,6 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
 
     expect(res.statusCode).toBe(200);
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
-    expect(deriveMockImpl).toHaveBeenCalledWith(
-      { tenantId: TENANT_A },
-      AGENT_ID,
-    );
   });
 
   it("PUT on template skill marker does not refresh agent AGENTS.md", async () => {
@@ -6954,7 +6906,6 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
   });
 });

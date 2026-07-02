@@ -1,6 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { agentSkills, and, db, eq } from "../../utils.js";
+import { patchSkillAssignmentState } from "../../../lib/skills/assignment-state.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { requireTenantMember } from "../core/authz.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
@@ -55,15 +55,18 @@ export async function disableSkill(
     throw err;
   }
 
-  await db
-    .update(agentSkills)
-    .set({ enabled: false })
-    .where(
-      and(
-        eq(agentSkills.agent_id, resolvedAgentId),
-        eq(agentSkills.skill_id, skillId),
-      ),
-    );
+  // KTD-8 (plan U10): the workspace assignment state file is the only
+  // store for the disabled flag — the agent_skills mirror is retired.
+  const ok = await patchSkillAssignmentState({
+    agentId: resolvedAgentId,
+    slug: skillId,
+    patch: { enabled: false },
+  });
+  if (!ok) {
+    throw new GraphQLError("Failed to persist the disabled state", {
+      extensions: { code: "CUSTOMIZE_DISABLE_WRITE_FAILED" },
+    });
+  }
 
   await renderWorkspaceAfterCustomize("disableSkill", resolvedAgentId);
 

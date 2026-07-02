@@ -38,6 +38,8 @@ export const CAPABILITY_DROP_REASONS = [
   "eval_gate",
   /** Per-skill OAuth env resolution failed (buildSkillEnvOverrides threw); skill ships without its OAuth env. */
   "oauth_missing",
+  /** A tenant/service credential (API key secret, service-credential binding) is missing or revoked. */
+  "credential_missing",
   /** Plugin-owned capability excluded because the requester holds no active activation. */
   "plugin_activation_missing",
   /** Plugin gate resolution failed or no requester was resolvable; all plugin-namespaced folders excluded. */

@@ -9,7 +9,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
-  resolveTerraformRoot,
+  resolveTerraformRootForStage,
   ensureInit,
   ensureWorkspace,
   runTerraform,
@@ -175,7 +175,10 @@ export async function runLocalTerraformDestroy(
     }
   }
 
-  const terraformDir = resolveTerraformRoot();
+  const terraformDir = resolveTerraformRootForStage(
+    stage,
+    localEnv?.terraformDir,
+  );
   const tiers = expandComponent(opts.component as Component).reverse();
 
   // Drop RDS deletion protection (U7): Aurora deploys protected by default,

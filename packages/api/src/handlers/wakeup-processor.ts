@@ -106,6 +106,7 @@ import {
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
 import {
   filterBlockedSkills,
   resolveDispatchPinnedSkills,
@@ -957,7 +958,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       if (bt.toolSlug === "web-search" && !templateWebSearchEnabled) {
         continue;
       }
-      // If a hand-installed agent_skills row already provided this tool,
+      // If a workspace-installed skill already provided this tool,
       // overlay our env overrides onto it so the provider + key still win.
       const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
       if (existing) {
@@ -2025,6 +2026,55 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
+    // KTD-3 (capability-mapping U12): fingerprint over the same narrow
+    // capability inputs the inspector hashes. The wakeup path assembles its
+    // config piecemeal, so inputs are projected from the local pieces; a
+    // mismatch against the inspector's value on identical stored config
+    // indicates dispatch-parity drift, which R15 should surface.
+    const dispatchConfigFingerprint = computeConfigFingerprint(
+      {
+        tenantId: wakeup.tenant_id,
+        agentId: wakeup.agent_id,
+        spaceId: runSpaceId ?? null,
+        agentProfileId: null,
+        perspectiveUserId: invokerUserId || null,
+      },
+      {
+        blockedTools: effectiveBlockedTools,
+        skills: effectiveSkillsConfig.map((skill) => ({
+          skillId: skill.skillId,
+          s3Key: skill.s3Key,
+          secretRef: skill.secretRef ?? null,
+          mcpServer: skill.mcpServer ?? null,
+        })),
+        mcpServers: mcpConfigs.map((server) => ({
+          name: server.name,
+          url: server.url,
+          transport: server.transport ?? null,
+          tools: server.tools ?? null,
+          availableTools: server.availableTools ?? null,
+        })),
+        piExtensions: piExtensions.map((extension) => ({
+          assignmentId: extension.assignmentId,
+          versionId: extension.versionId,
+          artifactHash: extension.artifactHash,
+          grantedPermissionClasses: extension.grantedPermissionClasses,
+        })),
+        agentProfiles: agentProfilesConfig.map((profile) => ({
+          id: profile.id,
+          slug: profile.slug,
+          modelId: profile.modelId,
+          builtInTools: profile.builtInTools,
+          skillSlugs: profile.skillSlugs,
+          mcpToolAllowlist: profile.mcpToolAllowlist,
+          availabilityScope: profile.availability.scope,
+          piExtensionAssignmentIds: profile.piExtensions.map(
+            (extension) => extension.assignmentId,
+          ),
+        })),
+      },
+    );
+
     const agentCorePayload: Record<string, unknown> = {
       tenant_id: wakeup.tenant_id,
       // Unit 7 made workspace_tenant_id a hard gate in
@@ -2115,6 +2165,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           : null,
         okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
         includeFinalizeCallback: false,
+        configFingerprint: dispatchConfigFingerprint,
       }),
     };
 
@@ -2766,6 +2817,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 : null,
               okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
               includeFinalizeCallback: false,
+              configFingerprint: dispatchConfigFingerprint,
             }),
           },
           runtimeType,

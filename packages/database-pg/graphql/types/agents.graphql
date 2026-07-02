@@ -52,7 +52,6 @@ type Agent {
   avatarUrl: String
   version: Int!
   capabilities: [AgentCapability!]!
-  skills: [AgentSkill!]!
   budgetPolicy: AgentBudgetPolicy
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
@@ -64,19 +63,6 @@ type AgentCapability {
   tenantId: ID!
   capability: String!
   config: AWSJSON
-  enabled: Boolean!
-  createdAt: AWSDateTime!
-}
-
-type AgentSkill {
-  id: ID!
-  agentId: ID!
-  tenantId: ID!
-  skillId: String!
-  config: AWSJSON
-  permissions: AWSJSON
-  rateLimitRpm: Int
-  modelOverride: String
   enabled: Boolean!
   createdAt: AWSDateTime!
 }
@@ -121,15 +107,6 @@ input UpdateTenantAgentInput {
 input AgentCapabilityInput {
   capability: String!
   config: AWSJSON
-  enabled: Boolean
-}
-
-input AgentSkillInput {
-  skillId: String!
-  config: AWSJSON
-  permissions: AWSJSON
-  rateLimitRpm: Int
-  modelOverride: String
   enabled: Boolean
 }
 

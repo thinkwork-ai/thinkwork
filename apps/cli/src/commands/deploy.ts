@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -21,7 +22,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
-  resolveTerraformRoot,
+  resolveTerraformRootForStage,
   ensureInit,
   ensureWorkspace,
   isInitScaffoldedLayout,
@@ -29,6 +30,7 @@ import {
   runTerraformTee,
   terraformOutput,
 } from "../terraform.js";
+import { loadEnvironment } from "../environments.js";
 import {
   type BackendTarget,
   backendTarget,
@@ -47,7 +49,8 @@ import {
   seedLambdaArtifacts,
   upsertTfvarsValues,
 } from "../lib/release.js";
-import { applyMigrations } from "../lib/db-migrations.js";
+import { applyMigrations, type PgConnection } from "../lib/db-migrations.js";
+import { ensureOwnerTenant } from "../lib/owner-tenant.js";
 import { runWorkspaceBootstrap } from "./bootstrap.js";
 import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
@@ -589,6 +592,222 @@ export async function ensureReleaseArtifacts(
 }
 
 /**
+ * Build /thinkwork-runtime-config.json for the deployed web app. The bundle
+ * ships stage-agnostic; the app fetches this file at boot for its API and
+ * Cognito endpoints — without it every scaffolded install renders "Sign-in
+ * options are unavailable" (HCI test). Mirrors the deployment-controller
+ * runner's runtime_profile(), which owned this step before CLI-first.
+ */
+export function buildRuntimeConfig(values: {
+  stage: string;
+  region: string;
+  accountId: string;
+  releaseVersion: string | null;
+  apiEndpoint: string;
+  appUrl: string;
+  authDomain: string;
+  appsyncUrl: string;
+  appsyncRealtimeUrl: string;
+  appsyncApiKey: string;
+  userPoolId: string;
+  adminClientId: string;
+  issuedAt: string;
+}): Record<string, unknown> {
+  const cognitoDomain = values.authDomain.startsWith("https://")
+    ? values.authDomain
+    : values.authDomain
+      ? `https://${values.authDomain}.auth.${values.region}.amazoncognito.com`
+      : "";
+  const api = values.apiEndpoint.replace(/\/+$/, "");
+  return {
+    stage: values.stage,
+    region: values.region,
+    accountId: values.accountId,
+    releaseVersion: values.releaseVersion,
+    releaseManifestUrl: null,
+    releaseManifestSha256: null,
+    deploymentId: `thinkwork-${values.stage}`,
+    displayName: "ThinkWork",
+    appUrl: values.appUrl,
+    apiEndpoint: values.apiEndpoint,
+    graphqlHttpUrl: api ? `${api}/graphql` : "",
+    appsyncUrl: values.appsyncUrl,
+    appsyncRealtimeUrl: values.appsyncRealtimeUrl,
+    appsyncApiKey: values.appsyncApiKey,
+    cognitoDomain,
+    cognitoUserPoolId: values.userPoolId,
+    cognitoClientId: values.adminClientId,
+    controller: null,
+    issuedAt: values.issuedAt,
+    // The web app consumes ONLY this map (runtime-config.ts reads
+    // raw.viteEnv) — the outer profile is for tooling. Omitting it kept the
+    // sign-in screen dead even with the file published (HCI test).
+    viteEnv: {
+      VITE_API_URL: values.apiEndpoint,
+      VITE_GRAPHQL_HTTP_URL: api ? `${api}/graphql` : "",
+      VITE_GRAPHQL_URL: values.appsyncUrl,
+      VITE_GRAPHQL_WS_URL: values.appsyncRealtimeUrl,
+      VITE_GRAPHQL_API_KEY: values.appsyncApiKey,
+      VITE_COGNITO_DOMAIN: cognitoDomain,
+      VITE_COGNITO_USER_POOL_ID: values.userPoolId,
+      VITE_COGNITO_CLIENT_ID: values.adminClientId,
+      VITE_DEPLOYMENT_ID: `thinkwork-${values.stage}`,
+      VITE_DEPLOYMENT_DISPLAY_NAME: "ThinkWork",
+      VITE_DEPLOYMENT_PROFILE_ISSUED_AT: values.issuedAt,
+      VITE_SPACES_URL: values.appUrl,
+      VITE_STAGE: values.stage,
+      VITE_AWS_REGION: values.region,
+      VITE_AWS_ACCOUNT_ID: values.accountId,
+      VITE_RELEASE_VERSION: values.releaseVersion ?? "",
+    },
+  };
+}
+
+async function publishRuntimeConfig(
+  cwd: string,
+  bucket: string,
+  identity: { account: string; region: string },
+  stage: string,
+  releaseVersion: string | null,
+): Promise<void> {
+  const output = async (key: string) => {
+    try {
+      return await terraformOutput(cwd, key);
+    } catch {
+      return "";
+    }
+  };
+  const config = buildRuntimeConfig({
+    stage,
+    region: identity.region,
+    accountId: identity.account,
+    releaseVersion,
+    apiEndpoint: await output("api_endpoint"),
+    appUrl: await output("app_url"),
+    authDomain: await output("auth_domain"),
+    appsyncUrl: await output("appsync_api_url"),
+    appsyncRealtimeUrl: await output("appsync_realtime_url"),
+    appsyncApiKey: await output("appsync_api_key"),
+    userPoolId: await output("user_pool_id"),
+    adminClientId:
+      (await output("admin_client_id")) || (await output("admin_client_id_out")),
+    issuedAt: new Date().toISOString(),
+  });
+  const tempDir = mkdtempSync(pathJoinTmp("thinkwork-runtime-config-"));
+  const file = join(tempDir, "thinkwork-runtime-config.json");
+  writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+  const put = spawnSync(
+    "aws",
+    [
+      "s3",
+      "cp",
+      file,
+      `s3://${bucket}/thinkwork-runtime-config.json`,
+      "--content-type",
+      "application/json",
+      "--cache-control",
+      "no-store",
+      "--region",
+      identity.region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (put.status !== 0) {
+    throw new Error(
+      `Could not publish runtime config: ${(put.stderr ?? "").trim().slice(0, 200)}`,
+    );
+  }
+  printSuccess(`Runtime config published to s3://${bucket}/thinkwork-runtime-config.json`);
+
+  // CloudFront's SPA fallback (403/404 → index.html) may have cached an HTML
+  // response for this path before the object existed — invalidate so the
+  // app's boot fetch sees JSON immediately (HCI test).
+  const distributionId = await output("app_distribution_id");
+  if (distributionId) {
+    spawnSync(
+      "aws",
+      [
+        "cloudfront",
+        "create-invalidation",
+        "--distribution-id",
+        distributionId,
+        "--paths",
+        "/thinkwork-runtime-config.json",
+        "/index.html",
+      ],
+      { encoding: "utf8" },
+    );
+  }
+}
+
+/**
+ * Ensure the owner Cognito user exists (first-user bootstrap). There is no
+ * default username/password by design — the first authenticated sign-in
+ * auto-provisions the tenant via bootstrapUser and becomes the owner. Deploy
+ * creates that first Cognito user from the wizard's operator email with a
+ * one-time temporary password printed in the summary; Cognito forces a
+ * password change at first sign-in, so no long-lived secret is stored.
+ */
+async function ensureOwnerUser(
+  cwd: string,
+  region: string,
+): Promise<{ email: string; tempPassword: string | null } | null> {
+  const email = (readTfvarsSignalsRaw(cwd).platform_operator_emails ?? "")
+    .split(",")[0]
+    ?.trim();
+  if (!email) return null;
+  const userPoolId = await terraformOutput(cwd, "user_pool_id").catch(() => "");
+  if (!userPoolId) return null;
+
+  const exists = spawnSync(
+    "aws",
+    [
+      "cognito-idp",
+      "admin-get-user",
+      "--user-pool-id",
+      userPoolId,
+      "--username",
+      email,
+      "--region",
+      region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (exists.status === 0) return { email, tempPassword: null };
+
+  // Meets the default Cognito policy (upper/lower/digit/symbol).
+  const tempPassword = `Tw1!${randomBytes(12).toString("base64url")}`;
+  const created = spawnSync(
+    "aws",
+    [
+      "cognito-idp",
+      "admin-create-user",
+      "--user-pool-id",
+      userPoolId,
+      "--username",
+      email,
+      "--user-attributes",
+      `Name=email,Value=${email}`,
+      "Name=email_verified,Value=true",
+      "--temporary-password",
+      tempPassword,
+      "--message-action",
+      "SUPPRESS",
+      "--region",
+      region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (created.status !== 0) {
+    printWarning(
+      `Could not create the owner user ${email}: ${(created.stderr ?? "").trim().slice(0, 200)}`,
+    );
+    return null;
+  }
+  return { email, tempPassword };
+}
+
+/**
  * Publish the release's prebuilt web assets to the stage's app bucket
  * (packaged installs have no web build step — CI builds ship in the release).
  */
@@ -671,6 +890,36 @@ async function applySchemaMigrations(
     return;
   }
 
+  const connection = await resolveStageDbConnection(cwd, identity, stage);
+
+  console.log("\n  Applying database schema (full migration history)...");
+  const summary = await applyMigrations({
+    drizzleDir,
+    stage,
+    region: identity.region,
+    connection,
+    log: (line) => console.log(`    ${line}`),
+  });
+  console.log(
+    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present` +
+      (summary.skippedFiles.length > 0
+        ? `, ${summary.skippedFiles.length} operator-only file(s) skipped`
+        : "") +
+      ".",
+  );
+}
+
+/**
+ * Direct-connection credentials for the stage database (clusters are
+ * publicly accessible by platform design — password auth, same posture
+ * `db:push` relies on). Shared by schema application and the owner-tenant
+ * pre-provision.
+ */
+async function resolveStageDbConnection(
+  cwd: string,
+  identity: { account: string; region: string },
+  stage: string,
+): Promise<PgConnection> {
   const endpoint = await terraformOutput(cwd, "db_cluster_endpoint");
   if (!endpoint) {
     throw new Error(
@@ -708,27 +957,13 @@ async function applySchemaMigrations(
     );
   }
 
-  console.log("\n  Applying database schema (full migration history)...");
-  const summary = await applyMigrations({
-    drizzleDir,
-    stage,
-    region: identity.region,
-    connection: {
-      host: endpoint,
-      port: 5432,
-      user: parsed.username,
-      password: parsed.password,
-      database: "thinkwork",
-    },
-    log: (line) => console.log(`    ${line}`),
-  });
-  console.log(
-    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present` +
-      (summary.skippedFiles.length > 0
-        ? `, ${summary.skippedFiles.length} operator-only file(s) skipped`
-        : "") +
-      ".",
-  );
+  return {
+    host: endpoint,
+    port: 5432,
+    user: parsed.username,
+    password: parsed.password,
+    database: "thinkwork",
+  };
 }
 
 /**
@@ -862,7 +1097,10 @@ export async function runLocalTerraformDeploy(
     }
   }
 
-  const terraformDir = resolveTerraformRoot();
+  const terraformDir = resolveTerraformRootForStage(
+    stage,
+    loadEnvironment(stage)?.terraformDir,
+  );
   const tiers = expandComponent(opts.component as Component);
 
   const cwd0 = resolveTierDir(terraformDir, stage, tiers[0]);
@@ -889,6 +1127,9 @@ export async function runLocalTerraformDeploy(
           : undefined,
       domain: signals.domain,
       sesConfigured: signals.sesConfigured,
+      agentcorePiSourceImage:
+        readTfvarsSignalsRaw(preflightCwd).agentcore_pi_source_image_uri ||
+        undefined,
     };
     console.log("\n  Preflight checks:");
     const summary = await runChecks(preflightChecks(ctx));
@@ -916,6 +1157,7 @@ export async function runLocalTerraformDeploy(
   // ── Release artifacts (U9): packaged installs deploy a pinned release's
   //    application code, never placeholder mode. ──
   let webAssetSource: string | null = null;
+  let releaseVersionPin: string | null = null;
   if (scaffolded && caller) {
     // Account-singleton ownership must be decided before the first apply.
     ensureBedrockLoggingPin(cwd0, caller.region);
@@ -926,6 +1168,7 @@ export async function runLocalTerraformDeploy(
       opts.releaseVersion,
     );
     webAssetSource = release.webAssetSource;
+    releaseVersionPin = release.version;
   }
 
   for (let i = 0; i < tiers.length; i++) {
@@ -979,10 +1222,59 @@ export async function runLocalTerraformDeploy(
     await applySchemaMigrations(cwd0, caller, stage);
   }
 
+  // ── Owner tenant + user: the first Cognito sign-in claims the instance
+  //    through bootstrapUser's pending_owner_email claim path, so deploy must
+  //    leave both a pending tenant and a Cognito user behind. Runs BEFORE the
+  //    workspace bootstrap so per-tenant workspace seeding sees the tenant. ──
+  let ownerUser: { email: string; tempPassword: string | null } | null = null;
+  if (scaffolded && caller) {
+    const operatorEmail = (
+      readTfvarsSignalsRaw(cwd0).platform_operator_emails ?? ""
+    )
+      .split(",")[0]
+      ?.trim();
+    if (operatorEmail) {
+      try {
+        const connection = await resolveStageDbConnection(cwd0, caller, stage);
+        const ownerTenant = await ensureOwnerTenant({
+          stage,
+          email: operatorEmail,
+          connection,
+        });
+        if (ownerTenant.created) {
+          printSuccess(
+            `Owner tenant "${ownerTenant.slug}" pre-provisioned — first sign-in by ${ownerTenant.email} claims it.`,
+          );
+        }
+      } catch (err) {
+        printWarning(
+          `Could not pre-provision the owner tenant: ${err instanceof Error ? err.message : String(err)}. ` +
+            `First sign-in will show "No tenant assigned" until this is resolved — rerun the deploy.`,
+        );
+      }
+    }
+    ownerUser = await ensureOwnerUser(cwd0, caller.region);
+  }
+
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to
   //    the stage's app bucket (packaged installs have no web build step). ──
   if (scaffolded && webAssetSource) {
     await publishWebAssets(cwd0, webAssetSource);
+  }
+
+  // ── Runtime config: the stage-agnostic web bundle reads its endpoints
+  //    from /thinkwork-runtime-config.json at boot (HCI test). ──
+  if (scaffolded && caller) {
+    const bucket = await terraformOutput(cwd0, "app_bucket_name");
+    if (bucket) {
+      await publishRuntimeConfig(
+        cwd0,
+        bucket,
+        caller,
+        stage,
+        releaseVersionPin ?? null,
+      );
+    }
   }
 
   // ── Workspace defaults (harness cycle-7): a fresh stack must pass the
@@ -1008,6 +1300,10 @@ export async function runLocalTerraformDeploy(
       ),
     });
     if (!verification.passed) {
+      // The temporary password must survive a failed verify — the user was
+      // already created, so a rerun won't mint a new one (HCI test: the
+      // password printed mid-scroll, verify failed, and it was gone).
+      printOwnerCredentials(ownerUser);
       printError(
         `Deploy applied but the stack failed verification (${verification.failures.length} probe(s)). ` +
           `Fix the items above and rerun \`thinkwork deploy -s ${stage}\` — reruns converge.`,
@@ -1026,6 +1322,27 @@ export async function runLocalTerraformDeploy(
   await runPostDeployProbe(stage);
 
   printSummary("deploy", stage, tiers, startTime);
+
+  // Owner-user credentials LAST: the one-time temporary password must be the
+  // final thing on screen, not buried in the scrollback.
+  printOwnerCredentials(ownerUser);
+}
+
+/** One-time owner credentials — printed at the very end of every deploy exit
+ * path (success AND failed verify) so they cannot be lost to scrollback. */
+function printOwnerCredentials(
+  ownerUser: { email: string; tempPassword: string | null } | null,
+): void {
+  if (ownerUser?.tempPassword) {
+    console.log("");
+    printSuccess(`Owner user created: ${ownerUser.email}`);
+    console.log(
+      `    Temporary password (shown ONCE — Cognito requires a change at first sign-in):`,
+    );
+    console.log(`      ${ownerUser.tempPassword}`);
+  } else if (ownerUser) {
+    console.log(`  Owner user ${ownerUser.email} already exists.`);
+  }
 }
 
 /**

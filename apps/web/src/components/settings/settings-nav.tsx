@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import {
   Bot,
   Brain,
+  ClipboardCheck,
   Clock,
   Cpu,
   History,
@@ -118,6 +119,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Agents",
     to: "/settings/agents",
     icon: Bot,
+    operatorOnly: true,
+  },
+  {
+    label: "Capabilities",
+    to: "/settings/capabilities",
+    icon: ClipboardCheck,
     operatorOnly: true,
   },
 ];

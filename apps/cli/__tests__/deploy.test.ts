@@ -145,3 +145,59 @@ describe("deploy controller path", () => {
     expect(localDeploy).not.toHaveBeenCalled();
   });
 });
+
+import { buildRuntimeConfig } from "../src/commands/deploy.js";
+
+describe("buildRuntimeConfig (HCI test — stage-agnostic web bundle)", () => {
+  it("mirrors the controller runner's runtime_profile shape", () => {
+    const config = buildRuntimeConfig({
+      stage: "hci",
+      region: "us-east-1",
+      accountId: "424337058806",
+      releaseVersion: "0.12.15",
+      apiEndpoint: "https://abc.execute-api.us-east-1.amazonaws.com/",
+      appUrl: "https://hci.thinkwork.ai",
+      authDomain: "thinkwork-hci",
+      appsyncUrl: "https://xyz.appsync-api.us-east-1.amazonaws.com/graphql",
+      appsyncRealtimeUrl:
+        "wss://xyz.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
+      appsyncApiKey: "da2-key",
+      userPoolId: "us-east-1_ABC",
+      adminClientId: "client123",
+      issuedAt: "2026-07-02T00:00:00.000Z",
+    });
+    expect(config.graphqlHttpUrl).toBe(
+      "https://abc.execute-api.us-east-1.amazonaws.com/graphql",
+    );
+    expect(config.cognitoDomain).toBe(
+      "https://thinkwork-hci.auth.us-east-1.amazoncognito.com",
+    );
+    expect(config.cognitoClientId).toBe("client123");
+    expect(config.deploymentId).toBe("thinkwork-hci");
+    expect(config.controller).toBeNull();
+    const viteEnv = config.viteEnv as Record<string, string>;
+    expect(viteEnv.VITE_COGNITO_CLIENT_ID).toBe("client123");
+    expect(viteEnv.VITE_GRAPHQL_WS_URL).toContain("appsync-realtime");
+    expect(viteEnv.VITE_STAGE).toBe("hci");
+  });
+
+  it("passes through already-https cognito domains and empty endpoints", () => {
+    const config = buildRuntimeConfig({
+      stage: "x",
+      region: "us-east-1",
+      accountId: "1",
+      releaseVersion: null,
+      apiEndpoint: "",
+      appUrl: "",
+      authDomain: "https://custom.auth.example.com",
+      appsyncUrl: "",
+      appsyncRealtimeUrl: "",
+      appsyncApiKey: "",
+      userPoolId: "",
+      adminClientId: "",
+      issuedAt: "2026-07-02T00:00:00.000Z",
+    });
+    expect(config.cognitoDomain).toBe("https://custom.auth.example.com");
+    expect(config.graphqlHttpUrl).toBe("");
+  });
+});

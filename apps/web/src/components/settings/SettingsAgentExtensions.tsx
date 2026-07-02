@@ -32,15 +32,18 @@ import {
   cn,
 } from "@thinkwork/ui";
 import {
+  CapabilityGrantClass,
+  CapabilityGrantScope,
   PiExtensionAssignmentTargetType,
   PiExtensionVersionStatus,
   type SettingsPiExtensionFieldsFragment,
 } from "@/gql/graphql";
 import {
   SettingsApprovePiExtensionVersionMutation,
+  SettingsDetachCapabilityMutation,
+  SettingsGrantCapabilityMutation,
   SettingsImportPiExtensionFromGitHubMutation,
   SettingsRejectPiExtensionVersionMutation,
-  SettingsUpdatePiExtensionAssignmentMutation,
 } from "@/lib/settings-queries";
 import { SettingsSection } from "@/components/settings/SettingsContent";
 
@@ -85,9 +88,18 @@ export function SettingsAgentExtensions({
   const [rejectState, rejectExtension] = useMutation(
     SettingsRejectPiExtensionVersionMutation,
   );
-  const [assignmentState, updateAssignment] = useMutation(
-    SettingsUpdatePiExtensionAssignmentMutation,
+  // Assignment writes go through the unified capability mutations (plan U8,
+  // KTD-5) so this surface shares the matrix-conformant, audited write path
+  // with the Capabilities area — grant on enable, detach on disable.
+  const [grantState, grantCapability] = useMutation(
+    SettingsGrantCapabilityMutation,
   );
+  const [detachState, detachCapability] = useMutation(
+    SettingsDetachCapabilityMutation,
+  );
+  const assignmentState = {
+    fetching: grantState.fetching || detachState.fetching,
+  };
 
   const rows = useMemo(
     () =>
@@ -258,25 +270,63 @@ export function SettingsAgentExtensions({
     agentProfileId?: string | null;
     enabled: boolean;
   }) {
-    const result = await updateAssignment({
-      input: {
-        tenantId,
-        versionId: input.extension.id,
-        targetType: input.targetType,
-        agentProfileId: input.agentProfileId ?? null,
-        enabled: input.enabled,
-        grantedPermissions: {
-          permissionClasses: input.extension.permissionClasses,
+    const scope =
+      input.targetType === PiExtensionAssignmentTargetType.DefaultAgent
+        ? CapabilityGrantScope.Agent
+        : CapabilityGrantScope.AgentProfile;
+    let payload:
+      | {
+          inspectionState: string;
+          item?: { active: boolean; reason?: string | null } | null;
+        }
+      | null
+      | undefined;
+    let errorMessage: string | undefined;
+    if (input.enabled) {
+      const result = await grantCapability({
+        input: {
+          tenantId,
+          capabilityClass: CapabilityGrantClass.PiExtension,
+          scope,
+          agentProfileId: input.agentProfileId ?? null,
+          capabilityRef: input.extension.id,
+          grantedPermissions: [...input.extension.permissionClasses],
         },
-      },
-    });
-    if (result.error) {
+      });
+      errorMessage = result.error?.message;
+      payload = result.data?.grantCapability;
+    } else {
+      const result = await detachCapability({
+        input: {
+          tenantId,
+          capabilityClass: CapabilityGrantClass.PiExtension,
+          scope,
+          agentProfileId: input.agentProfileId ?? null,
+          capabilityRef: input.extension.id,
+        },
+      });
+      errorMessage = result.error?.message;
+      payload = result.data?.detachCapability;
+    }
+    if (errorMessage) {
       toast.error("Could not update Pi extension assignment", {
-        description: result.error.message,
+        description: errorMessage,
       });
       return;
     }
-    toast.success("Pi extension assignment updated");
+    // Confirmation ends on the item's fresh inspector state (R12), not a
+    // bare success — the returned row carries the true post-write gate.
+    const item = payload?.item;
+    toast.success(
+      input.enabled ? "Pi extension assigned" : "Pi extension detached",
+      {
+        description: item
+          ? `Inspector: ${item.active ? "active" : (item.reason ?? "inactive")}`
+          : input.enabled
+            ? `Inspector state: ${payload?.inspectionState ?? "ok"}`
+            : "No longer in the effective set.",
+      },
+    );
     onChanged();
   }
 

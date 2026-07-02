@@ -66,6 +66,13 @@ enum ComplianceEventType {
   PLUGIN_INSTALL_KEY_FAILED
   PLUGIN_INSTALL_KEY_REVOKED
   PLUGIN_ENTITLEMENT_GRANTED
+  # Capability grant/detach mutations (capability-mapping plan U7)
+  SKILL_GRANTED
+  SKILL_DETACHED
+  MCP_GRANTED
+  MCP_DETACHED
+  AGENT_EXTENSION_GRANTED
+  AGENT_EXTENSION_DETACHED
 }
 
 enum ComplianceAnchorState {
