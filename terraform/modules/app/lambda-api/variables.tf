@@ -471,9 +471,15 @@ variable "ecr_repository_url" {
 }
 
 variable "ecr_repository_provisioned" {
-  description = "Static flag: an ECR repository exists for image-based handlers. count cannot depend on the repository URL attribute (unknown until apply in fresh accounts)."
+  description = "Static flag: an ECR repository exists for image-based handlers AND their image tags are seeded (CI pushes skill-trust-runner-latest for repo-managed stages). count cannot depend on the repository URL attribute (unknown until apply in fresh accounts)."
   type        = bool
   default     = false
+}
+
+variable "manage_bedrock_invocation_logging" {
+  description = "Own the account/region-scoped Bedrock model-invocation logging resources (log group, IAM role, account logging configuration). Only one stage per account+region may set this — the log group name is deliberately stage-neutral."
+  type        = bool
+  default     = true
 }
 
 variable "cors_allowed_origins" {

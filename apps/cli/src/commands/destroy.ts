@@ -27,6 +27,7 @@ import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
 import { loadEnvironment } from "../environments.js";
 import {
+  disableClusterDeletionProtection,
   emptyBucket,
   forceDeleteStageSecrets,
   listStageBuckets,
@@ -175,6 +176,23 @@ export async function runLocalTerraformDestroy(
 
   const terraformDir = resolveTerraformRoot();
   const tiers = expandComponent(opts.component as Component).reverse();
+
+  // Drop RDS deletion protection (U7): Aurora deploys protected by default,
+  // which fails DeleteDBCluster at the very end of the teardown otherwise.
+  // The explicit destroy confirmation above IS the deliberate act the
+  // protection exists to require.
+  const preRegion =
+    identity && identity.region !== "unknown" ? identity.region : "us-east-1";
+  const cluster = disableClusterDeletionProtection(stage, preRegion);
+  if (cluster.found && cluster.disabled) {
+    console.log(
+      `  RDS deletion protection disabled on thinkwork-${stage}-db.`,
+    );
+  } else if (cluster.found && !cluster.disabled) {
+    printWarning(
+      `Could not disable deletion protection on thinkwork-${stage}-db — the database tier will fail to destroy.`,
+    );
+  }
 
   // Pre-empty stage buckets (U7): versioned/non-empty buckets otherwise block
   // terraform's bucket deletion and strand the teardown partway.

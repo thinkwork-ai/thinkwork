@@ -112,7 +112,11 @@ export function forceDeleteStageSecrets(
     "--region",
     region,
     "--query",
-    `SecretList[?starts_with(Name, 'thinkwork-${stage}-')].ARN`,
+    // Two naming schemes exist: dash-style `thinkwork-<stage>-db-credentials`
+    // and slash-style `thinkwork/<stage>/api-auth` (± leading slash). The
+    // dash-only match left slash-style entries in the recovery window and
+    // made the orphan scan report "clean" falsely (harness cycle-5).
+    `SecretList[?starts_with(Name, 'thinkwork-${stage}-') || starts_with(Name, 'thinkwork/${stage}/') || starts_with(Name, '/thinkwork/${stage}/')].ARN`,
     "--output",
     "json",
   ]);
@@ -137,6 +141,48 @@ export function forceDeleteStageSecrets(
     if (del.status === 0) deleted.push(arn);
   }
   return deleted;
+}
+
+/**
+ * Aurora clusters deploy with deletion_protection = true (the right default
+ * for customer stages) — but that makes terraform's DeleteDBCluster fail with
+ * InvalidParameterCombination at the very end of an otherwise-clean teardown
+ * (harness cycle-5 ledger entry). An explicit `thinkwork destroy` IS the
+ * deliberate act the protection exists to require, so drop the flag first.
+ *
+ * Returns true when the cluster is unprotected (or doesn't exist) afterwards.
+ */
+export function disableClusterDeletionProtection(
+  stage: string,
+  region: string,
+  exec: AwsExec = defaultExec,
+): { found: boolean; disabled: boolean } {
+  const clusterId = `thinkwork-${stage}-db`;
+  const describe = exec([
+    "rds",
+    "describe-db-clusters",
+    "--db-cluster-identifier",
+    clusterId,
+    "--region",
+    region,
+    "--query",
+    "DBClusters[0].DeletionProtection",
+    "--output",
+    "text",
+  ]);
+  if (describe.status !== 0) return { found: false, disabled: true };
+  if (describe.stdout.trim() !== "True") return { found: true, disabled: true };
+  const modify = exec([
+    "rds",
+    "modify-db-cluster",
+    "--db-cluster-identifier",
+    clusterId,
+    "--no-deletion-protection",
+    "--apply-immediately",
+    "--region",
+    region,
+  ]);
+  return { found: true, disabled: modify.status === 0 };
 }
 
 export interface OrphanReport {
@@ -193,7 +239,7 @@ export function scanOrphans(
       "--region",
       region,
       "--query",
-      `SecretList[?starts_with(Name, '${prefix}')].Name`,
+      `SecretList[?starts_with(Name, '${prefix}') || starts_with(Name, 'thinkwork/${stage}/') || starts_with(Name, '/thinkwork/${stage}/')].Name`,
       "--output",
       "json",
     ]),
