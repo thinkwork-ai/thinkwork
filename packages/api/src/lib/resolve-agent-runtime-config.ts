@@ -111,6 +111,11 @@ import {
   piExtensionArtifactUri,
   type PiExtensionArtifactDescriptor,
 } from "./pi-extensions/artifacts.js";
+import {
+  createCapabilityDiagnostics,
+  type CapabilityDiagnostic,
+  type CapabilityDiagnosticsCollector,
+} from "./capability-diagnostics.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -265,6 +270,12 @@ export interface AgentRuntimeConfig {
   mcpConfigs: McpConfig[];
   piExtensions: AgentRuntimePiExtension[];
   agentProfilesConfig: AgentProfileRuntimeConfig[];
+  /**
+   * Present only when `collectDiagnostics: true` was passed (U1). Every
+   * capability a gate dropped during resolution, with the enumerated reason.
+   * Absent (never an empty array) on runtime-path resolutions.
+   */
+  capabilityDiagnostics?: CapabilityDiagnostic[];
 }
 
 export class AgentNotFoundError extends Error {
@@ -300,6 +311,17 @@ export interface ResolveAgentRuntimeConfigOptions {
    * agent's human pair" behavior in R15.
    */
   allowHumanPairEmailFallback?: boolean;
+  /**
+   * Opt-in capability diagnostics channel (capability-mapping plan U1).
+   * When true, the resolved config carries `capabilityDiagnostics`: one row
+   * per capability each gate dropped, with an enumerated reason. Runtime
+   * callers (chat-agent-invoke, agents-runtime-config) never set this — the
+   * flag-off path issues no additional queries and its output is unchanged.
+   * Only the capability inspector (U3) sets it; producing complete reason
+   * rows requires reads the runtime path doesn't make (e.g. disabled agent
+   * profiles are filtered out in SQL), and those run only under the flag.
+   */
+  collectDiagnostics?: boolean;
   /**
    * Logging prefix (e.g. "[chat-agent-invoke]", "[skill-run-dispatcher]") so
    * logs trace back to the caller context.
@@ -340,6 +362,9 @@ export async function resolveAgentRuntimeConfig(
 ): Promise<AgentRuntimeConfig> {
   const db = getDb();
   const logPrefix = opts.logPrefix ?? "[agent-runtime-config]";
+  const diagnostics = opts.collectDiagnostics
+    ? createCapabilityDiagnostics()
+    : null;
   const thinkworkApiUrl =
     opts.thinkworkApiUrl ?? getConfig("THINKWORK_API_URL") ?? "";
   const thinkworkApiSecret =
@@ -553,6 +578,7 @@ export async function resolveAgentRuntimeConfig(
     agentId: opts.agentId,
     tenantId: opts.tenantId,
     logPrefix,
+    diagnostics,
   });
 
   // Other default skills (always-on script skills).
@@ -608,11 +634,22 @@ export async function resolveAgentRuntimeConfig(
 
   // Apply template blocked-tools filter last.
   if (blockedTools.length > 0) {
-    const before = skillsConfig.length;
-    skillsConfig = skillsConfig.filter(
-      (s) => !blockedTools.includes(s.skillId),
-    );
-    const removed = before - skillsConfig.length;
+    const kept: SkillConfig[] = [];
+    let removed = 0;
+    for (const s of skillsConfig) {
+      if (blockedTools.includes(s.skillId)) {
+        removed += 1;
+        diagnostics?.add({
+          capabilityClass: "skill",
+          capabilityId: s.skillId,
+          reason: "blocked_by_policy",
+          detail: "agent blocked_tools",
+        });
+        continue;
+      }
+      kept.push(s);
+    }
+    skillsConfig = kept;
     if (removed > 0) {
       console.log(
         `${logPrefix} Class tool_access: removed ${removed} blocked skill(s)`,
@@ -639,9 +676,16 @@ export async function resolveAgentRuntimeConfig(
     ...trustedCatalogSkillIds,
     ...builtInSkillIds,
   ]);
-  skillsConfig = skillsConfig.filter((skill) =>
-    runtimeAllowedSkillIds.has(skill.skillId),
-  );
+  skillsConfig = skillsConfig.filter((skill) => {
+    if (runtimeAllowedSkillIds.has(skill.skillId)) return true;
+    diagnostics?.add({
+      capabilityClass: "skill",
+      capabilityId: skill.skillId,
+      reason: "trust_gate",
+      detail: "no current passed trust report for this catalog skill",
+    });
+    return false;
+  });
 
   const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
   const webExtractConfig =
@@ -814,6 +858,7 @@ export async function resolveAgentRuntimeConfig(
     spaceId: opts.spaceId ?? null,
     mcpConfigs,
     logPrefix,
+    diagnostics,
   });
   const piExtensionAssignments = await loadPiExtensionRuntimeAssignments({
     tenantId: opts.tenantId,
@@ -821,8 +866,15 @@ export async function resolveAgentRuntimeConfig(
       (profile) => profile.id,
     ),
     logPrefix,
+    diagnostics,
   }).catch((err): PiExtensionRuntimeAssignments => {
     console.error(`${logPrefix} Pi extension resolution failed:`, err);
+    diagnostics?.add({
+      capabilityClass: "pi_extension",
+      capabilityId: "*",
+      reason: "resolution_fault",
+      detail: `extension assignment resolution failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
     return { defaultAgent: [], byAgentProfileId: new Map() };
   });
   overriddenConfig.piExtensions = piExtensionAssignments.defaultAgent;
@@ -832,6 +884,9 @@ export async function resolveAgentRuntimeConfig(
       piExtensions:
         piExtensionAssignments.byAgentProfileId.get(profile.id) ?? [],
     }));
+  if (diagnostics) {
+    overriddenConfig.capabilityDiagnostics = diagnostics.drops;
+  }
   return overriddenConfig;
 }
 
@@ -844,6 +899,8 @@ export async function loadPiExtensionRuntimeAssignments(input: {
   tenantId: string;
   agentProfileIds: string[];
   logPrefix: string;
+  /** Opt-in diagnostics collector (U1); no behavior change when absent. */
+  diagnostics?: CapabilityDiagnosticsCollector | null;
 }): Promise<PiExtensionRuntimeAssignments> {
   const db = getDb();
   const rows = await db
@@ -893,20 +950,73 @@ export async function loadPiExtensionRuntimeAssignments(input: {
   const includedProfileIds = new Set(input.agentProfileIds);
 
   for (const row of rows) {
-    const descriptor = toRuntimePiExtension(row, input.logPrefix);
+    const descriptor = toRuntimePiExtension(
+      row,
+      input.logPrefix,
+      input.diagnostics,
+    );
     if (!descriptor) continue;
+    addExtensionContainerGatePrediction(descriptor, input.diagnostics);
     if (descriptor.targetType === "default_agent") {
       defaultAgent.push(descriptor);
       continue;
     }
     if (!descriptor.agentProfileId) continue;
-    if (!includedProfileIds.has(descriptor.agentProfileId)) continue;
+    if (!includedProfileIds.has(descriptor.agentProfileId)) {
+      input.diagnostics?.add({
+        capabilityClass: "pi_extension",
+        capabilityId: descriptor.assignmentId,
+        displayName: descriptor.displayName ?? descriptor.name ?? undefined,
+        reason: "space_mismatch",
+        detail: `target agent profile ${descriptor.agentProfileId} is not active for this resolution`,
+      });
+      continue;
+    }
     const list = byAgentProfileId.get(descriptor.agentProfileId) ?? [];
     list.push(descriptor);
     byAgentProfileId.set(descriptor.agentProfileId, list);
   }
 
   return { defaultAgent, byAgentProfileId };
+}
+
+/**
+ * Predict the container's dynamic-extension permission gate from descriptor
+ * fields the composer already holds. Mirrors the exact conditions and reason
+ * names in packages/agentcore-pi/agent-container/src/runtime/dynamic-extensions.ts —
+ * the extension still ships in runtime config (unchanged behavior); the
+ * diagnostic says the container will skip it at load time.
+ */
+function addExtensionContainerGatePrediction(
+  descriptor: AgentRuntimePiExtension,
+  diagnostics: CapabilityDiagnosticsCollector | null | undefined,
+): void {
+  if (!diagnostics) return;
+  const base = {
+    capabilityClass: "pi_extension" as const,
+    capabilityId: descriptor.assignmentId,
+    displayName: descriptor.displayName ?? descriptor.name ?? undefined,
+  };
+  if (
+    descriptor.permissionClasses.length >
+    descriptor.grantedPermissionClasses.length
+  ) {
+    diagnostics.add({
+      ...base,
+      reason: "missing_granted_provider",
+      detail:
+        "container will skip at load: extension requests more permission classes than were granted",
+    });
+    return;
+  }
+  if (descriptor.grantedPermissionClasses.length > 0) {
+    diagnostics.add({
+      ...base,
+      reason: "unavailable_provider",
+      detail:
+        "container will skip at load: no runtime permission provider exists yet (THINK-123)",
+    });
+  }
 }
 
 /**
@@ -926,6 +1036,13 @@ export async function loadAgentProfileRuntimeConfigs(input: {
   spaceId: string | null;
   mcpConfigs: McpConfig[];
   logPrefix: string;
+  /**
+   * Opt-in diagnostics collector (U1). When present, the query drops the
+   * `enabled = true` SQL predicate so disabled profiles can be reported with
+   * a `profile_disabled` reason — the in-loop enabled check below still
+   * excludes them from the returned configs, so behavior is unchanged.
+   */
+  diagnostics?: CapabilityDiagnosticsCollector | null;
 }): Promise<AgentProfileRuntimeConfig[]> {
   const db = getDb();
   const profileRows = await db
@@ -946,10 +1063,12 @@ export async function loadAgentProfileRuntimeConfigs(input: {
     })
     .from(agentProfiles)
     .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.enabled, true),
-      ),
+      input.diagnostics
+        ? eq(agentProfiles.tenant_id, input.tenantId)
+        : and(
+            eq(agentProfiles.tenant_id, input.tenantId),
+            eq(agentProfiles.enabled, true),
+          ),
     );
 
   if (profileRows.length === 0) return [];
@@ -1027,16 +1146,38 @@ export async function loadAgentProfileRuntimeConfigs(input: {
 
   const configs: AgentProfileRuntimeConfig[] = [];
   for (const profile of profileRows) {
-    if (profile.enabled !== true) continue;
+    if (profile.enabled !== true) {
+      input.diagnostics?.add({
+        capabilityClass: "agent_profile",
+        capabilityId: profile.slug,
+        displayName: profile.name,
+        reason: "profile_disabled",
+      });
+      continue;
+    }
     if (!availableModelIds.has(profile.model_id)) {
       console.warn(
         `${input.logPrefix} Agent Profile ${profile.slug} skipped: model ${profile.model_id} is not available`,
       );
+      input.diagnostics?.add({
+        capabilityClass: "agent_profile",
+        capabilityId: profile.slug,
+        displayName: profile.name,
+        reason: "model_unavailable",
+        detail: `model ${profile.model_id} is not in the tenant model catalog`,
+      });
       continue;
     }
     if (profile.source_space_id) {
       // Space-local profile: ships only while its Space is active.
       if (!input.spaceId || profile.source_space_id !== input.spaceId) {
+        input.diagnostics?.add({
+          capabilityClass: "agent_profile",
+          capabilityId: profile.slug,
+          displayName: profile.name,
+          reason: "space_mismatch",
+          detail: `space-local profile ships only while its Space (${profile.source_space_id}) is active`,
+        });
         continue;
       }
     } else if (activeSpaceLocalSlugs.has(profile.slug)) {
@@ -1044,6 +1185,13 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       console.warn(
         `${input.logPrefix} Agent Profile ${profile.slug} (central ${profile.id}) shadowed by space-local profile for space ${input.spaceId}`,
       );
+      input.diagnostics?.add({
+        capabilityClass: "agent_profile",
+        capabilityId: profile.slug,
+        displayName: profile.name,
+        reason: "shadowed_by_space_local",
+        detail: `central profile shadowed by a space-local profile with the same slug for space ${input.spaceId}`,
+      });
       continue;
     }
     const assignedSpaceIds = [
@@ -1063,6 +1211,14 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       assignedSpaceIds.length > 0 &&
       (!input.spaceId || !assignedSpaceIds.includes(input.spaceId))
     ) {
+      input.diagnostics?.add({
+        capabilityClass: "agent_profile",
+        capabilityId: profile.slug,
+        displayName: profile.name,
+        reason: "space_mismatch",
+        detail:
+          "profile is space-restricted and the selected Space is not in its assignment list",
+      });
       continue;
     }
 
@@ -1078,7 +1234,19 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       .map((slug) => {
         const row = mcpRowsBySlug.get(slug);
         const runtimeConfig = mcpConfigByName.get(slug);
-        if (!row || !runtimeConfig) return null;
+        if (!row || !runtimeConfig) {
+          input.diagnostics?.add({
+            capabilityClass: "mcp_server",
+            capabilityId: slug,
+            reason: "mcp_server_not_resolved",
+            detail: `agent profile ${profile.slug} tool_policy names this server but it ${
+              !row
+                ? "is not an approved+enabled tenant MCP server"
+                : "did not resolve a runtime MCP config"
+            }`,
+          });
+          return null;
+        }
         const availableTools = normalizeMcpToolNames(
           runtimeConfig.availableTools ?? row.tools,
         );
@@ -1168,11 +1336,20 @@ function toRuntimePiExtension(
     source_display_name: string | null;
   },
   logPrefix: string,
+  diagnostics?: CapabilityDiagnosticsCollector | null,
 ): AgentRuntimePiExtension | null {
+  const displayName = row.display_name ?? row.source_display_name ?? undefined;
   const skip = (reason: string) => {
     console.warn(
       `${logPrefix} Pi extension assignment ${row.assignment_id} skipped: ${reason}`,
     );
+    diagnostics?.add({
+      capabilityClass: "pi_extension",
+      capabilityId: row.assignment_id,
+      displayName,
+      reason: "extension_validation_failed",
+      detail: reason,
+    });
     return null;
   };
   if (row.assignment_tenant_id !== row.version_tenant_id) {
@@ -1181,8 +1358,25 @@ function toRuntimePiExtension(
   if (row.assignment_tenant_id !== row.source_tenant_id) {
     return skip("source tenant mismatch");
   }
-  if (!row.enabled) return null;
-  if (row.status !== "approved") return null;
+  if (!row.enabled) {
+    diagnostics?.add({
+      capabilityClass: "pi_extension",
+      capabilityId: row.assignment_id,
+      displayName,
+      reason: "extension_disabled",
+    });
+    return null;
+  }
+  if (row.status !== "approved") {
+    diagnostics?.add({
+      capabilityClass: "pi_extension",
+      capabilityId: row.assignment_id,
+      displayName,
+      reason: "extension_not_approved",
+      detail: `version status is ${row.status}`,
+    });
+    return null;
+  }
   if (row.runtime_target !== "agentcore-pi") {
     return skip(`unsupported runtime target ${row.runtime_target}`);
   }
@@ -1460,6 +1654,8 @@ export async function applyAgentSkillMetadata(input: {
   agentId: string;
   tenantId: string;
   logPrefix: string;
+  /** Opt-in diagnostics collector (U1); no behavior change when absent. */
+  diagnostics?: CapabilityDiagnosticsCollector | null;
 }): Promise<SkillConfig[]> {
   if (input.skillsConfig.length === 0) return input.skillsConfig;
 
@@ -1490,6 +1686,14 @@ export async function applyAgentSkillMetadata(input: {
         `${input.logPrefix} envOverrides failed for skill ${row.skill_id}:`,
         err,
       );
+      input.diagnostics?.add({
+        capabilityClass: "skill",
+        capabilityId: row.skill_id,
+        reason: "oauth_missing",
+        detail: `skill env resolution failed; skill ships without its OAuth env: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
       return null;
     });
     if (config.secretRef) skill.secretRef = config.secretRef as string;
