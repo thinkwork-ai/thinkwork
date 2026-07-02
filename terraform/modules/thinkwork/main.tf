@@ -1308,6 +1308,9 @@ module "api" {
   stripe_price_ids_json                         = var.stripe_price_ids_json
   appsync_realtime_url                          = module.appsync.graphql_realtime_url
   ecr_repository_url                            = module.agentcore_platform.ecr_repository_url
+  # Static truth for count gating: agentcore_platform's ECR repo is
+  # unconditional, but its URL attribute is unknown until apply.
+  ecr_repository_provisioned                    = true
   job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn

@@ -219,3 +219,28 @@ Lock Info:
     ).toBeNull();
   });
 });
+
+// Regression: harness cycle-1 ledger entry — init copies examples/ into the
+// scaffold, and resolveTierDir must prefer the flat tfvars layout over the
+// bundled greenfield example (which the npm bundler ships without tfvars).
+import { resolveTierDir } from "../src/terraform.js";
+
+describe("resolveTierDir precedence (harness cycle-1 regression)", () => {
+  it("prefers the flat scaffolded layout over the bundled greenfield example", () => {
+    const dir = makeTmpDir();
+    mkdirSync(join(dir, "examples", "greenfield"), { recursive: true });
+    writeFileSync(join(dir, "examples", "greenfield", "main.tf"), "");
+    writeFileSync(join(dir, "main.tf"), "");
+    writeFileSync(join(dir, "terraform.tfvars"), 'stage = "x"');
+    expect(resolveTierDir(dir, "x", "app")).toBe(dir);
+  });
+
+  it("still resolves greenfield for the repo layout (no flat tfvars pair)", () => {
+    const dir = makeTmpDir();
+    mkdirSync(join(dir, "examples", "greenfield"), { recursive: true });
+    writeFileSync(join(dir, "examples", "greenfield", "main.tf"), "");
+    expect(resolveTierDir(dir, "x", "app")).toBe(
+      join(dir, "examples", "greenfield"),
+    );
+  });
+});

@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
@@ -90,9 +92,21 @@ export function registerBootstrapCommand(program: Command): void {
 
       const databaseUrl = `postgresql://thinkwork_admin:${encodeURIComponent(dbPassword)}@${dbEndpoint}:5432/thinkwork?sslmode=no-verify`;
 
-      // Find the bootstrap script relative to the repo root
-      const repoRoot = resolve(terraformDir);
-      const scriptPath = resolve(repoRoot, "scripts/bootstrap-workspace.sh");
+      // Bundled copy first (npm/brew installs), then repo-relative (checkout)
+      const here = dirname(fileURLToPath(import.meta.url));
+      const candidates = [
+        resolve(here, "scripts/bootstrap-workspace.sh"),
+        resolve(terraformDir, "scripts/bootstrap-workspace.sh"),
+        resolve(terraformDir, "..", "scripts/bootstrap-workspace.sh"),
+      ];
+      const scriptPath = candidates.find((c) => existsSync(c));
+      if (!scriptPath) {
+        printError(
+          `bootstrap-workspace.sh not found (looked in the CLI bundle and ${terraformDir}). ` +
+            "Reinstall the CLI: npm install -g thinkwork-cli@latest",
+        );
+        process.exit(1);
+      }
 
       const code = await runScript(scriptPath, [stage, bucket, databaseUrl]);
       if (code !== 0) {

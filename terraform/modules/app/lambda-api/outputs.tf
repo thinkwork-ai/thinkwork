@@ -85,12 +85,16 @@ output "billing_export_manifest_key" {
 
 output "email_inbound_fn_arn" {
   description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].arn : ""
+  # Statically constructed (not a resource attribute): SES/customer-domain gate
+  # count on this value, and an apply-time-unknown breaks the FIRST apply in a
+  # fresh account ("Invalid count argument" — THINK-118 harness cycle 4).
+  value = local.deploy_lambda_handlers ? "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-email-inbound" : ""
 }
 
 output "email_inbound_fn_name" {
   description = "email-inbound Lambda function name. Used by the SES module for lambda:InvokeFunction permissions."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].function_name : ""
+  # Static for the same fresh-account plan-time reason as email_inbound_fn_arn.
+  value       = local.deploy_lambda_handlers ? "thinkwork-${var.stage}-api-email-inbound" : ""
 }
 
 # ---------------------------------------------------------------------------

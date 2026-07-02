@@ -428,6 +428,9 @@ export function doctorChecks(): Check[] {
     checkBedrockAccess(),
     checkLambdaConcurrency(),
     checkCredentialExpiry(),
+    // Warn-tier: pending SES production access is tracked here and in
+    // `thinkwork verify`'s checklist (R9); it never blocks.
+    checkSesStatus(),
   ];
 }
 

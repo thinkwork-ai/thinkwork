@@ -196,11 +196,11 @@ function buildTfvars(config: Record<string, string>): string {
   if (config.platform_operator_emails) {
     lines.push(``);
     lines.push(
-      `platform_operator_emails = [${config.platform_operator_emails
+      `platform_operator_emails = "${config.platform_operator_emails
         .split(",")
-        .map((e) => `"${e.trim()}"`)
-        .filter((e) => e !== '""')
-        .join(", ")}]`,
+        .map((e) => e.trim())
+        .filter(Boolean)
+        .join(",")}"`,
     );
   }
 
@@ -877,8 +877,11 @@ variable "customer_domain_delegated" {
 }
 
 variable "platform_operator_emails" {
-  type    = list(string)
-  default = []
+  # Comma-separated string — the module forwards it verbatim to graphql-http
+  # as THINKWORK_PLATFORM_OPERATOR_EMAILS (harness cycle-2 ledger entry:
+  # list(string) here failed module validation, "string required").
+  type    = string
+  default = ""
 }
 
 variable "ses_parent_domain" {

@@ -1,0 +1,64 @@
+name: Deploy Harness
+
+# Fresh-deploy acceptance harness (THINK-118): cycles an ephemeral
+# prod-shaped stage through pack-install → init → deploy → verify → destroy
+# in the ThinkWork account. Failures render fingerprinted, secret-scrubbed
+# ledger entries (uploaded as an artifact) for posting to THINK-118.
+#
+# Stage/account gating lives in scripts/deploy-harness.sh, not job-level
+# `if: env.X` (job-level env conditions silently produce 0-job runs).
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_account_id:
+        description: "AWS account ID the harness must operate in (defaults to the THINKWORK_ACCOUNT_ID repo variable)"
+        required: false
+        type: string
+  schedule:
+    # Weekly regression cycle — full-stack deploys are heavyweight; the
+    # burn-down runs on demand via workflow_dispatch.
+    - cron: "0 7 * * 0"
+
+concurrency:
+  group: deploy-harness
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  harness-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run harness cycle
+        run: |
+          EXPECTED="${{ inputs.expected_account_id || vars.THINKWORK_ACCOUNT_ID }}"
+          bash scripts/deploy-harness.sh "$EXPECTED" "$AWS_REGION"
+
+      - name: Upload ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-ledger
+          path: harness-ledger.json
+          if-no-files-found: ignore

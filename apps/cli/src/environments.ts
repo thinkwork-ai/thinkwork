@@ -27,6 +27,11 @@ export interface EnvironmentConfig {
   enableHindsight: boolean;
   /** @deprecated Use `enableHindsight` instead. Kept for backwards-compat reads of existing config.json files. */
   memoryEngine?: string;
+  /**
+   * Set at U8 graduation: destroy's strongest guard keys on this persisted
+   * identity, not on stage-name patterns (which false-match hprod-*).
+   */
+  graduated?: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveReleaseManifest } from "../commands/release/helpers.js";
@@ -21,8 +21,21 @@ import type { ExecResult } from "./state-backend.js";
 export interface ReleaseLambdaZip {
   name: string;
   fileName: string;
-  url: string;
+  /** Direct download URL — absent when the zip ships inside the bundle. */
+  url: string | null;
+  /** Path inside the release's artifact bundle (e.g. lambdas/activity.zip). */
+  relativePath: string | null;
   sha256?: string;
+}
+
+export interface ReleaseBundle {
+  fileName: string;
+  url: string;
+}
+
+export interface ReleaseWebAsset {
+  url: string | null;
+  relativePath: string | null;
 }
 
 export interface ReleaseArtifacts {
@@ -30,15 +43,18 @@ export interface ReleaseArtifacts {
   lambdaZips: ReleaseLambdaZip[];
   /** Digest-pinned Pi runtime image (repository@sha256:...), arm64. */
   piImageUri: string | null;
-  /** Packaged web static-assets bundle (web.tar.gz), when published. */
-  webAssetUrl: string | null;
+  /** Prebuilt web static-assets bundle (web.tar.gz), when published. */
+  webAsset: ReleaseWebAsset | null;
+  /** The all-in-one artifact bundle (platform-artifacts.tar.gz), when published. */
+  bundle: ReleaseBundle | null;
 }
 
 interface ManifestArtifact {
   name?: string;
   type?: string;
   fileName?: string;
-  url?: string;
+  relativePath?: string;
+  url?: string | null;
   sha256?: string;
 }
 
@@ -53,21 +69,28 @@ interface ManifestRuntimeImage {
 interface ReleaseManifestShape {
   release?: { version?: string };
   artifacts?: ManifestArtifact[];
+  artifactBundles?: ManifestArtifact[];
   runtimeImages?: ManifestRuntimeImage[];
 }
 
-/** Pure parse of a release manifest into the pieces a local deploy needs. */
+/**
+ * Pure parse of a release manifest into the pieces a local deploy needs.
+ * Real releases ship all zips inside one bundle (platform-artifacts.tar.gz)
+ * with per-artifact `relativePath` and `url: null` — per-artifact URLs exist
+ * only for unbundled releases (harness cycle-2 ledger entry).
+ */
 export function parseReleaseArtifacts(
   manifest: ReleaseManifestShape,
 ): ReleaseArtifacts {
   const version = manifest.release?.version ?? "unknown";
 
   const lambdaZips: ReleaseLambdaZip[] = (manifest.artifacts ?? [])
-    .filter((a) => a.type === "lambda" && a.name && a.url)
+    .filter((a) => a.type === "lambda" && a.name && (a.url || a.relativePath))
     .map((a) => ({
       name: a.name!,
       fileName: a.fileName ?? `${a.name}.zip`,
-      url: a.url!,
+      url: a.url ?? null,
+      relativePath: a.relativePath ?? null,
       sha256: a.sha256,
     }));
 
@@ -80,19 +103,59 @@ export function parseReleaseArtifacts(
   );
   const piImageUri = piImage ? `${piImage.repository}@${piImage.digest}` : null;
 
-  const webAsset = (manifest.artifacts ?? []).find(
+  const webArtifact = (manifest.artifacts ?? []).find(
     (a) =>
-      a.url &&
       (a.name === "web" || a.fileName === "web.tar.gz") &&
-      a.type !== "lambda",
+      a.type !== "lambda" &&
+      (a.url || a.relativePath),
   );
+
+  const bundleEntry = (manifest.artifactBundles ?? []).find((b) => b.url);
 
   return {
     version,
     lambdaZips,
     piImageUri,
-    webAssetUrl: webAsset?.url ?? null,
+    webAsset: webArtifact
+      ? {
+          url: webArtifact.url ?? null,
+          relativePath: webArtifact.relativePath ?? null,
+        }
+      : null,
+    bundle: bundleEntry
+      ? {
+          fileName: bundleEntry.fileName ?? "platform-artifacts.tar.gz",
+          url: bundleEntry.url!,
+        }
+      : null,
   };
+}
+
+/**
+ * Download and extract the release's artifact bundle once; returns the
+ * extraction root that artifact `relativePath`s resolve against.
+ */
+export async function materializeBundle(
+  bundle: ReleaseBundle,
+  fetchImpl: typeof fetch = fetch,
+  tempDir?: string,
+): Promise<string> {
+  const dir = tempDir ?? mkdtempSync(join(tmpdir(), "thinkwork-bundle-"));
+  const response = await fetchImpl(bundle.url, { redirect: "follow" });
+  if (!response.ok) {
+    throw new Error(
+      `Could not download release bundle ${bundle.fileName} (${response.status}) from ${bundle.url}`,
+    );
+  }
+  const local = join(dir, bundle.fileName);
+  writeFileSync(local, Buffer.from(await response.arrayBuffer()));
+  const extract = spawnSync("tar", ["-xzf", local, "-C", dir], {
+    encoding: "utf8",
+  });
+  if (extract.status !== 0) {
+    throw new Error(`Could not extract ${bundle.fileName}: ${extract.stderr}`);
+  }
+  return dir;
 }
 
 /** Stage-independent S3 prefix for a pinned release's Lambda zips. */
@@ -123,6 +186,8 @@ export async function seedLambdaArtifacts(options: {
   zips: ReleaseLambdaZip[];
   bucket: string;
   prefix: string;
+  /** Extraction root from materializeBundle() for relativePath-only zips. */
+  bundleRoot?: string;
   exec?: (args: string[]) => ExecResult;
   fetchImpl?: typeof fetch;
   tempDir?: string;
@@ -149,14 +214,28 @@ export async function seedLambdaArtifacts(options: {
       continue;
     }
 
-    const response = await fetchImpl(zip.url, { redirect: "follow" });
-    if (!response.ok) {
+    let local: string;
+    if (options.bundleRoot && zip.relativePath) {
+      local = join(options.bundleRoot, zip.relativePath);
+      if (!existsSync(local)) {
+        throw new Error(
+          `Release bundle is missing ${zip.relativePath} (artifact ${zip.name}).`,
+        );
+      }
+    } else if (zip.url) {
+      const response = await fetchImpl(zip.url, { redirect: "follow" });
+      if (!response.ok) {
+        throw new Error(
+          `Could not download release artifact ${zip.fileName} (${response.status}) from ${zip.url}`,
+        );
+      }
+      local = join(tempDir, zip.fileName);
+      writeFileSync(local, Buffer.from(await response.arrayBuffer()));
+    } else {
       throw new Error(
-        `Could not download release artifact ${zip.fileName} (${response.status}) from ${zip.url}`,
+        `Artifact ${zip.name} has neither a download URL nor a bundle path — is the release bundle missing?`,
       );
     }
-    const local = join(tempDir, zip.fileName);
-    writeFileSync(local, Buffer.from(await response.arrayBuffer()));
 
     const put = exec([
       "s3",

@@ -8,6 +8,7 @@ import { registerPlanCommand } from "./commands/plan.js";
 import { registerDeployCommand } from "./commands/deploy.js";
 import { registerDestroyCommand } from "./commands/destroy.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
+import { registerVerifyCommand } from "./commands/verify.js";
 import { registerOutputsCommand } from "./commands/outputs.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { registerBootstrapCommand } from "./commands/bootstrap.js";
@@ -97,6 +98,7 @@ registerLoginCommand(program);
 registerLogoutCommand(program);
 registerInitCommand(program);
 registerDoctorCommand(program);
+registerVerifyCommand(program);
 registerMeCommand(program);
 
 // Deploy
