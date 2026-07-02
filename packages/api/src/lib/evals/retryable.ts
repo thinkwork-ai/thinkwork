@@ -27,7 +27,15 @@ export function isRetryableEvalInfrastructureError(error: unknown): boolean {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /ThrottlingException|TooManyRequestsException|ServiceQuotaExceededException|Lambda throttled|Rate exceeded|status(?:Code)?:?\s*429|\(429\)/i.test(
+  // "Throttling error" / "Too many requests" cover the Pi runtime's
+  // WRAPPED throttles: the runtime surfaces a Bedrock throttle as an
+  // HTTP 500 body ({"error":"Throttling error: Too many requests,
+  // please wait before trying again.","runtime":"pi"}), which the eval
+  // invoke path rethrows as `AgentCore 500: <body>` — no exception
+  // name, no 429 anywhere. Unclassified, those burn straight to
+  // error/infra_other with no backoff and no redrive (observed live:
+  // 55 of the first 122 cases of a post-throughput-fix baseline run).
+  return /ThrottlingException|TooManyRequestsException|ServiceQuotaExceededException|Lambda throttled|Rate exceeded|Throttling error|Too many requests|status(?:Code)?:?\s*429|\(429\)/i.test(
     message,
   );
 }
