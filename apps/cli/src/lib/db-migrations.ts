@@ -97,6 +97,83 @@ function sqlLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+/**
+ * Split SQL into individual statements, respecting line/block comments,
+ * quoted strings/identifiers, and dollar-quoted bodies ($$...$$ / $tag$...).
+ * Needed for files that cannot run inside a transaction (CREATE INDEX
+ * CONCURRENTLY, procedures that COMMIT) — those must execute one statement
+ * at a time in autocommit, exactly as `psql -f` would.
+ */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let i = 0;
+  while (i < sql.length) {
+    const rest = sql.slice(i);
+    // Line comment
+    if (rest.startsWith("--")) {
+      const end = sql.indexOf("\n", i);
+      const stop = end === -1 ? sql.length : end + 1;
+      current += sql.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    // Block comment
+    if (rest.startsWith("/*")) {
+      const end = sql.indexOf("*/", i + 2);
+      const stop = end === -1 ? sql.length : end + 2;
+      current += sql.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    // Single-quoted string
+    if (sql[i] === "'") {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
+        else if (sql[j] === "'") break;
+        else j += 1;
+      }
+      current += sql.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    // Double-quoted identifier
+    if (sql[i] === '"') {
+      const end = sql.indexOf('"', i + 1);
+      const stop = end === -1 ? sql.length : end + 1;
+      current += sql.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    // Dollar-quoted body ($$ or $tag$)
+    const dollar = rest.match(/^\$[A-Za-z_]*\$/);
+    if (dollar) {
+      const tag = dollar[0];
+      const end = sql.indexOf(tag, i + tag.length);
+      const stop = end === -1 ? sql.length : end + tag.length;
+      current += sql.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    if (sql[i] === ";") {
+      statements.push(current.trim());
+      current = "";
+      i += 1;
+      continue;
+    }
+    current += sql[i];
+    i += 1;
+  }
+  if (current.trim()) statements.push(current.trim());
+  return statements.filter((s) => s.length > 0);
+}
+
+/** Statements that refuse to run inside any transaction block. */
+export function requiresAutocommit(sql: string): boolean {
+  return /(CREATE|DROP)\s+INDEX\s+CONCURRENTLY/i.test(sql);
+}
+
 const COMPLIANCE_VARS: Record<string, string> = {
   writer_pass: "writer",
   drainer_pass: "drainer",
@@ -289,7 +366,17 @@ export async function applyMigrations(options: {
       for (let i = 0; i < pending.length; ) {
         const { file, hash, sql } = pending[i];
         try {
-          await runner.query(sql);
+          if (requiresAutocommit(sql)) {
+            // CONCURRENTLY (and COMMIT-ing procedures) refuse transaction
+            // blocks — run the file one statement at a time in autocommit,
+            // as psql -f would. These files are written idempotent
+            // (IF NOT EXISTS) so a mid-file failure reruns cleanly.
+            for (const statement of splitSqlStatements(sql)) {
+              await runner.query(statement);
+            }
+          } else {
+            await runner.query(sql);
+          }
         } catch (err) {
           errors.set(file, err instanceof Error ? err.message : String(err));
           i += 1;

@@ -9,6 +9,8 @@ import {
   findPsqlVariables,
   listMigrationFiles,
   migrationHash,
+  requiresAutocommit,
+  splitSqlStatements,
   stripPsqlMetaLines,
   type SqlRunner,
 } from "../src/lib/db-migrations.js";
@@ -297,5 +299,60 @@ describe("clusterArn", () => {
     expect(clusterArn("us-east-1", "123", "prod")).toBe(
       "arn:aws:rds:us-east-1:123:cluster:thinkwork-prod-db",
     );
+  });
+});
+
+describe("splitSqlStatements", () => {
+  it("respects dollar-quoted bodies with internal semicolons (0148)", () => {
+    const sql = [
+      "SET lock_timeout = '5s';",
+      "DO $$ BEGIN RAISE NOTICE 'a;b'; END $$;",
+      "CREATE PROCEDURE p() LANGUAGE plpgsql AS $body$ BEGIN COMMIT; END; $body$;",
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (a);",
+    ].join("\n");
+    const parts = splitSqlStatements(sql);
+    expect(parts).toHaveLength(4);
+    expect(parts[1]).toContain("RAISE NOTICE 'a;b'");
+    expect(parts[2]).toContain("$body$ BEGIN COMMIT; END; $body$");
+  });
+
+  it("ignores semicolons in comments and quoted strings", () => {
+    const sql = "-- not a stmt; still comment\nSELECT 'x;y'; /* z;q */ SELECT 2;";
+    const parts = splitSqlStatements(sql);
+    expect(parts).toHaveLength(2);
+  });
+});
+
+describe("autocommit execution for CONCURRENTLY files (0148)", () => {
+  it("runs CONCURRENTLY files statement-by-statement", async () => {
+    const dir = makeDrizzleDir({
+      "0148_x.sql":
+        "ALTER TABLE t ADD COLUMN IF NOT EXISTS a int;\nCREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (a);",
+    });
+    const { runner, queries } = fakeRunner();
+    const summary = await applyMigrations({
+      drizzleDir: dir,
+      stage: "hp1",
+      region: "us-east-1",
+      connection: {
+        host: "h",
+        port: 5432,
+        user: "u",
+        password: "p",
+        database: "thinkwork",
+      },
+      connect: async () => runner,
+    });
+    expect(summary.applied).toEqual(["0148_x"]);
+    const applied = queries.filter(
+      (q) => q.includes("ALTER TABLE t") || q.includes("CONCURRENTLY"),
+    );
+    expect(applied).toHaveLength(2);
+  });
+
+  it("requiresAutocommit detects create/drop index concurrently", () => {
+    expect(requiresAutocommit("CREATE INDEX CONCURRENTLY i ON t(a);")).toBe(true);
+    expect(requiresAutocommit("DROP INDEX CONCURRENTLY i;")).toBe(true);
+    expect(requiresAutocommit("CREATE INDEX i ON t(a);")).toBe(false);
   });
 });
