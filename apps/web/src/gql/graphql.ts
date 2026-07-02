@@ -6957,7 +6957,10 @@ export type QueryRoutinesArgs = {
 
 export type QueryRuntimeManifestsByAgentArgs = {
   agentId: Scalars["ID"]["input"];
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryScheduledJobArgs = {
@@ -7857,11 +7860,16 @@ export type RunScheduledJobResult = {
 export type RuntimeManifest = {
   __typename?: "RuntimeManifest";
   agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  configFingerprint?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
   manifestJson: Scalars["AWSJSON"]["output"];
   sessionId: Scalars["String"]["output"];
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
   tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  threadTurnId?: Maybe<Scalars["ID"]["output"]>;
   userId?: Maybe<Scalars["ID"]["output"]>;
 };
 

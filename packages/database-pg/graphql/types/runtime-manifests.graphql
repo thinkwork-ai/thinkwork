@@ -12,10 +12,26 @@ type RuntimeManifest {
   tenantId: ID!
   agentId: ID
   userId: ID
+  # Turn/context identity (capability-mapping plan U11) — populated by the
+  # U12 runtime emitter; null on pre-U11 rows.
+  threadId: ID
+  threadTurnId: ID
+  spaceId: ID
+  agentProfileId: ID
+  # Resolved-config fingerprint forwarded from the dispatch payload; the
+  # inspector's divergence states (R15) compare against this.
+  configFingerprint: String
   manifestJson: AWSJSON!
   createdAt: AWSDateTime!
 }
 
 extend type Query {
-  runtimeManifestsByAgent(agentId: ID!, limit: Int): [RuntimeManifest!]!
+  runtimeManifestsByAgent(
+    agentId: ID!
+    limit: Int
+    # Context-keyed retrieval (U11): each filter is exact-match when set.
+    spaceId: ID
+    agentProfileId: ID
+    threadId: ID
+  ): [RuntimeManifest!]!
 }
