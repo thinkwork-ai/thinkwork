@@ -33,6 +33,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "thinkwork_api_url",
   "thinkwork_api_secret",
   "thread_turn_id",
+  "config_fingerprint",
   "agent_profiles",
   "pi_extensions",
   "model_routing_policy",
@@ -84,6 +85,15 @@ export interface AgentDispatchControlFieldArgs {
    * wakeup response path understands `finalize_dispatched`.
    */
   includeFinalizeCallback: boolean;
+  /**
+   * Resolved-config fingerprint (capability-mapping plan U12, KTD-3):
+   * computeConfigFingerprint over the dispatch's resolved runtime config +
+   * selection. The container forwards it opaquely into the per-turn
+   * capability manifest so the inspector can gate divergence assertions on
+   * fingerprint equality (R15). Optional — older callers omit it and the
+   * manifest row lands with a null fingerprint.
+   */
+  configFingerprint?: string;
 }
 
 export function buildAgentDispatchControlFields(
@@ -101,6 +111,7 @@ export function buildAgentDispatchControlFields(
     thinkwork_api_url: args.thinkworkApiUrl || undefined,
     thinkwork_api_secret: args.apiAuthSecret || undefined,
     thread_turn_id: args.threadTurnId || undefined,
+    config_fingerprint: args.configFingerprint || undefined,
     // Always an array — `[]` (not absent) when the tenant has no profiles.
     agent_profiles: args.agentProfiles,
     // Dynamic Pi extensions are resolved at invocation time from approved,
