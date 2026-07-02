@@ -178,9 +178,14 @@ export function splitSqlStatements(sql: string): string[] {
   return statements.filter((s) => s.length > 0);
 }
 
-/** Statements that refuse to run inside any transaction block. */
+/**
+ * Statements that refuse to run inside any transaction block. Comment text
+ * must not count — 0015's header COMMENT says "CREATE INDEX CONCURRENTLY was
+ * considered but", which left the file unwrapped (harness cycle-8).
+ */
 export function requiresAutocommit(sql: string): boolean {
-  return /(CREATE|DROP)\s+INDEX\s+CONCURRENTLY/i.test(sql);
+  const withoutComments = sql.replace(/--[^\n]*/g, "");
+  return /(CREATE|DROP)\s+INDEX\s+CONCURRENTLY/i.test(withoutComments);
 }
 
 const COMPLIANCE_VARS: Record<string, string> = {
@@ -275,7 +280,7 @@ export interface SqlRunner {
  * auto-installs it alongside the AWS CLI and Terraform.
  */
 function connectPsql(connection: PgConnection): Promise<SqlRunner> {
-  const url = `postgresql://${encodeURIComponent(connection.user)}:${encodeURIComponent(connection.password)}@${connection.host}:${connection.port}/${connection.database}?sslmode=require`;
+  const url = `postgresql://${encodeURIComponent(connection.user)}:${encodeURIComponent(connection.password)}@${connection.host}:${connection.port}/${connection.database}?sslmode=prefer`;
   const tempDir = mkdtempSync(join(tmpdir(), "thinkwork-psql-"));
   let seq = 0;
   const runner: SqlRunner = {
@@ -335,6 +340,30 @@ export async function applyMigrations(options: {
       "CREATE SCHEMA IF NOT EXISTS drizzle; " +
         "CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations " +
         "(id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);",
+    );
+    // Hindsight shares this database and races the replay on a fresh stack —
+    // whoever creates pg_trgm/vector first wins, and if that happens inside a
+    // session whose search_path points elsewhere, the operator classes become
+    // invisible to every migration (harness cycle-8: "gin_trgm_ops does not
+    // exist" while pg_trgm "already exists"). Normalize shared extensions
+    // into public before replaying anything.
+    await runner.query(
+      `DO $ext$
+       DECLARE ext text; sch text;
+       BEGIN
+         FOREACH ext IN ARRAY ARRAY['pg_trgm', 'vector'] LOOP
+           BEGIN
+             EXECUTE format('CREATE EXTENSION IF NOT EXISTS %I', ext);
+           EXCEPTION WHEN OTHERS THEN NULL; -- unavailable locally is fine
+           END;
+           SELECT n.nspname INTO sch FROM pg_extension e
+             JOIN pg_namespace n ON e.extnamespace = n.oid
+             WHERE e.extname = ext;
+           IF sch IS NOT NULL AND sch <> 'public' THEN
+             EXECUTE format('ALTER EXTENSION %I SET SCHEMA public', ext);
+           END IF;
+         END LOOP;
+       END $ext$;`,
     );
     const appliedRes = await runner.query(
       "SELECT hash FROM drizzle.__drizzle_migrations;",
