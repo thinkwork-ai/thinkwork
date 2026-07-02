@@ -314,6 +314,10 @@ export default defineConfig({
                   slug: "concepts/agents/import-fog-fita",
                 },
                 { label: "Skills", slug: "concepts/agents/skills" },
+                {
+                  label: "Capability Matrix",
+                  slug: "concepts/capability-matrix",
+                },
                 { label: "Code Sandbox", slug: "concepts/agents/code-sandbox" },
               ],
             },
