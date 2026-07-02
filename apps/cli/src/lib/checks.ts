@@ -159,27 +159,38 @@ export function evaluateBedrockProbe(error: string | null): CheckResult {
 export function checkBedrockAccess(): Check {
   return {
     name: "Bedrock model invocation",
-    run: () => {
+    run: async () => {
       const region = process.env.AWS_REGION || "us-east-1";
-      try {
-        execSync(
-          `aws bedrock-runtime converse --model-id ${DOCTOR_BEDROCK_PROBE_MODEL_ID} ` +
-            `--messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' ` +
-            `--inference-config '{"maxTokens":1}' --output json --region ${region}`,
-          {
-            encoding: "utf-8",
-            timeout: 30000,
-            stdio: ["pipe", "pipe", "pipe"],
-          },
-        );
-        return evaluateBedrockProbe(null);
-      } catch (err) {
-        const stderr =
-          err instanceof Error && "stderr" in err
-            ? String((err as { stderr?: unknown }).stderr ?? err.message)
-            : String(err);
-        return evaluateBedrockProbe(stderr);
+      // Busy accounts (dev + harness sharing quota) throw transient
+      // ThrottlingExceptions that are NOT deploy blockers — retry with
+      // backoff before treating throttle as a verdict (prod graduation was
+      // blocked twice by one-shot probes). Persistent throttle still fails.
+      let lastError: string | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          execSync(
+            `aws bedrock-runtime converse --model-id ${DOCTOR_BEDROCK_PROBE_MODEL_ID} ` +
+              `--messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' ` +
+              `--inference-config '{"maxTokens":1}' --output json --region ${region}`,
+            {
+              encoding: "utf-8",
+              timeout: 30000,
+              stdio: ["pipe", "pipe", "pipe"],
+            },
+          );
+          return evaluateBedrockProbe(null);
+        } catch (err) {
+          lastError =
+            err instanceof Error && "stderr" in err
+              ? String((err as { stderr?: unknown }).stderr ?? err.message)
+              : String(err);
+          if (!lastError.includes("ThrottlingException") || attempt === 3) {
+            return evaluateBedrockProbe(lastError);
+          }
+          await new Promise((r) => setTimeout(r, attempt * 5000));
+        }
       }
+      return evaluateBedrockProbe(lastError);
     },
   };
 }
