@@ -823,7 +823,10 @@ function caseContent(caseId: string) {
 
 describe("curation propagation (U7)", () => {
   it("propagates a retirement one-way, preserving tenant content edits (Covers AE5)", async () => {
-    await seedBaselineDataset(TENANT, deps(), { cases: syntheticCases() });
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: syntheticCases(),
+      targetVersion: 1,
+    });
 
     // Tenant edited gamma's query via the Studio-era dataset path.
     const gamma = caseContent("baseline-case-gamma");
@@ -872,7 +875,7 @@ describe("curation propagation (U7)", () => {
           : seed,
       ),
     );
-    await seedBaselineDataset(TENANT, deps(), { cases: v1 });
+    await seedBaselineDataset(TENANT, deps(), { cases: v1, targetVersion: 1 });
     expect(caseContent("baseline-case-gamma").core.quality_state).toBe(
       "retired",
     );
@@ -896,7 +899,10 @@ describe("curation propagation (U7)", () => {
           : seed,
       ),
     );
-    await seedBaselineDataset(TENANT, deps(), { cases: retired });
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: retired,
+      targetVersion: 1,
+    });
 
     const flagged = buildBaselineDatasetCases(
       syntheticSeeds().map((seed) =>
@@ -916,7 +922,10 @@ describe("curation propagation (U7)", () => {
   });
 
   it("rewrite: tombstones the old identity, adds the successor with rewritten_from linkage (Covers R14)", async () => {
-    await seedBaselineDataset(TENANT, deps(), { cases: syntheticCases() });
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: syntheticCases(),
+      targetVersion: 1,
+    });
 
     // v2: delta is rewritten as delta-v2; the old id leaves the packs
     // and lands in _tombstones.json.
@@ -996,7 +1005,10 @@ describe("curation propagation (U7)", () => {
           : seed,
       ),
     );
-    await seedBaselineDataset(TENANT, deps(), { cases: flagged });
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: flagged,
+      targetVersion: 1,
+    });
     expect(caseContent("baseline-case-alpha").core.quality_state).toBe(
       "needs-revision",
     );
