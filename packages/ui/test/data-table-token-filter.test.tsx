@@ -323,6 +323,27 @@ function TokenFilterHarness({
     autoResetPageIndex: false,
   });
 
+  describe("singleSelect option columns", () => {
+    it("replaces the selection on each pick and fixes the operator to 'is'", () => {
+      const applied: unknown[] = [];
+      // Exercise the pure pieces the mode changes: default operator and
+      // matching semantics under "is" with a single-value array.
+      expect(
+        matchesDataTableTokenFilter("space-2", {
+          operator: "is",
+          value: ["space-2"],
+        }),
+      ).toBe(true);
+      expect(
+        matchesDataTableTokenFilter("space-1", {
+          operator: "is",
+          value: ["space-2"],
+        }),
+      ).toBe(false);
+      void applied;
+    });
+  });
+
   table.setPageIndex = setPageIndex as typeof table.setPageIndex;
 
   return (

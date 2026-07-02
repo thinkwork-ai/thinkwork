@@ -14354,19 +14354,6 @@ export type SettingsRejectPiExtensionVersionMutation = {
   };
 };
 
-export type SettingsUpdatePiExtensionAssignmentMutationVariables = Exact<{
-  input: UpdatePiExtensionAssignmentInput;
-}>;
-
-export type SettingsUpdatePiExtensionAssignmentMutation = {
-  __typename?: "Mutation";
-  updatePiExtensionAssignment: { __typename?: "PiExtension" } & {
-    " $fragmentRefs"?: {
-      SettingsPiExtensionFieldsFragment: SettingsPiExtensionFieldsFragment;
-    };
-  };
-};
-
 export type SettingsMeQueryVariables = Exact<{ [key: string]: never }>;
 
 export type SettingsMeQuery = {
@@ -15490,6 +15477,58 @@ export type SettingsConfigureWorkosAuthPluginMutation = {
       hostnames: Array<string>;
       publicOptionLabel: string;
     };
+  };
+};
+
+export type SettingsGrantCapabilityMutationVariables = Exact<{
+  input: GrantCapabilityInput;
+}>;
+
+export type SettingsGrantCapabilityMutation = {
+  __typename?: "Mutation";
+  grantCapability: {
+    __typename?: "CapabilityMutationResult";
+    outcome: string;
+    inspectionState: string;
+    computedAt: any;
+    configFingerprint?: string | null;
+    item?: {
+      __typename?: "CapabilityItem";
+      capabilityClass: string;
+      capabilityId: string;
+      displayName?: string | null;
+      active: boolean;
+      provenance?: string | null;
+      reason?: string | null;
+      detail?: string | null;
+      tokenStatus?: string | null;
+    } | null;
+  };
+};
+
+export type SettingsDetachCapabilityMutationVariables = Exact<{
+  input: DetachCapabilityInput;
+}>;
+
+export type SettingsDetachCapabilityMutation = {
+  __typename?: "Mutation";
+  detachCapability: {
+    __typename?: "CapabilityMutationResult";
+    outcome: string;
+    inspectionState: string;
+    computedAt: any;
+    configFingerprint?: string | null;
+    item?: {
+      __typename?: "CapabilityItem";
+      capabilityClass: string;
+      capabilityId: string;
+      displayName?: string | null;
+      active: boolean;
+      provenance?: string | null;
+      reason?: string | null;
+      detail?: string | null;
+      tokenStatus?: string | null;
+    } | null;
   };
 };
 
@@ -28470,155 +28509,6 @@ export const SettingsRejectPiExtensionVersionDocument = {
   SettingsRejectPiExtensionVersionMutation,
   SettingsRejectPiExtensionVersionMutationVariables
 >;
-export const SettingsUpdatePiExtensionAssignmentDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SettingsUpdatePiExtensionAssignment" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "UpdatePiExtensionAssignmentInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "updatePiExtensionAssignment" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "FragmentSpread",
-                  name: { kind: "Name", value: "SettingsPiExtensionFields" },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: "FragmentDefinition",
-      name: { kind: "Name", value: "SettingsPiExtensionFields" },
-      typeCondition: {
-        kind: "NamedType",
-        name: { kind: "Name", value: "PiExtension" },
-      },
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          { kind: "Field", name: { kind: "Name", value: "id" } },
-          { kind: "Field", name: { kind: "Name", value: "tenantId" } },
-          { kind: "Field", name: { kind: "Name", value: "sourceId" } },
-          { kind: "Field", name: { kind: "Name", value: "sourceType" } },
-          { kind: "Field", name: { kind: "Name", value: "repositoryUrl" } },
-          { kind: "Field", name: { kind: "Name", value: "repositoryOwner" } },
-          { kind: "Field", name: { kind: "Name", value: "repositoryName" } },
-          { kind: "Field", name: { kind: "Name", value: "displayName" } },
-          { kind: "Field", name: { kind: "Name", value: "description" } },
-          { kind: "Field", name: { kind: "Name", value: "sourceRef" } },
-          { kind: "Field", name: { kind: "Name", value: "commitSha" } },
-          { kind: "Field", name: { kind: "Name", value: "manifestHash" } },
-          { kind: "Field", name: { kind: "Name", value: "artifactHash" } },
-          { kind: "Field", name: { kind: "Name", value: "artifactUri" } },
-          { kind: "Field", name: { kind: "Name", value: "runtimeTarget" } },
-          { kind: "Field", name: { kind: "Name", value: "status" } },
-          { kind: "Field", name: { kind: "Name", value: "statusReason" } },
-          { kind: "Field", name: { kind: "Name", value: "manifest" } },
-          { kind: "Field", name: { kind: "Name", value: "toolNames" } },
-          { kind: "Field", name: { kind: "Name", value: "lifecycleHooks" } },
-          { kind: "Field", name: { kind: "Name", value: "permissionClasses" } },
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "verificationReport" },
-          },
-          { kind: "Field", name: { kind: "Name", value: "reviewedByUserId" } },
-          { kind: "Field", name: { kind: "Name", value: "reviewedAt" } },
-          { kind: "Field", name: { kind: "Name", value: "approvedByUserId" } },
-          { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
-          { kind: "Field", name: { kind: "Name", value: "rejectedByUserId" } },
-          { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
-          { kind: "Field", name: { kind: "Name", value: "executable" } },
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "assignmentSummary" },
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "defaultAgentEnabled" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "enabledProfileCount" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "disabledCount" },
-                },
-              ],
-            },
-          },
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "assignments" },
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "id" } },
-                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
-                { kind: "Field", name: { kind: "Name", value: "versionId" } },
-                { kind: "Field", name: { kind: "Name", value: "targetType" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "agentProfileId" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "enabled" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "grantedPermissions" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
-                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
-              ],
-            },
-          },
-          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
-          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SettingsUpdatePiExtensionAssignmentMutation,
-  SettingsUpdatePiExtensionAssignmentMutationVariables
->;
 export const SettingsMeDocument = {
   kind: "Document",
   definitions: [
@@ -32946,6 +32836,214 @@ export const SettingsConfigureWorkosAuthPluginDocument = {
 } as unknown as DocumentNode<
   SettingsConfigureWorkosAuthPluginMutation,
   SettingsConfigureWorkosAuthPluginMutationVariables
+>;
+export const SettingsGrantCapabilityDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsGrantCapability" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "GrantCapabilityInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "grantCapability" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "outcome" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "inspectionState" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "computedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "configFingerprint" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "item" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "capabilityClass" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "capabilityId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "active" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provenance" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "detail" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tokenStatus" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsGrantCapabilityMutation,
+  SettingsGrantCapabilityMutationVariables
+>;
+export const SettingsDetachCapabilityDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsDetachCapability" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "DetachCapabilityInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "detachCapability" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "outcome" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "inspectionState" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "computedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "configFingerprint" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "item" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "capabilityClass" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "capabilityId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "displayName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "active" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "provenance" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "detail" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "tokenStatus" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsDetachCapabilityMutation,
+  SettingsDetachCapabilityMutationVariables
 >;
 export const SettingsCapabilityInspectorDocument = {
   kind: "Document",

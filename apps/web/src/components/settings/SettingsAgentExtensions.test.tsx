@@ -54,4 +54,11 @@ describe("SettingsAgentExtensions", () => {
     expect(source).toContain("ref: trimmedRef");
     expect(source).not.toContain("manifestPath:");
   });
+
+  it("routes assignment writes through the unified capability mutations (plan U8)", () => {
+    expect(source).toContain("SettingsGrantCapabilityMutation");
+    expect(source).toContain("SettingsDetachCapabilityMutation");
+    expect(source).toContain("CapabilityGrantClass.PiExtension");
+    expect(source).not.toContain("SettingsUpdatePiExtensionAssignmentMutation");
+  });
 });
