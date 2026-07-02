@@ -341,9 +341,10 @@ describe("rescueLeakedAskUserQuestion", () => {
   });
 
   it("post failure: strips the syntax and appends a readable markdown fallback", async () => {
-    const post = vi.fn(
-      async (): Promise<RescuePostOutcome> => ({ ok: false, status: 500 }),
-    );
+    const post = vi.fn(async (): Promise<RescuePostOutcome> => ({
+      ok: false,
+      status: 500,
+    }));
     const result = await rescueLeakedAskUserQuestion({ text: FORMAT_A, post });
     expect(result.rescued).toBe(false);
     expect(result.content).not.toContain("<tool_call>");
@@ -367,9 +368,10 @@ describe("rescueLeakedAskUserQuestion", () => {
   });
 
   it("post 409 (already pending): strips, no fallback appended", async () => {
-    const post = vi.fn(
-      async (): Promise<RescuePostOutcome> => ({ ok: false, status: 409 }),
-    );
+    const post = vi.fn(async (): Promise<RescuePostOutcome> => ({
+      ok: false,
+      status: 409,
+    }));
     const result = await rescueLeakedAskUserQuestion({ text: FORMAT_A, post });
     expect(result.rescued).toBe(false);
     expect(result.content).toBe(
@@ -696,9 +698,14 @@ describe("handleInvocation — leaked ask_user_question rescue wiring", () => {
     });
 
     expect(result.statusCode).toBe(200);
-    expect(
-      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.length,
-    ).toBe(0);
+    // The U12 capability manifest POST fires on every turn; this test pins
+    // INTAKE traffic specifically.
+    const nonManifestCalls = (
+      fetchImpl as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.filter(
+      (call) => !String(call[0]).endsWith("/api/runtime/manifests"),
+    );
+    expect(nonManifestCalls.length).toBe(0);
     const response = result.body.response as Record<string, unknown>;
     expect(response.content).toBe(CLEAN_TEXT);
   });
