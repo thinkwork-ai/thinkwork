@@ -2,10 +2,16 @@
  * Capabilities area (capability-mapping plan U4 + U8).
  *
  * One operator door: the effective merged capability set for a selection —
- * space, agent profile, perspective user — grouped by capability class,
+ * space, agent profile, perspective user — one tab per capability class,
  * with a per-row state chip (active / inactive+reason / degraded) and
  * provenance line. Point-in-time semantics: results carry `computedAt` and
- * are only refreshed by selector changes or the explicit refresh action.
+ * are only refreshed by selection changes or the explicit refresh action.
+ *
+ * The toolbar reuses the Work Items token-filter pattern: Space / Agent
+ * profile / Perspective user are single-select tokens that drive the
+ * inspector QUERY (clearing them returns to the tenant-wide no-user
+ * baseline), while Search and State tokens filter the returned rows
+ * client-side.
  *
  * Because the inspector already renders the tenant pool (catalog skills and
  * registered MCP servers appear as `not_installed` rows), inventory + grant
@@ -23,7 +29,21 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
+  Bot,
+  Boxes,
+  CircleDotDashed,
+  RefreshCw,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -38,12 +58,15 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
+  type DataTableTokenFilterColumn,
+  type DataTableTokenFilterValue,
+  Input,
   Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
   cn,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
@@ -60,8 +83,6 @@ import {
   SettingsHeader,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-
-const ANY_VALUE = "__any__";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -87,6 +108,18 @@ const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
   skill: CapabilityGrantClass.Skill,
   mcp_server: CapabilityGrantClass.McpServer,
 };
+
+// Hidden filter-table columns (Work Items token-filter pattern). The
+// search/state columns filter rows client-side; the space/profile/user
+// columns are SELECTION tokens — they drive the inspector query, so their
+// row predicate always matches.
+const FILTER_COLUMNS = {
+  search: "filterSearch",
+  state: "filterState",
+  space: "filterSpace",
+  profile: "filterProfile",
+  user: "filterUser",
+} as const;
 
 // Post-attach S3 materialization race: poll the inspector briefly and show
 // "sync pending" until the workspace read confirms — never a false
@@ -152,13 +185,50 @@ function stateChip(item: InspectorItem) {
   );
 }
 
+/** First selected option value of a single-select selection token. */
+function selectedOptionValue(
+  filters: ColumnFiltersState,
+  columnId: string,
+): string | null {
+  const raw = filters.find((filter) => filter.id === columnId)?.value as
+    DataTableTokenFilterValue | undefined;
+  if (!raw || raw.operator === "is_not" || raw.operator === "is_none_of") {
+    return null;
+  }
+  const value = Array.isArray(raw.value) ? raw.value[0] : raw.value;
+  return typeof value === "string" && value ? value : null;
+}
+
+const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
+  {
+    id: FILTER_COLUMNS.search,
+    accessorFn: (item) =>
+      [
+        item.displayName,
+        item.capabilityId,
+        item.provenance,
+        item.reason,
+        item.detail,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    filterFn: dataTableTokenFilterFns.text,
+  },
+  {
+    id: FILTER_COLUMNS.state,
+    accessorFn: (item) => (item.active ? "active" : "inactive"),
+    filterFn: dataTableTokenFilterFns.option,
+  },
+  // Selection tokens: never filter rows — they change the query.
+  { id: FILTER_COLUMNS.space, accessorFn: () => "", filterFn: () => true },
+  { id: FILTER_COLUMNS.profile, accessorFn: () => "", filterFn: () => true },
+  { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
+];
+
 export function SettingsCapabilities() {
   const { tenantId } = useTenant();
-  const [spaceId, setSpaceId] = useState<string | null>(null);
-  const [agentProfileId, setAgentProfileId] = useState<string | null>(null);
-  const [perspectiveUserId, setPerspectiveUserId] = useState<string | null>(
-    null,
-  );
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [activeClass, setActiveClass] = useState<string>("skill");
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const syncPollCount = useRef(0);
@@ -179,6 +249,18 @@ export function SettingsCapabilities() {
     pause: !tenantId,
   });
 
+  // Selection tokens drive the QUERY; Clear resets to the tenant-wide
+  // no-user baseline.
+  const spaceId = selectedOptionValue(columnFilters, FILTER_COLUMNS.space);
+  const agentProfileId = selectedOptionValue(
+    columnFilters,
+    FILTER_COLUMNS.profile,
+  );
+  const perspectiveUserId = selectedOptionValue(
+    columnFilters,
+    FILTER_COLUMNS.user,
+  );
+
   const [inspection, refetchInspection] = useQuery({
     query: SettingsCapabilityInspectorQuery,
     variables: {
@@ -197,6 +279,85 @@ export function SettingsCapabilities() {
   const loading = inspection.fetching;
   const result = inspection.data?.capabilityInspector;
   const predicted = result?.predicted ?? null;
+  const items = useMemo(
+    () => (predicted?.items ?? []) as InspectorItem[],
+    [predicted?.items],
+  );
+
+  const members = useMemo(
+    () =>
+      (membersResult.data?.tenantMembers ?? [])
+        .filter(
+          (member) =>
+            member.principalType.toUpperCase() === "USER" && member.user?.id,
+        )
+        .map((member) => ({
+          id: member.user!.id,
+          name: member.user!.name ?? member.user!.email ?? member.principalId,
+        })),
+    [membersResult.data?.tenantMembers],
+  );
+
+  const filterTable = useReactTable({
+    data: items,
+    columns: FILTER_COLUMN_DEFS,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const filteredItems = filterTable
+    .getFilteredRowModel()
+    .rows.map((row) => row.original);
+
+  const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
+    () => [
+      {
+        id: FILTER_COLUMNS.state,
+        label: "State",
+        type: "option",
+        icon: <CircleDotDashed className="size-4" />,
+        options: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      },
+      {
+        id: FILTER_COLUMNS.space,
+        label: "Space",
+        type: "option",
+        icon: <Boxes className="size-4" />,
+        options: (spacesResult.data?.spaces ?? []).map((space) => ({
+          value: space.id,
+          label: space.name,
+        })),
+        emptyMessage: "No spaces",
+      },
+      {
+        id: FILTER_COLUMNS.profile,
+        label: "Agent profile",
+        type: "option",
+        icon: <Bot className="size-4" />,
+        options: (profilesResult.data?.agentProfiles ?? []).map((profile) => ({
+          value: profile.id,
+          label: profile.name,
+        })),
+        emptyMessage: "No agent profiles",
+      },
+      {
+        id: FILTER_COLUMNS.user,
+        label: "Perspective user",
+        type: "option",
+        icon: <UserRound className="size-4" />,
+        options: members.map((member) => ({
+          value: member.id,
+          label: member.name,
+        })),
+        emptyMessage: "No members",
+      },
+    ],
+    [members, profilesResult.data?.agentProfiles, spacesResult.data?.spaces],
+  );
 
   // Grant/detach exist only at agent and agent-profile scope (R11): a
   // space or perspective-user selection is a read lens. Derived from the
@@ -210,9 +371,7 @@ export function SettingsCapabilities() {
   // active (or attempts run out — then show the true current state).
   useEffect(() => {
     if (!confirmation?.syncPending) return;
-    const row = (predicted?.items ?? []).find(
-      (item) => rowKeyOf(item) === confirmation.rowKey,
-    );
+    const row = items.find((item) => rowKeyOf(item) === confirmation.rowKey);
     if (row?.active) {
       setConfirmation({ ...confirmation, item: row, syncPending: false });
       return;
@@ -230,7 +389,7 @@ export function SettingsCapabilities() {
       refetchInspection({ requestPolicy: "network-only" });
     }, SYNC_POLL_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [confirmation, predicted?.items, refetchInspection]);
+  }, [confirmation, items, refetchInspection]);
 
   async function runMutation(action: "attach" | "detach", item: InspectorItem) {
     if (!tenantId) return;
@@ -357,33 +516,59 @@ export function SettingsCapabilities() {
     return null;
   }
 
-  const grouped = useMemo(() => {
-    const byClass = new Map<string, InspectorItem[]>();
-    for (const item of predicted?.items ?? []) {
-      const list = byClass.get(item.capabilityClass) ?? [];
+  // One tab per capability class, in fixed order, with active counts.
+  const byClass = useMemo(() => {
+    const map = new Map<string, InspectorItem[]>();
+    for (const item of filteredItems) {
+      const list = map.get(item.capabilityClass) ?? [];
       list.push(item);
-      byClass.set(item.capabilityClass, list);
+      map.set(item.capabilityClass, list);
     }
-    const orderOf = (capabilityClass: string) => {
-      const index = CLASS_ORDER.indexOf(capabilityClass);
-      return index === -1 ? CLASS_ORDER.length : index;
-    };
-    return [...byClass.entries()].sort(([a], [b]) => orderOf(a) - orderOf(b));
-  }, [predicted?.items]);
+    return map;
+  }, [filteredItems]);
 
-  const members = useMemo(
-    () =>
-      (membersResult.data?.tenantMembers ?? [])
-        .filter(
-          (member) =>
-            member.principalType.toUpperCase() === "USER" && member.user?.id,
-        )
-        .map((member) => ({
-          id: member.user!.id,
-          name: member.user!.name ?? member.user!.email ?? member.principalId,
-        })),
-    [membersResult.data?.tenantMembers],
-  );
+  const tabClasses = useMemo(() => {
+    const present = [...byClass.keys()];
+    const ordered = CLASS_ORDER.filter(
+      (capabilityClass) =>
+        present.includes(capabilityClass) ||
+        capabilityClass === "skill" ||
+        capabilityClass === "mcp_server",
+    );
+    for (const capabilityClass of present) {
+      if (!ordered.includes(capabilityClass)) ordered.push(capabilityClass);
+    }
+    return ordered;
+  }, [byClass]);
+
+  const activeTab = tabClasses.includes(activeClass)
+    ? activeClass
+    : (tabClasses[0] ?? "skill");
+  const visibleItems = byClass.get(activeTab) ?? [];
+
+  const searchToken = columnFilters.find(
+    (filter) => filter.id === FILTER_COLUMNS.search,
+  )?.value as DataTableTokenFilterValue | undefined;
+  const searchValue =
+    searchToken && typeof searchToken.value === "string"
+      ? searchToken.value
+      : "";
+
+  function setSearch(value: string) {
+    setColumnFilters((current) => {
+      const rest = current.filter(
+        (filter) => filter.id !== FILTER_COLUMNS.search,
+      );
+      if (!value) return rest;
+      return [
+        ...rest,
+        {
+          id: FILTER_COLUMNS.search,
+          value: { operator: "contains", value } as DataTableTokenFilterValue,
+        },
+      ];
+    });
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6">
@@ -393,94 +578,43 @@ export function SettingsCapabilities() {
       />
 
       <div
-        className="mb-6 flex flex-wrap items-end gap-3"
-        data-testid="capability-selectors"
+        className="mb-4 flex flex-wrap items-center gap-2"
+        data-testid="capability-toolbar"
       >
-        <div className="min-w-44">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            Space
-          </p>
-          <Select
-            value={spaceId ?? ANY_VALUE}
-            onValueChange={(value) =>
-              setSpaceId(value === ANY_VALUE ? null : value)
-            }
-            disabled={loading}
-          >
-            <SelectTrigger aria-label="Space">
-              <SelectValue placeholder="No space (agent baseline)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANY_VALUE}>No space</SelectItem>
-              {(spacesResult.data?.spaces ?? []).map((space) => (
-                <SelectItem key={space.id} value={space.id}>
-                  {space.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="min-w-44">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            Agent profile
-          </p>
-          <Select
-            value={agentProfileId ?? ANY_VALUE}
-            onValueChange={(value) =>
-              setAgentProfileId(value === ANY_VALUE ? null : value)
-            }
-            disabled={loading}
-          >
-            <SelectTrigger aria-label="Agent profile">
-              <SelectValue placeholder="Default agent" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANY_VALUE}>Default agent</SelectItem>
-              {(profilesResult.data?.agentProfiles ?? []).map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
-                  {profile.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="min-w-44">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            Perspective user
-          </p>
-          <Select
-            value={perspectiveUserId ?? ANY_VALUE}
-            onValueChange={(value) =>
-              setPerspectiveUserId(value === ANY_VALUE ? null : value)
-            }
-            disabled={loading}
-          >
-            <SelectTrigger aria-label="Perspective user">
-              <SelectValue placeholder="No user (scheduled-turn baseline)" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANY_VALUE}>
-                No user (scheduled-turn baseline)
-              </SelectItem>
-              {members.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetchInspection({ requestPolicy: "network-only" })}
-          disabled={loading}
-        >
-          <RefreshCw
-            className={cn("mr-1.5 size-3.5", loading && "animate-spin")}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchValue}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search"
+            aria-label="Search capabilities"
+            className="h-8 w-44 pl-8"
+            data-testid="capability-search"
           />
-          Refresh
-        </Button>
+        </div>
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={tokenFilterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
+        <div className="ml-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetchInspection({ requestPolicy: "network-only" })}
+            disabled={loading}
+          >
+            <RefreshCw
+              className={cn("mr-1.5 size-3.5", loading && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {result?.noUserBaseline && !loading ? (
@@ -547,14 +681,38 @@ export function SettingsCapabilities() {
         </p>
       ) : predicted ? (
         <>
-          {grouped.map(([capabilityClass, items]) => (
-            <SettingsSection
-              key={capabilityClass}
-              label={CLASS_LABELS[capabilityClass] ?? capabilityClass}
-            >
-              {items.map((item) => (
+          <Tabs value={activeTab} onValueChange={setActiveClass}>
+            <TabsList className="mb-3 flex-wrap">
+              {tabClasses.map((capabilityClass) => {
+                const classItems = byClass.get(capabilityClass) ?? [];
+                const activeCount = classItems.filter(
+                  (item) => item.active,
+                ).length;
+                return (
+                  <TabsTrigger
+                    key={capabilityClass}
+                    value={capabilityClass}
+                    data-testid={`capability-tab-${capabilityClass}`}
+                  >
+                    {CLASS_LABELS[capabilityClass] ?? capabilityClass}
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      {activeCount}
+                    </span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
+
+          <SettingsSection label={CLASS_LABELS[activeTab] ?? activeTab}>
+            {visibleItems.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                Nothing in this category for the current selection.
+              </p>
+            ) : (
+              visibleItems.map((item) => (
                 <div
-                  key={`${item.capabilityClass}:${item.capabilityId}`}
+                  key={rowKeyOf(item)}
                   className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0"
                   data-testid="capability-row"
                 >
@@ -586,9 +744,9 @@ export function SettingsCapabilities() {
                     </p>
                   ) : null}
                 </div>
-              ))}
-            </SettingsSection>
-          ))}
+              ))
+            )}
+          </SettingsSection>
           <p className="mt-2 text-xs text-muted-foreground">
             Computed {new Date(predicted.computedAt).toLocaleString()} ·
             fingerprint{" "}

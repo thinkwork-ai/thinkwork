@@ -253,20 +253,44 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("SettingsCapabilities (read surface)", () => {
-  it("renders capability classes with verbatim backend reason chips", () => {
+  it("renders one tab per capability class with active counts; reasons render verbatim", () => {
     render(<SettingsCapabilities />);
-    expect(screen.getByText("Skills")).toBeTruthy();
-    expect(screen.getByText("MCP servers")).toBeTruthy();
-    expect(screen.getByText("Pi extensions")).toBeTruthy();
-    expect(screen.getByText("Agent profiles")).toBeTruthy();
-    // Reason strings render verbatim (R6).
+    // Tabs carry the class label + count of ACTIVE items in the class.
+    expect(screen.getByTestId("capability-tab-skill").textContent).toContain(
+      "Skills",
+    );
+    expect(screen.getByTestId("capability-tab-skill").textContent).toContain(
+      "1",
+    ); // approve-receipt is the only active skill
+    expect(
+      screen.getByTestId("capability-tab-mcp_server").textContent,
+    ).toContain("MCP servers");
+    // Default tab = Skills: verbatim reason chips (R6).
     expect(screen.getByText("trust_gate")).toBeTruthy();
+    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
+    // Switch to Pi extensions: its rows + verbatim reasons render.
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
+      button: 0,
+    });
     expect(screen.getByText("extension_validation_failed")).toBeTruthy();
     expect(
       screen.getByText("verification artifact hash is stale"),
     ).toBeTruthy();
+    // Switch to MCP servers: token status badge renders.
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-mcp_server"), {
+      button: 0,
+    });
     expect(screen.getByText("token: expired")).toBeTruthy();
-    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
+  });
+
+  it("quick search filters rows across the view", () => {
+    render(<SettingsCapabilities />);
+    fireEvent.change(screen.getByTestId("capability-search"), {
+      target: { value: "expenses" },
+    });
+    // Skills tab keeps the matching row; the non-matching active row drops.
+    expect(screen.getByText("Expenses")).toBeTruthy();
+    expect(screen.queryByText("approve-receipt")).toBeNull();
   });
 
   it("labels the no-user baseline", () => {
@@ -276,7 +300,7 @@ describe("SettingsCapabilities (read surface)", () => {
     );
   });
 
-  it("shows the loading state and disables selectors while a refetch is in flight", () => {
+  it("shows the loading state while a refetch is in flight", () => {
     queryState.inspector = {
       data: undefined,
       fetching: true,
@@ -284,11 +308,6 @@ describe("SettingsCapabilities (read surface)", () => {
     };
     render(<SettingsCapabilities />);
     expect(screen.getByTestId("capability-loading")).toBeTruthy();
-    const selectors = screen.getAllByRole("combobox");
-    expect(selectors.length).toBeGreaterThan(0);
-    for (const selector of selectors) {
-      expect(selector.hasAttribute("disabled")).toBe(true);
-    }
   });
 
   it("renders the fault state distinctly from empty", () => {
@@ -505,6 +524,11 @@ describe("SettingsCapabilities write actions (U8)", () => {
 
   it("extension rows carry no row actions here (assignment lives on the extensions surface)", () => {
     render(<SettingsCapabilities />);
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
+      button: 0,
+    });
+    // The active extension row renders — but with no detach action.
+    expect(screen.getByText("Live Ext")).toBeTruthy();
     expect(screen.queryByTestId("detach-pi_extension:assignment-3")).toBeNull();
   });
 });
