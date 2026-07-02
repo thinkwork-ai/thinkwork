@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -738,6 +739,73 @@ async function publishRuntimeConfig(
 }
 
 /**
+ * Ensure the owner Cognito user exists (first-user bootstrap). There is no
+ * default username/password by design — the first authenticated sign-in
+ * auto-provisions the tenant via bootstrapUser and becomes the owner. Deploy
+ * creates that first Cognito user from the wizard's operator email with a
+ * one-time temporary password printed in the summary; Cognito forces a
+ * password change at first sign-in, so no long-lived secret is stored.
+ */
+async function ensureOwnerUser(
+  cwd: string,
+  region: string,
+): Promise<{ email: string; tempPassword: string | null } | null> {
+  const email = (readTfvarsSignalsRaw(cwd).platform_operator_emails ?? "")
+    .split(",")[0]
+    ?.trim();
+  if (!email) return null;
+  const userPoolId = await terraformOutput(cwd, "user_pool_id").catch(() => "");
+  if (!userPoolId) return null;
+
+  const exists = spawnSync(
+    "aws",
+    [
+      "cognito-idp",
+      "admin-get-user",
+      "--user-pool-id",
+      userPoolId,
+      "--username",
+      email,
+      "--region",
+      region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (exists.status === 0) return { email, tempPassword: null };
+
+  // Meets the default Cognito policy (upper/lower/digit/symbol).
+  const tempPassword = `Tw1!${randomBytes(12).toString("base64url")}`;
+  const created = spawnSync(
+    "aws",
+    [
+      "cognito-idp",
+      "admin-create-user",
+      "--user-pool-id",
+      userPoolId,
+      "--username",
+      email,
+      "--user-attributes",
+      `Name=email,Value=${email}`,
+      "Name=email_verified,Value=true",
+      "--temporary-password",
+      tempPassword,
+      "--message-action",
+      "SUPPRESS",
+      "--region",
+      region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (created.status !== 0) {
+    printWarning(
+      `Could not create the owner user ${email}: ${(created.stderr ?? "").trim().slice(0, 200)}`,
+    );
+    return null;
+  }
+  return { email, tempPassword };
+}
+
+/**
  * Publish the release's prebuilt web assets to the stage's app bucket
  * (packaged installs have no web build step — CI builds ship in the release).
  */
@@ -1156,6 +1224,22 @@ export async function runLocalTerraformDeploy(
   if (scaffolded && caller) {
     console.log("\n  Seeding workspace defaults...");
     await runWorkspaceBootstrap(cwd0, stage, caller.region);
+  }
+
+  // ── Owner user: the first Cognito sign-in claims the instance. ──
+  let ownerUser: { email: string; tempPassword: string | null } | null = null;
+  if (scaffolded && caller) {
+    ownerUser = await ensureOwnerUser(cwd0, caller.region);
+    if (ownerUser?.tempPassword) {
+      console.log("");
+      printSuccess(`Owner user created: ${ownerUser.email}`);
+      console.log(
+        `    Temporary password (shown ONCE — Cognito requires a change at first sign-in):`,
+      );
+      console.log(`      ${ownerUser.tempPassword}`);
+    } else if (ownerUser) {
+      console.log(`  Owner user ${ownerUser.email} already exists.`);
+    }
   }
 
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by
