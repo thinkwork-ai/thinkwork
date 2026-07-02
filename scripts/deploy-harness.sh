@@ -13,7 +13,8 @@
 #
 #   $1 — AWS account ID the run must operate in (asserted before deploy AND destroy)
 #   $2 — region (default: us-east-1)
-#   $3 — stage override (default: hprod-<yymmdd>-<nnn>)
+#   $3 — stage override (default: hp<yymmdd><nnn> — ≤14 chars; longer stage
+#        names push Lambda function names past the 64-char AWS cap)
 #
 # Exit codes: 0 = clean cycle; 1 = one or more steps failed (ledger written);
 #             2 = account assertion failed (nothing was deployed or destroyed).
@@ -22,7 +23,7 @@ set -u  # no `set -e`: we summarize all failures and always attempt teardown
 
 EXPECTED_ACCOUNT="${1:?usage: deploy-harness.sh <expected-account-id> [region] [stage]}"
 REGION="${2:-us-east-1}"
-STAGE="${3:-hprod-$(date +%y%m%d)-$(printf '%03d' $((RANDOM % 1000)))}"
+STAGE="${3:-hp$(date +%y%m%d)$(printf '%03d' $((RANDOM % 1000)))}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/thinkwork-harness.XXXXXX")"

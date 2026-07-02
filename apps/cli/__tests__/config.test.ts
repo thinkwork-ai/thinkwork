@@ -32,9 +32,12 @@ describe("validateStage", () => {
     expect(validateStage("my stage").valid).toBe(false); // spaces not allowed
   });
 
-  it("rejects stages over 30 characters", () => {
-    expect(validateStage("a".repeat(31)).valid).toBe(false);
-    expect(validateStage("a".repeat(30)).valid).toBe(true);
+  it("rejects stages over the Lambda-name budget (14 chars)", () => {
+    // Harness cycle-6: a 16-char stage pushed the longest handler's Lambda
+    // function name past AWS's 64-char cap. See stage-name.test.ts for the
+    // fixture pinning 14 against the real handler list.
+    expect(validateStage("a".repeat(15)).valid).toBe(false);
+    expect(validateStage("a".repeat(14)).valid).toBe(true);
   });
 });
 

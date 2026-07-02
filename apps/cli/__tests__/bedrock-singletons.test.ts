@@ -78,7 +78,9 @@ describe("account-singleton terraform gating (fixtures)", () => {
         (l) =>
           l.includes("aws_cloudwatch_log_group.bedrock_model_invocations") &&
           !l.includes("[0]") &&
-          !l.includes("resource "),
+          !l.includes("resource ") &&
+          // moved-block `from` addresses are the pre-count names by design
+          !l.trim().startsWith("from "),
       );
     expect(unindexed).toEqual([]);
   });
