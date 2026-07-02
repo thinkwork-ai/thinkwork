@@ -353,6 +353,14 @@ resource "terraform_data" "seed_pi_image" {
         source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
         docker tag "$source_id" "${local.pi_image_uri}"
       else
+        # Unreachable source must not fail a stack whose target tag is already
+        # seeded (rerun after a partial deploy, or a registry that went
+        # private) — the Lambda only consumes the target ECR tag.
+        repo_name="$(basename "${var.ecr_repository_url}")"
+        if aws ecr describe-images --repository-name "$repo_name" --image-ids imageTag=pi-latest --region ${var.region} >/dev/null 2>&1; then
+          echo "WARN: could not pull ${var.source_image_uri}; ${local.pi_image_uri} is already seeded — keeping the existing image."
+          exit 0
+        fi
         dockerfile="$repo_root/packages/agentcore-pi/agent-container/Dockerfile"
         if [[ ! -f "$dockerfile" ]]; then
           echo "ERROR: could not pull ${var.source_image_uri} and there is no repo checkout at $repo_root to build from." >&2

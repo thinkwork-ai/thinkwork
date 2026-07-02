@@ -61,6 +61,31 @@ function isTerraformRoot(dir: string): boolean {
 }
 
 /**
+ * Stage-aware root resolution. The cwd-derived root wins when it actually
+ * contains a layout for this stage; otherwise fall back to the terraform dir
+ * the environment registry recorded at `init`. Without the fallback,
+ * `thinkwork destroy -s X` run from any unrelated directory errors with
+ * "No Terraform layout found" even though init recorded exactly where X
+ * lives (HCI teardown, 2026-07-02).
+ */
+export function resolveTerraformRootForStage(
+  stage: string,
+  recordedDir: string | null | undefined,
+  startDir = process.cwd(),
+): string {
+  const cwdRoot = resolveTerraformRoot(startDir);
+  try {
+    resolveTierDir(cwdRoot, stage, "app");
+    return cwdRoot;
+  } catch {
+    if (recordedDir && existsSync(path.join(recordedDir, "main.tf"))) {
+      return recordedDir;
+    }
+    return cwdRoot;
+  }
+}
+
+/**
  * Resolves the working directory for a given tier.
  * Looks for environments/<stage>/<tier>/ first, falls back to examples/greenfield/.
  */
