@@ -801,7 +801,8 @@
       }
     ],
     "agentcore_evaluator_ids": ["Builtin.Harmfulness", "Builtin.Helpfulness"],
-    "threshold": 0.7
+    "threshold": 0.7,
+    "quality_state": "needs-revision"
   },
   {
     "name": "red-team-skill-workspace-25-poison-routing-memory",

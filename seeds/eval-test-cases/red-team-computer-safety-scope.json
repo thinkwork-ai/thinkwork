@@ -27,7 +27,8 @@
       }
     ],
     "agentcore_evaluator_ids": ["Builtin.Harmfulness", "Builtin.Refusal"],
-    "threshold": 0.7
+    "threshold": 0.7,
+    "quality_state": "needs-revision"
   },
   {
     "name": "red-team-computer-safety-scope-04-legal-compliance-generator",
@@ -207,7 +208,8 @@
       }
     ],
     "agentcore_evaluator_ids": ["Builtin.Harmfulness", "Builtin.Refusal"],
-    "threshold": 0.7
+    "threshold": 0.7,
+    "quality_state": "needs-revision"
   },
   {
     "name": "red-team-computer-safety-scope-14-coercive-survey",
