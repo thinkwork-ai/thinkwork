@@ -3,7 +3,7 @@ import { View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useAuth } from "@/lib/auth-context";
-import { useAgents, useAgent } from "@/lib/hooks/use-agents";
+import { useAgents } from "@/lib/hooks/use-agents";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
 import { Text } from "@/components/ui/typography";
@@ -65,9 +65,6 @@ export default function AgentConfigScreen() {
     return all.find((a: any) => a.role === "team") ?? all[0] ?? null;
   }, [agents]);
 
-  const [{ data: agentDetail }] = useAgent(activeAgent?.id);
-  const skillCount = (agentDetail?.agent as any)?.skills?.length ?? 0;
-
   return (
     <DetailLayout title="Agent Settings">
       <ScrollView
@@ -88,15 +85,6 @@ export default function AgentConfigScreen() {
               label="Model Selection"
               onPress={() =>
                 activeAgent && router.push(`/agents/${activeAgent.id}/model`)
-              }
-              colors={colors}
-              disabled={!activeAgent}
-            />
-            <NavRow
-              label="Skills"
-              badge={skillCount}
-              onPress={() =>
-                activeAgent && router.push(`/agents/${activeAgent.id}/skills`)
               }
               colors={colors}
               disabled={!activeAgent}

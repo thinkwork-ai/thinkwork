@@ -5,13 +5,17 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
+import {
+  listAgentWorkspaceSkills,
+  type AgentWorkspaceSkill,
+} from "../lib/skills/workspace-skill-index.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { db } from "../lib/db.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { handleCors, json, error, notFound } from "../lib/response.js";
 
-const { agents, agentCapabilities, agentSkills } = schema;
+const { agents, agentCapabilities } = schema;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -258,21 +262,6 @@ async function handleCapabilities(
             body.enabled !== undefined ? (body.enabled as boolean) : true,
         })
         .returning();
-      // KTD-8 dual-write (plan U9): full-state write to the workspace
-      // assignment file (config + permissions + enabled).
-      await patchSkillAssignmentState({
-        agentId,
-        slug: body.skill_id as string,
-        patch: {
-          replace: true,
-          configMerge: (body.config as Record<string, unknown>) ?? undefined,
-          permissions:
-            (body.permissions as Record<string, unknown>) ?? undefined,
-          rate_limit_rpm: (body.rate_limit_rpm as number) ?? undefined,
-          enabled:
-            body.enabled !== undefined ? (body.enabled as boolean) : true,
-        },
-      });
       return json(row, 201);
     }
     case "DELETE": {
@@ -297,7 +286,47 @@ async function handleCapabilities(
 
 // ---------------------------------------------------------------------------
 // Skills sub-resource
+//
+// KTD-8 (capability-mapping plan U10): the agent_skills mirror table is
+// retired. Skill assignment state lives in the agent workspace —
+// presence is the installed `skills/<slug>/SKILL.md` folder, per-
+// assignment state (config / permissions / enabled) is the
+// `skills/<slug>/.assignment.json` file. This REST surface reads and
+// writes that store; the skill id in paths and payloads is the slug.
+// DELETE disables the assignment (enabled=false) — removing the skill
+// itself is the workspace uninstall-skill action.
 // ---------------------------------------------------------------------------
+
+async function requireTenantAgent(
+  tenantId: string,
+  agentId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
+  return Boolean(row);
+}
+
+function skillRowShape(
+  tenantId: string,
+  agentId: string,
+  skill: AgentWorkspaceSkill,
+) {
+  // agent_skills-row-compatible shape for existing REST callers; the
+  // row id is the slug now that there is no DB row.
+  return {
+    id: skill.slug,
+    agent_id: agentId,
+    tenant_id: tenantId,
+    skill_id: skill.slug,
+    config: skill.config,
+    permissions: skill.permissions,
+    rate_limit_rpm: skill.rateLimitRpm,
+    model_override: skill.modelOverride,
+    enabled: skill.enabled,
+  };
+}
 
 async function handleSkills(
   method: string,
@@ -306,52 +335,59 @@ async function handleSkills(
   skillId: string | null,
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  if (!(await requireTenantAgent(tenantId, agentId))) {
+    return notFound("Agent not found");
+  }
   switch (method) {
     case "GET": {
-      const rows = await db
-        .select()
-        .from(agentSkills)
-        .where(
-          and(
-            eq(agentSkills.agent_id, agentId),
-            eq(agentSkills.tenant_id, tenantId),
-          ),
-        );
-      return json(rows);
+      const skills = await listAgentWorkspaceSkills(agentId);
+      return json(
+        (skills ?? []).map((skill) => skillRowShape(tenantId, agentId, skill)),
+      );
     }
     case "POST": {
       const body = parseBody(event);
       if (!body.skill_id) return error("skill_id is required");
-
-      const [row] = await db
-        .insert(agentSkills)
-        .values({
-          agent_id: agentId,
-          tenant_id: tenantId,
-          skill_id: body.skill_id as string,
-          config: body.config ?? undefined,
-          permissions: body.permissions ?? undefined,
-          rate_limit_rpm: body.rate_limit_rpm as number | undefined,
+      const slug = body.skill_id as string;
+      const ok = await patchSkillAssignmentState({
+        agentId,
+        slug,
+        patch: {
+          replace: true,
+          configMerge: (body.config as Record<string, unknown>) ?? undefined,
+          permissions:
+            (body.permissions as Record<string, unknown>) ?? undefined,
+          rate_limit_rpm: (body.rate_limit_rpm as number) ?? undefined,
           enabled:
             body.enabled !== undefined ? (body.enabled as boolean) : true,
-        })
-        .returning();
-      return json(row, 201);
+        },
+      });
+      if (!ok) return error("Failed to write skill assignment state", 500);
+      const skills = await listAgentWorkspaceSkills(agentId);
+      const written = skills?.find((skill) => skill.slug === slug) ?? {
+        slug,
+        enabled: body.enabled !== undefined ? (body.enabled as boolean) : true,
+        config: (body.config as Record<string, unknown>) ?? null,
+        permissions: (body.permissions as Record<string, unknown>) ?? null,
+        rateLimitRpm: (body.rate_limit_rpm as number) ?? null,
+        modelOverride: null,
+      };
+      return json(skillRowShape(tenantId, agentId, written), 201);
     }
     case "DELETE": {
       if (!skillId) return error("Missing skill ID");
-      const [row] = await db
-        .delete(agentSkills)
-        .where(
-          and(
-            eq(agentSkills.id, skillId),
-            eq(agentSkills.agent_id, agentId),
-            eq(agentSkills.tenant_id, tenantId),
-          ),
-        )
-        .returning();
-      if (!row) return notFound("Skill not found");
-      return json(row);
+      const skills = await listAgentWorkspaceSkills(agentId);
+      const existing = skills?.find((skill) => skill.slug === skillId);
+      if (!existing) return notFound("Skill not found");
+      const ok = await patchSkillAssignmentState({
+        agentId,
+        slug: skillId,
+        patch: { enabled: false },
+      });
+      if (!ok) return error("Failed to write skill assignment state", 500);
+      return json(
+        skillRowShape(tenantId, agentId, { ...existing, enabled: false }),
+      );
     }
     default:
       return error("Method not allowed", 405);

@@ -71,10 +71,6 @@ import {
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
 import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
 import {
-  deriveAgentSkills,
-  type DeriveResult,
-} from "./src/lib/derive-agent-skills.js";
-import {
   isBuiltinToolSlug,
   isBuiltinToolWorkspacePath,
 } from "./src/lib/builtin-tool-slugs.js";
@@ -2640,48 +2636,6 @@ function isSkillMarkerPath(path: string): boolean {
   return /(?:^|\/)skills\/[^/]+\/SKILL\.md$/.test(path);
 }
 
-function summarizeDerivedAgentSkills(
-  target: AgentTarget,
-  result: DeriveResult,
-): string {
-  return (
-    `agent=${target.agentId} skill_paths=${result.agentsMdPathsScanned.length} ` +
-    `changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
-    `removed=${result.removedSlugs.join(",") || "-"}`
-  );
-}
-
-async function syncDerivedAgentSkills(
-  target: AgentTarget,
-  tenantId: string,
-  action: string,
-  failureContext: string,
-): Promise<
-  | { ok: true; result: DeriveResult }
-  | { ok: false; response: APIGatewayProxyResult }
-> {
-  try {
-    const result = await deriveAgentSkills({ tenantId }, target.agentId);
-    console.log(
-      `[derive-agent-skills] ${action} ${summarizeDerivedAgentSkills(
-        target,
-        result,
-      )}`,
-    );
-    return { ok: true, result };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[derive-agent-skills] ${action} failed: ${message}`);
-    return {
-      ok: false,
-      response: json(500, {
-        ok: false,
-        error: `${failureContext}: ${message}`,
-      }),
-    };
-  }
-}
-
 /**
  * Top-level governance / identity / capability files that, when
  * edited, materially change agent behavior. Edits to these files emit
@@ -3047,21 +3001,8 @@ async function handlePut(
     }
 
     if (isSkillMarkerPath(cleanPath)) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        tenantId,
-        "PUT",
-        "Skill file persisted but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
       const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
       if (refreshError) return refreshError;
-      if (derive.result.warnings.length > 0) {
-        return json(200, {
-          ok: true,
-          deriveWarnings: derive.result.warnings,
-        });
-      }
       return json(200, { ok: true });
     }
 
@@ -3232,25 +3173,11 @@ async function handleCreateSubAgent(
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "create-sub-agent",
-    "AGENTS.md persisted but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
-
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "create-sub-agent",
   );
   if (refreshError) return refreshError;
-  if (derive.result.warnings.length > 0) {
-    return json(200, {
-      ok: true,
-      deriveWarnings: derive.result.warnings,
-    });
-  }
   return json(200, { ok: true });
 }
 
@@ -3306,15 +3233,6 @@ async function handleDelete(
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
     if (isAgentProfileWorkspacePath(cleanPath)) {
       await deleteAgentProfileProjectionForFile({ tenantId, path: cleanPath });
-    }
-    if (isSkillMarkerPath(cleanPath)) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        tenantId,
-        "DELETE",
-        "Skill file deleted but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
@@ -3528,9 +3446,7 @@ async function stageGatedSkillUpdate(
 const SPACE_SKILLS_SECTION_START = "<!-- BEGIN THINKWORK SPACE SKILLS -->";
 const SPACE_SKILLS_SECTION_END = "<!-- END THINKWORK SPACE SKILLS -->";
 
-async function refreshSpaceSkillInventory(
-  target: SpaceTarget,
-): Promise<void> {
+async function refreshSpaceSkillInventory(target: SpaceTarget): Promise<void> {
   const installedPaths = await listPrefix(target.prefix);
   const skillSlugs = [
     ...new Set(
@@ -3641,13 +3557,6 @@ async function handleInstallSkill(
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "install-skill",
-    "Skill installed but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "install-skill",
@@ -3657,9 +3566,6 @@ async function handleInstallSkill(
   const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
     ...installResult,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalSync,
   });
 }
@@ -3702,13 +3608,6 @@ async function handleUninstallSkill(
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "uninstall-skill",
-    "Skill uninstalled but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "uninstall-skill",
@@ -3717,9 +3616,6 @@ async function handleUninstallSkill(
   const evalArchive = await archiveSkillEvalDataset(tenantId, slug);
   return json(200, {
     ...result,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalArchive,
   });
 }
@@ -3830,13 +3726,6 @@ async function handleReinstallSkill(
   }
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  const derive = await syncDerivedAgentSkills(
-    target,
-    tenantId,
-    "reinstall-skill",
-    "Skill reinstalled but agent_skills derive failed",
-  );
-  if (!derive.ok) return derive.response;
   const refreshError = await refreshAgentAgentsMdSections(
     target,
     "reinstall-skill",
@@ -3846,9 +3735,6 @@ async function handleReinstallSkill(
   const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
     ...reinstallResult,
-    ...(derive.result.warnings.length > 0
-      ? { deriveWarnings: derive.result.warnings }
-      : {}),
     ...evalSync,
   });
 }
@@ -4097,20 +3983,6 @@ async function handleSingleFileMove(
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 
-    const fromIsAgentsMd = pathBasename(cleanFrom) === "AGENTS.md";
-    const destIsAgentsMd = pathBasename(finalDest) === "AGENTS.md";
-    const fromIsSkillMd = isSkillMarkerPath(cleanFrom);
-    const destIsSkillMd = isSkillMarkerPath(finalDest);
-    if (fromIsAgentsMd || destIsAgentsMd || fromIsSkillMd || destIsSkillMd) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        deps.tenantId,
-        "move",
-        "Move succeeded but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
-    }
-
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
   }
@@ -4200,8 +4072,6 @@ async function handleFolderMove(
   // for shape parity with single-file moves; a richer
   // template-inheritance-aware detach metric is a follow-up.
   let detachedPinnedCount = 0;
-  let touchesAgentsMd = false;
-  let touchesSkillMd = false;
 
   for (const rel of folderListing) {
     const sourceKey = sourcePrefix + rel;
@@ -4217,8 +4087,6 @@ async function handleFolderMove(
     if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
       detachedPinnedCount++;
     }
-    if (pathBasename(sourceRelPath) === "AGENTS.md") touchesAgentsMd = true;
-    if (isSkillMarkerPath(sourceRelPath)) touchesSkillMd = true;
   }
 
   // Phase 2: delete every source object. We accumulate per-object delete
@@ -4262,16 +4130,6 @@ async function handleFolderMove(
 
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-
-    if (touchesAgentsMd || touchesSkillMd) {
-      const derive = await syncDerivedAgentSkills(
-        target,
-        deps.tenantId,
-        "folder-move",
-        "Move succeeded but agent_skills derive failed",
-      );
-      if (!derive.ok) return derive.response;
-    }
 
     const refreshError = await refreshAgentAgentsMdSections(target, "move");
     if (refreshError) return refreshError;
@@ -4457,10 +4315,6 @@ async function handleSingleFileRename(
     cleanTo,
     movedCount: 1,
     detachedPinnedCount,
-    touchesAgentsMd:
-      pathBasename(cleanFrom) === "AGENTS.md" ||
-      pathBasename(cleanTo) === "AGENTS.md",
-    touchesSkillMd: isSkillMarkerPath(cleanFrom) || isSkillMarkerPath(cleanTo),
   });
   if (finalized) return finalized;
 
@@ -4490,8 +4344,6 @@ async function handleFolderRename(
   }
 
   let detachedPinnedCount = 0;
-  let touchesAgentsMd = false;
-  let touchesSkillMd = false;
 
   for (const rel of folderListing) {
     const sourceKey = sourcePrefix + rel;
@@ -4504,18 +4356,8 @@ async function handleFolderRename(
       }),
     );
     const sourceRelPath = cleanFrom + "/" + rel;
-    const destRelPath = cleanTo + "/" + rel;
     if (target.kind === "agent" && isPinnedWorkspacePath(sourceRelPath)) {
       detachedPinnedCount++;
-    }
-    if (
-      pathBasename(sourceRelPath) === "AGENTS.md" ||
-      pathBasename(destRelPath) === "AGENTS.md"
-    ) {
-      touchesAgentsMd = true;
-    }
-    if (isSkillMarkerPath(sourceRelPath) || isSkillMarkerPath(destRelPath)) {
-      touchesSkillMd = true;
     }
   }
 
@@ -4550,8 +4392,6 @@ async function handleFolderRename(
     cleanTo,
     movedCount: folderListing.length,
     detachedPinnedCount,
-    touchesAgentsMd,
-    touchesSkillMd,
   });
   if (finalized) return finalized;
 
@@ -4570,24 +4410,12 @@ async function finalizeRenameSideEffects(
     cleanTo: string;
     movedCount: number;
     detachedPinnedCount: number;
-    touchesAgentsMd: boolean;
-    touchesSkillMd: boolean;
   },
 ): Promise<APIGatewayProxyResult | null> {
   const { target } = deps;
   if (target.kind !== "agent") return null;
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-
-  if (input.touchesAgentsMd || input.touchesSkillMd) {
-    const derive = await syncDerivedAgentSkills(
-      target,
-      deps.tenantId,
-      "rename",
-      "Rename succeeded but agent_skills derive failed",
-    );
-    if (!derive.ok) return derive.response;
-  }
 
   return await refreshAgentAgentsMdSections(target, "rename");
 }

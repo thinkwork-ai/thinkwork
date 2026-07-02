@@ -42,8 +42,7 @@
  * the WIRING.md snippet ("… read skills/<slug>/SKILL.md and follow it")
  * to the agent workspace's CONTEXT.md at install time, and the runtime
  * activates skills by walking materialized `skills/<slug>/SKILL.md`
- * files (`derive-agent-skills.ts` syncs a derived DB table from the same
- * folder presence). The render-time AGENTS.md composition only rewrites
+ * files. The render-time AGENTS.md composition only rewrites
  * the Active Space section and mentionable-workspace tables — it carries
  * no per-skill rows. The gate therefore filters (a) the skill FOLDERS
  * out of the hydrate manifest (which removes runtime activation), and

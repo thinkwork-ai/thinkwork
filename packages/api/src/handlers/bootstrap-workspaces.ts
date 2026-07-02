@@ -161,7 +161,12 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
       continue;
     }
 
-    // Get sub-agent's assigned skills
+    // Get sub-agent's assigned skills. KTD-8 (plan U10) note: this is a
+    // deliberate holdover on the retired agent_skills table — legacy DB
+    // sub-agents have no workspace of their own, so their skill rows are
+    // the only record. Those rows are frozen (no writer touches them
+    // anymore); this one-time migration handler must be deleted together
+    // with the deferred agent_skills DROP.
     const skillRows = await db
       .select({ skill_id: agentSkills.skill_id, config: agentSkills.config })
       .from(agentSkills)
