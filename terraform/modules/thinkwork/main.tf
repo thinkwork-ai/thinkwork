@@ -1716,6 +1716,8 @@ module "ses" {
   inbound_bucket_name                = module.s3.bucket_name
   email_inbound_fn_arn               = module.api.email_inbound_fn_arn
   email_inbound_fn_name              = module.api.email_inbound_fn_name
+  email_inbound_fn_arn_attr          = module.api.email_inbound_fn_arn_attr
+  email_inbound_fn_name_attr         = module.api.email_inbound_fn_name_attr
   enable_email_inbound_lambda_action = true
 
   manage_active_rule_set = var.ses_manage_active_rule_set
@@ -1805,6 +1807,8 @@ module "customer_domain" {
   inbound_bucket_name                = module.s3.bucket_name
   email_inbound_fn_arn               = module.api.email_inbound_fn_arn
   email_inbound_fn_name              = module.api.email_inbound_fn_name
+  email_inbound_fn_arn_attr          = module.api.email_inbound_fn_arn_attr
+  email_inbound_fn_name_attr         = module.api.email_inbound_fn_name_attr
   enable_email_inbound_lambda_action = true
 
   # KTD6 — one active receipt rule set per account/region. The customer-domain

@@ -64,6 +64,18 @@ variable "email_inbound_fn_arn" {
   default     = ""
 }
 
+variable "email_inbound_fn_name_attr" {
+  description = "Attribute-based twin of email_inbound_fn_name (dependency ordering; attributes only, never count)."
+  type        = string
+  default     = ""
+}
+
+variable "email_inbound_fn_arn_attr" {
+  description = "Attribute-based twin of email_inbound_fn_arn (dependency ordering; attributes only, never count)."
+  type        = string
+  default     = ""
+}
+
 variable "email_inbound_fn_name" {
   description = "Function name of the email-inbound Lambda (for the Lambda permission)."
   type        = string
@@ -230,7 +242,7 @@ resource "aws_lambda_permission" "ses_invoke_email_inbound" {
   count          = local.enabled && local.has_lambda ? 1 : 0
   statement_id   = "AllowSESInvokeEmailInbound"
   action         = "lambda:InvokeFunction"
-  function_name  = var.email_inbound_fn_name
+  function_name  = var.email_inbound_fn_name_attr != "" ? var.email_inbound_fn_name_attr : var.email_inbound_fn_name
   principal      = "ses.amazonaws.com"
   source_account = var.account_id
 }
@@ -255,7 +267,7 @@ resource "aws_ses_receipt_rule" "inbound" {
   dynamic "lambda_action" {
     for_each = local.has_lambda ? [1] : []
     content {
-      function_arn    = var.email_inbound_fn_arn
+      function_arn    = var.email_inbound_fn_arn_attr != "" ? var.email_inbound_fn_arn_attr : var.email_inbound_fn_arn
       invocation_type = "Event"
       position        = local.has_bucket ? 2 : 1
     }

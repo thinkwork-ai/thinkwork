@@ -97,6 +97,19 @@ output "email_inbound_fn_name" {
   value       = local.deploy_lambda_handlers ? "thinkwork-${var.stage}-api-email-inbound" : ""
 }
 
+# Attribute-based twins: same values, but carrying the dependency edge. The
+# static outputs above removed it, so a fresh-account apply raced the SES
+# invoke permission ahead of the function's creation ("Function not found" —
+# THINK-118 HCI test). Consumers use these ONLY in resource attributes; the
+# static twins stay authoritative for count/for_each gating.
+output "email_inbound_fn_name_attr" {
+  value = local.deploy_lambda_handlers ? try(aws_lambda_function.handler["email-inbound"].function_name, "") : ""
+}
+
+output "email_inbound_fn_arn_attr" {
+  value = local.deploy_lambda_handlers ? try(aws_lambda_function.handler["email-inbound"].arn, "") : ""
+}
+
 # ---------------------------------------------------------------------------
 # MCP custom domain — outputs consumed by `pnpm cf:sync-mcp`.
 # ---------------------------------------------------------------------------
