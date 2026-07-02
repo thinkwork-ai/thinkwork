@@ -26,6 +26,7 @@ import {
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { ensureTenantBootstrapDefaults } from "../../../lib/tenant-bootstrap-defaults.js";
+import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { validateTenantSlug } from "./tenantSlugValidation.js";
 
 async function seedTenantBootstrapDefaults(tenantId: string, userId: string) {
@@ -36,6 +37,22 @@ async function seedTenantBootstrapDefaults(tenantId: string, userId: string) {
       "[bootstrapUser] Failed to seed tenant bootstrap defaults:",
       err,
     );
+  }
+}
+
+/**
+ * A tenant with zero spaces dead-ends the composer ("You need access to a
+ * workspace before starting work") — the only other creators are operators
+ * in Settings → Spaces and addManualUser's invite path. Seed the same
+ * default General space for tenants bootstrapUser creates or claims, so the
+ * first sign-in lands in a working composer. Warn-only: a failed seed must
+ * not fail the bootstrap (the operator can still create a space by hand).
+ */
+async function seedDefaultThreadSpace(tenantId: string, userId: string) {
+  try {
+    await ensureDefaultThreadSpace({ tenantId, userId });
+  } catch (err) {
+    console.warn("[bootstrapUser] Failed to seed the default space:", err);
   }
 }
 
@@ -177,6 +194,7 @@ export const bootstrapUser = async (
     }
 
     await seedTenantBootstrapDefaults(pendingTenant.id, user.id);
+    await seedDefaultThreadSpace(pendingTenant.id, user.id);
 
     return {
       user,
@@ -249,6 +267,7 @@ export const bootstrapUser = async (
     .onConflictDoNothing();
 
   await seedTenantBootstrapDefaults(tenant.id, user.id);
+  await seedDefaultThreadSpace(tenant.id, user.id);
 
   // Update Cognito user with tenant_id (for future token claims)
   try {

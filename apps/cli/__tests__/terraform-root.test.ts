@@ -4,7 +4,11 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveTerraformRoot, resolveTierDir } from "../src/terraform.js";
+import {
+  resolveTerraformRoot,
+  resolveTerraformRootForStage,
+  resolveTierDir,
+} from "../src/terraform.js";
 
 const tempDirs: string[] = [];
 const originalTerraformDir = process.env.THINKWORK_TERRAFORM_DIR;
@@ -54,5 +58,38 @@ describe("resolveTerraformRoot", () => {
     const start = tempDir();
 
     expect(resolveTerraformRoot(start)).toBe(start);
+  });
+});
+
+describe("resolveTerraformRootForStage", () => {
+  it("prefers the cwd-derived root when it has a layout for the stage", () => {
+    const repo = tempDir();
+    const terraformRoot = join(repo, "terraform");
+    const greenfield = join(terraformRoot, "examples", "greenfield");
+    mkdirSync(greenfield, { recursive: true });
+    writeFileSync(join(greenfield, "main.tf"), "");
+    const recorded = tempDir();
+    writeFileSync(join(recorded, "main.tf"), "");
+
+    expect(resolveTerraformRootForStage("hci", recorded, repo)).toBe(
+      terraformRoot,
+    );
+  });
+
+  it("falls back to the registry-recorded terraform dir when cwd has no layout", () => {
+    const start = tempDir();
+    const recorded = tempDir();
+    writeFileSync(join(recorded, "main.tf"), "");
+    writeFileSync(join(recorded, "terraform.tfvars"), 'stage = "hci"\n');
+
+    expect(resolveTerraformRootForStage("hci", recorded, start)).toBe(recorded);
+  });
+
+  it("returns the cwd-derived root when the recorded dir is missing too", () => {
+    const start = tempDir();
+    const recorded = join(tempDir(), "gone");
+
+    expect(resolveTerraformRootForStage("hci", recorded, start)).toBe(start);
+    expect(resolveTerraformRootForStage("hci", undefined, start)).toBe(start);
   });
 });

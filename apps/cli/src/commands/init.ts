@@ -84,8 +84,13 @@ export function parseTfvarsAssignments(
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const line of content.split("\n")) {
-    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
-    if (match) values[match[1]] = match[2];
+    // Quoted strings AND unquoted bools/numbers — customer_domain_delegated
+    // is a bare bool, and missing it made init reruns silently flip it back
+    // to false, destroying the live cert + domain aliases (HCI test).
+    const match = line.match(
+      /^\s*([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|(true|false|[0-9]+))\s*$/,
+    );
+    if (match) values[match[1]] = match[2] ?? match[3];
   }
   const hasContent = content
     .split("\n")
@@ -190,6 +195,26 @@ function buildTfvars(config: Record<string, string>): string {
     lines.push(`customer_domain           = "${config.customer_domain}"`);
     lines.push(
       `customer_domain_delegated = ${config.customer_domain_delegated === "true"}`,
+    );
+  }
+
+  if (config.stage === "prod" || config.stage === "production") {
+    lines.push(``);
+    lines.push(
+      `# ── Compliance (prod requirement) ─────────────────────────────────`,
+    );
+    lines.push(
+      `# Object Lock COMPLIANCE is REQUIRED for prod-named stages (terraform`,
+    );
+    lines.push(
+      `# precondition). Retention is irreversible until it expires — even AWS`,
+    );
+    lines.push(
+      `# root cannot delete anchors early. Raise retention for audit posture.`,
+    );
+    lines.push(`compliance_anchor_object_lock_mode = "COMPLIANCE"`);
+    lines.push(
+      `compliance_anchor_retention_days   = ${config.compliance_anchor_retention_days || "30"}`,
     );
   }
 
@@ -377,7 +402,8 @@ export function registerInitCommand(program: Command): void {
           config.admin_url = "http://localhost:5174";
           config.mobile_scheme = "thinkwork";
           config.customer_domain = existing?.customer_domain ?? "";
-          config.customer_domain_delegated = "false";
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
           config.platform_operator_emails =
             existing?.platform_operator_emails ?? "";
           config.ses_parent_domain = existing?.ses_parent_domain ?? "";
@@ -417,7 +443,8 @@ export function registerInitCommand(program: Command): void {
             "Domain (e.g. thinkwork.acme.com; empty to skip)",
             existing?.customer_domain ?? "",
           );
-          config.customer_domain_delegated = "false";
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
 
           config.platform_operator_emails = await ask(
             "Operator email(s), comma-separated",
@@ -548,12 +575,40 @@ export function registerInitCommand(program: Command): void {
         }
 
         // Write terraform.tfvars at the root terraform/ dir (flat layout)
-        const tfvars = buildTfvars(config);
+        let tfvars = buildTfvars(config);
+        // Preserve assignments init does not manage (deploy-pinned release
+        // artifacts, Pi image override, bedrock-logging ownership pin, …):
+        // regenerating tfvars used to silently drop them, which re-pinned a
+        // fresh deploy to the manifest's unpullable ghcr image (prod
+        // graduation).
+        const generatedKeys = new Set(
+          [...tfvars.matchAll(/^\s*([a-zA-Z0-9_]+)\s*=/gm)].map((m) => m[1]),
+        );
+        const preserved = Object.entries(existing ?? {}).filter(
+          ([key]) => !generatedKeys.has(key),
+        );
+        if (preserved.length > 0) {
+          tfvars +=
+            `\n# ── Preserved from previous configuration (init rerun) ────────────\n` +
+            preserved
+              .map(([key, value]) =>
+                /^(true|false|[0-9]+)$/.test(value)
+                  ? `${key} = ${value}`
+                  : `${key} = "${value}"`,
+              )
+              .join("\n") +
+            `\n`;
+        }
         writeFileSync(tfvarsPath, tfvars);
 
-        // Also write a main.tf that sources the composite module
+        // Also write a main.tf that sources the composite module. ALWAYS
+        // regenerated: the file is a machine-owned template (user state
+        // lives in terraform.tfvars), and skip-if-exists meant CLI updates
+        // could never ship template fixes to existing environments — the
+        // prod scaffold kept a stale template without the compliance-lock
+        // threading (THINK-118 graduation).
         const mainTfPath = join(tfDir, "main.tf");
-        if (!existsSync(mainTfPath)) {
+        {
           writeFileSync(
             mainTfPath,
             `################################################################################
@@ -909,6 +964,20 @@ variable "agentcore_pi_source_image_uri" {
   default = ""
 }
 
+# Object Lock posture for the compliance anchor bucket. Stages named
+# prod/production REQUIRE "COMPLIANCE" (terraform precondition) — set
+# automatically by init for those stage names. COMPLIANCE retention is
+# irreversible until it expires (even AWS root cannot delete early).
+variable "compliance_anchor_object_lock_mode" {
+  type    = string
+  default = "GOVERNANCE"
+}
+
+variable "compliance_anchor_retention_days" {
+  type    = number
+  default = 365
+}
+
 # Pinned by \`thinkwork deploy\`: true only when this stage is the first
 # ThinkWork stack in the account+region (the Bedrock invocation-logging
 # resources are account-scoped singletons).
@@ -943,6 +1012,9 @@ module "thinkwork" {
   # (repo-managed) stages can run it.
   skill_trust_runner_enabled        = false
   manage_bedrock_invocation_logging = var.manage_bedrock_invocation_logging
+
+  compliance_anchor_object_lock_mode = var.compliance_anchor_object_lock_mode
+  compliance_anchor_retention_days   = var.compliance_anchor_retention_days
 
   db_password                = var.db_password
   database_engine            = var.database_engine
@@ -998,6 +1070,38 @@ module "thinkwork" {
 
 output "api_endpoint" {
   value = module.thinkwork.api_endpoint
+}
+
+# Outputs consumed by \`thinkwork deploy\`'s web runtime-config generation —
+# the web app fetches /thinkwork-runtime-config.json at boot; without these
+# the published bundle renders "Sign-in options are unavailable".
+output "app_url" {
+  value = module.thinkwork.app_url
+}
+
+output "auth_domain" {
+  value = module.thinkwork.auth_domain
+}
+
+output "appsync_api_url" {
+  value = module.thinkwork.appsync_api_url
+}
+
+output "appsync_realtime_url" {
+  value = module.thinkwork.appsync_realtime_url
+}
+
+output "appsync_api_key" {
+  value     = module.thinkwork.appsync_api_key
+  sensitive = true
+}
+
+output "admin_client_id_out" {
+  value = module.thinkwork.admin_client_id
+}
+
+output "app_distribution_id" {
+  value = module.thinkwork.app_distribution_id
 }
 
 output "app_bucket_name" {

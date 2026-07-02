@@ -2,12 +2,14 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { gql } from "urql";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
-import { setGraphqlTenantId } from "@/lib/graphql-client";
+import { graphqlClient, setGraphqlTenantId } from "@/lib/graphql-client";
 import { readRuntimeEnv } from "@/lib/runtime-config";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,12 @@ interface TenantContextValue {
    * and the user is gated out of the actual product.
    *
    * See ce-doc-review ADV-9 on PR #959 for the full reasoning.
+   *
+   * One narrow exception (does not weaken ADV-9): when `/api/auth/me`
+   * reports `pendingClaim` — a tenant pre-provisioned for exactly this
+   * email by Stripe checkout or `thinkwork deploy` — the shell claims it
+   * via bootstrapUser's pending_owner_email path before concluding
+   * NoTenantAssigned. See ClaimPendingTenantMutation below.
    */
   noTenantAssigned: boolean;
   refetch: () => void;
@@ -87,25 +95,47 @@ async function discoverCallerViaAuthMe(): Promise<{
   tenantId: string | null;
   userId: string | null;
   role: TenantRole | null;
+  pendingClaim: boolean;
 }> {
-  const empty = { tenantId: null, userId: null, role: null };
+  const empty = { tenantId: null, userId: null, role: null, pendingClaim: false };
   if (!readRuntimeEnv("VITE_API_URL")) return empty;
   try {
     const data = await apiFetch<{
       tenantId?: string | null;
       userId?: string | null;
       role?: string | null;
+      pendingClaim?: boolean;
     }>("/api/auth/me");
     return {
       tenantId: data.tenantId ?? null,
       userId: data.userId ?? null,
       role: data.role ?? null,
+      pendingClaim: data.pendingClaim === true,
     };
   } catch (err) {
     if (err instanceof NotReadyError) throw err;
     return empty;
   }
 }
+
+/**
+ * Pre-provisioned owner claim. When `/api/auth/me` reports `pendingClaim`,
+ * a tenants row already carries this caller's email in
+ * `pending_owner_email` — written by the Stripe webhook (paid signup) or by
+ * `thinkwork deploy` (self-hosted first owner). Calling `bootstrapUser`
+ * here attaches the caller to THAT tenant via its claim path; it cannot
+ * mint a fresh tenant for an arbitrary end user, so ADV-9's prohibition on
+ * unconditional auto-bootstrap is preserved.
+ */
+const ClaimPendingTenantMutation = gql`
+  mutation TenantContextClaimPendingTenant {
+    bootstrapUser {
+      tenant {
+        id
+      }
+    }
+  }
+`;
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isLoading: authLoading, getToken } = useAuth();
@@ -124,6 +154,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   // AuthProvider wraps us so tenantId arrives before getIdToken() returns a
   // value. Rather than restructuring the provider tree, tolerate the race.
   const [authRetryTick, setAuthRetryTick] = useState(0);
+  // One claim attempt per page load: a failed bootstrapUser (or a claim that
+  // resolves to no membership) must fall through to NoTenantAssigned instead
+  // of looping discover → claim → discover forever.
+  const claimAttempted = useRef(false);
 
   const jwtTenantId = user?.tenantId ?? null;
   const effectiveTenantId = discoveredTenantId ?? jwtTenantId;
@@ -183,7 +217,23 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
       return;
     }
-    const found = await discoverCallerViaAuthMe();
+    let found = await discoverCallerViaAuthMe();
+    if (!found.tenantId && found.pendingClaim && !claimAttempted.current) {
+      // Designated first owner (see ClaimPendingTenantMutation doc) — claim
+      // the pre-provisioned tenant, then re-discover the membership it wrote.
+      claimAttempted.current = true;
+      const result = await graphqlClient
+        .mutation(ClaimPendingTenantMutation, {})
+        .toPromise();
+      if (result.error) {
+        console.error(
+          "[apps/web TenantContext] pending-tenant claim failed:",
+          result.error,
+        );
+      } else {
+        found = await discoverCallerViaAuthMe();
+      }
+    }
     setDiscoveredUserId(found.userId);
     setRole(found.role);
     setRoleResolved(true);

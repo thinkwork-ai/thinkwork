@@ -112,6 +112,22 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   },
 }));
 
+const { defaultSpaceCalls } = vi.hoisted(() => ({
+  defaultSpaceCalls: [] as Array<{
+    tenantId: string;
+    userId?: string | null;
+  }>,
+}));
+
+vi.mock("../../../lib/spaces/default-space.js", () => ({
+  ensureDefaultThreadSpace: vi.fn(
+    async (input: { tenantId: string; userId?: string | null }) => {
+      defaultSpaceCalls.push(input);
+      return { id: "space-1", tenant_id: input.tenantId, status: "active" };
+    },
+  ),
+}));
+
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
 import { __setNamespaceCheckDepsForTests } from "./tenantSlugValidation.js";
 
@@ -127,6 +143,7 @@ beforeEach(() => {
   returningQueue.length = 0;
   bootstrapDefaultCalls.length = 0;
   bootstrapDefaultFailures.length = 0;
+  defaultSpaceCalls.length = 0;
   namespaceListRecords.mockReset().mockResolvedValue([]);
   __setNamespaceCheckDepsForTests({
     resolveToken: async () => "cf-token",
@@ -160,6 +177,9 @@ describe("bootstrapUser", () => {
     expect(userInsert?.values.cognito_sub).toBe("sub-new");
     expect(userInsert?.values.email).toBe("new@example.com");
     expect(bootstrapDefaultCalls).toEqual([
+      { tenantId: "tenant-1", userId: "user-1" },
+    ]);
+    expect(defaultSpaceCalls).toEqual([
       { tenantId: "tenant-1", userId: "user-1" },
     ]);
     expect(result.isNew).toBe(true);
@@ -253,6 +273,9 @@ describe("bootstrapUser", () => {
     expect(bootstrapDefaultCalls).toEqual([
       { tenantId: "tenant-existing", userId: "user-existing" },
     ]);
+    // Existing tenants are never mutated — an intentionally space-less
+    // tenant must stay space-less (seeding is for created/claimed only).
+    expect(defaultSpaceCalls).toEqual([]);
     expect(result.isNew).toBe(false);
   });
 
@@ -315,6 +338,9 @@ describe("bootstrapUser", () => {
       }),
     );
     expect(bootstrapDefaultCalls).toEqual([
+      { tenantId: "tenant-claim", userId: "user-claim" },
+    ]);
+    expect(defaultSpaceCalls).toEqual([
       { tenantId: "tenant-claim", userId: "user-claim" },
     ]);
     expect(result.tenant.id).toBe("tenant-claim");
