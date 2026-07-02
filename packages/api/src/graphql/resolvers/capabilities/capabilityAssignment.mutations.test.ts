@@ -822,7 +822,7 @@ describe("pi_extension (THINK-114 delegate)", () => {
           versionId: VERSION_ID,
           targetType: "default_agent",
           enabled: true,
-          grantedPermissions: ["tool_use"],
+          grantedPermissions: { permissionClasses: ["tool_use"] },
         }),
       },
       ctx,

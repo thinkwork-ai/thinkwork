@@ -661,7 +661,11 @@ async function piExtensionMutation(
         agentProfileId:
           targetType === "agent_profile" ? input.agentProfileId : null,
         enabled: mode === "grant",
-        grantedPermissions: input.grantedPermissions ?? undefined,
+        // The delegate's normalizeGrantedPermissions expects the THINK-114
+        // object shape { permissionClasses } — a bare array is rejected.
+        grantedPermissions: input.grantedPermissions
+          ? { permissionClasses: input.grantedPermissions }
+          : undefined,
       },
     },
     ctx,
