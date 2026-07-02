@@ -47,7 +47,8 @@ import {
   seedLambdaArtifacts,
   upsertTfvarsValues,
 } from "../lib/release.js";
-import { applyMigrations, clusterArn } from "../lib/db-migrations.js";
+import { applyMigrations } from "../lib/db-migrations.js";
+import { runWorkspaceBootstrap } from "./bootstrap.js";
 import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
 import { confirm } from "../prompt.js";
@@ -651,24 +652,17 @@ function pathJoinTmp(prefix: string): string {
 }
 
 /**
- * Apply the bundled journaled migrations to the stage database (U10) via the
- * Aurora Data API. rds-postgres engines have no Data API — warn with the
- * manual path instead of failing the deploy.
+ * Apply the bundled migration history to the stage database (U10, reworked
+ * after harness cycle 7). Connects directly to the cluster endpoint — the
+ * platform's clusters are publicly accessible by design (password auth;
+ * db:push relies on the same posture) and the migration files need full psql
+ * semantics the Data API cannot provide.
  */
 async function applySchemaMigrations(
   cwd: string,
   identity: { account: string; region: string },
   stage: string,
 ): Promise<void> {
-  const signals = readTfvarsSignalsRaw(cwd);
-  if (signals.database_engine === "rds-postgres") {
-    printWarning(
-      "Schema application via the Data API needs aurora-serverless; apply migrations manually " +
-        "(psql + packages/database-pg/drizzle) for rds-postgres stages.",
-    );
-    return;
-  }
-
   const drizzleDir = findBundledDrizzle();
   if (!drizzleDir) {
     printWarning(
@@ -677,20 +671,63 @@ async function applySchemaMigrations(
     return;
   }
 
-  const secretArn = await terraformOutput(cwd, "db_secret_arn");
-  console.log("\n  Applying database schema (journaled migrations)...");
+  const endpoint = await terraformOutput(cwd, "db_cluster_endpoint");
+  if (!endpoint) {
+    throw new Error(
+      "Terraform output db_cluster_endpoint is empty — cannot apply the schema.",
+    );
+  }
+  const creds = spawnSync(
+    "aws",
+    [
+      "secretsmanager",
+      "get-secret-value",
+      "--secret-id",
+      `thinkwork-${stage}-db-credentials`,
+      "--region",
+      identity.region,
+      "--query",
+      "SecretString",
+      "--output",
+      "text",
+    ],
+    { encoding: "utf8" },
+  );
+  if (creds.status !== 0) {
+    throw new Error(
+      `Could not read thinkwork-${stage}-db-credentials: ${(creds.stderr ?? "").trim().slice(0, 200)}`,
+    );
+  }
+  const parsed = JSON.parse(creds.stdout) as {
+    username?: string;
+    password?: string;
+  };
+  if (!parsed.username || !parsed.password) {
+    throw new Error(
+      `Secret thinkwork-${stage}-db-credentials is missing username/password.`,
+    );
+  }
+
+  console.log("\n  Applying database schema (full migration history)...");
   const summary = await applyMigrations({
     drizzleDir,
-    target: {
-      resourceArn: clusterArn(identity.region, identity.account, stage),
-      secretArn,
+    stage,
+    region: identity.region,
+    connection: {
+      host: endpoint,
+      port: 5432,
+      user: parsed.username,
+      password: parsed.password,
       database: "thinkwork",
-      region: identity.region,
     },
     log: (line) => console.log(`    ${line}`),
   });
   console.log(
-    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present.`,
+    `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present` +
+      (summary.skippedFiles.length > 0
+        ? `, ${summary.skippedFiles.length} operator-only file(s) skipped`
+        : "") +
+      ".",
   );
 }
 
@@ -946,6 +983,13 @@ export async function runLocalTerraformDeploy(
   //    the stage's app bucket (packaged installs have no web build step). ──
   if (scaffolded && webAssetSource) {
     await publishWebAssets(cwd0, webAssetSource);
+  }
+
+  // ── Workspace defaults (harness cycle-7): a fresh stack must pass the
+  //    workspace-seeding probe without a separate manual bootstrap step. ──
+  if (scaffolded && caller) {
+    console.log("\n  Seeding workspace defaults...");
+    await runWorkspaceBootstrap(cwd0, stage, caller.region);
   }
 
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by

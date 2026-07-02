@@ -4,7 +4,7 @@
  * Called as part of `npm run build`.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,9 +65,22 @@ for (const script of ["bootstrap-workspace.sh", "post-deploy.sh"]) {
 }
 console.log("✓ Operational scripts bundled into dist/scripts/");
 
-// Journaled Drizzle migrations (U10): the deploy tail applies these to fresh
-// stages via the Aurora Data API. Only journal-listed files ship — hand-rolled
-// .sql outside meta/_journal.json stays repo-only by design.
+// Workspace default files (harness cycle-7): bootstrap-workspace.sh seeds
+// these into the stage bucket; packaged installs have no packages/ tree.
+const wsDefaultsSrc = resolve(repoRoot, "packages/workspace-defaults/files");
+const wsDefaultsDst = resolve(cliRoot, "dist/workspace-defaults/files");
+if (existsSync(wsDefaultsSrc)) {
+  rmSync(wsDefaultsDst, { recursive: true, force: true });
+  mkdirSync(wsDefaultsDst, { recursive: true });
+  cpSync(wsDefaultsSrc, wsDefaultsDst, { recursive: true });
+  console.log("✓ Workspace defaults bundled into dist/workspace-defaults/files/");
+}
+
+// Drizzle migrations (U10, reworked after harness cycle 7): the deploy tail
+// applies the FULL migration history to fresh stages — the journal froze at
+// 0019 while hand-rolled files carry the real schema evolution, so a
+// journal-only bundle can never produce a working database. Rollback files
+// stay repo-only.
 const drizzleSrc = resolve(repoRoot, "packages/database-pg/drizzle");
 const drizzleDst = resolve(cliRoot, "dist/drizzle");
 const journalPath = resolve(drizzleSrc, "meta/_journal.json");
@@ -75,16 +88,13 @@ if (existsSync(journalPath)) {
   rmSync(drizzleDst, { recursive: true, force: true });
   mkdirSync(resolve(drizzleDst, "meta"), { recursive: true });
   cpSync(journalPath, resolve(drizzleDst, "meta/_journal.json"));
-  const journal = JSON.parse(readFileSync(journalPath, "utf8"));
   let copied = 0;
-  for (const entry of journal.entries ?? []) {
-    const sqlFile = resolve(drizzleSrc, `${entry.tag}.sql`);
-    if (existsSync(sqlFile)) {
-      cpSync(sqlFile, resolve(drizzleDst, `${entry.tag}.sql`));
-      copied += 1;
-    }
+  for (const file of readdirSync(drizzleSrc)) {
+    if (!file.endsWith(".sql") || file.endsWith("_rollback.sql")) continue;
+    cpSync(resolve(drizzleSrc, file), resolve(drizzleDst, file));
+    copied += 1;
   }
-  console.log(`✓ ${copied} journaled migrations bundled into dist/drizzle/`);
+  console.log(`✓ ${copied} migration files bundled into dist/drizzle/`);
 }
 
 if (existsSync(pluginsSrc)) {
