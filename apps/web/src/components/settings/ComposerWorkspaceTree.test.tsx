@@ -17,6 +17,9 @@ const {
   navigateMock,
   queryDocs,
   useQueryCalls,
+  editorSpy,
+  tenant,
+  putFileMock,
 } = vi.hoisted(() => ({
   queryState: {
     preview: {
@@ -42,6 +45,9 @@ const {
     variables: Record<string, unknown>;
     pause?: boolean;
   }>,
+  editorSpy: vi.fn(),
+  tenant: { isOperator: true, roleResolved: true },
+  putFileMock: vi.fn(),
 }));
 
 vi.mock("urql", () => ({
@@ -63,6 +69,30 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
+
+vi.mock("@thinkwork/workspace-editor", () => ({
+  WorkspaceFileEditor: (props: Record<string, unknown>) => {
+    editorSpy(props);
+    return <div data-testid="mock-editor" />;
+  },
+}));
+
+vi.mock("@/context/TenantContext", () => ({ useTenant: () => tenant }));
+
+vi.mock("@/components/LoadingShimmer", () => ({
+  LoadingShimmer: () => <div data-testid="loading-shimmer" />,
+}));
+
+vi.mock("@/lib/workspace-files-api", () => ({
+  spacesWorkspaceFilesClient: {
+    listFiles: vi.fn().mockResolvedValue({ files: [] }),
+    getFile: vi
+      .fn()
+      .mockResolvedValue({ content: "", source: "agent", sha256: "" }),
+    putFile: (...args: unknown[]) => putFileMock(...args),
+    deleteFile: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 import { ComposerWorkspaceTree, causeOf } from "./ComposerWorkspaceTree";
 
@@ -144,6 +174,9 @@ beforeEach(() => {
     error: undefined,
   };
   queryState.file = { data: undefined, fetching: false, error: undefined };
+  tenant.isOperator = true;
+  tenant.roleResolved = true;
+  putFileMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => cleanup());
@@ -408,6 +441,104 @@ describe("read-only file viewer", () => {
     expect(screen.getByTestId("composer-file-error").textContent).toContain(
       "source object no longer exists",
     );
+  });
+});
+
+describe("split-view template editor (U7)", () => {
+  function lastEditorProps() {
+    return editorSpy.mock.calls.at(-1)?.[0] as
+      | Record<string, unknown>
+      | undefined;
+  }
+
+  it("opens a generated agent file split with the agent layer source", () => {
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    expect(screen.getByTestId("composer-split-view")).toBeTruthy();
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
+    // Rendered pane (read-only viewer) is still present beside the editor.
+    expect(screen.getByTestId("composer-file-viewer")).toBeTruthy();
+    const props = lastEditorProps();
+    expect(props?.target).toEqual({ agentId: "agent-1" });
+    expect(props?.defaultOpenFile).toBe("AGENTS.md");
+    expect(props?.readOnly).toBe(false);
+  });
+
+  it("opens a generated space file split with the space layer source (owner resolved)", () => {
+    renderTree();
+    fireEvent.click(
+      screen.getByTestId("tree-file-Spaces/customer-success/CONTEXT.md"),
+    );
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
+    const props = lastEditorProps();
+    expect(props?.target).toEqual({ spaceId: "space-1" });
+    expect(props?.defaultOpenFile).toBe("CONTEXT.md");
+  });
+
+  it("opens non-generated files single-pane (no source editor)", () => {
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
+    expect(screen.queryByTestId("composer-split-view")).toBeNull();
+    expect(screen.queryByTestId("composer-source-pane")).toBeNull();
+    expect(screen.queryByTestId("mock-editor")).toBeNull();
+    expect(screen.getByTestId("composer-file-viewer")).toBeTruthy();
+  });
+
+  it("refetches the preview after the source is saved (existing putFile path)", async () => {
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    const props = lastEditorProps();
+    const client = props?.client as {
+      putFile: (t: unknown, p: string, c: string) => Promise<void>;
+    };
+    await client.putFile({ agentId: "agent-1" }, "AGENTS.md", "# edited prose");
+    expect(putFileMock).toHaveBeenCalledWith(
+      { agentId: "agent-1" },
+      "AGENTS.md",
+      "# edited prose",
+    );
+    expect(previewRefetchMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(fileRefetchMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  it("gates editing to operators: a non-operator gets a read-only source pane", () => {
+    tenant.isOperator = false;
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    expect(lastEditorProps()?.readOnly).toBe(true);
+  });
+
+  it("keeps the source pane when the rendered pane errors (per-pane independence)", () => {
+    queryState.file = {
+      data: {
+        workspacePreviewFile: {
+          state: "resolution_fault",
+          stateDetail: "compose failed",
+          file: null,
+          content: null,
+        },
+      },
+      fetching: false,
+      error: undefined,
+    };
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    // Viewer shows its error, source editor is still mounted beside it.
+    expect(screen.getByTestId("composer-file-error")).toBeTruthy();
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
+    expect(screen.getByTestId("mock-editor")).toBeTruthy();
+  });
+
+  it("keeps the source pane while the rendered pane is loading", () => {
+    queryState.file = { data: undefined, fetching: true, error: undefined };
+    renderTree();
+    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    expect(screen.getByTestId("composer-file-loading")).toBeTruthy();
+    expect(screen.getByTestId("composer-source-pane")).toBeTruthy();
   });
 });
 

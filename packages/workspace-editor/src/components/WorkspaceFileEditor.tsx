@@ -41,6 +41,10 @@ import {
 } from "./FolderTree.js";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts.js";
 import {
+  DEFAULT_MANAGED_SECTION_HEADINGS,
+  editTouchesManagedSection,
+} from "../lib/managed-sections.js";
+import {
   basenameOf,
   joinFolderPath,
   parentFolderOf,
@@ -66,6 +70,13 @@ export interface WorkspaceFileEditorProps<TTarget> {
   refreshKey?: string | number;
   readOnly?: boolean;
   className?: string;
+  /**
+   * Managed-heading vocabulary (Composer plan U7). Bodies of these `## `
+   * sections are recomputed by the composer, so they render marked/locked and
+   * saving an edit that falls inside one warns first. Defaults to the shared
+   * `DEFAULT_MANAGED_SECTION_HEADINGS`, so every embedding surface inherits the
+   * affordance with zero wiring; pass `[]` to disable it. */
+  managedSectionHeadings?: readonly string[];
   /** Draw the outer border + rounded corners around the tree/editor split.
    *  Default true; full-screen hosts can opt out for an edge-to-edge look. */
   bordered?: boolean;
@@ -94,6 +105,7 @@ export function WorkspaceFileEditor<TTarget>({
   refreshKey,
   readOnly = false,
   className,
+  managedSectionHeadings = DEFAULT_MANAGED_SECTION_HEADINGS,
   bordered = true,
   loadingSlot,
 }: WorkspaceFileEditorProps<TTarget>) {
@@ -477,6 +489,17 @@ export function WorkspaceFileEditor<TTarget>({
     if (!openFile || readOnly) return;
     const savedPath = openFile;
     const savedValue = editValue;
+    // Warn (but don't block) when the edit lands inside a computed managed
+    // section — the composer recomposes those bodies, so the edit will be
+    // overwritten on the next render/skill toggle (Composer plan U7).
+    if (
+      managedSectionHeadings.length > 0 &&
+      editTouchesManagedSection(content, savedValue, managedSectionHeadings)
+    ) {
+      toast.warning(
+        "This edit falls inside a computed section — it is recomposed automatically and your change here will not survive the next update.",
+      );
+    }
     setSaving(true);
     setError(null);
     try {
@@ -493,7 +516,16 @@ export function WorkspaceFileEditor<TTarget>({
     } finally {
       setSaving(false);
     }
-  }, [client, editValue, fetchFiles, openFile, readOnly, stableTarget]);
+  }, [
+    client,
+    content,
+    editValue,
+    fetchFiles,
+    managedSectionHeadings,
+    openFile,
+    readOnly,
+    stableTarget,
+  ]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -715,6 +747,7 @@ export function WorkspaceFileEditor<TTarget>({
                   loading={loadingContent}
                   saving={saving}
                   readOnly={readOnly}
+                  managedHeadings={managedSectionHeadings}
                   onChange={setEditValue}
                   onSave={handleSave}
                   onDiscard={() => setEditValue(content)}
