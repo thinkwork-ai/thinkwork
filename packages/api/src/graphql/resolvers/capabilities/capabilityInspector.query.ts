@@ -31,12 +31,15 @@ import {
   db,
   eq,
   and,
+  desc,
+  isNull,
   agents,
   spaces,
   users,
   agentProfiles,
   skillCatalog,
   tenantMcpServers,
+  resolvedCapabilityManifests,
 } from "../../utils.js";
 import { pluginInstalls } from "@thinkwork/database-pg/schema";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
@@ -93,6 +96,191 @@ interface CapabilityInspectionOut {
     configFingerprint: string;
     items: CapabilityItemOut[];
   } | null;
+  observed?: {
+    variant: "OBSERVED";
+    computedAt: string;
+    configFingerprint: string;
+    items: CapabilityItemOut[];
+  } | null;
+  divergence?: {
+    state:
+      "no_manifest_yet" | "config_changed_since_turn" | "in_sync" | "divergent";
+    manifestId?: string | null;
+    manifestCreatedAt?: string | null;
+    manifestFingerprint?: string | null;
+    deltas?: Array<{
+      capabilityClass: string;
+      capabilityId: string;
+      kind: "missing_in_observed" | "extra_in_observed";
+    }> | null;
+  } | null;
+}
+
+/**
+ * U13: project the latest matching turn's capability manifest into the
+ * shared EffectiveCapabilitySet shape (KTD-9) and compute the divergence
+ * state. Divergence is asserted ONLY on fingerprint equality (KTD-3).
+ *
+ * Comparison covers the classes whose vocabularies align between the
+ * predicted set and the container's loaded record: skills, MCP servers, and
+ * Pi extensions. Built-in tools are excluded — the container reports host
+ * tool names (bash, file_read, ...) while prediction speaks catalog slugs.
+ */
+async function loadObservedAndDivergence(args: {
+  tenantId: string;
+  agentId: string;
+  spaceId: string | null;
+  agentProfileId: string | null;
+  predictedFingerprint: string;
+  predictedItems: CapabilityItemOut[];
+}): Promise<{
+  observed: CapabilityInspectionOut["observed"];
+  divergence: NonNullable<CapabilityInspectionOut["divergence"]>;
+}> {
+  const predicates = [
+    eq(resolvedCapabilityManifests.tenant_id, args.tenantId),
+    eq(resolvedCapabilityManifests.agent_id, args.agentId),
+    args.spaceId
+      ? eq(resolvedCapabilityManifests.space_id, args.spaceId)
+      : isNull(resolvedCapabilityManifests.space_id),
+    args.agentProfileId
+      ? eq(resolvedCapabilityManifests.agent_profile_id, args.agentProfileId)
+      : isNull(resolvedCapabilityManifests.agent_profile_id),
+  ];
+  const [row] = await db
+    .select()
+    .from(resolvedCapabilityManifests)
+    .where(and(...predicates))
+    .orderBy(desc(resolvedCapabilityManifests.created_at))
+    .limit(1);
+
+  if (!row) {
+    return { observed: null, divergence: { state: "no_manifest_yet" } };
+  }
+
+  const manifest = (row.manifest_json ?? {}) as Record<string, unknown>;
+  const section = (name: string): Record<string, unknown> =>
+    manifest[name] && typeof manifest[name] === "object"
+      ? (manifest[name] as Record<string, unknown>)
+      : {};
+  const stringList = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  const loaded = section("loaded");
+  const gated = Array.isArray(manifest.gated) ? manifest.gated : [];
+
+  const observedItems: CapabilityItemOut[] = [
+    ...stringList(loaded.skills).map((skillId) => ({
+      capabilityClass: "skill",
+      capabilityId: skillId,
+      active: true,
+    })),
+    ...stringList(loaded.builtInTools).map((tool) => ({
+      capabilityClass: "builtin_tool",
+      capabilityId: tool,
+      active: true,
+    })),
+    ...stringList(loaded.mcpServers).map((server) => ({
+      capabilityClass: "mcp_server",
+      capabilityId: server,
+      active: true,
+    })),
+    ...stringList(loaded.piExtensions).map((extension) => ({
+      capabilityClass: "pi_extension",
+      capabilityId: extension,
+      active: true,
+    })),
+    ...gated.flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const record = entry as Record<string, unknown>;
+      if (
+        typeof record.capabilityClass !== "string" ||
+        typeof record.capabilityId !== "string"
+      ) {
+        return [];
+      }
+      return [
+        {
+          capabilityClass: record.capabilityClass,
+          capabilityId: record.capabilityId,
+          active: false,
+          reason: typeof record.reason === "string" ? record.reason : null,
+          detail: typeof record.detail === "string" ? record.detail : null,
+        },
+      ];
+    }),
+  ];
+
+  const observed = {
+    variant: "OBSERVED" as const,
+    computedAt: row.created_at.toISOString(),
+    configFingerprint: row.config_fingerprint ?? "",
+    items: observedItems,
+  };
+
+  if (
+    !row.config_fingerprint ||
+    row.config_fingerprint !== args.predictedFingerprint
+  ) {
+    return {
+      observed,
+      divergence: {
+        state: "config_changed_since_turn",
+        manifestId: row.id,
+        manifestCreatedAt: observed.computedAt,
+        manifestFingerprint: row.config_fingerprint ?? null,
+      },
+    };
+  }
+
+  const COMPARED_CLASSES = ["skill", "mcp_server", "pi_extension"];
+  const observedActive = new Set(
+    observedItems
+      .filter(
+        (item) =>
+          item.active && COMPARED_CLASSES.includes(item.capabilityClass),
+      )
+      .map((item) => `${item.capabilityClass} ${item.capabilityId}`),
+  );
+  const predictedActive = new Set(
+    args.predictedItems
+      .filter(
+        (item) =>
+          item.active && COMPARED_CLASSES.includes(item.capabilityClass),
+      )
+      .map((item) => `${item.capabilityClass} ${item.capabilityId}`),
+  );
+  const deltas: NonNullable<
+    NonNullable<CapabilityInspectionOut["divergence"]>["deltas"]
+  > = [];
+  for (const key of predictedActive) {
+    if (!observedActive.has(key)) {
+      const [capabilityClass, capabilityId] = key.split(" ");
+      deltas.push({
+        capabilityClass,
+        capabilityId,
+        kind: "missing_in_observed",
+      });
+    }
+  }
+  for (const key of observedActive) {
+    if (!predictedActive.has(key)) {
+      const [capabilityClass, capabilityId] = key.split(" ");
+      deltas.push({ capabilityClass, capabilityId, kind: "extra_in_observed" });
+    }
+  }
+
+  return {
+    observed,
+    divergence: {
+      state: deltas.length === 0 ? "in_sync" : "divergent",
+      manifestId: row.id,
+      manifestCreatedAt: observed.computedAt,
+      manifestFingerprint: row.config_fingerprint,
+      deltas: deltas.length > 0 ? deltas : null,
+    },
+  };
 }
 
 export async function capabilityInspector(
@@ -563,6 +751,34 @@ export async function capabilityInspector(
       : a.capabilityClass.localeCompare(b.capabilityClass),
   );
 
+  const configFingerprint = computeConfigFingerprint(
+    {
+      tenantId: args.tenantId,
+      agentId,
+      spaceId: args.spaceId ?? null,
+      agentProfileId: selectedProfile?.id ?? null,
+      perspectiveUserId,
+    },
+    fingerprintInputsFromRuntimeConfig(config),
+  );
+
+  // U13: runtime truth beside the prediction, divergence gated on the
+  // fingerprint. A lookup fault degrades to "no manifest yet" semantics.
+  const { observed, divergence } = await loadObservedAndDivergence({
+    tenantId: args.tenantId,
+    agentId,
+    spaceId: args.spaceId ?? null,
+    agentProfileId: selectedProfile?.id ?? null,
+    predictedFingerprint: configFingerprint,
+    predictedItems: items,
+  }).catch((err) => {
+    console.warn(`${LOG_PREFIX} manifest lookup failed:`, err);
+    return {
+      observed: null,
+      divergence: { state: "no_manifest_yet" as const },
+    };
+  });
+
   return {
     state: "ok",
     stateDetail: null,
@@ -574,17 +790,10 @@ export async function capabilityInspector(
     predicted: {
       variant: "PREDICTED",
       computedAt: new Date().toISOString(),
-      configFingerprint: computeConfigFingerprint(
-        {
-          tenantId: args.tenantId,
-          agentId,
-          spaceId: args.spaceId ?? null,
-          agentProfileId: selectedProfile?.id ?? null,
-          perspectiveUserId,
-        },
-        fingerprintInputsFromRuntimeConfig(config),
-      ),
+      configFingerprint,
       items,
     },
+    observed,
+    divergence,
   };
 }

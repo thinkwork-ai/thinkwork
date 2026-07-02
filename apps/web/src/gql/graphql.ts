@@ -995,24 +995,29 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
-export enum CapabilityGrantClass {
-  McpServer = "MCP_SERVER",
-  PiExtension = "PI_EXTENSION",
-  Skill = "SKILL",
-}
+export type CapabilityDivergence = {
+  __typename?: "CapabilityDivergence";
+  deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
+  manifestCreatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  manifestFingerprint?: Maybe<Scalars["String"]["output"]>;
+  manifestId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+};
 
-export enum CapabilityGrantScope {
-  Agent = "AGENT",
-  AgentProfile = "AGENT_PROFILE",
-  Space = "SPACE",
-  User = "USER",
-}
+export type CapabilityDivergenceDelta = {
+  __typename?: "CapabilityDivergenceDelta";
+  capabilityClass: Scalars["String"]["output"];
+  capabilityId: Scalars["String"]["output"];
+  kind: Scalars["String"]["output"];
+};
 
 export type CapabilityInspection = {
   __typename?: "CapabilityInspection";
   agentId?: Maybe<Scalars["ID"]["output"]>;
   agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  divergence?: Maybe<CapabilityDivergence>;
   noUserBaseline: Scalars["Boolean"]["output"];
+  observed?: Maybe<EffectiveCapabilitySet>;
   perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
   predicted?: Maybe<EffectiveCapabilitySet>;
   spaceId?: Maybe<Scalars["ID"]["output"]>;
@@ -1030,15 +1035,6 @@ export type CapabilityItem = {
   provenance?: Maybe<Scalars["String"]["output"]>;
   reason?: Maybe<Scalars["String"]["output"]>;
   tokenStatus?: Maybe<Scalars["String"]["output"]>;
-};
-
-export type CapabilityMutationResult = {
-  __typename?: "CapabilityMutationResult";
-  computedAt: Scalars["AWSDateTime"]["output"];
-  configFingerprint?: Maybe<Scalars["String"]["output"]>;
-  inspectionState: Scalars["String"]["output"];
-  item?: Maybe<CapabilityItem>;
-  outcome: Scalars["String"]["output"];
 };
 
 export enum CapabilitySetVariant {
@@ -1206,8 +1202,6 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentCreated = "AGENT_CREATED",
   AgentDeleted = "AGENT_DELETED",
-  AgentExtensionDetached = "AGENT_EXTENSION_DETACHED",
-  AgentExtensionGranted = "AGENT_EXTENSION_GRANTED",
   AgentMigrated = "AGENT_MIGRATED",
   AgentSkillsChanged = "AGENT_SKILLS_CHANGED",
   ApprovalRecorded = "APPROVAL_RECORDED",
@@ -1217,8 +1211,6 @@ export enum ComplianceEventType {
   AuthSignout = "AUTH_SIGNOUT",
   DataExportInitiated = "DATA_EXPORT_INITIATED",
   McpAdded = "MCP_ADDED",
-  McpDetached = "MCP_DETACHED",
-  McpGranted = "MCP_GRANTED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
@@ -1236,8 +1228,6 @@ export enum ComplianceEventType {
   PolicyBypassed = "POLICY_BYPASSED",
   PolicyEvaluated = "POLICY_EVALUATED",
   SkillActivated = "SKILL_ACTIVATED",
-  SkillDetached = "SKILL_DETACHED",
-  SkillGranted = "SKILL_GRANTED",
   UserCreated = "USER_CREATED",
   UserDeleted = "USER_DELETED",
   UserDisabled = "USER_DISABLED",
@@ -1893,15 +1883,6 @@ export type DeploymentStatus = {
   twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
-export type DetachCapabilityInput = {
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
-  capabilityClass: CapabilityGrantClass;
-  capabilityRef: Scalars["String"]["input"];
-  scope: CapabilityGrantScope;
-  tenantId: Scalars["ID"]["input"];
-};
-
 export type DisableSkillInput = {
   agentId: Scalars["ID"]["input"];
   skillId: Scalars["String"]["input"];
@@ -2436,18 +2417,6 @@ export type FlagThreadForEvalResult = {
   case: EvalTestCase;
   completeness: EvalCaseCompleteness;
   dataset: EvalDataset;
-};
-
-export type GrantCapabilityInput = {
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
-  capabilityClass: CapabilityGrantClass;
-  capabilityRef: Scalars["String"]["input"];
-  grantedPermissions?: InputMaybe<Array<Scalars["String"]["input"]>>;
-  scope: CapabilityGrantScope;
-  tenantId: Scalars["ID"]["input"];
-  toolAllowlist?: InputMaybe<Array<Scalars["String"]["input"]>>;
-  wiringChoice?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type HandleJsonRenderActionInput = {
@@ -3747,7 +3716,6 @@ export type Mutation = {
   deleteWebhook: Scalars["Boolean"]["output"];
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
-  detachCapability: CapabilityMutationResult;
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
@@ -3757,7 +3725,6 @@ export type Mutation = {
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
-  grantCapability: CapabilityMutationResult;
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
@@ -4403,10 +4370,6 @@ export type MutationDeleteWorkflowArgs = {
   id: Scalars["ID"]["input"];
 };
 
-export type MutationDetachCapabilityArgs = {
-  input: DetachCapabilityInput;
-};
-
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -4442,10 +4405,6 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
-};
-
-export type MutationGrantCapabilityArgs = {
-  input: GrantCapabilityInput;
 };
 
 export type MutationHandleJsonRenderActionArgs = {
@@ -14354,6 +14313,19 @@ export type SettingsRejectPiExtensionVersionMutation = {
   };
 };
 
+export type SettingsUpdatePiExtensionAssignmentMutationVariables = Exact<{
+  input: UpdatePiExtensionAssignmentInput;
+}>;
+
+export type SettingsUpdatePiExtensionAssignmentMutation = {
+  __typename?: "Mutation";
+  updatePiExtensionAssignment: { __typename?: "PiExtension" } & {
+    " $fragmentRefs"?: {
+      SettingsPiExtensionFieldsFragment: SettingsPiExtensionFieldsFragment;
+    };
+  };
+};
+
 export type SettingsMeQueryVariables = Exact<{ [key: string]: never }>;
 
 export type SettingsMeQuery = {
@@ -15477,97 +15449,6 @@ export type SettingsConfigureWorkosAuthPluginMutation = {
       hostnames: Array<string>;
       publicOptionLabel: string;
     };
-  };
-};
-
-export type SettingsGrantCapabilityMutationVariables = Exact<{
-  input: GrantCapabilityInput;
-}>;
-
-export type SettingsGrantCapabilityMutation = {
-  __typename?: "Mutation";
-  grantCapability: {
-    __typename?: "CapabilityMutationResult";
-    outcome: string;
-    inspectionState: string;
-    computedAt: any;
-    configFingerprint?: string | null;
-    item?: {
-      __typename?: "CapabilityItem";
-      capabilityClass: string;
-      capabilityId: string;
-      displayName?: string | null;
-      active: boolean;
-      provenance?: string | null;
-      reason?: string | null;
-      detail?: string | null;
-      tokenStatus?: string | null;
-    } | null;
-  };
-};
-
-export type SettingsDetachCapabilityMutationVariables = Exact<{
-  input: DetachCapabilityInput;
-}>;
-
-export type SettingsDetachCapabilityMutation = {
-  __typename?: "Mutation";
-  detachCapability: {
-    __typename?: "CapabilityMutationResult";
-    outcome: string;
-    inspectionState: string;
-    computedAt: any;
-    configFingerprint?: string | null;
-    item?: {
-      __typename?: "CapabilityItem";
-      capabilityClass: string;
-      capabilityId: string;
-      displayName?: string | null;
-      active: boolean;
-      provenance?: string | null;
-      reason?: string | null;
-      detail?: string | null;
-      tokenStatus?: string | null;
-    } | null;
-  };
-};
-
-export type SettingsCapabilityInspectorQueryVariables = Exact<{
-  tenantId: Scalars["ID"]["input"];
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
-  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
-  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
-}>;
-
-export type SettingsCapabilityInspectorQuery = {
-  __typename?: "Query";
-  capabilityInspector: {
-    __typename?: "CapabilityInspection";
-    state: string;
-    stateDetail?: string | null;
-    agentId?: string | null;
-    spaceId?: string | null;
-    agentProfileId?: string | null;
-    perspectiveUserId?: string | null;
-    noUserBaseline: boolean;
-    predicted?: {
-      __typename?: "EffectiveCapabilitySet";
-      variant: CapabilitySetVariant;
-      computedAt: any;
-      configFingerprint: string;
-      items: Array<{
-        __typename?: "CapabilityItem";
-        capabilityClass: string;
-        capabilityId: string;
-        displayName?: string | null;
-        active: boolean;
-        provenance?: string | null;
-        reason?: string | null;
-        detail?: string | null;
-        tokenStatus?: string | null;
-      }>;
-    } | null;
   };
 };
 
@@ -28509,6 +28390,155 @@ export const SettingsRejectPiExtensionVersionDocument = {
   SettingsRejectPiExtensionVersionMutation,
   SettingsRejectPiExtensionVersionMutationVariables
 >;
+export const SettingsUpdatePiExtensionAssignmentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpdatePiExtensionAssignment" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdatePiExtensionAssignmentInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updatePiExtensionAssignment" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "FragmentSpread",
+                  name: { kind: "Name", value: "SettingsPiExtensionFields" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "SettingsPiExtensionFields" },
+      typeCondition: {
+        kind: "NamedType",
+        name: { kind: "Name", value: "PiExtension" },
+      },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+          { kind: "Field", name: { kind: "Name", value: "sourceId" } },
+          { kind: "Field", name: { kind: "Name", value: "sourceType" } },
+          { kind: "Field", name: { kind: "Name", value: "repositoryUrl" } },
+          { kind: "Field", name: { kind: "Name", value: "repositoryOwner" } },
+          { kind: "Field", name: { kind: "Name", value: "repositoryName" } },
+          { kind: "Field", name: { kind: "Name", value: "displayName" } },
+          { kind: "Field", name: { kind: "Name", value: "description" } },
+          { kind: "Field", name: { kind: "Name", value: "sourceRef" } },
+          { kind: "Field", name: { kind: "Name", value: "commitSha" } },
+          { kind: "Field", name: { kind: "Name", value: "manifestHash" } },
+          { kind: "Field", name: { kind: "Name", value: "artifactHash" } },
+          { kind: "Field", name: { kind: "Name", value: "artifactUri" } },
+          { kind: "Field", name: { kind: "Name", value: "runtimeTarget" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "statusReason" } },
+          { kind: "Field", name: { kind: "Name", value: "manifest" } },
+          { kind: "Field", name: { kind: "Name", value: "toolNames" } },
+          { kind: "Field", name: { kind: "Name", value: "lifecycleHooks" } },
+          { kind: "Field", name: { kind: "Name", value: "permissionClasses" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "verificationReport" },
+          },
+          { kind: "Field", name: { kind: "Name", value: "reviewedByUserId" } },
+          { kind: "Field", name: { kind: "Name", value: "reviewedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "approvedByUserId" } },
+          { kind: "Field", name: { kind: "Name", value: "approvedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "rejectedByUserId" } },
+          { kind: "Field", name: { kind: "Name", value: "rejectedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "executable" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "assignmentSummary" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "defaultAgentEnabled" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "enabledProfileCount" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "disabledCount" },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "assignments" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "versionId" } },
+                { kind: "Field", name: { kind: "Name", value: "targetType" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentProfileId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "grantedPermissions" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpdatePiExtensionAssignmentMutation,
+  SettingsUpdatePiExtensionAssignmentMutationVariables
+>;
 export const SettingsMeDocument = {
   kind: "Document",
   definitions: [
@@ -32836,406 +32866,6 @@ export const SettingsConfigureWorkosAuthPluginDocument = {
 } as unknown as DocumentNode<
   SettingsConfigureWorkosAuthPluginMutation,
   SettingsConfigureWorkosAuthPluginMutationVariables
->;
-export const SettingsGrantCapabilityDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SettingsGrantCapability" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "GrantCapabilityInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "grantCapability" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "outcome" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "inspectionState" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "computedAt" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "configFingerprint" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "item" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "capabilityClass" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "capabilityId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "displayName" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "active" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "provenance" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "reason" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "detail" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "tokenStatus" },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SettingsGrantCapabilityMutation,
-  SettingsGrantCapabilityMutationVariables
->;
-export const SettingsDetachCapabilityDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SettingsDetachCapability" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "input" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: {
-              kind: "NamedType",
-              name: { kind: "Name", value: "DetachCapabilityInput" },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "detachCapability" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "input" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "input" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "outcome" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "inspectionState" },
-                },
-                { kind: "Field", name: { kind: "Name", value: "computedAt" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "configFingerprint" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "item" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "capabilityClass" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "capabilityId" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "displayName" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "active" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "provenance" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "reason" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "detail" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "tokenStatus" },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SettingsDetachCapabilityMutation,
-  SettingsDetachCapabilityMutationVariables
->;
-export const SettingsCapabilityInspectorDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "SettingsCapabilityInspector" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "tenantId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentId" },
-          },
-          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "spaceId" },
-          },
-          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "agentProfileId" },
-          },
-          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-        },
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "perspectiveUserId" },
-          },
-          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "capabilityInspector" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "tenantId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "tenantId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "spaceId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "spaceId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "agentProfileId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "agentProfileId" },
-                },
-              },
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "perspectiveUserId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "perspectiveUserId" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "state" } },
-                { kind: "Field", name: { kind: "Name", value: "stateDetail" } },
-                { kind: "Field", name: { kind: "Name", value: "agentId" } },
-                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "agentProfileId" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "perspectiveUserId" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "noUserBaseline" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "predicted" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "variant" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "computedAt" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "configFingerprint" },
-                      },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "items" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "capabilityClass" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "capabilityId" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "displayName" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "active" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "provenance" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "reason" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "detail" },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "tokenStatus" },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SettingsCapabilityInspectorQuery,
-  SettingsCapabilityInspectorQueryVariables
 >;
 export const TenantSkillCatalogDocument = {
   kind: "Document",
