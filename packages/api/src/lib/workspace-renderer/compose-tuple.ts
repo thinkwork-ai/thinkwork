@@ -97,6 +97,15 @@ export interface RenderWorkspaceTupleDeps {
    * without mutating the thread's rendered workspace. Defaults to true.
    */
   persist?: boolean;
+  /**
+   * Opt-in (Composer plan U1, KTD-3): expose the generated files' CONTENTS
+   * (`generatedFiles`) on the render result, on both the cache-hit and
+   * cache-miss return paths. Under `persist: false` nothing exists at the
+   * manifest's rendered keys, so this is the only way a read surface can
+   * serve generated content. Defaults to false to keep runtime render
+   * results lean.
+   */
+  includeGeneratedContents?: boolean;
 }
 
 interface SourceObject extends WorkspaceObjectMetadata {
@@ -878,6 +887,18 @@ export async function renderWorkspaceTuple(
     },
     ...(gatedContextFile ? [gatedContextFile] : []),
   ];
+  // Opt-in generated-content exposure (Composer plan U1): identical on the
+  // hit and miss paths — the compose above already produced the exact bytes
+  // a persisting render would write.
+  const generatedContents = deps.includeGeneratedContents
+    ? {
+        generatedFiles: generatedFiles.map((generatedFile) => ({
+          path: generatedFile.path,
+          owner: generatedFile.owner,
+          content: generatedFile.content,
+        })),
+      }
+    : {};
   const sourceLatest = latestMtime([
     agentSource,
     spaceSource,
@@ -921,6 +942,7 @@ export async function renderWorkspaceTuple(
       sourcePrefixes,
       writtenFiles: [],
       hydrateManifest,
+      ...generatedContents,
       activeSpace: {
         id: tuple.spaceId,
         slug: tuple.spaceSlug,
@@ -1000,6 +1022,7 @@ export async function renderWorkspaceTuple(
     sourcePrefixes,
     writtenFiles,
     hydrateManifest: nextHydrateManifest,
+    ...generatedContents,
     activeSpace: {
       id: tuple.spaceId,
       slug: tuple.spaceSlug,

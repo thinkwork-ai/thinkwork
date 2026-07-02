@@ -6474,6 +6474,8 @@ export type Query = {
   workflowRuns: Array<WorkflowRun>;
   workflowTemplateCatalog: Array<WorkflowTemplateCatalogItem>;
   workflows: Array<Workflow>;
+  workspacePreview: WorkspacePreview;
+  workspacePreviewFile: WorkspacePreviewFilePayload;
 };
 
 export type QueryAccountUsageArgs = {
@@ -7427,6 +7429,21 @@ export type QueryWorkflowsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   readinessState?: InputMaybe<WorkflowReadinessState>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkspacePreviewArgs = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryWorkspacePreviewFileArgs = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  path: Scalars["String"]["input"];
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export enum QuickActionScope {
@@ -11055,6 +11072,33 @@ export type WorkspaceAccessRevokedEvent = {
   spaceId: Scalars["ID"]["output"];
   tenantId: Scalars["ID"]["output"];
   userId: Scalars["ID"]["output"];
+};
+
+export type WorkspacePreview = {
+  __typename?: "WorkspacePreview";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  files?: Maybe<Array<WorkspacePreviewEntry>>;
+  noUserBaseline: Scalars["Boolean"]["output"];
+  perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+  stateDetail?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type WorkspacePreviewEntry = {
+  __typename?: "WorkspacePreviewEntry";
+  generated: Scalars["Boolean"]["output"];
+  owner: Scalars["String"]["output"];
+  path: Scalars["String"]["output"];
+  size?: Maybe<Scalars["Int"]["output"]>;
+};
+
+export type WorkspacePreviewFilePayload = {
+  __typename?: "WorkspacePreviewFilePayload";
+  content?: Maybe<Scalars["String"]["output"]>;
+  file?: Maybe<WorkspacePreviewEntry>;
+  state: Scalars["String"]["output"];
+  stateDetail?: Maybe<Scalars["String"]["output"]>;
 };
 
 export enum WorkspaceReviewKind {
