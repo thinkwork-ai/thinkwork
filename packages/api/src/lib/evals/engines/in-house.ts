@@ -30,9 +30,22 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 
 export const EVAL_IN_HOUSE_ENGINE_ID = "in_house";
 
-const JUDGE_MODEL_ID =
-  process.env.EVAL_JUDGE_MODEL_ID ??
-  "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+const FALLBACK_JUDGE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+/**
+ * Resolve the judge model for a run (Eval Profiles U4, KTD11): the
+ * profile snapshot's pinned judge wins; EVAL_JUDGE_MODEL_ID is the
+ * deployed DEFAULT for profiles that don't pin one — no longer a global
+ * constant the profile can't reach.
+ */
+export function resolveEvalJudgeModelId(
+  pinnedJudgeModel?: string | null,
+): string {
+  const pinned = pinnedJudgeModel?.trim();
+  if (pinned) return pinned;
+  const deployedDefault = process.env.EVAL_JUDGE_MODEL_ID?.trim();
+  return deployedDefault || FALLBACK_JUDGE_MODEL_ID;
+}
 
 export function llmJudgeEnabled(value = process.env.EVAL_LLM_JUDGE): boolean {
   return ["1", "true", "enabled", "always", "llm"].includes(
@@ -126,7 +139,30 @@ export function parseEvalJudgeVerdict(text: string): EvalJudgeVerdict {
   };
 }
 
-export async function bedrockLlmJudge(
+/**
+ * Build a Bedrock Converse judge pinned to a specific model (Eval
+ * Profiles U4, KTD11). The eval-worker threads the run's
+ * profile_snapshot.judgeModel here so two profiles with different pins
+ * genuinely score under different judges; null/undefined falls back to
+ * the deployed default.
+ */
+export function createBedrockLlmJudge(
+  pinnedJudgeModel?: string | null,
+): (query: string, output: string, rubric: string) => Promise<EvalJudgeResult> {
+  return (query, output, rubric) =>
+    invokeBedrockLlmJudge(
+      resolveEvalJudgeModelId(pinnedJudgeModel),
+      query,
+      output,
+      rubric,
+    );
+}
+
+/** Default-judge instance kept for existing importers/tests. */
+export const bedrockLlmJudge = createBedrockLlmJudge();
+
+async function invokeBedrockLlmJudge(
+  judgeModelId: string,
   query: string,
   output: string,
   rubric: string,
@@ -153,7 +189,7 @@ ${rubric}
 
     const resp = await client.send(
       new ConverseCommand({
-        modelId: JUDGE_MODEL_ID,
+        modelId: judgeModelId,
         system: [{ text: EVAL_JUDGE_SYSTEM_PROMPT }],
         messages: [{ role: "user", content: [{ text: judgeData }] }],
         inferenceConfig: { maxTokens: 256, temperature: 0 },

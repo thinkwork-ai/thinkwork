@@ -44,12 +44,17 @@ import {
   evaluationsQueries,
   evaluationsMutations,
   evalResultTypeResolvers,
+  evalRunTypeResolvers,
   skillEvalScoreTypeResolvers,
 } from "./evaluations/index.js";
 import {
   evalDatasetQueries,
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
+import {
+  evalProfileQueries,
+  evalProfileMutations,
+} from "./evaluations/profiles.js";
 import {
   flagThreadMutations,
   flagThreadQueries,
@@ -158,6 +163,7 @@ export const queryResolvers: Record<string, any> = {
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
+  ...evalProfileQueries,
   ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
@@ -209,6 +215,7 @@ export const mutationResolvers: Record<string, any> = {
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,
+  ...evalProfileMutations,
   ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
   ...wikiMutations,
@@ -258,6 +265,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   EvalResult: evalResultTypeResolvers,
+  EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,

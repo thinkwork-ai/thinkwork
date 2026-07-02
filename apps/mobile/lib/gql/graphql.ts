@@ -1414,6 +1414,13 @@ export type CreateEvalDatasetInput = {
   slug: Scalars["String"]["input"];
 };
 
+export type CreateEvalProfileInput = {
+  judgeModel?: InputMaybe<Scalars["String"]["input"]>;
+  model: Scalars["String"]["input"];
+  name: Scalars["String"]["input"];
+  trials?: InputMaybe<Scalars["Int"]["input"]>;
+};
+
 export type CreateEvalTestCaseInput = {
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
@@ -2191,6 +2198,20 @@ export type EvalDatasetCaseInput = {
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
+export type EvalProfile = {
+  __typename?: "EvalProfile";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  isDefault: Scalars["Boolean"]["output"];
+  judgeModel?: Maybe<Scalars["String"]["output"]>;
+  model: Scalars["String"]["output"];
+  name: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  trials: Scalars["Int"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
 export type EvalReplayAllowedTool = {
   __typename?: "EvalReplayAllowedTool";
   createdAt: Scalars["AWSDateTime"]["output"];
@@ -2218,6 +2239,9 @@ export type EvalReplayMcpTool = {
 export type EvalResult = {
   __typename?: "EvalResult";
   actualOutput?: Maybe<Scalars["String"]["output"]>;
+  agentCostUsd?: Maybe<Scalars["Float"]["output"]>;
+  agentInputTokens?: Maybe<Scalars["Int"]["output"]>;
+  agentOutputTokens?: Maybe<Scalars["Int"]["output"]>;
   agentSessionId?: Maybe<Scalars["String"]["output"]>;
   assertions: Scalars["AWSJSON"]["output"];
   category?: Maybe<Scalars["String"]["output"]>;
@@ -2241,6 +2265,7 @@ export type EvalResult = {
   testCaseId?: Maybe<Scalars["ID"]["output"]>;
   testCaseName?: Maybe<Scalars["String"]["output"]>;
   threadTurnId?: Maybe<Scalars["ID"]["output"]>;
+  trialIndex: Scalars["Int"]["output"];
   workspaceProjection?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
@@ -2250,6 +2275,7 @@ export type EvalRun = {
   agentName?: Maybe<Scalars["String"]["output"]>;
   categories: Array<Scalars["String"]["output"]>;
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  costPartial: Scalars["Boolean"]["output"];
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   datasetId?: Maybe<Scalars["ID"]["output"]>;
@@ -2257,12 +2283,18 @@ export type EvalRun = {
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   errored?: Maybe<Scalars["Int"]["output"]>;
   executionTarget: Scalars["String"]["output"];
+  expectedResultRows?: Maybe<Scalars["Int"]["output"]>;
   failed: Scalars["Int"]["output"];
   id: Scalars["ID"]["output"];
   isLegacyScoring: Scalars["Boolean"]["output"];
+  latencyP50Ms?: Maybe<Scalars["Int"]["output"]>;
+  latencyP95Ms?: Maybe<Scalars["Int"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];
+  profileId?: Maybe<Scalars["ID"]["output"]>;
+  profileName?: Maybe<Scalars["String"]["output"]>;
+  profileSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
   regression: Scalars["Boolean"]["output"];
   runtimeHost: Scalars["String"]["output"];
   scheduledJobId?: Maybe<Scalars["ID"]["output"]>;
@@ -2272,6 +2304,7 @@ export type EvalRun = {
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   totalTests: Scalars["Int"]["output"];
+  unstable?: Maybe<Scalars["Int"]["output"]>;
 };
 
 export type EvalRunUpdateEvent = {
@@ -3528,6 +3561,7 @@ export type Mutation = {
   approveOntologyChangeSet: OntologyChangeSet;
   approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
+  archiveEvalProfile: EvalProfile;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -3590,6 +3624,7 @@ export type Mutation = {
    */
   createComplianceExport: ComplianceExport;
   createEvalDataset: EvalDataset;
+  createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -3654,6 +3689,7 @@ export type Mutation = {
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
   disconnectN8nWorkflow: DisconnectN8nWorkflowResult;
+  duplicateEvalProfile: EvalProfile;
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
@@ -3691,6 +3727,7 @@ export type Mutation = {
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
+  overrideEvalCaseVerdict: Scalars["Boolean"]["output"];
   overrideEvalResult: EvalResult;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
@@ -3779,6 +3816,7 @@ export type Mutation = {
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
+  setDefaultEvalProfile: EvalProfile;
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
@@ -3838,6 +3876,7 @@ export type Mutation = {
   updateEmailReadinessCheck: EmailReadinessCheck;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
+  updateEvalProfile: EvalProfile;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
@@ -3988,6 +4027,10 @@ export type MutationArchiveEvalDatasetArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type MutationArchiveEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationAssignThreadLabelArgs = {
   labelId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
@@ -4090,6 +4133,11 @@ export type MutationCreateComplianceExportArgs = {
 
 export type MutationCreateEvalDatasetArgs = {
   input: CreateEvalDatasetInput;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationCreateEvalProfileArgs = {
+  input: CreateEvalProfileInput;
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -4307,6 +4355,11 @@ export type MutationDisconnectN8nWorkflowArgs = {
   input: DisconnectN8nWorkflowInput;
 };
 
+export type MutationDuplicateEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
 };
@@ -4480,6 +4533,10 @@ export type MutationNotifyWorkspaceAccessRevokedArgs = {
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationOverrideEvalCaseVerdictArgs = {
+  input: OverrideEvalCaseVerdictInput;
 };
 
 export type MutationOverrideEvalResultArgs = {
@@ -4745,6 +4802,10 @@ export type MutationSetAgentKnowledgeBasesArgs = {
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
 };
 
+export type MutationSetDefaultEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationSetKnowledgeGraphDeploymentArgs = {
   input: SetKnowledgeGraphDeploymentInput;
 };
@@ -4934,6 +4995,11 @@ export type MutationUpdateEvalDatasetCaseArgs = {
   datasetSlug: Scalars["String"]["input"];
   input: UpdateEvalDatasetCaseInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationUpdateEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+  input: UpdateEvalProfileInput;
 };
 
 export type MutationUpdateEvalTestCaseArgs = {
@@ -5622,6 +5688,13 @@ export type OrgUpdateEvent = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type OverrideEvalCaseVerdictInput = {
+  overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  testCaseId: Scalars["ID"]["input"];
+};
+
 export type OverrideEvalResultInput = {
   overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
   reason?: InputMaybe<Scalars["String"]["input"]>;
@@ -6072,6 +6145,7 @@ export type Query = {
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
+  evalProfiles: Array<EvalProfile>;
   evalReplayAvailableMcpTools: Array<EvalReplayMcpServer>;
   evalReplayToolAllowlist: Array<EvalReplayAllowedTool>;
   evalResultSpans: Array<EvalSpan>;
@@ -6538,6 +6612,11 @@ export type QueryEvalDatasetArgs = {
 };
 
 export type QueryEvalDatasetsArgs = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalProfilesArgs = {
   includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
@@ -8432,6 +8511,7 @@ export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
+  profileId?: InputMaybe<Scalars["ID"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };
 
@@ -9416,6 +9496,14 @@ export type UpdateEvalDatasetCaseInput = {
 
 export type UpdateEvalDatasetInput = {
   name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type UpdateEvalProfileInput = {
+  clearJudgeModel?: InputMaybe<Scalars["Boolean"]["input"]>;
+  judgeModel?: InputMaybe<Scalars["String"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type UpdateEvalTestCaseInput = {

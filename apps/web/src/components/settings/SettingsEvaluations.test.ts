@@ -43,23 +43,23 @@ describe("SettingsEvaluations target selection", () => {
     ).toBe("schedule");
   });
 
-  it("disables starts only while submitting or without a model", () => {
+  it("disables starts only while submitting or without a profile", () => {
     expect(
       isStartEvaluationDisabled({
         submitting: false,
-        selectedModel: "moonshotai.kimi-k2.5",
+        selectedProfileId: "profile-1",
       }),
     ).toBe(false);
     expect(
       isStartEvaluationDisabled({
         submitting: true,
-        selectedModel: "moonshotai.kimi-k2.5",
+        selectedProfileId: "profile-1",
       }),
     ).toBe(true);
     expect(
       isStartEvaluationDisabled({
         submitting: false,
-        selectedModel: "",
+        selectedProfileId: "",
       }),
     ).toBe(true);
   });
@@ -94,16 +94,16 @@ describe("SettingsEvaluations target selection", () => {
   });
 });
 
-describe("buildStartEvalRunInput (U11 dataset launches)", () => {
+describe("buildStartEvalRunInput (U11 dataset launches, THINK-107 profiles)", () => {
   it("sends datasetSlug and drops categories entirely (mutually exclusive)", () => {
     expect(
       buildStartEvalRunInput({
-        model: "moonshotai.kimi-k2.5",
+        profileId: "profile-1",
         categories: ["red-team-data-boundary"],
         datasetSlug: "thinkwork-redteam-baseline",
       }),
     ).toEqual({
-      model: "moonshotai.kimi-k2.5",
+      profileId: "profile-1",
       datasetSlug: "thinkwork-redteam-baseline",
     });
   });
@@ -111,21 +111,21 @@ describe("buildStartEvalRunInput (U11 dataset launches)", () => {
   it("sends categories (null = all) when no dataset is picked", () => {
     expect(
       buildStartEvalRunInput({
-        model: "moonshotai.kimi-k2.5",
+        profileId: "profile-1",
         categories: ["red-team-data-boundary"],
         datasetSlug: null,
       }),
     ).toEqual({
-      model: "moonshotai.kimi-k2.5",
+      profileId: "profile-1",
       categories: ["red-team-data-boundary"],
     });
 
     expect(
       buildStartEvalRunInput({
-        model: "moonshotai.kimi-k2.5",
+        profileId: "profile-1",
         categories: [],
         datasetSlug: null,
       }),
-    ).toEqual({ model: "moonshotai.kimi-k2.5", categories: null });
+    ).toEqual({ profileId: "profile-1", categories: null });
   });
 });
