@@ -51,6 +51,13 @@ export interface DataTableTokenFilterColumn<
   type: DataTableTokenFilterColumnType;
   icon?: React.ReactNode;
   options?: Array<DataTableTokenFilterOption & { value: OptionValue }>;
+  /**
+   * Single-choice option column: picking a value REPLACES the selection
+   * (radio semantics), the operator is fixed to "is", and the picker
+   * closes on choice. For filters that model a selection (one space, one
+   * profile) rather than a set.
+   */
+  singleSelect?: boolean;
   loading?: boolean;
   loadingMessage?: string;
   emptyMessage?: string;
@@ -391,7 +398,9 @@ function FilterToken({
             showOperators={column.type !== "option"}
             onApply={(nextValue) => {
               onApply(nextValue);
-              if (column.type !== "option") setValueOpen(false);
+              if (column.type !== "option" || column.singleSelect) {
+                setValueOpen(false);
+              }
             }}
             onCancel={() => setValueOpen(false)}
           />
@@ -402,7 +411,8 @@ function FilterToken({
           <button
             type="button"
             data-token-filter-operator
-            className="whitespace-nowrap border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            disabled={column.singleSelect}
+            className="whitespace-nowrap border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:pointer-events-none"
             aria-label={`Edit ${column.label} operator`}
           >
             {operatorLabels[value.operator]}
@@ -636,6 +646,7 @@ function OptionValueList({
         value={value}
         operator={operator}
         onApply={onApply}
+        singleSelect={Boolean(column.singleSelect)}
       />
     );
   }
@@ -678,11 +689,13 @@ function MultiOptionValueList({
   value,
   operator,
   onApply,
+  singleSelect = false,
 }: {
   options: DataTableTokenFilterOption[];
   value?: DataTableTokenFilterValue;
   operator: DataTableTokenFilterOperator;
   onApply: (value: DataTableTokenFilterValue) => void;
+  singleSelect?: boolean;
 }) {
   const [selectedValues, setSelectedValues] = React.useState<string[]>(() =>
     selectedOptionValues(value),
@@ -700,9 +713,12 @@ function MultiOptionValueList({
   const commitSelection = React.useCallback(
     (nextValues: string[]) => {
       setSelectedValues(nextValues);
-      onApply({ operator, value: nextValues });
+      onApply({
+        operator: singleSelect ? "is" : operator,
+        value: nextValues,
+      });
     },
-    [onApply, operator],
+    [singleSelect, onApply, operator],
   );
 
   return (
@@ -732,13 +748,17 @@ function MultiOptionValueList({
                 checked && "bg-accent/30",
               )}
               onClick={() => {
+                if (singleSelect) {
+                  commitSelection(checked ? [] : [option.value]);
+                  return;
+                }
                 const nextValues = checked
                   ? selectedValues.filter((item) => item !== option.value)
                   : [...selectedValues, option.value];
                 commitSelection(nextValues);
               }}
             >
-              <CheckboxIndicator checked={checked} />
+              <CheckboxIndicator checked={checked} radio={singleSelect} />
               {option.icon ? (
                 <span className="shrink-0 text-muted-foreground">
                   {option.icon}
@@ -825,16 +845,29 @@ function OperatorList({
   );
 }
 
-function CheckboxIndicator({ checked }: { checked: boolean }) {
+function CheckboxIndicator({
+  checked,
+  radio = false,
+}: {
+  checked: boolean;
+  radio?: boolean;
+}) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input",
+        "flex h-4 w-4 shrink-0 items-center justify-center border border-input",
+        radio ? "rounded-full" : "rounded",
         checked && "border-primary bg-primary text-primary-foreground",
       )}
     >
-      {checked ? <Check className="h-3 w-3" /> : null}
+      {checked ? (
+        radio ? (
+          <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+        ) : (
+          <Check className="h-3 w-3" />
+        )
+      ) : null}
     </span>
   );
 }
@@ -854,7 +887,9 @@ function operatorsFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator[] {
   if (column.type === "text") return ["contains", "does_not_contain"];
-  if (column.type === "option") return ["is_any_of", "is_none_of"];
+  if (column.type === "option") {
+    return column.singleSelect ? ["is"] : ["is_any_of", "is_none_of"];
+  }
   return ["is", "is_not"];
 }
 
@@ -862,7 +897,9 @@ function defaultOperatorFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator {
   if (column.type === "text") return "contains";
-  if (column.type === "option") return "is_any_of";
+  if (column.type === "option") {
+    return column.singleSelect ? "is" : "is_any_of";
+  }
   return "is";
 }
 

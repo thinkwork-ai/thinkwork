@@ -1533,16 +1533,6 @@ export const SettingsRejectPiExtensionVersionMutation = graphql(`
   }
 `);
 
-export const SettingsUpdatePiExtensionAssignmentMutation = graphql(`
-  mutation SettingsUpdatePiExtensionAssignment(
-    $input: UpdatePiExtensionAssignmentInput!
-  ) {
-    updatePiExtensionAssignment(input: $input) {
-      ...SettingsPiExtensionFields
-    }
-  }
-`);
-
 // ─── Users (operator-only section) ───────────────────────────────────────
 
 export const SettingsMeQuery = graphql(`
@@ -2484,6 +2474,51 @@ export const SettingsConfigureWorkosAuthPluginMutation = graphql(`
         status
         hostnames
         publicOptionLabel
+      }
+    }
+  }
+`);
+
+// Grant/detach mutations (capability-mapping plan U8, KTD-5): every
+// assignment write in the web app goes through these two — the legacy
+// surfaces are clients of the same contract.
+export const SettingsGrantCapabilityMutation = graphql(`
+  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {
+    grantCapability(input: $input) {
+      outcome
+      inspectionState
+      computedAt
+      configFingerprint
+      item {
+        capabilityClass
+        capabilityId
+        displayName
+        active
+        provenance
+        reason
+        detail
+        tokenStatus
+      }
+    }
+  }
+`);
+
+export const SettingsDetachCapabilityMutation = graphql(`
+  mutation SettingsDetachCapability($input: DetachCapabilityInput!) {
+    detachCapability(input: $input) {
+      outcome
+      inspectionState
+      computedAt
+      configFingerprint
+      item {
+        capabilityClass
+        capabilityId
+        displayName
+        active
+        provenance
+        reason
+        detail
+        tokenStatus
       }
     }
   }
