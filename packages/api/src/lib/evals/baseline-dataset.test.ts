@@ -1025,3 +1025,78 @@ describe("baselineSeedCacheKey", () => {
     ).not.toBe(baselineSeedCacheKey("tenant-1", BASELINE_DATASET_VERSION));
   });
 });
+
+describe("execution-tier propagation (Eval Execution Tiers v1)", () => {
+  it("propagates a canonical tier change to already-materialized tenant cases (canonical-wins, both directions)", async () => {
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: syntheticCases(),
+      targetVersion: 1,
+    });
+    expect(caseContent("baseline-case-alpha").core).not.toHaveProperty(
+      "execution_tier",
+    );
+
+    // v2 classifies alpha as model tier.
+    const v2 = buildBaselineDatasetCases(
+      syntheticSeeds().map((seed) =>
+        seed.name === "baseline-case-alpha"
+          ? { ...seed, execution_tier: "model" as const }
+          : seed,
+      ),
+    );
+    const result = await seedBaselineDataset(TENANT, deps(), {
+      cases: v2,
+      targetVersion: 2,
+    });
+    expect(result.stateTransitions).toEqual(["baseline-case-alpha"]);
+    expect(caseContent("baseline-case-alpha").core.execution_tier).toBe(
+      "model",
+    );
+
+    // v3 reclassifies it back to the full agent turn — that must reach
+    // tenants too (operational metadata, not a tenant content edit).
+    const v3 = buildBaselineDatasetCases(
+      syntheticSeeds().map((seed) =>
+        seed.name === "baseline-case-alpha"
+          ? { ...seed, execution_tier: "agent" as const }
+          : seed,
+      ),
+    );
+    const again = await seedBaselineDataset(TENANT, deps(), {
+      cases: v3,
+      targetVersion: 3,
+    });
+    expect(again.stateTransitions).toEqual(["baseline-case-alpha"]);
+    expect(caseContent("baseline-case-alpha").core.execution_tier).toBe(
+      "agent",
+    );
+  });
+
+  it("tier propagation never touches tenant content edits or quality states", async () => {
+    await seedBaselineDataset(TENANT, deps(), {
+      cases: syntheticCases(),
+      targetVersion: 1,
+    });
+    const gamma = caseContent("baseline-case-gamma");
+    await putEvalDatasetCase(
+      dctx,
+      { ...gamma.core, query: "Tenant-edited query." },
+      gamma.engines,
+      storage,
+      store,
+    );
+
+    const v2 = buildBaselineDatasetCases(
+      syntheticSeeds().map((seed) =>
+        seed.name === "baseline-case-gamma"
+          ? { ...seed, execution_tier: "model" as const }
+          : seed,
+      ),
+    );
+    await seedBaselineDataset(TENANT, deps(), { cases: v2, targetVersion: 2 });
+    const updated = caseContent("baseline-case-gamma");
+    expect(updated.core.execution_tier).toBe("model");
+    expect(updated.core.query).toBe("Tenant-edited query.");
+    expect(updated.core).not.toHaveProperty("quality_state");
+  });
+});
