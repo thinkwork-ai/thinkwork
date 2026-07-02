@@ -571,9 +571,14 @@ export function registerInitCommand(program: Command): void {
         const tfvars = buildTfvars(config);
         writeFileSync(tfvarsPath, tfvars);
 
-        // Also write a main.tf that sources the composite module
+        // Also write a main.tf that sources the composite module. ALWAYS
+        // regenerated: the file is a machine-owned template (user state
+        // lives in terraform.tfvars), and skip-if-exists meant CLI updates
+        // could never ship template fixes to existing environments — the
+        // prod scaffold kept a stale template without the compliance-lock
+        // threading (THINK-118 graduation).
         const mainTfPath = join(tfDir, "main.tf");
-        if (!existsSync(mainTfPath)) {
+        {
           writeFileSync(
             mainTfPath,
             `################################################################################
