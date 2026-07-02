@@ -84,8 +84,13 @@ export function parseTfvarsAssignments(
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const line of content.split("\n")) {
-    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"/);
-    if (match) values[match[1]] = match[2];
+    // Quoted strings AND unquoted bools/numbers — customer_domain_delegated
+    // is a bare bool, and missing it made init reruns silently flip it back
+    // to false, destroying the live cert + domain aliases (HCI test).
+    const match = line.match(
+      /^\s*([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|(true|false|[0-9]+))\s*$/,
+    );
+    if (match) values[match[1]] = match[2] ?? match[3];
   }
   const hasContent = content
     .split("\n")
@@ -397,7 +402,8 @@ export function registerInitCommand(program: Command): void {
           config.admin_url = "http://localhost:5174";
           config.mobile_scheme = "thinkwork";
           config.customer_domain = existing?.customer_domain ?? "";
-          config.customer_domain_delegated = "false";
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
           config.platform_operator_emails =
             existing?.platform_operator_emails ?? "";
           config.ses_parent_domain = existing?.ses_parent_domain ?? "";
@@ -437,7 +443,8 @@ export function registerInitCommand(program: Command): void {
             "Domain (e.g. thinkwork.acme.com; empty to skip)",
             existing?.customer_domain ?? "",
           );
-          config.customer_domain_delegated = "false";
+          config.customer_domain_delegated =
+            existing?.customer_domain_delegated ?? "false";
 
           config.platform_operator_emails = await ask(
             "Operator email(s), comma-separated",
