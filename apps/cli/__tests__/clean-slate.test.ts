@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  disableClusterDeletionProtection,
   emptyBucket,
   forceDeleteStageSecrets,
   listStageBuckets,
@@ -94,5 +95,53 @@ describe("listStageBuckets", () => {
     expect(listStageBuckets("hprod-1", exec)).toEqual([
       "thinkwork-hprod-1-storage",
     ]);
+  });
+});
+
+describe("disableClusterDeletionProtection", () => {
+  it("disables protection when the cluster is protected", () => {
+    const calls: string[][] = [];
+    const exec = (args: string[]): ExecResult => {
+      calls.push(args);
+      if (args[1] === "describe-db-clusters") return ok("True\n");
+      return ok();
+    };
+    const result = disableClusterDeletionProtection("hprod-1", "us-east-1", exec);
+    expect(result).toEqual({ found: true, disabled: true });
+    const modify = calls.find((c) => c[1] === "modify-db-cluster")!;
+    expect(modify).toContain("--no-deletion-protection");
+    expect(modify).toContain("thinkwork-hprod-1-db");
+  });
+
+  it("does not call modify when the cluster is already unprotected", () => {
+    const calls: string[][] = [];
+    const exec = (args: string[]): ExecResult => {
+      calls.push(args);
+      return ok("False\n");
+    };
+    const result = disableClusterDeletionProtection("hprod-1", "us-east-1", exec);
+    expect(result).toEqual({ found: true, disabled: true });
+    expect(calls.some((c) => c[1] === "modify-db-cluster")).toBe(false);
+  });
+
+  it("treats a missing cluster as already clean", () => {
+    const exec = (): ExecResult => ({
+      status: 254,
+      stdout: "",
+      stderr: "DBClusterNotFoundFault",
+    });
+    expect(disableClusterDeletionProtection("hprod-1", "us-east-1", exec)).toEqual(
+      { found: false, disabled: true },
+    );
+  });
+
+  it("reports failure when modify is refused", () => {
+    const exec = (args: string[]): ExecResult =>
+      args[1] === "describe-db-clusters"
+        ? ok("True\n")
+        : { status: 1, stdout: "", stderr: "AccessDenied" };
+    expect(disableClusterDeletionProtection("hprod-1", "us-east-1", exec)).toEqual(
+      { found: true, disabled: false },
+    );
   });
 });
