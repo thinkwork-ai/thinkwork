@@ -19,6 +19,7 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
+import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -450,6 +451,15 @@ export async function handler(
             enabled: true,
           });
         }
+
+        // KTD-8 dual-write (plan U9): the workspace state file is the
+        // target store for OAuth wiring; the row above is the fallback
+        // until U10 retires it.
+        await patchSkillAssignmentState({
+          agentId,
+          slug: skillId,
+          patch: { configMerge: skillConfig, enabled: true },
+        });
 
         console.log(
           `[oauth-callback] Linked connection ${conn.id} to agent_skill ${agentId}/${skillId}`,
