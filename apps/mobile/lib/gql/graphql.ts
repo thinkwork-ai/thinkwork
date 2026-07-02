@@ -1019,6 +1019,35 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
+export type CapabilityInspection = {
+  __typename?: "CapabilityInspection";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  noUserBaseline: Scalars["Boolean"]["output"];
+  perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
+  predicted?: Maybe<EffectiveCapabilitySet>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+  stateDetail?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type CapabilityItem = {
+  __typename?: "CapabilityItem";
+  active: Scalars["Boolean"]["output"];
+  capabilityClass: Scalars["String"]["output"];
+  capabilityId: Scalars["String"]["output"];
+  detail?: Maybe<Scalars["String"]["output"]>;
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  provenance?: Maybe<Scalars["String"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  tokenStatus?: Maybe<Scalars["String"]["output"]>;
+};
+
+export enum CapabilitySetVariant {
+  Observed = "OBSERVED",
+  Predicted = "PREDICTED",
+}
+
 export type CheckoutThreadInput = {
   runId: Scalars["String"]["input"];
 };
@@ -1885,6 +1914,14 @@ export type DisconnectN8nWorkflowResult = {
   __typename?: "DisconnectN8nWorkflowResult";
   binding: WorkflowEngineBinding;
   workflow: Workflow;
+};
+
+export type EffectiveCapabilitySet = {
+  __typename?: "EffectiveCapabilitySet";
+  computedAt: Scalars["AWSDateTime"]["output"];
+  configFingerprint: Scalars["String"]["output"];
+  items: Array<CapabilityItem>;
+  variant: CapabilitySetVariant;
 };
 
 export enum EmailAllowlistType {
@@ -6083,6 +6120,7 @@ export type Query = {
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  capabilityInspector: CapabilityInspection;
   companyBrainStatus: CompanyBrainStatus;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
@@ -6525,6 +6563,14 @@ export type QueryBudgetPoliciesArgs = {
 };
 
 export type QueryBudgetStatusArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryCapabilityInspectorArgs = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
 

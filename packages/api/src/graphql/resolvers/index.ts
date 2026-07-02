@@ -75,6 +75,7 @@ import {
   skillCreatorQueries,
 } from "./skill-creator/index.js";
 import { runtimeQueries } from "./runtime/index.js";
+import { capabilityQueries } from "./capabilities/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
@@ -172,6 +173,7 @@ export const queryResolvers: Record<string, any> = {
   ...skillCatalogQueries,
   ...skillCreatorQueries,
   ...runtimeQueries,
+  ...capabilityQueries,
   ...workspaceQueries,
   ...routineQueries,
   ...workflowQueries,

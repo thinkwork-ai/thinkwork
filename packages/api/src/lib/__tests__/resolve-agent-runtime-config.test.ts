@@ -1335,6 +1335,8 @@ describe("resolveAgentRuntimeConfig", () => {
       AGENT_ID,
       { humanPairId: null, requesterUserId: null },
       expect.stringContaining("agent-runtime-config"),
+      // Runtime path: no token-mode override, no diagnostics collector.
+      { tokenMode: undefined, diagnostics: null },
     );
   });
 
