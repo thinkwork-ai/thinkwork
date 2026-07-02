@@ -343,6 +343,7 @@ export function SettingsCapabilities() {
         id: FILTER_COLUMNS.space,
         label: "Space",
         type: "option",
+        singleSelect: true,
         icon: <Boxes className="size-4" />,
         options: (spacesResult.data?.spaces ?? []).map((space) => ({
           value: space.id,
@@ -354,6 +355,7 @@ export function SettingsCapabilities() {
         id: FILTER_COLUMNS.profile,
         label: "Agent profile",
         type: "option",
+        singleSelect: true,
         icon: <Bot className="size-4" />,
         options: (profilesResult.data?.agentProfiles ?? []).map((profile) => ({
           value: profile.id,
@@ -365,6 +367,7 @@ export function SettingsCapabilities() {
         id: FILTER_COLUMNS.user,
         label: "Perspective user",
         type: "option",
+        singleSelect: true,
         icon: <UserRound className="size-4" />,
         options: members.map((member) => ({
           value: member.id,
