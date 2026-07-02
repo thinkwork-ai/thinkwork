@@ -13,6 +13,7 @@
  * caught immediately.
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,9 @@ import { describe, expect, it } from "vitest";
 import {
   CANONICAL_FILE_NAMES,
   DEFAULTS_VERSION,
+  GOVERNANCE_SNAPSHOT_SHA256,
+  HISTORICAL_GOVERNANCE_DEFAULTS,
+  RESEEDABLE_GOVERNANCE_FILES,
   loadDefaults,
   loadFile,
 } from "../index.js";
@@ -80,7 +84,7 @@ describe("workspace-defaults parity", () => {
     const fileNames = Object.keys(defaults);
     const combined = Object.values(defaults).join("\n");
 
-    expect(DEFAULTS_VERSION).toBe(28);
+    expect(DEFAULTS_VERSION).toBe(29);
     expect(fileNames).not.toContain("skills/json-render/SKILL.md");
     expect(fileNames).not.toContain("skills/a2ui/SKILL.md");
     expect(fileNames).not.toContain("skills/ag-ui/SKILL.md");
@@ -90,5 +94,43 @@ describe("workspace-defaults parity", () => {
     expect(combined).toContain(
       "Upstream json-render developer skills are not runtime workspace skills",
     );
+  });
+});
+
+describe("historical governance defaults (reseed corpus)", () => {
+  const sha256 = (content: string) =>
+    createHash("sha256").update(content, "utf8").digest("hex");
+
+  it.each(RESEEDABLE_GOVERNANCE_FILES)(
+    "snapshot hash for %s matches the current default — regenerate src/historical.ts (node scripts/generate-historical-governance.mjs) after editing a governance default",
+    (name) => {
+      expect(sha256(loadFile(name))).toBe(GOVERNANCE_SNAPSHOT_SHA256[name]);
+    },
+  );
+
+  it.each(RESEEDABLE_GOVERNANCE_FILES)(
+    "no historical %s entry equals the current default",
+    (name) => {
+      const current = loadFile(name);
+      for (const historical of HISTORICAL_GOVERNANCE_DEFAULTS[name]) {
+        expect(historical).not.toEqual(current);
+      }
+    },
+  );
+
+  it.each(RESEEDABLE_GOVERNANCE_FILES)(
+    "historical %s entries are unique",
+    (name) => {
+      const hashes = HISTORICAL_GOVERNANCE_DEFAULTS[name].map(sha256);
+      expect(new Set(hashes).size).toBe(hashes.length);
+    },
+  );
+
+  it("carries at least one historical version per governance file", () => {
+    for (const name of RESEEDABLE_GOVERNANCE_FILES) {
+      expect(
+        HISTORICAL_GOVERNANCE_DEFAULTS[name].length,
+      ).toBeGreaterThanOrEqual(1);
+    }
   });
 });

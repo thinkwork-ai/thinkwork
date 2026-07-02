@@ -25,7 +25,7 @@
  */
 
 import { getConfig } from "@thinkwork/runtime-config";
-import { and, eq, isNotNull, or } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or } from "drizzle-orm";
 import {
   GetObjectCommand,
   NoSuchKey,
@@ -33,11 +33,19 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getDb } from "@thinkwork/database-pg";
-import { agentTemplates, spaces, tenants } from "@thinkwork/database-pg/schema";
+import {
+  agents,
+  agentTemplates,
+  spaces,
+  tenants,
+} from "@thinkwork/database-pg/schema";
 import { DEFAULTS_VERSION, loadDefaults } from "@thinkwork/workspace-defaults";
 import { ensureCustomerOnboardingSourceFiles } from "../lib/spaces/customer-onboarding-source-files.js";
 import { ensureSpaceMdSourceFile } from "../lib/spaces/space-md-source-file.js";
 import { ensureDefaultsExist } from "../lib/workspace-copy.js";
+import { reseedTenantGovernanceDefaults } from "../lib/workspace-defaults-reseed.js";
+import { regenerateAgentsMdDerivedSections } from "../lib/workspace-map-generator.js";
+import { regenerateManifest } from "../lib/workspace-manifest.js";
 
 const db = getDb();
 const s3 = new S3Client({
@@ -66,6 +74,9 @@ type SeedSummary = {
   customerOnboardingSourceFilesWritten: number;
   spacesCheckedForSpaceMd: number;
   spaceMdFilesWritten: number;
+  reseedAgentsChecked: number;
+  reseedAgentsRewritten: number;
+  reseedFilesRewritten: number;
   results: PerTenantResult[];
 };
 
@@ -233,6 +244,78 @@ async function ensureActiveSpaceMdSources(
   return { spacesChecked: rows.length, filesWritten };
 }
 
+/**
+ * Governance-file reseed (Composer plan 2026-07-02-001 U6): rewrite an
+ * existing agent's AGENTS.md / CONTEXT.md when — and only when — its live
+ * content is byte-identical to a previously shipped default version
+ * (after `{{AGENT_NAME}}` / `{{TENANT_NAME}}` substitution with the
+ * agent's own values). Hand-edited or map-recomposed files are left
+ * alone. See `../lib/workspace-defaults-reseed.ts`.
+ */
+async function reseedTenantAgentGovernanceFiles(
+  tenantId: string,
+  tenantSlug: string,
+  tenantName: string,
+): Promise<{
+  agentsChecked: number;
+  agentsRewritten: number;
+  filesRewritten: number;
+}> {
+  const bucket = workspaceBucket();
+  const rows = await db
+    .select({ id: agents.id, slug: agents.slug, name: agents.name })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, tenantId),
+        isNotNull(agents.slug),
+        ne(agents.status, "archived"),
+      ),
+    );
+
+  const summary = await reseedTenantGovernanceDefaults({
+    tenantSlug,
+    tenantName,
+    agents: rows
+      .filter((row) => row.slug)
+      .map((row) => ({
+        agentId: row.id,
+        agentSlug: row.slug!,
+        agentName: row.name,
+      })),
+    store: {
+      getText: (key) => readS3Text(bucket, key),
+      putText: async (key, content) => {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: content,
+            ContentType: "text/markdown",
+          }),
+        );
+      },
+    },
+    afterAgentRewrite: async (agent, rewritten) => {
+      console.log(
+        `[seed-defaults] ${tenantSlug}/${agent.agentSlug}: reseeded governance file(s) ${rewritten.join(", ")} (byte-identical to a prior default)`,
+      );
+      if (rewritten.includes("AGENTS.md")) {
+        // Refresh derived sections so the reseeded map carries real
+        // workspace state instead of the shipped placeholder bodies.
+        await regenerateAgentsMdDerivedSections(agent.agentId);
+      }
+      await regenerateManifest(bucket, tenantSlug, agent.agentSlug);
+    },
+  });
+
+  return {
+    agentsChecked: summary.agentsChecked,
+    agentsRewritten: summary.agentsRewritten,
+    filesRewritten: summary.filesRewritten,
+  };
+}
+
 export async function handler(): Promise<SeedSummary> {
   if (!getConfig("WORKSPACE_BUCKET")) {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
@@ -243,7 +326,7 @@ export async function handler(): Promise<SeedSummary> {
   );
 
   const rows = await db
-    .select({ id: tenants.id, slug: tenants.slug })
+    .select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
     .from(tenants)
     .where(isNotNull(tenants.slug));
 
@@ -258,6 +341,9 @@ export async function handler(): Promise<SeedSummary> {
   let customerOnboardingSourceFilesWritten = 0;
   let spacesCheckedForSpaceMd = 0;
   let spaceMdFilesWritten = 0;
+  let reseedAgentsChecked = 0;
+  let reseedAgentsRewritten = 0;
+  let reseedFilesRewritten = 0;
 
   for (const row of rows) {
     const tenantSlug = row.slug!;
@@ -295,6 +381,17 @@ export async function handler(): Promise<SeedSummary> {
       const spaceMdSeed = await ensureActiveSpaceMdSources(row.id, tenantSlug);
       spacesCheckedForSpaceMd += spaceMdSeed.spacesChecked;
       spaceMdFilesWritten += spaceMdSeed.filesWritten;
+      const reseed = await reseedTenantAgentGovernanceFiles(
+        row.id,
+        tenantSlug,
+        row.name,
+      );
+      reseedAgentsChecked += reseed.agentsChecked;
+      reseedAgentsRewritten += reseed.agentsRewritten;
+      reseedFilesRewritten += reseed.filesRewritten;
+      console.log(
+        `[seed-defaults] ${tenantSlug}: governance reseed checked ${reseed.agentsChecked} agent(s), rewrote ${reseed.filesRewritten} file(s) across ${reseed.agentsRewritten} agent(s)`,
+      );
     } catch (err) {
       errors++;
       const message = err instanceof Error ? err.message : String(err);
@@ -319,11 +416,14 @@ export async function handler(): Promise<SeedSummary> {
     customerOnboardingSourceFilesWritten,
     spacesCheckedForSpaceMd,
     spaceMdFilesWritten,
+    reseedAgentsChecked,
+    reseedAgentsRewritten,
+    reseedFilesRewritten,
     results,
   };
 
   console.log(
-    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${spacesCheckedForSpaceMd} Space(s) checked for SPACE.md, ${spaceMdFilesWritten} SPACE.md file(s) written, ${errors} error(s)`,
+    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${spacesCheckedForSpaceMd} Space(s) checked for SPACE.md, ${spaceMdFilesWritten} SPACE.md file(s) written, ${reseedFilesRewritten} governance file(s) reseeded across ${reseedAgentsRewritten}/${reseedAgentsChecked} agent(s), ${errors} error(s)`,
   );
 
   return summary;

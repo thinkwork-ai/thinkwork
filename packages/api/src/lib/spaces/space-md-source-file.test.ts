@@ -47,8 +47,9 @@ describe("ensureSpaceMdSourceFile", () => {
       ContentType: "text/markdown; charset=utf-8",
     });
     expect(String(putCommand?.input.Body)).toContain("# Customer");
+    // Canonical SPACE.md content flows through (blueprint Layer-3 shape).
     expect(String(putCommand?.input.Body)).toContain(
-      "`CONTEXT.md` - main workflow/context file.",
+      "| Task | Load These | Skip These |",
     );
   });
 
