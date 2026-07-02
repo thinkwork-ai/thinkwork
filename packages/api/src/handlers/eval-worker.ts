@@ -49,6 +49,7 @@ import {
   type TenantModelPricing,
 } from "../lib/model-catalog/tenant-catalog.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
+import { invokeModelForEval } from "../lib/evals/model-direct.js";
 import {
   createBedrockLlmJudge,
   createInHouseScoringEngine,
@@ -131,6 +132,12 @@ export interface EvalWorkerMessage {
    * manifest, so the launch's read-once hash is the integrity anchor.
    */
   payloadShas?: Partial<Record<EvalCasePayloadName, string>>;
+  /**
+   * Execution tier (Eval Execution Tiers v1): 'model' = one stateless
+   * Converse call against the run's pinned composed prompt; absent or
+   * 'agent' = the full Pi turn.
+   */
+  executionTier?: "agent" | "model";
 }
 
 /**
@@ -185,6 +192,8 @@ interface CaseOutcome {
   agentInputTokens: number | null;
   agentOutputTokens: number | null;
   agentCostUsd: number | null;
+  /** Which tier actually executed ('model' only when the cheap path ran). */
+  executionTier: "agent" | "model";
   sessionId: string;
   /**
    * Thread turn this execution corresponds to — set when the case's
@@ -231,6 +240,7 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
         ? parsed.contentSha
         : undefined,
     payloadShas: parsePayloadShas(parsed.payloadShas),
+    executionTier: parsed.executionTier === "model" ? "model" : undefined,
   };
 }
 
@@ -555,6 +565,23 @@ export function agentUsageCostUsd(
 }
 
 /**
+ * The run's dispatch-pinned composed system prompt (Eval Execution
+ * Tiers v1, settled Q1) — captured once per run by the runner. Null on
+ * runs dispatched before tiers shipped or when capture failed (their
+ * model-tier messages degrade to the full agent turn).
+ */
+export function pinnedComposedPromptForRun(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot">,
+): string | null {
+  const snapshot = run.profile_snapshot;
+  const prompt =
+    typeof snapshot === "object" && snapshot !== null
+      ? (snapshot as { composedSystemPrompt?: unknown }).composedSystemPrompt
+      : null;
+  return typeof prompt === "string" && prompt.length > 0 ? prompt : null;
+}
+
+/**
  * Pinned-case load (Trust Core U6): dataset-pinned messages carry a
  * run-scoped snapshot key. Reject any key resolving outside the run's
  * guarded tenant prefix BEFORE any S3 fetch, verify the fetched content
@@ -793,44 +820,71 @@ async function executeCase(
   let costUsd = 0;
   let agentUsage: EvalAgentUsage | null = null;
   let threadTurnId: string | null = null;
+  // Which tier actually EXECUTED (Eval Execution Tiers v1) — recorded on
+  // the result row. Model-tier requests degrade to 'agent' when the run
+  // has no pinned composed prompt (dispatch capture failed or a legacy
+  // in-flight message), so the row never claims a cheaper execution than
+  // what really happened.
+  let executedTier: "agent" | "model" = "agent";
 
   try {
-    // Belt-and-suspenders: in normal operation the dispatcher (eval-runner
-    // or job-trigger) sets run.agent_id before fan-out. During a deploy
-    // race or an SQS replay, a worker may receive a case for a run whose
-    // agent_id is still null — fall back to the tenant platform agent
-    // rather than failing the case outright.
-    let targetAgentId = run.agent_id;
-    if (!targetAgentId) {
-      targetAgentId = (await resolveTenantPlatformAgent(run.tenant_id)).id;
+    const pinnedComposedPrompt = pinnedComposedPromptForRun(run);
+    if (
+      message.executionTier === "model" &&
+      pinnedComposedPrompt &&
+      !tc.messages_history
+    ) {
+      // Tier 'model': one stateless Converse call against this agent's
+      // pinned composed prompt — no workspace bootstrap, no tools, no
+      // MCP. Scoring below is tier-agnostic.
+      executedTier = "model";
+      const inv = await invokeModelForEval({
+        modelId: agentModelForRunPricing(run),
+        systemPrompt: pinnedComposedPrompt,
+        query: tc.query,
+      });
+      actualOutput = inv.output;
+      durationMs = inv.durationMs;
+      systemPrompt = pinnedComposedPrompt;
+      agentUsage = inv.usage ?? null;
+    } else {
+      // Belt-and-suspenders: in normal operation the dispatcher (eval-runner
+      // or job-trigger) sets run.agent_id before fan-out. During a deploy
+      // race or an SQS replay, a worker may receive a case for a run whose
+      // agent_id is still null — fall back to the tenant platform agent
+      // rather than failing the case outright.
+      let targetAgentId = run.agent_id;
+      if (!targetAgentId) {
+        targetAgentId = (await resolveTenantPlatformAgent(run.tenant_id)).id;
+      }
+
+      // Read-only MCP tools on replay (U14). Default-ALLOW: read-shaped tools
+      // run by name heuristic with no overrides; the operator override rows
+      // (loaded per case, tenant-scoped, cheap indexed lookup) force-allow a
+      // blocked write or force-block an allowed read.
+      const replayToolOverrides = await loadReplayToolOverrides(run.tenant_id);
+
+      const inv = await invokeAgentCoreForEval({
+        tenantId: run.tenant_id,
+        agentId: targetAgentId,
+        sessionId,
+        message: tc.query,
+        model: run.model,
+        systemPrompt: tc.system_prompt,
+        // Flagged-thread replay (U8): recorded conversation strictly
+        // before the flagged turn; undefined (= empty history) for
+        // synthetic single-message cases.
+        messagesHistory: tc.messages_history,
+        replayToolOverrides,
+      });
+      actualOutput = inv.output;
+      durationMs = inv.durationMs;
+      systemPrompt = inv.composedSystemPrompt;
+      // Agent-turn telemetry (U5): undefined on envelopes from older
+      // runtime images — the row then records null tokens/cost and the
+      // run summary marks cost partial, never zero.
+      agentUsage = inv.usage ?? null;
     }
-
-    // Read-only MCP tools on replay (U14). Default-ALLOW: read-shaped tools
-    // run by name heuristic with no overrides; the operator override rows
-    // (loaded per case, tenant-scoped, cheap indexed lookup) force-allow a
-    // blocked write or force-block an allowed read.
-    const replayToolOverrides = await loadReplayToolOverrides(run.tenant_id);
-
-    const inv = await invokeAgentCoreForEval({
-      tenantId: run.tenant_id,
-      agentId: targetAgentId,
-      sessionId,
-      message: tc.query,
-      model: run.model,
-      systemPrompt: tc.system_prompt,
-      // Flagged-thread replay (U8): recorded conversation strictly
-      // before the flagged turn; undefined (= empty history) for
-      // synthetic single-message cases.
-      messagesHistory: tc.messages_history,
-      replayToolOverrides,
-    });
-    actualOutput = inv.output;
-    durationMs = inv.durationMs;
-    systemPrompt = inv.composedSystemPrompt;
-    // Agent-turn telemetry (U5): undefined on envelopes from older
-    // runtime images — the row then records null tokens/cost and the
-    // run summary marks cost partial, never zero.
-    agentUsage = inv.usage ?? null;
 
     const assertions = (tc.assertions ?? []) as EvalAssertion[];
     // `workspace-projection-*` assertions read STORED turn snapshots (never
@@ -970,6 +1024,7 @@ async function executeCase(
     agentInputTokens: agentUsage?.inputTokens ?? null,
     agentOutputTokens: agentUsage?.outputTokens ?? null,
     agentCostUsd,
+    executionTier: executedTier,
     sessionId,
     threadTurnId,
   };
@@ -1169,6 +1224,7 @@ async function handleMessage(
         agentInputTokens: null,
         agentOutputTokens: null,
         agentCostUsd: null,
+        executionTier: "agent",
         sessionId: uniqueSessionId(
           message.runId,
           message.testCaseId,
@@ -1235,6 +1291,9 @@ async function handleMessage(
       agent_output_tokens: outcome.agentOutputTokens,
       agent_cost_usd:
         outcome.agentCostUsd === null ? null : outcome.agentCostUsd.toFixed(6),
+      // Which tier actually executed (Eval Execution Tiers v1) — honest
+      // even when a model-tier request degraded to the full agent turn.
+      execution_tier: outcome.executionTier,
       agent_session_id: outcome.sessionId,
       thread_turn_id: outcome.threadTurnId,
       input: executionCase.query,

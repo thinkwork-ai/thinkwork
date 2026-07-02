@@ -290,6 +290,10 @@ type EvalResult {
   # Which trial of the case this row is (0-based). 0 on legacy
   # single-trial rows.
   trialIndex: Int!
+  # HOW the response was produced (Eval Execution Tiers v1): 'agent' =
+  # full Pi turn via AgentCore; 'model' = one stateless Converse call
+  # with the run's pinned composed prompt. Scoring is tier-agnostic.
+  executionTier: String!
   score: Float
   durationMs: Int
   # Agent-turn telemetry (THINK-107 U5): token usage of the agent
@@ -609,6 +613,10 @@ input StartEvalRunInput {
   # edits cannot change what the run scores. Mutually exclusive with
   # categories/testCaseIds.
   datasetSlug: String
+  # Force EVERY case through the full agent turn regardless of its
+  # execution_tier (Eval Execution Tiers v1) — the periodic
+  # full-fidelity audit lever.
+  fullFidelity: Boolean
 }
 
 # ────────────────────────────────────────────────────────────────────

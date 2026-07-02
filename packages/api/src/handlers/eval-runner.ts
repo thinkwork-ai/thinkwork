@@ -31,10 +31,12 @@ import {
   createEvalDatasetStorageFromConfig,
   type RunSnapshot,
 } from "../lib/evals/run-launch.js";
-import type {
-  DatasetStorage,
-  EvalCasePayloadName,
+import {
+  evalCaseExecutionTier,
+  type DatasetStorage,
+  type EvalCasePayloadName,
 } from "../lib/evals/dataset-store.js";
+import { invokeAgentCoreForEval } from "../lib/evals/agentcore-direct.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 // Read per-invocation, not at module load (vitest env capture timing —
@@ -50,7 +52,13 @@ interface EvalRunnerEvent {
   runId: string;
   input?: {
     testCaseIds?: unknown;
+    /** Force every case through the full agent turn (tier audit lever). */
+    fullFidelity?: unknown;
   } | null;
+}
+
+export function fullFidelityFromEvent(event: EvalRunnerEvent): boolean {
+  return event.input?.fullFidelity === true;
 }
 
 export interface EvalWorkerMessage {
@@ -84,6 +92,13 @@ export interface EvalWorkerMessage {
    * recorded history.
    */
   payloadShas?: Partial<Record<EvalCasePayloadName, string>>;
+  /**
+   * Execution tier (Eval Execution Tiers v1): 'model' = one stateless
+   * Converse call against the run's pinned composed prompt; absent or
+   * 'agent' = the full Pi turn. Stamped at dispatch from the pinned
+   * case content (fullFidelity forces 'agent').
+   */
+  executionTier?: "agent" | "model";
 }
 
 const DIRECT_AGENTCORE_MESSAGE_SHARDS = Math.max(
@@ -153,6 +168,7 @@ export function buildEvalWorkerMessages(
     snapshotKey?: string;
     contentSha?: string;
     payloadShas?: EvalWorkerMessage["payloadShas"];
+    executionTier?: "agent" | "model";
   }>,
 ): EvalWorkerMessage[] {
   const messages: EvalWorkerMessage[] = [];
@@ -172,6 +188,9 @@ export function buildEvalWorkerMessages(
           : {}),
         ...(tc.snapshotKey && tc.payloadShas
           ? { payloadShas: tc.payloadShas }
+          : {}),
+        ...(tc.executionTier === "model"
+          ? { executionTier: tc.executionTier }
           : {}),
       });
     }
@@ -271,6 +290,7 @@ async function dispatchDatasetRun(
   run: typeof evalRuns.$inferSelect,
   queueUrl: string,
   client: SQSClient,
+  opts: { fullFidelity?: boolean } = {},
 ): Promise<{ dispatched: number; totalTests: number }> {
   const datasetId = run.dataset_id;
   if (!datasetId) throw new Error("run has no dataset_id");
@@ -359,8 +379,64 @@ async function dispatchDatasetRun(
   // eval-baseline agent on skill-gate runs). Pre-profile runs (created
   // before profile stamping deployed) pin against the tenant default so
   // in-flight runs finish with an honest record.
-  const profileSnapshot: EvalProfileSnapshot =
+  let profileSnapshot: EvalProfileSnapshot =
     await resolveProfileSnapshotForRun(run);
+
+  // Execution tiers (Eval Execution Tiers v1): each pinned case declares
+  // how its response is produced — 'model' (one stateless Converse call)
+  // or 'agent' (full Pi turn, the default). fullFidelity forces every
+  // case to 'agent' (the periodic audit lever).
+  const tierByCaseId = new Map<string, "agent" | "model">(
+    snapshot.cases.map((c) => [
+      c.caseId,
+      opts.fullFidelity ? "agent" : evalCaseExecutionTier(c.core),
+    ]),
+  );
+  let modelTierCount = [...tierByCaseId.values()].filter(
+    (tier) => tier === "model",
+  ).length;
+
+  // Composed-prompt capture (settled Q1): tier-'model' cases must run
+  // against THIS agent's composed system prompt, not the raw model —
+  // captured ONCE per run via a single full agent ping (one bootstrap
+  // per run instead of one per case). Capture failure degrades the
+  // whole run to tier-'agent': never a silently unrepresentative prompt.
+  if (modelTierCount > 0) {
+    try {
+      const ping = await invokeAgentCoreForEval({
+        tenantId: run.tenant_id,
+        agentId: run.agent_id as string,
+        sessionId: `eval-compose-${run.id}`,
+        message: "Reply with exactly: OK",
+        model: profileSnapshot.model,
+      });
+      if (ping.composedSystemPrompt) {
+        profileSnapshot = {
+          ...profileSnapshot,
+          composedSystemPrompt: ping.composedSystemPrompt,
+        };
+      } else {
+        throw new Error("runtime did not surface a composed system prompt");
+      }
+    } catch (err) {
+      console.warn(
+        `[eval-runner] runId=${run.id}: composed-prompt capture failed; degrading all ${modelTierCount} model-tier case(s) to the full agent turn:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      for (const caseId of tierByCaseId.keys()) {
+        tierByCaseId.set(caseId, "agent");
+      }
+      modelTierCount = 0;
+    }
+  }
+  profileSnapshot = {
+    ...profileSnapshot,
+    tierCounts: {
+      model: modelTierCount,
+      agent: snapshot.cases.length - modelTierCount,
+    },
+    ...(opts.fullFidelity ? { fullFidelity: true } : {}),
+  };
 
   // Resolve the pinned dataset_case_ids to their index row uuids —
   // eval_results FK eval_test_cases for dedupe + trend history. The
@@ -455,6 +531,7 @@ async function dispatchDatasetRun(
         snapshotKey: c.snapshotKey,
         contentSha: c.contentSha,
         payloadShas: c.payloadShas,
+        executionTier: tierByCaseId.get(c.caseId),
       };
     }),
   );
@@ -504,6 +581,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         run,
         queueUrl,
         client,
+        { fullFidelity: fullFidelityFromEvent(event) },
       );
       return { ok: true, runId, dispatched, totalTests };
     }

@@ -241,6 +241,9 @@ function resultToGraphql(
     // 0-based trial identity (Eval Profiles U4); legacy rows carry 0
     // via the column default.
     trialIndex: (row.trial_index as number | null) ?? 0,
+    // Which tier actually executed (Eval Execution Tiers v1); historical
+    // rows predate the column and were all full agent turns.
+    executionTier: (row.execution_tier as string | null) ?? "agent",
     score: row.score ? Number(row.score) : null,
     durationMs: row.duration_ms,
     // Agent-turn telemetry (Eval Profiles U5): tokens without resolved
@@ -419,6 +422,7 @@ function plannedResultToGraphql(
     category: testCase.category,
     status: placeholderStatusForEvalRun(String(run.status ?? "")),
     trialIndex: 0,
+    executionTier: "agent",
     score: null,
     durationMs: null,
     agentInputTokens: null,
@@ -1002,6 +1006,11 @@ interface StartEvalRunInput {
   categories?: string[] | null;
   testCaseIds?: string[] | null;
   /**
+   * Force every case through the full agent turn regardless of its
+   * execution_tier (Eval Execution Tiers v1 — the periodic audit lever).
+   */
+  fullFidelity?: boolean | null;
+  /**
    * Dataset launch (Trust Core U6): the run pins the dataset version +
    * case scope at launch and executes run-scoped copies. Mutually
    * exclusive with categories/testCaseIds; legacy launches unchanged.
@@ -1157,7 +1166,11 @@ const startEvalRun = async (
     .where(eq(evalRuns.id, runId));
 
   try {
-    await invokeEvalRunner(runId, args.input.testCaseIds ?? null);
+    await invokeEvalRunner(
+      runId,
+      args.input.testCaseIds ?? null,
+      args.input.fullFidelity === true,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -1180,6 +1193,7 @@ const startEvalRun = async (
 async function invokeEvalRunner(
   runId: string,
   testCaseIds: string[] | null,
+  fullFidelity = false,
 ): Promise<void> {
   const fnName =
     process.env.EVAL_RUNNER_FN ??
@@ -1194,11 +1208,17 @@ async function invokeEvalRunner(
   const { LambdaClient, InvokeCommand } =
     await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
-  const payload: { runId: string; input?: { testCaseIds: string[] } } = {
-    runId,
-  };
+  const payload: {
+    runId: string;
+    input?: { testCaseIds?: string[]; fullFidelity?: boolean };
+  } = { runId };
   if (testCaseIds && testCaseIds.length > 0) {
-    payload.input = { testCaseIds };
+    payload.input = { ...(payload.input ?? {}), testCaseIds };
+  }
+  if (fullFidelity) {
+    // Tier audit lever (Eval Execution Tiers v1): force every case
+    // through the full agent turn regardless of its execution_tier.
+    payload.input = { ...(payload.input ?? {}), fullFidelity: true };
   }
   await lambda.send(
     new InvokeCommand({

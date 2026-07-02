@@ -60,6 +60,14 @@ vi.mock("../lib/evals/eval-profiles.js", () => ({
   resolveProfileSnapshotForRun: mockResolveProfileSnapshotForRun,
 }));
 
+// Composed-prompt capture ping (Eval Execution Tiers v1): a controllable
+// seam so tier tests can assert the one-ping-per-run contract without
+// dragging the real AgentCore invoke chain into this suite.
+const mockInvokeAgentCoreForEval = vi.hoisted(() => vi.fn());
+vi.mock("../lib/evals/agentcore-direct.js", () => ({
+  invokeAgentCoreForEval: mockInvokeAgentCoreForEval,
+}));
+
 import {
   _setDatasetStorageForTests,
   _setSqsClientForTests,
@@ -210,6 +218,11 @@ let storage: MemoryStorage;
 beforeEach(() => {
   vi.clearAllMocks();
   mockResolveProfileSnapshotForRun.mockResolvedValue(profileSnapshot());
+  mockInvokeAgentCoreForEval.mockResolvedValue({
+    output: "OK",
+    durationMs: 1200,
+    composedSystemPrompt: "COMPOSED PROMPT",
+  });
   sentBatches.length = 0;
   process.env.EVAL_FANOUT_QUEUE_URL = "https://sqs.test/eval-fanout.fifo";
   storage = makeMemoryStorage();
@@ -451,5 +464,88 @@ describe("eval-runner dataset dispatch (U6)", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/index rows missing.*case-b/);
     expect(sentBatches).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Execution tiers (Eval Execution Tiers v1)
+// ---------------------------------------------------------------------------
+
+describe("eval-runner execution tiers", () => {
+  it("stamps model-tier messages, pins the composed prompt with ONE agent ping, and records tierCounts", async () => {
+    seedDataset(storage, [
+      makeCore("case-a", { execution_tier: "model" }),
+      makeCore("case-b"), // missing = agent
+    ]);
+
+    await handler({ runId: "run-1" });
+
+    // One ping, not one per case — the whole point of the capture.
+    expect(mockInvokeAgentCoreForEval).toHaveBeenCalledTimes(1);
+    expect(mockInvokeAgentCoreForEval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        model: "model-1",
+      }),
+    );
+
+    const running = state.runUpdates.at(-1)!;
+    expect(running.profile_snapshot.composedSystemPrompt).toBe(
+      "COMPOSED PROMPT",
+    );
+    expect(running.profile_snapshot.tierCounts).toEqual({
+      model: 1,
+      agent: 1,
+    });
+
+    const messages: EvalWorkerMessage[] = sentBatches.flatMap((b) =>
+      b.Entries.map((e) => JSON.parse(e.MessageBody)),
+    );
+    const byCase = new Map(messages.map((m) => [m.testCaseId, m]));
+    expect(byCase.get("uuid-a")?.executionTier).toBe("model");
+    expect(byCase.get("uuid-b")?.executionTier).toBeUndefined();
+  });
+
+  it("degrades ALL model-tier cases to the full agent turn when the composed-prompt capture fails", async () => {
+    mockInvokeAgentCoreForEval.mockRejectedValue(new Error("runtime down"));
+    seedDataset(storage, [
+      makeCore("case-a", { execution_tier: "model" }),
+      makeCore("case-b", { execution_tier: "model" }),
+    ]);
+
+    await handler({ runId: "run-1" });
+
+    const running = state.runUpdates.at(-1)!;
+    expect(running.profile_snapshot.composedSystemPrompt).toBeUndefined();
+    expect(running.profile_snapshot.tierCounts).toEqual({
+      model: 0,
+      agent: 2,
+    });
+    const messages: EvalWorkerMessage[] = sentBatches.flatMap((b) =>
+      b.Entries.map((e) => JSON.parse(e.MessageBody)),
+    );
+    expect(messages.every((m) => m.executionTier === undefined)).toBe(true);
+  });
+
+  it("fullFidelity forces every case to the agent tier with no ping (the audit lever)", async () => {
+    seedDataset(storage, [
+      makeCore("case-a", { execution_tier: "model" }),
+      makeCore("case-b", { execution_tier: "model" }),
+    ]);
+
+    await handler({ runId: "run-1", input: { fullFidelity: true } });
+
+    expect(mockInvokeAgentCoreForEval).not.toHaveBeenCalled();
+    const running = state.runUpdates.at(-1)!;
+    expect(running.profile_snapshot.fullFidelity).toBe(true);
+    expect(running.profile_snapshot.tierCounts).toEqual({
+      model: 0,
+      agent: 2,
+    });
+    const messages: EvalWorkerMessage[] = sentBatches.flatMap((b) =>
+      b.Entries.map((e) => JSON.parse(e.MessageBody)),
+    );
+    expect(messages.every((m) => m.executionTier === undefined)).toBe(true);
   });
 });

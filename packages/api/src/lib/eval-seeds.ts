@@ -58,6 +58,12 @@ export interface SeedTestCase {
    * the old identity while gaining this one.
    */
   rewritten_from?: string;
+  /**
+   * Execution tier (Eval Execution Tiers v1). 'model' = the case only
+   * needs a stateless model call (refusal-shaped behavior); missing or
+   * 'agent' = the full Pi turn. Classified via adjudication PR.
+   */
+  execution_tier?: "agent" | "model";
 }
 
 /**

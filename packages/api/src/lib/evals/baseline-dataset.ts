@@ -182,6 +182,9 @@ export function buildBaselineDatasetCases(
         // case shas don't churn.
         ...(seed.quality_state ? { quality_state: seed.quality_state } : {}),
         ...(seed.rewritten_from ? { rewritten_from: seed.rewritten_from } : {}),
+        // Execution tier (Eval Execution Tiers v1) — carried only when
+        // present (missing = agent).
+        ...(seed.execution_tier ? { execution_tier: seed.execution_tier } : {}),
       },
       engines: { agentcore: { evaluator_ids: baselineEvaluatorIds(seed) } },
     };

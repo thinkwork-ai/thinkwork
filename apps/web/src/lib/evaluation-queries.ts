@@ -101,6 +101,7 @@ export const EvalRunResultsQuery = graphql(`
       category
       status
       trialIndex
+      executionTier
       score
       durationMs
       agentInputTokens
