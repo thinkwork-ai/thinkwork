@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentCoreEvalEmptyResponseError,
   buildEvalAgentCorePayload,
+  extractAgentCoreUsage,
   DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS,
   DEFAULT_EVAL_MAX_TOKENS,
   DEFAULT_EVAL_MODEL_ID,
@@ -424,6 +425,40 @@ describe("direct AgentCore eval helpers", () => {
       extractAgentCoreResponseText({ response_text: "strands response" }),
     ).toBe("strands response");
   });
+
+  it("extracts agent-turn usage from the pi-ai Usage shape and the normalized shape (U5)", () => {
+    // Pi runtime `pi_usage` / `response.usage` shape.
+    expect(
+      extractAgentCoreUsage({
+        input: 1200,
+        output: 340,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 1540,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      }),
+    ).toEqual({ inputTokens: 1200, outputTokens: 340 });
+    // Normalized shape.
+    expect(
+      extractAgentCoreUsage({ inputTokens: 10, outputTokens: 20 }),
+    ).toEqual({ inputTokens: 10, outputTokens: 20 });
+  });
+
+  it("returns undefined for missing or unusable usage — never a fabricated zero (U5, R6)", () => {
+    expect(extractAgentCoreUsage(undefined)).toBeUndefined();
+    expect(extractAgentCoreUsage(null)).toBeUndefined();
+    expect(extractAgentCoreUsage("usage")).toBeUndefined();
+    expect(extractAgentCoreUsage([1200, 340])).toBeUndefined();
+    // Partial usage (one side missing/invalid) is unusable for pricing.
+    expect(extractAgentCoreUsage({ input: 1200 })).toBeUndefined();
+    expect(extractAgentCoreUsage({ input: 1200, output: -1 })).toBeUndefined();
+    expect(
+      extractAgentCoreUsage({ input: Number.NaN, output: 340 }),
+    ).toBeUndefined();
+    expect(
+      extractAgentCoreUsage({ input: "1200", output: "340" }),
+    ).toBeUndefined();
+  });
 });
 
 describe("direct AgentCore eval empty-response in-process retry", () => {
@@ -482,6 +517,72 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
     expect(lambdaSendMock).toHaveBeenCalledTimes(
       DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS,
     );
+  });
+
+  it("surfaces the runtime's pi_usage as the envelope's usage (U5)", async () => {
+    lambdaSendMock.mockResolvedValueOnce(
+      lambdaResponse({
+        response: { role: "assistant", content: "I refuse." },
+        composed_system_prompt: "composed prompt",
+        pi_usage: {
+          input: 1200,
+          output: 340,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 1540,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      }),
+    );
+
+    const result = await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Refuse this",
+      model: null,
+    });
+
+    expect(result.output).toBe("I refuse.");
+    expect(result.usage).toEqual({ inputTokens: 1200, outputTokens: 340 });
+  });
+
+  it("falls back to response.usage when pi_usage is absent, and tolerates envelopes with neither (older runtime images)", async () => {
+    lambdaSendMock.mockResolvedValueOnce(
+      lambdaResponse({
+        response: {
+          role: "assistant",
+          content: "I refuse.",
+          usage: { input: 50, output: 7 },
+        },
+      }),
+    );
+    const withResponseUsage = await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Refuse this",
+      model: null,
+    });
+    expect(withResponseUsage.usage).toEqual({
+      inputTokens: 50,
+      outputTokens: 7,
+    });
+
+    // Older runtime image: no usage anywhere — the envelope leaves usage
+    // undefined (the worker records nulls, never zeros).
+    lambdaSendMock.mockResolvedValueOnce(
+      lambdaResponse({ response: "I refuse." }),
+    );
+    const withoutUsage = await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Refuse this",
+      model: null,
+    });
+    expect(withoutUsage.output).toBe("I refuse.");
+    expect(withoutUsage.usage).toBeUndefined();
   });
 
   it("does not retry non-empty-response invoke errors in-process", async () => {

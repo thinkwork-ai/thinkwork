@@ -124,6 +124,10 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     passRate: row.pass_rate ? Number(row.pass_rate) : null,
     regression: row.regression,
     costUsd: row.cost_usd ? Number(row.cost_usd) : null,
+    // Cost honesty (Eval Profiles U5, R6): null = the run finalized
+    // before agent-turn telemetry shipped (or is still in flight), so
+    // its cost is evaluator-only — partial, never a confident total.
+    costPartial: (row.cost_partial as boolean | null) ?? true,
     errorMessage: row.error_message,
     startedAt: row.started_at,
     completedAt: row.completed_at,
@@ -239,6 +243,11 @@ function resultToGraphql(
     trialIndex: (row.trial_index as number | null) ?? 0,
     score: row.score ? Number(row.score) : null,
     durationMs: row.duration_ms,
+    // Agent-turn telemetry (Eval Profiles U5): tokens without resolved
+    // catalog pricing carry a null cost — the run marks cost partial.
+    agentInputTokens: row.agent_input_tokens ?? null,
+    agentOutputTokens: row.agent_output_tokens ?? null,
+    agentCostUsd: row.agent_cost_usd ? Number(row.agent_cost_usd) : null,
     agentSessionId: row.agent_session_id,
     threadTurnId: row.thread_turn_id ?? null,
     input: row.input,
@@ -294,6 +303,52 @@ export const evalResultTypeResolvers = {
     if (projection === undefined || projection === null) return null;
     return JSON.stringify(projection);
   },
+};
+
+// Run-level latency percentiles (Eval Profiles U5, R7). Query-time
+// aggregation over eval_results.duration_ms per KTD6 — never
+// finalization-path math — as FIELD resolvers so the runs list pays
+// nothing unless a surface actually selects them. Both fields share one
+// PERCENTILE_CONT query per parent via the memo (same pattern as
+// skillEvalScoreTypeResolvers below). The parent run object only ever
+// comes from tenant-scoped run queries, so the run id is safe to
+// aggregate by directly.
+type EvalRunLatency = { p50: number | null; p95: number | null };
+const evalRunLatencyMemo = new WeakMap<object, Promise<EvalRunLatency>>();
+
+function percentileMs(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return value != null && Number.isFinite(parsed) ? Math.round(parsed) : null;
+}
+
+function resolveEvalRunLatency(parent: {
+  id?: string | null;
+}): Promise<EvalRunLatency> {
+  if (!parent.id) return Promise.resolve({ p50: null, p95: null });
+  let cached = evalRunLatencyMemo.get(parent);
+  if (!cached) {
+    cached = (async () => {
+      const result = await db.execute(sql`
+			SELECT
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50,
+				PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95
+			FROM eval_results
+			WHERE run_id = ${parent.id}
+			  AND duration_ms IS NOT NULL
+		`);
+      const [row] = (result as unknown as { rows?: any[] }).rows ?? [];
+      return { p50: percentileMs(row?.p50), p95: percentileMs(row?.p95) };
+    })();
+    evalRunLatencyMemo.set(parent, cached);
+  }
+  return cached;
+}
+
+export const evalRunTypeResolvers = {
+  latencyP50Ms: async (parent: { id?: string | null }) =>
+    (await resolveEvalRunLatency(parent)).p50,
+  latencyP95Ms: async (parent: { id?: string | null }) =>
+    (await resolveEvalRunLatency(parent)).p95,
 };
 
 // Lazy eligibility for the SkillEvalScore type (Skill Tests & Evals — run
@@ -366,6 +421,9 @@ function plannedResultToGraphql(
     trialIndex: 0,
     score: null,
     durationMs: null,
+    agentInputTokens: null,
+    agentOutputTokens: null,
+    agentCostUsd: null,
     agentSessionId: null,
     threadTurnId: null,
     input: testCase.query,

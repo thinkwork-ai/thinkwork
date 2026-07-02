@@ -293,7 +293,16 @@ export const evalRuns = pgTable(
     // scoreable execution (all-error / zero-case) — "no score", never 0%.
     pass_rate: numeric("pass_rate", { precision: 5, scale: 4 }),
     regression: boolean("regression").notNull().default(false),
+    // cost_usd aggregates agent-turn cost + evaluator cost at finalize
+    // (Eval Profiles U5). cost_partial is the honesty flag (R6): true
+    // when any result row is missing a priced agent-turn cost (usage
+    // absent, or tokens recorded with catalog pricing unresolved) — the
+    // total then understates real spend and must never render as a
+    // confident number or a false zero. Null on runs finalized before
+    // the column shipped (evaluator-only cost — the API maps null to
+    // true). Hand-rolled migration 0199_eval_runs_cost_partial.
     cost_usd: numeric("cost_usd", { precision: 12, scale: 6 }),
+    cost_partial: boolean("cost_partial"),
     error_message: text("error_message"),
     started_at: timestamp("started_at", { withTimezone: true }),
     completed_at: timestamp("completed_at", { withTimezone: true }),

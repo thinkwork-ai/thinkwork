@@ -2275,6 +2275,7 @@ export type EvalRun = {
   agentName?: Maybe<Scalars["String"]["output"]>;
   categories: Array<Scalars["String"]["output"]>;
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  costPartial: Scalars["Boolean"]["output"];
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   datasetId?: Maybe<Scalars["ID"]["output"]>;
@@ -2286,6 +2287,8 @@ export type EvalRun = {
   failed: Scalars["Int"]["output"];
   id: Scalars["ID"]["output"];
   isLegacyScoring: Scalars["Boolean"]["output"];
+  latencyP50Ms?: Maybe<Scalars["Int"]["output"]>;
+  latencyP95Ms?: Maybe<Scalars["Int"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];

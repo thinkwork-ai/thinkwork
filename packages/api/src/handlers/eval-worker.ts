@@ -38,10 +38,16 @@ import {
 import { createHash } from "crypto";
 import {
   AgentCoreEvalInvocationTimeoutError,
+  evalModelId,
   invokeAgentCoreForEval,
+  type EvalAgentUsage,
   type EvalReplayToolOverride,
   type EvalReplayHistoryMessage,
 } from "../lib/evals/agentcore-direct.js";
+import {
+  getTenantModelPricing,
+  type TenantModelPricing,
+} from "../lib/model-catalog/tenant-catalog.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
 import {
   createBedrockLlmJudge,
@@ -168,6 +174,17 @@ interface CaseOutcome {
   durationMs: number;
   errorMessage: string | null;
   costUsd: number;
+  /**
+   * Agent-turn telemetry (Eval Profiles U5): token usage of the agent
+   * invocation itself (not evaluator tokens), priced against the run's
+   * snapshot model. All null when the runtime envelope carried no usage
+   * (older image, errored invoke); cost null when usage is present but
+   * catalog pricing is unresolved — tokens are still recorded and the
+   * run summary marks cost partial, never zero (R6).
+   */
+  agentInputTokens: number | null;
+  agentOutputTokens: number | null;
+  agentCostUsd: number | null;
   sessionId: string;
   /**
    * Thread turn this execution corresponds to — set when the case's
@@ -382,6 +399,48 @@ export function pinnedJudgeModelForRun(
   return typeof judgeModel === "string" && judgeModel.trim().length > 0
     ? judgeModel
     : null;
+}
+
+/**
+ * The model the agent under test actually ran as, for pricing its turn
+ * (Eval Profiles U5): the dispatch-pinned profile_snapshot.model, falling
+ * back to the run's informational scalar, normalized through the same
+ * default (`evalModelId`) the invoke path applies — so pre-profile runs
+ * with a null model price against the deployed eval default, not nothing.
+ */
+export function agentModelForRunPricing(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot" | "model">,
+): string {
+  const snapshot = run.profile_snapshot;
+  const snapshotModel =
+    typeof snapshot === "object" && snapshot !== null
+      ? (snapshot as { model?: unknown }).model
+      : null;
+  const pinnedModel =
+    typeof snapshotModel === "string" && snapshotModel.trim().length > 0
+      ? snapshotModel
+      : null;
+  return evalModelId(pinnedModel ?? run.model);
+}
+
+/**
+ * Price an agent turn's token usage against resolved tenant-catalog
+ * pricing (per-million-token rates). Null pricing → null cost (R6):
+ * tokens are still recorded but the run summary marks cost partial —
+ * an unresolved catalog entry must NEVER read as a free turn.
+ */
+export function agentUsageCostUsd(
+  usage: EvalAgentUsage,
+  pricing: Pick<
+    TenantModelPricing,
+    "inputPerMillion" | "outputPerMillion"
+  > | null,
+): number | null {
+  if (!pricing) return null;
+  return (
+    (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
+    (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
+  );
 }
 
 /**
@@ -600,6 +659,7 @@ async function executeCase(
   const assertionResults: EvalAssertionResult[] = [];
   const evaluatorResults: EvalEvaluatorResult[] = [];
   let costUsd = 0;
+  let agentUsage: EvalAgentUsage | null = null;
   let threadTurnId: string | null = null;
 
   try {
@@ -635,6 +695,10 @@ async function executeCase(
     actualOutput = inv.output;
     durationMs = inv.durationMs;
     systemPrompt = inv.composedSystemPrompt;
+    // Agent-turn telemetry (U5): undefined on envelopes from older
+    // runtime images — the row then records null tokens/cost and the
+    // run summary marks cost partial, never zero.
+    agentUsage = inv.usage ?? null;
 
     const assertions = (tc.assertions ?? []) as EvalAssertion[];
     // `workspace-projection-*` assertions read STORED turn snapshots (never
@@ -740,6 +804,26 @@ async function executeCase(
     errorCause,
   });
 
+  // Price the agent turn against the run's snapshot model (U5). Outside
+  // the execution try/catch by design: a pricing-lookup failure must
+  // degrade to a null cost (tokens still recorded, summary cost-partial)
+  // — never reclassify a scored case as an infrastructure error.
+  let agentCostUsd: number | null = null;
+  if (agentUsage) {
+    try {
+      const pricing = await getTenantModelPricing({
+        tenantId: run.tenant_id,
+        modelId: agentModelForRunPricing(run),
+      });
+      agentCostUsd = agentUsageCostUsd(agentUsage, pricing);
+    } catch (err) {
+      console.warn(
+        `[eval-worker] agent-turn pricing lookup failed for run ${run.id}; recording tokens with null cost:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   return {
     status: scoredOutcome.status,
     errorCause: scoredOutcome.errorCause,
@@ -751,6 +835,9 @@ async function executeCase(
     durationMs,
     errorMessage,
     costUsd,
+    agentInputTokens: agentUsage?.inputTokens ?? null,
+    agentOutputTokens: agentUsage?.outputTokens ?? null,
+    agentCostUsd,
     sessionId,
     threadTurnId,
   };
@@ -768,6 +855,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
       status: evalResults.status,
       override_status: evalResults.override_status,
       evaluator_results: evalResults.evaluator_results,
+      agent_cost_usd: evalResults.agent_cost_usd,
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
@@ -792,10 +880,19 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     caseOverrides,
     run.scoring_version,
   );
+  // Run cost = evaluator cost + priced agent-turn cost (U5). Any row
+  // missing a priced agent cost — usage absent (older runtime envelope,
+  // errored invoke) or tokens recorded with pricing unresolved — makes
+  // the total PARTIAL (R6): it understates real spend and must render
+  // flagged, never as a confident number or a false zero.
   const totalCostUsd = rows.reduce(
-    (total, row) => total + evaluatorCostUsd(row.evaluator_results),
+    (total, row) =>
+      total +
+      evaluatorCostUsd(row.evaluator_results) +
+      (row.agent_cost_usd ? Number(row.agent_cost_usd) : 0),
     0,
   );
+  const costPartial = rows.some((row) => row.agent_cost_usd == null);
   const expectedRows = run.expected_result_rows ?? run.total_tests;
   const isComplete = summary.completed >= expectedRows;
   const completedAt = new Date();
@@ -811,6 +908,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
       unstable: summary.unstable,
       pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
       cost_usd: totalCostUsd.toFixed(6),
+      cost_partial: costPartial,
       // Record the semantics this summary was computed under. Legacy
       // runs (null stamp) keep a null summary version; runs stamped at or
       // below the deployed version record their own stamp (v2 and v3
@@ -936,6 +1034,9 @@ async function handleMessage(
         durationMs: 0,
         errorMessage: pinned.errorMessage,
         costUsd: 0,
+        agentInputTokens: null,
+        agentOutputTokens: null,
+        agentCostUsd: null,
         sessionId: uniqueSessionId(
           message.runId,
           message.testCaseId,
@@ -986,6 +1087,12 @@ async function handleMessage(
       error_cause: outcome.errorCause,
       score: outcome.score === null ? null : outcome.score.toFixed(4),
       duration_ms: outcome.durationMs,
+      // Agent-turn telemetry (U5). Tokens without resolved pricing keep
+      // a null cost — the run summary marks cost partial, never zero.
+      agent_input_tokens: outcome.agentInputTokens,
+      agent_output_tokens: outcome.agentOutputTokens,
+      agent_cost_usd:
+        outcome.agentCostUsd === null ? null : outcome.agentCostUsd.toFixed(6),
       agent_session_id: outcome.sessionId,
       thread_turn_id: outcome.threadTurnId,
       input: executionCase.query,

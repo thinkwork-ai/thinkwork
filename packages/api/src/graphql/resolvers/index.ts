@@ -44,6 +44,7 @@ import {
   evaluationsQueries,
   evaluationsMutations,
   evalResultTypeResolvers,
+  evalRunTypeResolvers,
   skillEvalScoreTypeResolvers,
 } from "./evaluations/index.js";
 import {
@@ -264,6 +265,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
   EvalResult: evalResultTypeResolvers,
+  EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,

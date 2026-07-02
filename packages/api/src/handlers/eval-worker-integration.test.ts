@@ -33,8 +33,10 @@ import {
 // eval-worker's instanceof checks see).
 import {
   AgentCoreEvalInvocationTimeoutError,
+  DEFAULT_EVAL_MODEL_ID,
   invokeAgentCoreForEval,
 } from "../lib/evals/agentcore-direct.js";
+import { getTenantModelPricing } from "../lib/model-catalog/tenant-catalog.js";
 
 // ---------------------------------------------------------------------------
 // Mocks: the worker's collaborators. The drizzle fake dispatches on the
@@ -70,6 +72,12 @@ vi.mock("../lib/evals/agentcore-direct.js", async (importOriginal) => {
     await importOriginal<typeof import("../lib/evals/agentcore-direct.js")>();
   return { ...actual, invokeAgentCoreForEval: vi.fn() };
 });
+
+// Agent-turn pricing (U5) resolves through the tenant model catalog; the
+// default (null) is "pricing unresolved" — tokens record with null cost.
+vi.mock("../lib/model-catalog/tenant-catalog.js", () => ({
+  getTenantModelPricing: vi.fn(async () => null),
+}));
 
 // The LLM judge dynamic-imports the Bedrock runtime client; tests drive
 // judge crashes through this seam.
@@ -148,6 +156,7 @@ function createFakeDb(dbState: FakeDbState) {
 }
 
 const invokeMock = vi.mocked(invokeAgentCoreForEval);
+const pricingMock = vi.mocked(getTenantModelPricing);
 
 function sqsEvent(receiveCount: string): SQSEvent {
   return {
@@ -1358,6 +1367,147 @@ describe("eval-worker scoring-engine contract dispatch (U10)", () => {
 
     expect(scoreSpy).not.toHaveBeenCalled();
     expect(state.insertedResults[0].evaluator_results).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U5 — agent-turn cost + latency telemetry, cost-partial honesty (R6)
+// ---------------------------------------------------------------------------
+
+describe("eval-worker agent-turn telemetry (Eval Profiles U5)", () => {
+  const usageEnvelope = {
+    output: "I refuse to do that.",
+    durationMs: 800,
+    composedSystemPrompt: null,
+    usage: { inputTokens: 2_000_000, outputTokens: 1_000_000 },
+  };
+
+  it("records tokens and a non-zero priced cost when the envelope carries usage and catalog pricing is resolved; the run cost sums agent + evaluator cost with costPartial false", async () => {
+    state.run.profile_snapshot = {
+      profileId: "profile-1",
+      model: "us.snapshot.agent-model-v1:0",
+      judgeModel: null,
+      trials: 1,
+    };
+    // The in-house engine's verdicts carry judge token usage — the run
+    // total must include BOTH evaluator cost and priced agent cost.
+    _setScoringEnginesForTests({
+      inHouse: {
+        id: "in_house",
+        score: async () => ({
+          assertions: [
+            {
+              type: "icontains",
+              value: "refuse",
+              passed: true,
+              score: 1,
+              reason: "contains",
+            },
+          ],
+          verdicts: [
+            {
+              evaluator_id: "llm_judge",
+              source: "in_house",
+              value: 1,
+              label: "pass",
+              explanation: "ok",
+              token_usage: { inputTokens: 1000, outputTokens: 100 },
+            },
+          ],
+        }),
+      },
+    });
+    pricingMock.mockResolvedValueOnce({
+      inputPerMillion: 3,
+      outputPerMillion: 15,
+      source: "tenant_model_catalog",
+    });
+    invokeMock.mockResolvedValueOnce(usageEnvelope);
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    // Pricing resolves against the dispatch-pinned snapshot model.
+    expect(pricingMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      modelId: "us.snapshot.agent-model-v1:0",
+    });
+    const row = state.insertedResults[0];
+    expect(row.agent_input_tokens).toBe(2_000_000);
+    expect(row.agent_output_tokens).toBe(1_000_000);
+    // 2M input × $3/M + 1M output × $15/M = $21.
+    expect(row.agent_cost_usd).toBe("21.000000");
+
+    const finalize = state.runUpdates.at(-1)!;
+    // Evaluator cost: 1000/1k × $0.0024 + 100/1k × $0.012 = $0.0036.
+    expect(finalize.cost_usd).toBe("21.003600");
+    expect(finalize.cost_partial).toBe(false);
+
+    _setScoringEnginesForTests(undefined);
+  });
+
+  it("records null telemetry when the envelope has no usage (older runtime image) and marks the run cost partial — never zero", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 800,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    // No usage → no pricing lookup at all.
+    expect(pricingMock).not.toHaveBeenCalled();
+    const row = state.insertedResults[0];
+    expect(row.agent_input_tokens).toBeNull();
+    expect(row.agent_output_tokens).toBeNull();
+    expect(row.agent_cost_usd).toBeNull();
+
+    const finalize = state.runUpdates.at(-1)!;
+    expect(finalize.cost_partial).toBe(true);
+  });
+
+  it("records tokens with a NULL cost when usage is present but catalog pricing is unresolved (R6 — never a false zero), marking the run cost partial", async () => {
+    // Default pricing mock resolves to null (unresolved catalog entry).
+    invokeMock.mockResolvedValueOnce(usageEnvelope);
+
+    await handler(sqsEvent("1"));
+
+    const row = state.insertedResults[0];
+    expect(row.agent_input_tokens).toBe(2_000_000);
+    expect(row.agent_output_tokens).toBe(1_000_000);
+    expect(row.agent_cost_usd).toBeNull();
+    expect(row.agent_cost_usd).not.toBe("0.000000");
+
+    const finalize = state.runUpdates.at(-1)!;
+    expect(finalize.cost_partial).toBe(true);
+  });
+
+  it("degrades a pricing-lookup crash to a null cost without reclassifying the scored case", async () => {
+    pricingMock.mockRejectedValueOnce(new Error("catalog unavailable"));
+    invokeMock.mockResolvedValueOnce(usageEnvelope);
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    const row = state.insertedResults[0];
+    // The behavioral verdict is untouched; only the cost is unpriced.
+    expect(row.status).toBe("pass");
+    expect(row.agent_input_tokens).toBe(2_000_000);
+    expect(row.agent_cost_usd).toBeNull();
+    expect(state.runUpdates.at(-1)!.cost_partial).toBe(true);
+  });
+
+  it("prices pre-profile runs (no snapshot, null run.model) against the deployed eval default model", async () => {
+    state.run.profile_snapshot = null;
+    state.run.model = null;
+    invokeMock.mockResolvedValueOnce(usageEnvelope);
+
+    await handler(sqsEvent("1"));
+
+    expect(pricingMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      modelId: DEFAULT_EVAL_MODEL_ID,
+    });
   });
 });
 

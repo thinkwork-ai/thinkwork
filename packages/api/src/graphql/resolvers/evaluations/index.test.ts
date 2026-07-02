@@ -13,6 +13,7 @@ const {
   updateResults,
   deleteWheres,
   executeCalls,
+  executeResults,
   mockFetchSpansForSession,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
@@ -41,6 +42,7 @@ const {
   const updateResults: unknown[][] = [];
   const deleteWheres: unknown[] = [];
   const executeCalls: unknown[] = [];
+  const executeResults: unknown[][] = [];
   return {
     selectQueue,
     selectWheres,
@@ -51,6 +53,7 @@ const {
     updateResults,
     deleteWheres,
     executeCalls,
+    executeResults,
     mockFetchSpansForSession: vi.fn(),
     mockResolveCallerTenantId: vi.fn(),
     mockResolveCallerUserId: vi.fn(),
@@ -81,6 +84,7 @@ const {
       updateResults.length = 0;
       deleteWheres.length = 0;
       executeCalls.length = 0;
+      executeResults.length = 0;
     },
   };
 });
@@ -169,7 +173,7 @@ vi.mock("../../utils.js", () => {
     }),
     execute: (query: unknown) => {
       executeCalls.push(query);
-      return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rows: executeResults.shift() ?? [] });
     },
   };
   return {
@@ -313,6 +317,7 @@ import {
   evalResultSpans,
   evaluationsMutations,
   evaluationsQueries,
+  evalRunTypeResolvers,
   placeholderStatusForEvalRun,
   shouldIncludePlannedEvalRows,
   skillEvalScoreTypeResolvers,
@@ -2513,5 +2518,36 @@ describe("skillEvalScoreTypeResolvers (run eligibility)", () => {
       "tenant-1",
       "research-dashboard",
     );
+  });
+});
+
+describe("evalRunTypeResolvers (run latency percentiles, U5)", () => {
+  it("resolves p50/p95 from the PERCENTILE_CONT aggregate, rounded to ms", async () => {
+    executeResults.push([{ p50: 1234.4, p95: "5678.9" }]);
+    const parent = { id: "run-1" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBe(1234);
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBe(5679);
+  });
+
+  it("memoizes: both fields share one aggregate query per parent run", async () => {
+    executeResults.push([{ p50: 100, p95: 200 }]);
+    const before = executeCalls.length;
+    const parent = { id: "run-2" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBe(100);
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBe(200);
+    expect(executeCalls.length - before).toBe(1);
+  });
+
+  it("returns nulls for a run with no recorded durations, and never queries without an id", async () => {
+    executeResults.push([{ p50: null, p95: null }]);
+    const parent = { id: "run-3" };
+    expect(await evalRunTypeResolvers.latencyP50Ms(parent)).toBeNull();
+    expect(await evalRunTypeResolvers.latencyP95Ms(parent)).toBeNull();
+
+    const before = executeCalls.length;
+    const idless = {} as { id?: string | null };
+    expect(await evalRunTypeResolvers.latencyP50Ms(idless)).toBeNull();
+    expect(await evalRunTypeResolvers.latencyP95Ms(idless)).toBeNull();
+    expect(executeCalls.length).toBe(before);
   });
 });

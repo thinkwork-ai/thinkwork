@@ -75,6 +75,12 @@ type EvalResultSummary = {
   unstable: number | null;
   passRate: number | null;
   totalCostUsd: number;
+  /**
+   * Cost honesty (Eval Profiles U5, R6): true when any row is missing a
+   * priced agent-turn cost — reconciler-synthesized rows always are —
+   * so totalCostUsd understates real spend and must render as partial.
+   */
+  costPartial: boolean;
 };
 
 type ReconciledRun = {
@@ -181,6 +187,7 @@ export function summarizeEvalRowsForReconciler(
     status: string;
     override_status?: string | null;
     evaluator_results: unknown;
+    agent_cost_usd?: string | null;
   }>,
   scoringVersion: number | null,
 ): EvalResultSummary {
@@ -196,10 +203,8 @@ export function summarizeEvalRowsForReconciler(
     // compute unstable through the shared aggregation layer instead.
     unstable: null,
     passRate,
-    totalCostUsd: rows.reduce(
-      (total, row) => total + evaluatorCostUsd(row.evaluator_results),
-      0,
-    ),
+    totalCostUsd: rows.reduce((total, row) => total + rowCostUsd(row), 0),
+    costPartial: rows.some((row) => row.agent_cost_usd == null),
   };
 }
 
@@ -209,7 +214,24 @@ type SummaryResultRow = {
   status: string;
   override_status?: string | null;
   evaluator_results: unknown;
+  /** Priced agent-turn cost (U5); null/absent rows make the run cost partial. */
+  agent_cost_usd?: string | null;
 };
+
+/**
+ * A row's contribution to the run total (U5): evaluator cost + the
+ * priced agent-turn cost. Rows without a priced agent cost contribute
+ * only evaluator cost — the caller marks the total partial (R6).
+ */
+function rowCostUsd(row: {
+  evaluator_results: unknown;
+  agent_cost_usd?: string | null;
+}): number {
+  return (
+    evaluatorCostUsd(row.evaluator_results) +
+    (row.agent_cost_usd ? Number(row.agent_cost_usd) : 0)
+  );
+}
 
 /**
  * Trial-aware summary for the reconciler's write paths (Eval Profiles
@@ -239,10 +261,8 @@ function summarizeRunRowsForWrite(
     errored: verdictSummary.errored,
     unstable: verdictSummary.unstable,
     passRate: verdictSummary.passRate,
-    totalCostUsd: rows.reduce(
-      (total, row) => total + evaluatorCostUsd(row.evaluator_results),
-      0,
-    ),
+    totalCostUsd: rows.reduce((total, row) => total + rowCostUsd(row), 0),
+    costPartial: rows.some((row) => row.agent_cost_usd == null),
   };
 }
 
@@ -750,6 +770,7 @@ async function reconcileRun(
         status: evalResults.status,
         override_status: evalResults.override_status,
         evaluator_results: evalResults.evaluator_results,
+        agent_cost_usd: evalResults.agent_cost_usd,
       })
       .from(evalResults)
       .where(eq(evalResults.run_id, candidate.id));
@@ -788,6 +809,9 @@ async function reconcileRun(
           CURRENT_EVAL_SCORING_VERSION,
         ),
         cost_usd: summary.totalCostUsd.toFixed(6),
+        // Reconciler-synthesized rows never carry priced agent cost, so
+        // a reconciled run is cost-partial by construction (R6).
+        cost_partial: summary.costPartial,
         error_message:
           missingCases.length > 0
             ? `Reconciled ${missingCases.length} missing eval result(s)`

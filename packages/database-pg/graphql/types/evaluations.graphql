@@ -255,7 +255,21 @@ type EvalRun {
   # "no score", never 0%.
   passRate: Float
   regression: Boolean!
+  # Aggregate run cost: evaluator cost + priced agent-turn cost (U5).
   costUsd: Float
+  # Cost honesty flag (U5, R6): true when any result row is missing a
+  # priced agent-turn cost (usage absent on an older runtime envelope or
+  # an errored invoke, or tokens recorded with catalog pricing
+  # unresolved) — costUsd then understates real spend and must render
+  # flagged, never as a confident total. Also true for runs finalized
+  # before agent-turn telemetry shipped (evaluator-only cost) and while
+  # a run is still in flight.
+  costPartial: Boolean!
+  # Run-level latency percentiles over per-result durationMs (U5, R7),
+  # computed at query time via PERCENTILE_CONT (KTD6) — only when
+  # requested. Null until the run has results with recorded durations.
+  latencyP50Ms: Int
+  latencyP95Ms: Int
   errorMessage: String
   startedAt: AWSDateTime
   completedAt: AWSDateTime

@@ -101,6 +101,49 @@ export function extractAgentCoreResponseText(data: unknown): string {
 }
 
 /**
+ * Agent-turn token usage extracted from the runtime's eval response
+ * (Eval Profiles U5). The worker prices it against the run's snapshot
+ * model; tokens without resolved catalog pricing record with a null
+ * cost — never zero.
+ */
+export interface EvalAgentUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+function finiteNonNegative(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+/**
+ * Extract agent-turn token usage from a runtime usage object. Accepts
+ * the Pi runtime's pi-ai `Usage` shape (`{ input, output, ... }` — what
+ * `pi_usage` / `response.usage` carry today) and the normalized
+ * `{ inputTokens, outputTokens }` shape. Returns undefined when the
+ * envelope has no recognizable usage (older runtime images) — the
+ * telemetry columns then stay null and the run summary marks cost
+ * partial rather than recording a false zero (R6).
+ */
+export function extractAgentCoreUsage(
+  data: unknown,
+): EvalAgentUsage | undefined {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return undefined;
+  }
+  const usage = data as Record<string, unknown>;
+  const inputTokens =
+    finiteNonNegative(usage.input) ?? finiteNonNegative(usage.inputTokens);
+  const outputTokens =
+    finiteNonNegative(usage.output) ?? finiteNonNegative(usage.outputTokens);
+  if (inputTokens === undefined || outputTokens === undefined) {
+    return undefined;
+  }
+  return { inputTokens, outputTokens };
+}
+
+/**
  * Replay history row shape (U8): identical to the `messages_history`
  * rows chat-agent-invoke ships to the Pi runtime, which normalizes them
  * via `normalizeHistory` (role 'user' | 'assistant' + non-empty string
@@ -321,6 +364,13 @@ export async function invokeAgentCoreForEval(input: {
    * responses that pre-date this contract).
    */
   composedSystemPrompt: string | null;
+  /**
+   * Agent-turn token usage from the runtime's response (Pi's `pi_usage`
+   * / `response.usage`, Eval Profiles U5). Undefined when the runtime
+   * did not surface usage (older runtime image) — the worker then
+   * records null telemetry and the run summary marks cost partial.
+   */
+  usage?: EvalAgentUsage;
 }> {
   let lastError: unknown;
   for (
@@ -362,6 +412,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   output: string;
   durationMs: number;
   composedSystemPrompt: string | null;
+  usage?: EvalAgentUsage;
 }> {
   const runtimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
@@ -441,9 +492,22 @@ async function invokeAgentCoreForEvalOnce(input: {
       ? rawComposedPrompt
       : null;
 
+  // Agent-turn token usage (Eval Profiles U5): the Pi runtime ships the
+  // turn's usage as `pi_usage` (and mirrors it on `response.usage`).
+  // Envelopes without it (older runtime images) leave `usage` undefined
+  // — the worker records null telemetry, never a fabricated zero.
+  const responseUsage =
+    responseData && typeof responseData === "object"
+      ? (responseData as Record<string, unknown>).usage
+      : undefined;
+  const usage =
+    extractAgentCoreUsage(invokeResult.pi_usage) ??
+    extractAgentCoreUsage(responseUsage);
+
   return {
     output,
     durationMs: Date.now() - startedAt,
     composedSystemPrompt,
+    ...(usage ? { usage } : {}),
   };
 }
