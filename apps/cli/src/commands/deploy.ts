@@ -989,7 +989,7 @@ export async function runLocalTerraformDeploy(
   //    workspace-seeding probe without a separate manual bootstrap step. ──
   if (scaffolded && caller) {
     console.log("\n  Seeding workspace defaults...");
-    await runWorkspaceBootstrap(cwd0, stage);
+    await runWorkspaceBootstrap(cwd0, stage, caller.region);
   }
 
   // ── Verify (U6 / R8): a deploy ends by proving the stack works, not by

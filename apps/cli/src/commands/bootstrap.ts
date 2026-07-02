@@ -35,10 +35,15 @@ function getTerraformOutput(cwd: string, key: string): Promise<string> {
 /**
  * Run a shell script with live output.
  */
-function runScript(scriptPath: string, args: string[]): Promise<number> {
+function runScript(
+  scriptPath: string,
+  args: string[],
+  extraEnv: Record<string, string> = {},
+): Promise<number> {
   return new Promise((resolve) => {
     const proc = spawn("bash", [scriptPath, ...args], {
       stdio: "inherit",
+      env: { ...process.env, ...extraEnv },
     });
     proc.on("close", (code) => resolve(code ?? 1));
   });
@@ -52,13 +57,16 @@ function runScript(scriptPath: string, args: string[]): Promise<number> {
 export async function runWorkspaceBootstrap(
   cwd: string,
   stage: string,
+  region: string,
 ): Promise<void> {
   const bucket = await getTerraformOutput(cwd, "bucket_name");
   const dbEndpoint = await getTerraformOutput(cwd, "db_cluster_endpoint");
   const secretArn = await getTerraformOutput(cwd, "db_secret_arn");
   const { execSync } = await import("node:child_process");
+  // Explicit --region + env: profiles without a default region are a
+  // recurring greenfield failure class (harness cycles 3 and 7).
   const secretJson = execSync(
-    `aws secretsmanager get-secret-value --secret-id "${secretArn}" --query SecretString --output text`,
+    `aws secretsmanager get-secret-value --secret-id "${secretArn}" --query SecretString --output text --region "${region}"`,
     { encoding: "utf-8" },
   ).trim();
   const secret = JSON.parse(secretJson) as { password: string };
@@ -78,7 +86,10 @@ export async function runWorkspaceBootstrap(
         "Reinstall the CLI: npm install -g thinkwork-cli@latest",
     );
   }
-  const code = await runScript(scriptPath, [stage, bucket, databaseUrl]);
+  const code = await runScript(scriptPath, [stage, bucket, databaseUrl], {
+    AWS_REGION: region,
+    AWS_DEFAULT_REGION: region,
+  });
   if (code !== 0) {
     throw new Error(`Workspace bootstrap failed (exit ${code}).`);
   }
