@@ -1625,6 +1625,30 @@ locals {
   bedrock_invocation_log_group_arn  = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/thinkwork/bedrock/model-invocations"
 }
 
+# Adding count re-addressed these resources (`x` → `x[0]`); without moved
+# blocks, existing states (dev) plan destroy+create — losing invocation-log
+# history and racing the same-name recreate (the private_nat
+# RouteAlreadyExists failure class from the cycle-4 fix).
+moved {
+  from = aws_cloudwatch_log_group.bedrock_model_invocations
+  to   = aws_cloudwatch_log_group.bedrock_model_invocations[0]
+}
+
+moved {
+  from = aws_iam_role.bedrock_model_invocation_logging
+  to   = aws_iam_role.bedrock_model_invocation_logging[0]
+}
+
+moved {
+  from = aws_iam_role_policy.bedrock_model_invocation_logging
+  to   = aws_iam_role_policy.bedrock_model_invocation_logging[0]
+}
+
+moved {
+  from = aws_bedrock_model_invocation_logging_configuration.this
+  to   = aws_bedrock_model_invocation_logging_configuration.this[0]
+}
+
 resource "aws_cloudwatch_log_group" "bedrock_model_invocations" {
   count             = var.manage_bedrock_invocation_logging ? 1 : 0
   name              = local.bedrock_invocation_log_group_name
