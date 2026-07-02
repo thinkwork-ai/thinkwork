@@ -28,13 +28,17 @@ export const EvalRunsQuery = graphql(`
         passed
         failed
         errored
+        unstable
         scoringVersion
         isLegacyScoring
         datasetId
         datasetVersion
+        profileId
+        profileName
         passRate
         regression
         costUsd
+        costPartial
         agentId
         agentName
         scheduledJobId
@@ -60,13 +64,21 @@ export const EvalRunQuery = graphql(`
       passed
       failed
       errored
+      unstable
       scoringVersion
       isLegacyScoring
       datasetId
       datasetVersion
+      profileId
+      profileName
+      profileSnapshot
+      expectedResultRows
       passRate
       regression
       costUsd
+      costPartial
+      latencyP50Ms
+      latencyP95Ms
       errorMessage
       agentId
       agentName
@@ -88,8 +100,12 @@ export const EvalRunResultsQuery = graphql(`
       testCaseName
       category
       status
+      trialIndex
       score
       durationMs
+      agentInputTokens
+      agentOutputTokens
+      agentCostUsd
       agentSessionId
       input
       actualOutput
@@ -104,6 +120,81 @@ export const EvalRunResultsQuery = graphql(`
       overrideReason
       effectiveStatus
       createdAt
+    }
+  }
+`);
+
+// ─────────────────────────────────────────────────────────────────────
+// Eval Profiles (THINK-107): the durable agent-under-test configuration
+// — model, judge pin, trials. Runs pin a snapshot at dispatch, so later
+// profile edits never reinterpret past runs.
+// ─────────────────────────────────────────────────────────────────────
+
+export const EvalProfilesQuery = graphql(`
+  query EvalProfiles($tenantId: ID!, $includeArchived: Boolean) {
+    evalProfiles(tenantId: $tenantId, includeArchived: $includeArchived) {
+      id
+      name
+      model
+      judgeModel
+      trials
+      isDefault
+      archivedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const CreateEvalProfileMutation = graphql(`
+  mutation CreateEvalProfile($tenantId: ID!, $input: CreateEvalProfileInput!) {
+    createEvalProfile(tenantId: $tenantId, input: $input) {
+      id
+      name
+      model
+      judgeModel
+      trials
+      isDefault
+    }
+  }
+`);
+
+export const UpdateEvalProfileMutation = graphql(`
+  mutation UpdateEvalProfile($id: ID!, $input: UpdateEvalProfileInput!) {
+    updateEvalProfile(id: $id, input: $input) {
+      id
+      name
+      model
+      judgeModel
+      trials
+      isDefault
+    }
+  }
+`);
+
+export const DuplicateEvalProfileMutation = graphql(`
+  mutation DuplicateEvalProfile($id: ID!, $name: String) {
+    duplicateEvalProfile(id: $id, name: $name) {
+      id
+      name
+    }
+  }
+`);
+
+export const ArchiveEvalProfileMutation = graphql(`
+  mutation ArchiveEvalProfile($id: ID!) {
+    archiveEvalProfile(id: $id) {
+      id
+      archivedAt
+    }
+  }
+`);
+
+export const SetDefaultEvalProfileMutation = graphql(`
+  mutation SetDefaultEvalProfile($id: ID!) {
+    setDefaultEvalProfile(id: $id) {
+      id
+      isDefault
     }
   }
 `);

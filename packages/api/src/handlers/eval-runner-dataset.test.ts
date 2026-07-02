@@ -52,6 +52,14 @@ vi.mock("../lib/agents/tenant-platform-agent.js", () => ({
   resolveTenantPlatformAgent: vi.fn(async () => ({ id: "agent-1" })),
 }));
 
+// The dispatch-time profile pin (U3) resolves through the lib's own db
+// wiring; the profile lifecycle is unit-tested in eval-profiles.test.ts.
+// Here it's a controllable seam so trial fan-out (U4) can vary `trials`.
+const mockResolveProfileSnapshotForRun = vi.hoisted(() => vi.fn());
+vi.mock("../lib/evals/eval-profiles.js", () => ({
+  resolveProfileSnapshotForRun: mockResolveProfileSnapshotForRun,
+}));
+
 import {
   _setDatasetStorageForTests,
   _setSqsClientForTests,
@@ -59,6 +67,18 @@ import {
   type EvalWorkerMessage,
 } from "./eval-runner.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
+
+function profileSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    profileId: "profile-1",
+    name: "Default",
+    model: "model-1",
+    judgeModel: null,
+    trials: 1,
+    workspaceFingerprint: null,
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -189,6 +209,7 @@ let storage: MemoryStorage;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockResolveProfileSnapshotForRun.mockResolvedValue(profileSnapshot());
   sentBatches.length = 0;
   process.env.EVAL_FANOUT_QUEUE_URL = "https://sqs.test/eval-fanout.fifo";
   storage = makeMemoryStorage();
@@ -254,6 +275,13 @@ describe("eval-runner dataset dispatch (U6)", () => {
     expect(running.pinned_case_ids).toEqual(["case-a", "case-b"]);
     expect(running.selected_test_case_ids).toEqual(["uuid-a", "uuid-b"]);
     expect(running.total_tests).toBe(2);
+    // Trial plan pinned alongside the scope (U4): deterministic-only
+    // cases at profile trials=1 → one row each.
+    expect(running.pinned_trial_plan).toEqual([
+      { caseId: "uuid-a", trials: 1 },
+      { caseId: "uuid-b", trials: 1 },
+    ]);
+    expect(running.expected_result_rows).toBe(2);
 
     // Copies landed under the run snapshot prefix.
     expect(
@@ -327,7 +355,66 @@ describe("eval-runner dataset dispatch (U6)", () => {
     expect(finalize.pass_rate).toBeNull();
     expect(finalize.dataset_version).toBe(7);
     expect(finalize.pinned_case_ids).toEqual([]);
+    // Zero-case runs pin an empty plan and zero expected rows (U4).
+    expect(finalize.pinned_trial_plan).toEqual([]);
+    expect(finalize.expected_result_rows).toBe(0);
     expect(sentBatches).toHaveLength(0);
+  });
+
+  it("fans out one message per (case, trial): rubric cases run the profile trials, deterministic-only once (R11)", async () => {
+    mockResolveProfileSnapshotForRun.mockResolvedValue(
+      profileSnapshot({ trials: 3 }),
+    );
+    seedDataset(storage, [
+      makeCore("case-a", {
+        assertions: [
+          { type: "icontains", value: "refuse" },
+          { type: "llm-rubric", value: "Should refuse politely" },
+        ],
+      }),
+      // Deterministic-only: trials never apply.
+      makeCore("case-b"),
+    ]);
+
+    const result = await handler({ runId: "run-1" });
+
+    expect(result).toEqual({
+      ok: true,
+      runId: "run-1",
+      dispatched: 4,
+      totalTests: 2,
+    });
+
+    const running = state.runUpdates.at(-1)!;
+    expect(running.pinned_trial_plan).toEqual([
+      { caseId: "uuid-a", trials: 3 },
+      { caseId: "uuid-b", trials: 1 },
+    ]);
+    expect(running.expected_result_rows).toBe(4);
+    // total_tests keeps its case-count meaning for every existing reader.
+    expect(running.total_tests).toBe(2);
+
+    const entries = sentBatches.flatMap((b) => b.Entries);
+    const messages: EvalWorkerMessage[] = entries.map((e) =>
+      JSON.parse(e.MessageBody),
+    );
+    expect(messages).toHaveLength(4);
+    expect(messages.map((m) => [m.testCaseId, m.trialIndex])).toEqual([
+      ["uuid-a", 0],
+      ["uuid-a", 1],
+      ["uuid-a", 2],
+      ["uuid-b", 0],
+    ]);
+    // Batch entry Ids stay unique per (case, trial) — the flat `index`
+    // counter feeds them (KTD5: SQS itself must never dedupe trials).
+    const ids = entries.map((e) => (e as { Id?: string }).Id);
+    expect(new Set(ids).size).toBe(4);
+    // Every trial message still carries the pinned snapshot reference.
+    for (const message of messages) {
+      expect(message.snapshotKey).toBeTruthy();
+      expect(message.contentSha).toMatch(/^[0-9a-f]{64}$/);
+    }
+    expect(messages.map((m) => m.index)).toEqual([0, 1, 2, 3]);
   });
 
   it("fails the run with an error_message when the snapshot capture stays torn", async () => {

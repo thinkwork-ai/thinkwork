@@ -23,6 +23,10 @@ import {
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import {
+  resolveProfileSnapshotForRun,
+  type EvalProfileSnapshot,
+} from "../lib/evals/eval-profiles.js";
+import {
   captureRunSnapshot,
   createEvalDatasetStorageFromConfig,
   type RunSnapshot,
@@ -52,7 +56,19 @@ interface EvalRunnerEvent {
 export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
+  /**
+   * Flat unique 0..N-1 counter across ALL messages of the dispatch —
+   * it feeds the SQS batch entry Id and the FIFO shard, so uniqueness
+   * per batch entry is load-bearing. NOT the trial index.
+   */
   index: number;
+  /**
+   * Which trial of the case this message executes (0-based; Eval
+   * Profiles U4). Extends the worker's dedup identity to
+   * (run, case, trial) — without it, trials 2..n are dropped as
+   * duplicates. Absent on legacy in-flight messages (= trial 0).
+   */
+  trialIndex: number;
   /**
    * Dataset-pinned launches (Trust Core U6): the run-scoped S3 key the
    * worker fetches the case content from, plus its expected sha. The
@@ -83,26 +99,84 @@ export function selectedTestCaseIdsFromEvent(event: EvalRunnerEvent): string[] {
   );
 }
 
+/**
+ * True when the case's assertions carry an `llm-rubric` entry — the only
+ * assertion kind trials apply to (KTD3). Deterministic assertions don't
+ * flake; multiplying their cost buys nothing.
+ */
+export function caseHasLlmRubricAssertion(assertions: unknown): boolean {
+  return (
+    Array.isArray(assertions) &&
+    assertions.some(
+      (assertion) =>
+        typeof assertion === "object" &&
+        assertion !== null &&
+        (assertion as { type?: unknown }).type === "llm-rubric",
+    )
+  );
+}
+
+/** One pinned-plan entry: caseId is the eval_test_cases row uuid the
+ *  fan-out messages carry (both dispatch paths). */
+export interface EvalTrialPlanEntry {
+  caseId: string;
+  trials: number;
+}
+
+/**
+ * Compute the per-case trial plan (KTD3): rubric-bearing cases run the
+ * profile's trial count, deterministic-only cases always run once. The
+ * plan pins on the run row (pinned_trial_plan) and its sum becomes
+ * expected_result_rows — the true fan-out count completion checks read.
+ */
+export function buildEvalTrialPlan(
+  cases: Array<{ id: string; assertions: unknown }>,
+  profileTrials: number,
+): { plan: EvalTrialPlanEntry[]; expectedResultRows: number } {
+  const trials = Math.max(1, Math.floor(profileTrials || 1));
+  const plan = cases.map((tc) => ({
+    caseId: tc.id,
+    trials: caseHasLlmRubricAssertion(tc.assertions) ? trials : 1,
+  }));
+  return {
+    plan,
+    expectedResultRows: plan.reduce((sum, entry) => sum + entry.trials, 0),
+  };
+}
+
 export function buildEvalWorkerMessages(
   runId: string,
   testCases: Array<{
     id: string;
+    /** Per-case trial count from the pinned plan; default 1. */
+    trials?: number;
     snapshotKey?: string;
     contentSha?: string;
     payloadShas?: EvalWorkerMessage["payloadShas"];
   }>,
 ): EvalWorkerMessage[] {
-  return testCases.map((tc, index) => ({
-    runId,
-    testCaseId: tc.id,
-    index,
-    ...(tc.snapshotKey
-      ? { snapshotKey: tc.snapshotKey, contentSha: tc.contentSha }
-      : {}),
-    ...(tc.snapshotKey && tc.payloadShas
-      ? { payloadShas: tc.payloadShas }
-      : {}),
-  }));
+  const messages: EvalWorkerMessage[] = [];
+  // `index` stays a flat unique counter across ALL (case, trial)
+  // messages — it feeds the SQS batch entry Id and the FIFO shard.
+  let index = 0;
+  for (const tc of testCases) {
+    const trials = Math.max(1, Math.floor(tc.trials ?? 1));
+    for (let trialIndex = 0; trialIndex < trials; trialIndex++) {
+      messages.push({
+        runId,
+        testCaseId: tc.id,
+        index: index++,
+        trialIndex,
+        ...(tc.snapshotKey
+          ? { snapshotKey: tc.snapshotKey, contentSha: tc.contentSha }
+          : {}),
+        ...(tc.snapshotKey && tc.payloadShas
+          ? { payloadShas: tc.payloadShas }
+          : {}),
+      });
+    }
+  }
+  return messages;
 }
 
 export function chunkEvalWorkerMessages(
@@ -235,13 +309,18 @@ async function dispatchDatasetRun(
         completed_at: startedAt,
         dataset_version: snapshot.datasetVersion,
         pinned_case_ids: [],
+        pinned_trial_plan: [],
+        expected_result_rows: 0,
         total_tests: 0,
         passed: 0,
         failed: 0,
         errored: run.scoring_version === null ? null : 0,
+        unstable: run.scoring_version === null ? null : 0,
         pass_rate: null,
         summary_scoring_version:
-          run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+          run.scoring_version === null
+            ? null
+            : Math.min(run.scoring_version, CURRENT_EVAL_SCORING_VERSION),
         cost_usd: "0.000000",
       })
       .where(eq(evalRuns.id, run.id));
@@ -266,6 +345,15 @@ async function dispatchDatasetRun(
       .returning();
     run = updatedRun ?? { ...run, agent_id: platformAgent.id };
   }
+
+  // Pin the profile snapshot at dispatch (KTD1/KTD2) — after the agent
+  // resolves so the workspace fingerprint reflects the agent this run
+  // actually executes against (platform agent, or the claimed
+  // eval-baseline agent on skill-gate runs). Pre-profile runs (created
+  // before profile stamping deployed) pin against the tenant default so
+  // in-flight runs finish with an honest record.
+  const profileSnapshot: EvalProfileSnapshot =
+    await resolveProfileSnapshotForRun(run);
 
   // Resolve the pinned dataset_case_ids to their index row uuids —
   // eval_results FK eval_test_cases for dedupe + trend history. The
@@ -300,13 +388,32 @@ async function dispatchDatasetRun(
     );
   }
 
+  // Per-case trial plan (KTD3), computed from the SNAPSHOT case content
+  // (authoritative over live index rows) and pinned in the same update
+  // that pins profile_snapshot. total_tests keeps its case-count meaning;
+  // expected_result_rows is the true fan-out count completion checks read.
+  const { plan: trialPlan, expectedResultRows } = buildEvalTrialPlan(
+    snapshot.cases.map((c) => ({
+      id: uuidByCaseId.get(c.caseId) as string,
+      assertions: c.core.assertions,
+    })),
+    profileSnapshot.trials,
+  );
+  const trialsByCaseUuid = new Map(
+    trialPlan.map((entry) => [entry.caseId, entry.trials]),
+  );
+
   await db
     .update(evalRuns)
     .set({
       status: "running",
       started_at: run.started_at ?? startedAt,
       dataset_version: snapshot.datasetVersion,
+      profile_id: profileSnapshot.profileId,
+      profile_snapshot: profileSnapshot,
       pinned_case_ids: pinnedCaseIds,
+      pinned_trial_plan: trialPlan,
+      expected_result_rows: expectedResultRows,
       // Belt-and-suspenders for legacy read paths (placeholder rows,
       // pre-pinning reconciler fallback): record the resolved uuids too.
       selected_test_case_ids: pinnedCaseIds.map(
@@ -316,6 +423,7 @@ async function dispatchDatasetRun(
       passed: 0,
       failed: 0,
       errored: run.scoring_version === null ? null : 0,
+      unstable: run.scoring_version === null ? null : 0,
       pass_rate: null,
       summary_scoring_version: null,
       cost_usd: "0.000000",
@@ -332,22 +440,26 @@ async function dispatchDatasetRun(
 
   const messages = buildEvalWorkerMessages(
     run.id,
-    snapshot.cases.map((c) => ({
-      id: uuidByCaseId.get(c.caseId) as string,
-      snapshotKey: c.snapshotKey,
-      contentSha: c.contentSha,
-      payloadShas: c.payloadShas,
-    })),
+    snapshot.cases.map((c) => {
+      const caseUuid = uuidByCaseId.get(c.caseId) as string;
+      return {
+        id: caseUuid,
+        trials: trialsByCaseUuid.get(caseUuid),
+        snapshotKey: c.snapshotKey,
+        contentSha: c.contentSha,
+        payloadShas: c.payloadShas,
+      };
+    }),
   );
   for (const batch of chunkEvalWorkerMessages(messages)) {
     await sendFanoutBatch(queueUrl, batch, client, run);
   }
 
   console.log(
-    `[eval-runner] runId=${run.id} dataset=${dataset.slug} v${snapshot.datasetVersion} dispatched ${snapshot.cases.length} pinned eval cases`,
+    `[eval-runner] runId=${run.id} dataset=${dataset.slug} v${snapshot.datasetVersion} dispatched ${messages.length} messages for ${snapshot.cases.length} pinned eval cases`,
   );
   return {
-    dispatched: snapshot.cases.length,
+    dispatched: messages.length,
     totalTests: snapshot.cases.length,
   };
 }
@@ -397,6 +509,10 @@ export async function handler(event: EvalRunnerEvent): Promise<{
     const caseConditions = [
       eq(evalTestCases.tenant_id, run.tenant_id),
       eq(evalTestCases.enabled, true),
+      // Curation exclusion (U7): retired / needs-revision cases never
+      // dispatch. Dataset runs get this filter at captureRunSnapshot;
+      // this is the legacy category/selected-ids path's mirror.
+      eq(evalTestCases.quality_state, "active"),
     ];
     if (selectedTestCaseIds.length > 0) {
       caseConditions.push(inArray(evalTestCases.id, selectedTestCaseIds));
@@ -410,7 +526,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{
     }
 
     const cases = await db
-      .select({ id: evalTestCases.id })
+      .select({ id: evalTestCases.id, assertions: evalTestCases.assertions })
       .from(evalTestCases)
       .where(and(...caseConditions));
 
@@ -424,13 +540,18 @@ export async function handler(event: EvalRunnerEvent): Promise<{
           status: "completed",
           started_at: run.started_at ?? startedAt,
           completed_at: startedAt,
+          pinned_trial_plan: [],
+          expected_result_rows: 0,
           total_tests: 0,
           passed: 0,
           failed: 0,
           errored: run.scoring_version === null ? null : 0,
+          unstable: run.scoring_version === null ? null : 0,
           pass_rate: null,
           summary_scoring_version:
-            run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+            run.scoring_version === null
+              ? null
+              : Math.min(run.scoring_version, CURRENT_EVAL_SCORING_VERSION),
           cost_usd: "0.000000",
         })
         .where(eq(evalRuns.id, runId));
@@ -456,15 +577,36 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       run = updatedRun ?? { ...run, agent_id: platformAgent.id };
     }
 
+    // Pin the profile snapshot on the legacy category/test-case path too
+    // (KTD1) — both dispatch paths record the agent-under-test config.
+    const profileSnapshot: EvalProfileSnapshot =
+      await resolveProfileSnapshotForRun(run);
+
+    // Same trial-plan pinning as the dataset path (KTD3): rubric-bearing
+    // cases run the profile's trial count, computed here from the live
+    // rows this path executes against.
+    const { plan: trialPlan, expectedResultRows } = buildEvalTrialPlan(
+      cases,
+      profileSnapshot.trials,
+    );
+    const trialsByCaseId = new Map(
+      trialPlan.map((entry) => [entry.caseId, entry.trials]),
+    );
+
     await db
       .update(evalRuns)
       .set({
         status: "running",
         started_at: run.started_at ?? startedAt,
+        profile_id: profileSnapshot.profileId,
+        profile_snapshot: profileSnapshot,
+        pinned_trial_plan: trialPlan,
+        expected_result_rows: expectedResultRows,
         total_tests: cases.length,
         passed: 0,
         failed: 0,
         errored: run.scoring_version === null ? null : 0,
+        unstable: run.scoring_version === null ? null : 0,
         pass_rate: null,
         summary_scoring_version: null,
         cost_usd: "0.000000",
@@ -479,19 +621,22 @@ export async function handler(event: EvalRunnerEvent): Promise<{
       totalTests: cases.length,
     });
 
-    const messages = buildEvalWorkerMessages(runId, cases);
+    const messages = buildEvalWorkerMessages(
+      runId,
+      cases.map((tc) => ({ id: tc.id, trials: trialsByCaseId.get(tc.id) })),
+    );
     const client = sqsClientForTests ?? sqs;
     for (const batch of chunkEvalWorkerMessages(messages)) {
       await sendFanoutBatch(queueUrl, batch, client, run);
     }
 
     console.log(
-      `[eval-runner] runId=${runId} dispatched ${cases.length} eval cases`,
+      `[eval-runner] runId=${runId} dispatched ${messages.length} messages for ${cases.length} eval cases`,
     );
     return {
       ok: true,
       runId,
-      dispatched: cases.length,
+      dispatched: messages.length,
       totalTests: cases.length,
     };
   } catch (err) {

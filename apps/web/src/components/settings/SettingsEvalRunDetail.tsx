@@ -62,6 +62,10 @@ import {
 } from "@/lib/evaluation-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import {
+  aggregateTrialCaseVerdicts,
+  type TrialResultInput,
+} from "@thinkwork/evals-core";
+import {
   canEditEvalResult,
   computeEvalRunComparison,
   countEvalVerdictGroups,
@@ -99,6 +103,9 @@ interface EvalResultRow {
   testCaseName: string | null;
   category: string | null;
   status: string;
+  // Which trial of the case this row is (Eval Profiles U4); 0 on legacy
+  // single-trial rows.
+  trialIndex: number;
   score: number | null;
   durationMs: number | null;
   agentSessionId: string | null;
@@ -216,9 +223,92 @@ function statusBadge(status: string) {
           cancelled
         </Badge>
       );
+    case "unstable":
+      // Scored trials split with no majority (Eval Profiles U4) —
+      // excluded from the score like errors, but a distinct signal:
+      // the case is flaky under this profile, not broken infra.
+      return (
+        <Badge
+          variant="outline"
+          className="border-purple-500/60 text-purple-600 dark:text-purple-400"
+        >
+          unstable
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Case-grouped view (Eval Profiles KTD12): multi-trial runs read
+// case-level verdicts through the same evals-core aggregation layer the
+// worker finalizes with — trial rows never render as top-level results.
+// ---------------------------------------------------------------------------
+
+export interface EvalCaseGroup {
+  testCaseId: string;
+  testCaseName: string | null;
+  category: string | null;
+  verdict: "pass" | "fail" | "error" | "unstable";
+  /** Trial rows for the case, ordered by trialIndex. */
+  trials: EvalResultRow[];
+  passVotes: number;
+  scoredCount: number;
+}
+
+function trialAggregationStatus(status: string): "pass" | "fail" | "error" {
+  if (status === "pass" || status === "completed") return "pass";
+  if (status === "fail" || status === "failed") return "fail";
+  return "error";
+}
+
+/**
+ * Group per-trial rows by case and derive each case's verdict via the
+ * shared evals-core aggregation (majority of scored trials; tie →
+ * unstable; sub-quorum → error; row-level overrides applied as effective
+ * statuses). Case-level overrides are applied server-side to the run
+ * summary; this view reflects row data.
+ */
+export function groupEvalResultsByCase(rows: EvalResultRow[]): EvalCaseGroup[] {
+  const trialInputs: TrialResultInput[] = rows.map((row) => ({
+    testCaseId: row.testCaseId ?? row.id,
+    trialIndex: row.trialIndex ?? 0,
+    status: trialAggregationStatus(row.status),
+    overrideStatus:
+      row.overrideStatus === "pass" || row.overrideStatus === "fail"
+        ? row.overrideStatus
+        : null,
+  }));
+  const verdicts = aggregateTrialCaseVerdicts(trialInputs);
+  const verdictByCase = new Map(verdicts.map((v) => [v.testCaseId, v]));
+
+  const byCase = new Map<string, EvalResultRow[]>();
+  for (const row of rows) {
+    const key = row.testCaseId ?? row.id;
+    const existing = byCase.get(key);
+    if (existing) existing.push(row);
+    else byCase.set(key, [row]);
+  }
+
+  return [...byCase.entries()].map(([testCaseId, trials]) => {
+    const ordered = [...trials].sort(
+      (a, b) => (a.trialIndex ?? 0) - (b.trialIndex ?? 0),
+    );
+    const aggregate = verdictByCase.get(testCaseId);
+    const effective = ordered.map((t) =>
+      trialAggregationStatus(t.overrideStatus ?? t.status),
+    );
+    return {
+      testCaseId,
+      testCaseName: ordered[0]?.testCaseName ?? null,
+      category: ordered[0]?.category ?? null,
+      verdict: aggregate?.verdict ?? "error",
+      trials: ordered,
+      passVotes: effective.filter((s) => s === "pass").length,
+      scoredCount: effective.filter((s) => s === "pass" || s === "fail").length,
+    };
+  });
 }
 
 const resultColumns: ColumnDef<EvalResultRow>[] = [
@@ -398,6 +488,31 @@ export function SettingsEvalRunDetail() {
       (!verdictFilter || evalResultVerdictGroup(r) === verdictFilter),
   );
 
+  // Case-grouped view (KTD12): a multi-trial run (any trialIndex > 0)
+  // renders case verdicts with per-trial rows nested — trial rows never
+  // render as top-level results.
+  const isMultiTrial = runResults.some((r) => (r.trialIndex ?? 0) > 0);
+  const caseGroups = useMemo(
+    () => (isMultiTrial ? groupEvalResultsByCase(runResults) : []),
+    [isMultiTrial, runResults],
+  );
+  const filteredCaseGroups = caseGroups.filter(
+    (group) =>
+      (!categoryFilter || group.category === categoryFilter) &&
+      (!verdictFilter || group.verdict === verdictFilter),
+  );
+  const [expandedCases, setExpandedCases] = useState<Set<string>>(
+    () => new Set(),
+  );
+  function toggleCase(testCaseId: string) {
+    setExpandedCases((cur) => {
+      const next = new Set(cur);
+      if (next.has(testCaseId)) next.delete(testCaseId);
+      else next.add(testCaseId);
+      return next;
+    });
+  }
+
   const handleDelete = useCallback(async () => {
     const result = await deleteRun({ id: runId });
     if (result.error) toast.error("Failed to delete: " + result.error.message);
@@ -480,6 +595,20 @@ export function SettingsEvalRunDetail() {
               ` · v${runDetail.datasetVersion}`}
           </Badge>
         )}
+        {/* Eval Profile provenance (THINK-107): pre-profile runs are
+            labeled, never blended silently into profile comparisons. */}
+        {runDetail.profileId ? (
+          <Badge variant="secondary" className="whitespace-nowrap">
+            {runDetail.profileName ?? "Profile"}
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="text-muted-foreground whitespace-nowrap"
+          >
+            Legacy (pre-profile)
+          </Badge>
+        )}
         <span className="text-sm text-muted-foreground tabular-nums">
           {passRate}
           {passRate.endsWith("%") ? " pass rate" : ""}
@@ -494,6 +623,24 @@ export function SettingsEvalRunDetail() {
             {runDetail.errored} errored
           </Badge>
         )}
+        {(runDetail.unstable ?? 0) > 0 && (
+          <Badge
+            variant="outline"
+            className="gap-1 border-purple-500/60 text-purple-600 dark:text-purple-400 tabular-nums"
+            title="Cases whose scored trials split with no majority — excluded from the score like errors."
+          >
+            {runDetail.unstable} unstable
+          </Badge>
+        )}
+        {(runDetail.latencyP50Ms != null || runDetail.latencyP95Ms != null) && (
+          <span
+            className="text-xs text-muted-foreground tabular-nums whitespace-nowrap"
+            title="Agent-turn latency percentiles over this run's results"
+          >
+            p50 {runDetail.latencyP50Ms ?? "—"}ms · p95{" "}
+            {runDetail.latencyP95Ms ?? "—"}ms
+          </span>
+        )}
         {runDetail.datasetId && !isRunning && (
           <Button
             variant="ghost"
@@ -507,8 +654,16 @@ export function SettingsEvalRunDetail() {
           </Button>
         )}
         {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
             ${Number(runDetail.costUsd).toFixed(4)}
+            {runDetail.costPartial && (
+              <span
+                className="ml-1 text-amber-600 dark:text-amber-400"
+                title="Some result rows are missing priced agent-turn cost — this total understates real spend."
+              >
+                (partial)
+              </span>
+            )}
           </span>
         )}
         {dateLabel && (
@@ -692,14 +847,103 @@ export function SettingsEvalRunDetail() {
       )}
 
       <div className="min-h-0 flex-1">
-        <DataTable
-          columns={resultColumns}
-          data={filteredResults}
-          pageSize={25}
-          tableClassName="table-fixed"
-          scrollable
-          onRowClick={(result) => setSelectedResultId(result.id)}
-        />
+        {isMultiTrial ? (
+          <div className="h-full overflow-auto rounded-md border">
+            {filteredCaseGroups.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No cases match the current filters.
+              </p>
+            ) : (
+              filteredCaseGroups.map((group) => (
+                <div
+                  key={group.testCaseId}
+                  className="border-b last:border-b-0"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/50"
+                    onClick={() => toggleCase(group.testCaseId)}
+                    aria-expanded={expandedCases.has(group.testCaseId)}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                        !expandedCases.has(group.testCaseId) && "-rotate-90",
+                      )}
+                    />
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium"
+                      title={group.testCaseName ?? group.testCaseId}
+                    >
+                      {group.testCaseName ?? "(unnamed)"}
+                    </span>
+                    {group.category && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs whitespace-nowrap"
+                      >
+                        {group.category}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      {group.passVotes}/{group.scoredCount} pass ·{" "}
+                      {group.trials.length}{" "}
+                      {group.trials.length === 1 ? "trial" : "trials"}
+                    </span>
+                    {statusBadge(group.verdict)}
+                  </button>
+                  {expandedCases.has(group.testCaseId) && (
+                    <div className="bg-muted/30">
+                      {group.trials.map((trial) => (
+                        <button
+                          key={trial.id}
+                          type="button"
+                          className="flex w-full items-center gap-3 border-t px-3 py-1.5 pl-9 text-left text-sm hover:bg-accent/50"
+                          onClick={() => setSelectedResultId(trial.id)}
+                        >
+                          <span className="w-14 text-xs text-muted-foreground">
+                            Trial {(trial.trialIndex ?? 0) + 1}
+                          </span>
+                          {statusBadge(trial.effectiveStatus ?? trial.status)}
+                          {trial.overrideStatus && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-muted-foreground"
+                              title={`Judge verdict: ${trial.status}`}
+                            >
+                              overridden
+                            </Badge>
+                          )}
+                          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                            {trial.status === "error"
+                              ? evalErrorCauseLabel(trial.errorCause)
+                              : trial.score != null
+                                ? Number(trial.score).toFixed(2)
+                                : "—"}
+                          </span>
+                          <span className="w-16 text-right text-xs text-muted-foreground tabular-nums">
+                            {trial.durationMs != null
+                              ? `${trial.durationMs}ms`
+                              : "—"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <DataTable
+            columns={resultColumns}
+            data={filteredResults}
+            pageSize={25}
+            tableClassName="table-fixed"
+            scrollable
+            onRowClick={(result) => setSelectedResultId(result.id)}
+          />
+        )}
       </div>
 
       <ResultDetailSheet

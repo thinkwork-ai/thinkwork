@@ -30,6 +30,7 @@ import {
   db,
   and,
   eq,
+  gte,
   desc,
   sql,
   evalDatasets,
@@ -37,7 +38,7 @@ import {
 } from "../../graphql/utils.js";
 import { evalRuns } from "@thinkwork/database-pg/schema";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
-import { DEFAULT_EVAL_MODEL_ID } from "./eval-defaults.js";
+import { getOrCreateDefaultEvalProfile } from "./eval-profiles.js";
 import { skillEvalDatasetSlug } from "./skill-dataset.js";
 import { resolveDatasetForLaunch } from "./run-launch.js";
 import {
@@ -169,9 +170,14 @@ export async function launchSkillEvalRun(args: {
     return { status: "unrated" };
   }
 
-  // 3. Resolve the model — the default eval model must be enabled in the
-  //    tenant catalog or the run can't be scored.
-  const model = DEFAULT_EVAL_MODEL_ID;
+  // 3. Resolve the tenant's default Eval Profile (THINK-107 F3) — gate
+  //    runs execute against it so "the score" is unambiguous once a
+  //    second profile exists. Get-or-create: a freshly provisioned tenant
+  //    synthesizes its default here (AE7) instead of failing. The
+  //    profile's model must be enabled in the tenant catalog or the run
+  //    can't be scored.
+  const profile = await getOrCreateDefaultEvalProfile(tenantId);
+  const model = profile.model;
   const catalogRow = await getTenantModelCatalogEntry({
     tenantId,
     modelId: model,
@@ -179,7 +185,7 @@ export async function launchSkillEvalRun(args: {
   if (!catalogRow) {
     return {
       status: "skipped",
-      reason: "default eval model not enabled in tenant catalog",
+      reason: "default eval profile model not enabled in tenant catalog",
     };
   }
 
@@ -194,6 +200,8 @@ export async function launchSkillEvalRun(args: {
       runtime_host: "aws-agentcore",
       model,
       dataset_id: datasetId,
+      // Profile stamps at creation (KTD1); the runner pins the snapshot.
+      profile_id: profile.id,
       // Scoring semantics stamped at creation — never inferred later.
       scoring_version: CURRENT_EVAL_SCORING_VERSION,
     })
@@ -282,8 +290,8 @@ export async function readSkillEvalScore(
     );
   const rated = (totalCases ?? 0) > 0;
 
-  // Latest two completed scored runs (current scoring version only — a
-  // baseline/version change carries a different scoring_version and is
+  // Latest two completed scored runs (versioned scoring only, >= 2 — a
+  // legacy-denominator run carries a null scoring_version and is
   // excluded so it never reads as a skill regression).
   const recent = await db
     .select({
@@ -297,7 +305,9 @@ export async function readSkillEvalScore(
         eq(evalRuns.tenant_id, tenantId),
         eq(evalRuns.dataset_id, dataset.id),
         eq(evalRuns.status, "completed"),
-        eq(evalRuns.scoring_version, CURRENT_EVAL_SCORING_VERSION),
+        // v2 and v3 share the errors-out-of-denominator rule (KTD4), so
+        // their pass rates compare safely; legacy (null) stays excluded.
+        gte(evalRuns.scoring_version, 2),
       ),
     )
     .orderBy(desc(evalRuns.completed_at))

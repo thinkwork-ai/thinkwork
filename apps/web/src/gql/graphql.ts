@@ -1414,6 +1414,13 @@ export type CreateEvalDatasetInput = {
   slug: Scalars["String"]["input"];
 };
 
+export type CreateEvalProfileInput = {
+  judgeModel?: InputMaybe<Scalars["String"]["input"]>;
+  model: Scalars["String"]["input"];
+  name: Scalars["String"]["input"];
+  trials?: InputMaybe<Scalars["Int"]["input"]>;
+};
+
 export type CreateEvalTestCaseInput = {
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
@@ -2191,6 +2198,20 @@ export type EvalDatasetCaseInput = {
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
+export type EvalProfile = {
+  __typename?: "EvalProfile";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  isDefault: Scalars["Boolean"]["output"];
+  judgeModel?: Maybe<Scalars["String"]["output"]>;
+  model: Scalars["String"]["output"];
+  name: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  trials: Scalars["Int"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
 export type EvalReplayAllowedTool = {
   __typename?: "EvalReplayAllowedTool";
   createdAt: Scalars["AWSDateTime"]["output"];
@@ -2218,6 +2239,9 @@ export type EvalReplayMcpTool = {
 export type EvalResult = {
   __typename?: "EvalResult";
   actualOutput?: Maybe<Scalars["String"]["output"]>;
+  agentCostUsd?: Maybe<Scalars["Float"]["output"]>;
+  agentInputTokens?: Maybe<Scalars["Int"]["output"]>;
+  agentOutputTokens?: Maybe<Scalars["Int"]["output"]>;
   agentSessionId?: Maybe<Scalars["String"]["output"]>;
   assertions: Scalars["AWSJSON"]["output"];
   category?: Maybe<Scalars["String"]["output"]>;
@@ -2241,6 +2265,7 @@ export type EvalResult = {
   testCaseId?: Maybe<Scalars["ID"]["output"]>;
   testCaseName?: Maybe<Scalars["String"]["output"]>;
   threadTurnId?: Maybe<Scalars["ID"]["output"]>;
+  trialIndex: Scalars["Int"]["output"];
   workspaceProjection?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
@@ -2250,6 +2275,7 @@ export type EvalRun = {
   agentName?: Maybe<Scalars["String"]["output"]>;
   categories: Array<Scalars["String"]["output"]>;
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  costPartial: Scalars["Boolean"]["output"];
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   datasetId?: Maybe<Scalars["ID"]["output"]>;
@@ -2257,12 +2283,18 @@ export type EvalRun = {
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   errored?: Maybe<Scalars["Int"]["output"]>;
   executionTarget: Scalars["String"]["output"];
+  expectedResultRows?: Maybe<Scalars["Int"]["output"]>;
   failed: Scalars["Int"]["output"];
   id: Scalars["ID"]["output"];
   isLegacyScoring: Scalars["Boolean"]["output"];
+  latencyP50Ms?: Maybe<Scalars["Int"]["output"]>;
+  latencyP95Ms?: Maybe<Scalars["Int"]["output"]>;
   model?: Maybe<Scalars["String"]["output"]>;
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];
+  profileId?: Maybe<Scalars["ID"]["output"]>;
+  profileName?: Maybe<Scalars["String"]["output"]>;
+  profileSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
   regression: Scalars["Boolean"]["output"];
   runtimeHost: Scalars["String"]["output"];
   scheduledJobId?: Maybe<Scalars["ID"]["output"]>;
@@ -2272,6 +2304,7 @@ export type EvalRun = {
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   totalTests: Scalars["Int"]["output"];
+  unstable?: Maybe<Scalars["Int"]["output"]>;
 };
 
 export type EvalRunUpdateEvent = {
@@ -3528,6 +3561,7 @@ export type Mutation = {
   approveOntologyChangeSet: OntologyChangeSet;
   approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
+  archiveEvalProfile: EvalProfile;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -3590,6 +3624,7 @@ export type Mutation = {
    */
   createComplianceExport: ComplianceExport;
   createEvalDataset: EvalDataset;
+  createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -3654,6 +3689,7 @@ export type Mutation = {
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
   disconnectN8nWorkflow: DisconnectN8nWorkflowResult;
+  duplicateEvalProfile: EvalProfile;
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
@@ -3691,6 +3727,7 @@ export type Mutation = {
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
+  overrideEvalCaseVerdict: Scalars["Boolean"]["output"];
   overrideEvalResult: EvalResult;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
@@ -3779,6 +3816,7 @@ export type Mutation = {
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
+  setDefaultEvalProfile: EvalProfile;
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
@@ -3838,6 +3876,7 @@ export type Mutation = {
   updateEmailReadinessCheck: EmailReadinessCheck;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
+  updateEvalProfile: EvalProfile;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
@@ -3988,6 +4027,10 @@ export type MutationArchiveEvalDatasetArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type MutationArchiveEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationAssignThreadLabelArgs = {
   labelId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
@@ -4090,6 +4133,11 @@ export type MutationCreateComplianceExportArgs = {
 
 export type MutationCreateEvalDatasetArgs = {
   input: CreateEvalDatasetInput;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationCreateEvalProfileArgs = {
+  input: CreateEvalProfileInput;
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -4307,6 +4355,11 @@ export type MutationDisconnectN8nWorkflowArgs = {
   input: DisconnectN8nWorkflowInput;
 };
 
+export type MutationDuplicateEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
 };
@@ -4480,6 +4533,10 @@ export type MutationNotifyWorkspaceAccessRevokedArgs = {
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationOverrideEvalCaseVerdictArgs = {
+  input: OverrideEvalCaseVerdictInput;
 };
 
 export type MutationOverrideEvalResultArgs = {
@@ -4745,6 +4802,10 @@ export type MutationSetAgentKnowledgeBasesArgs = {
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
 };
 
+export type MutationSetDefaultEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type MutationSetKnowledgeGraphDeploymentArgs = {
   input: SetKnowledgeGraphDeploymentInput;
 };
@@ -4934,6 +4995,11 @@ export type MutationUpdateEvalDatasetCaseArgs = {
   datasetSlug: Scalars["String"]["input"];
   input: UpdateEvalDatasetCaseInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationUpdateEvalProfileArgs = {
+  id: Scalars["ID"]["input"];
+  input: UpdateEvalProfileInput;
 };
 
 export type MutationUpdateEvalTestCaseArgs = {
@@ -5622,6 +5688,13 @@ export type OrgUpdateEvent = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type OverrideEvalCaseVerdictInput = {
+  overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  testCaseId: Scalars["ID"]["input"];
+};
+
 export type OverrideEvalResultInput = {
   overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
   reason?: InputMaybe<Scalars["String"]["input"]>;
@@ -6072,6 +6145,7 @@ export type Query = {
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
+  evalProfiles: Array<EvalProfile>;
   evalReplayAvailableMcpTools: Array<EvalReplayMcpServer>;
   evalReplayToolAllowlist: Array<EvalReplayAllowedTool>;
   evalResultSpans: Array<EvalSpan>;
@@ -6538,6 +6612,11 @@ export type QueryEvalDatasetArgs = {
 };
 
 export type QueryEvalDatasetsArgs = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalProfilesArgs = {
   includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
@@ -8432,6 +8511,7 @@ export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
+  profileId?: InputMaybe<Scalars["ID"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };
 
@@ -9416,6 +9496,14 @@ export type UpdateEvalDatasetCaseInput = {
 
 export type UpdateEvalDatasetInput = {
   name?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type UpdateEvalProfileInput = {
+  clearJudgeModel?: InputMaybe<Scalars["Boolean"]["input"]>;
+  judgeModel?: InputMaybe<Scalars["String"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type UpdateEvalTestCaseInput = {
@@ -11006,13 +11094,17 @@ export type EvalRunsQuery = {
       passed: number;
       failed: number;
       errored?: number | null;
+      unstable?: number | null;
       scoringVersion?: number | null;
       isLegacyScoring: boolean;
       datasetId?: string | null;
       datasetVersion?: number | null;
+      profileId?: string | null;
+      profileName?: string | null;
       passRate?: number | null;
       regression: boolean;
       costUsd?: number | null;
+      costPartial: boolean;
       agentId?: string | null;
       agentName?: string | null;
       scheduledJobId?: string | null;
@@ -11041,13 +11133,21 @@ export type EvalRunQuery = {
     passed: number;
     failed: number;
     errored?: number | null;
+    unstable?: number | null;
     scoringVersion?: number | null;
     isLegacyScoring: boolean;
     datasetId?: string | null;
     datasetVersion?: number | null;
+    profileId?: string | null;
+    profileName?: string | null;
+    profileSnapshot?: any | null;
+    expectedResultRows?: number | null;
     passRate?: number | null;
     regression: boolean;
     costUsd?: number | null;
+    costPartial: boolean;
+    latencyP50Ms?: number | null;
+    latencyP95Ms?: number | null;
     errorMessage?: string | null;
     agentId?: string | null;
     agentName?: string | null;
@@ -11073,8 +11173,12 @@ export type EvalRunResultsQuery = {
     testCaseName?: string | null;
     category?: string | null;
     status: string;
+    trialIndex: number;
     score?: number | null;
     durationMs?: number | null;
+    agentInputTokens?: number | null;
+    agentOutputTokens?: number | null;
+    agentCostUsd?: number | null;
     agentSessionId?: string | null;
     input?: string | null;
     actualOutput?: string | null;
@@ -11090,6 +11194,103 @@ export type EvalRunResultsQuery = {
     effectiveStatus: string;
     createdAt: any;
   }>;
+};
+
+export type EvalProfilesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+}>;
+
+export type EvalProfilesQuery = {
+  __typename?: "Query";
+  evalProfiles: Array<{
+    __typename?: "EvalProfile";
+    id: string;
+    name: string;
+    model: string;
+    judgeModel?: string | null;
+    trials: number;
+    isDefault: boolean;
+    archivedAt?: any | null;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
+
+export type CreateEvalProfileMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: CreateEvalProfileInput;
+}>;
+
+export type CreateEvalProfileMutation = {
+  __typename?: "Mutation";
+  createEvalProfile: {
+    __typename?: "EvalProfile";
+    id: string;
+    name: string;
+    model: string;
+    judgeModel?: string | null;
+    trials: number;
+    isDefault: boolean;
+  };
+};
+
+export type UpdateEvalProfileMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+  input: UpdateEvalProfileInput;
+}>;
+
+export type UpdateEvalProfileMutation = {
+  __typename?: "Mutation";
+  updateEvalProfile: {
+    __typename?: "EvalProfile";
+    id: string;
+    name: string;
+    model: string;
+    judgeModel?: string | null;
+    trials: number;
+    isDefault: boolean;
+  };
+};
+
+export type DuplicateEvalProfileMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
+}>;
+
+export type DuplicateEvalProfileMutation = {
+  __typename?: "Mutation";
+  duplicateEvalProfile: {
+    __typename?: "EvalProfile";
+    id: string;
+    name: string;
+  };
+};
+
+export type ArchiveEvalProfileMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type ArchiveEvalProfileMutation = {
+  __typename?: "Mutation";
+  archiveEvalProfile: {
+    __typename?: "EvalProfile";
+    id: string;
+    archivedAt?: any | null;
+  };
+};
+
+export type SetDefaultEvalProfileMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SetDefaultEvalProfileMutation = {
+  __typename?: "Mutation";
+  setDefaultEvalProfile: {
+    __typename?: "EvalProfile";
+    id: string;
+    isDefault: boolean;
+  };
 };
 
 export type OverrideEvalResultMutationVariables = Exact<{
@@ -15993,6 +16194,10 @@ export const EvalRunsDocument = {
                       },
                       {
                         kind: "Field",
+                        name: { kind: "Name", value: "unstable" },
+                      },
+                      {
+                        kind: "Field",
                         name: { kind: "Name", value: "scoringVersion" },
                       },
                       {
@@ -16009,6 +16214,14 @@ export const EvalRunsDocument = {
                       },
                       {
                         kind: "Field",
+                        name: { kind: "Name", value: "profileId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "profileName" },
+                      },
+                      {
+                        kind: "Field",
                         name: { kind: "Name", value: "passRate" },
                       },
                       {
@@ -16018,6 +16231,10 @@ export const EvalRunsDocument = {
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "costUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "costPartial" },
                       },
                       {
                         kind: "Field",
@@ -16107,6 +16324,7 @@ export const EvalRunDocument = {
                 { kind: "Field", name: { kind: "Name", value: "passed" } },
                 { kind: "Field", name: { kind: "Name", value: "failed" } },
                 { kind: "Field", name: { kind: "Name", value: "errored" } },
+                { kind: "Field", name: { kind: "Name", value: "unstable" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "scoringVersion" },
@@ -16120,9 +16338,28 @@ export const EvalRunDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "datasetVersion" },
                 },
+                { kind: "Field", name: { kind: "Name", value: "profileId" } },
+                { kind: "Field", name: { kind: "Name", value: "profileName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "profileSnapshot" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "expectedResultRows" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "passRate" } },
                 { kind: "Field", name: { kind: "Name", value: "regression" } },
                 { kind: "Field", name: { kind: "Name", value: "costUsd" } },
+                { kind: "Field", name: { kind: "Name", value: "costPartial" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "latencyP50Ms" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "latencyP95Ms" },
+                },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "errorMessage" },
@@ -16196,8 +16433,21 @@ export const EvalRunResultsDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "category" } },
                 { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "trialIndex" } },
                 { kind: "Field", name: { kind: "Name", value: "score" } },
                 { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentInputTokens" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentOutputTokens" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentCostUsd" },
+                },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "agentSessionId" },
@@ -16250,6 +16500,391 @@ export const EvalRunResultsDocument = {
     },
   ],
 } as unknown as DocumentNode<EvalRunResultsQuery, EvalRunResultsQueryVariables>;
+export const EvalProfilesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalProfiles" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "includeArchived" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalProfiles" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeArchived" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "includeArchived" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
+                { kind: "Field", name: { kind: "Name", value: "trials" } },
+                { kind: "Field", name: { kind: "Name", value: "isDefault" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<EvalProfilesQuery, EvalProfilesQueryVariables>;
+export const CreateEvalProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CreateEvalProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "CreateEvalProfileInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "createEvalProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
+                { kind: "Field", name: { kind: "Name", value: "trials" } },
+                { kind: "Field", name: { kind: "Name", value: "isDefault" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateEvalProfileMutation,
+  CreateEvalProfileMutationVariables
+>;
+export const UpdateEvalProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "UpdateEvalProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateEvalProfileInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateEvalProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
+                { kind: "Field", name: { kind: "Name", value: "trials" } },
+                { kind: "Field", name: { kind: "Name", value: "isDefault" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UpdateEvalProfileMutation,
+  UpdateEvalProfileMutationVariables
+>;
+export const DuplicateEvalProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "DuplicateEvalProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "name" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "duplicateEvalProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "name" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "name" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  DuplicateEvalProfileMutation,
+  DuplicateEvalProfileMutationVariables
+>;
+export const ArchiveEvalProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "ArchiveEvalProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "archiveEvalProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ArchiveEvalProfileMutation,
+  ArchiveEvalProfileMutationVariables
+>;
+export const SetDefaultEvalProfileDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SetDefaultEvalProfile" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setDefaultEvalProfile" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "isDefault" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SetDefaultEvalProfileMutation,
+  SetDefaultEvalProfileMutationVariables
+>;
 export const OverrideEvalResultDocument = {
   kind: "Document",
   definitions: [

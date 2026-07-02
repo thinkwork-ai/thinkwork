@@ -2130,20 +2130,16 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
     Statement = [{
       Effect = "Allow"
       Action = ["lambda:InvokeFunction"]
-      # Includes every for_each handler PLUS the standalone Phase 3 U8a
-      # anchor Lambda (which is intentionally outside the for_each set
-      # because it uses the U7 IAM role, not the shared aws_iam_role.lambda).
-      # Splat (`[*]`) expansion handles count=0 cleanly when handlers are
-      # disabled; an indexed reference (`[0].arn`) would throw on graph eval.
-      # Phase 3 U8b — watchdog moved to standalone resource; its ARN must
-      # be added to the splat list explicitly (SEC-U8B-005). The splat
-      # `[*].arn` form handles count = 0 cleanly when handlers are disabled;
-      # an indexed `[0].arn` would throw on graph eval.
-      Resource = local.deploy_lambda_handlers ? concat(
-        [for k, v in aws_lambda_function.handler : v.arn],
-        aws_lambda_function.compliance_anchor[*].arn,
-        aws_lambda_function.compliance_anchor_watchdog[*].arn,
-      ) : []
+      # One name-pattern wildcard instead of enumerating every handler ARN:
+      # the enumerated form scaled with handler count × stage-name length and
+      # blew IAM's 10,240-byte inline-policy cap for stages ≥ ~11 characters
+      # (harness cycle-7 ledger entry; dev's 3-char stage never saw it). The
+      # api- prefix covers every for_each handler plus the standalone
+      # compliance-anchor and watchdog Lambdas (all named
+      # thinkwork-<stage>-api-*).
+      Resource = local.deploy_lambda_handlers ? [
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-*",
+      ] : []
     }]
   })
 }

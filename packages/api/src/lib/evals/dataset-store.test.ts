@@ -21,9 +21,11 @@ import {
   archiveEvalDataset,
   assertValidCaseId,
   assertValidDatasetSlug,
+  caseFileToIndexRow,
   computeEvalCaseSha,
   createEvalDataset,
   createS3DatasetStorage,
+  evalCaseQualityState,
   evalDatasetCaseKey,
   evalDatasetCasePayloadKey,
   evalDatasetCasePayloadPrefix,
@@ -693,6 +695,59 @@ describe("case file format", () => {
     expect(() =>
       parseEvalDatasetCase(JSON.stringify({ case_id: "x", name: "y" })),
     ).toThrow(/missing required field/);
+  });
+
+  it("round-trips the curation block only when present, so pre-curation shas don't churn (U7)", () => {
+    // No curation fields → none serialized, effective state active.
+    const plain = parseEvalDatasetCase(
+      serializeEvalDatasetCase(makeCase(), null),
+    );
+    expect(plain.core).not.toHaveProperty("quality_state");
+    expect(plain.core).not.toHaveProperty("rewritten_from");
+    expect(evalCaseQualityState(plain.core)).toBe("active");
+
+    // Curation fields survive the round-trip verbatim.
+    const curated = parseEvalDatasetCase(
+      serializeEvalDatasetCase(
+        {
+          ...makeCase(),
+          quality_state: "retired",
+          rewritten_from: "case-old",
+        },
+        null,
+      ),
+    );
+    expect(curated.core.quality_state).toBe("retired");
+    expect(curated.core.rewritten_from).toBe("case-old");
+
+    // Unrecognized values are dropped (effective active) — the case
+    // must stay loadable, never fail the parse.
+    const invalid = parseEvalDatasetCase(
+      JSON.stringify({ ...makeCase(), quality_state: "banished" }),
+    );
+    expect(invalid.core).not.toHaveProperty("quality_state");
+    expect(evalCaseQualityState(invalid.core)).toBe("active");
+  });
+
+  it("projects quality_state and rewrite linkage into the index row (U7)", () => {
+    const row = caseFileToIndexRow("case-new", {
+      core: {
+        ...makeCase(),
+        case_id: "case-new",
+        quality_state: "needs-revision",
+        rewritten_from: "case-old",
+      },
+      engines: null,
+    });
+    expect(row.quality_state).toBe("needs-revision");
+    expect(row.rewritten_from_id).toBe("case-old");
+
+    const plain = caseFileToIndexRow("case-plain", {
+      core: makeCase(),
+      engines: null,
+    });
+    expect(plain.quality_state).toBe("active");
+    expect(plain.rewritten_from_id).toBeNull();
   });
 
   it("projects engines.agentcore.evaluator_ids into the index row only", async () => {

@@ -464,6 +464,9 @@ importers:
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
+      '@thinkwork/evals-core':
+        specifier: workspace:*
+        version: link:../../packages/evals-core
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph
