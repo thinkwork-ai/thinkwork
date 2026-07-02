@@ -34,6 +34,18 @@ import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 import { spaceSourcePrefix } from "./spaces/template-migration.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { regenerateManifestForPrefix } from "./workspace-manifest.js";
+import {
+  AGENTS_MD_MANAGED_SECTION_ORDER,
+  replaceManagedSections,
+  replaceMarkdownSection,
+  type AgentsMdManagedSectionName,
+} from "./workspace-renderer/managed-sections.js";
+
+// Section machinery lives in the shared managed-sections composer
+// (Composer plan U4, KTD-2) so the map path and the render path compute
+// governance-file sections through ONE engine. Re-exported for existing
+// consumers of this module.
+export { replaceMarkdownSection };
 
 const s3 = new S3Client({
   region:
@@ -76,12 +88,10 @@ interface WorkspaceMapRenderContext {
   workspaces: WorkspaceSummary[];
 }
 
-export type DerivedSectionName = "Folder Structure" | "Skills & Tools";
+export type DerivedSectionName = AgentsMdManagedSectionName;
 
-const DERIVED_SECTION_ORDER: DerivedSectionName[] = [
-  "Folder Structure",
-  "Skills & Tools",
-];
+/** Legacy derived headings stripped on every AGENTS.md recomposition. */
+const LEGACY_DERIVED_SECTIONS = ["Knowledge Bases", "Workflows"] as const;
 
 const ROOT_ANNOTATIONS = new Map<string, string>([
   ["AGENTS.md", "You are here (always loaded)"],
@@ -518,105 +528,10 @@ export function replaceDerivedAgentsMdSections(
   markdown: string,
   sections: Record<DerivedSectionName, string>,
 ): string {
-  let rendered = markdown;
-  for (const sectionName of ["Knowledge Bases", "Workflows"]) {
-    rendered = removeMarkdownSection(rendered, sectionName);
-  }
-
-  for (const sectionName of DERIVED_SECTION_ORDER) {
-    const sectionRange = findSectionBodyRange(rendered, sectionName);
-    if (!sectionRange) continue;
-    rendered =
-      rendered.slice(0, sectionRange.start) +
-      sections[sectionName] +
-      rendered.slice(sectionRange.end);
-  }
-
-  for (const sectionName of DERIVED_SECTION_ORDER) {
-    if (findSectionBodyRange(rendered, sectionName)) continue;
-    const suffix = rendered.endsWith("\n") ? "" : "\n";
-    rendered = `${rendered}${suffix}---\n\n## ${sectionName}\n${sections[sectionName]}`;
-  }
-
-  return rendered;
-}
-
-function removeMarkdownSection(markdown: string, sectionName: string): string {
-  const sectionRange = findMarkdownSectionRange(markdown, sectionName);
-  if (!sectionRange) return markdown;
-
-  let start = sectionRange.headingStart;
-  const before = markdown.slice(0, start);
-  const leadingDivider = before.match(/(?:^|\n)---[ \t]*(?:\r?\n){1,2}$/);
-  if (leadingDivider) {
-    start =
-      before.length -
-      leadingDivider[0].length +
-      (leadingDivider[0].startsWith("\n") ? 1 : 0);
-  }
-
-  return markdown.slice(0, start) + markdown.slice(sectionRange.end);
-}
-
-export function replaceMarkdownSection(
-  markdown: string,
-  sectionName: string,
-  body: string,
-): string {
-  const sectionRange = findSectionBodyRange(markdown, sectionName);
-  if (sectionRange) {
-    return (
-      markdown.slice(0, sectionRange.start) +
-      body +
-      markdown.slice(sectionRange.end)
-    );
-  }
-
-  const suffix = markdown.endsWith("\n") ? "" : "\n";
-  return `${markdown}${suffix}\n---\n\n## ${sectionName}${body}`;
-}
-
-function findSectionBodyRange(
-  markdown: string,
-  sectionName: string,
-): { start: number; end: number } | null {
-  const sectionRange = findMarkdownSectionRange(markdown, sectionName);
-  if (!sectionRange) return null;
-  return { start: sectionRange.bodyStart, end: sectionRange.end };
-}
-
-function findMarkdownSectionRange(
-  markdown: string,
-  sectionName: string,
-): { headingStart: number; bodyStart: number; end: number } | null {
-  const headingPattern = new RegExp(
-    `(^|\\n)## ${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ \\t]*(?:\\r?\\n|$)`,
-    "g",
-  );
-  const match = headingPattern.exec(markdown);
-  if (!match) return null;
-
-  const headingStart = match.index + (match[1] === "\n" ? 1 : 0);
-  const bodyStart = headingPattern.lastIndex;
-  const linePattern = /[^\n]*(?:\n|$)/g;
-  linePattern.lastIndex = bodyStart;
-
-  let lineMatch: RegExpExecArray | null;
-  while ((lineMatch = linePattern.exec(markdown))) {
-    const lineStart = lineMatch.index;
-    if (lineStart >= markdown.length) break;
-    const line = lineMatch[0];
-    const trimmed = line.trim();
-    if (
-      lineStart > headingStart &&
-      (trimmed === "---" || line.startsWith("## "))
-    ) {
-      return { headingStart, bodyStart, end: lineStart };
-    }
-    if (linePattern.lastIndex >= markdown.length) break;
-  }
-
-  return { headingStart, bodyStart, end: markdown.length };
+  return replaceManagedSections(markdown, sections, {
+    order: AGENTS_MD_MANAGED_SECTION_ORDER,
+    removeSections: LEGACY_DERIVED_SECTIONS,
+  });
 }
 
 /**
