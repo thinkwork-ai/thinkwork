@@ -356,6 +356,15 @@ export const COMPLIANCE_EVENT_TYPES = [
   "plugin.install_key_failed",
   "plugin.install_key_revoked",
   "plugin.entitlement_granted",
+  // Capability grant/detach mutations (capability-mapping plan U7). The
+  // skill./mcp./agent. prefixes are already admitted by the prefix-based
+  // event-type CHECK constraints — no migration needed.
+  "skill.granted",
+  "skill.detached",
+  "mcp.granted",
+  "mcp.detached",
+  "agent.extension_granted",
+  "agent.extension_detached",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];
