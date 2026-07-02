@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@thinkwork/ui";
+import { formatDate } from "@thinkwork/shared-utils";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsAddManualUserMutation,
@@ -53,12 +54,6 @@ function getInitials(name: string): string {
       .toUpperCase()
       .slice(0, 2) || "?"
   );
-}
-
-function relativeTime(value: unknown): string {
-  if (!value) return "—";
-  const d = new Date(value as string);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
 export function SettingsUsers() {
@@ -141,7 +136,9 @@ export function SettingsUsers() {
         size: 130,
         cell: ({ row }) => (
           <span className="text-muted-foreground">
-            {relativeTime(row.original.createdAt)}
+            {row.original.createdAt
+              ? formatDate(String(row.original.createdAt))
+              : "—"}
           </span>
         ),
       },

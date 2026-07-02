@@ -19,6 +19,7 @@ import {
   SelectValue,
   Textarea,
 } from "@thinkwork/ui";
+import { formatDate } from "@thinkwork/shared-utils";
 import { SpaceAccessMode } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -40,13 +41,6 @@ type SpaceRow = {
   accessMode?: string | null;
   updatedAt?: unknown;
 };
-
-function relativeTime(value: unknown): string {
-  if (!value) return "—";
-  const d = new Date(value as string);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString();
-}
 
 export function SettingsSpaces() {
   const { tenantId } = useTenant();
@@ -108,7 +102,9 @@ export function SettingsSpaces() {
         size: 130,
         cell: ({ row }) => (
           <span className="text-muted-foreground">
-            {relativeTime(row.original.updatedAt)}
+            {row.original.updatedAt
+              ? formatDate(String(row.original.updatedAt))
+              : "—"}
           </span>
         ),
       },

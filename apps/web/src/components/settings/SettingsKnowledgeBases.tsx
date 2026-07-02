@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
+import { formatDate } from "@thinkwork/shared-utils";
 import { KnowledgeBasesListQuery } from "@/lib/kb-queries";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -19,12 +20,6 @@ type KbRow = {
   documentCount?: number | null;
   lastSyncAt?: string | null;
 };
-
-function relativeTime(iso?: string | null): string {
-  if (!iso) return "Never";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "Never" : d.toLocaleDateString();
-}
 
 function statusVariant(
   status: string,
@@ -99,7 +94,9 @@ export function SettingsKnowledgeBases({
         size: 120,
         cell: ({ row }) => (
           <span className="text-muted-foreground">
-            {relativeTime(row.original.lastSyncAt)}
+            {row.original.lastSyncAt
+              ? formatDate(row.original.lastSyncAt)
+              : "Never"}
           </span>
         ),
       },

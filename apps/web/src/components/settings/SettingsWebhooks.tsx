@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
+import { formatDate } from "@thinkwork/shared-utils";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWebhooksQuery } from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
@@ -16,12 +17,6 @@ type WebhookRow = {
   invocationCount: number;
   lastInvokedAt?: string | null;
 };
-
-function relativeTime(value: unknown): string {
-  if (!value) return "Never";
-  const d = new Date(value as string);
-  return Number.isNaN(d.getTime()) ? "Never" : d.toLocaleDateString();
-}
 
 export function SettingsWebhooks() {
   const { tenantId } = useTenant();
@@ -75,7 +70,9 @@ export function SettingsWebhooks() {
         size: 120,
         cell: ({ row }) => (
           <span className="text-muted-foreground">
-            {relativeTime(row.original.lastInvokedAt)}
+            {row.original.lastInvokedAt
+              ? formatDate(row.original.lastInvokedAt)
+              : "Never"}
           </span>
         ),
       },
