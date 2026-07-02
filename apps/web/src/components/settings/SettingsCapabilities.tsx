@@ -40,6 +40,7 @@ import {
   Bot,
   Boxes,
   CircleDotDashed,
+  Info,
   RefreshCw,
   Search,
   UserRound,
@@ -62,6 +63,12 @@ import {
   dataTableTokenFilterFns,
   type DataTableTokenFilterColumn,
   type DataTableTokenFilterValue,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
   Input,
   Skeleton,
   Tabs,
@@ -227,7 +234,17 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
 
 export function SettingsCapabilities() {
   const { tenantId } = useTenant();
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  // Default view: active capabilities only — remove or edit the State
+  // token (or Clear) to see the inactive pool and gate reasons.
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
+    {
+      id: FILTER_COLUMNS.state,
+      value: {
+        operator: "is_any_of",
+        value: ["active"],
+      } satisfies DataTableTokenFilterValue,
+    },
+  ]);
   const [activeClass, setActiveClass] = useState<string>("skill");
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -358,6 +375,25 @@ export function SettingsCapabilities() {
     ],
     [members, profilesResult.data?.agentProfiles, spacesResult.data?.spaces],
   );
+
+  const spaceName = (spacesResult.data?.spaces ?? []).find(
+    (space) => space.id === spaceId,
+  )?.name;
+  const profileName = (profilesResult.data?.agentProfiles ?? []).find(
+    (profile) => profile.id === agentProfileId,
+  )?.name;
+  const memberName = members.find(
+    (member) => member.id === perspectiveUserId,
+  )?.name;
+  const stateToken = columnFilters.find(
+    (filter) => filter.id === FILTER_COLUMNS.state,
+  )?.value as DataTableTokenFilterValue | undefined;
+  const stateFilterValues = stateToken
+    ? (Array.isArray(stateToken.value)
+        ? stateToken.value
+        : [stateToken.value]
+      ).filter((value): value is string => typeof value === "string")
+    : [];
 
   // Grant/detach exist only at agent and agent-profile scope (R11): a
   // space or perspective-user selection is a read lens. Derived from the
@@ -581,17 +617,7 @@ export function SettingsCapabilities() {
         className="mb-4 flex flex-wrap items-center gap-2"
         data-testid="capability-toolbar"
       >
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchValue}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search"
-            aria-label="Search capabilities"
-            className="h-8 w-44 pl-8"
-            data-testid="capability-search"
-          />
-        </div>
+        <CapabilityToolbarSearch value={searchValue} onChange={setSearch} />
         <DataTableTokenFilter
           table={filterTable}
           columns={tokenFilterColumns}
@@ -602,31 +628,89 @@ export function SettingsCapabilities() {
           className="max-w-full [&_[data-token-filter-token]]:shrink-0"
           popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
         />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
           <Button
             variant="outline"
-            size="sm"
+            size="icon-sm"
+            className="h-8 w-8 rounded-md"
+            aria-label="Refresh"
             onClick={() => refetchInspection({ requestPolicy: "network-only" })}
             disabled={loading}
           >
-            <RefreshCw
-              className={cn("mr-1.5 size-3.5", loading && "animate-spin")}
-            />
-            Refresh
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
           </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="h-8 w-8 rounded-md"
+                aria-label="What am I looking at?"
+                data-testid="view-info-trigger"
+              >
+                <Info className="size-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>What this view shows</DialogTitle>
+                <DialogDescription>
+                  The effective capability set the platform agent would get for
+                  the current selection, computed through the same resolver the
+                  runtime uses.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm" data-testid="view-info-body">
+                <p>
+                  <span className="font-medium">Selection:</span>{" "}
+                  {spaceId
+                    ? `Space ${spaceName ?? spaceId}`
+                    : "no Space (agent baseline)"}
+                  {" · "}
+                  {agentProfileId
+                    ? `agent profile ${profileName ?? agentProfileId}`
+                    : "default agent"}
+                  {" · "}
+                  {perspectiveUserId
+                    ? `as ${memberName ?? perspectiveUserId}`
+                    : "no perspective user"}
+                </p>
+                {result?.noUserBaseline ? (
+                  <p data-testid="baseline-note">
+                    No perspective user means the no-user baseline — exactly
+                    what a scheduled or wakeup turn gets: plugin per-user
+                    servers excluded, direct OAuth via the agent&apos;s human
+                    pair.
+                  </p>
+                ) : null}
+                <p>
+                  <span className="font-medium">Filters:</span>{" "}
+                  {stateFilterValues.length > 0
+                    ? `state ${stateFilterValues.join(", ")}`
+                    : "all states"}
+                  {searchValue ? ` · search "${searchValue}"` : ""}
+                </p>
+                <p className="text-muted-foreground">
+                  Inactive rows carry the exact gate that dropped them (trust
+                  gate, eval gate, OAuth, plugin activation, policy…) and the
+                  tenant pool appears as not_installed rows you can attach.
+                  Every attach/detach ends on the item&apos;s fresh post-write
+                  state.
+                </p>
+                {predicted ? (
+                  <p className="text-muted-foreground">
+                    Computed {new Date(predicted.computedAt).toLocaleString()} ·
+                    fingerprint{" "}
+                    <span className="font-mono">
+                      {predicted.configFingerprint.slice(0, 12)}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
-
-      {result?.noUserBaseline && !loading ? (
-        <p
-          className="mb-4 text-sm text-muted-foreground"
-          data-testid="baseline-note"
-        >
-          Showing the no-user baseline — exactly what a scheduled or wakeup turn
-          gets: plugin per-user servers excluded, direct OAuth via the
-          agent&apos;s human pair.
-        </p>
-      ) : null}
 
       {confirmation ? (
         <div
@@ -695,7 +779,7 @@ export function SettingsCapabilities() {
                     data-testid={`capability-tab-${capabilityClass}`}
                   >
                     {CLASS_LABELS[capabilityClass] ?? capabilityClass}
-                    <span className="ml-1.5 text-xs text-muted-foreground">
+                    <span className="ml-1.5 text-xs font-semibold text-primary">
                       {activeCount}
                     </span>
                   </TabsTrigger>
@@ -704,7 +788,7 @@ export function SettingsCapabilities() {
             </TabsList>
           </Tabs>
 
-          <SettingsSection label={CLASS_LABELS[activeTab] ?? activeTab}>
+          <SettingsSection>
             {visibleItems.length === 0 ? (
               <p className="px-4 py-6 text-sm text-muted-foreground">
                 Nothing in this category for the current selection.
@@ -756,6 +840,63 @@ export function SettingsCapabilities() {
           </p>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function CapabilityToolbarSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || value.length > 0;
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label="Search capabilities"
+        data-testid="capability-search-toggle"
+        onClick={() => setExpanded(true)}
+      >
+        <Search className="size-4" aria-hidden="true" />
+      </Button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center rounded-md border border-input">
+      <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        aria-label="Search capabilities"
+        data-testid="capability-search"
+        placeholder="Search capabilities..."
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        value={value}
+        onBlur={() => {
+          if (!value) setExpanded(false);
+        }}
+        onChange={(event) => onChange(event.target.value.trimStart())}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onChange("");
+            setExpanded(false);
+          }
+        }}
+      />
     </div>
   );
 }

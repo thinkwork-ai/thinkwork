@@ -252,9 +252,19 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+/** The view defaults to State=Active — clear tokens to see the pool. */
+function clearDefaultFilters() {
+  fireEvent.click(screen.getByText("Clear"));
+}
+
+function expandSearch() {
+  fireEvent.click(screen.getByTestId("capability-search-toggle"));
+}
+
 describe("SettingsCapabilities (read surface)", () => {
   it("renders one tab per capability class with active counts; reasons render verbatim", () => {
     render(<SettingsCapabilities />);
+    clearDefaultFilters();
     // Tabs carry the class label + count of ACTIVE items in the class.
     expect(screen.getByTestId("capability-tab-skill").textContent).toContain(
       "Skills",
@@ -283,8 +293,11 @@ describe("SettingsCapabilities (read surface)", () => {
     expect(screen.getByText("token: expired")).toBeTruthy();
   });
 
-  it("quick search filters rows across the view", () => {
+  it("quick search is collapsed by default and filters rows when expanded", () => {
     render(<SettingsCapabilities />);
+    clearDefaultFilters();
+    expect(screen.queryByTestId("capability-search")).toBeNull();
+    expandSearch();
     fireEvent.change(screen.getByTestId("capability-search"), {
       target: { value: "expenses" },
     });
@@ -293,11 +306,27 @@ describe("SettingsCapabilities (read surface)", () => {
     expect(screen.queryByText("approve-receipt")).toBeNull();
   });
 
-  it("labels the no-user baseline", () => {
+  it("explains the no-user baseline in the view-info dialog", () => {
     render(<SettingsCapabilities />);
+    fireEvent.click(screen.getByTestId("view-info-trigger"));
     expect(screen.getByTestId("baseline-note").textContent).toContain(
       "no-user baseline",
     );
+    // The dialog also states the current selection and filters.
+    expect(screen.getByTestId("view-info-body").textContent).toContain(
+      "no Space (agent baseline)",
+    );
+    expect(screen.getByTestId("view-info-body").textContent).toContain(
+      "state active",
+    );
+  });
+
+  it("defaults to active-only rows; clearing filters reveals the pool", () => {
+    render(<SettingsCapabilities />);
+    // trust_gate rows are inactive → hidden by the default State token.
+    expect(screen.queryByText("trust_gate")).toBeNull();
+    clearDefaultFilters();
+    expect(screen.getByText("trust_gate")).toBeTruthy();
   });
 
   it("shows the loading state while a refetch is in flight", () => {
@@ -358,6 +387,7 @@ describe("SettingsCapabilities write actions (U8)", () => {
       }),
     );
     render(<SettingsCapabilities />);
+    clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
 
     await waitFor(() =>
@@ -394,6 +424,7 @@ describe("SettingsCapabilities write actions (U8)", () => {
       }),
     );
     render(<SettingsCapabilities />);
+    clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
 
     await waitFor(() =>
@@ -418,6 +449,7 @@ describe("SettingsCapabilities write actions (U8)", () => {
       }),
     );
     const view = render(<SettingsCapabilities />);
+    clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
 
     await waitFor(() =>
