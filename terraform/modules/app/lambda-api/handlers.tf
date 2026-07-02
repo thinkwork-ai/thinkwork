@@ -727,7 +727,10 @@ resource "aws_lambda_function" "handler" {
   # concurrent drainers would race the chain head SELECT and produce
   # orphan prev_hash links). All other handlers run with the default
   # account-level concurrency pool.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 20 : -1
+  # eval-worker's cap must be >= the fan-out event source mapping's
+  # maximum_concurrency (eval-fanout.tf) or UpdateEventSourceMapping
+  # rejects the apply.
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 40 : -1
 
   environment {
     variables = merge(
