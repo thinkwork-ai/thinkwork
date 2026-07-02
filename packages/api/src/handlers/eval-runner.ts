@@ -509,6 +509,10 @@ export async function handler(event: EvalRunnerEvent): Promise<{
     const caseConditions = [
       eq(evalTestCases.tenant_id, run.tenant_id),
       eq(evalTestCases.enabled, true),
+      // Curation exclusion (U7): retired / needs-revision cases never
+      // dispatch. Dataset runs get this filter at captureRunSnapshot;
+      // this is the legacy category/selected-ids path's mirror.
+      eq(evalTestCases.quality_state, "active"),
     ];
     if (selectedTestCaseIds.length > 0) {
       caseConditions.push(inArray(evalTestCases.id, selectedTestCaseIds));

@@ -143,6 +143,8 @@ function makeIndexStore(fake: FakeDb): DatasetIndexStore {
                   tags: r.tags,
                   agentcore_evaluator_ids: r.agentcore_evaluator_ids,
                   enabled: r.enabled,
+                  quality_state: "active",
+                  rewritten_from_id: null,
                 } satisfies DatasetCaseIndexRow,
               ]),
           );

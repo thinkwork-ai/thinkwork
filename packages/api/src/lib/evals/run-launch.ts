@@ -53,6 +53,7 @@ import {
   evalDatasetCasePayloadKey,
   evalDatasetManifestKey,
   evalRunSnapshotCaseKey,
+  evalCaseQualityState,
   evalRunSnapshotCasePayloadKey,
   evalRunSnapshotPrefix,
   FLAGGED_THREAD_CATEGORY,
@@ -173,8 +174,9 @@ export interface RunSnapshot {
  * the enabled cases into the run snapshot prefix. Copies are written
  * only after the WHOLE set verifies — a sha mismatch (concurrent edit)
  * retries the capture once from a fresh manifest read, then fails the
- * launch. Disabled cases are verified but not copied (they are outside
- * the effective scope).
+ * launch. Disabled cases — and cases whose curation quality_state is
+ * not "active" (U7) — are verified but not copied (they are outside the
+ * effective scope).
  */
 export async function captureRunSnapshot(
   ctx: DatasetContext,
@@ -226,6 +228,12 @@ export async function captureRunSnapshot(
     for (const entry of verified) {
       const parsed = parseEvalDatasetCase(entry.content);
       if (!parsed.core.enabled) continue;
+      // Curation exclusion (U7 / KTD8): retired and needs-revision cases
+      // keep their history but never dispatch — only active cases enter
+      // the pinned scope. The reconciler reconstructs from the pinned
+      // scope (pinned_case_ids / pinned_trial_plan), so it inherits this
+      // filter for dataset runs by construction.
+      if (evalCaseQualityState(parsed.core) !== "active") continue;
       const snapshotKey = evalRunSnapshotCaseKey(
         ctx.tenantSlug,
         runId,

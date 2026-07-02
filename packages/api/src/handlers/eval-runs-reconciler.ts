@@ -686,6 +686,9 @@ async function expectedCasesForCandidate(
       and(
         eq(evalTestCases.tenant_id, candidate.tenant_id),
         eq(evalTestCases.enabled, true),
+        // Mirrors the runner's legacy-path curation filter (U7) so the
+        // reconstruction matches what dispatch actually fanned out.
+        eq(evalTestCases.quality_state, "active"),
         candidate.selected_test_case_ids.length > 0
           ? inArray(evalTestCases.id, candidate.selected_test_case_ids)
           : inArray(evalTestCases.category, candidate.categories),

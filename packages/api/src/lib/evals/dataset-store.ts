@@ -327,6 +327,47 @@ export interface EvalCaseSource {
 }
 
 /**
+ * Curation disposition (Eval Profiles U7 / KTD8). Missing = "active" —
+ * authored and legacy case files never carry the field, so their shas
+ * don't churn. "retired" and "needs-revision" cases keep their result
+ * history and stay in the manifest, but are excluded from run-snapshot
+ * capture (only active cases dispatch). Propagation from the canonical
+ * seed packs is ONE-WAY: a tenant case never moves back toward "active"
+ * on re-seed — fixes ship as rewrites with a new case identity (R14).
+ */
+export type EvalCaseQualityState = "active" | "retired" | "needs-revision";
+
+export const EVAL_CASE_QUALITY_STATES: readonly EvalCaseQualityState[] = [
+  "active",
+  "retired",
+  "needs-revision",
+];
+
+export function isEvalCaseQualityState(
+  value: unknown,
+): value is EvalCaseQualityState {
+  return (
+    value === "active" || value === "retired" || value === "needs-revision"
+  );
+}
+
+/** Effective quality state of a case file (missing field = active). */
+export function evalCaseQualityState(core: {
+  quality_state?: EvalCaseQualityState;
+}): EvalCaseQualityState {
+  return core.quality_state ?? "active";
+}
+
+/**
+ * One-way ordering for seed-pack propagation (KTD8): a transition only
+ * propagates when the canonical rank is HIGHER — never retired → active,
+ * never retired → needs-revision.
+ */
+export function evalCaseQualityRank(state: EvalCaseQualityState): number {
+  return state === "retired" ? 2 : state === "needs-revision" ? 1 : 0;
+}
+
+/**
  * Engine-neutral core case fields. The canonical format never references
  * engine vocabulary — engine-specific evaluator selections (today's
  * agentcore_evaluator_ids) live only in the `engines` extension block.
@@ -351,6 +392,13 @@ export interface EvalDatasetCaseCore {
   resolution_target?: string;
   outcome_kind?: EvalCaseOutcomeKind;
   completeness?: EvalCaseCompleteness;
+  /**
+   * Curation block (U7 / KTD8) — preserved on round-trip only when
+   * present (missing = active) so pre-curation case shas don't churn.
+   * `rewritten_from` links a rewrite to the case identity it supersedes.
+   */
+  quality_state?: EvalCaseQualityState;
+  rewritten_from?: string;
 }
 
 export interface EvalDatasetCaseEngines {
@@ -442,6 +490,19 @@ export function parseEvalDatasetCase(content: string): ParsedEvalDatasetCase {
       traces: rest.completeness.traces === true,
       truncated: rest.completeness.truncated === true,
     };
+  }
+
+  // Curation block (U7) — preserved on round-trip only when present.
+  // An unrecognized quality_state value is dropped (effective = active)
+  // rather than failing the parse: the case must stay loadable.
+  if (isEvalCaseQualityState(rest.quality_state)) {
+    core.quality_state = rest.quality_state;
+  }
+  if (
+    typeof rest.rewritten_from === "string" &&
+    rest.rewritten_from.length > 0
+  ) {
+    core.rewritten_from = rest.rewritten_from;
   }
 
   return {
@@ -585,6 +646,10 @@ export interface DatasetCaseIndexRow {
   tags: string[];
   agentcore_evaluator_ids: string[];
   enabled: boolean;
+  /** Curation projection (U7): case-content quality state (default active). */
+  quality_state: EvalCaseQualityState;
+  /** Rewrite linkage (R14): predecessor dataset_case_id, null otherwise. */
+  rewritten_from_id: string | null;
 }
 
 /** Write surface handed to the locked sync callback. */
@@ -637,6 +702,8 @@ function caseRowsEqual(
     a.query === b.query &&
     a.system_prompt === b.system_prompt &&
     a.enabled === b.enabled &&
+    a.quality_state === b.quality_state &&
+    a.rewritten_from_id === b.rewritten_from_id &&
     JSON.stringify(a.assertions) === JSON.stringify(b.assertions) &&
     JSON.stringify(a.tags) === JSON.stringify(b.tags) &&
     JSON.stringify(a.agentcore_evaluator_ids) ===
@@ -659,6 +726,8 @@ export function caseFileToIndexRow(
     tags: parsed.core.tags,
     agentcore_evaluator_ids: Array.isArray(agentcoreIds) ? agentcoreIds : [],
     enabled: parsed.core.enabled,
+    quality_state: evalCaseQualityState(parsed.core),
+    rewritten_from_id: parsed.core.rewritten_from ?? null,
   };
 }
 
@@ -1098,6 +1167,8 @@ export function createDrizzleDatasetIndexStore(): DatasetIndexStore {
                 tags: evalTestCases.tags,
                 agentcore_evaluator_ids: evalTestCases.agentcore_evaluator_ids,
                 enabled: evalTestCases.enabled,
+                quality_state: evalTestCases.quality_state,
+                rewritten_from_id: evalTestCases.rewritten_from_id,
               })
               .from(evalTestCases)
               .where(eq(evalTestCases.dataset_id, datasetId));
@@ -1121,6 +1192,10 @@ export function createDrizzleDatasetIndexStore(): DatasetIndexStore {
                     tags: r.tags ?? [],
                     agentcore_evaluator_ids: r.agentcore_evaluator_ids ?? [],
                     enabled: r.enabled,
+                    quality_state: isEvalCaseQualityState(r.quality_state)
+                      ? r.quality_state
+                      : "active",
+                    rewritten_from_id: r.rewritten_from_id,
                   } satisfies DatasetCaseIndexRow,
                 ]),
             );
@@ -1152,6 +1227,8 @@ export function createDrizzleDatasetIndexStore(): DatasetIndexStore {
                   tags: row.tags,
                   agentcore_evaluator_ids: row.agentcore_evaluator_ids,
                   enabled: row.enabled,
+                  quality_state: row.quality_state,
+                  rewritten_from_id: row.rewritten_from_id,
                   updated_at: new Date(),
                 })
                 .where(eq(evalTestCases.id, existing.id));
@@ -1168,6 +1245,8 @@ export function createDrizzleDatasetIndexStore(): DatasetIndexStore {
                 tags: row.tags,
                 agentcore_evaluator_ids: row.agentcore_evaluator_ids,
                 enabled: row.enabled,
+                quality_state: row.quality_state,
+                rewritten_from_id: row.rewritten_from_id,
                 source: "dataset",
               });
             }

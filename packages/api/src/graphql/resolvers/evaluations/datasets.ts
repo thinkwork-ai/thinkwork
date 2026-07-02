@@ -415,6 +415,23 @@ interface UpdateDatasetCaseInput {
   enabled?: boolean | null;
 }
 
+/**
+ * Content fields of the update input (U7 curation guard). `enabled` is
+ * deliberately absent: tenant enable/disable of a baseline case remains
+ * a Studio action — only CONTENT of canonical seed cases is routed
+ * through the repo curation channel.
+ */
+const CASE_CONTENT_INPUT_FIELDS = [
+  "name",
+  "category",
+  "query",
+  "systemPrompt",
+  "expectedBehavior",
+  "assertions",
+  "agentcoreEvaluatorIds",
+  "tags",
+] as const satisfies readonly (keyof UpdateDatasetCaseInput)[];
+
 const updateEvalDatasetCase = async (
   _p: unknown,
   args: {
@@ -438,6 +455,31 @@ const updateEvalDatasetCase = async (
       `Case ${args.caseId} not found in dataset ${args.datasetSlug}`,
       { extensions: { code: "NOT_FOUND" } },
     );
+  }
+
+  // Curation guard (Eval Profiles U7 / KTD8): canonical baseline seed
+  // cases (index row source='yaml-seed') are curated in the repo seed
+  // packs and adjudicated by PR — in-place Studio content edits would
+  // fork a tenant's baseline from the canonical pack and make baseline
+  // comparisons across tenants meaningless. Enable/disable stays a
+  // Studio action; custom/flagged cases are unaffected.
+  const contentEdited = CASE_CONTENT_INPUT_FIELDS.some(
+    (field) => args.input[field] !== undefined,
+  );
+  if (contentEdited) {
+    const dataset = await loadDatasetRowOrThrow(
+      args.tenantId,
+      args.datasetSlug,
+    );
+    const row = await loadCaseRowOrThrow(String(dataset.id), args.caseId);
+    if (row.source === "yaml-seed") {
+      throw badInput(
+        `Case ${args.caseId} is a canonical baseline seed case. Its content is ` +
+          `curated in the repo seed packs (seeds/eval-test-cases/*.json) and ` +
+          `adjudicated by PR — edit the pack there instead. Enabling or ` +
+          `disabling the case is still available here.`,
+      );
+    }
   }
 
   const core: EvalDatasetCaseCore = {
