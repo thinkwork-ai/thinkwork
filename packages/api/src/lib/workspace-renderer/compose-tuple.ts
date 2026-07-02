@@ -29,7 +29,10 @@ import {
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
 import { composeAgentsMdWithRouting } from "./agents-md-composer.js";
-import { composeGeneratedContextMd } from "./managed-sections.js";
+import {
+  composeGeneratedContextMd,
+  type ContextRoutingSkillEntry,
+} from "./managed-sections.js";
 import type {
   WorkspaceAgentProfileRoutingEntry,
   WorkspaceHydrateFile,
@@ -203,6 +206,25 @@ export function shouldRenderUserSourcePath(relPath: string): boolean {
     sourcePath === "memory/contacts.md" ||
     sourcePath === "memory/lessons.md"
   );
+}
+
+/** `skills/<folder>/SKILL.md` marker — the installed-skill presence rule. */
+const SKILL_MARKER_RE = /^skills\/([^/]+)\/SKILL\.md$/;
+/** Per-assignment state file beside the marker (absent = enabled). */
+const SKILL_ASSIGNMENT_RE = /^skills\/([^/]+)\/\.assignment\.json$/;
+
+/** `.assignment.json` semantics: absent/unparseable file = enabled. */
+function skillAssignmentEnabled(raw: string | null): boolean {
+  if (raw === null) return true;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return true;
+    }
+    return (parsed as { enabled?: unknown }).enabled !== false;
+  } catch {
+    return true;
+  }
 }
 
 const THREAD_GOAL_STATUS_FILES = [
@@ -797,39 +819,55 @@ export async function renderWorkspaceTuple(
     }
   }
 
-  // Routing entries for plugin skills are CONTEXT.md lines appended at
-  // install time (not render-generated) — for a gated requester the
-  // blocked lines are filtered into a generated per-thread CONTEXT.md
-  // replacement produced through the managed-sections composer seam
-  // (Composer plan U4; the computed Routing section itself stays inert
-  // until U5 per KTD-9). See gating.ts module doc for the AGENTS.md
-  // finding.
-  let gatedContextFile: GeneratedWorkspaceFile | null = null;
-  if (pluginGateHasExclusions(pluginGate)) {
-    const contextObject = agentSource.objects.find(
-      (object) => runtimeSourcePath(object.relPath) === "CONTEXT.md",
-    );
-    if (contextObject) {
-      const rawContext = await objectStore.getText({
-        bucket,
-        key: contextObject.key,
-      });
-      if (rawContext !== null) {
-        const composedContext = composeGeneratedContextMd({
-          baseline: rawContext,
-          pluginGate,
-        });
-        if (composedContext.changed) {
-          gatedContextFile = {
-            path: "CONTEXT.md",
-            key: `${renderedPrefix}CONTEXT.md`,
-            content: composedContext.content,
-            owner: "agent",
-          };
-        }
-      }
-    }
+  // Computed CONTEXT.md `## Routing` section (Composer plan U5 — KTD-9
+  // ACTIVE): the rendered CONTEXT.md is generated on every render. The
+  // agent-source file's operator prose survives byte-for-byte while the
+  // Routing managed section is recomputed from the effective capability
+  // set — the skill folders present in the (gate-filtered) agent source,
+  // minus assignments disabled via `skills/<slug>/.assignment.json`.
+  // Install-time snippet appends are retired, so these computed rows are
+  // the only routing wiring — and the only per-requester plugin-gate
+  // enforcement — CONTEXT.md carries.
+  const contextSourceObject = agentSource.objects.find(
+    (object) => runtimeSourcePath(object.relPath) === "CONTEXT.md",
+  );
+  const skillAssignmentKeys = new Map<string, string>();
+  const skillFolders: string[] = [];
+  for (const object of agentSource.objects) {
+    const sourcePath = runtimeSourcePath(object.relPath);
+    const marker = sourcePath.match(SKILL_MARKER_RE);
+    if (marker) skillFolders.push(marker[1]!);
+    const assignment = sourcePath.match(SKILL_ASSIGNMENT_RE);
+    if (assignment) skillAssignmentKeys.set(assignment[1]!, object.key);
   }
+  const [contextBaseline, contextSkillEntries] = await Promise.all([
+    contextSourceObject
+      ? objectStore.getText({ bucket, key: contextSourceObject.key })
+      : Promise.resolve(null),
+    Promise.all(
+      skillFolders.map(async (folder): Promise<ContextRoutingSkillEntry> => {
+        const assignmentKey = skillAssignmentKeys.get(folder);
+        const assignmentRaw = assignmentKey
+          ? await objectStore.getText({ bucket, key: assignmentKey })
+          : null;
+        return {
+          slug: folder,
+          skillFolderPath: `skills/${folder}/`,
+          enabled: skillAssignmentEnabled(assignmentRaw),
+        };
+      }),
+    ),
+  ]);
+  const generatedContextFile: GeneratedWorkspaceFile = {
+    path: "CONTEXT.md",
+    key: `${renderedPrefix}CONTEXT.md`,
+    content: composeGeneratedContextMd({
+      baseline: contextBaseline,
+      skills: contextSkillEntries,
+      pluginGate,
+    }),
+    owner: "agent",
+  };
 
   const sourcePrefixes = [
     agentPrefix,
@@ -859,7 +897,7 @@ export async function renderWorkspaceTuple(
     marker,
     existingManifest,
     existingAgentsMd,
-    existingGatedContext,
+    existingGeneratedContext,
   ] = await Promise.all([
     repository.listAuthorizedSpaces?.(tuple) ??
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
@@ -869,9 +907,7 @@ export async function renderWorkspaceTuple(
     objectStore.getText({ bucket, key: markerKey }),
     objectStore.getText({ bucket, key: manifestKey }),
     objectStore.getText({ bucket, key: agentsMdKey }),
-    gatedContextFile
-      ? objectStore.getText({ bucket, key: gatedContextFile.key })
-      : Promise.resolve(null),
+    objectStore.getText({ bucket, key: generatedContextFile.key }),
   ]);
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
@@ -888,7 +924,7 @@ export async function renderWorkspaceTuple(
       content: agentsMd,
       owner: "agent",
     },
-    ...(gatedContextFile ? [gatedContextFile] : []),
+    generatedContextFile,
   ];
   // Opt-in generated-content exposure (Composer plan U1): identical on the
   // hit and miss paths — the compose above already produced the exact bytes
@@ -935,7 +971,7 @@ export async function renderWorkspaceTuple(
   const cacheIsFresh =
     existingManifest !== null &&
     existingAgentsMd === agentsMd &&
-    (!gatedContextFile || existingGatedContext === gatedContextFile.content) &&
+    existingGeneratedContext === generatedContextFile.content &&
     markerFresh &&
     existingManifestMatchesContract(existingManifest, hydrateManifest);
   if (cacheIsFresh) {

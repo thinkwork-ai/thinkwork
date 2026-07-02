@@ -22,32 +22,6 @@ afterEach(() => {
   s3Mock.reset();
 });
 
-function body(content: string) {
-  return {
-    Body: {
-      transformToString: async (_enc?: string) => content,
-    } as unknown as never,
-  };
-}
-
-function noSuchKey() {
-  const err = new Error("NoSuchKey");
-  err.name = "NoSuchKey";
-  return err;
-}
-
-function catalogRef(
-  snippet = "| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |\n",
-) {
-  return JSON.stringify({
-    slug: "finance-audit-xls",
-    source_sha256: "a".repeat(64),
-    installed_at: "2026-05-24T16:00:00.000Z",
-    wiring_choice: "stage-3-gate",
-    snippet,
-  });
-}
-
 function uninstallOptions() {
   return {
     s3: new S3Client({}),
@@ -75,30 +49,12 @@ function mockInstalledSkill(): void {
         },
       ],
     });
-  s3Mock
-    .on(GetObjectCommand, {
-      Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
-    })
-    .resolves(body(catalogRef()));
   s3Mock.on(DeleteObjectCommand).resolves({});
 }
 
 describe("uninstallCatalogSkill", () => {
-  it("strips the stored snippet and deletes the installed folder", async () => {
+  it("deletes the installed folder and leaves CONTEXT.md untouched (U5)", async () => {
     mockInstalledSkill();
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .resolves(
-        body(`# Context
-
-| Stage 3 gate | . | skills/finance-audit-xls/SKILL.md |
-
-## Next
-`),
-      );
-    s3Mock.on(PutObjectCommand).resolves({});
 
     const result = await uninstallCatalogSkill(uninstallOptions());
 
@@ -109,17 +65,7 @@ describe("uninstallCatalogSkill", () => {
         "skills/finance-audit-xls/SKILL.md",
         "skills/finance-audit-xls/WIRING.md",
       ],
-      context_md_strip: "removed",
-      context_md_changed_path: "CONTEXT.md",
     });
-    const contextPut = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
-    expect(contextPut).toMatchObject({
-      Key: "tenants/acme/agents/marco/CONTEXT.md",
-    });
-    expect(String(contextPut?.Body)).toBe(`# Context
-
-## Next
-`);
     expect(
       s3Mock
         .commandCalls(DeleteObjectCommand)
@@ -129,50 +75,24 @@ describe("uninstallCatalogSkill", () => {
       "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
       "tenants/acme/agents/marco/skills/finance-audit-xls/WIRING.md",
     ]);
+    // Composer plan U5 (R8): uninstall never reads or writes CONTEXT.md —
+    // the rendered Routing section recomputes from the remaining folders.
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 
-  it("deletes the folder without touching CONTEXT.md when the catalog ref is absent", async () => {
+  it("no-ops (empty deleted_paths) when the skill folder does not exist", async () => {
     s3Mock
       .on(ListObjectsV2Command, {
         Prefix: "tenants/acme/agents/marco/skills/finance-audit-xls/",
       })
-      .resolves({
-        Contents: [
-          {
-            Key: "tenants/acme/agents/marco/skills/finance-audit-xls/SKILL.md",
-          },
-        ],
-      });
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/skills/finance-audit-xls/.catalog-ref.json",
-      })
-      .rejects(noSuchKey());
-    s3Mock.on(DeleteObjectCommand).resolves({});
+      .resolves({ Contents: [] });
 
     const result = await uninstallCatalogSkill(uninstallOptions());
 
-    expect(result).toEqual({
-      ok: true,
-      deleted_paths: ["skills/finance-audit-xls/SKILL.md"],
-      context_md_strip: "catalog_ref_missing",
-    });
+    expect(result).toEqual({ ok: true, deleted_paths: [] });
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
-  });
-
-  it("deletes the folder and reports when CONTEXT.md no longer has the snippet", async () => {
-    mockInstalledSkill();
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/marco/CONTEXT.md",
-      })
-      .resolves(body("# Context\n"));
-
-    const result = await uninstallCatalogSkill(uninstallOptions());
-
-    expect(result.context_md_strip).toBe("snippet_not_found");
-    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
-    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(3);
   });
 
   it("rejects invalid slugs before touching S3", async () => {

@@ -1,9 +1,9 @@
 /**
  * Unit tests for the shared plugin activation gate (plan 2026-06-12-001
  * U7): resolvePluginGate fail-closed semantics, folder/path exclusion
- * helpers, CONTEXT.md routing-entry filtering, and the deduplicated
- * TOOLS.md MCP policy chokepoint (behavior-preservation of the filters
- * previously inlined in chat-agent-invoke and wakeup-processor).
+ * helpers, and the deduplicated TOOLS.md MCP policy chokepoint
+ * (behavior-preservation of the filters previously inlined in
+ * chat-agent-invoke and wakeup-processor).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,6 @@ import {
   applyWorkspaceMcpPolicyFilter,
   EMPTY_PLUGIN_GATE,
   FAIL_CLOSED_PLUGIN_GATE,
-  filterContextRoutingEntries,
   isNamespacedPluginSkillPath,
   pluginGateExcludesWorkspacePath,
   pluginGateHasExclusions,
@@ -262,58 +261,6 @@ describe("path helpers", () => {
     expect(pluginGateExcludesWorkspacePath(gate, "memory/MEMORY.md")).toBe(
       false,
     );
-  });
-});
-
-describe("filterContextRoutingEntries", () => {
-  const gate: PluginActivationGate = {
-    hasPluginInstalls: true,
-    allowedInstallIds: new Set(),
-    blockedInstallIds: new Set(["install-a"]),
-    blockedSkillFolderPrefixes: ["skills/lastmile--crm/"],
-    blockAllNamespacedPluginFolders: false,
-  };
-
-  it("drops routing lines referencing blocked plugin skill folders, keeps everything else", () => {
-    const content = [
-      "# Context",
-      "",
-      "- For tasks covered by the `lastmile--crm` skill, read skills/lastmile--crm/SKILL.md and follow it.",
-      "- For tasks covered by the `notes-helper` skill, read skills/notes-helper/SKILL.md and follow it.",
-      "General prose stays.",
-    ].join("\n");
-    const result = filterContextRoutingEntries(content, gate);
-    expect(result.changed).toBe(true);
-    expect(result.content).not.toContain("lastmile--crm");
-    expect(result.content).toContain("skills/notes-helper/SKILL.md");
-    expect(result.content).toContain("General prose stays.");
-  });
-
-  it("is a no-op when no line references a blocked folder", () => {
-    const content = "# Context\n\n- read skills/notes-helper/SKILL.md\n";
-    const result = filterContextRoutingEntries(content, gate);
-    expect(result.changed).toBe(false);
-    expect(result.content).toBe(content);
-  });
-
-  it("is a no-op for a gate without exclusions", () => {
-    const content = "- read skills/lastmile--crm/SKILL.md\n";
-    expect(
-      filterContextRoutingEntries(content, EMPTY_PLUGIN_GATE).changed,
-    ).toBe(false);
-  });
-
-  it("drops namespaced references under the degraded fail-closed gate", () => {
-    const content = [
-      "- read skills/lastmile--crm/SKILL.md",
-      "- read skills/notes-helper/SKILL.md",
-    ].join("\n");
-    const result = filterContextRoutingEntries(
-      content,
-      FAIL_CLOSED_PLUGIN_GATE,
-    );
-    expect(result.changed).toBe(true);
-    expect(result.content).toBe("- read skills/notes-helper/SKILL.md");
   });
 });
 

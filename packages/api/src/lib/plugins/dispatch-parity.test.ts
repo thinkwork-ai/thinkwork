@@ -131,13 +131,10 @@ const INSTALL = "install-lastmile-1";
 const PLUGIN_SKILL_FOLDER = "skills/lastmile--crm-basics/";
 const PLAIN_SKILL_FOLDER = "skills/notes-helper/";
 
-const CONTEXT_MD = [
-  "# Context",
-  "",
-  "- For tasks covered by the `lastmile--crm-basics` skill, read skills/lastmile--crm-basics/SKILL.md and follow it.",
-  "- For tasks covered by the `notes-helper` skill, read skills/notes-helper/SKILL.md and follow it.",
-  "",
-].join("\n");
+// Post-U5 source shape: operator prose only. Routing rows are COMPUTED
+// into the rendered CONTEXT.md `## Routing` section per requester —
+// install-time snippet lines no longer exist in source (Composer U5).
+const CONTEXT_MD = "# Context\n\nOperator prose stays.\n";
 
 function pluginMcpRow(key: string) {
   return {

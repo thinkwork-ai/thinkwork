@@ -3,7 +3,6 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
-  NoSuchKey,
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
@@ -26,7 +25,6 @@ export type CatalogInstallOptions = {
 export type CatalogInstallResult = {
   ok: true;
   installed_paths: string[];
-  context_md_changed_path: "CONTEXT.md";
   source_sha256: string;
   /**
    * Bundled eval case files (`evals/*.json`) read from the catalog folder
@@ -125,20 +123,11 @@ export async function installCatalogSkill(
     );
   }
 
-  const contextKey = `${options.targetPrefix}CONTEXT.md`;
-  let contextContent: string;
-  let contextExisted = true;
-  try {
-    contextContent = await readTextObject(options, contextKey);
-  } catch (err) {
-    if (isNoSuchKey(err)) {
-      contextContent = "";
-      contextExisted = false;
-    } else {
-      throw err;
-    }
-  }
-
+  // Composer plan U5 (R8, KTD-4): install NEVER touches CONTEXT.md.
+  // Routing wiring is computed into the rendered CONTEXT.md `## Routing`
+  // managed section at render time. The wiring snippet is still recorded
+  // in `.catalog-ref.json` — it carries the install's wiring choice and
+  // powers the legacy-snippet migration's exact-match strip.
   const sourceSha256 = sourceSha256ForFiles(files);
   const catalogRef: CatalogRef = {
     slug,
@@ -149,7 +138,6 @@ export async function installCatalogSkill(
   };
   const copiedKeys: string[] = [];
   let refKey: string | null = null;
-  let contextWritten = false;
 
   try {
     for (const file of files) {
@@ -173,25 +161,8 @@ export async function installCatalogSkill(
         ContentType: "application/json; charset=utf-8",
       }),
     );
-
-    await options.s3.send(
-      new PutObjectCommand({
-        Bucket: options.bucket,
-        Key: contextKey,
-        Body: appendSnippetIfMissing(contextContent, suggestion.snippet),
-        ContentType: "text/markdown; charset=utf-8",
-      }),
-    );
-    contextWritten = true;
   } catch (err) {
-    await rollbackInstall(options, {
-      copiedKeys,
-      refKey,
-      contextKey,
-      contextContent,
-      contextExisted,
-      contextWritten,
-    });
+    await rollbackInstall(options, { copiedKeys, refKey });
     throw new CatalogInstallError(
       500,
       "install_failed",
@@ -205,7 +176,6 @@ export async function installCatalogSkill(
       ...files.map((file) => `skills/${slug}/${file.relativePath}`),
       `skills/${slug}/.catalog-ref.json`,
     ].sort(),
-    context_md_changed_path: "CONTEXT.md",
     source_sha256: sourceSha256,
     eval_cases: extractBundledEvalCases(files),
   };
@@ -285,32 +255,11 @@ function sourceSha256ForFiles(files: CatalogFile[]): string {
   return hash.digest("hex");
 }
 
-function appendSnippetIfMissing(context: string, snippet: string): string {
-  const normalizedContext = context.replace(/\r\n?/g, "\n");
-  const cleanSnippet = snippet.replace(/\r\n?/g, "\n").trimEnd();
-  if (!cleanSnippet || normalizedContext.includes(cleanSnippet)) {
-    return normalizedContext;
-  }
-  const separator =
-    normalizedContext.length === 0
-      ? ""
-      : normalizedContext.endsWith("\n\n")
-        ? ""
-        : normalizedContext.endsWith("\n")
-          ? "\n"
-          : "\n\n";
-  return `${normalizedContext}${separator}${cleanSnippet}\n`;
-}
-
 async function rollbackInstall(
   options: Pick<CatalogInstallOptions, "s3" | "bucket">,
   args: {
     copiedKeys: string[];
     refKey: string | null;
-    contextKey: string;
-    contextContent: string;
-    contextExisted: boolean;
-    contextWritten: boolean;
   },
 ): Promise<void> {
   for (const key of [...args.copiedKeys, args.refKey].filter(
@@ -326,39 +275,11 @@ async function rollbackInstall(
         );
       });
   }
-  if (args.contextWritten) {
-    const rollbackContext = args.contextExisted
-      ? new PutObjectCommand({
-          Bucket: options.bucket,
-          Key: args.contextKey,
-          Body: args.contextContent,
-          ContentType: "text/markdown; charset=utf-8",
-        })
-      : new DeleteObjectCommand({
-          Bucket: options.bucket,
-          Key: args.contextKey,
-        });
-    await options.s3.send(rollbackContext).catch((err) => {
-      console.error(
-        `[catalog-install] rollback CONTEXT.md restore failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    });
-  }
 }
 
 function s3CopySource(bucket: string, key: string): string {
   const encoded = key.split("/").map(encodeURIComponent).join("/");
   return `${bucket}/${encoded}`;
-}
-
-function isNoSuchKey(err: unknown): boolean {
-  if (err instanceof NoSuchKey) return true;
-  const name = (err as { name?: string } | null)?.name;
-  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-    ?.$metadata?.httpStatusCode;
-  return name === "NoSuchKey" || name === "NotFound" || status === 404;
 }
 
 function errorMessage(err: unknown): string {
