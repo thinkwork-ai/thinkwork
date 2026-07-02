@@ -7,9 +7,11 @@ import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
   resolveTerraformRoot,
+  resolveTerraformRootForStage,
   ensureInit,
   ensureWorkspace,
 } from "../terraform.js";
+import { loadEnvironment } from "../environments.js";
 import { printHeader, printSuccess, printError } from "../ui.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { isCancellation } from "../lib/interactive.js";
@@ -114,7 +116,10 @@ export function registerBootstrapCommand(program: Command): void {
       const identity = getAwsIdentity();
       printHeader("bootstrap", stage, identity);
 
-      const terraformDir = resolveTerraformRoot();
+      const terraformDir = resolveTerraformRootForStage(
+        stage,
+        loadEnvironment(stage)?.terraformDir,
+      );
       const cwd = resolveTierDir(terraformDir, stage, "app");
 
       await ensureInit(cwd);

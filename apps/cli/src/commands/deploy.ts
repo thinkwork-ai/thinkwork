@@ -22,7 +22,7 @@ import {
 import { getAwsIdentity } from "../aws.js";
 import {
   resolveTierDir,
-  resolveTerraformRoot,
+  resolveTerraformRootForStage,
   ensureInit,
   ensureWorkspace,
   isInitScaffoldedLayout,
@@ -30,6 +30,7 @@ import {
   runTerraformTee,
   terraformOutput,
 } from "../terraform.js";
+import { loadEnvironment } from "../environments.js";
 import {
   type BackendTarget,
   backendTarget,
@@ -1096,7 +1097,10 @@ export async function runLocalTerraformDeploy(
     }
   }
 
-  const terraformDir = resolveTerraformRoot();
+  const terraformDir = resolveTerraformRootForStage(
+    stage,
+    loadEnvironment(stage)?.terraformDir,
+  );
   const tiers = expandComponent(opts.component as Component);
 
   const cwd0 = resolveTierDir(terraformDir, stage, tiers[0]);
@@ -1123,6 +1127,9 @@ export async function runLocalTerraformDeploy(
           : undefined,
       domain: signals.domain,
       sesConfigured: signals.sesConfigured,
+      agentcorePiSourceImage:
+        readTfvarsSignalsRaw(preflightCwd).agentcore_pi_source_image_uri ||
+        undefined,
     };
     console.log("\n  Preflight checks:");
     const summary = await runChecks(preflightChecks(ctx));

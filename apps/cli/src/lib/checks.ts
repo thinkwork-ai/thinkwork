@@ -442,6 +442,88 @@ export function checkSesStatus(
   };
 }
 
+// ── AgentCore Pi source image ─────────────────────────────────────────────────
+
+/** Parse "<acct>.dkr.ecr.<region>.amazonaws.com/…" into its registry parts. */
+export function parseEcrImageUri(
+  uri: string,
+): { registry: string; region: string } | null {
+  const match = uri.match(/^(\d+\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com)\//);
+  return match ? { registry: match[1], region: match[2] } : null;
+}
+
+export function evaluateAgentcorePiImageProbe(input: {
+  uri: string;
+  dockerAvailable: boolean;
+  reachable: boolean;
+  error?: string;
+}): CheckResult {
+  if (!input.dockerAvailable) {
+    return {
+      pass: true,
+      detail:
+        "docker unavailable — cannot probe the pinned image; the apply-time seed reports pull failures",
+    };
+  }
+  if (input.reachable) {
+    return { pass: true, detail: `${input.uri} reachable` };
+  }
+  const reason = (input.error ?? "").trim().split("\n")[0].slice(0, 160);
+  return {
+    pass: false,
+    detail:
+      `pinned AgentCore image ${input.uri} is not pullable from this machine` +
+      (reason ? ` (${reason})` : "") +
+      ". The apply keeps an already-seeded ECR image or builds from a repo checkout; " +
+      "otherwise set agentcore_pi_source_image_uri in terraform.tfvars to a pullable image.",
+  };
+}
+
+/**
+ * Warn-tier probe of the pinned AgentCore Pi source image (harness ledger,
+ * HCI validation 2026-07-02: a GHCR 403 surfaced ~7 minutes into terraform
+ * apply). `docker manifest inspect` exercises the same registry auth a pull
+ * would. Never blocks — the apply-time seed has fallbacks this probe cannot
+ * see (already-seeded ECR target, repo-checkout build).
+ */
+export function checkAgentcorePiSourceImage(uri: string): Check {
+  return {
+    name: "AgentCore image pullable",
+    blocking: false,
+    run: () => {
+      const docker = spawnSync("docker", ["--version"], { encoding: "utf8" });
+      if (docker.status !== 0) {
+        return evaluateAgentcorePiImageProbe({
+          uri,
+          dockerAvailable: false,
+          reachable: false,
+        });
+      }
+      // ECR sources need the same login the seed script performs.
+      const ecr = parseEcrImageUri(uri);
+      if (ecr) {
+        spawnSync(
+          "bash",
+          [
+            "-c",
+            `aws ecr get-login-password --region ${ecr.region} | docker login --username AWS --password-stdin ${ecr.registry}`,
+          ],
+          { encoding: "utf8" },
+        );
+      }
+      const probe = spawnSync("docker", ["manifest", "inspect", uri], {
+        encoding: "utf8",
+      });
+      return evaluateAgentcorePiImageProbe({
+        uri,
+        dockerAvailable: true,
+        reachable: probe.status === 0,
+        error: probe.stderr,
+      });
+    },
+  };
+}
+
 // ── Registry assembly + runner ────────────────────────────────────────────────
 
 export function doctorChecks(): Check[] {
@@ -464,6 +546,8 @@ export interface PreflightContext {
   domain?: string;
   /** true when the stage tfvars configure SES */
   sesConfigured?: boolean;
+  /** agentcore_pi_source_image_uri from the stage tfvars, when pinned */
+  agentcorePiSourceImage?: string;
 }
 
 export function preflightChecks(ctx: PreflightContext): Check[] {
@@ -471,6 +555,9 @@ export function preflightChecks(ctx: PreflightContext): Check[] {
   if (ctx.backend) checks.push(checkStateBackend(ctx.backend));
   if (ctx.domain) checks.push(checkDomainDelegation(ctx.domain));
   if (ctx.sesConfigured) checks.push(checkSesStatus());
+  if (ctx.agentcorePiSourceImage) {
+    checks.push(checkAgentcorePiSourceImage(ctx.agentcorePiSourceImage));
+  }
   return checks;
 }
 
