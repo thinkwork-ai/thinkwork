@@ -140,6 +140,8 @@ export interface McpConfig {
   tools?: string[];
   availableTools?: string[];
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /** Probe-mode only (U3): stored token status; never set on runtime resolutions. */
+  tokenStatus?: "active" | "expired" | "configured";
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;
@@ -322,6 +324,14 @@ export interface ResolveAgentRuntimeConfigOptions {
    * profiles are filtered out in SQL), and those run only under the flag.
    */
   collectDiagnostics?: boolean;
+  /**
+   * MCP token resolution mode (capability-mapping plan U3, KTD-1). Default
+   * "resolve" — the runtime path, which refreshes expired OAuth tokens.
+   * The capability inspector passes "probe": token status is classified from
+   * stored metadata only, with zero Secrets Manager reads and zero token
+   * writes. Never set on runtime/dispatch callers.
+   */
+  mcpTokenMode?: "resolve" | "probe";
   /**
    * Logging prefix (e.g. "[chat-agent-invoke]", "[skill-run-dispatcher]") so
    * logs trace back to the caller context.
@@ -804,6 +814,7 @@ export async function resolveAgentRuntimeConfig(
       requesterUserId: opts.currentUserId ?? null,
     },
     logPrefix,
+    { tokenMode: opts.mcpTokenMode, diagnostics },
   );
 
   const resolvedConfig: AgentRuntimeConfig = {

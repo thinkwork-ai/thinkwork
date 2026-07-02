@@ -46,6 +46,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
+import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
 
 export interface McpServerConfig {
   name: string;
@@ -64,6 +65,17 @@ export interface McpServerConfig {
   tools?: string[];
   availableTools?: string[];
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /**
+   * Probe-mode only (capability-mapping plan U3, KTD-1): the stored token's
+   * status for this server, read from user_mcp_tokens / auth_config metadata
+   * WITHOUT touching Secrets Manager or the token endpoint. Never present on
+   * runtime-path resolutions — runtime configs carry real `auth` instead.
+   *   - "active"     stored token exists and is not near expiry
+   *   - "expired"    stored token exists but is expired; a runtime turn would
+   *                  attempt a refresh (outcome unknowable without side effects)
+   *   - "configured" tenant/service credential reference is present
+   */
+  tokenStatus?: "active" | "expired" | "configured";
 }
 
 export interface McpRuntimeRecordLinkHints {
@@ -92,6 +104,26 @@ export interface McpRequesterIdentity {
 export interface BuildMcpConfigsDeps {
   /** Injectable for tests; defaults to the Drizzle/SecretsManager resolver. */
   pluginAuth?: PluginDispatchAuthResolver;
+  /**
+   * Token resolution mode (capability-mapping plan U3, KTD-1).
+   *
+   *   - "resolve" (default): the runtime path — reads Secrets Manager and
+   *     refreshes expired OAuth tokens (token-endpoint POST + Secrets Manager
+   *     + user_mcp_tokens writes).
+   *   - "probe": the inspector path — classifies each server's stored token
+   *     state from DB metadata only. Zero Secrets Manager reads, zero
+   *     refreshes, zero writes; configs carry `tokenStatus` instead of `auth`.
+   *     Inspection must never mutate the state it observes: with WorkOS
+   *     refresh-token rotation, a refresh from the inspector could burn a
+   *     live connection.
+   */
+  tokenMode?: "resolve" | "probe";
+  /**
+   * Optional diagnostics collector (U1): when present, every server this
+   * builder skips is recorded with its enumerated reason. Orthogonal to
+   * tokenMode; runtime callers pass neither.
+   */
+  diagnostics?: CapabilityDiagnosticsCollector | null;
 }
 
 const db = getDb();
@@ -108,6 +140,21 @@ export async function buildMcpConfigs(
 ): Promise<McpServerConfig[]> {
   const humanPairId = requester?.humanPairId ?? null;
   const requesterUserId = requester?.requesterUserId ?? null;
+  const probe = deps.tokenMode === "probe";
+  const diagnostics = deps.diagnostics ?? null;
+  const dropDiag = (
+    mcp: { slug: string | null; name: string },
+    reason: Parameters<CapabilityDiagnosticsCollector["add"]>[0]["reason"],
+    detail: string,
+  ) => {
+    diagnostics?.add({
+      capabilityClass: "mcp_server",
+      capabilityId: mcp.slug ?? mcp.name,
+      displayName: mcp.name,
+      reason,
+      detail,
+    });
+  };
   const mcpConfigs: McpServerConfig[] = [];
 
   // U11 gate: only approved + enabled servers whose pinned `url_hash`
@@ -122,7 +169,9 @@ export async function buildMcpConfigs(
     .limit(1);
 
   if (!agentRow?.tenant_id) {
-    console.warn(`${logPrefix} No agent found for MCP config build: ${agentId}`);
+    console.warn(
+      `${logPrefix} No agent found for MCP config build: ${agentId}`,
+    );
     return [];
   }
 
@@ -227,6 +276,11 @@ export async function buildMcpConfigs(
       console.warn(
         `${logPrefix} skipping ${mcp.slug}: url_hash mismatch with (url, auth_config); re-approval required`,
       );
+      dropDiag(
+        mcp,
+        "mcp_server_not_resolved",
+        "url_hash mismatch with (url, auth_config); re-approval required",
+      );
       continue;
     }
 
@@ -238,12 +292,31 @@ export async function buildMcpConfigs(
     // tenant-owned.
     if (isPluginRow(mcp)) {
       if (mcp.auth_type === "service_credential") {
+        if (probe) {
+          const status = probeServiceCredentialConfig(
+            (mcp.auth_config as Record<string, unknown>) || {},
+          );
+          if (status !== "configured") {
+            dropDiag(mcp, "credential_missing", status);
+            continue;
+          }
+          mcpConfigs.push(probeMcpServerConfig(mcp, "configured"));
+          includedPluginUrls.add(normalizeServerUrl(mcp.url));
+          continue;
+        }
         const resolved = await resolveServiceCredentialAuth(
           (mcp.auth_config as Record<string, unknown>) || {},
           logPrefix,
           mcp.slug ?? mcp.name,
         );
-        if (!resolved) continue;
+        if (!resolved) {
+          dropDiag(
+            mcp,
+            "credential_missing",
+            "service credential did not resolve",
+          );
+          continue;
+        }
         mcpConfigs.push(
           toMcpServerConfig(mcp, resolved.token, resolved.headers),
         );
@@ -251,7 +324,9 @@ export async function buildMcpConfigs(
         continue;
       }
       if (mcp.auth_type === "none") {
-        mcpConfigs.push(toMcpServerConfig(mcp, undefined));
+        mcpConfigs.push(
+          probe ? probeMcpServerConfig(mcp) : toMcpServerConfig(mcp, undefined),
+        );
         includedPluginUrls.add(normalizeServerUrl(mcp.url));
         continue;
       }
@@ -259,19 +334,48 @@ export async function buildMcpConfigs(
         console.warn(
           `${logPrefix} Skipping plugin MCP ${mcp.slug}: no resolvable requesting user (fail closed)`,
         );
+        dropDiag(
+          mcp,
+          "plugin_gate_fail_closed",
+          "no resolvable requesting user for a per-user plugin server (fail closed)",
+        );
         continue;
       }
       const pluginInstallId = mcp.plugin_install_id as string;
       let pluginToken: string | undefined;
       let pluginHeaders: Record<string, string> | undefined;
       if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
+        if (probe) {
+          const status = await probeUserMcpTokenStatus({
+            userId: requesterUserId,
+            mcpServerId: mcp.mcp_server_id,
+          });
+          if (status === "missing") {
+            dropDiag(
+              mcp,
+              "oauth_missing",
+              "requester has no active MCP OAuth token for this plugin server",
+            );
+            continue;
+          }
+          mcpConfigs.push(probeMcpServerConfig(mcp, status));
+          includedPluginUrls.add(normalizeServerUrl(mcp.url));
+          continue;
+        }
         pluginToken = await resolveUserMcpBearerToken({
           userId: requesterUserId,
           mcp,
           logPrefix,
           fallbackLabel: "for plugin-registered MCP server",
         });
-        if (!pluginToken) continue;
+        if (!pluginToken) {
+          dropDiag(
+            mcp,
+            "oauth_missing",
+            "requester's MCP OAuth token did not resolve",
+          );
+          continue;
+        }
       } else if (mcp.auth_type === "user_headers") {
         const headerNames = userHeaderNamesFromAuthConfig(
           mcp.auth_config as Record<string, unknown> | null,
@@ -283,6 +387,30 @@ export async function buildMcpConfigs(
           console.warn(
             `${logPrefix} Skipping plugin MCP ${mcp.slug}: user_headers auth_config has no header or bearer bindings`,
           );
+          dropDiag(
+            mcp,
+            "mcp_server_not_resolved",
+            "user_headers auth_config has no header or bearer bindings",
+          );
+          continue;
+        }
+        if (probe) {
+          // Probe path: activation check only. Full header/token resolution
+          // can MINT plugin activation tokens (WorkOS rotates refresh tokens
+          // — mint at most one per activation), so the inspector never runs it.
+          const active = await (
+            await getPluginAuth()
+          ).hasActiveActivation(requesterUserId, pluginInstallId);
+          if (!active) {
+            dropDiag(
+              mcp,
+              "plugin_activation_missing",
+              "requester has no active activation for this plugin",
+            );
+            continue;
+          }
+          mcpConfigs.push(probeMcpServerConfig(mcp, "active"));
+          includedPluginUrls.add(normalizeServerUrl(mcp.url));
           continue;
         }
         if (headerNames.length > 0) {
@@ -322,10 +450,19 @@ export async function buildMcpConfigs(
           console.warn(
             `${logPrefix} Skipping plugin MCP ${mcp.slug}: requester has no active activation`,
           );
+          dropDiag(
+            mcp,
+            "plugin_activation_missing",
+            "requester has no active activation for this plugin",
+          );
           continue;
         }
       }
-      mcpConfigs.push(toMcpServerConfig(mcp, pluginToken, pluginHeaders));
+      mcpConfigs.push(
+        probe
+          ? probeMcpServerConfig(mcp, "active")
+          : toMcpServerConfig(mcp, pluginToken, pluginHeaders),
+      );
       includedPluginUrls.add(normalizeServerUrl(mcp.url));
       continue;
     }
@@ -337,6 +474,52 @@ export async function buildMcpConfigs(
       console.log(
         `${logPrefix} Skipping direct MCP ${mcp.slug}: deduped against an active plugin server with the same URL`,
       );
+      continue;
+    }
+
+    if (probe) {
+      // Probe path (KTD-1): classify from stored metadata only — never a
+      // Secrets Manager read, never a token refresh.
+      if (mcp.auth_type === "tenant_api_key") {
+        const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
+        const hasRef =
+          (typeof authCfg.secretRef === "string" && authCfg.secretRef.trim()) ||
+          (typeof authCfg.token === "string" && authCfg.token.length > 0);
+        if (!hasRef) {
+          dropDiag(mcp, "credential_missing", "tenant API key not configured");
+          continue;
+        }
+        mcpConfigs.push(probeMcpServerConfig(mcp, "configured"));
+        continue;
+      }
+      if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
+        const directOAuthUserId = requesterUserId ?? humanPairId;
+        if (!directOAuthUserId) {
+          dropDiag(
+            mcp,
+            "oauth_missing",
+            "no requesting user and no human pair to resolve OAuth for this server",
+          );
+          continue;
+        }
+        const status = await probeUserMcpTokenStatus({
+          userId: directOAuthUserId,
+          mcpServerId: mcp.mcp_server_id,
+        });
+        if (status === "missing") {
+          dropDiag(
+            mcp,
+            "oauth_missing",
+            requesterUserId
+              ? "requester has not completed OAuth for this server"
+              : "human pair has not completed OAuth for this server",
+          );
+          continue;
+        }
+        mcpConfigs.push(probeMcpServerConfig(mcp, status));
+        continue;
+      }
+      mcpConfigs.push(probeMcpServerConfig(mcp));
       continue;
     }
 
@@ -363,6 +546,7 @@ export async function buildMcpConfigs(
       console.warn(
         `${logPrefix} Skipping MCP ${mcp.slug}: tenant API key not configured`,
       );
+      dropDiag(mcp, "credential_missing", "tenant API key not configured");
       continue;
     }
     if (
@@ -372,6 +556,7 @@ export async function buildMcpConfigs(
       console.warn(
         `${logPrefix} Skipping MCP ${mcp.slug}: user has not completed OAuth`,
       );
+      dropDiag(mcp, "oauth_missing", "user has not completed OAuth");
       continue;
     }
 
@@ -385,6 +570,65 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+/**
+ * Probe a user's stored MCP OAuth token status from user_mcp_tokens metadata
+ * only (capability-mapping plan U3, KTD-1). No Secrets Manager read, no
+ * refresh, no writes — the inspector's zero-side-effect counterpart to
+ * resolveUserMcpBearerToken.
+ */
+async function probeUserMcpTokenStatus(args: {
+  userId: string;
+  mcpServerId: string;
+}): Promise<"active" | "expired" | "missing"> {
+  const [userToken] = await db
+    .select({
+      secret_ref: userMcpTokens.secret_ref,
+      expires_at: userMcpTokens.expires_at,
+    })
+    .from(userMcpTokens)
+    .where(
+      and(
+        eq(userMcpTokens.user_id, args.userId),
+        eq(userMcpTokens.mcp_server_id, args.mcpServerId),
+        eq(userMcpTokens.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!userToken?.secret_ref) return "missing";
+  const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+  const isExpired =
+    userToken.expires_at &&
+    new Date(userToken.expires_at).getTime() - Date.now() < EXPIRY_BUFFER_MS;
+  return isExpired ? "expired" : "active";
+}
+
+/** Probe-mode service-credential config check — presence only, no secret read. */
+function probeServiceCredentialConfig(
+  authCfg: Record<string, unknown>,
+): "configured" | string {
+  if (typeof authCfg.revokedAt === "string" || authCfg.revoked === true) {
+    return "service credential is revoked";
+  }
+  const secretRef =
+    typeof authCfg.secretRef === "string" && authCfg.secretRef.trim();
+  if (!secretRef) return "service credential secret ref is missing";
+  if (serviceCredentialHeaderBindings(authCfg).length === 0) {
+    return "service credential auth_config has no header bindings";
+  }
+  return "configured";
+}
+
+/** Probe-mode config: same shape as the runtime config but never carries auth material. */
+function probeMcpServerConfig(
+  mcp: Parameters<typeof toMcpServerConfig>[0],
+  tokenStatus?: "active" | "expired" | "configured",
+): McpServerConfig {
+  const config = toMcpServerConfig(mcp, undefined);
+  delete config.auth;
+  if (tokenStatus) config.tokenStatus = tokenStatus;
+  return config;
 }
 
 async function resolveUserMcpBearerToken(args: {
