@@ -87,8 +87,10 @@ import {
   normalizeHistory,
   normalizeApprovedModelIds,
   normalizeModelRoutingPolicy,
+  postCapabilityManifest,
   postFinalizeCallback,
   readActivityCallbackConfig,
+  readCapabilityManifestSinkConfig,
   runAgentLoop,
   type AgentProfileRunRecord,
   type ChildModelCaller,
@@ -778,14 +780,12 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
     await mkdir(workspaceDir, { recursive: true });
     return;
   } catch (err) {
-    if (
-      !(
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "ENOENT"
-      )
-    ) {
+    if (!(
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      err.code === "ENOENT"
+    )) {
       throw err;
     }
   }
@@ -1175,6 +1175,16 @@ export interface InvocationResourceBundle {
    * avoids polluting the agent's tool list when MCP is unused).
    */
   mcpProxyRegistered: boolean;
+  /**
+   * Per-server MCP load outcomes for the per-turn capability manifest
+   * (capability-mapping plan U12): every server in the payload's mcp_configs
+   * lands here as connected, rejected_url, or connect_failed.
+   */
+  mcpLoadRecord: Array<{
+    serverName: string;
+    status: "connected" | "rejected_url" | "connect_failed";
+    reason?: string;
+  }>;
 }
 
 export interface BuildInvocationResourcesArgs {
@@ -1749,6 +1759,7 @@ export async function buildInvocationResources(
   // MCP (U7) — validate, mint, build.
   const rawConfigs = parseMcpConfigs(args.payload.mcp_configs);
   const validatedConfigs: McpServerConfig[] = [];
+  const mcpLoadRecord: InvocationResourceBundle["mcpLoadRecord"] = [];
   for (const config of rawConfigs) {
     const validation = validateMcpUrl(config.url, {
       trustedInternal: config.trustedInternal === true,
@@ -1762,10 +1773,16 @@ export async function buildInvocationResources(
         serverName: config.serverName,
         rejectionReason: validation.reason,
       });
+      mcpLoadRecord.push({
+        serverName: config.serverName,
+        status: "rejected_url",
+        reason: validation.reason,
+      });
       continue;
     }
     validatedConfigs.push(config);
   }
+  const mcpConnectFailures = new Set<string>();
   const mcpTools = await buildMcpTools({
     mcpConfigs: validatedConfigs,
     handleStore,
@@ -1778,6 +1795,12 @@ export async function buildInvocationResources(
         userId: args.identity.userId,
         serverName: config.serverName,
         error: err instanceof Error ? err.message : String(err),
+      });
+      mcpConnectFailures.add(config.serverName);
+      mcpLoadRecord.push({
+        serverName: config.serverName,
+        status: "connect_failed",
+        reason: err instanceof Error ? err.message : String(err),
       });
     },
     // Plan §006 U4 — populate the per-invocation registry as part of the
@@ -1839,6 +1862,15 @@ export async function buildInvocationResources(
     }
   }
 
+  for (const config of validatedConfigs) {
+    if (!mcpConnectFailures.has(config.serverName)) {
+      mcpLoadRecord.push({
+        serverName: config.serverName,
+        status: "connected",
+      });
+    }
+  }
+
   return {
     tools,
     builtinToolNames,
@@ -1848,6 +1880,7 @@ export async function buildInvocationResources(
     workspaceSkills: args.workspaceSkills,
     handleStore,
     mcpProxyRegistered,
+    mcpLoadRecord,
   };
 }
 
@@ -1881,10 +1914,7 @@ export interface SkillRunContext {
 }
 
 export type CompletionStatus =
-  | "complete"
-  | "failed"
-  | "cancelled"
-  | "cost_bounded_error";
+  "complete" | "failed" | "cancelled" | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;
@@ -2182,6 +2212,7 @@ export async function handleInvocation(
       lambdaClient: deps.lambdaClientFactory(env.awsRegion),
       finalizeFunctionName: env.chatAgentFinalizeFnName || "",
       activityFunctionName: env.chatAgentActivityFnName || "",
+      manifestFunctionName: env.manifestLogFnName || "",
       logger: callbackLogger,
     });
   const workspaceBucket =
@@ -3053,6 +3084,89 @@ export async function handleInvocation(
     // turn already completed, so this never extends its wall-clock, and it
     // closes the Lambda-Web-Adapter unawaited-promise gap for the live view.
     await activityEmitter.drain();
+    // Per-turn capability manifest (capability-mapping plan U12, R14).
+    // Gated on the API wiring every dispatch path carries (KTD-6) — never on
+    // the chat-only finalize callback, so wakeup/automation turns emit too.
+    // Best-effort: a failed POST renders as "manifest missing" in the
+    // inspector and never blocks the turn.
+    const manifestSink = readCapabilityManifestSinkConfig(args.payload);
+    if (manifestSink) {
+      const payloadSkillIds = Array.isArray(args.payload.skills)
+        ? args.payload.skills.flatMap((skill) => {
+            if (!skill || typeof skill !== "object") return [];
+            const skillId = asString((skill as { skillId?: unknown }).skillId);
+            return skillId ? [skillId] : [];
+          })
+        : [];
+      const dynamicEvidence = dynamicDefaultExtensions.evidence;
+      const extensionEvidenceId = (
+        entry: (typeof dynamicEvidence)[number],
+      ): string => entry.assignmentId || entry.name || entry.extensionId;
+      await postCapabilityManifest({
+        config: manifestSink,
+        manifestJson: {
+          schema_version: 2,
+          resolved: {
+            skills: payloadSkillIds,
+            builtInTools: bundle.builtinToolNames,
+            mcpServers: bundle.mcpLoadRecord.map((record) => record.serverName),
+            piExtensions: dynamicEvidence.map(extensionEvidenceId),
+          },
+          loaded: {
+            skills: bundle.workspaceSkills.map((skill) => skill.slug),
+            builtInTools: bundle.builtinToolNames,
+            mcpServers: bundle.mcpLoadRecord
+              .filter((record) => record.status === "connected")
+              .map((record) => record.serverName),
+            piExtensions: dynamicEvidence
+              .filter((entry) => entry.status === "loaded")
+              .map(extensionEvidenceId),
+            extensionTools: bundle.extensionToolNames,
+          },
+          gated: [
+            ...bundle.mcpLoadRecord
+              .filter((record) => record.status !== "connected")
+              .map((record) => ({
+                capabilityClass: "mcp_server",
+                capabilityId: record.serverName,
+                reason:
+                  record.status === "rejected_url"
+                    ? "mcp_server_not_resolved"
+                    : "resolution_fault",
+                detail: record.reason,
+              })),
+            ...dynamicEvidence
+              .filter((entry) => entry.status !== "loaded")
+              .map((entry) => ({
+                capabilityClass: "pi_extension",
+                capabilityId: extensionEvidenceId(entry),
+                // Container gate reasons that already exist in the shared
+                // taxonomy pass through verbatim; everything else folds into
+                // extension_validation_failed with the raw reason as detail.
+                reason:
+                  entry.reason === "unavailable_provider" ||
+                  entry.reason === "missing_granted_provider"
+                    ? entry.reason
+                    : "extension_validation_failed",
+                detail: entry.reason,
+              })),
+          ],
+          delegatedProfiles: agentProfiles.map((profile) => ({
+            profileId: profile.id,
+            slug: profile.slug,
+            loadedExtensionTools:
+              profileExtensionToolNamesById.get(profile.id) ?? [],
+          })),
+        },
+        fetchImpl: callbackFetchImpl,
+        logger: (entry) =>
+          logStructured({
+            ...entry,
+            tenantId: identity.tenantId,
+            threadId: identity.threadId,
+          }),
+      });
+    }
     logStructured({
       level: "info",
       event: "agent_loop_completed",

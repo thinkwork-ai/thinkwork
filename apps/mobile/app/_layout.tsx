@@ -393,7 +393,6 @@ function RootLayoutNav() {
               <Stack.Screen name="invite/[token]" />
               <Stack.Screen name="agents/[id]/files" />
               <Stack.Screen name="agents/[id]/file-view" />
-              <Stack.Screen name="agents/[id]/skills" />
               <Stack.Screen name="agents/[id]/model" />
               <Stack.Screen
                 name="artifacts/[id]"

@@ -206,7 +206,6 @@ export type Agent = {
   runtimeConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
   sandbox?: Maybe<Scalars["AWSJSON"]["output"]>;
   sendEmail?: Maybe<Scalars["AWSJSON"]["output"]>;
-  skills: Array<AgentSkill>;
   slug?: Maybe<Scalars["String"]["output"]>;
   source?: Maybe<Scalars["String"]["output"]>;
   status: AgentStatus;
@@ -609,29 +608,6 @@ export enum AgentRuntime {
   Flue = "FLUE",
 }
 
-export type AgentSkill = {
-  __typename?: "AgentSkill";
-  agentId: Scalars["ID"]["output"];
-  config?: Maybe<Scalars["AWSJSON"]["output"]>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  modelOverride?: Maybe<Scalars["String"]["output"]>;
-  permissions?: Maybe<Scalars["AWSJSON"]["output"]>;
-  rateLimitRpm?: Maybe<Scalars["Int"]["output"]>;
-  skillId: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-};
-
-export type AgentSkillInput = {
-  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
-  modelOverride?: InputMaybe<Scalars["String"]["input"]>;
-  permissions?: InputMaybe<Scalars["AWSJSON"]["input"]>;
-  rateLimitRpm?: InputMaybe<Scalars["Int"]["input"]>;
-  skillId: Scalars["String"]["input"];
-};
-
 export enum AgentStatus {
   Busy = "BUSY",
   Error = "ERROR",
@@ -1019,6 +995,57 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars["Float"]["output"];
 };
 
+export enum CapabilityGrantClass {
+  McpServer = "MCP_SERVER",
+  PiExtension = "PI_EXTENSION",
+  Skill = "SKILL",
+}
+
+export enum CapabilityGrantScope {
+  Agent = "AGENT",
+  AgentProfile = "AGENT_PROFILE",
+  Space = "SPACE",
+  User = "USER",
+}
+
+export type CapabilityInspection = {
+  __typename?: "CapabilityInspection";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  noUserBaseline: Scalars["Boolean"]["output"];
+  perspectiveUserId?: Maybe<Scalars["ID"]["output"]>;
+  predicted?: Maybe<EffectiveCapabilitySet>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  state: Scalars["String"]["output"];
+  stateDetail?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type CapabilityItem = {
+  __typename?: "CapabilityItem";
+  active: Scalars["Boolean"]["output"];
+  capabilityClass: Scalars["String"]["output"];
+  capabilityId: Scalars["String"]["output"];
+  detail?: Maybe<Scalars["String"]["output"]>;
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  provenance?: Maybe<Scalars["String"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  tokenStatus?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type CapabilityMutationResult = {
+  __typename?: "CapabilityMutationResult";
+  computedAt: Scalars["AWSDateTime"]["output"];
+  configFingerprint?: Maybe<Scalars["String"]["output"]>;
+  inspectionState: Scalars["String"]["output"];
+  item?: Maybe<CapabilityItem>;
+  outcome: Scalars["String"]["output"];
+};
+
+export enum CapabilitySetVariant {
+  Observed = "OBSERVED",
+  Predicted = "PREDICTED",
+}
+
 export type CheckoutThreadInput = {
   runId: Scalars["String"]["input"];
 };
@@ -1179,6 +1206,8 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentCreated = "AGENT_CREATED",
   AgentDeleted = "AGENT_DELETED",
+  AgentExtensionDetached = "AGENT_EXTENSION_DETACHED",
+  AgentExtensionGranted = "AGENT_EXTENSION_GRANTED",
   AgentMigrated = "AGENT_MIGRATED",
   AgentSkillsChanged = "AGENT_SKILLS_CHANGED",
   ApprovalRecorded = "APPROVAL_RECORDED",
@@ -1188,6 +1217,8 @@ export enum ComplianceEventType {
   AuthSignout = "AUTH_SIGNOUT",
   DataExportInitiated = "DATA_EXPORT_INITIATED",
   McpAdded = "MCP_ADDED",
+  McpDetached = "MCP_DETACHED",
+  McpGranted = "MCP_GRANTED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
@@ -1205,6 +1236,8 @@ export enum ComplianceEventType {
   PolicyBypassed = "POLICY_BYPASSED",
   PolicyEvaluated = "POLICY_EVALUATED",
   SkillActivated = "SKILL_ACTIVATED",
+  SkillDetached = "SKILL_DETACHED",
+  SkillGranted = "SKILL_GRANTED",
   UserCreated = "USER_CREATED",
   UserDeleted = "USER_DELETED",
   UserDisabled = "USER_DISABLED",
@@ -1860,6 +1893,15 @@ export type DeploymentStatus = {
   twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
+export type DetachCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type DisableSkillInput = {
   agentId: Scalars["ID"]["input"];
   skillId: Scalars["String"]["input"];
@@ -1885,6 +1927,14 @@ export type DisconnectN8nWorkflowResult = {
   __typename?: "DisconnectN8nWorkflowResult";
   binding: WorkflowEngineBinding;
   workflow: Workflow;
+};
+
+export type EffectiveCapabilitySet = {
+  __typename?: "EffectiveCapabilitySet";
+  computedAt: Scalars["AWSDateTime"]["output"];
+  configFingerprint: Scalars["String"]["output"];
+  items: Array<CapabilityItem>;
+  variant: CapabilitySetVariant;
 };
 
 export enum EmailAllowlistType {
@@ -2386,6 +2436,18 @@ export type FlagThreadForEvalResult = {
   case: EvalTestCase;
   completeness: EvalCaseCompleteness;
   dataset: EvalDataset;
+};
+
+export type GrantCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  grantedPermissions?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+  toolAllowlist?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  wiringChoice?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type HandleJsonRenderActionInput = {
@@ -3685,6 +3747,7 @@ export type Mutation = {
   deleteWebhook: Scalars["Boolean"]["output"];
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
+  detachCapability: CapabilityMutationResult;
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
@@ -3694,6 +3757,7 @@ export type Mutation = {
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
+  grantCapability: CapabilityMutationResult;
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
@@ -4339,6 +4403,10 @@ export type MutationDeleteWorkflowArgs = {
   id: Scalars["ID"]["input"];
 };
 
+export type MutationDetachCapabilityArgs = {
+  input: DetachCapabilityInput;
+};
+
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -4374,6 +4442,10 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
+};
+
+export type MutationGrantCapabilityArgs = {
+  input: GrantCapabilityInput;
 };
 
 export type MutationHandleJsonRenderActionArgs = {
@@ -6083,6 +6155,7 @@ export type Query = {
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  capabilityInspector: CapabilityInspection;
   companyBrainStatus: CompanyBrainStatus;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
@@ -6528,6 +6601,14 @@ export type QueryBudgetStatusArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type QueryCapabilityInspectorArgs = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type QueryComplianceEventArgs = {
   eventId: Scalars["ID"]["input"];
 };
@@ -6957,7 +7038,10 @@ export type QueryRoutinesArgs = {
 
 export type QueryRuntimeManifestsByAgentArgs = {
   agentId: Scalars["ID"]["input"];
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryScheduledJobArgs = {
@@ -7857,11 +7941,16 @@ export type RunScheduledJobResult = {
 export type RuntimeManifest = {
   __typename?: "RuntimeManifest";
   agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentProfileId?: Maybe<Scalars["ID"]["output"]>;
+  configFingerprint?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
   manifestJson: Scalars["AWSJSON"]["output"];
   sessionId: Scalars["String"]["output"];
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
   tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  threadTurnId?: Maybe<Scalars["ID"]["output"]>;
   userId?: Maybe<Scalars["ID"]["output"]>;
 };
 

@@ -42,7 +42,7 @@ describe("selectedTestCaseIdsFromEvent", () => {
     ).toBe("eval-computer:computer-1");
   });
 
-  it("shards direct AgentCore runs across FIFO message groups", () => {
+  it("shards direct AgentCore runs across RUN-scoped FIFO message groups", () => {
     expect(
       evalWorkerMessageGroupIdForMessage(
         {
@@ -53,7 +53,18 @@ describe("selectedTestCaseIdsFromEvent", () => {
         { index: 21 },
         20,
       ),
-    ).toBe("eval-agentcore:agent-1:1");
+    ).toBe("eval-agentcore:run-1:1");
+  });
+
+  it("concurrent runs of the SAME agent get independent lanes (throughput fix)", () => {
+    const runA = { id: "run-a", computer_id: null, agent_id: "agent-1" };
+    const runB = { id: "run-b", computer_id: null, agent_id: "agent-1" };
+    // Same shard index, same agent — different runs must not share a
+    // FIFO lane, or one run's throttle-parked messages head-of-line
+    // block the other run entirely.
+    expect(evalWorkerMessageGroupIdForMessage(runA, { index: 0 }, 20)).not.toBe(
+      evalWorkerMessageGroupIdForMessage(runB, { index: 0 }, 20),
+    );
   });
 
   it("excludes Computer-surface cases from direct AgentCore category runs by default", () => {

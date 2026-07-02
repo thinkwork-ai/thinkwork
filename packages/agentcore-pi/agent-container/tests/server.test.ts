@@ -55,7 +55,9 @@ const VALID_PAYLOAD = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const DYNAMIC_EXTENSION_PAYLOAD = (overrides: Record<string, unknown> = {}) => ({
+const DYNAMIC_EXTENSION_PAYLOAD = (
+  overrides: Record<string, unknown> = {},
+) => ({
   extensionId: "11111111-1111-4111-8111-111111111111",
   versionId: "22222222-2222-4222-8222-222222222222",
   assignmentId: "33333333-3333-4333-8333-333333333333",
@@ -302,8 +304,10 @@ describe("handleInvocation — happy path", () => {
   it("chat-turn invocation returns 200 and SKIPS the completion callback (chat-agent-invoke owns turn writeback)", async () => {
     let fetchCalled = 0;
     const part = createTaskReviewJsonRenderFixture();
-    const fetchImpl: typeof fetch = (async () => {
-      fetchCalled += 1;
+    const fetchImpl: typeof fetch = (async (url: unknown) => {
+      // The U12 capability manifest POST is expected on every turn — this
+      // test pins the COMPLETION callback specifically.
+      if (!String(url).endsWith("/api/runtime/manifests")) fetchCalled += 1;
       return new Response();
     }) as unknown as typeof fetch;
 
@@ -1520,8 +1524,7 @@ describe("handleInvocation — happy path", () => {
     let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
     let capturedBundle:
-      | import("../src/server.js").InvocationResourceBundle
-      | undefined;
+      import("../src/server.js").InvocationResourceBundle | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message: "Summarize the file attached in Slack.",
@@ -1608,7 +1611,10 @@ describe("handleInvocation — happy path", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return {
         ok: true,
         status: 200,
@@ -1654,7 +1660,10 @@ describe("handleInvocation — happy path", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return { ok: true, status: 200 } as unknown as Response;
     }) as unknown as typeof fetch;
 
@@ -1968,7 +1977,10 @@ describe("postCompletion", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return {
         ok: false,
         status: 401,
@@ -2064,7 +2076,10 @@ describe("postFinalizeCallback", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return { ok: true, status: 200 } as unknown as Response;
     }) as unknown as typeof fetch;
 
@@ -2146,7 +2161,10 @@ describe("postFinalizeCallback", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return { ok: true, status: 200 } as unknown as Response;
     }) as unknown as typeof fetch;
 
@@ -2176,7 +2194,10 @@ describe("postFinalizeCallback", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return { ok: true, status: 200 } as unknown as Response;
     }) as unknown as typeof fetch;
 
@@ -2359,7 +2380,10 @@ describe("postFinalizeCallback", () => {
       url: unknown,
       init?: RequestInit,
     ) => {
-      fetchCalls.push([url, init]);
+      // U12 posts a capability manifest on every turn; these tests pin the
+      // finalize/completion callback traffic specifically.
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
       return { ok: true, status: 200 } as unknown as Response;
     }) as unknown as typeof fetch;
 
@@ -4605,3 +4629,124 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     onHandlerComplete: opts.onHandlerComplete,
   };
 }
+
+// ─── Capability manifest emission (capability-mapping plan U12) ─────────────
+
+describe("handleInvocation — capability manifest emission (U12)", () => {
+  function manifestCapturingFetch() {
+    const manifestPosts: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url).endsWith("/api/runtime/manifests")) {
+        manifestPosts.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>,
+        );
+      }
+      return Response.json({ ok: true }, { status: 201 });
+    });
+    return { fetchImpl, manifestPosts };
+  }
+
+  it("posts a per-turn manifest on a wakeup-style turn (no finalize callback) with fingerprint + gated MCP evidence", async () => {
+    const { fetchImpl, manifestPosts } = manifestCapturingFetch();
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_turn_id: "turn-1",
+        session_key: "wakeup-cron-1",
+        config_fingerprint: "fp-test-1",
+        turn_context: { spaceId: "space-1" },
+        // Private-network URL without trustedInternal → rejected at
+        // validation, so it must land in the manifest's gated section
+        // (the observed half of AE3's silent-failure class).
+        mcp_configs: [
+          {
+            name: "internal-crm",
+            url: "http://10.0.0.1/mcp",
+            auth: { token: "tok-1" },
+          },
+        ],
+      }),
+      deps: makeDeps({ fetchImpl: fetchImpl as typeof fetch }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(manifestPosts).toHaveLength(1);
+    const body = manifestPosts[0];
+    expect(body).toMatchObject({
+      session_id: "wakeup-cron-1",
+      tenant_id: "tenant-1",
+      agent_id: "agent-1",
+      thread_turn_id: "turn-1",
+      space_id: "space-1",
+      config_fingerprint: "fp-test-1",
+    });
+    const manifest = body.manifest_json as Record<string, unknown>;
+    expect(manifest.schema_version).toBe(2);
+    expect(manifest.resolved).toBeTruthy();
+    expect(manifest.loaded).toBeTruthy();
+    expect(manifest.gated).toContainEqual(
+      expect.objectContaining({
+        capabilityClass: "mcp_server",
+        capabilityId: "internal-crm",
+        reason: "mcp_server_not_resolved",
+      }),
+    );
+    const resolved = manifest.resolved as Record<string, unknown>;
+    const loaded = manifest.loaded as Record<string, unknown>;
+    expect(resolved.mcpServers).toContain("internal-crm");
+    expect(loaded.mcpServers).not.toContain("internal-crm");
+  });
+
+  it("covers AE3 (observed half): a permission-bearing dynamic extension lands in gated as unavailable_provider", async () => {
+    const { fetchImpl, manifestPosts } = manifestCapturingFetch();
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_turn_id: "turn-2",
+        pi_extensions: [
+          DYNAMIC_EXTENSION_PAYLOAD({
+            permissionClasses: ["network"],
+            grantedPermissionClasses: ["network"],
+          }),
+        ],
+      }),
+      deps: makeDeps({ fetchImpl: fetchImpl as typeof fetch }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const manifest = manifestPosts[0].manifest_json as Record<string, unknown>;
+    expect(manifest.gated).toContainEqual(
+      expect.objectContaining({
+        capabilityClass: "pi_extension",
+        reason: "unavailable_provider",
+      }),
+    );
+    const loaded = manifest.loaded as Record<string, unknown>;
+    expect(loaded.piExtensions).toEqual([]);
+  });
+
+  it("a manifest POST failure never fails the turn", async () => {
+    const fetchImpl = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/api/runtime/manifests")) {
+        return new Response("boom", { status: 500 });
+      }
+      return Response.json({ ok: true });
+    });
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ thread_turn_id: "turn-3" }),
+      deps: makeDeps({ fetchImpl: fetchImpl as typeof fetch }),
+    });
+    expect(result.statusCode).toBe(200);
+  });
+
+  it("emits no manifest when the API wiring is absent", async () => {
+    const { fetchImpl, manifestPosts } = manifestCapturingFetch();
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_turn_id: "turn-4",
+        thinkwork_api_secret: undefined,
+      }),
+      deps: makeDeps({ fetchImpl: fetchImpl as typeof fetch }),
+    });
+    expect(result.statusCode).toBe(200);
+    expect(manifestPosts).toHaveLength(0);
+  });
+});

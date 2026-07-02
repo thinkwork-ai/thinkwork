@@ -11,7 +11,8 @@
  *   - tenant_mcp_servers  (each server.tools[] entry → one tool row,
  *                          source: "mcp")
  *   - tenant_builtin_tools (one row per enabled, source: "builtin")
- *   - agent_skills        (workspace-backed skills assigned to tenant agents)
+ *   - agent workspaces    (skills/<slug>/SKILL.md markers gated by
+ *                          .assignment.json enabled state — KTD-8/U10)
  *   - routines            (only engine='step_functions'; visibility per R21)
  *   - workflows           (first-class workflow inventory with readiness)
  *
@@ -25,7 +26,6 @@
 
 import { and, eq, ne } from "drizzle-orm";
 import {
-  agentSkills,
   agents,
   routines,
   tenantBuiltinTools,
@@ -34,6 +34,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
+import { listEnabledAgentWorkspaceSkillSlugs } from "../../../lib/skills/workspace-skill-index.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { EVAL_BASELINE_AGENT_SOURCE } from "../../../lib/evals/eval-baseline-constants.js";
 
@@ -107,111 +108,91 @@ export async function tenantToolInventory(
   }
   const callerAgentId = ctx.auth?.agentId ?? null;
 
-  const [
-    agentRows,
-    mcpRows,
-    builtinRows,
-    skillRows,
-    routineRows,
-    workflowRows,
-  ] = await Promise.all([
-    db
-      .select({
-        id: agents.id,
-        name: agents.name,
-      })
-      .from(agents)
-      .where(
-        and(
-          eq(agents.tenant_id, args.tenantId),
-          ne(agents.status, "archived"),
-          // Hide the hidden eval-baseline agent (Skill Tests & Evals U3).
-          ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
+  const [agentRows, mcpRows, builtinRows, routineRows, workflowRows] =
+    await Promise.all([
+      db
+        .select({
+          id: agents.id,
+          name: agents.name,
+        })
+        .from(agents)
+        .where(
+          and(
+            eq(agents.tenant_id, args.tenantId),
+            ne(agents.status, "archived"),
+            // Hide the hidden eval-baseline agent (Skill Tests & Evals U3).
+            ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
+          ),
         ),
-      ),
-    db
-      .select({
-        id: tenantMcpServers.id,
-        name: tenantMcpServers.name,
-        slug: tenantMcpServers.slug,
-        tools: tenantMcpServers.tools,
-      })
-      .from(tenantMcpServers)
-      .where(
-        and(
-          eq(tenantMcpServers.tenant_id, args.tenantId),
-          eq(tenantMcpServers.enabled, true),
-          // Plugin-installed MCP servers land enabled but pending; only
-          // approved servers are surfaced to the chat builder so it can't
-          // compose tool_invoke steps that downstream dispatch refuses.
-          // Mirrors the pattern in packages/api/src/lib/mcp-configs.ts.
-          eq(tenantMcpServers.status, "approved"),
+      db
+        .select({
+          id: tenantMcpServers.id,
+          name: tenantMcpServers.name,
+          slug: tenantMcpServers.slug,
+          tools: tenantMcpServers.tools,
+        })
+        .from(tenantMcpServers)
+        .where(
+          and(
+            eq(tenantMcpServers.tenant_id, args.tenantId),
+            eq(tenantMcpServers.enabled, true),
+            // Plugin-installed MCP servers land enabled but pending; only
+            // approved servers are surfaced to the chat builder so it can't
+            // compose tool_invoke steps that downstream dispatch refuses.
+            // Mirrors the pattern in packages/api/src/lib/mcp-configs.ts.
+            eq(tenantMcpServers.status, "approved"),
+          ),
         ),
-      ),
-    db
-      .select({
-        id: tenantBuiltinTools.id,
-        tool_slug: tenantBuiltinTools.tool_slug,
-        provider: tenantBuiltinTools.provider,
-      })
-      .from(tenantBuiltinTools)
-      .where(
-        and(
-          eq(tenantBuiltinTools.tenant_id, args.tenantId),
-          eq(tenantBuiltinTools.enabled, true),
+      db
+        .select({
+          id: tenantBuiltinTools.id,
+          tool_slug: tenantBuiltinTools.tool_slug,
+          provider: tenantBuiltinTools.provider,
+        })
+        .from(tenantBuiltinTools)
+        .where(
+          and(
+            eq(tenantBuiltinTools.tenant_id, args.tenantId),
+            eq(tenantBuiltinTools.enabled, true),
+          ),
         ),
-      ),
-    db
-      .select({
-        skill_id: agentSkills.skill_id,
-      })
-      .from(agentSkills)
-      .innerJoin(agents, eq(agentSkills.agent_id, agents.id))
-      .where(
-        and(
-          eq(agents.tenant_id, args.tenantId),
-          ne(agents.status, "archived"),
-          ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
-          eq(agentSkills.enabled, true),
+      // Only step_functions routines are inventory-eligible. Legacy Python
+      // rows are not callable from a routine_invoke step.
+      db
+        .select({
+          id: routines.id,
+          name: routines.name,
+          description: routines.description,
+          agent_id: routines.agent_id,
+        })
+        .from(routines)
+        .where(
+          and(
+            eq(routines.tenant_id, args.tenantId),
+            eq(routines.engine, "step_functions"),
+            eq(routines.status, "active"),
+          ),
         ),
-      ),
-    // Only step_functions routines are inventory-eligible. Legacy Python
-    // rows are not callable from a routine_invoke step.
-    db
-      .select({
-        id: routines.id,
-        name: routines.name,
-        description: routines.description,
-        agent_id: routines.agent_id,
-      })
-      .from(routines)
-      .where(
-        and(
-          eq(routines.tenant_id, args.tenantId),
-          eq(routines.engine, "step_functions"),
-          eq(routines.status, "active"),
+      db
+        .select({
+          id: workflows.id,
+          name: workflows.name,
+          description: workflows.description,
+          visibility: workflows.visibility,
+          owner_agent_id: workflows.owner_agent_id,
+          primary_trigger_family: workflows.primary_trigger_family,
+          readiness_state: workflows.readiness_state,
+          readiness_reasons: workflows.readiness_reasons,
+          capability_flags: workflows.capability_flags,
+        })
+        .from(workflows)
+        .where(
+          and(
+            eq(workflows.tenant_id, args.tenantId),
+            eq(workflows.lifecycle_status, "active"),
+          ),
         ),
-      ),
-    db
-      .select({
-        id: workflows.id,
-        name: workflows.name,
-        description: workflows.description,
-        visibility: workflows.visibility,
-        owner_agent_id: workflows.owner_agent_id,
-        primary_trigger_family: workflows.primary_trigger_family,
-        readiness_state: workflows.readiness_state,
-        readiness_reasons: workflows.readiness_reasons,
-        capability_flags: workflows.capability_flags,
-      })
-      .from(workflows)
-      .where(
-        and(
-          eq(workflows.tenant_id, args.tenantId),
-          eq(workflows.lifecycle_status, "active"),
-        ),
-      ),
-  ]);
+    ]);
 
   const agentInventory: ToolInventoryAgent[] = agentRows.map((r) => ({
     id: r.id,
@@ -256,13 +237,30 @@ export async function tenantToolInventory(
     });
   }
 
+  // KTD-8 (plan U10): skills come from each agent's workspace tree
+  // (SKILL.md presence gated by .assignment.json enabled state), not the
+  // retired agent_skills mirror. Per-agent reads fail soft to "no
+  // skills" so one unresolvable workspace can't empty the inventory.
+  const skillSlugSets = await Promise.all(
+    agentRows.map((agent) =>
+      listEnabledAgentWorkspaceSkillSlugs(agent.id).catch((err) => {
+        console.warn(
+          `[tenantToolInventory] workspace skill read failed for agent ${agent.id}:`,
+          err,
+        );
+        return null;
+      }),
+    ),
+  );
   const skillInventory: ToolInventorySkill[] = Array.from(
-    new Set(skillRows.map((r) => r.skill_id)),
-  ).map((slug) => ({
-    id: slug,
-    slug,
-    description: null,
-  }));
+    new Set(skillSlugSets.flatMap((slugs) => slugs ?? [])),
+  )
+    .sort()
+    .map((slug) => ({
+      id: slug,
+      slug,
+      description: null,
+    }));
 
   const routineInventory: ToolInventoryRoutine[] = routineRows
     .map((r) => ({

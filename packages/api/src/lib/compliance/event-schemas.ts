@@ -30,6 +30,20 @@ export interface RedactionSchema {
 
 const GOVERNANCE_PREVIEW_BYTES = 2048;
 
+// Shared allow-list for the capability grant/detach events (plan U7).
+const CAPABILITY_MUTATION_FIELDS: ReadonlySet<string> = new Set([
+  "capabilityClass",
+  "scope",
+  "capabilityRef",
+  "agentId",
+  "agentProfileId",
+  "wiringChoice",
+  "toolAllowlist",
+  "grantedPermissions",
+  "before",
+  "after",
+]);
+
 /**
  * Truncate a string to the largest UTF-8-byte-length-bounded prefix.
  * Bisects on character index so the cut never lands mid-codepoint —
@@ -424,18 +438,10 @@ export const EVENT_PAYLOAD_SHAPES: Record<
     ]),
   },
   "plugin.install_key_failed": {
-    allowedFields: new Set([
-      "pluginKey",
-      "entitlementProductKey",
-      "reason",
-    ]),
+    allowedFields: new Set(["pluginKey", "entitlementProductKey", "reason"]),
   },
   "plugin.install_key_revoked": {
-    allowedFields: new Set([
-      "pluginKey",
-      "entitlementProductKey",
-      "keyId",
-    ]),
+    allowedFields: new Set(["pluginKey", "entitlementProductKey", "keyId"]),
   },
   "plugin.entitlement_granted": {
     allowedFields: new Set([
@@ -445,6 +451,18 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "entitlementId",
     ]),
   },
+
+  // ── Capability grant/detach mutations (capability-mapping plan U7) ──
+  // One shared shape: class + scope + target identity + before/after
+  // state summaries. The grant options that reach the payload are
+  // structural (wiring choice, allowlists, permission classes) — secret
+  // refs and env values never enter it.
+  "skill.granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "skill.detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "mcp.granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "mcp.detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "agent.extension_granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "agent.extension_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

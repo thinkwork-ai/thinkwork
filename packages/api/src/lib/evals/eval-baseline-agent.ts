@@ -10,7 +10,7 @@
  *
  * Isolation is by MATERIALIZATION, not a DB toggle — the filesystem
  * (workspace `skills/<slug>/SKILL.md`) is the activation truth that
- * `resolveAgentRuntimeConfig` reads (`agent_skills` is derived). See
+ * `resolveAgentRuntimeConfig` reads. See
  * docs/solutions/architecture-patterns/workspace-skills-load-from-copied-agent-workspace-2026-04-28.md.
  *
  * Two load-bearing traps this guards against:
