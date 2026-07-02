@@ -145,3 +145,33 @@ describe("disableClusterDeletionProtection", () => {
     );
   });
 });
+
+describe("secret prefix coverage (dash- and slash-style)", () => {
+  it("forceDeleteStageSecrets queries both naming schemes", () => {
+    let query = "";
+    const exec = (args: string[]): ExecResult => {
+      if (args[1] === "list-secrets") {
+        query = args[args.indexOf("--query") + 1];
+        return ok(JSON.stringify([]));
+      }
+      return ok();
+    };
+    forceDeleteStageSecrets("hprod-1", "us-east-1", exec);
+    expect(query).toContain("'thinkwork-hprod-1-'");
+    expect(query).toContain("'thinkwork/hprod-1/'");
+    expect(query).toContain("'/thinkwork/hprod-1/'");
+  });
+
+  it("scanOrphans secret listing covers both naming schemes", () => {
+    let query = "";
+    const exec = (args: string[]): ExecResult => {
+      if (args[0] === "secretsmanager") {
+        query = args[args.indexOf("--query") + 1];
+      }
+      return ok(JSON.stringify([]));
+    };
+    scanOrphans("hprod-1", "us-east-1", exec);
+    expect(query).toContain("'thinkwork/hprod-1/'");
+    expect(query).toContain("'/thinkwork/hprod-1/'");
+  });
+});

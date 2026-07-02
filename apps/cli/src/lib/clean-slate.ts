@@ -112,7 +112,11 @@ export function forceDeleteStageSecrets(
     "--region",
     region,
     "--query",
-    `SecretList[?starts_with(Name, 'thinkwork-${stage}-')].ARN`,
+    // Two naming schemes exist: dash-style `thinkwork-<stage>-db-credentials`
+    // and slash-style `thinkwork/<stage>/api-auth` (± leading slash). The
+    // dash-only match left slash-style entries in the recovery window and
+    // made the orphan scan report "clean" falsely (harness cycle-5).
+    `SecretList[?starts_with(Name, 'thinkwork-${stage}-') || starts_with(Name, 'thinkwork/${stage}/') || starts_with(Name, '/thinkwork/${stage}/')].ARN`,
     "--output",
     "json",
   ]);
@@ -235,7 +239,7 @@ export function scanOrphans(
       "--region",
       region,
       "--query",
-      `SecretList[?starts_with(Name, '${prefix}')].Name`,
+      `SecretList[?starts_with(Name, '${prefix}') || starts_with(Name, 'thinkwork/${stage}/') || starts_with(Name, '/thinkwork/${stage}/')].Name`,
       "--output",
       "json",
     ]),
