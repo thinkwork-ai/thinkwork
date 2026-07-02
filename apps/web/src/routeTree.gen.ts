@@ -31,6 +31,7 @@ import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_auth
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
 import { Route as AuthedSettingsContextDiagnosticsRouteImport } from "./routes/_authed/settings.context-diagnostics";
+import { Route as AuthedSettingsCapabilitiesRouteImport } from "./routes/_authed/settings.capabilities";
 import { Route as AuthedSettingsBrainOperationsRouteImport } from "./routes/_authed/settings.brain-operations";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
@@ -233,6 +234,12 @@ const AuthedSettingsContextDiagnosticsRoute =
   AuthedSettingsContextDiagnosticsRouteImport.update({
     id: "/context-diagnostics",
     path: "/context-diagnostics",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsCapabilitiesRoute =
+  AuthedSettingsCapabilitiesRouteImport.update({
+    id: "/capabilities",
+    path: "/capabilities",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsBrainOperationsRoute =
@@ -777,6 +784,7 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -884,6 +892,7 @@ export interface FileRoutesByTo {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -999,6 +1008,7 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
+  "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/_authed/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
@@ -1113,6 +1123,7 @@ export interface FileRouteTypes {
     | "/settings/artifacts"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/capabilities"
     | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
@@ -1220,6 +1231,7 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/billing"
     | "/settings/brain-operations"
+    | "/settings/capabilities"
     | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
@@ -1334,6 +1346,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
     | "/_authed/settings/brain-operations"
+    | "/_authed/settings/capabilities"
     | "/_authed/settings/context-diagnostics"
     | "/_authed/settings/crm"
     | "/_authed/settings/general"
@@ -1593,6 +1606,13 @@ declare module "@tanstack/react-router" {
       path: "/context-diagnostics";
       fullPath: "/settings/context-diagnostics";
       preLoaderRoute: typeof AuthedSettingsContextDiagnosticsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/capabilities": {
+      id: "/_authed/settings/capabilities";
+      path: "/capabilities";
+      fullPath: "/settings/capabilities";
+      preLoaderRoute: typeof AuthedSettingsCapabilitiesRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/brain-operations": {
@@ -2456,6 +2476,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsBrainOperationsRoute: typeof AuthedSettingsBrainOperationsRoute;
+  AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
   AuthedSettingsContextDiagnosticsRoute: typeof AuthedSettingsContextDiagnosticsRoute;
   AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
@@ -2519,6 +2540,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsBrainOperationsRoute: AuthedSettingsBrainOperationsRoute,
+  AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
   AuthedSettingsContextDiagnosticsRoute: AuthedSettingsContextDiagnosticsRoute,
   AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
