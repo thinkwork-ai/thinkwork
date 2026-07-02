@@ -11097,6 +11097,18 @@ export type SaveAppletStateMutation = {
   };
 };
 
+export type TenantContextClaimPendingTenantMutationVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type TenantContextClaimPendingTenantMutation = {
+  __typename?: "Mutation";
+  bootstrapUser: {
+    __typename?: "BootstrapResult";
+    tenant: { __typename?: "Tenant"; id: string };
+  };
+};
+
 export type SpacesThreadActivitySubscriptionVariables = Exact<{
   userId: Scalars["ID"]["input"];
 }>;
@@ -15972,6 +15984,43 @@ export const SaveAppletStateDocument = {
 } as unknown as DocumentNode<
   SaveAppletStateMutation,
   SaveAppletStateMutationVariables
+>;
+export const TenantContextClaimPendingTenantDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "TenantContextClaimPendingTenant" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "bootstrapUser" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "tenant" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  TenantContextClaimPendingTenantMutation,
+  TenantContextClaimPendingTenantMutationVariables
 >;
 export const SpacesThreadActivityDocument = {
   kind: "Document",
