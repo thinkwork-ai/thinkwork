@@ -193,6 +193,26 @@ function buildTfvars(config: Record<string, string>): string {
     );
   }
 
+  if (config.stage === "prod" || config.stage === "production") {
+    lines.push(``);
+    lines.push(
+      `# ── Compliance (prod requirement) ─────────────────────────────────`,
+    );
+    lines.push(
+      `# Object Lock COMPLIANCE is REQUIRED for prod-named stages (terraform`,
+    );
+    lines.push(
+      `# precondition). Retention is irreversible until it expires — even AWS`,
+    );
+    lines.push(
+      `# root cannot delete anchors early. Raise retention for audit posture.`,
+    );
+    lines.push(`compliance_anchor_object_lock_mode = "COMPLIANCE"`);
+    lines.push(
+      `compliance_anchor_retention_days   = ${config.compliance_anchor_retention_days || "30"}`,
+    );
+  }
+
   if (config.platform_operator_emails) {
     lines.push(``);
     lines.push(
@@ -909,6 +929,20 @@ variable "agentcore_pi_source_image_uri" {
   default = ""
 }
 
+# Object Lock posture for the compliance anchor bucket. Stages named
+# prod/production REQUIRE "COMPLIANCE" (terraform precondition) — set
+# automatically by init for those stage names. COMPLIANCE retention is
+# irreversible until it expires (even AWS root cannot delete early).
+variable "compliance_anchor_object_lock_mode" {
+  type    = string
+  default = "GOVERNANCE"
+}
+
+variable "compliance_anchor_retention_days" {
+  type    = number
+  default = 365
+}
+
 # Pinned by \`thinkwork deploy\`: true only when this stage is the first
 # ThinkWork stack in the account+region (the Bedrock invocation-logging
 # resources are account-scoped singletons).
@@ -943,6 +977,9 @@ module "thinkwork" {
   # (repo-managed) stages can run it.
   skill_trust_runner_enabled        = false
   manage_bedrock_invocation_logging = var.manage_bedrock_invocation_logging
+
+  compliance_anchor_object_lock_mode = var.compliance_anchor_object_lock_mode
+  compliance_anchor_retention_days   = var.compliance_anchor_retention_days
 
   db_password                = var.db_password
   database_engine            = var.database_engine
@@ -998,6 +1035,34 @@ module "thinkwork" {
 
 output "api_endpoint" {
   value = module.thinkwork.api_endpoint
+}
+
+# Outputs consumed by \`thinkwork deploy\`'s web runtime-config generation —
+# the web app fetches /thinkwork-runtime-config.json at boot; without these
+# the published bundle renders "Sign-in options are unavailable".
+output "app_url" {
+  value = module.thinkwork.app_url
+}
+
+output "auth_domain" {
+  value = module.thinkwork.auth_domain
+}
+
+output "appsync_api_url" {
+  value = module.thinkwork.appsync_api_url
+}
+
+output "appsync_realtime_url" {
+  value = module.thinkwork.appsync_realtime_url
+}
+
+output "appsync_api_key" {
+  value     = module.thinkwork.appsync_api_key
+  sensitive = true
+}
+
+output "admin_client_id_out" {
+  value = module.thinkwork.admin_client_id
 }
 
 output "app_bucket_name" {

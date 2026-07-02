@@ -589,6 +589,114 @@ export async function ensureReleaseArtifacts(
 }
 
 /**
+ * Build /thinkwork-runtime-config.json for the deployed web app. The bundle
+ * ships stage-agnostic; the app fetches this file at boot for its API and
+ * Cognito endpoints — without it every scaffolded install renders "Sign-in
+ * options are unavailable" (HCI test). Mirrors the deployment-controller
+ * runner's runtime_profile(), which owned this step before CLI-first.
+ */
+export function buildRuntimeConfig(values: {
+  stage: string;
+  region: string;
+  accountId: string;
+  releaseVersion: string | null;
+  apiEndpoint: string;
+  appUrl: string;
+  authDomain: string;
+  appsyncUrl: string;
+  appsyncRealtimeUrl: string;
+  appsyncApiKey: string;
+  userPoolId: string;
+  adminClientId: string;
+  issuedAt: string;
+}): Record<string, unknown> {
+  const cognitoDomain = values.authDomain.startsWith("https://")
+    ? values.authDomain
+    : values.authDomain
+      ? `https://${values.authDomain}.auth.${values.region}.amazoncognito.com`
+      : "";
+  const api = values.apiEndpoint.replace(/\/+$/, "");
+  return {
+    stage: values.stage,
+    region: values.region,
+    accountId: values.accountId,
+    releaseVersion: values.releaseVersion,
+    releaseManifestUrl: null,
+    releaseManifestSha256: null,
+    deploymentId: `thinkwork-${values.stage}`,
+    displayName: "ThinkWork",
+    appUrl: values.appUrl,
+    apiEndpoint: values.apiEndpoint,
+    graphqlHttpUrl: api ? `${api}/graphql` : "",
+    appsyncUrl: values.appsyncUrl,
+    appsyncRealtimeUrl: values.appsyncRealtimeUrl,
+    appsyncApiKey: values.appsyncApiKey,
+    cognitoDomain,
+    cognitoUserPoolId: values.userPoolId,
+    cognitoClientId: values.adminClientId,
+    controller: null,
+    issuedAt: values.issuedAt,
+  };
+}
+
+async function publishRuntimeConfig(
+  cwd: string,
+  bucket: string,
+  identity: { account: string; region: string },
+  stage: string,
+  releaseVersion: string | null,
+): Promise<void> {
+  const output = async (key: string) => {
+    try {
+      return await terraformOutput(cwd, key);
+    } catch {
+      return "";
+    }
+  };
+  const config = buildRuntimeConfig({
+    stage,
+    region: identity.region,
+    accountId: identity.account,
+    releaseVersion,
+    apiEndpoint: await output("api_endpoint"),
+    appUrl: await output("app_url"),
+    authDomain: await output("auth_domain"),
+    appsyncUrl: await output("appsync_api_url"),
+    appsyncRealtimeUrl: await output("appsync_realtime_url"),
+    appsyncApiKey: await output("appsync_api_key"),
+    userPoolId: await output("user_pool_id"),
+    adminClientId:
+      (await output("admin_client_id")) || (await output("admin_client_id_out")),
+    issuedAt: new Date().toISOString(),
+  });
+  const tempDir = mkdtempSync(pathJoinTmp("thinkwork-runtime-config-"));
+  const file = join(tempDir, "thinkwork-runtime-config.json");
+  writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+  const put = spawnSync(
+    "aws",
+    [
+      "s3",
+      "cp",
+      file,
+      `s3://${bucket}/thinkwork-runtime-config.json`,
+      "--content-type",
+      "application/json",
+      "--cache-control",
+      "no-store",
+      "--region",
+      identity.region,
+    ],
+    { encoding: "utf8" },
+  );
+  if (put.status !== 0) {
+    throw new Error(
+      `Could not publish runtime config: ${(put.stderr ?? "").trim().slice(0, 200)}`,
+    );
+  }
+  printSuccess(`Runtime config published to s3://${bucket}/thinkwork-runtime-config.json`);
+}
+
+/**
  * Publish the release's prebuilt web assets to the stage's app bucket
  * (packaged installs have no web build step — CI builds ship in the release).
  */
@@ -916,6 +1024,7 @@ export async function runLocalTerraformDeploy(
   // ── Release artifacts (U9): packaged installs deploy a pinned release's
   //    application code, never placeholder mode. ──
   let webAssetSource: string | null = null;
+  let releaseVersionPin: string | null = null;
   if (scaffolded && caller) {
     // Account-singleton ownership must be decided before the first apply.
     ensureBedrockLoggingPin(cwd0, caller.region);
@@ -926,6 +1035,7 @@ export async function runLocalTerraformDeploy(
       opts.releaseVersion,
     );
     webAssetSource = release.webAssetSource;
+    releaseVersionPin = release.version;
   }
 
   for (let i = 0; i < tiers.length; i++) {
@@ -983,6 +1093,21 @@ export async function runLocalTerraformDeploy(
   //    the stage's app bucket (packaged installs have no web build step). ──
   if (scaffolded && webAssetSource) {
     await publishWebAssets(cwd0, webAssetSource);
+  }
+
+  // ── Runtime config: the stage-agnostic web bundle reads its endpoints
+  //    from /thinkwork-runtime-config.json at boot (HCI test). ──
+  if (scaffolded && caller) {
+    const bucket = await terraformOutput(cwd0, "app_bucket_name");
+    if (bucket) {
+      await publishRuntimeConfig(
+        cwd0,
+        bucket,
+        caller,
+        stage,
+        releaseVersionPin ?? null,
+      );
+    }
   }
 
   // ── Workspace defaults (harness cycle-7): a fresh stack must pass the

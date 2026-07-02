@@ -179,6 +179,31 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
               break;
             }
           }
+          // The bundle is stage-agnostic: without a populated runtime config
+          // the app renders "Sign-in options are unavailable" even though /
+          // serves 200 (HCI test). Require the config's Cognito client id.
+          if (url) {
+            const cfg = httpProbe(`${url}/thinkwork-runtime-config.json`);
+            if (cfg.status !== 200 || !cfg.body.includes("cognitoClientId")) {
+              return {
+                pass: false,
+                detail: `${url} serves HTML but /thinkwork-runtime-config.json is ${cfg.status === 200 ? "incomplete" : "missing"} — the app cannot sign in. Rerun thinkwork deploy to publish it.`,
+              };
+            }
+            const parsed = (() => {
+              try {
+                return JSON.parse(cfg.body) as { cognitoClientId?: string };
+              } catch {
+                return {};
+              }
+            })();
+            if (!parsed.cognitoClientId) {
+              return {
+                pass: false,
+                detail: `${url} runtime config has no cognitoClientId — sign-in would be unavailable.`,
+              };
+            }
+          }
           if (!url && candidates.length > 0) {
             url = `https://${candidates[0].Domain}`;
           }
