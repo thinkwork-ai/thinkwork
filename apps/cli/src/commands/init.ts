@@ -568,7 +568,30 @@ export function registerInitCommand(program: Command): void {
         }
 
         // Write terraform.tfvars at the root terraform/ dir (flat layout)
-        const tfvars = buildTfvars(config);
+        let tfvars = buildTfvars(config);
+        // Preserve assignments init does not manage (deploy-pinned release
+        // artifacts, Pi image override, bedrock-logging ownership pin, …):
+        // regenerating tfvars used to silently drop them, which re-pinned a
+        // fresh deploy to the manifest's unpullable ghcr image (prod
+        // graduation).
+        const generatedKeys = new Set(
+          [...tfvars.matchAll(/^\s*([a-zA-Z0-9_]+)\s*=/gm)].map((m) => m[1]),
+        );
+        const preserved = Object.entries(existing ?? {}).filter(
+          ([key]) => !generatedKeys.has(key),
+        );
+        if (preserved.length > 0) {
+          tfvars +=
+            `\n# ── Preserved from previous configuration (init rerun) ────────────\n` +
+            preserved
+              .map(([key, value]) =>
+                /^(true|false|[0-9]+)$/.test(value)
+                  ? `${key} = ${value}`
+                  : `${key} = "${value}"`,
+              )
+              .join("\n") +
+            `\n`;
+        }
         writeFileSync(tfvarsPath, tfvars);
 
         // Also write a main.tf that sources the composite module. ALWAYS
