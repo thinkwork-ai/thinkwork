@@ -349,10 +349,17 @@ resource "terraform_data" "seed_pi_image" {
         source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
         docker tag "$source_id" "${local.pi_image_uri}"
       else
+        dockerfile="$repo_root/packages/agentcore-pi/agent-container/Dockerfile"
+        if [[ ! -f "$dockerfile" ]]; then
+          echo "ERROR: could not pull ${var.source_image_uri} and there is no repo checkout at $repo_root to build from." >&2
+          echo "The pinned release image must be pullable by this machine (public registry, or docker login to its registry)." >&2
+          echo "Alternatively set agentcore_pi_source_image_uri in terraform.tfvars to an image this AWS account can pull." >&2
+          exit 1
+        fi
         echo "Unable to pull release image ${var.source_image_uri}; building Pi image from $repo_root"
         docker build \
           --platform linux/amd64 \
-          -f "$repo_root/packages/agentcore-pi/agent-container/Dockerfile" \
+          -f "$dockerfile" \
           -t "${local.pi_image_uri}" \
           "$repo_root"
       fi

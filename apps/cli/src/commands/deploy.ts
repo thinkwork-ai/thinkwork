@@ -568,7 +568,10 @@ export async function ensureReleaseArtifacts(
     lambda_artifact_bucket: target.bucket,
     lambda_artifact_prefix: prefix,
   };
-  if (artifacts.piImageUri) {
+  // An existing tfvars pin wins over the manifest image — the operator may
+  // have pointed the stage at a registry this machine/account can actually
+  // pull (harness cycle-5: the release's ghcr image is not publicly pullable).
+  if (artifacts.piImageUri && !assignments.agentcore_pi_source_image_uri) {
     pinned.agentcore_pi_source_image_uri = artifacts.piImageUri;
   }
   writeFileSync(tfvarsPath, upsertTfvarsValues(content, pinned));
@@ -688,6 +691,64 @@ async function applySchemaMigrations(
   });
   console.log(
     `  Schema: ${summary.applied.length} migration(s) applied, ${summary.skipped} already present.`,
+  );
+}
+
+/**
+ * The Bedrock model-invocation logging resources (log group + account-level
+ * logging configuration) are account/region singletons — only the FIRST
+ * ThinkWork stage in an account may manage them, or the second stack collides
+ * on the log group and, worse, clobbers then destroys the account config on
+ * teardown (harness cycle-5 ledger entry). Decide once and pin the answer in
+ * terraform.tfvars so reruns never flip it (the group existing on a rerun
+ * would otherwise read as "someone else owns it").
+ *
+ * Returns the value pinned this call, or null when tfvars already pins one.
+ */
+export function resolveBedrockLoggingPin(
+  assignments: Record<string, string>,
+  logGroupExists: boolean,
+): "true" | "false" | null {
+  if (assignments.manage_bedrock_invocation_logging !== undefined) return null;
+  return logGroupExists ? "false" : "true";
+}
+
+function ensureBedrockLoggingPin(cwd: string, region: string): void {
+  const tfvarsPath = join(cwd, "terraform.tfvars");
+  if (!existsSync(tfvarsPath)) return;
+  const content = readFileSync(tfvarsPath, "utf8");
+  const assignments: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const match = line.match(/^\s*([a-zA-Z0-9_]+)\s*=\s*"?([^"\n]*)"?\s*$/);
+    if (match) assignments[match[1]] = match[2];
+  }
+  const probe = spawnSync(
+    "aws",
+    [
+      "logs",
+      "describe-log-groups",
+      "--log-group-name-prefix",
+      "/thinkwork/bedrock/model-invocations",
+      "--region",
+      region,
+      "--query",
+      "logGroups[?logGroupName=='/thinkwork/bedrock/model-invocations'].logGroupName",
+      "--output",
+      "text",
+    ],
+    { encoding: "utf8" },
+  );
+  const exists = probe.status === 0 && probe.stdout.trim().length > 0;
+  const pin = resolveBedrockLoggingPin(assignments, exists);
+  if (pin === null) return;
+  writeFileSync(
+    tfvarsPath,
+    upsertTfvarsValues(content, { manage_bedrock_invocation_logging: pin }),
+  );
+  console.log(
+    pin === "true"
+      ? "  Bedrock invocation logging: this stage will manage the account-level config (pinned)."
+      : "  Bedrock invocation logging: already managed by another stage in this account — skipping (pinned).",
   );
 }
 
@@ -819,6 +880,8 @@ export async function runLocalTerraformDeploy(
   //    application code, never placeholder mode. ──
   let webAssetSource: string | null = null;
   if (scaffolded && caller) {
+    // Account-singleton ownership must be decided before the first apply.
+    ensureBedrockLoggingPin(cwd0, caller.region);
     const release = await ensureReleaseArtifacts(
       cwd0,
       caller,

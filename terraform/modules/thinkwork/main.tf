@@ -1309,8 +1309,11 @@ module "api" {
   appsync_realtime_url                          = module.appsync.graphql_realtime_url
   ecr_repository_url                            = module.agentcore_platform.ecr_repository_url
   # Static truth for count gating: agentcore_platform's ECR repo is
-  # unconditional, but its URL attribute is unknown until apply.
-  ecr_repository_provisioned                    = true
+  # unconditional, but its URL attribute is unknown until apply. The runner
+  # additionally needs its image tag seeded (CI does this for repo-managed
+  # stages) — scaffolded installs disable it via skill_trust_runner_enabled.
+  ecr_repository_provisioned                    = var.skill_trust_runner_enabled
+  manage_bedrock_invocation_logging             = var.manage_bedrock_invocation_logging
   job_scheduler_role_arn                        = module.job_triggers.job_scheduler_role_arn
   routines_execution_role_arn                   = module.routines_stepfunctions.execution_role_arn
   routines_log_group_arn                        = module.routines_stepfunctions.log_group_arn

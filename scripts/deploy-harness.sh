@@ -120,6 +120,15 @@ else
   #    remote state backend automatically (U2), so cycles converge on rerun. ──
   step "init" bash -c "cd '$STAGE_DIR' && '$CLI' init -s '$STAGE' -d . --defaults"
 
+  # ── Pi image override (cycle-5 ledger entry): the release's ghcr image is
+  #    not yet publicly pullable. Until it is, cycles may pass an in-account
+  #    image URI; deploy respects an existing tfvars pin over the manifest. ──
+  if [ -n "${THINKWORK_PI_IMAGE_URI:-}" ] && [ -f "$TFVARS" ] \
+    && ! grep -q '^agentcore_pi_source_image_uri' "$TFVARS"; then
+    printf '\nagentcore_pi_source_image_uri = "%s"\n' "$THINKWORK_PI_IMAGE_URI" >>"$TFVARS"
+    echo "  Pi image pinned to $THINKWORK_PI_IMAGE_URI (THINKWORK_PI_IMAGE_URI)"
+  fi
+
   # ── Deploy: preflight → apply → artifacts → schema → verify (U3/U9/U10/U6
   #    all run inside deploy; a green deploy IS a verified stack) ─────────────
   step "deploy" bash -c "cd '$STAGE_DIR' && '$CLI' deploy -s '$STAGE' --yes"

@@ -1186,6 +1186,18 @@ variable "agentcore_pi_source_image_uri" {
   default     = ""
 }
 
+variable "skill_trust_runner_enabled" {
+  description = "Deploy the skill-trust-runner container Lambda. Requires the <ecr-repo>:skill-trust-runner-latest image to already exist (CI seeds it for repo-managed stages); releases do not yet publish this image, so init-scaffolded installs must leave it disabled (harness cycle-5 ledger entry)."
+  type        = bool
+  default     = true
+}
+
+variable "manage_bedrock_invocation_logging" {
+  description = "Own the account/region-level Bedrock model-invocation logging (log group /thinkwork/bedrock/model-invocations, IAM role, and the account logging configuration). Exactly ONE stage per account+region may manage it — a second stack collides on the log group and would clobber/destroy the account-level config (harness cycle-5 ledger entry)."
+  type        = bool
+  default     = true
+}
+
 variable "require_lambda_artifacts" {
   description = "Fail planning unless either lambda_zips_dir or lambda_artifact_bucket/lambda_artifact_prefix is configured. Enterprise deployment repos should set this to true."
   type        = bool

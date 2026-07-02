@@ -793,8 +793,8 @@ locals {
       Effect = "Allow"
       Action = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogGroups"]
       Resource = [
-        aws_cloudwatch_log_group.bedrock_model_invocations.arn,
-        "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:*",
+        local.bedrock_invocation_log_group_arn,
+        "${local.bedrock_invocation_log_group_arn}:*",
       ]
     },
     # (was the EvalSpansRead statement of inline policy

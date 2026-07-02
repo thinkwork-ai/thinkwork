@@ -191,15 +191,46 @@ if [[ -n "$execution_role_arn" ]]; then
   role_arg="--memory-execution-role-arn $execution_role_arn"
 fi
 
-create_output="$(
-  aws bedrock-agentcore-control create-memory \
-    --region "$region" \
-    --name "$name" \
-    --memory-strategies "$strategies_json" \
-    --event-expiry-duration 365 \
-    $role_arg \
-    --output json
-)"
+# CreateMemory validates the execution role's trust policy at call time. When
+# Terraform created that role moments earlier in the same apply, IAM has not
+# propagated yet and the API rejects it with ValidationException "Please
+# provide a role with a valid trust policy" — empirically for ~20s after role
+# creation (harness cycle-5 ledger entry). Retry that specific error with a
+# bounded backoff; every other error fails immediately.
+create_output=""
+create_status=1
+err_file="$(mktemp)"
+trap 'rm -f "$err_file"' EXIT
+for attempt in $(seq 1 12); do
+  set +e
+  create_output="$(
+    aws bedrock-agentcore-control create-memory \
+      --region "$region" \
+      --name "$name" \
+      --memory-strategies "$strategies_json" \
+      --event-expiry-duration 365 \
+      $role_arg \
+      --output json 2>"$err_file"
+  )"
+  create_status=$?
+  set -e
+  if [[ $create_status -eq 0 ]]; then
+    break
+  fi
+  if grep -qi "valid trust policy" "$err_file"; then
+    echo "[create_or_find_memory] attempt $attempt: execution role not yet visible to AgentCore (IAM propagation); retrying in 15s" >&2
+    sleep 15
+    continue
+  fi
+  cat "$err_file" >&2
+  exit "$create_status"
+done
+
+if [[ $create_status -ne 0 ]]; then
+  echo "[create_or_find_memory] create-memory still failing after $attempt attempts:" >&2
+  cat "$err_file" >&2
+  exit "$create_status"
+fi
 
 new_id="$(echo "$create_output" | jq -r '.memory.id // .id')"
 

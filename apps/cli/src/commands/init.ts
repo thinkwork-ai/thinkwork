@@ -909,6 +909,14 @@ variable "agentcore_pi_source_image_uri" {
   default = ""
 }
 
+# Pinned by \`thinkwork deploy\`: true only when this stage is the first
+# ThinkWork stack in the account+region (the Bedrock invocation-logging
+# resources are account-scoped singletons).
+variable "manage_bedrock_invocation_logging" {
+  type    = bool
+  default = true
+}
+
 module "thinkwork" {
   source = "./modules/thinkwork"
 
@@ -930,6 +938,11 @@ module "thinkwork" {
   lambda_artifact_bucket        = var.lambda_artifact_bucket
   lambda_artifact_prefix        = var.lambda_artifact_prefix
   agentcore_pi_source_image_uri = var.agentcore_pi_source_image_uri
+
+  # Releases publish no skill-trust-runner image yet; only CI-seeded
+  # (repo-managed) stages can run it.
+  skill_trust_runner_enabled        = false
+  manage_bedrock_invocation_logging = var.manage_bedrock_invocation_logging
 
   db_password                = var.db_password
   database_engine            = var.database_engine
