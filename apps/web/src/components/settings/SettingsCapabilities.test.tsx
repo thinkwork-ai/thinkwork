@@ -564,3 +564,91 @@ describe("SettingsCapabilities write actions (U8)", () => {
     expect(screen.queryByTestId("detach-pi_extension:assignment-3")).toBeNull();
   });
 });
+
+describe("divergence surface (U13)", () => {
+  it("renders per-row deltas and the divergent summary only on fingerprint match", () => {
+    queryState.inspector = {
+      data: inspection({
+        divergence: {
+          state: "divergent",
+          manifestId: "m-1",
+          manifestCreatedAt: "2026-07-02T13:37:00.000Z",
+          manifestFingerprint: "abcdef1234567890",
+          deltas: [
+            {
+              capabilityClass: "skill",
+              capabilityId: "approve-receipt",
+              kind: "missing_in_observed",
+            },
+            {
+              capabilityClass: "mcp_server",
+              capabilityId: "shadow-server",
+              kind: "extra_in_observed",
+            },
+          ],
+        },
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    expect(screen.getByTestId("divergence-chip").textContent).toContain(
+      "divergent",
+    );
+    // Predicted-active row the runtime never loaded → red row badge.
+    expect(
+      screen.getByTestId("delta-skill:approve-receipt").textContent,
+    ).toContain("not loaded last turn");
+    // Runtime-only extras summarize in the footer.
+    expect(screen.getByTestId("extra-in-observed").textContent).toContain(
+      "shadow-server",
+    );
+  });
+
+  it("renders config-changed as its own state, never divergent (KTD-3)", () => {
+    queryState.inspector = {
+      data: inspection({
+        divergence: {
+          state: "config_changed_since_turn",
+          manifestId: "m-1",
+          manifestCreatedAt: "2026-07-02T13:37:00.000Z",
+          manifestFingerprint: "other-fingerprint",
+          deltas: null,
+        },
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    expect(screen.getByTestId("divergence-chip").textContent).toContain(
+      "config changed",
+    );
+    expect(screen.queryByTestId("delta-skill:approve-receipt")).toBeNull();
+  });
+
+  it("renders in-sync and no-manifest states", () => {
+    queryState.inspector = {
+      data: inspection({
+        divergence: { state: "in_sync", deltas: null },
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    const view = render(<SettingsCapabilities />);
+    expect(screen.getByTestId("divergence-chip").textContent).toContain(
+      "in sync",
+    );
+    view.unmount();
+    queryState.inspector = {
+      data: inspection({
+        divergence: { state: "no_manifest_yet", deltas: null },
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    expect(screen.getByTestId("divergence-chip").textContent).toContain(
+      "no turn observed",
+    );
+  });
+});

@@ -2561,6 +2561,32 @@ export const SettingsCapabilityInspectorQuery = graphql(`
           tokenStatus
         }
       }
+      observed {
+        variant
+        computedAt
+        configFingerprint
+        items {
+          capabilityClass
+          capabilityId
+          displayName
+          active
+          provenance
+          reason
+          detail
+          tokenStatus
+        }
+      }
+      divergence {
+        state
+        manifestId
+        manifestCreatedAt
+        manifestFingerprint
+        deltas {
+          capabilityClass
+          capabilityId
+          kind
+        }
+      }
     }
   }
 `);

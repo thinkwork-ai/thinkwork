@@ -1011,6 +1011,19 @@ export type CapabilityDivergenceDelta = {
   kind: Scalars["String"]["output"];
 };
 
+export enum CapabilityGrantClass {
+  McpServer = "MCP_SERVER",
+  PiExtension = "PI_EXTENSION",
+  Skill = "SKILL",
+}
+
+export enum CapabilityGrantScope {
+  Agent = "AGENT",
+  AgentProfile = "AGENT_PROFILE",
+  Space = "SPACE",
+  User = "USER",
+}
+
 export type CapabilityInspection = {
   __typename?: "CapabilityInspection";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -1035,6 +1048,15 @@ export type CapabilityItem = {
   provenance?: Maybe<Scalars["String"]["output"]>;
   reason?: Maybe<Scalars["String"]["output"]>;
   tokenStatus?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type CapabilityMutationResult = {
+  __typename?: "CapabilityMutationResult";
+  computedAt: Scalars["AWSDateTime"]["output"];
+  configFingerprint?: Maybe<Scalars["String"]["output"]>;
+  inspectionState: Scalars["String"]["output"];
+  item?: Maybe<CapabilityItem>;
+  outcome: Scalars["String"]["output"];
 };
 
 export enum CapabilitySetVariant {
@@ -1202,6 +1224,8 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentCreated = "AGENT_CREATED",
   AgentDeleted = "AGENT_DELETED",
+  AgentExtensionDetached = "AGENT_EXTENSION_DETACHED",
+  AgentExtensionGranted = "AGENT_EXTENSION_GRANTED",
   AgentMigrated = "AGENT_MIGRATED",
   AgentSkillsChanged = "AGENT_SKILLS_CHANGED",
   ApprovalRecorded = "APPROVAL_RECORDED",
@@ -1211,6 +1235,8 @@ export enum ComplianceEventType {
   AuthSignout = "AUTH_SIGNOUT",
   DataExportInitiated = "DATA_EXPORT_INITIATED",
   McpAdded = "MCP_ADDED",
+  McpDetached = "MCP_DETACHED",
+  McpGranted = "MCP_GRANTED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
@@ -1228,6 +1254,8 @@ export enum ComplianceEventType {
   PolicyBypassed = "POLICY_BYPASSED",
   PolicyEvaluated = "POLICY_EVALUATED",
   SkillActivated = "SKILL_ACTIVATED",
+  SkillDetached = "SKILL_DETACHED",
+  SkillGranted = "SKILL_GRANTED",
   UserCreated = "USER_CREATED",
   UserDeleted = "USER_DELETED",
   UserDisabled = "USER_DISABLED",
@@ -1883,6 +1911,15 @@ export type DeploymentStatus = {
   twentyWorkerServiceName?: Maybe<Scalars["String"]["output"]>;
 };
 
+export type DetachCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type DisableSkillInput = {
   agentId: Scalars["ID"]["input"];
   skillId: Scalars["String"]["input"];
@@ -2417,6 +2454,18 @@ export type FlagThreadForEvalResult = {
   case: EvalTestCase;
   completeness: EvalCaseCompleteness;
   dataset: EvalDataset;
+};
+
+export type GrantCapabilityInput = {
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  capabilityClass: CapabilityGrantClass;
+  capabilityRef: Scalars["String"]["input"];
+  grantedPermissions?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  scope: CapabilityGrantScope;
+  tenantId: Scalars["ID"]["input"];
+  toolAllowlist?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  wiringChoice?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type HandleJsonRenderActionInput = {
@@ -3716,6 +3765,7 @@ export type Mutation = {
   deleteWebhook: Scalars["Boolean"]["output"];
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
+  detachCapability: CapabilityMutationResult;
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
@@ -3725,6 +3775,7 @@ export type Mutation = {
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
+  grantCapability: CapabilityMutationResult;
   handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
@@ -4370,6 +4421,10 @@ export type MutationDeleteWorkflowArgs = {
   id: Scalars["ID"]["input"];
 };
 
+export type MutationDetachCapabilityArgs = {
+  input: DetachCapabilityInput;
+};
+
 export type MutationDisableSkillArgs = {
   input: DisableSkillInput;
 };
@@ -4405,6 +4460,10 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
+};
+
+export type MutationGrantCapabilityArgs = {
+  input: GrantCapabilityInput;
 };
 
 export type MutationHandleJsonRenderActionArgs = {
@@ -11141,6 +11200,41 @@ export type CliDeleteBudgetPolicyMutation = {
   deleteBudgetPolicy: boolean;
 };
 
+export type CliCapabilityInspectorQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentProfileId?: InputMaybe<Scalars["ID"]["input"]>;
+  perspectiveUserId?: InputMaybe<Scalars["ID"]["input"]>;
+}>;
+
+export type CliCapabilityInspectorQuery = {
+  __typename?: "Query";
+  capabilityInspector: {
+    __typename?: "CapabilityInspection";
+    state: string;
+    stateDetail?: string | null;
+    agentId?: string | null;
+    noUserBaseline: boolean;
+    predicted?: {
+      __typename?: "EffectiveCapabilitySet";
+      computedAt: any;
+      configFingerprint: string;
+      items: Array<{
+        __typename?: "CapabilityItem";
+        capabilityClass: string;
+        capabilityId: string;
+        displayName?: string | null;
+        active: boolean;
+        provenance?: string | null;
+        reason?: string | null;
+        detail?: string | null;
+        tokenStatus?: string | null;
+      }>;
+    } | null;
+  };
+};
+
 export type CliCostSummaryQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
@@ -14026,6 +14120,185 @@ export const CliDeleteBudgetPolicyDocument = {
 } as unknown as DocumentNode<
   CliDeleteBudgetPolicyMutation,
   CliDeleteBudgetPolicyMutationVariables
+>;
+export const CliCapabilityInspectorDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliCapabilityInspector" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "spaceId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentProfileId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "perspectiveUserId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "capabilityInspector" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "spaceId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "spaceId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentProfileId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentProfileId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "perspectiveUserId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "perspectiveUserId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "state" } },
+                { kind: "Field", name: { kind: "Name", value: "stateDetail" } },
+                { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "noUserBaseline" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "predicted" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "computedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "configFingerprint" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityClass" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "capabilityId" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "displayName" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "active" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "provenance" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "reason" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "detail" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "tokenStatus" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliCapabilityInspectorQuery,
+  CliCapabilityInspectorQueryVariables
 >;
 export const CliCostSummaryDocument = {
   kind: "Document",
