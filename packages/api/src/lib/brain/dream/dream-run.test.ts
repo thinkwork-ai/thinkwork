@@ -198,6 +198,9 @@ describe("applyDreamRun", () => {
     );
     expect(texts.some((t) => t.includes("DELETE FROM hindsight.memory_units"))).toBe(true);
     expect(texts.some((t) => t.includes("DELETE FROM hindsight.documents"))).toBe(true);
+    // Regression (dev run ef5a9c73): drizzle binds a raw JS array as a
+    // malformed composite literal — deletes must build explicit id lists.
+    expect(texts.some((t) => t.includes("unnest"))).toBe(false);
     // Consolidate was not staged, so the engine call never fires.
     expect(consolidate).not.toHaveBeenCalled();
   });

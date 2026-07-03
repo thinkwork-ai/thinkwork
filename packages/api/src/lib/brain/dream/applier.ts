@@ -10,7 +10,7 @@
  * quarantined documents whose units are all gone are deleted too.
  */
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import {
   completeDreamRun,
@@ -21,6 +21,17 @@ import {
   markRunApplying,
   type StagedActionRow,
 } from "./ledger.js";
+
+
+/** Parameter-safe id list: drizzle binds a raw JS array as a malformed
+ * composite literal, so build `IN (...)` lists explicitly (same pattern as
+ * knowledge-graph/graph-search.ts). */
+function idList(ids: string[], cast: "uuid" | "varchar"): SQL {
+  return sql.join(
+    ids.map((id) => (cast === "uuid" ? sql`${id}::uuid` : sql`${id}`)),
+    sql`, `,
+  );
+}
 
 export interface DreamConsolidator {
   consolidateBankById(bankId: string): Promise<void>;
@@ -80,7 +91,7 @@ async function applyAction(
         await db.execute(sql`
           DELETE FROM hindsight.memory_units
           WHERE bank_id = ${bankId}
-            AND id IN (SELECT unnest(${unitIds}::uuid[]))
+            AND id IN (${idList(unitIds, "uuid")})
         `);
       }
       if (documentIds.length > 0) {
@@ -88,7 +99,7 @@ async function applyAction(
         await db.execute(sql`
           DELETE FROM hindsight.documents d
           WHERE d.bank_id = ${bankId}
-            AND d.id IN (SELECT unnest(${documentIds}::varchar[]))
+            AND d.id IN (${idList(documentIds, "varchar")})
             AND NOT EXISTS (
               SELECT 1 FROM hindsight.memory_units u
               WHERE u.bank_id = d.bank_id AND u.document_id = d.id
@@ -103,7 +114,7 @@ async function applyAction(
         await db.execute(sql`
           DELETE FROM hindsight.memory_units
           WHERE bank_id = ${bankId}
-            AND id IN (SELECT unnest(${unitIds}::uuid[]))
+            AND id IN (${idList(unitIds, "uuid")})
         `);
       }
       return;
