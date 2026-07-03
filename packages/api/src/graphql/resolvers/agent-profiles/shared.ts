@@ -249,3 +249,28 @@ export function assertCustomProfileSlugAvailable(slug: string): void {
     throw badInput("Agent Profile slug is reserved for a built-in profile");
   }
 }
+
+/**
+ * Resolve a slug that is free within the tenant, deriving from `seed` and
+ * appending `-2`, `-3`, … on collision. Guards the `uq_agent_profiles_tenant_slug`
+ * unique constraint so a generic default name ("New Agent Profile") can be
+ * created repeatedly instead of failing with a raw DB error. Built-in slugs are
+ * rejected up front (they can never be a custom profile's slug).
+ */
+export async function resolveAvailableCustomSlug(
+  tenantId: string,
+  seed: string,
+): Promise<string> {
+  const base = normalizeProfileSlug(seed);
+  assertCustomProfileSlugAvailable(base);
+  const rows = await db
+    .select({ slug: agentProfiles.slug })
+    .from(agentProfiles)
+    .where(eq(agentProfiles.tenant_id, tenantId));
+  const taken = new Set(rows.map((row) => row.slug));
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; ; suffix++) {
+    const candidate = `${base}-${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
