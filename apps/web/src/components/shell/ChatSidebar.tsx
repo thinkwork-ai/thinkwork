@@ -199,11 +199,20 @@ export function ChatSidebar() {
   const location = useRouterState({ select: (s) => s.location });
   const routeSpaceId = spaceIdFromThreadPath(location.pathname);
   const routeThreadId = threadIdFromThreadPath(location.pathname);
-  // Desktop OS notifications for thread activity (no-op in the web build).
+  // Desktop OS notifications for thread activity (no-op in the web build), plus
+  // web/desktop sidebar liveness: every onThreadActivity event drives the same
+  // coalesced thread-list refetch as onThreadUpdated so a freshly-mentioned or
+  // muted participant's sidebar updates live without a reload (R9). The ref
+  // defers to scheduleThreadListRefresh, which is defined further down.
   const threadNotificationsEnabled = useThreadNotificationsEnabled();
+  const scheduleThreadListRefreshRef = useRef<() => void>(() => {});
+  const handleThreadActivity = useCallback(() => {
+    scheduleThreadListRefreshRef.current();
+  }, []);
   useThreadNotifications({
     activeThreadId: routeThreadId ?? null,
     enabled: threadNotificationsEnabled,
+    onActivity: handleThreadActivity,
   });
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
@@ -596,6 +605,9 @@ export function ChatSidebar() {
       refreshThreadLists();
     }, 400);
   }, [refreshThreadLists]);
+  // Let the onThreadActivity consumer (useThreadNotifications above) reach the
+  // coalescer without a forward reference / hook-order shuffle.
+  scheduleThreadListRefreshRef.current = scheduleThreadListRefresh;
 
   useEffect(
     () => () => {

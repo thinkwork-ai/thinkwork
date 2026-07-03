@@ -300,7 +300,7 @@ describe("TaskThreadView", () => {
         "Continue on cheaper model",
         [],
         [],
-        true,
+        "AUTO",
         [],
         "anthropic.claude-haiku",
       );
@@ -683,7 +683,7 @@ describe("TaskThreadView", () => {
         "Please continue",
         [],
         [],
-        true,
+        "AUTO",
         [],
       ),
     );
@@ -2152,7 +2152,7 @@ describe("TaskThreadView", () => {
       "Resume goal: Finish the launch plan",
       [],
       [],
-      true,
+      "FORCE_ON",
       undefined,
       undefined,
       {
@@ -4243,7 +4243,7 @@ describe("TaskThreadView", () => {
         "Add detail",
         [],
         [],
-        true,
+        "AUTO",
         [],
       );
     });
@@ -4308,7 +4308,7 @@ describe("TaskThreadView", () => {
         "Finish the migration",
         [],
         [],
-        true,
+        "FORCE_ON",
         [],
         undefined,
         {
@@ -4408,7 +4408,7 @@ describe("TaskThreadView", () => {
         "reconcile the customer list",
         [],
         [],
-        true,
+        "FORCE_ON",
         [],
         undefined,
         {
@@ -4450,7 +4450,7 @@ describe("TaskThreadView", () => {
         "Normal follow up",
         [],
         [],
-        true,
+        "AUTO",
         [],
       );
     });
@@ -4483,7 +4483,7 @@ describe("TaskThreadView", () => {
         "For humans only",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4497,7 +4497,7 @@ describe("TaskThreadView", () => {
         "Still just humans",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4715,7 +4715,7 @@ describe("TaskThreadView", () => {
         "Try once",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4788,7 +4788,7 @@ describe("TaskThreadView", () => {
             rawText: "@Scott Odom",
           },
         ],
-        false,
+        "AUTO",
         [],
       );
     });
@@ -4924,7 +4924,7 @@ describe("TaskThreadView", () => {
             rawText: "@agent",
           },
         ],
-        true,
+        "FORCE_ON",
         [],
       );
     });

@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Search,
   Sparkles,
+  Users,
   Zap,
 } from "lucide-react";
 import {
@@ -133,7 +134,12 @@ import type {
 } from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
-import { deriveAgentDefault } from "@/lib/agent-mode";
+import {
+  deriveAgentDefault,
+  deriveAgentDispatch,
+  type AgentDispatchRequestValue,
+  type ServerThreadMode,
+} from "@/lib/agent-mode";
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
@@ -272,7 +278,7 @@ interface TaskThreadViewProps {
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -280,6 +286,12 @@ interface TaskThreadViewProps {
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
   onSelectedModelChange?: (modelId: string) => void;
+  /**
+   * Server-derived Thread Mode (THINK-136 R1). When present it drives the
+   * composer's agent-toggle default; absent (legacy data) falls back to the
+   * local message-history heuristic.
+   */
+  threadMode?: ServerThreadMode | null;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
   /**
@@ -313,6 +325,23 @@ export interface TaskThreadInfoPanelState {
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
   goal?: ThreadInfoGoalState | null;
   checklist?: ThreadInfoChecklistState | null;
+  mode?: ThreadInfoModeState | null;
+}
+
+/**
+ * Thread Mode row state (THINK-136 R3). `value` is the effective server-derived
+ * mode; `isOverride` distinguishes an explicit per-thread override from the
+ * automatic (participant-count) derivation. The control is read-only for
+ * non-participants (`canEdit` false) and disables while a change is in flight
+ * (`isSaving`); the displayed value updates from the notifyThreadUpdate-driven
+ * refetch, never optimistically.
+ */
+export interface ThreadInfoModeState {
+  value: ServerThreadMode;
+  isOverride: boolean;
+  canEdit: boolean;
+  isSaving: boolean;
+  onSetMode: (mode: ServerThreadMode) => void | Promise<void>;
 }
 
 export interface ThreadInfoGoalState {
@@ -431,6 +460,7 @@ export function TaskThreadView({
   onSelectedModelChange,
   currentUser,
   onSendFollowUp,
+  threadMode,
   artifactPanelState,
   infoPanelState,
   onFlagTurn,
@@ -631,6 +661,7 @@ export function TaskThreadView({
               onSelectedModelChange={onSelectedModelChange}
               threadMessages={thread.messages}
               currentUserId={currentUser?.id ?? null}
+              serverMode={threadMode}
               prefill={composerPrefill}
               onSubmit={onSendFollowUp}
             />
@@ -789,6 +820,7 @@ function ThreadInfoPanelBody({
                 icon={<Zap className="size-4" />}
                 value={`Triggered by ${startedBy}`}
               />
+              {state.mode ? <ThreadModeRow mode={state.mode} /> : null}
               {isOperator && state.threadId ? (
                 <Link
                   to="/activity/$threadId"
@@ -1517,6 +1549,80 @@ function InfoPanelInlineRow({
   );
 }
 
+const THREAD_MODE_OPTIONS: ServerThreadMode[] = ["AGENT", "MULTIPLAYER"];
+
+function threadModeLabel(mode: ServerThreadMode): string {
+  return mode === "AGENT" ? "Agent" : "Multiplayer";
+}
+
+/**
+ * Thread Mode row (THINK-136 R3). Renders the current mode for every viewer;
+ * the Agent/Multiplayer control is disabled (read-only) for non-participants
+ * and while a change is in flight. No optimistic flip — the displayed value
+ * updates from the server refetch after the mutation, so a failed change simply
+ * leaves the prior value shown and re-enables the control.
+ */
+export function ThreadModeRow({ mode }: { mode: ThreadInfoModeState }) {
+  const controlDisabled = !mode.canEdit || mode.isSaving;
+  return (
+    <div className="space-y-1.5" data-testid="thread-mode-row">
+      <div className="flex min-w-0 items-center gap-2 text-sm text-white/75">
+        <span className="shrink-0 text-white/45">
+          {mode.value === "AGENT" ? (
+            <Bot className="size-4" />
+          ) : (
+            <Users className="size-4" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {`Mode: ${threadModeLabel(mode.value)}`}
+        </span>
+        <span className="shrink-0 text-[11px] uppercase tracking-normal text-white/35">
+          {mode.isOverride ? "Set" : "Automatic"}
+        </span>
+      </div>
+      <div
+        role="group"
+        aria-label="Thread mode"
+        className="flex gap-1 rounded-lg bg-white/5 p-0.5"
+      >
+        {THREAD_MODE_OPTIONS.map((option) => {
+          const active = mode.value === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              disabled={controlDisabled}
+              title={
+                mode.canEdit
+                  ? `Set thread mode to ${threadModeLabel(option)}`
+                  : "Only participants can change the thread mode"
+              }
+              onClick={() => {
+                if (!active && !controlDisabled) void mode.onSetMode(option);
+              }}
+              className={cn(
+                "flex-1 rounded-md px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                active
+                  ? "bg-white/15 text-white"
+                  : "text-white/60 hover:text-white",
+              )}
+            >
+              {threadModeLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+      {!mode.canEdit ? (
+        <p className="text-[11px] text-white/35">
+          Only participants can change the mode.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function InfoPanelCopyRow({
   label,
   value,
@@ -1730,7 +1836,7 @@ function TranscriptSegment({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -1857,7 +1963,7 @@ function ThreadTurnActivity({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -2210,7 +2316,7 @@ function resumeGoalRunFromThread(
   const content = goalRun.objective
     ? `Resume goal: ${goalRun.objective}`
     : "Resume goal";
-  return onSendFollowUp(content, [], [], true, undefined, undefined, {
+  return onSendFollowUp(content, [], [], "FORCE_ON", undefined, undefined, {
     enabled: true,
     action: "resume",
     ...(goalRun.objective ? { objective: goalRun.objective } : {}),
@@ -2848,6 +2954,7 @@ function FollowUpComposer({
   skillCatalog = [],
   threadMessages,
   currentUserId,
+  serverMode,
   prefill,
   onSubmit,
   approvedModels,
@@ -2862,12 +2969,13 @@ function FollowUpComposer({
   skillCatalog?: SkillOption[];
   threadMessages?: TaskThreadMessage[];
   currentUserId?: string | null;
+  serverMode?: ServerThreadMode | null;
   prefill?: { text: string; token: number } | null;
   onSubmit?: (
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -2883,6 +2991,7 @@ function FollowUpComposer({
     () =>
       deriveAgentDefault({
         currentUserId,
+        serverMode,
         threadMessages: (threadMessages ?? []).map((message) => ({
           role: message.role,
           senderType: message.sender?.type ?? null,
@@ -2893,7 +3002,7 @@ function FollowUpComposer({
           targetId: mention.targetId,
         })),
       }).agentDefaultOn,
-    [currentUserId, threadMessages, mentions],
+    [currentUserId, serverMode, threadMessages, mentions],
   );
   const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
   // Whether the user has manually toggled the agent in this thread. While
@@ -3058,12 +3167,21 @@ function FollowUpComposer({
       );
       const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
       const submittedGoalMode = goalModeSubmission.goalMode;
+      // KTD2 tri-state: goal mode requires dispatch (FORCE_ON); otherwise the
+      // toggle maps untouched -> AUTO (server decides from Thread Mode),
+      // manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
+      const submittedDispatch: AgentDispatchRequestValue = submittedGoalMode
+        ? "FORCE_ON"
+        : deriveAgentDispatch({
+            overridden: agentOverriddenRef.current,
+            enabled: effectiveAgentEnabled,
+          });
       if (selectedModelId && submittedGoalMode) {
         await onSubmit(
           content,
           files,
           submittedMentions,
-          true,
+          submittedDispatch,
           pinnedSkills,
           selectedModelId,
           submittedGoalMode,
@@ -3073,7 +3191,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          effectiveAgentEnabled,
+          submittedDispatch,
           pinnedSkills,
           selectedModelId,
         );
@@ -3082,7 +3200,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          true,
+          submittedDispatch,
           pinnedSkills,
           undefined,
           submittedGoalMode,
@@ -3092,7 +3210,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          effectiveAgentEnabled,
+          submittedDispatch,
           pinnedSkills,
         );
       }

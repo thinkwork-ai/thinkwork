@@ -1315,7 +1315,7 @@ describe("SpacesThreadDetailRoute", () => {
           threadId: "thread-1",
           role: "USER",
           content: "For the human collaborators only",
-          agentRequested: false,
+          agentDispatch: "FORCE_OFF",
         },
       });
     });

@@ -1569,6 +1569,13 @@ export const ComputerThreadQuery = gql`
         slug
       }
       channel
+      mode
+      modeOverride
+      participants {
+        id
+        participantType
+        userId
+      }
       lifecycleStatus
       metadata
       lastModel
@@ -2423,6 +2430,8 @@ export const UpdateThreadMutation = gql`
       id
       title
       status
+      mode
+      modeOverride
       archivedAt
       updatedAt
     }
