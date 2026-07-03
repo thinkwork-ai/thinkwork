@@ -299,13 +299,30 @@ function parseKeyValue(text: string): { key: string; value: string } | null {
 function convertDetectedTable(
   detected: DetectedTable,
 ): SafetyNetConversionResult {
-  const columnIds = buildColumnIds(detected.headers);
-  const columns = detected.headers.map((header, index) => ({
+  const result = buildValidatedTablePart(detected.headers, detected.rows);
+  return result.matched
+    ? { ...result, sourceSpan: detected.span }
+    : result;
+}
+
+/**
+ * Build a validated `table` json-render part from a header list and a
+ * string-cell grid. Shared by the markdown safety net (U7) and the structured
+ * tool-result converter (U8) so there is a single source of truth for the
+ * `table` spec shape, mobile fallback, and the strict-validator gate. Returns
+ * `{ matched:false, diagnostics }` when the spec fails validation; never throws.
+ */
+export function buildValidatedTablePart(
+  headers: string[],
+  cellRows: string[][],
+): SafetyNetConversionResult {
+  const columnIds = buildColumnIds(headers);
+  const columns = headers.map((header, index) => ({
     id: columnIds[index],
     header: header.length > 0 ? header : columnIds[index],
   }));
 
-  const rows = detected.rows.map((cells, rowIndex) => {
+  const rows = cellRows.map((cells, rowIndex) => {
     const row: Record<string, string> = { id: `row-${rowIndex + 1}` };
     columnIds.forEach((columnId, columnIndex) => {
       // `id` is reserved for row identity; never let a column named "id"
@@ -332,7 +349,7 @@ function convertDetectedTable(
     catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
     status: "ready",
     spec,
-    mobileFallback: buildMobileFallback(detected),
+    mobileFallback: buildMobileFallback(headers, cellRows),
     specHash: createThreadJsonRenderSpecHash(spec),
   };
 
@@ -341,21 +358,17 @@ function convertDetectedTable(
     return { matched: false, diagnostics: validation.diagnostics };
   }
 
-  return {
-    matched: true,
-    part: validation.data,
-    sourceSpan: detected.span,
-  };
+  return { matched: true, part: validation.data };
 }
 
-function buildMobileFallback(detected: DetectedTable) {
-  const rowCount = detected.rows.length;
-  const columnCount = detected.headers.length;
+function buildMobileFallback(headers: string[], cellRows: string[][]) {
+  const rowCount = cellRows.length;
+  const columnCount = headers.length;
   const summary =
     `${rowCount} ${plural(rowCount, "row", "rows")}, ` +
     `${columnCount} ${plural(columnCount, "column", "columns")}`;
 
-  const lines = detected.rows
+  const lines = cellRows
     .slice(0, MAX_FALLBACK_LINES)
     .map((cells) => cells.join(" — "));
 
