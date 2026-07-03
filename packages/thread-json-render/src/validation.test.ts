@@ -9,7 +9,6 @@ import {
   type ThreadJsonRenderSpec,
 } from "./spec.js";
 import {
-  createAnalyticsJsonRenderFixture,
   createChartJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
@@ -41,9 +40,6 @@ describe("thread json-render validation", () => {
       workItemId: "77777777-7777-7777-7777-777777777777",
       statusCategory: "DONE",
     });
-    expect(
-      validateThreadJsonRenderPart(createAnalyticsJsonRenderFixture()).ok,
-    ).toBe(true);
     expect(
       validateThreadJsonRenderPart(createResultListJsonRenderFixture()).ok,
     ).toBe(true);

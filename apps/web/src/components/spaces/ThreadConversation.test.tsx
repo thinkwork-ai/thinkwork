@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  createAnalyticsJsonRenderFixture,
+  createTableJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
 } from "@/components/workbench/json-render/fixtures";
 import { ThreadConversation } from "./ThreadConversation";
@@ -174,8 +174,8 @@ describe("ThreadConversation", () => {
     expect(screen.getByText(/Legacy component shape/)).toBeTruthy();
   });
 
-  it("renders a persisted analytics json-render domain part inside a Thread message", () => {
-    const part = createAnalyticsJsonRenderFixture();
+  it("renders a persisted table json-render domain part inside a Thread message", () => {
+    const part = createTableJsonRenderFixture();
 
     render(
       <ThreadConversation
@@ -191,9 +191,9 @@ describe("ThreadConversation", () => {
       />,
     );
 
-    expect(screen.getByTestId("json-render-analytics-display")).toBeTruthy();
-    expect(screen.getByText("Support volume")).toBeTruthy();
-    expect(screen.getByText(/ThinkWork analytics adapter/)).toBeTruthy();
+    expect(screen.getByTestId("json-render-table")).toBeTruthy();
+    expect(screen.getByText("Open work items")).toBeTruthy();
+    expect(screen.getByText("Kickoff onboarding")).toBeTruthy();
   });
 });
 

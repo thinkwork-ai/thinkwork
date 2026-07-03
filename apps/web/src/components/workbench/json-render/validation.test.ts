@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createAnalyticsJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
@@ -40,12 +39,6 @@ describe("Thread json-render web validation", () => {
       "complete-work-item",
       "skip-question",
     ]);
-  });
-
-  it("accepts the analytics.display adapter boundary", () => {
-    const fixture = createAnalyticsJsonRenderFixture();
-
-    expect(validateThreadJsonRenderPart(fixture).ok).toBe(true);
   });
 
   it("rejects unknown components before render", () => {

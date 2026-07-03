@@ -23,7 +23,6 @@ describe("Thread json-render catalog", () => {
       "workflow.status",
       "keyValue.list",
       "form.action",
-      "analytics.display",
       "result.list",
       "table",
       "chart",
@@ -33,7 +32,6 @@ describe("Thread json-render catalog", () => {
         "Card",
         "Button",
         "task.review",
-        "analytics.display",
         "result.list",
       ]),
     );

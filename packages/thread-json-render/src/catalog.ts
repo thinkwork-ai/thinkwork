@@ -224,21 +224,6 @@ export const threadJsonRenderDomainComponentDefinitions = {
       submitActionId: "submit-approval",
     },
   },
-  "analytics.display": {
-    props: z
-      .object({
-        kind: z.literal("analytics.display"),
-        analyticsDisplayVersion: z.string(),
-      })
-      .passthrough(),
-    slots: ["default"],
-    description:
-      "ThinkWork analytics-display adapter backed by @thinkwork/analytics-display.",
-    example: {
-      kind: "analytics.display",
-      analyticsDisplayVersion: "analytics-display/v1",
-    },
-  },
   "result.list": {
     props: z
       .object({

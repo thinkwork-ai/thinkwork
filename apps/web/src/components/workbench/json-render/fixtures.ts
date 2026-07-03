@@ -98,32 +98,6 @@ export function createTaskReviewJsonRenderFixture(): ThreadJsonRenderPart {
   );
 }
 
-export function createAnalyticsJsonRenderFixture(): ThreadJsonRenderPart {
-  const spec = {
-    root: "analytics",
-    elements: {
-      analytics: {
-        type: "analytics.display",
-        props: {
-          kind: "analytics.display",
-          analyticsDisplayVersion: "analytics-display/v1",
-          title: "Support volume",
-        },
-        children: [],
-      },
-    },
-  } satisfies ThreadJsonRenderSpec;
-
-  return createThreadJsonRenderPart(
-    "json-render:analytics:support-volume",
-    spec,
-    {
-      title: "Support volume",
-      summary: "Analytical display",
-    },
-  );
-}
-
 export function createResultListJsonRenderFixture(): ThreadJsonRenderPart {
   const spec = {
     root: "results",

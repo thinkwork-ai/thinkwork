@@ -96,21 +96,6 @@ function createDomainComponents(actionState: DurableActionState) {
         statusForAction={actionState.statusForAction}
       />
     )) satisfies ThreadJsonRenderComponentFn<"form.action">,
-    "analytics.display": (({ props }) => (
-      <section
-        aria-label={analyticsTitle(props)}
-        className="grid gap-2 rounded-md border border-border bg-card p-3 text-sm shadow-sm"
-        data-testid="json-render-analytics-display"
-      >
-        <h3 className="text-sm font-semibold text-foreground">
-          {analyticsTitle(props)}
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Analytical display rendering is handled by the ThinkWork analytics
-          adapter.
-        </p>
-      </section>
-    )) satisfies ThreadJsonRenderComponentFn<"analytics.display">,
     "result.list": (({ props }) => (
       <ResultListView
         {...props}
@@ -156,10 +141,6 @@ function normalizeActionFormFields(
     ...field,
     type: field.type === "checkbox" ? "text" : field.type,
   }));
-}
-
-function analyticsTitle(props: Record<string, unknown>) {
-  return typeof props.title === "string" ? props.title : "Analytics display";
 }
 
 const rendererFallback: ComponentRenderer = ({ element }) => (
