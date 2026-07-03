@@ -1,5 +1,6 @@
 export * from "./actions.js";
 export * from "./catalog.js";
+export * from "./primitive-catalog.js";
 export * from "./hash.js";
 export * from "./safety-net/detect-convert.js";
 export * from "./safety-net/tool-result-convert.js";
