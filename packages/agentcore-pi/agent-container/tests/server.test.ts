@@ -338,6 +338,88 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  // THINK-116 U7 — deterministic markdown→GenUI safety-net backstop (ship-inert).
+  const MARKDOWN_TABLE_RESPONSE = [
+    "Here are the open work items:",
+    "",
+    "| Name | Owner | Score |",
+    "| --- | --- | --- |",
+    "| Kickoff | Codex | 3 |",
+    "| Launch | Ada | 1 |",
+  ].join("\n");
+
+  it("safety-net is INERT by default: a markdown-table response emits NO json-render part", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD(),
+      deps: makeDeps({
+        runAgentLoop: async () => ({
+          content: MARKDOWN_TABLE_RESPONSE,
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    // Prose is untouched and no part was fabricated — behavior is unchanged.
+    expect((body.response as Record<string, unknown>).content).toBe(
+      MARKDOWN_TABLE_RESPONSE,
+    );
+    expect(body.ui_message_parts).toEqual([]);
+  });
+
+  it("safety-net ON: a markdown-table response is converted into a validated data-json-render part while prose is preserved", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_json_render_safety_net_enabled: true,
+      }),
+      deps: makeDeps({
+        runAgentLoop: async () => ({
+          content: MARKDOWN_TABLE_RESPONSE,
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    // Original prose is never dropped — the part augments it.
+    expect((body.response as Record<string, unknown>).content).toBe(
+      MARKDOWN_TABLE_RESPONSE,
+    );
+    const parts = body.ui_message_parts as Array<Record<string, unknown>>;
+    expect(parts).toHaveLength(1);
+    expect(parts[0].type).toBe("data-json-render");
+    const data = parts[0].data as {
+      spec: { elements: Record<string, { type: string }> };
+    };
+    expect(data.spec.elements.table.type).toBe("table");
+  });
+
+  it("safety-net ON but prose has no structured content: no part is emitted", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_json_render_safety_net_enabled: true,
+      }),
+      deps: makeDeps({
+        runAgentLoop: async () => ({
+          content: "Just a plain prose answer with no table at all.",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    expect(body.ui_message_parts).toEqual([]);
+  });
+
   it("translates goal-mode payloads into Pi commands and returns goal evidence", async () => {
     const seenMessages: unknown[] = [];
     const result = await handleInvocation({
