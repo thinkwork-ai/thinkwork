@@ -545,8 +545,9 @@ export function ComposerWorkspaceEditor({
           setSelectedPath(selectedPath.replace(path, toTree));
         }
       } else {
+        // Empty anchorPath = the AGENT workspace ROOT (owner=agent, rel "").
         const parent = nameDialog.anchorPath;
-        const src = srcForPath(parent || name);
+        const src = srcForPath(parent);
         if (!src) throw new Error("This folder has no editable source layer.");
         const childTree = parent ? `${parent}/${name}` : name;
         const childRel = src.rel ? `${src.rel}/${name}` : name;
@@ -1017,6 +1018,49 @@ export function ComposerWorkspaceEditor({
     ? (entryByPath.get(selectedPath) ?? null)
     : null;
 
+  // Root-level create targets the AGENT workspace root (owner=agent, rel "").
+  const canEditRoot = canEditSource && Boolean(result?.agentId);
+
+  const treeBody = (
+    <div
+      className="min-h-0 flex-1 overflow-y-auto p-2"
+      data-testid="composer-tree-scroll"
+    >
+      {manifest.loading && !result ? (
+        <div className="space-y-2" data-testid="preview-loading">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-5 w-2/3" />
+          <Skeleton className="h-5 w-4/5" />
+        </div>
+      ) : manifest.error ? (
+        <p className="text-sm text-destructive" data-testid="preview-error">
+          Couldn&apos;t load the rendered workspace: {manifest.error}
+        </p>
+      ) : result?.state === "invalid_selection" ? (
+        <p
+          className="text-sm text-destructive"
+          data-testid="preview-invalid-selection"
+        >
+          Invalid selection: {result.stateDetail}
+        </p>
+      ) : result?.state === "resolution_fault" ? (
+        <p
+          className="text-sm text-destructive"
+          data-testid="preview-resolution-fault"
+        >
+          Resolution fault — this selection could not be composed:{" "}
+          {result.stateDetail}
+        </p>
+      ) : result && tree.length === 0 ? (
+        <p className="px-1 py-2 text-sm text-muted-foreground">
+          Nothing rendered for the current selection.
+        </p>
+      ) : result ? (
+        tree.map((node) => renderNode(node, 0))
+      ) : null}
+    </div>
+  );
+
   const treePanel = (
     <div className="flex min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
@@ -1033,40 +1077,32 @@ export function ComposerWorkspaceEditor({
           </Badge>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {manifest.loading && !result ? (
-          <div className="space-y-2" data-testid="preview-loading">
-            <Skeleton className="h-5 w-3/4" />
-            <Skeleton className="h-5 w-2/3" />
-            <Skeleton className="h-5 w-4/5" />
-          </div>
-        ) : manifest.error ? (
-          <p className="text-sm text-destructive" data-testid="preview-error">
-            Couldn&apos;t load the rendered workspace: {manifest.error}
-          </p>
-        ) : result?.state === "invalid_selection" ? (
-          <p
-            className="text-sm text-destructive"
-            data-testid="preview-invalid-selection"
-          >
-            Invalid selection: {result.stateDetail}
-          </p>
-        ) : result?.state === "resolution_fault" ? (
-          <p
-            className="text-sm text-destructive"
-            data-testid="preview-resolution-fault"
-          >
-            Resolution fault — this selection could not be composed:{" "}
-            {result.stateDetail}
-          </p>
-        ) : result && tree.length === 0 ? (
-          <p className="px-1 py-2 text-sm text-muted-foreground">
-            Nothing rendered for the current selection.
-          </p>
-        ) : result ? (
-          tree.map((node) => renderNode(node, 0))
-        ) : null}
-      </div>
+      {canEditRoot ? (
+        // Right-click the blank tree background to create at the workspace ROOT.
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{treeBody}</ContextMenuTrigger>
+          <ContextMenuContent data-testid="tree-root-menu">
+            <ContextMenuItem
+              onSelect={() =>
+                setNameDialog({ mode: "new-file", anchorPath: "", value: "" })
+              }
+              data-testid="menu-root-new-file"
+            >
+              <FilePlus className="mr-2 size-4" /> New File…
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() =>
+                setNameDialog({ mode: "new-folder", anchorPath: "", value: "" })
+              }
+              data-testid="menu-root-new-folder"
+            >
+              <FolderPlus className="mr-2 size-4" /> New Folder…
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        treeBody
+      )}
     </div>
   );
 
