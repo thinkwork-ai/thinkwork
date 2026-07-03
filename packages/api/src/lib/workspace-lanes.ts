@@ -311,9 +311,11 @@ export function workspacePathContract(path: string): WorkspacePathContract {
 
 export function isVisibleUserContextPath(path: string): boolean {
   const clean = workspaceSourcePath(path).replace(/^\/+/, "");
-  if (clean === "USER.md") return true;
-  if (!clean.startsWith("memory/")) return false;
-  if (clean.startsWith("memory/.") || clean.includes("/.")) return false;
+  // The Composer is the agent configuration — everything the operator can see in
+  // a user's own source tree is editable (USER.md, knowledge packs, memory, and
+  // any nested files/folders). Only hidden dotfiles and generated report
+  // artifacts stay off-limits.
+  if (clean.startsWith(".") || clean.includes("/.")) return false;
   if (clean.startsWith("memory/reports/")) return false;
   return true;
 }

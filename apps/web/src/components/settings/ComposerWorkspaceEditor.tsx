@@ -45,6 +45,7 @@ import {
   FilePlus,
   FileText,
   Folder,
+  FolderOpen,
   FolderPlus,
   FolderTree,
   Pencil,
@@ -309,6 +310,17 @@ function formatBytes(value: number): string {
   }
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
+
+/**
+ * Display-only lowercase aliases for the capitalized mount roots so they sit
+ * with the other lowercase roots (skills). The real runtime mount paths
+ * (`Spaces/`, `User/`, `Users/`) are unchanged — this is purely the tree label.
+ */
+const MOUNT_DISPLAY_ALIAS: Record<string, string> = {
+  Spaces: "spaces",
+  User: "user",
+  Users: "users",
+};
 
 /** Skill slug for a `skills/<slug>` folder node, else null. */
 function skillSlugForFolder(node: TreeNode): string | null {
@@ -678,6 +690,24 @@ export function ComposerWorkspaceEditor({
     return nodes;
   }, [entries, pendingFolderPath]);
 
+  // Default state is COLLAPSED at EVERY depth — every folder starts closed, only
+  // root files are visible; expanding a folder reveals its immediate children
+  // (also collapsed). Deliberate (keeps the tree scannable). Runs once per mount
+  // so later expands stick and mutations don't re-collapse the operator's view.
+  const didInitCollapse = useRef(false);
+  useEffect(() => {
+    if (didInitCollapse.current || entries.length === 0) return;
+    didInitCollapse.current = true;
+    const folders = new Set<string>();
+    for (const entry of entries) {
+      const parts = entry.path.split("/");
+      for (let i = 0; i < parts.length - 1; i++) {
+        folders.add(parts.slice(0, i + 1).join("/"));
+      }
+    }
+    setCollapsed(folders);
+  }, [entries]);
+
   function toggleFolder(path: string) {
     setCollapsed((current) => {
       const next = new Set(current);
@@ -807,6 +837,10 @@ export function ComposerWorkspaceEditor({
         )}
         style={{ paddingLeft: `${depth * 0.875 + 0.25}rem` }}
         data-testid={`tree-node-${node.path}`}
+        // Nested Radix ContextMenus: a node with its own menu stops the
+        // contextmenu event here so it doesn't ALSO open the root (tree-
+        // background) menu. Menu-less rows let it bubble to the root menu.
+        onContextMenu={hasMenu ? (event) => event.stopPropagation() : undefined}
       >
         {node.isFolder ? (
           <button
@@ -822,12 +856,20 @@ export function ComposerWorkspaceEditor({
                 !isCollapsed && "rotate-90",
               )}
             />
-            <Folder className="size-3.5 shrink-0" />
-            {/* Display alias only: the `Spaces/` mount renders lowercase to sit
-                with the other lowercase roots. The real runtime mount path stays
-                `Spaces/` everywhere — do NOT "fix" this into an actual rename. */}
+            {isCollapsed ? (
+              <Folder className="size-3.5 shrink-0" />
+            ) : (
+              <FolderOpen
+                className="size-3.5 shrink-0"
+                data-testid={`tree-folder-open-${node.path}`}
+              />
+            )}
+            {/* Display alias only: the capitalized mount roots (`Spaces/`,
+                `User/`, `Users/`) render lowercase to sit with the other
+                lowercase roots. The real runtime mount paths are unchanged
+                everywhere — do NOT "fix" these into actual renames. */}
             <span className="truncate">
-              {node.path === "Spaces" ? "spaces" : node.name}
+              {MOUNT_DISPLAY_ALIAS[node.path] ?? node.name}
             </span>
           </button>
         ) : (
