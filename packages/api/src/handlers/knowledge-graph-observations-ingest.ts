@@ -18,7 +18,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
-import { CogneeClient } from "@thinkwork/plugin-company-brain/api/cognee-client";
+import { extractGraphFromPackets } from "../lib/knowledge-graph/bedrock-graph-extractor.js";
 import {
   redactedSourceRef,
   writeKnowledgeGraphIngestArtifacts,
@@ -27,12 +27,12 @@ import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { loadObservationsKnowledgeGraphSource } from "../lib/knowledge-graph/observations-source.js";
 import {
-  countKnowledgeGraphEntitiesForSource,
   loadKnowledgeGraphIngestRun,
   markKnowledgeGraphRunFailed,
   markKnowledgeGraphRunRunning,
   markKnowledgeGraphRunStaleNoop,
-  replaceKnowledgeGraphSnapshot,
+  mergeKnowledgeGraphSnapshot,
+  purgeKnowledgeGraphSource,
   type DatabaseTransaction,
 } from "../lib/knowledge-graph/repository.js";
 import {
@@ -69,14 +69,9 @@ export interface KnowledgeGraphObservationsIngestResult {
 
 interface KnowledgeGraphObservationsIngestDeps {
   db?: Database;
-  cogneeClient?: Pick<
-    CogneeClient,
-    | "ingestDocument"
-    | "waitForDatasetIndexing"
-    | "fetchDatasetGraph"
-    | "deleteDatasetByName"
-    | "pruneAll"
-  >;
+  /** Bedrock graph extractor; injectable for tests. Defaults to the real
+   * `extractGraphFromPackets`. */
+  extractor?: typeof extractGraphFromPackets;
   /** Fire-and-forget self re-invoke used to drain a truncated backlog.
    * Injectable for tests; the default issues an async Event invoke of this
    * same worker with the tenantId. */
@@ -86,15 +81,6 @@ interface KnowledgeGraphObservationsIngestDeps {
   }) => Promise<void>;
 }
 
-const DEFAULT_SHRINK_GUARD_RATIO = 0.5;
-
-function shrinkGuardRatio(): number {
-  const raw = process.env.KG_OBS_SHRINK_GUARD_RATIO;
-  const parsed = raw ? Number.parseFloat(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 && parsed <= 1
-    ? parsed
-    : DEFAULT_SHRINK_GUARD_RATIO;
-}
 
 /**
  * Per-run candidate cap. A 500-candidate backlog times out a 480 s Lambda
@@ -261,31 +247,19 @@ async function processTenantObservationsIngest(
     await markKnowledgeGraphRunRunning({ db: database, runId: run.id });
 
     if (fullRebuild) {
-      // Reset cursors to epoch BEFORE reading so the whole corpus re-reads.
+      // Reset cursors to epoch BEFORE reading so the whole corpus re-reads,
+      // and wipe the mirror for this source so the merge-upsert re-seeds
+      // from empty (the merge path is additive and never deletes on absence,
+      // so a rebuild must purge explicitly).
       await database
         .delete(knowledgeGraphObservationCursors)
         .where(eq(knowledgeGraphObservationCursors.tenant_id, args.tenantId));
-
-      // Purge the Cognee graph too — a "full rebuild" that only reset cursors
-      // left the prior graph in place, so old/stale nodes accumulated and the
-      // dataset re-cognified atop them. pruneAll wipes the whole store
-      // (single-tenant/dev escape hatch); otherwise drop just this tenant's
-      // observations dataset so it rebuilds from empty. Best-effort: a purge
-      // failure must not abort the rebuild.
-      const purgeClient = deps.cogneeClient ?? new CogneeClient();
-      try {
-        if (cogneePruneAll && purgeClient.pruneAll) {
-          await purgeClient.pruneAll();
-        } else if (purgeClient.deleteDatasetByName) {
-          await purgeClient.deleteDatasetByName(run.cognee_dataset_name);
-        }
-      } catch (purgeErr) {
-        console.warn(
-          `[kg-observations-ingest] Cognee purge failed (continuing rebuild): ${
-            purgeErr instanceof Error ? purgeErr.message : String(purgeErr)
-          }`,
-        );
-      }
+      await purgeKnowledgeGraphSource({
+        db: database,
+        tenantId: run.tenant_id,
+        sourceKind: run.source_kind,
+        sourceRef: run.source_ref,
+      });
     }
 
     const ontology = await loadApprovedOntologyExport({
@@ -336,56 +310,23 @@ async function processTenantObservationsIngest(
       ontology,
     });
 
-    const client = deps.cogneeClient ?? new CogneeClient();
-    const ingest = await client.ingestDocument({
-      tenantId: run.tenant_id,
-      sourceKind: "observations",
-      sourceRef: run.source_ref,
-      datasetName: run.cognee_dataset_name,
-      document: source.bundle.document,
-      filename: "thinkwork-observations.md",
-      ontology,
-    });
-    if (!ingest.datasetId) {
-      throw new Error(
-        "Cognee ingest did not return a dataset id for graph retrieval",
-      );
-    }
-    const indexing = await client.waitForDatasetIndexing(ingest.datasetId);
-    const graph = await client.fetchDatasetGraph(ingest.datasetId);
-    const normalizedSnapshot = normalizeCogneeGraph({
-      graph,
-      transcript: source.bundle.evidence,
-      ontology,
-      // Cognee's dogfood graph fetch returns the GLOBAL graph (all datasets),
-      // so scope to the observations NodeSet — otherwise this run would ingest
-      // thread/wiki/brain entities under source_kind='observations'.
-      scopeNodeSetSubstrings: ["observations"],
-    });
-    const snapshot = applySourceDeclaredFallback({
-      snapshot: normalizedSnapshot,
-      source: source.bundle,
+    const extractor = deps.extractor ?? extractGraphFromPackets;
+    const extraction = await extractor({
+      packets: source.bundle.packets,
       ontology,
     });
 
-    // Shrink guard: one poisoned normalization otherwise replaces the
-    // entire tenant graph in a single full-snapshot swap.
-    const priorEntityCount = await countKnowledgeGraphEntitiesForSource({
-      db: database,
-      tenantId: run.tenant_id,
-      sourceKind: run.source_kind,
-      sourceRef: run.source_ref,
-    });
-    const ratio = shrinkGuardRatio();
-    if (
-      !fullRebuild &&
-      priorEntityCount > 0 &&
-      snapshot.entities.length < priorEntityCount * ratio
-    ) {
+    // A batch that failed after the retry envelope means observations went
+    // unextracted. Fail the run WITHOUT writing the mirror or advancing
+    // cursors, so the next sweep re-reads the same candidates — advancing
+    // past unextracted observations would be silent permanent knowledge
+    // loss (R2/AE2). Transient flakes are already absorbed by the extractor's
+    // per-batch retry envelope; a post-retry drop is worth re-running.
+    if (extraction.batchesDropped > 0) {
       const error =
-        `shrink guard: refusing to replace ${priorEntityCount} mirror entities ` +
-        `with ${snapshot.entities.length} (ratio threshold ${ratio}); ` +
-        "flagged for operator review";
+        `extraction dropped ${extraction.batchesDropped}/${extraction.batchesTotal} ` +
+        `batch(es) after retries (${extraction.batchesTruncated} truncated); ` +
+        "failing the run so cursors do not advance past unextracted observations";
       await markKnowledgeGraphRunFailed({
         db: database,
         runId: run.id,
@@ -393,10 +334,10 @@ async function processTenantObservationsIngest(
         error,
         metrics: {
           ...auditMetrics,
-          shrinkGuard: {
-            priorEntityCount,
-            newEntityCount: snapshot.entities.length,
-            ratio,
+          extraction: {
+            batchesTotal: extraction.batchesTotal,
+            batchesDropped: extraction.batchesDropped,
+            batchesTruncated: extraction.batchesTruncated,
           },
         },
       });
@@ -409,13 +350,29 @@ async function processTenantObservationsIngest(
       };
     }
 
-    await replaceKnowledgeGraphSnapshot({
+    const normalizedSnapshot = normalizeCogneeGraph({
+      graph: extraction.payload,
+      transcript: source.bundle.evidence,
+      ontology,
+      // The extractor emits only this source's nodes, so no NodeSet scoping
+      // is needed (unlike Cognee's global-graph fetch).
+    });
+    const snapshot = applySourceDeclaredFallback({
+      snapshot: normalizedSnapshot,
+      source: source.bundle,
+      ontology,
+    });
+
+    // Merge-upsert (not replace): the observations source shares one
+    // source_ref across runs and each run sees only its cursor-gated new
+    // packets — a full-snapshot replace would wipe the mirror to the newest
+    // batch every sweep. The merge is additive, so the shrink guard is moot.
+    await mergeKnowledgeGraphSnapshot({
       db: database,
       run,
       snapshot,
-      cogneeDatasetId: ingest.datasetId,
       startedAt,
-      ingestMode: ingest.mode,
+      ingestMode: "bedrock_extraction",
       ontologyMechanism: ontology.mechanism,
       sourceMetrics: {
         ...auditMetrics,
@@ -428,17 +385,15 @@ async function processTenantObservationsIngest(
           artifactWrite.sourceArtifact?.checksumSha256 ?? null,
         ingestionManifestChecksum:
           artifactWrite.ingestionManifest?.checksumSha256 ?? null,
-        cogneePipelineRunId: ingest.pipelineRunId,
-        cogneeIndexStatus: indexing.status,
-        cogneeIndexRawStatus: indexing.rawStatus,
-        cogneeIndexAttempts: indexing.attempts,
-        cogneeIndexElapsedMs: indexing.elapsedMs,
-        cogneeIndexSamples: indexing.samples.map((sample) => ({
-          status: sample.status,
-          rawStatus: sample.rawStatus,
-        })),
+        extraction: {
+          batchesTotal: extraction.batchesTotal,
+          extractedNodeCount: extraction.payload.nodes.length,
+          extractedEdgeCount: extraction.payload.edges.length,
+          inputTokens: extraction.inputTokens,
+          outputTokens: extraction.outputTokens,
+        },
       },
-      runMetadata: fullRebuild ? { shrinkGuardBypassed: true } : undefined,
+      runMetadata: fullRebuild ? { fullRebuild: true } : undefined,
       extraWork: async (tx) =>
         upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
     });
@@ -480,9 +435,8 @@ async function processTenantObservationsIngest(
         entityCount: snapshot.entities.length,
         relationshipCount: snapshot.relationships.length,
         evidenceCount: snapshot.evidence.length,
-        ingestMode: ingest.mode,
-        cogneePipelineRunId: ingest.pipelineRunId,
-        cogneeIndexStatus: indexing.status,
+        ingestMode: "bedrock_extraction",
+        extractionBatchesTotal: extraction.batchesTotal,
         selfInvoked,
       },
     };

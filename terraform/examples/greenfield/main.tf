@@ -672,6 +672,12 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
+variable "knowledge_graph_observations_ingest_enabled" {
+  description = "Enable the Brain distillation schedule (observations -> knowledge graph). Ships disabled; flip on dev after a validated manual run (plan 2026-07-03-005 U4)."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki compile pipeline source: 'planner' (LLM compile) or 'graph' (deterministic graph->wiki materializer). Dev flips first per THINK-133 U8/KTD-4; the default flips for all stages only after dev comparison evidence holds."
   type        = string
@@ -1094,6 +1100,7 @@ module "thinkwork" {
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
+  knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
