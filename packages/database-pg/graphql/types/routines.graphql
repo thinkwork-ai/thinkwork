@@ -25,6 +25,7 @@ enum RoutineRunStatus {
 enum RoutineEngine {
   LEGACY_PYTHON
   STEP_FUNCTIONS
+  GIT_PYTHON
 }
 
 enum RoutineExecutionStatus {
@@ -74,6 +75,21 @@ type Routine {
   # enforces ownership via these two fields.
   visibility: RoutineVisibility!
   owningAgentId: ID
+  # ---- git_python engine fields (deterministic routines v1) ----
+  # Null on legacy_python / step_functions routines. Code lives only in the
+  # tenant-configured GitHub repo; these are identity + pointers, never code.
+  # Path of the Python module inside the tenant repo.
+  modulePath: String
+  # Repo paths of the routine's recorded fixture files (JSON string[]).
+  fixturePaths: AWSJSON
+  # Tenant-credential ids this routine declares; only these are injected
+  # into its sandbox session at execution (R19).
+  credentialRefs: AWSJSON
+  # Last fixture-validated commit SHA (denormalized from routine_code_cache).
+  validatedSha: String
+  # Set when the repair budget circuit-breaker (or an operator) disabled
+  # the routine.
+  disabledReason: String
   lastRunAt: AWSDateTime
   nextRunAt: AWSDateTime
   # Nullable in Phase A while the type-resolver lands in Phase B U7. A
@@ -103,10 +119,12 @@ type RoutineExecution {
   tenantId: ID!
   routineId: ID!
   routine: Routine
-  stateMachineArn: String!
+  # Null on git_python executions, which run through the routine-exec-git
+  # Lambda instead of Step Functions.
+  stateMachineArn: String
   aliasArn: String
   versionArn: String
-  sfnExecutionArn: String!
+  sfnExecutionArn: String
   triggerId: ID
   trigger: RoutineTrigger
   triggerSource: String!
@@ -118,6 +136,15 @@ type RoutineExecution {
   errorCode: String
   errorMessage: String
   totalLlmCostUsdCents: Int
+  # ---- git_python engine fields (deterministic routines v1) ----
+  # The commit SHA whose code actually executed (R4).
+  commitSha: String
+  # The routine's validated SHA at execution time — differs from commitSha
+  # when the executor reverted to last-validated code.
+  validatedSha: String
+  # True when git was unreachable and the S3-cached last-validated SHA
+  # served the run (R6).
+  cacheServed: Boolean
   stepEvents: [RoutineStepEvent!]!
   # Pointer to the routine_asl_versions row that backed this specific
   # execution. Resolved by (state_machine_arn, version_arn) — the same
@@ -147,6 +174,30 @@ type RoutineStepEvent {
   stderrS3Uri: String
   stdoutPreview: String
   truncated: Boolean!
+  createdAt: AWSDateTime!
+}
+
+# Repair-ladder history for git_python routines (deterministic routines
+# v1). Backs the visible repair log (R12/R15). Schema lands with U1;
+# writer + read resolver ship with the repair units (U7/U8).
+type RoutineRepairEvent {
+  id: ID!
+  tenantId: ID!
+  routineId: ID!
+  executionId: ID
+  # retry | revert | repair_attempt | pending_commit | disabled | infra_failure
+  eventType: String!
+  # Thread / wakeup ref that carried the agent repair; null for mechanical tiers.
+  threadRef: String
+  fromSha: String
+  toSha: String
+  # green | red (repair_attempt events)
+  gateResult: String
+  # in_envelope | out_of_envelope (agent commits)
+  envelopeVerdict: String
+  # Repair attempts remaining for the UTC day after this event.
+  budgetSnapshot: Int
+  detailJson: AWSJSON
   createdAt: AWSDateTime!
 }
 
@@ -429,6 +480,7 @@ extend type Query {
     cursor: String
   ): [RoutineExecution!]!
   routineStepEvents(executionId: ID!): [RoutineStepEvent!]!
+  routineRepairEvents(routineId: ID!, limit: Int): [RoutineRepairEvent!]!
   routineAslVersion(id: ID!): RoutineAslVersion
   routineDefinition(routineId: ID!): RoutineDefinition
   routineRecipeCatalog(tenantId: ID!): [RoutineRecipe!]!

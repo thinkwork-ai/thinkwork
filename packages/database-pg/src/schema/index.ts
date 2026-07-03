@@ -14,6 +14,8 @@ export * from "./routine-executions";
 export * from "./routine-step-events";
 export * from "./routine-asl-versions";
 export * from "./routine-approval-tokens";
+export * from "./routine-code-cache";
+export * from "./routine-repair-events";
 export * from "./integrations";
 export * from "./tenant-credentials";
 export * from "./tenant-customize-catalog";

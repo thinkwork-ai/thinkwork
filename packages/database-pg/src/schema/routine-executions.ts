@@ -23,6 +23,7 @@ import {
   timestamp,
   jsonb,
   bigint,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -46,8 +47,10 @@ export const routineExecutions = pgTable(
       .notNull(),
     // State Functions resource ARNs at the moment this execution started.
     // Captured for audit even if the routine is later edited or the alias
-    // pointer-flips to a new version.
-    state_machine_arn: text("state_machine_arn").notNull(),
+    // pointer-flips to a new version. Null on git_python executions, which
+    // run through the routine-exec-git Lambda instead of Step Functions
+    // (plan 2026-07-03-004 U1).
+    state_machine_arn: text("state_machine_arn"),
     alias_arn: text("alias_arn"),
     version_arn: text("version_arn"),
     // Exact routine_asl_versions row used when this execution was started.
@@ -57,8 +60,10 @@ export const routineExecutions = pgTable(
       () => routineAslVersions.id,
     ),
     // SFN execution ARN. Unique per execution; used to correlate
-    // EventBridge state-change events back to this row.
-    sfn_execution_arn: text("sfn_execution_arn").notNull(),
+    // EventBridge state-change events back to this row. Null on git_python
+    // executions (no SFN involvement; Postgres allows multiple NULLs under
+    // the unique index).
+    sfn_execution_arn: text("sfn_execution_arn"),
     // Optional FK to the scheduled_jobs row that triggered this run.
     // Null for manual / agent-tool / routine_invoke triggers.
     trigger_id: uuid("trigger_id").references(() => scheduledJobs.id),
@@ -75,6 +80,17 @@ export const routineExecutions = pgTable(
     total_llm_cost_usd_cents: bigint("total_llm_cost_usd_cents", {
       mode: "number",
     }),
+    // ---- git_python engine columns (deterministic routines v1) ----
+    // Null on step_functions / legacy rows. Every git run answers
+    // "what exactly ran?" (R4). Plan: 2026-07-03-004 (U1, KTD-1).
+    // The commit SHA whose code actually executed.
+    commit_sha: text("commit_sha"),
+    // The routine's validated SHA at execution time — differs from
+    // commit_sha when the executor reverted to the last-validated code.
+    validated_sha: text("validated_sha"),
+    // True when git was unreachable and the S3-cached last-validated SHA
+    // served the run (R6 / AE5).
+    cache_served: boolean("cache_served"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

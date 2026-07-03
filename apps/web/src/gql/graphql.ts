@@ -6599,6 +6599,7 @@ export type Query = {
   routineExecution?: Maybe<RoutineExecution>;
   routineExecutions: Array<RoutineExecution>;
   routineRecipeCatalog: Array<RoutineRecipe>;
+  routineRepairEvents: Array<RoutineRepairEvent>;
   routineStepEvents: Array<RoutineStepEvent>;
   routines: Array<Routine>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
@@ -7416,6 +7417,12 @@ export type QueryRoutineRecipeCatalogArgs = {
 };
 
 
+export type QueryRoutineRepairEventsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  routineId: Scalars['ID']['input'];
+};
+
+
 export type QueryRoutineStepEventsArgs = {
   executionId: Scalars['ID']['input'];
 };
@@ -8151,13 +8158,17 @@ export type Routine = {
   agentId?: Maybe<Scalars['ID']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
+  credentialRefs?: Maybe<Scalars['AWSJSON']['output']>;
   currentVersion?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
+  disabledReason?: Maybe<Scalars['String']['output']>;
   documentationMd?: Maybe<Scalars['String']['output']>;
   engine: Scalars['String']['output'];
   executions?: Maybe<Array<RoutineExecution>>;
+  fixturePaths?: Maybe<Scalars['AWSJSON']['output']>;
   id: Scalars['ID']['output'];
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  modulePath?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
   nextRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   owningAgentId?: Maybe<Scalars['ID']['output']>;
@@ -8169,6 +8180,7 @@ export type Routine = {
   triggers: Array<RoutineTrigger>;
   type: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+  validatedSha?: Maybe<Scalars['String']['output']>;
   visibility: RoutineVisibility;
 };
 
@@ -8272,6 +8284,7 @@ export type RoutineDraft = {
 };
 
 export enum RoutineEngine {
+  GitPython = 'GIT_PYTHON',
   LegacyPython = 'LEGACY_PYTHON',
   StepFunctions = 'STEP_FUNCTIONS'
 }
@@ -8280,6 +8293,8 @@ export type RoutineExecution = {
   __typename?: 'RoutineExecution';
   aliasArn?: Maybe<Scalars['String']['output']>;
   aslVersion?: Maybe<RoutineAslVersion>;
+  cacheServed?: Maybe<Scalars['Boolean']['output']>;
+  commitSha?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
@@ -8289,9 +8304,9 @@ export type RoutineExecution = {
   outputJson?: Maybe<Scalars['AWSJSON']['output']>;
   routine?: Maybe<Routine>;
   routineId: Scalars['ID']['output'];
-  sfnExecutionArn: Scalars['String']['output'];
+  sfnExecutionArn?: Maybe<Scalars['String']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  stateMachineArn: Scalars['String']['output'];
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
   status: Scalars['String']['output'];
   stepEvents: Array<RoutineStepEvent>;
   tenantId: Scalars['ID']['output'];
@@ -8299,6 +8314,7 @@ export type RoutineExecution = {
   trigger?: Maybe<RoutineTrigger>;
   triggerId?: Maybe<Scalars['ID']['output']>;
   triggerSource: Scalars['String']['output'];
+  validatedSha?: Maybe<Scalars['String']['output']>;
   versionArn?: Maybe<Scalars['String']['output']>;
 };
 
@@ -8337,6 +8353,23 @@ export type RoutineRecipeConfigField = {
   placeholder?: Maybe<Scalars['String']['output']>;
   required: Scalars['Boolean']['output'];
   value?: Maybe<Scalars['AWSJSON']['output']>;
+};
+
+export type RoutineRepairEvent = {
+  __typename?: 'RoutineRepairEvent';
+  budgetSnapshot?: Maybe<Scalars['Int']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  detailJson?: Maybe<Scalars['AWSJSON']['output']>;
+  envelopeVerdict?: Maybe<Scalars['String']['output']>;
+  eventType: Scalars['String']['output'];
+  executionId?: Maybe<Scalars['ID']['output']>;
+  fromSha?: Maybe<Scalars['String']['output']>;
+  gateResult?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  routineId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadRef?: Maybe<Scalars['String']['output']>;
+  toSha?: Maybe<Scalars['String']['output']>;
 };
 
 export enum RoutineRunStatus {
@@ -12128,7 +12161,7 @@ export type RoutineExecutionDetailQueryVariables = Exact<{
 }>;
 
 
-export type RoutineExecutionDetailQuery = { __typename?: 'Query', routineExecution?: { __typename?: 'RoutineExecution', id: string, tenantId: string, routineId: string, stateMachineArn: string, aliasArn?: string | null, versionArn?: string | null, sfnExecutionArn: string, triggerSource: string, inputJson?: any | null, outputJson?: any | null, status: string, startedAt?: any | null, finishedAt?: any | null, errorCode?: string | null, errorMessage?: string | null, totalLlmCostUsdCents?: number | null, createdAt: any, stepEvents: Array<{ __typename?: 'RoutineStepEvent', id: string, nodeId: string, recipeType: string, status: string, startedAt?: any | null, finishedAt?: any | null, inputJson?: any | null, outputJson?: any | null, errorJson?: any | null, llmCostUsdCents?: number | null, retryCount: number, stdoutS3Uri?: string | null, stderrS3Uri?: string | null, stdoutPreview?: string | null, truncated: boolean, createdAt: any }>, routine?: { __typename?: 'Routine', id: string, name: string, description?: string | null, currentVersion?: number | null, documentationMd?: string | null } | null, aslVersion?: { __typename?: 'RoutineAslVersion', id: string, versionNumber: number, aslJson: any, markdownSummary: string, stepManifestJson: any } | null } | null };
+export type RoutineExecutionDetailQuery = { __typename?: 'Query', routineExecution?: { __typename?: 'RoutineExecution', id: string, tenantId: string, routineId: string, stateMachineArn?: string | null, aliasArn?: string | null, versionArn?: string | null, sfnExecutionArn?: string | null, triggerSource: string, inputJson?: any | null, outputJson?: any | null, status: string, startedAt?: any | null, finishedAt?: any | null, errorCode?: string | null, errorMessage?: string | null, totalLlmCostUsdCents?: number | null, createdAt: any, stepEvents: Array<{ __typename?: 'RoutineStepEvent', id: string, nodeId: string, recipeType: string, status: string, startedAt?: any | null, finishedAt?: any | null, inputJson?: any | null, outputJson?: any | null, errorJson?: any | null, llmCostUsdCents?: number | null, retryCount: number, stdoutS3Uri?: string | null, stderrS3Uri?: string | null, stdoutPreview?: string | null, truncated: boolean, createdAt: any }>, routine?: { __typename?: 'Routine', id: string, name: string, description?: string | null, currentVersion?: number | null, documentationMd?: string | null } | null, aslVersion?: { __typename?: 'RoutineAslVersion', id: string, versionNumber: number, aslJson: any, markdownSummary: string, stepManifestJson: any } | null } | null };
 
 export type SettingsTenantDetailQueryVariables = Exact<{
   id: Scalars['ID']['input'];
