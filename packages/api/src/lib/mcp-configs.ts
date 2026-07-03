@@ -47,6 +47,11 @@ import {
 import { mcpHashMatches } from "./mcp-server-hash.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
+// Type-only import: erased at compile time, so referencing McpAssignmentState
+// here does NOT load the S3/graphql-utils-coupled assignment-state module.
+// The runtime module is pulled in lazily (dynamic import) only when an agent
+// actually has a resolvable workspace — see loadWorkspaceMcpHelpers().
+import type { McpAssignmentState } from "./mcp/assignment-state.js";
 
 export interface McpServerConfig {
   name: string;
@@ -124,6 +129,62 @@ export interface BuildMcpConfigsDeps {
    * tokenMode; runtime callers pass neither.
    */
   diagnostics?: CapabilityDiagnosticsCollector | null;
+  /**
+   * Workspace assignment-file store (Composer plan U9b). Injectable for
+   * tests; defaults to a lazy dynamic import of
+   * `./mcp/assignment-state.js`. The default is only loaded when an agent
+   * has a resolvable slug (a workspace prefix), so the S3/graphql-utils
+   * dependency graph stays out of the DB-only resolution path.
+   */
+  workspaceMcp?: WorkspaceMcpHelpers;
+}
+
+/**
+ * The subset of the workspace assignment-state store `buildMcpConfigs` reads
+ * from (Composer plan U9b). Kept as a narrow injectable so the runtime module
+ * (and its graphql-utils/S3 graph) loads lazily and tests can stub it.
+ */
+export interface WorkspaceMcpHelpers {
+  resolveAgentWorkspacePrefix(agentId: string): Promise<string | null>;
+  listWorkspaceMcpSlugs(targetPrefix: string): Promise<string[] | null>;
+  readMcpAssignmentState(
+    targetPrefix: string,
+    slug: string,
+  ): Promise<McpAssignmentState | null>;
+}
+
+async function loadWorkspaceMcpHelpers(): Promise<WorkspaceMcpHelpers> {
+  const mod = await import("./mcp/assignment-state.js");
+  return {
+    resolveAgentWorkspacePrefix: mod.resolveAgentWorkspacePrefix,
+    listWorkspaceMcpSlugs: (prefix) => mod.listWorkspaceMcpSlugs(prefix),
+    readMcpAssignmentState: (prefix, slug) =>
+      mod.readMcpAssignmentState(prefix, slug),
+  };
+}
+
+/**
+ * The joined per-server row the resolution loop consumes — a tenant registry
+ * row plus the agent-level assignment overlay (`enabled` + `config`). Both the
+ * workspace-file path (U9b) and the DB fallback produce this identical shape.
+ */
+interface McpJoinedRow {
+  mcp_server_id: string;
+  name: string;
+  slug: string;
+  url: string;
+  transport: string;
+  auth_type: string;
+  auth_config: unknown;
+  server_enabled: boolean;
+  server_status: string;
+  server_url_hash: string | null;
+  management_source: string;
+  plugin_install_id: string | null;
+  runtime_metadata: unknown;
+  tools: unknown;
+  assignment_enabled: boolean;
+  assignment_config: unknown;
 }
 
 const db = getDb();
@@ -163,7 +224,7 @@ export async function buildMcpConfigs(
   // here with a log line so operators see the reason a capability
   // vanished. This is the SI-5 defensive layer.
   const [agentRow] = await db
-    .select({ tenant_id: agents.tenant_id })
+    .select({ tenant_id: agents.tenant_id, slug: agents.slug })
     .from(agents)
     .where(eq(agents.id, agentId))
     .limit(1);
@@ -175,6 +236,9 @@ export async function buildMcpConfigs(
     return [];
   }
 
+  // The approved+enabled tenant registry is the join source for BOTH the
+  // workspace-file path and the DB fallback. The U11 approval/hash gate lives
+  // in the resolution loop below and applies identically to both sources.
   const serverRows = await db
     .select({
       mcp_server_id: tenantMcpServers.id,
@@ -201,35 +265,33 @@ export async function buildMcpConfigs(
       ),
     );
 
-  const assignmentRows = await db
-    .select({
-      mcp_server_id: agentMcpServers.mcp_server_id,
-      enabled: agentMcpServers.enabled,
-      config: agentMcpServers.config,
-    })
-    .from(agentMcpServers)
-    .where(eq(agentMcpServers.agent_id, agentId));
+  // ── Attachment resolution (Composer plan U9b) ──────────────────────────
+  // Prefer the workspace `mcp/<slug>/.assignment.json` files (U9a dual-write)
+  // as the source of the agent's ATTACHED server set; the `agent_mcp_servers`
+  // DB read is the fallback for file-absent agents and S3 outages. Per-user
+  // OAuth/token resolution at turn time (the loop below) is unchanged. The DB
+  // read is only DEMOTED here — retirement is a named follow-up, gated on
+  // observing the file path serve live turns on dev (see the log line below).
+  const fileResolution = await resolveAttachedRowsFromWorkspaceFiles({
+    agentId,
+    agentSlug: agentRow.slug,
+    serverRows,
+    logPrefix,
+    helpers: deps.workspaceMcp,
+  });
 
-  const assignmentsByServerId = new Map(
-    assignmentRows.map((assignment) => [
-      assignment.mcp_server_id,
-      {
-        enabled: assignment.enabled,
-        config: assignment.config,
-      },
-    ]),
-  );
-
-  const mcpRows = serverRows
-    .map((row) => {
-      const assignment = assignmentsByServerId.get(row.mcp_server_id);
-      return {
-        ...row,
-        assignment_enabled: assignment?.enabled ?? true,
-        assignment_config: assignment?.config ?? null,
-      };
-    })
-    .filter((row) => row.assignment_enabled);
+  let mcpRows: McpJoinedRow[];
+  if ("rows" in fileResolution) {
+    mcpRows = fileResolution.rows;
+    console.log(
+      `${logPrefix} mcp attachment resolution source=workspace-file agentId=${agentId} files=${fileResolution.fileCount} servers=${mcpRows.length}`,
+    );
+  } else {
+    mcpRows = await resolveAttachedRowsFromDb(agentId, serverRows);
+    console.log(
+      `${logPrefix} mcp attachment resolution source=database agentId=${agentId} fallbackReason=${fileResolution.fallbackReason} servers=${mcpRows.length}`,
+    );
+  }
 
   // Plugin rows resolve FIRST so the URL-dedupe pass below can give the
   // plugin entry precedence over a direct entry sharing the endpoint.
@@ -570,6 +632,148 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+/** The approved+enabled tenant registry row `serverRows` yields. */
+type McpRegistryServerRow = Omit<
+  McpJoinedRow,
+  "assignment_enabled" | "assignment_config"
+>;
+
+/**
+ * DB fallback (Composer plan U9b): the pre-U9b resolution — every approved +
+ * enabled tenant server, overlaid with its `agent_mcp_servers` row (enabled +
+ * config), dropping assignment-disabled rows. Byte-identical to the behavior
+ * that shipped before the file path, so file-absent agents are unchanged.
+ */
+async function resolveAttachedRowsFromDb(
+  agentId: string,
+  serverRows: readonly McpRegistryServerRow[],
+): Promise<McpJoinedRow[]> {
+  const assignmentRows = await db
+    .select({
+      mcp_server_id: agentMcpServers.mcp_server_id,
+      enabled: agentMcpServers.enabled,
+      config: agentMcpServers.config,
+    })
+    .from(agentMcpServers)
+    .where(eq(agentMcpServers.agent_id, agentId));
+
+  const assignmentsByServerId = new Map(
+    assignmentRows.map((assignment) => [
+      assignment.mcp_server_id,
+      { enabled: assignment.enabled, config: assignment.config },
+    ]),
+  );
+
+  return serverRows
+    .map((row) => {
+      const assignment = assignmentsByServerId.get(row.mcp_server_id);
+      return {
+        ...row,
+        assignment_enabled: assignment?.enabled ?? true,
+        assignment_config: assignment?.config ?? null,
+      };
+    })
+    .filter((row) => row.assignment_enabled);
+}
+
+/**
+ * File-preferred resolution (Composer plan U9b): the agent's ATTACHED server
+ * set is the `mcp/<slug>/.assignment.json` files U9a dual-writes into the
+ * agent workspace source. Each file references a `registryServerId`; we join
+ * it to the approved+enabled tenant registry (`serverRows`) so the U11
+ * approval/hash gate in the caller's loop still applies. `enabledTools`
+ * becomes the `toolAllowlist` overlay — the exact inverse of what U9a wrote
+ * from `agent_mcp_servers.config`, so output is parity-identical for shared
+ * data.
+ *
+ * Returns `{ fallbackReason }` (never throws) whenever the file listing is
+ * empty or unavailable, so the caller runs the DB path. Files whose
+ * `registryServerId` isn't an approved+enabled server, or that are unreadable,
+ * are tolerated (skipped + logged, not fatal). A file marked `enabled:false`
+ * excludes the server, mirroring a DB-disabled assignment.
+ */
+async function resolveAttachedRowsFromWorkspaceFiles(input: {
+  agentId: string;
+  agentSlug: string | null | undefined;
+  serverRows: readonly McpRegistryServerRow[];
+  logPrefix: string;
+  helpers?: WorkspaceMcpHelpers;
+}): Promise<
+  { rows: McpJoinedRow[]; fileCount: number } | { fallbackReason: string }
+> {
+  const { agentId, agentSlug, serverRows, logPrefix } = input;
+  // Cheap local gate: without the agent's own slug the workspace prefix is
+  // unresolvable. Short-circuiting here keeps the S3/graphql-utils dependency
+  // graph out of the DB-only path (and out of DB-mocked unit tests).
+  if (!agentSlug) return { fallbackReason: "no-agent-slug" };
+
+  let helpers: WorkspaceMcpHelpers;
+  try {
+    helpers = input.helpers ?? (await loadWorkspaceMcpHelpers());
+  } catch (err) {
+    console.warn(
+      `${logPrefix} workspace MCP store unavailable, falling back to DB:`,
+      err instanceof Error ? err.message : err,
+    );
+    return { fallbackReason: "store-load-error" };
+  }
+
+  const targetPrefix = await helpers
+    .resolveAgentWorkspacePrefix(agentId)
+    .catch(() => null);
+  if (!targetPrefix) return { fallbackReason: "no-workspace-prefix" };
+
+  const slugs = await helpers.listWorkspaceMcpSlugs(targetPrefix);
+  // null = no bucket / list error (helper logs the cause); [] = folder absent.
+  // Both fall back so cutover is conservative until DB retirement.
+  if (slugs === null) return { fallbackReason: "workspace-unavailable" };
+  if (slugs.length === 0) return { fallbackReason: "no-attachment-files" };
+
+  const states = await Promise.all(
+    slugs.map(async (slug) => ({
+      slug,
+      state: await helpers.readMcpAssignmentState(targetPrefix, slug),
+    })),
+  );
+
+  const registryById = new Map(
+    serverRows.map((row) => [row.mcp_server_id, row]),
+  );
+  const rows: McpJoinedRow[] = [];
+  for (const { slug, state } of states) {
+    if (!state) {
+      console.warn(
+        `${logPrefix} skipping mcp/${slug}: assignment file unreadable`,
+      );
+      continue;
+    }
+    if (state.enabled === false) continue;
+    const registry = state.registryServerId
+      ? registryById.get(state.registryServerId)
+      : undefined;
+    if (!registry) {
+      console.warn(
+        `${logPrefix} skipping mcp/${slug}: registryServerId ${
+          state.registryServerId ?? "(missing)"
+        } is not an approved+enabled tenant server`,
+      );
+      continue;
+    }
+    const enabledTools = Array.isArray(state.enabledTools)
+      ? state.enabledTools.filter(
+          (tool): tool is string => typeof tool === "string",
+        )
+      : [];
+    rows.push({
+      ...registry,
+      assignment_enabled: true,
+      assignment_config:
+        enabledTools.length > 0 ? { toolAllowlist: enabledTools } : null,
+    });
+  }
+  return { rows, fileCount: slugs.length };
 }
 
 /**
