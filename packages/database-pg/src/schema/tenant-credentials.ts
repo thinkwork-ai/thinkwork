@@ -53,7 +53,7 @@ export const tenantCredentials = pgTable(
     index("idx_tenant_credentials_status").on(table.tenant_id, table.status),
     check(
       "tenant_credentials_kind_enum",
-      sql`${table.kind} IN ('api_key','bearer_token','basic_auth','soap_partner','webhook_signing_secret','json')`,
+      sql`${table.kind} IN ('api_key','bearer_token','basic_auth','soap_partner','webhook_signing_secret','json','github_repo')`,
     ),
     check(
       "tenant_credentials_status_enum",
