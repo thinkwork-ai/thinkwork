@@ -2,6 +2,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import {
   routineAslVersions,
   routineExecutions as routineExecutionsTable,
+  routineRepairEvents as routineRepairEventsTable,
   routineStepEvents,
   routines,
 } from "@thinkwork/database-pg/schema";
@@ -89,6 +90,31 @@ export async function routineStepEvents_(
     .where(eq(routineStepEvents.execution_id, args.executionId))
     .orderBy(routineStepEvents.started_at, routineStepEvents.created_at)
     .limit(1_000);
+  return rows.map(snakeToCamel);
+}
+
+// Repair-ladder history for git_python routines (deterministic routines
+// v1, U1). Writers land with the repair units (U7/U8).
+export async function routineRepairEvents_(
+  _parent: unknown,
+  args: { routineId: string; limit?: number | null },
+  ctx: GraphQLContext,
+): Promise<unknown[]> {
+  const [routine] = await db
+    .select({ tenant_id: routines.tenant_id })
+    .from(routines)
+    .where(eq(routines.id, args.routineId))
+    .limit(1);
+  if (!routine) return [];
+  await assertCanReadTenant(ctx, routine.tenant_id);
+
+  const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+  const rows = await db
+    .select()
+    .from(routineRepairEventsTable)
+    .where(eq(routineRepairEventsTable.routine_id, args.routineId))
+    .orderBy(desc(routineRepairEventsTable.created_at))
+    .limit(limit);
   return rows.map(snakeToCamel);
 }
 
