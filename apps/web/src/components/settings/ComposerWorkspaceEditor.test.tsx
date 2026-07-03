@@ -32,6 +32,8 @@ const {
   focusRowMock,
   addSkillMock,
   detachSkillMock,
+  addMcpMock,
+  detachMcpMock,
 } = vi.hoisted(() => ({
   getManifestMock: vi.fn(),
   getFilePayloadMock: vi.fn(),
@@ -46,6 +48,8 @@ const {
   focusRowMock: vi.fn(),
   addSkillMock: vi.fn(),
   detachSkillMock: vi.fn(),
+  addMcpMock: vi.fn(),
+  detachMcpMock: vi.fn(),
 }));
 
 vi.mock("urql", () => ({ useClient: () => ({}) }));
@@ -172,6 +176,19 @@ const ENTRIES = [
     size: 100,
   },
   { path: "User/USER.md", owner: "user", generated: false, size: 128 },
+  // MCP attachment folders (U9a dual-write): agent-owned reference manifests.
+  {
+    path: "mcp/github/.assignment.json",
+    owner: "agent",
+    generated: false,
+    size: 220,
+  },
+  {
+    path: "mcp/gmail/.assignment.json",
+    owner: "agent",
+    generated: false,
+    size: 210,
+  },
 ];
 
 function manifest(overrides: Record<string, unknown> = {}) {
@@ -293,7 +310,7 @@ describe("ComposerWorkspaceEditor rendering", () => {
     expect(screen.queryByTestId("tree-generated-CAPABILITIES.md")).toBeNull();
     // The editor-shell "N files" header counts the manifest entries.
     expect(screen.getByTestId("composer-files-header").textContent).toContain(
-      "6 files",
+      "8 files",
     );
   });
 
@@ -557,6 +574,92 @@ describe("standard file-tree menu (v1.1)", () => {
     await screen.findByTestId("tree-node-CAPABILITIES.md");
     expect(screen.queryByTestId("menu-rename-CAPABILITIES.md")).toBeNull();
     expect(screen.queryByTestId("menu-delete-CAPABILITIES.md")).toBeNull();
+  });
+});
+
+describe("MCP server tree affordances (U9c)", () => {
+  it("offers Add MCP server on the mcp root and Detach on an mcp/<slug> folder", async () => {
+    await renderEditor({
+      canManageSkills: true,
+      onAddMcpServer: addMcpMock,
+      onDetachMcpServer: detachMcpMock,
+    });
+    await screen.findByTestId("tree-node-mcp");
+    fireEvent.click(screen.getByTestId("menu-add-mcp-server"));
+    expect(addMcpMock).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("menu-detach-mcp-github"));
+    expect(detachMcpMock).toHaveBeenCalledWith("github");
+  });
+
+  it("withholds MCP affordances when writes aren't allowed", async () => {
+    await renderEditor({
+      canManageSkills: false,
+      onAddMcpServer: addMcpMock,
+      onDetachMcpServer: detachMcpMock,
+    });
+    await screen.findByTestId("tree-node-mcp");
+    expect(screen.queryByTestId("menu-add-mcp-server")).toBeNull();
+    expect(screen.queryByTestId("menu-detach-mcp-github")).toBeNull();
+  });
+
+  it("maps an mcp/<slug> folder's destructive action to Detach, not raw Delete/Rename", async () => {
+    await renderEditor({
+      canManageSkills: true,
+      onDetachMcpServer: detachMcpMock,
+    });
+    await screen.findByTestId("tree-node-mcp/github");
+    expect(screen.queryByTestId("menu-delete-mcp/github")).toBeNull();
+    expect(screen.queryByTestId("menu-rename-mcp/github")).toBeNull();
+    expect(screen.getByTestId("menu-detach-mcp-github")).toBeTruthy();
+  });
+
+  it("dims gated mcp folders with the verbatim reason; the badge focuses the mcp_server row", async () => {
+    const mcpStateBySlug = new Map<string, SkillNodeState>([
+      ["github", { active: false, reason: "oauth_missing" }],
+      ["gmail", { active: true, reason: null }],
+    ]);
+    await renderEditor({ mcpStateBySlug });
+    const gate = await screen.findByTestId("tree-gate-mcp/github");
+    expect(gate.textContent).toContain("oauth_missing");
+    expect(
+      screen
+        .getByTestId("tree-node-mcp/github")
+        .className.includes("opacity-60"),
+    ).toBe(true);
+    // Active server folders stay undecorated.
+    expect(screen.queryByTestId("tree-gate-mcp/gmail")).toBeNull();
+    fireEvent.click(gate);
+    expect(focusRowMock).toHaveBeenCalledWith("mcp_server", "github");
+  });
+
+  it("renders a ghost mcp folder while an attach materializes", async () => {
+    await renderEditor({ pendingMcpSlug: "slack" });
+    expect(await screen.findByTestId("tree-node-mcp/slack")).toBeTruthy();
+    expect(screen.getByTestId("tree-pending-mcp/slack").textContent).toContain(
+      "syncing",
+    );
+  });
+
+  it("marks an mcp folder removing while a detach is in flight", async () => {
+    await renderEditor({ removingMcpSlug: "github" });
+    expect(
+      (await screen.findByTestId("tree-removing-mcp/github")).textContent,
+    ).toContain("removing");
+  });
+
+  it("the .assignment.json opens as a normal agent-source file", async () => {
+    await renderEditor();
+    await screen.findByTestId("tree-file-mcp/github/.assignment.json");
+    fireEvent.click(
+      screen.getByTestId("tree-file-mcp/github/.assignment.json"),
+    );
+    await waitFor(() =>
+      expect(sourceGetFileMock).toHaveBeenCalledWith(
+        { agentId: "agent-1" },
+        "mcp/github/.assignment.json",
+      ),
+    );
+    expect(screen.getByTestId("composer-editable-pane")).toBeTruthy();
   });
 });
 

@@ -143,6 +143,21 @@ export interface ComposerWorkspaceEditorProps {
   onAddSkill?: () => void;
   /** Open the destructive detach confirm for a `skills/<slug>/` folder. */
   onDetachSkill?: (slug: string) => void;
+  /**
+   * MCP mirror of the skill affordances (Composer plan U9c): `mcp/<slug>/`
+   * folders carry capability state from the inspector's mcp_server rows, the
+   * `mcp/` root offers "Add MCP server…", and `mcp/<slug>/` offers
+   * "Detach MCP server…" — the same picker/confirm/sync machinery, second class.
+   */
+  mcpStateBySlug?: Map<string, SkillNodeState>;
+  /** MCP-server slug inside the post-attach sync-pending window (ghost node). */
+  pendingMcpSlug?: string | null;
+  /** MCP-server slug whose detach is in flight ("removing…" affordance). */
+  removingMcpSlug?: string | null;
+  /** Open the Add-MCP-server picker (context menu on the `mcp/` folder). */
+  onAddMcpServer?: () => void;
+  /** Open the destructive detach confirm for an `mcp/<slug>/` folder. */
+  onDetachMcpServer?: (slug: string) => void;
 }
 
 interface TreeNode {
@@ -329,6 +344,13 @@ function skillSlugForFolder(node: TreeNode): string | null {
   return match ? match[1] : null;
 }
 
+/** MCP-server slug for an `mcp/<slug>` folder node, else null (U9c). */
+function mcpSlugForFolder(node: TreeNode): string | null {
+  if (!node.isFolder) return null;
+  const match = /^mcp\/([^/]+)$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
 interface PathSource {
   target: WorkspaceFilesTarget;
   /** Path relative to the owning layer's tree (mount prefix stripped). */
@@ -417,6 +439,11 @@ export function ComposerWorkspaceEditor({
   canManageSkills = false,
   onAddSkill,
   onDetachSkill,
+  mcpStateBySlug,
+  pendingMcpSlug = null,
+  removingMcpSlug = null,
+  onAddMcpServer,
+  onDetachMcpServer,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
@@ -658,37 +685,42 @@ export function ComposerWorkspaceEditor({
     void loadFile(selectedPath);
   }, [selectedPath, loadFile, refreshToken, entryByPath, result, spaceId]);
 
-  const pendingFolderPath = pendingSkillSlug
-    ? `skills/${pendingSkillSlug}`
-    : null;
+  // Post-attach sync ghosts: one per capability-folder class (skills + mcp).
+  const pendingFolderPaths = useMemo(() => {
+    const paths: string[] = [];
+    if (pendingSkillSlug) paths.push(`skills/${pendingSkillSlug}`);
+    if (pendingMcpSlug) paths.push(`mcp/${pendingMcpSlug}`);
+    return paths;
+  }, [pendingSkillSlug, pendingMcpSlug]);
   const tree = useMemo(() => {
     const nodes = buildPreviewTree(entries);
-    if (
-      pendingFolderPath &&
-      !entries.some((entry) => entry.path.startsWith(`${pendingFolderPath}/`))
-    ) {
-      const skillsFolder = nodes.find(
-        (node) => node.path === "skills" && node.isFolder,
+    for (const pendingPath of pendingFolderPaths) {
+      if (entries.some((entry) => entry.path.startsWith(`${pendingPath}/`))) {
+        continue;
+      }
+      const rootName = pendingPath.split("/")[0];
+      const rootFolder = nodes.find(
+        (node) => node.path === rootName && node.isFolder,
       );
       const ghost: TreeNode = {
-        name: pendingFolderPath.split("/")[1],
-        path: pendingFolderPath,
+        name: pendingPath.split("/")[1],
+        path: pendingPath,
         isFolder: true,
         children: [],
       };
-      if (skillsFolder) {
-        skillsFolder.children.unshift(ghost);
+      if (rootFolder) {
+        rootFolder.children.unshift(ghost);
       } else {
         nodes.unshift({
-          name: "skills",
-          path: "skills",
+          name: rootName,
+          path: rootName,
           isFolder: true,
           children: [ghost],
         });
       }
     }
     return nodes;
-  }, [entries, pendingFolderPath]);
+  }, [entries, pendingFolderPaths]);
 
   // Default state is COLLAPSED at EVERY depth — every folder starts closed, only
   // root files are visible; expanding a folder reveals its immediate children
@@ -757,7 +789,7 @@ export function ComposerWorkspaceEditor({
 
   function jumpEntryFor(node: TreeNode): ComposerPreviewEntry | null {
     if (node.entry) return node.entry;
-    if (node.path === pendingFolderPath) return null;
+    if (pendingFolderPaths.includes(node.path)) return null;
     let cursor: TreeNode | undefined = node;
     while (cursor && !cursor.entry) {
       cursor = cursor.children[0];
@@ -767,11 +799,21 @@ export function ComposerWorkspaceEditor({
 
   function renderNode(node: TreeNode, depth: number): React.ReactNode {
     const isCollapsed = collapsed.has(node.path);
-    const isPending = node.path === pendingFolderPath;
+    const isPending = pendingFolderPaths.includes(node.path);
     const skillSlug = skillSlugForFolder(node);
     const skillState = skillSlug ? skillStateBySlug?.get(skillSlug) : undefined;
-    const isGated = Boolean(skillState && !skillState.active);
-    const isRemoving = Boolean(skillSlug && skillSlug === removingSkillSlug);
+    // MCP mirror (U9c): `mcp/<slug>/` folders carry the mcp_server row state.
+    const mcpSlug = mcpSlugForFolder(node);
+    const mcpState = mcpSlug ? mcpStateBySlug?.get(mcpSlug) : undefined;
+    // One gate treatment for both capability-folder classes.
+    const gateState = skillState ?? mcpState;
+    const gateClass = skillSlug ? "skill" : "mcp_server";
+    const gateId = skillSlug ?? mcpSlug;
+    const isGated = Boolean(gateState && !gateState.active);
+    const isRemoving = Boolean(
+      (skillSlug && skillSlug === removingSkillSlug) ||
+      (mcpSlug && mcpSlug === removingMcpSlug),
+    );
     const jumpEntry = jumpEntryFor(node);
     const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;
     // "Open …source" navigation is offered ONLY for nodes that open a real
@@ -793,25 +835,40 @@ export function ComposerWorkspaceEditor({
           ? "Open user source"
           : "Open agent source";
     const isSkillsRoot = node.isFolder && node.path === "skills";
+    const isMcpRoot = node.isFolder && node.path === "mcp";
     const canDetachThis = Boolean(
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
     );
     const canAddHere = Boolean(isSkillsRoot && canManageSkills && onAddSkill);
+    // MCP mirror (U9c): same write-scope gating, second class.
+    const canDetachMcp = Boolean(
+      mcpSlug && canManageSkills && onDetachMcpServer && !isRemoving,
+    );
+    const canAddMcpHere = Boolean(
+      isMcpRoot && canManageSkills && onAddMcpServer,
+    );
 
     // Standard file-tree ops (v1.1), routed through the owning SOURCE layer.
-    // Generated files, the `skills`/`Spaces` containers, and source roots are
-    // derived / structural — no destructive ops there.
+    // Generated files, the `skills`/`mcp`/`Spaces` containers, and source roots
+    // are derived / structural — no destructive ops there.
     const src = srcForPath(node.path);
     const isSpacesContainer = node.path === "Spaces";
     const isSourceRoot = Boolean(src) && src!.rel === "";
     const stdEligible = Boolean(
-      canEditSource && src && !isSpacesContainer && !isSkillsRoot,
+      canEditSource && src && !isSpacesContainer && !isSkillsRoot && !isMcpRoot,
     );
     const canNewInside = stdEligible; // create inside any editable folder (incl. skill folder)
+    // Capability folders (skills/<slug>, mcp/<slug>) map their destructive
+    // action to Detach — never raw Rename/Delete that would bypass the
+    // unified mutation.
     const canRename = Boolean(
       stdEligible && !node.isFolder
         ? !node.entry?.generated
-        : stdEligible && node.isFolder && !skillSlug && !isSourceRoot,
+        : stdEligible &&
+            node.isFolder &&
+            !skillSlug &&
+            !mcpSlug &&
+            !isSourceRoot,
     );
     const canDelete = canRename;
     const canCut = canRename;
@@ -824,7 +881,13 @@ export function ComposerWorkspaceEditor({
     const hasStdOps =
       (node.isFolder && canNewInside) || canRename || canDelete || canPaste;
 
-    const hasMenu = canDetachThis || canAddHere || hasStdOps || canOpenSource;
+    const hasMenu =
+      canDetachThis ||
+      canAddHere ||
+      canDetachMcp ||
+      canAddMcpHere ||
+      hasStdOps ||
+      canOpenSource;
 
     const row = (
       <div
@@ -897,12 +960,10 @@ export function ComposerWorkspaceEditor({
             generated
           </Badge>
         ) : null}
-        {isGated && skillState?.reason ? (
+        {isGated && gateState?.reason ? (
           <button
             type="button"
-            onClick={() =>
-              skillSlug && onFocusCapabilityRow?.("skill", skillSlug)
-            }
+            onClick={() => gateId && onFocusCapabilityRow?.(gateClass, gateId)}
             data-testid={`tree-gate-${node.path}`}
             title="Open this capability in the list"
           >
@@ -911,7 +972,7 @@ export function ComposerWorkspaceEditor({
               variant="outline"
               className="shrink-0 cursor-pointer border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
             >
-              {skillState.reason}
+              {gateState.reason}
             </Badge>
           </button>
         ) : null}
@@ -957,7 +1018,25 @@ export function ComposerWorkspaceEditor({
               <Trash2 className="mr-2 size-4" /> Detach skill…
             </ContextMenuItem>
           ) : null}
-          {(canAddHere || canDetachThis) && hasStdOps ? (
+          {canAddMcpHere ? (
+            <ContextMenuItem
+              onSelect={() => onAddMcpServer?.()}
+              data-testid="menu-add-mcp-server"
+            >
+              <Plus className="mr-2 size-4" /> Add MCP server…
+            </ContextMenuItem>
+          ) : null}
+          {canDetachMcp ? (
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() => mcpSlug && onDetachMcpServer?.(mcpSlug)}
+              data-testid={`menu-detach-mcp-${mcpSlug}`}
+            >
+              <Trash2 className="mr-2 size-4" /> Detach MCP server…
+            </ContextMenuItem>
+          ) : null}
+          {(canAddHere || canDetachThis || canAddMcpHere || canDetachMcp) &&
+          hasStdOps ? (
             <ContextMenuSeparator />
           ) : null}
           {node.isFolder && canNewInside ? (
@@ -1029,7 +1108,12 @@ export function ComposerWorkspaceEditor({
               <Trash2 className="mr-2 size-4" /> Delete
             </ContextMenuItem>
           ) : null}
-          {(canAddHere || canDetachThis || hasStdOps) && canOpenSource ? (
+          {(canAddHere ||
+            canDetachThis ||
+            canAddMcpHere ||
+            canDetachMcp ||
+            hasStdOps) &&
+          canOpenSource ? (
             <ContextMenuSeparator />
           ) : null}
           {canOpenSource && jumpEntry ? (

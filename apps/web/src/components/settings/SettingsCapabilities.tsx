@@ -264,10 +264,12 @@ export function SettingsCapabilities() {
   const [sheetOpen, setSheetOpen] = useState(false);
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
+  const [addMcpOpen, setAddMcpOpen] = useState(false);
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
   const [removingSkillSlug, setRemovingSkillSlug] = useState<string | null>(
     null,
   );
+  const [removingMcpSlug, setRemovingMcpSlug] = useState<string | null>(null);
 
   const [spacesResult] = useQuery({
     query: SettingsSpacesListQuery,
@@ -464,6 +466,26 @@ export function SettingsCapabilities() {
     [items],
   );
 
+  // MCP mirror (U9c): decoration state per server slug, and the Add picker
+  // pool — ALL registered mcp_server rows (state shown verbatim; Add is
+  // disabled on already-active rows).
+  const mcpStateBySlug = useMemo(() => {
+    const map = new Map<string, SkillNodeState>();
+    for (const item of items) {
+      if (item.capabilityClass !== "mcp_server") continue;
+      map.set(item.capabilityId, {
+        active: item.active,
+        reason: item.reason ?? null,
+      });
+    }
+    return map;
+  }, [items]);
+
+  const addMcpPool = useMemo(
+    () => items.filter((item) => item.capabilityClass === "mcp_server"),
+    [items],
+  );
+
   // Sync-pending resolution: keep polling until the touched row reads active.
   useEffect(() => {
     if (!confirmation?.syncPending) return;
@@ -590,17 +612,36 @@ export function SettingsCapabilities() {
     if (item) setDetachTarget(item);
   }
 
+  // MCP mirror (U9c): same confirm dialog + detach mutation, second class.
+  function requestDetachMcp(slug: string) {
+    const item = items.find(
+      (candidate) =>
+        candidate.capabilityClass === "mcp_server" &&
+        candidate.capabilityId === slug,
+    );
+    if (item) setDetachTarget(item);
+  }
+
   async function confirmDetachFromTree() {
     if (!detachTarget) return;
     const item = detachTarget;
     setDetachTarget(null);
-    setRemovingSkillSlug(item.capabilityId);
+    const setRemoving =
+      item.capabilityClass === "mcp_server"
+        ? setRemovingMcpSlug
+        : setRemovingSkillSlug;
+    setRemoving(item.capabilityId);
     await runMutation("detach", item);
-    setRemovingSkillSlug(null);
+    setRemoving(null);
   }
 
   async function pickSkillToAdd(item: InspectorItem) {
     setAddSkillOpen(false);
+    await runMutation("attach", item);
+  }
+
+  async function pickMcpToAdd(item: InspectorItem) {
+    setAddMcpOpen(false);
     await runMutation("attach", item);
   }
 
@@ -773,11 +814,15 @@ export function SettingsCapabilities() {
     );
   }
 
-  // Post-attach sync window (U2): surface the affected skill folder in the tree
-  // as an explicit pending node instead of a frozen view.
+  // Post-attach sync window (U2): surface the affected capability folder in the
+  // tree as an explicit pending node instead of a frozen view.
   const pendingSkillSlug =
     confirmation?.syncPending && confirmation.rowKey.startsWith("skill:")
       ? confirmation.rowKey.slice("skill:".length)
+      : null;
+  const pendingMcpSlug =
+    confirmation?.syncPending && confirmation.rowKey.startsWith("mcp_server:")
+      ? confirmation.rowKey.slice("mcp_server:".length)
       : null;
 
   return (
@@ -919,6 +964,13 @@ export function SettingsCapabilities() {
           canManageSkills={writeScope}
           onAddSkill={!agentProfileId ? () => setAddSkillOpen(true) : undefined}
           onDetachSkill={requestDetachSkill}
+          mcpStateBySlug={mcpStateBySlug}
+          pendingMcpSlug={pendingMcpSlug}
+          removingMcpSlug={removingMcpSlug}
+          onAddMcpServer={
+            !agentProfileId ? () => setAddMcpOpen(true) : undefined
+          }
+          onDetachMcpServer={requestDetachMcp}
         />
       </div>
 
@@ -1135,8 +1187,79 @@ export function SettingsCapabilities() {
         </DialogContent>
       </Dialog>
 
-      {/* Tree context-menu detach confirm (v1.1 item 4): the SAME destructive
-          gate the Sheet rows use, driving the SAME detach mutation. */}
+      {/* Add-MCP-server picker (U9c): the tenant's registered MCP servers from
+          the inspector's mcp_server rows — state shown verbatim (incl. token
+          status); Add is disabled on already-attached rows. */}
+      <Dialog open={addMcpOpen} onOpenChange={setAddMcpOpen}>
+        <DialogContent data-testid="add-mcp-dialog">
+          <DialogHeader>
+            <DialogTitle>Add an MCP server</DialogTitle>
+            <DialogDescription>
+              MCP servers registered for this tenant. Attaching ends on the
+              server&apos;s live state — an honest gate reason (OAuth,
+              activation…) shows if it&apos;s held.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            {addMcpPool.length === 0 ? (
+              <p className="px-1 py-6 text-sm text-muted-foreground">
+                No MCP servers are registered for this tenant.
+              </p>
+            ) : (
+              addMcpPool.map((item) => (
+                <div
+                  key={rowKeyOf(item)}
+                  className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                  data-testid={`add-mcp-row-${item.capabilityId}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {item.displayName || item.capabilityId}
+                    </p>
+                    {item.detail ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.detail}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {item.tokenStatus ? (
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
+                        token: {item.tokenStatus}
+                      </Badge>
+                    ) : null}
+                    {stateChip(item)}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pendingRow !== null || item.active}
+                      onClick={() => void pickMcpToAdd(item)}
+                      data-testid={`add-mcp-pick-${item.capabilityId}`}
+                    >
+                      {item.active ? "Attached" : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddMcpOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tree context-menu detach confirm (v1.1 item 4; U9c adds mcp): the SAME
+          destructive gate the Sheet rows use, driving the SAME detach mutation. */}
       <AlertDialog
         open={detachTarget !== null}
         onOpenChange={(open) => !open && setDetachTarget(null)}
@@ -1147,9 +1270,10 @@ export function SettingsCapabilities() {
               Detach {detachTarget?.displayName || detachTarget?.capabilityId}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Removes the installed skill folder from the agent workspace and
-              strips its CONTEXT.md wiring. The post-detach state is shown
-              before you leave.
+              {detachTarget?.capabilityClass === "mcp_server"
+                ? "Removes this server's assignment from the agent (its mcp/ folder disappears from the workspace)."
+                : "Removes the installed skill folder from the agent workspace and strips its CONTEXT.md wiring."}{" "}
+              The post-detach state is shown before you leave.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
