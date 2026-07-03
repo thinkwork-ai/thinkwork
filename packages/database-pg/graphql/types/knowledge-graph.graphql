@@ -237,39 +237,6 @@ type KnowledgeGraphSearchResult {
   relationships: [KnowledgeGraphSearchRelationship!]!
 }
 
-type KnowledgeGraphThreadCandidate {
-  threadId: ID!
-  tenantId: ID!
-  title: String!
-  number: Int!
-  requesterUserId: ID
-  requesterName: String
-  spaceId: ID
-  spaceName: String
-  messageCount: Int!
-  lastMessageAt: AWSDateTime
-  lastIngestRun: KnowledgeGraphIngestRun
-}
-
-input StartKnowledgeGraphThreadIngestInput {
-  tenantId: ID
-  threadId: ID!
-  force: Boolean = false
-  metadata: AWSJSON
-}
-
-input StartKnowledgeGraphIngestInput {
-  tenantId: ID
-  sourceKind: KnowledgeGraphSourceKind!
-  threadId: ID
-  sourceRef: String
-  sourceLabel: String
-  ownerUserId: ID
-  pageIds: [ID!]
-  force: Boolean = false
-  metadata: AWSJSON
-}
-
 input StartKnowledgeGraphObservationsIngestInput {
   tenantId: ID
   fullRebuild: Boolean = false
@@ -277,12 +244,6 @@ input StartKnowledgeGraphObservationsIngestInput {
 }
 
 extend type Query {
-  knowledgeGraphThreadCandidates(
-    tenantId: ID
-    requesterUserId: ID
-    query: String
-    limit: Int = 25
-  ): [KnowledgeGraphThreadCandidate!]!
   knowledgeGraphIngestRuns(
     tenantId: ID
     threadId: ID
@@ -331,12 +292,6 @@ extend type Query {
 }
 
 extend type Mutation {
-  startKnowledgeGraphIngest(
-    input: StartKnowledgeGraphIngestInput!
-  ): KnowledgeGraphIngestRun!
-  startKnowledgeGraphThreadIngest(
-    input: StartKnowledgeGraphThreadIngestInput!
-  ): KnowledgeGraphIngestRun!
   startKnowledgeGraphObservationsIngest(
     input: StartKnowledgeGraphObservationsIngestInput
   ): KnowledgeGraphIngestRun!

@@ -8,14 +8,8 @@ import {
   knowledgeGraphNeighbors,
 } from "./agent-traverse.query.js";
 import { startKnowledgeGraphObservationsIngest } from "./startObservationsIngest.mutation.js";
-import {
-  startKnowledgeGraphIngest,
-  startKnowledgeGraphThreadIngest,
-} from "./startThreadIngest.mutation.js";
-import { knowledgeGraphThreadCandidates } from "./threadCandidates.query.js";
 
 export const knowledgeGraphQueries = {
-  knowledgeGraphThreadCandidates,
   knowledgeGraphIngestRuns,
   knowledgeGraphEntities,
   knowledgeGraphGraph,
@@ -25,7 +19,5 @@ export const knowledgeGraphQueries = {
   knowledgeGraphNeighbors,
 };
 export const knowledgeGraphMutations = {
-  startKnowledgeGraphIngest,
-  startKnowledgeGraphThreadIngest,
   startKnowledgeGraphObservationsIngest,
 };

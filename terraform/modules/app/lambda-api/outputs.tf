@@ -43,16 +43,6 @@ output "memory_retain_fn_arn" {
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
 
-output "knowledge_graph_thread_ingest_fn_name" {
-  description = "Knowledge Graph thread ingest worker Lambda function name."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["knowledge-graph-thread-ingest"].function_name : ""
-}
-
-output "knowledge_graph_thread_ingest_fn_arn" {
-  description = "Knowledge Graph thread ingest worker Lambda ARN."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["knowledge-graph-thread-ingest"].arn : ""
-}
-
 output "okf_efs_refresh_fn_name" {
   description = "OKF EFS refresh Lambda function name."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["okf-efs-refresh"].function_name : ""
@@ -94,7 +84,7 @@ output "email_inbound_fn_arn" {
 output "email_inbound_fn_name" {
   description = "email-inbound Lambda function name. Used by the SES module for lambda:InvokeFunction permissions."
   # Static for the same fresh-account plan-time reason as email_inbound_fn_arn.
-  value       = local.deploy_lambda_handlers ? "thinkwork-${var.stage}-api-email-inbound" : ""
+  value = local.deploy_lambda_handlers ? "thinkwork-${var.stage}-api-email-inbound" : ""
 }
 
 # Attribute-based twins: same values, but carrying the dependency edge. The

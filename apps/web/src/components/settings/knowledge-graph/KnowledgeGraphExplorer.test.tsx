@@ -9,13 +9,6 @@ const explorerSource = readFileSync(
   ),
   "utf8",
 );
-const ingestSource = readFileSync(
-  resolve(
-    process.cwd(),
-    "src/components/settings/knowledge-graph/KnowledgeGraphIngestControls.tsx",
-  ),
-  "utf8",
-);
 const settingsSource = readFileSync(
   resolve(
     process.cwd(),
@@ -32,16 +25,17 @@ const sheetSource = readFileSync(
 );
 
 describe("KnowledgeGraphExplorer", () => {
-  it("wires the typed Knowledge Graph read and ingest operations", () => {
-    expect(explorerSource).toContain(
-      "SettingsKnowledgeGraphThreadCandidatesQuery",
-    );
+  it("wires the typed Knowledge Graph read operations", () => {
     expect(explorerSource).toContain("SettingsKnowledgeGraphEntitiesQuery");
-    expect(explorerSource).toContain(
-      "SettingsStartKnowledgeGraphThreadIngestMutation",
-    );
-    expect(explorerSource).toContain("startIngest");
-    expect(explorerSource).toContain("graphRef.current?.refetch()");
+    expect(explorerSource).toContain("SettingsKnowledgeGraphOntologyQuery");
+  });
+
+  it("retires the thread-ingest trigger and candidate picker", () => {
+    expect(explorerSource).not.toContain("ThreadCandidate");
+    expect(explorerSource).not.toContain("startKnowledgeGraphThreadIngest");
+    expect(explorerSource).not.toContain("KnowledgeGraphIngestControls");
+    expect(explorerSource).not.toContain("ThreadIngestDetailView");
+    expect(explorerSource).not.toContain("Ingest thread");
   });
 
   it("keeps the main table and graph on tenant-wide ontology filters", () => {
@@ -91,36 +85,5 @@ describe("KnowledgeGraphExplorer", () => {
     expect(settingsSource).not.toContain("Cognee");
     expect(settingsSource).not.toContain("Data");
     expect(settingsSource).not.toContain("Definitions");
-  });
-
-  it("exposes thread search, selection, and manual ingest controls only in the data branch", () => {
-    // Thread ingest opens from a right-aligned "Threads" link in the explorer
-    // toolbar.
-    expect(explorerSource).toContain("Threads");
-    expect(explorerSource).toContain("dataMode ? (");
-    expect(explorerSource).toContain("!dataMode || !effectiveTenantId");
-    expect(explorerSource).toContain("onThreadSheetOpenChange");
-    expect(explorerSource).toContain("threadSheetOpen");
-    expect(explorerSource).toContain("Thread Ingest");
-    expect(explorerSource).toContain("Thread Detail");
-    expect(explorerSource).toContain("ThreadIngestDetailView");
-    expect(explorerSource).toContain("Ingest thread");
-    expect(explorerSource).toContain("Ontology gate diagnostics");
-    expect(explorerSource).toContain("droppedNodeSamples");
-    expect(explorerSource).toContain("droppedEdgeSamples");
-    expect(explorerSource).toContain("runId={run.id}");
-    expect(explorerSource).toContain("run.metrics");
-    expect(ingestSource).toContain("Search threads");
-    expect(ingestSource).toContain("DataTable");
-    expect(ingestSource).toContain("pageSize={0}");
-    expect(ingestSource).toContain("hideHeader");
-    expect(ingestSource).toContain("CheckCircle2");
-    expect(ingestSource).toContain("XCircle");
-    expect(ingestSource).toContain("Clock3");
-    expect(ingestSource).toContain("Status");
-    expect(ingestSource).toContain("onSelectThread");
-    expect(ingestSource).toContain("lastIngestRun");
-    expect(ingestSource).not.toContain("onIngestThread");
-    expect(ingestSource).not.toContain("Messages");
   });
 });

@@ -1,12 +1,3 @@
-export interface KnowledgeGraphThreadIngestWorkerPayload {
-  runId: string;
-  tenantId: string;
-  threadId?: string;
-  sourceKind?: "thread" | "wiki" | "brain" | "observations";
-  sourceRef?: string;
-  requestedByUserId: string | null;
-}
-
 interface InvokeWorkerDeps {
   lambdaClient?: { send(command: any): Promise<unknown> };
   InvokeCommand?: new (input: Record<string, unknown>) => any;
@@ -28,17 +19,6 @@ export interface KnowledgeGraphObservationsIngestWorkerPayload {
   requestedByUserId: string | null;
 }
 
-export async function invokeKnowledgeGraphThreadIngestWorker(
-  payload: KnowledgeGraphThreadIngestWorkerPayload,
-  deps: InvokeWorkerDeps = {},
-): Promise<void> {
-  return invokeWorker(
-    deps.functionName ?? resolveWorkerFunctionName(),
-    payload,
-    deps,
-  );
-}
-
 export async function invokeKnowledgeGraphObservationsIngestWorker(
   payload: KnowledgeGraphObservationsIngestWorkerPayload,
   deps: InvokeWorkerDeps = {},
@@ -52,9 +32,7 @@ export async function invokeKnowledgeGraphObservationsIngestWorker(
 
 async function invokeWorker(
   functionName: string | null,
-  payload:
-    | KnowledgeGraphThreadIngestWorkerPayload
-    | KnowledgeGraphObservationsIngestWorkerPayload,
+  payload: KnowledgeGraphObservationsIngestWorkerPayload,
   deps: InvokeWorkerDeps,
 ): Promise<void> {
   if (!functionName) {
@@ -86,14 +64,6 @@ async function invokeWorker(
       `Knowledge Graph ingest worker invoke returned HTTP ${result.StatusCode}`,
     );
   }
-}
-
-export function resolveWorkerFunctionName(): string | null {
-  if (process.env.KNOWLEDGE_GRAPH_THREAD_INGEST_FUNCTION_NAME) {
-    return process.env.KNOWLEDGE_GRAPH_THREAD_INGEST_FUNCTION_NAME;
-  }
-  if (!process.env.STAGE) return null;
-  return `thinkwork-${process.env.STAGE}-api-knowledge-graph-thread-ingest`;
 }
 
 export function resolveObservationsWorkerFunctionName(): string | null {
