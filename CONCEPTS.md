@@ -94,6 +94,9 @@ The merged result of all layers for a concrete context — agent × Space × Age
 ### Capability Inspector
 The operator surface (GraphQL query + Settings page + CLI read command) that renders the effective capability set for a selected agent × Space × Agent Profile × perspective-user combination, with per-item provenance and a why-not-active reason from the enumerated gate taxonomy. It computes through the runtime's own composer (never a parallel implementation) and stamps each response with a computed-at time and resolved-config fingerprint so manifest divergence can be asserted honestly.
 
+### Agent Page
+The single operator surface for all agent configuration (Settings → Agent, route `/settings/agents`): the Composer editor shell — selection chips over a rendered-workspace file tree and editor — plus three purpose-built side sheets for the non-file concerns (Config, Profiles, Extensions). Supersedes the separate Agents page and Composer nav entries; capability attachment is tree-first, and profile definitions are hybrid — `agents/<slug>.md` content in the tree, structured fields in the Profiles sheet.
+
 ### Capability Manifest
 Per-turn runtime evidence of what the agent actually received: which skills, tools, MCP servers, and extensions loaded, which were gated out, and why. The runtime-truth counterpart to the config-derived effective capability set; divergence between the two is a defect signal, and the manifest doubles as the action-time capability snapshot the compliance direction requires.
 
