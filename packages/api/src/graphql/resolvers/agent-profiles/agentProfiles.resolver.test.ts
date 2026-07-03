@@ -304,6 +304,8 @@ describe("Agent Profile resolvers", () => {
           { builtInKey: "reviewer" },
         ]),
       )
+      // resolveAvailableCustomSlug: existing slugs (none clash with the seed)
+      .mockReturnValueOnce(queryRows([{ slug: "some-other" }]))
       .mockReturnValueOnce(queryRows([{ id: "space-1" }]));
     const insertedProfileValues: unknown[] = [];
     const insertedAssignmentValues: unknown[] = [];
@@ -377,6 +379,100 @@ describe("Agent Profile resolvers", () => {
       slug: "fast-research",
       modelId: "model-fast",
     });
+  });
+
+  it("auto-suffixes a name-derived slug when it collides (repeat default create)", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          { builtInKey: "research" },
+          { builtInKey: "coding" },
+          { builtInKey: "analyst" },
+          { builtInKey: "reviewer" },
+        ]),
+      )
+      // resolveAvailableCustomSlug: base + "-2" already exist → picks "-3".
+      .mockReturnValueOnce(
+        queryRows([
+          { slug: "new-agent-profile" },
+          { slug: "new-agent-profile-2" },
+        ]),
+      )
+      .mockReturnValueOnce(queryRows([]));
+    const insertedProfileValues: unknown[] = [];
+    mockInsert
+      .mockReturnValueOnce(
+        insertRows(
+          [
+            {
+              id: "profile-new",
+              tenant_id: "tenant-1",
+              slug: "new-agent-profile-3",
+              name: "New Agent Profile",
+              model_id: "model-fast",
+              enabled: true,
+              built_in_key: null,
+              tool_policy: {},
+              skill_policy: {},
+              execution_controls: {},
+            },
+          ],
+          insertedProfileValues,
+        ),
+      )
+      .mockReturnValueOnce(insertRows(undefined, []));
+    mockDelete.mockReturnValueOnce(deleteRows());
+
+    const result = await createMod.createAgentProfile(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: {
+          // No explicit slug — derived from the generic default name.
+          name: "New Agent Profile",
+          instructions: "Complete the task.",
+          modelId: "model-fast",
+          spaceIds: [],
+        },
+      },
+      ctx(),
+    );
+
+    expect(insertedProfileValues[0]).toMatchObject({
+      slug: "new-agent-profile-3",
+    });
+    expect(result).toMatchObject({ slug: "new-agent-profile-3" });
+  });
+
+  it("rejects an explicit slug that already exists", async () => {
+    mockSelect
+      .mockReturnValueOnce(
+        queryRows([
+          { builtInKey: "research" },
+          { builtInKey: "coding" },
+          { builtInKey: "analyst" },
+          { builtInKey: "reviewer" },
+        ]),
+      )
+      .mockReturnValueOnce(queryRows([{ slug: "fast-research" }]));
+
+    await expect(
+      createMod.createAgentProfile(
+        null,
+        {
+          tenantId: "tenant-1",
+          input: {
+            slug: "Fast Research",
+            name: "Fast Research",
+            instructions: "Go find it.",
+            modelId: "model-fast",
+            spaceIds: [],
+          },
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow('slug "fast-research" already exists');
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
   it("refuses to change built-in profile identity", async () => {

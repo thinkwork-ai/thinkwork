@@ -57,6 +57,12 @@ type SettingsAgentExtensionsProps = {
   fetching: boolean;
   errorMessage?: string | null;
   onChanged: () => void;
+  /**
+   * Render without the SettingsSection chrome (its own "Extensions" heading
+   * and bordered card). Used inside the Extensions sheet, which already owns
+   * the title — the wrapper would otherwise double the header and box the table.
+   */
+  embedded?: boolean;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -68,6 +74,7 @@ export function SettingsAgentExtensions({
   fetching,
   errorMessage,
   onChanged,
+  embedded = false,
 }: SettingsAgentExtensionsProps) {
   const [importOpen, setImportOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -247,41 +254,40 @@ export function SettingsAgentExtensions({
     onChanged();
   }
 
-  return (
-    <SettingsSection
-      label="Extensions"
-      action={
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setImportOpen(true)}
-        >
-          <Github className="mr-2 size-4" />
-          GitHub import
-        </Button>
-      }
+  const githubImportButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => setImportOpen(true)}
     >
-      {errorMessage ? (
-        <div className="p-4 text-sm text-destructive">{errorMessage}</div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={rows}
-          pageSize={10}
-          tableClassName="w-full table-auto [&_tbody_tr]:h-14"
-          allowHorizontalScroll={false}
-          onRowClick={(row) => setSelectedId(row.id)}
-          emptyState={
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              {fetching
-                ? "Loading Pi extensions..."
-                : "No Pi extensions imported yet."}
-            </div>
-          }
-        />
-      )}
+      <Github className="mr-2 size-4" />
+      GitHub import
+    </Button>
+  );
 
+  const table = errorMessage ? (
+    <div className="p-4 text-sm text-destructive">{errorMessage}</div>
+  ) : (
+    <DataTable
+      columns={columns}
+      data={rows}
+      pageSize={10}
+      tableClassName="w-full table-auto [&_tbody_tr]:h-14"
+      allowHorizontalScroll={false}
+      onRowClick={(row) => setSelectedId(row.id)}
+      emptyState={
+        <div className="py-10 text-center text-sm text-muted-foreground">
+          {fetching
+            ? "Loading Pi extensions..."
+            : "No Pi extensions imported yet."}
+        </div>
+      }
+    />
+  );
+
+  const dialogs = (
+    <>
       <ImportPiExtensionDialog
         open={importOpen}
         repositoryUrl={repositoryUrl}
@@ -306,6 +312,25 @@ export function SettingsAgentExtensions({
           if (!open) setSelectedId(null);
         }}
       />
+    </>
+  );
+
+  if (embedded) {
+    // Sheet already owns the "Extensions" title — render just the action +
+    // table, no SettingsSection heading or bordered card.
+    return (
+      <div>
+        <div className="mb-3 flex justify-end">{githubImportButton}</div>
+        {table}
+        {dialogs}
+      </div>
+    );
+  }
+
+  return (
+    <SettingsSection label="Extensions" action={githubImportButton}>
+      {table}
+      {dialogs}
     </SettingsSection>
   );
 }

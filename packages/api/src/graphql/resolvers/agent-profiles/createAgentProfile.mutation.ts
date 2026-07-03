@@ -10,10 +10,12 @@ import {
   assertAvailableModel,
   assertCustomProfileSlugAvailable,
   assertSpacesBelongToTenant,
+  badInput,
   ensureBuiltInAgentProfiles,
   normalizeProfileSlug,
   parseJsonInput,
   replaceAgentProfileSpaceAssignments,
+  resolveAvailableCustomSlug,
   toAgentProfileGraphql,
 } from "./shared.js";
 
@@ -44,8 +46,20 @@ export async function createAgentProfile(
   await ensureBuiltInAgentProfiles(args.tenantId);
 
   const input = args.input;
-  const slug = normalizeProfileSlug(input.slug ?? input.name);
-  assertCustomProfileSlugAvailable(slug);
+  // An explicit slug is honored as-is (collision is a clean user error); when
+  // it's derived from the name we resolve to a free slug so a generic default
+  // like "New Agent Profile" can be created repeatedly.
+  let slug: string;
+  if (input.slug) {
+    slug = normalizeProfileSlug(input.slug);
+    assertCustomProfileSlugAvailable(slug);
+    const clash = await resolveAvailableCustomSlug(args.tenantId, slug);
+    if (clash !== slug) {
+      throw badInput(`An Agent Profile with slug "${slug}" already exists`);
+    }
+  } else {
+    slug = await resolveAvailableCustomSlug(args.tenantId, input.name);
+  }
   await assertAvailableModel(args.tenantId, input.modelId);
   const spaceIds = await assertSpacesBelongToTenant(
     args.tenantId,

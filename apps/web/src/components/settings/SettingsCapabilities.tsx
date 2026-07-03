@@ -447,6 +447,13 @@ export function SettingsCapabilities({
   const [, deleteAgentProfile] = useMutation(SettingsDeleteAgentProfileMutation);
 
   const loading = inspection.fetching;
+  // The refresh icon reflects only a user-initiated refresh — background
+  // inspection fetches (initial load, post-mutation refetch, sync-poll) must
+  // not leave it perpetually spinning.
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  useEffect(() => {
+    if (!inspection.fetching && manualRefreshing) setManualRefreshing(false);
+  }, [inspection.fetching, manualRefreshing]);
   const result = inspection.data?.capabilityInspector;
   const predicted = result?.predicted ?? null;
   const items = useMemo(
@@ -1186,10 +1193,15 @@ export function SettingsCapabilities({
         title="Refresh"
         aria-label="Refresh"
         className={desktopToolbarButtonClassName}
-        onClick={() => refetchInspection({ requestPolicy: "network-only" })}
-        disabled={loading}
+        onClick={() => {
+          setManualRefreshing(true);
+          refetchInspection({ requestPolicy: "network-only" });
+        }}
+        disabled={manualRefreshing}
       >
-        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+        <RefreshCw
+          className={cn("size-4", manualRefreshing && "animate-spin")}
+        />
       </Button>
           <Dialog>
             <DialogTrigger asChild>
@@ -1263,7 +1275,7 @@ export function SettingsCapabilities({
   );
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-6 py-6">
       <div className="shrink-0">
         <SettingsHeader
           title="Agents"
@@ -1396,6 +1408,7 @@ export function SettingsCapabilities({
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
             <SettingsAgentExtensions
+              embedded
               tenantId={tenantId ?? ""}
               extensions={registryExtensions}
               profiles={(profilesResult.data?.agentProfiles ?? []).map(
