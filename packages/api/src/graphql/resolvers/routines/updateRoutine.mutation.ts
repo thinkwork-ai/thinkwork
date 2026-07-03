@@ -42,7 +42,14 @@ export async function updateRoutine(
   if (i.name !== undefined) updates.name = i.name;
   if (i.description !== undefined) updates.description = i.description;
   if (i.type !== undefined) updates.type = i.type;
-  if (i.status !== undefined) updates.status = i.status;
+  if (i.status !== undefined) {
+    updates.status = i.status;
+    // Human re-enable of a budget-disabled routine (plan 2026-07-03-004
+    // U9, R13): reactivation clears the breaker reason. requireAdmin...
+    // above already makes this a human/operator-only path — the agent
+    // tool surface has no updateRoutine.
+    if (i.status === "active") updates.disabled_reason = null;
+  }
   if (i.schedule !== undefined) updates.schedule = i.schedule;
   if (i.teamId !== undefined) updates.team_id = i.teamId;
   if (i.agentId !== undefined) updates.agent_id = i.agentId;

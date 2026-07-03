@@ -8,6 +8,11 @@ const { useQueryMock } = vi.hoisted(() => ({
 
 vi.mock("urql", () => ({
   useQuery: useQueryMock,
+  // GitRoutineRunPanel's import graph pulls TenantContext (gql) and a
+  // re-enable mutation; provide inert stand-ins.
+  gql: (strings: TemplateStringsArray, ...rest: unknown[]) =>
+    String.raw({ raw: strings }, ...rest),
+  useMutation: () => [{ fetching: false }, vi.fn()],
 }));
 
 vi.mock("@tanstack/react-router", async () => {
