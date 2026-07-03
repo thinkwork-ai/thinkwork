@@ -164,6 +164,26 @@ vi.mock("@/context/PageHeaderContext", () => ({
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
 
+// Agent page merge U12: page actions render in the AppTopBar via
+// SettingsHeader's `actions` prop; render them inline here so the suite can
+// click the header icons without mounting the app chrome.
+vi.mock("@/components/settings/SettingsContent", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    SettingsHeader: (props: {
+      title: string;
+      description?: string;
+      actions?: React.ReactNode;
+    }) => (
+      <div>
+        <div>{props.title}</div>
+        <div data-testid="header-actions-inline">{props.actions}</div>
+      </div>
+    ),
+  };
+});
+
 // The editor shell is exercised in its own suite — stub it and capture props.
 vi.mock("@/components/settings/ComposerWorkspaceEditor", () => ({
   ComposerWorkspaceEditor: (props: Record<string, unknown>) => {
@@ -330,7 +350,8 @@ function openSheet() {
 }
 
 function clearDefaultFilters() {
-  fireEvent.click(screen.getByText("Clear"));
+  // No default filters (Agent page merge U12): nothing to clear — the full
+  // pool renders immediately. Kept as a no-op so call sites read as intent.
 }
 
 function expandSearch() {
@@ -416,11 +437,9 @@ describe("capability side sheet (read surface)", () => {
     expect(screen.getByText("token: expired")).toBeTruthy();
   });
 
-  it("defaults to active-only rows; clearing filters reveals the pool", () => {
+  it("shows the full pool by default — no default filters (U12)", () => {
     render(<SettingsCapabilities />);
     openSheet();
-    expect(screen.queryByText("trust_gate")).toBeNull();
-    clearDefaultFilters();
     expect(screen.getByText("trust_gate")).toBeTruthy();
   });
 
@@ -475,7 +494,7 @@ describe("capability side sheet (read surface)", () => {
       "no-user baseline",
     );
     expect(screen.getByTestId("view-info-body").textContent).toContain(
-      "state active",
+      "all states",
     );
   });
 });
