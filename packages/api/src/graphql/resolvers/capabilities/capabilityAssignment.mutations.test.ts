@@ -699,6 +699,44 @@ describe("skill @ profile (skill_policy subset)", () => {
     ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
     expect(mockEmitAuditEvent).not.toHaveBeenCalled();
   });
+
+  // Agent page merge (THINK-132 U5): the tree's profile-scoped attach must be
+  // a drop-in for the retired chip editor — a grant touches ONLY skillSlugs
+  // and carries every sibling policy key through unchanged.
+  it("grant preserves sibling skill_policy keys untouched", async () => {
+    rowsQueue.push(
+      [{ slug: "expenses" }],
+      [
+        {
+          id: PROFILE_ID,
+          slug: "coding",
+          source_space_id: null,
+          tool_policy: {},
+          skill_policy: { skillSlugs: ["existing"], pinned: ["existing"] },
+        },
+      ],
+    );
+
+    await grantCapability(
+      null,
+      {
+        input: {
+          tenantId: TENANT_ID,
+          capabilityClass: "SKILL",
+          scope: "AGENT_PROFILE",
+          agentProfileId: PROFILE_ID,
+          capabilityRef: "expenses",
+        },
+      },
+      ctx,
+    );
+
+    const update = txOps.find((op) => op.op === "update");
+    expect(
+      (update!.args as { values: { skill_policy: unknown } }).values
+        .skill_policy,
+    ).toEqual({ pinned: ["existing"], skillSlugs: ["existing", "expenses"] });
+  });
 });
 
 describe("mcp_server @ profile (tool_policy subset)", () => {
