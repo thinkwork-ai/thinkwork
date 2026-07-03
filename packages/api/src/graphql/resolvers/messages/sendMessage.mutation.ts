@@ -288,6 +288,28 @@ export const sendMessage = async (
       );
     }
 
+    // R13/KTD6: a human sender becomes a thread participant in the same
+    // transaction as their message, so Thread Mode derivation (U3) reads the
+    // true participant set — a reply-joiner counts immediately, not on some
+    // later mention. Agent/system senders (senderType !== "user") never get
+    // participant rows. space_id is null for non-space threads (R14).
+    // onConflictDoNothing keeps repeat senders idempotent; the
+    // markSenderParticipantRead call below then stamps last_read_at on the
+    // (new or existing) row.
+    if (senderType === "user" && senderId) {
+      await tx
+        .insert(threadParticipants)
+        .values({
+          tenant_id: thread.tenant_id,
+          thread_id: i.threadId,
+          space_id: thread.space_id ?? null,
+          participant_type: "user",
+          user_id: senderId,
+          source: "sender",
+        })
+        .onConflictDoNothing();
+    }
+
     await markSenderParticipantRead(
       {
         tenantId: thread.tenant_id,

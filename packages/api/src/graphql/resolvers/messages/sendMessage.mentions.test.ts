@@ -114,6 +114,59 @@ describe("sendMessage mention collaboration path", () => {
   });
 });
 
+describe("sendMessage sender-as-participant upsert (plan 2026-07-03-003 U2, R13)", () => {
+  it("upserts the human sender as a participant inside the message transaction", () => {
+    // The upsert must live inside the db.transaction callback alongside the
+    // message insert, so the participant row commits atomically with the
+    // message (mode derivation reads a truthful participant set).
+    expect(source).toContain('if (senderType === "user" && senderId) {');
+    const txStart = source.indexOf("db.transaction");
+    const upsertIdx = source.indexOf(
+      'if (senderType === "user" && senderId) {',
+    );
+    const returnRowIdx = source.indexOf("return messageRow;");
+    expect(txStart).toBeGreaterThanOrEqual(0);
+    expect(upsertIdx).toBeGreaterThan(txStart);
+    expect(upsertIdx).toBeLessThan(returnRowIdx);
+  });
+
+  it("inserts a source='sender' user participant with onConflictDoNothing", () => {
+    // participant_type user + source sender + idempotent conflict handling ⇒
+    // a sender without a row gets one; an existing participant is a no-op.
+    expect(source).toContain('participant_type: "user"');
+    expect(source).toContain('source: "sender"');
+    // The sender upsert is the second threadParticipants insert (after the
+    // mention-participants insert) and both are onConflictDoNothing.
+    const senderInsert = source.slice(
+      source.indexOf('if (senderType === "user" && senderId) {'),
+    );
+    expect(senderInsert).toContain(".insert(threadParticipants)");
+    expect(senderInsert).toContain(".onConflictDoNothing()");
+  });
+
+  it("gates the upsert to human senders so agent/system senders never get rows", () => {
+    // The senderType === "user" guard is the whole mechanism that keeps
+    // agent/system senders out of thread_participants.
+    expect(source).toMatch(
+      /if \(senderType === "user" && senderId\) \{\s*\n\s*await tx\s*\n?\s*\.insert\(threadParticipants\)/,
+    );
+  });
+
+  it("carries a null space for non-space threads (R14)", () => {
+    // thread.space_id ?? null ⇒ non-space threads still get a participant row,
+    // with a null space_id rather than being skipped.
+    expect(source).toContain("space_id: thread.space_id ?? null");
+  });
+
+  it("upserts the sender before marking their participant row read", () => {
+    // markSenderParticipantRead updates last_read_at on the sender's row; the
+    // insert must precede it so a brand-new row exists to be stamped.
+    expect(source.indexOf('source: "sender"')).toBeLessThan(
+      source.indexOf("await markSenderParticipantRead("),
+    );
+  });
+});
+
 describe("sendMessage pending-question reply consumption (plan 2026-06-09-005 U3)", () => {
   it("CAS-consumes the pending batch with answeredVia 'reply' and the new message as the reference", () => {
     expect(source).toContain("consumePendingQuestions(db, {");

@@ -6,7 +6,9 @@ import type { ThreadMentionTarget } from "./thread-mention-targets.js";
 export interface MentionParticipantInsert {
   tenantId: string;
   threadId: string;
-  spaceId: string;
+  // Null for non-space threads (R14): mention-created participation works
+  // without a Space, so those rows carry a null space_id.
+  spaceId: string | null;
   participantType: "user" | "agent";
   userId?: string;
   agentId?: string;
@@ -26,8 +28,12 @@ export function buildMentionParticipantRows(input: {
   mentions: ParsedMention[];
   targets: ThreadMentionTarget[];
 }): MentionParticipantInsert[] {
-  if (!input.spaceId || input.mentions.length === 0) return [];
+  // Non-space threads (R14) still produce participant rows — they carry a
+  // null space_id rather than being dropped. Only an empty mention set is a
+  // no-op.
+  if (input.mentions.length === 0) return [];
 
+  const spaceId = input.spaceId ?? null;
   const targetsByKey = new Map(
     input.targets.map((target) => [
       participantKey(target.targetType, target.targetId),
@@ -50,7 +56,7 @@ export function buildMentionParticipantRows(input: {
       rowsByKey.set(key, {
         tenantId: input.tenantId,
         threadId: input.threadId,
-        spaceId: input.spaceId,
+        spaceId,
         participantType: "user",
         userId: mention.targetId,
         role: target.role ?? "member",
@@ -61,7 +67,7 @@ export function buildMentionParticipantRows(input: {
       rowsByKey.set(key, {
         tenantId: input.tenantId,
         threadId: input.threadId,
-        spaceId: input.spaceId,
+        spaceId,
         participantType: "agent",
         agentId: mention.targetId,
         role: target.role ?? "agent",

@@ -128,6 +128,55 @@ describe("thread participant mentions", () => {
     ]);
   });
 
+  it("builds rows with a null space for non-space threads (R14)", () => {
+    // A mention in a thread without an owning Space still creates the
+    // participant row — it just carries a null space_id instead of being
+    // dropped. Regression guard for the old `if (!input.spaceId) return []`.
+    const rows = buildMentionParticipantRows({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      spaceId: null,
+      mentions,
+      targets,
+    });
+    expect(rows).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        spaceId: null,
+        participantType: "user",
+        userId: "user-2",
+        role: "member",
+        source: "mention",
+        notificationPreference: "subscribed",
+      },
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        spaceId: null,
+        participantType: "agent",
+        agentId: "agent-1",
+        role: "coordinator",
+        source: "mention",
+        notificationPreference: "subscribed",
+      },
+    ]);
+    // The row maps to a null space_id insert, not a dropped/omitted row.
+    expect(rows.map(toThreadParticipantInsert)[0].space_id).toBeNull();
+  });
+
+  it("still no-ops when there are no mentions, space or not", () => {
+    expect(
+      buildMentionParticipantRows({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        spaceId: null,
+        mentions: [],
+        targets,
+      }),
+    ).toEqual([]);
+  });
+
   it("keeps insert idempotency in the repository boundary", async () => {
     const repository = makeRepository();
 
