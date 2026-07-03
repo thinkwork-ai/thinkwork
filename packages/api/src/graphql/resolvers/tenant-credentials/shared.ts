@@ -76,7 +76,8 @@ export function assertKnownKind(
     kind !== "basic_auth" &&
     kind !== "soap_partner" &&
     kind !== "webhook_signing_secret" &&
-    kind !== "json"
+    kind !== "json" &&
+    kind !== "github_repo"
   ) {
     throw new GraphQLError(`Unsupported credential kind: ${kind}`, {
       extensions: { code: "BAD_USER_INPUT" },

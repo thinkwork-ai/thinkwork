@@ -4,6 +4,7 @@ import {
   Brain,
   Clock,
   Cpu,
+  GitBranch,
   History,
   Settings as SettingsIcon,
   Sparkles,
@@ -100,6 +101,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Automations",
     to: "/settings/automations",
     icon: Clock,
+    operatorOnly: true,
+  },
+  {
+    label: "Routine Repo",
+    to: "/settings/routine-repo",
+    icon: GitBranch,
     operatorOnly: true,
   },
   {

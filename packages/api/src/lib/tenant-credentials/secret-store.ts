@@ -12,7 +12,8 @@ export type TenantCredentialKind =
   | "basic_auth"
   | "soap_partner"
   | "webhook_signing_secret"
-  | "json";
+  | "json"
+  | "github_repo";
 
 export type TenantCredentialStatus = "active" | "disabled" | "deleted";
 
@@ -25,6 +26,9 @@ const REQUIRED_FIELDS: Record<TenantCredentialKind, readonly string[]> = {
   soap_partner: ["apiUrl", "username", "password", "partnerId"],
   webhook_signing_secret: ["secret"],
   json: [],
+  // Deterministic routines v1 (R2/KTD-8): the tenant routine repo — URL +
+  // pasted fine-grained GitHub token + branch, validated at save time.
+  github_repo: ["repoUrl", "token", "branch"],
 };
 
 let smClient: SecretsManagerClient | null = null;
