@@ -26,6 +26,9 @@ const {
   tenant,
   putFileMock,
   sourceGetFileMock,
+  deleteFileMock,
+  renamePathMock,
+  movePathMock,
   focusRowMock,
   addSkillMock,
   detachSkillMock,
@@ -37,6 +40,9 @@ const {
   tenant: { isOperator: true, roleResolved: true },
   putFileMock: vi.fn(),
   sourceGetFileMock: vi.fn(),
+  deleteFileMock: vi.fn(),
+  renamePathMock: vi.fn(),
+  movePathMock: vi.fn(),
   focusRowMock: vi.fn(),
   addSkillMock: vi.fn(),
   detachSkillMock: vi.fn(),
@@ -103,7 +109,9 @@ vi.mock("@/lib/workspace-files-api", () => ({
     listFiles: vi.fn().mockResolvedValue({ files: [] }),
     getFile: (...args: unknown[]) => sourceGetFileMock(...args),
     putFile: (...args: unknown[]) => putFileMock(...args),
-    deleteFile: vi.fn().mockResolvedValue(undefined),
+    deleteFile: (...args: unknown[]) => deleteFileMock(...args),
+    renamePath: (...args: unknown[]) => renamePathMock(...args),
+    movePath: (...args: unknown[]) => movePathMock(...args),
   },
 }));
 
@@ -115,6 +123,11 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   );
   return {
     ...actual,
+    // react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+    // plain passthroughs so the resizable shell mounts deterministically.
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
     ContextMenu: pass,
     ContextMenuTrigger: pass,
     ContextMenuContent: pass,
@@ -205,6 +218,9 @@ beforeEach(() => {
   tenant.isOperator = true;
   tenant.roleResolved = true;
   putFileMock.mockResolvedValue(undefined);
+  deleteFileMock.mockResolvedValue(undefined);
+  renamePathMock.mockResolvedValue({ destPath: "" });
+  movePathMock.mockResolvedValue({ destPath: "" });
   sourceGetFileMock.mockResolvedValue({
     content: "# source body",
     source: "agent",
@@ -345,6 +361,89 @@ describe("context-menu actions (item 4)", () => {
       params: { spaceId: "space-1" },
       search: { view: "workspace", file: "notes.md" },
     });
+  });
+});
+
+describe("standard file-tree menu (v1.1)", () => {
+  it("creates a new file inside a folder through the owning source client, then refetches", async () => {
+    renderEditor();
+    await screen.findByTestId("tree-node-skills/approve-receipt");
+    fireEvent.click(screen.getByTestId("menu-new-file-skills/approve-receipt"));
+    fireEvent.change(await screen.findByTestId("composer-name-input"), {
+      target: { value: "NOTES.md" },
+    });
+    getManifestMock.mockClear();
+    fireEvent.click(screen.getByTestId("composer-name-submit"));
+    await waitFor(() =>
+      expect(putFileMock).toHaveBeenCalledWith(
+        { agentId: "agent-1" },
+        "skills/approve-receipt/NOTES.md",
+        "",
+      ),
+    );
+    await waitFor(() => expect(getManifestMock).toHaveBeenCalled());
+  });
+
+  it("renames a source file through renamePath (relative to its layer)", async () => {
+    renderEditor();
+    await screen.findByTestId("tree-node-CAPABILITIES.md");
+    fireEvent.click(screen.getByTestId("menu-rename-CAPABILITIES.md"));
+    fireEvent.change(await screen.findByTestId("composer-name-input"), {
+      target: { value: "CAPS.md" },
+    });
+    fireEvent.click(screen.getByTestId("composer-name-submit"));
+    await waitFor(() =>
+      expect(renamePathMock).toHaveBeenCalledWith(
+        { agentId: "agent-1" },
+        "CAPABILITIES.md",
+        "CAPS.md",
+      ),
+    );
+  });
+
+  it("deletes a Space source file through the space client (prefix stripped)", async () => {
+    renderEditor();
+    await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");
+    fireEvent.click(
+      screen.getByTestId("menu-delete-Spaces/customer-success/notes.md"),
+    );
+    fireEvent.click(await screen.findByTestId("composer-delete-confirm"));
+    await waitFor(() =>
+      expect(deleteFileMock).toHaveBeenCalledWith(
+        { spaceId: "space-1" },
+        "notes.md",
+      ),
+    );
+  });
+
+  it("offers NO standard ops on a generated file (derived)", async () => {
+    renderEditor();
+    await screen.findByTestId("tree-node-AGENTS.md");
+    expect(screen.queryByTestId("menu-rename-AGENTS.md")).toBeNull();
+    expect(screen.queryByTestId("menu-delete-AGENTS.md")).toBeNull();
+  });
+
+  it("maps a skill folder's destructive action to Detach, not raw Delete", async () => {
+    renderEditor({
+      canManageSkills: true,
+      onDetachSkill: detachSkillMock,
+    });
+    await screen.findByTestId("tree-node-skills/approve-receipt");
+    // No raw Delete on the skill folder — Detach is the destructive path.
+    expect(
+      screen.queryByTestId("menu-delete-skills/approve-receipt"),
+    ).toBeNull();
+    expect(
+      screen.getByTestId("menu-detach-skill-approve-receipt"),
+    ).toBeTruthy();
+  });
+
+  it("hides standard ops for non-operators", async () => {
+    tenant.isOperator = false;
+    renderEditor();
+    await screen.findByTestId("tree-node-CAPABILITIES.md");
+    expect(screen.queryByTestId("menu-rename-CAPABILITIES.md")).toBeNull();
+    expect(screen.queryByTestId("menu-delete-CAPABILITIES.md")).toBeNull();
   });
 });
 

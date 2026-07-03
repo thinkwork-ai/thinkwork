@@ -898,38 +898,10 @@ export function SettingsCapabilities() {
         </div>
       </div>
 
-      {confirmation ? (
-        <div
-          className="mb-4 flex shrink-0 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
-          data-testid="mutation-confirmation"
-        >
-          <span className="font-medium">{confirmation.label}</span>
-          <span className="text-muted-foreground">
-            {confirmation.action === "attach" ? "attach" : "detach"}
-            {confirmation.outcome === "noop" ? " (no change)" : ""} —
-          </span>
-          {confirmation.syncPending ? (
-            <Badge
-              variant="outline"
-              className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-400"
-              data-testid="sync-pending"
-            >
-              sync pending…
-            </Badge>
-          ) : confirmation.item ? (
-            stateChip(confirmation.item)
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">
-              removed
-            </Badge>
-          )}
-          {!confirmation.syncPending && confirmation.item?.detail ? (
-            <span className="min-w-0 truncate text-xs text-muted-foreground">
-              {confirmation.item.detail}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
+      {/* No persistent confirmation banner — the live tree + sheet state (and,
+          on failure, a toast) already show the result. The `confirmation` state
+          is retained only to drive the post-attach sync-pending ghost + refetch
+          (below), never a rendered row. */}
 
       {/* The Composer editor shell (v1.1 item 1): the rendered workspace as a
           normal left-tree + CodeMirror editor. Profile-invariant by design —
