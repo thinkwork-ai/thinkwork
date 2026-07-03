@@ -1838,6 +1838,74 @@ describe("resolveAgentRuntimeConfig", () => {
     });
   });
 
+  // Agent page merge (THINK-132 U5): pins the empty-vs-absent policy
+  // semantics the tree's profile overlay relies on — an explicitly emptied
+  // allowlist and a never-shaped profile resolve to the identical runtime
+  // config ("no profile-scoped grants"), so detaching a profile's last
+  // skill cannot flip it into a different inheritance mode.
+  it("treats empty and absent profile policy keys identically", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    stageProfileRows([
+      {
+        id: "profile-emptied",
+        slug: "emptied",
+        name: "Emptied",
+        description: null,
+        routing_guidance: null,
+        instructions: "Emptied allowlists.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        tool_policy: { builtInTools: [], mcpServers: [] },
+        skill_policy: { skillSlugs: [] },
+        execution_controls: {},
+      },
+      {
+        id: "profile-unshaped",
+        slug: "unshaped",
+        name: "Unshaped",
+        description: null,
+        routing_guidance: null,
+        instructions: "Never shaped.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: null,
+        tool_policy: {},
+        skill_policy: {},
+        execution_controls: {},
+      },
+    ]);
+    mockListTenantModelCatalogByIds.mockImplementation(async () => [
+      { modelId: PROFILE_MODEL_ID },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    const emptied = cfg.agentProfilesConfig.find((p) => p.slug === "emptied");
+    const unshaped = cfg.agentProfilesConfig.find(
+      (p) => p.slug === "unshaped",
+    );
+    expect(emptied).toBeDefined();
+    expect(unshaped).toBeDefined();
+    for (const profile of [emptied!, unshaped!]) {
+      expect(profile.skillSlugs).toEqual([]);
+      expect(profile.builtInTools).toEqual([]);
+      expect(profile.mcpServers).toEqual([]);
+      expect(profile.mcpToolAllowlist).toEqual({});
+      expect(profile.availability).toEqual({ scope: "global", spaceIds: [] });
+    }
+  });
+
   it("excludes disabled profiles and profiles with unavailable models only", async () => {
     stageAgentRow();
     stageTenantSlug();
