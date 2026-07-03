@@ -391,6 +391,32 @@ describe("standard file-tree menu (v1.1)", () => {
     await waitFor(() => expect(getManifestMock).toHaveBeenCalled());
   });
 
+  it("creates a ROOT-level folder via the tree background menu (agent workspace root)", async () => {
+    renderEditor();
+    await screen.findByTestId("composer-tree-scroll");
+    fireEvent.click(screen.getByTestId("menu-root-new-folder"));
+    fireEvent.change(await screen.findByTestId("composer-name-input"), {
+      target: { value: "playbooks" },
+    });
+    getManifestMock.mockClear();
+    fireEvent.click(screen.getByTestId("composer-name-submit"));
+    await waitFor(() =>
+      expect(putFileMock).toHaveBeenCalledWith(
+        { agentId: "agent-1" },
+        "playbooks/.gitkeep",
+        "",
+      ),
+    );
+    await waitFor(() => expect(getManifestMock).toHaveBeenCalled());
+  });
+
+  it("hides the tree-background create menu for non-operators", async () => {
+    tenant.isOperator = false;
+    renderEditor();
+    await screen.findByTestId("composer-tree-scroll");
+    expect(screen.queryByTestId("menu-root-new-folder")).toBeNull();
+  });
+
   it("renames a source file through renamePath (relative to its layer)", async () => {
     renderEditor();
     await screen.findByTestId("tree-node-CAPABILITIES.md");
