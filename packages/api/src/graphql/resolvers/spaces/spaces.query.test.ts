@@ -70,6 +70,18 @@ vi.mock("../../utils.js", () => ({
     owner_user_id: "work_items.owner_user_id",
     archived_at: "work_items.archived_at",
   },
+  threads: {
+    id: "threads.id",
+    tenant_id: "threads.tenant_id",
+    space_id: "threads.space_id",
+    archived_at: "threads.archived_at",
+  },
+  threadParticipants: {
+    tenant_id: "thread_participants.tenant_id",
+    thread_id: "thread_participants.thread_id",
+    participant_type: "thread_participants.participant_type",
+    user_id: "thread_participants.user_id",
+  },
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -173,7 +185,21 @@ describe("spaces", () => {
         type: "sql",
         text: expect.stringContaining("owner_user_id"),
       }),
+      // Mention Invite (THINK-136): Spaces with a thread the caller
+      // participates in are listed even without space membership.
+      expect.objectContaining({
+        type: "sql",
+        text: expect.stringContaining("invited_tp"),
+      }),
     );
+    const invitePredicate = sqlCalls.find((call) =>
+      call.text.includes("invited_tp"),
+    );
+    expect(invitePredicate?.text).toContain(
+      "invited_tp.participant_type = 'user'",
+    );
+    expect(invitePredicate?.text).toContain("invited_t.archived_at IS NULL");
+    expect(invitePredicate?.values).toContain("user-1");
   });
 
   it("returns an empty list instead of leaking cross-tenant Spaces", async () => {

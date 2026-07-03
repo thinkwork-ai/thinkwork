@@ -6,6 +6,8 @@ import {
   or,
   sql,
   spaces as spacesTable,
+  threadParticipants,
+  threads,
   workItems,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
@@ -49,6 +51,13 @@ export async function spaces(
     const callerSpacePredicate = or(
       userAccessibleSpacePredicate(args.tenantId, callerUserId),
       assignedWorkItemSpacePredicate(args.tenantId, callerUserId),
+      // Mention Invite (THINK-136): a mention is a thread-level invite, so a
+      // Space containing a thread the caller participates in must appear in
+      // their Space list even when the Space is private and they are not a
+      // member — otherwise the invited thread has no navigable home in the
+      // sidebar. Thread listing inside the Space stays scoped per-thread by
+      // callerVisibleThreadPredicate.
+      participantThreadSpacePredicate(args.tenantId, callerUserId),
     );
     if (callerSpacePredicate) conditions.push(callerSpacePredicate);
   }
@@ -151,5 +160,23 @@ function assignedWorkItemSpacePredicate(tenantId: string, callerUserId: string) 
        AND assigned_wi.space_id = ${spacesTable.id}
        AND assigned_wi.owner_user_id = ${callerUserId}
        AND assigned_wi.archived_at IS NULL
+  )`;
+}
+
+function participantThreadSpacePredicate(
+  tenantId: string,
+  callerUserId: string,
+) {
+  return sql`EXISTS (
+    SELECT 1
+      FROM ${threads} invited_t
+      JOIN ${threadParticipants} invited_tp
+        ON invited_tp.tenant_id = invited_t.tenant_id
+       AND invited_tp.thread_id = invited_t.id
+       AND invited_tp.participant_type = 'user'
+       AND invited_tp.user_id = ${callerUserId}
+     WHERE invited_t.tenant_id = ${tenantId}
+       AND invited_t.space_id = ${spacesTable.id}
+       AND invited_t.archived_at IS NULL
   )`;
 }

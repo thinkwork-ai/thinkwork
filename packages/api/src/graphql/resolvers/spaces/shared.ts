@@ -8,6 +8,8 @@ import {
   spaceMembers,
   spaces,
   tenantMembers,
+  threadParticipants,
+  threads,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
@@ -95,7 +97,7 @@ export async function hasSpaceMemberAccess(
   tenantId: string,
   spaceId: string,
 ): Promise<boolean> {
-  return canAccessSpace(ctx, tenantId, spaceId);
+  return hasMemberOrPublicSpaceAccess(ctx, tenantId, spaceId);
 }
 
 export async function canPostToSpace(
@@ -103,10 +105,30 @@ export async function canPostToSpace(
   tenantId: string,
   spaceId: string,
 ): Promise<boolean> {
-  return canAccessSpace(ctx, tenantId, spaceId);
+  // Posting rights stay member-scoped: a Mention Invite (THINK-136) grants
+  // READ access to the invited thread's Space shell (canAccessSpace), not
+  // the right to start new threads in a private Space.
+  return hasMemberOrPublicSpaceAccess(ctx, tenantId, spaceId);
 }
 
 export async function canAccessSpace(
+  ctx: GraphQLContext,
+  tenantId: string,
+  spaceId: string,
+): Promise<boolean> {
+  if (await hasMemberOrPublicSpaceAccess(ctx, tenantId, spaceId)) return true;
+  // Mention Invite (THINK-136): a mention is a thread-level invite, so a
+  // caller who participates in a thread that lives in this Space can read
+  // the Space shell — otherwise the invited thread has no navigable home.
+  // Which threads they see inside it stays governed per-thread by
+  // callerVisibleThreadPredicate.
+  if (ctx.auth.authType !== "cognito") return false;
+  const callerUserId = await resolveCallerUserId(ctx);
+  if (!callerUserId) return false;
+  return callerHasParticipantThreadInSpace(tenantId, spaceId, callerUserId);
+}
+
+async function hasMemberOrPublicSpaceAccess(
   ctx: GraphQLContext,
   tenantId: string,
   spaceId: string,
@@ -138,6 +160,34 @@ export async function canAccessSpace(
       ),
     );
   return Boolean(member);
+}
+
+async function callerHasParticipantThreadInSpace(
+  tenantId: string,
+  spaceId: string,
+  callerUserId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .innerJoin(
+      threadParticipants,
+      and(
+        eq(threadParticipants.tenant_id, threads.tenant_id),
+        eq(threadParticipants.thread_id, threads.id),
+        eq(threadParticipants.participant_type, "user"),
+        eq(threadParticipants.user_id, callerUserId),
+      ),
+    )
+    .where(
+      and(
+        eq(threads.tenant_id, tenantId),
+        eq(threads.space_id, spaceId),
+        sql`${threads.archived_at} IS NULL`,
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 export function userAccessibleSpacePredicate(
