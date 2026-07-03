@@ -333,6 +333,14 @@ locals {
       ROUTINE_OUTPUT_BUCKET        = "thinkwork-${var.stage}-routine-output"
       ROUTINE_PYTHON_ENV_ALLOWLIST = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
     }
+    # routine-exec-git (plan 2026-07-03-004 U3, KTD-10): configuration on
+    # the executor's own env, never new graphql-http env vars (4KB ceiling).
+    # The S3 SHA code cache rides the existing routine-output bucket under
+    # the routine-code-cache/ prefix.
+    "routine-exec-git" = {
+      SANDBOX_INTERPRETER_ID = var.agentcore_code_interpreter_id
+      ROUTINE_OUTPUT_BUCKET  = "thinkwork-${var.stage}-routine-output"
+    }
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
     # U8) which invokes routine-resume via the AWS SDK.
@@ -583,6 +591,13 @@ resource "aws_lambda_function" "handler" {
     # (Start/Invoke/Stop CodeInterpreterSession) + S3 PutObject IAM —
     # see main.tf.
     "routine-task-python",
+    # routine-exec-git: deterministic git-backed routine executor (plan
+    # 2026-07-03-004 U3). SDK-invoked (job-trigger / dispatcher / manual
+    # async job). Pulls the tenant routine repo at branch HEAD,
+    # fixture-gates new SHAs, executes run(input) in the AgentCore code
+    # interpreter, and writes routine_executions rows directly. Shares the
+    # role-wide bedrock-agentcore + S3 + Secrets Manager grants.
+    "routine-exec-git",
     # routine-resume: SDK-invoked by routine-approval-bridge (Phase B
     # U8) after a HITL decision. Calls SendTaskSuccess/SendTaskFailure;
     # idempotent on already-consumed tokens. Needs states:SendTaskSuccess
@@ -716,7 +731,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
