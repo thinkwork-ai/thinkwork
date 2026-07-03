@@ -841,14 +841,28 @@ describe("jump-to-cause (KTD-5)", () => {
     ).toBeNull();
   });
 
-  it("generated agent files navigate to the agent workspace editor", async () => {
+  // KTD-7 (Agent page merge U7): /settings/agents IS this surface after the
+  // cutover, so "Open source" on an agent-owned file selects it in place —
+  // it must not navigate to the retired workspace view. Deliberate rewrite
+  // of the pre-cutover navigation contract.
+  it("agent-owned files select in place instead of navigating (U7)", async () => {
     await renderEditor();
-    await screen.findByTestId("tree-node-AGENTS.md");
-    fireEvent.click(screen.getByTestId("menu-open-source-AGENTS.md"));
-    expect(navigateMock).toHaveBeenCalledWith({
-      to: "/settings/agents",
-      search: { view: "workspace", file: "AGENTS.md" },
-    });
+    await screen.findByTestId("tree-node-CAPABILITIES.md");
+    fireEvent.click(screen.getByTestId("menu-open-source-CAPABILITIES.md"));
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("tree-file-CAPABILITIES.md").className,
+    ).toContain("text-foreground");
+  });
+
+  it("applies a deep-linked initial tree selection once (U7)", async () => {
+    await renderEditor({ initialSelectedPath: "CAPABILITIES.md" });
+    await screen.findByTestId("tree-file-CAPABILITIES.md");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("tree-file-CAPABILITIES.md").className,
+      ).toContain("text-foreground"),
+    );
   });
 
   it("user nodes navigate to the perspective user's detail page", async () => {
