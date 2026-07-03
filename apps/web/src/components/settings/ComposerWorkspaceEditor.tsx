@@ -743,11 +743,24 @@ export function ComposerWorkspaceEditor({
     const isRemoving = Boolean(skillSlug && skillSlug === removingSkillSlug);
     const jumpEntry = jumpEntryFor(node);
     const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;
-    const canJump =
-      causeKind !== null &&
-      (causeKind !== "user" ||
-        Boolean(result?.perspectiveUserId ?? perspectiveUserId)) &&
-      (causeKind !== "skill" || Boolean(onFocusCapabilityRow));
+    // "Open …source" navigation is offered ONLY for nodes that open a real
+    // owning editor — Spaces file → space editor, User file → user detail,
+    // generated agent file → agent workspace editor. Skill nodes get NO menu
+    // entry pointing at the capability sheet (the gate-badge click still does);
+    // tree-first interactions win.
+    const canOpenSource =
+      Boolean(jumpEntry) &&
+      (causeKind === "space" || causeKind === "agent_source"
+        ? true
+        : causeKind === "user"
+          ? Boolean(result?.perspectiveUserId ?? perspectiveUserId)
+          : false);
+    const openSourceLabel =
+      causeKind === "space"
+        ? "Open space source"
+        : causeKind === "user"
+          ? "Open user source"
+          : "Open agent source";
     const isSkillsRoot = node.isFolder && node.path === "skills";
     const canDetachThis = Boolean(
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
@@ -780,11 +793,7 @@ export function ComposerWorkspaceEditor({
     const hasStdOps =
       (node.isFolder && canNewInside) || canRename || canDelete || canPaste;
 
-    const hasMenu =
-      canDetachThis ||
-      canAddHere ||
-      hasStdOps ||
-      (canJump && Boolean(jumpEntry));
+    const hasMenu = canDetachThis || canAddHere || hasStdOps || canOpenSource;
 
     const row = (
       <div
@@ -813,7 +822,12 @@ export function ComposerWorkspaceEditor({
               )}
             />
             <Folder className="size-3.5 shrink-0" />
-            <span className="truncate">{node.name}</span>
+            {/* Display alias only: the `Spaces/` mount renders lowercase to sit
+                with the other lowercase roots. The real runtime mount path stays
+                `Spaces/` everywhere — do NOT "fix" this into an actual rename. */}
+            <span className="truncate">
+              {node.path === "Spaces" ? "spaces" : node.name}
+            </span>
           </button>
         ) : (
           <button
@@ -972,17 +986,15 @@ export function ComposerWorkspaceEditor({
               <Trash2 className="mr-2 size-4" /> Delete
             </ContextMenuItem>
           ) : null}
-          {(canAddHere || canDetachThis || hasStdOps) &&
-          canJump &&
-          jumpEntry ? (
+          {(canAddHere || canDetachThis || hasStdOps) && canOpenSource ? (
             <ContextMenuSeparator />
           ) : null}
-          {canJump && jumpEntry ? (
+          {canOpenSource && jumpEntry ? (
             <ContextMenuItem
               onSelect={() => jumpToCause(jumpEntry)}
               data-testid={`menu-open-source-${node.path}`}
             >
-              {causeKind === "skill" ? "Open in capabilities" : "Open source"}
+              {openSourceLabel}
             </ContextMenuItem>
           ) : null}
         </ContextMenuContent>
@@ -1071,7 +1083,8 @@ export function ComposerWorkspaceEditor({
         >
           {treePanel}
         </ResizablePanel>
-        <ResizableHandle withHandle />
+        {/* Thin draggable divider (col-resize) — no visible grip handle. */}
+        <ResizableHandle />
         <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
           {selectedPath ? (
             (() => {

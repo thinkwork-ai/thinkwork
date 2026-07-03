@@ -317,6 +317,13 @@ describe("skill-folder decoration (item 3)", () => {
     expect(focusRowMock).toHaveBeenCalledWith("skill", "approve-receipt");
   });
 
+  it("renders the Spaces mount lowercase as a display alias (real path unchanged)", async () => {
+    renderEditor();
+    const row = await screen.findByTestId("tree-node-Spaces");
+    // Display-only: the label reads "spaces" while the node path stays "Spaces".
+    expect(within(row).getByText("spaces")).toBeTruthy();
+  });
+
   it("leaves active skill folders undecorated", async () => {
     const skillStateBySlug = new Map<string, SkillNodeState>([
       ["approve-receipt", { active: true, reason: null }],
@@ -474,14 +481,13 @@ describe("jump-to-cause (KTD-5)", () => {
     ).toBeNull();
   });
 
-  it("skill nodes focus their capability row via the menu", async () => {
+  it("skill nodes have NO capability-sheet menu entry (gate badge handles focus)", async () => {
     renderEditor();
     await screen.findByTestId("tree-node-skills/approve-receipt");
-    fireEvent.click(
-      screen.getByTestId("menu-open-source-skills/approve-receipt"),
-    );
-    expect(focusRowMock).toHaveBeenCalledWith("skill", "approve-receipt");
-    expect(navigateMock).not.toHaveBeenCalled();
+    // No "Open in capabilities" / open-source entry on skill nodes.
+    expect(
+      screen.queryByTestId("menu-open-source-skills/approve-receipt"),
+    ).toBeNull();
   });
 
   it("generated agent files navigate to the agent workspace editor", async () => {
