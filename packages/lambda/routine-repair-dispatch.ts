@@ -23,8 +23,8 @@
  * cannot fan out a wakeup storm.
  */
 
-import { and, eq, gte, inArray } from "drizzle-orm";
-import { getDb, schema } from "@thinkwork/database-pg";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { ensureThreadForWork, getDb, schema } from "@thinkwork/database-pg";
 
 const {
   routines,
@@ -32,6 +32,7 @@ const {
   agentWakeupRequests,
   agents,
   inboxItems,
+  tenantMembers,
 } = schema;
 
 export const REPAIR_BUDGET_PER_DAY = 3;
@@ -58,6 +59,8 @@ export interface RepairDispatchResult {
 export interface RepairDispatchDeps {
   database?: ReturnType<typeof getDb>;
   now?: () => Date;
+  /** Injectable for tests; defaults to ensureThreadForWork. */
+  ensureThread?: typeof ensureThreadForWork;
 }
 
 export function utcDayStart(now: Date): Date {
@@ -259,16 +262,47 @@ export async function dispatchRoutineRepair(
     return { status: "skipped", reason: "no_platform_agent" };
   }
 
-  const payload = buildRoutineRepairWakeupPayload({
-    routineId: input.routineId,
-    routineName: input.routineName,
-    executionId: input.executionId,
-    failingSha: input.failingSha,
-    lastValidatedSha: input.lastValidatedSha,
-    errorClass: input.errorClass,
-    errorSummary: input.errorSummary,
-    budgetRemaining,
+  // The Pi runtime requires a thread and a human invoker identity on every
+  // invocation. Repairs run on behalf of the tenant's earliest active
+  // operator (the same delegation scheduled Automations use), in a
+  // dedicated thread so the repair conversation is visible and linkable
+  // from the repair log.
+  const [operator] = await db
+    .select({ principal_id: tenantMembers.principal_id })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenant_id, input.tenantId),
+        eq(tenantMembers.status, "active"),
+        inArray(tenantMembers.role, ["owner", "admin"]),
+      ),
+    )
+    .orderBy(asc(tenantMembers.created_at))
+    .limit(1);
+  if (!operator) {
+    return { status: "skipped", reason: "no_operator_identity" };
+  }
+  const thread = await (deps.ensureThread ?? ensureThreadForWork)({
+    tenantId: input.tenantId,
+    agentId: platformAgent.id,
+    userId: operator.principal_id,
+    title: `Routine repair: ${input.routineName}`,
+    channel: "schedule",
   });
+
+  const payload = {
+    ...buildRoutineRepairWakeupPayload({
+      routineId: input.routineId,
+      routineName: input.routineName,
+      executionId: input.executionId,
+      failingSha: input.failingSha,
+      lastValidatedSha: input.lastValidatedSha,
+      errorClass: input.errorClass,
+      errorSummary: input.errorSummary,
+      budgetRemaining,
+    }),
+    threadId: thread.threadId,
+  };
 
   const [wakeup] = await db
     .insert(agentWakeupRequests)
@@ -281,7 +315,8 @@ export async function dispatchRoutineRepair(
       payload,
       status: "queued",
       idempotency_key: `routine-repair:${input.routineId}:${input.executionId}`,
-      requested_by_actor_type: "system",
+      requested_by_actor_type: "user",
+      requested_by_actor_id: operator.principal_id,
       requested_at: now,
       created_at: now,
     })

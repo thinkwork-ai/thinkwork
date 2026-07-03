@@ -21,11 +21,15 @@ const {
   agentWakeupRequests,
   agents,
   inboxItems,
+  tenantMembers,
 } = schema;
 
 const TENANT = "00000000-0000-4000-8000-000000000001";
 const ROUTINE_ID = "11111111-1111-4111-8111-111111111111";
 const AGENT_ID = "55555555-5555-4555-8555-555555555555";
+const OPERATOR_ID = "44444444-4444-4444-8444-444444444444";
+const fakeEnsureThread = async () =>
+  ({ threadId: "thread-77", identifier: "TICK-77", created: true }) as never;
 const NOW = new Date("2026-07-03T18:00:00Z");
 
 function fakeDb(state: {
@@ -34,6 +38,7 @@ function fakeDb(state: {
   wakeups?: Record<string, unknown>[];
   agents?: Record<string, unknown>[];
   inbox?: Record<string, unknown>[];
+  members?: Record<string, unknown>[];
 }) {
   const inserts: { table: unknown; values: Record<string, unknown> }[] = [];
   const updates: { table: unknown; set: Record<string, unknown> }[] = [];
@@ -43,6 +48,8 @@ function fakeDb(state: {
     if (table === agentWakeupRequests) return state.wakeups ?? [];
     if (table === agents) return state.agents ?? [];
     if (table === inboxItems) return state.inbox ?? [];
+    if (table === tenantMembers)
+      return state.members ?? [{ principal_id: OPERATOR_ID }];
     return [];
   };
   const db = {
@@ -51,6 +58,7 @@ function fakeDb(state: {
         const result = rowsFor(table);
         const chain = {
           where: () => chain,
+          orderBy: () => chain,
           limit: (n: number) => Promise.resolve(result.slice(0, n)),
           then: (resolve: (rows: unknown[]) => void) => resolve(result),
         };
@@ -139,6 +147,7 @@ describe("dispatchRoutineRepair", () => {
     const result = await dispatchRoutineRepair(dispatchInput(), {
       database: db as never,
       now: () => NOW,
+      ensureThread: fakeEnsureThread as never,
     });
     expect(result.status).toBe("wakeup_enqueued");
     expect(result.budgetRemaining).toBe(REPAIR_BUDGET_PER_DAY);
@@ -149,7 +158,14 @@ describe("dispatchRoutineRepair", () => {
       source: "routine_repair",
       status: "queued",
       idempotency_key: `routine-repair:${ROUTINE_ID}:exec-9`,
+      // Pi requires a thread + human invoker: repairs run on behalf of the
+      // tenant's earliest active operator in a dedicated thread.
+      requested_by_actor_type: "user",
+      requested_by_actor_id: OPERATOR_ID,
     });
+    expect((wakeup?.values.payload as Record<string, unknown>).threadId).toBe(
+      "thread-77",
+    );
   });
 
   it("disables the routine and notifies the operator when the budget is spent (AE4)", async () => {
@@ -166,6 +182,7 @@ describe("dispatchRoutineRepair", () => {
     const result = await dispatchRoutineRepair(dispatchInput(), {
       database: db as never,
       now: () => NOW,
+      ensureThread: fakeEnsureThread as never,
     });
     expect(result.status).toBe("disabled");
     const disable = updates.find(
