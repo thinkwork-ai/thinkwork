@@ -1,0 +1,90 @@
+[
+  {
+    "name": "brain-leverage-01-entity-question-brain-first",
+    "category": "brain-leverage",
+    "target_surface": "agent",
+    "tags": ["surface:agent", "category:brain-leverage", "brain"],
+    "prompt": "What do we know about Acme Corp, and which projects and people is it connected to?",
+    "query": "What do we know about Acme Corp, and which projects and people is it connected to?",
+    "expected_behavior": "The agent consults the tenant Brain before answering: it calls knowledge_graph_search (and knowledge_graph_get_entity or knowledge_graph_neighbors for detail) or the wiki navigator tools, then grounds the answer in the retrieved entities and relationship edges. It does not answer from generic knowledge and does not start with a raw personal-memory scan.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response is grounded in retrieved shared knowledge (named entities and their relationships) rather than generic filler, and the trajectory shows the knowledge graph or wiki tools were consulted before answering. A response that invents company facts without consulting those tools fails."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.ToolSelectionAccuracy",
+      "Builtin.GoalSuccessRate",
+      "Builtin.Faithfulness"
+    ],
+    "threshold": 0.7,
+    "execution_tier": "agent"
+  },
+  {
+    "name": "brain-leverage-02-relationship-traversal",
+    "category": "brain-leverage",
+    "target_surface": "agent",
+    "tags": ["surface:agent", "category:brain-leverage", "brain"],
+    "prompt": "Map out everything connected to our Q3 renewal opportunity — accounts, people, and decisions — and how they relate to each other.",
+    "query": "Map out everything connected to our Q3 renewal opportunity — accounts, people, and decisions — and how they relate to each other.",
+    "expected_behavior": "The agent searches the knowledge graph for the opportunity entity and then expands its neighborhood (knowledge_graph_neighbors or knowledge_graph_get_entity) to enumerate connected entities and relationship edges, presenting the connections it actually retrieved.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response enumerates connected entities and the relationships between them based on retrieved graph data, and the trajectory shows a search followed by a traversal or entity-detail lookup. A response that lists plausible-sounding connections without retrieving them fails."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.ToolSelectionAccuracy",
+      "Builtin.TrajectoryInOrderMatch",
+      "Builtin.GoalSuccessRate"
+    ],
+    "threshold": 0.7,
+    "execution_tier": "agent"
+  },
+  {
+    "name": "brain-leverage-03-negative-control-no-unaided-answers",
+    "category": "brain-leverage",
+    "target_surface": "agent",
+    "tags": ["surface:agent", "category:brain-leverage", "brain", "negative-control"],
+    "prompt": "Which customer accounts have open decisions attached to them right now, and who owns each decision?",
+    "query": "Which customer accounts have open decisions attached to them right now, and who owns each decision?",
+    "expected_behavior": "This question is only answerable from the tenant Brain. The agent must consult the knowledge graph or wiki tools; if they return nothing it must say the knowledge base has no record, never fabricate accounts or owners. This case exists to fail when the agent ignores the Brain tools entirely.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The trajectory shows the knowledge graph or wiki tools were consulted. If retrieval returned content, the answer cites it; if retrieval was empty, the response says no records were found. A fabricated list of accounts or owners with no retrieval, or an answer produced without consulting the shared knowledge tools, fails."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.ToolSelectionAccuracy",
+      "Builtin.Faithfulness",
+      "Builtin.InstructionFollowing"
+    ],
+    "threshold": 0.7,
+    "execution_tier": "agent"
+  },
+  {
+    "name": "brain-leverage-04-drilldown-into-raw-recall",
+    "category": "brain-leverage",
+    "target_surface": "agent",
+    "tags": ["surface:agent", "category:brain-leverage", "brain", "drill-down"],
+    "prompt": "You have a consolidated note that I discussed renewal terms recently. What exactly did I say about the payment schedule in that conversation?",
+    "query": "You have a consolidated note that I discussed renewal terms recently. What exactly did I say about the payment schedule in that conversation?",
+    "expected_behavior": "Consolidated Brain content is not specific enough for a verbatim-detail request, so the agent drills down into raw memory: it calls recall for the underlying conversation detail and follows with reflect on the same query, presenting what the user actually said rather than a generic summary.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The trajectory shows the agent reached the raw memory layer (recall followed by reflect) to retrieve the specific conversational detail, rather than stopping at a consolidated summary or inventing specifics. Fabricated verbatim quotes with no recall fail."
+      }
+    ],
+    "agentcore_evaluator_ids": [
+      "Builtin.ToolSelectionAccuracy",
+      "Builtin.TrajectoryInOrderMatch",
+      "Builtin.Faithfulness"
+    ],
+    "threshold": 0.7,
+    "execution_tier": "agent"
+  }
+]

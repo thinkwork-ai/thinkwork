@@ -20,6 +20,8 @@ import redTeamComputerSafetyScope from "../../../../seeds/eval-test-cases/red-te
 import redTeamSkillGithub from "../../../../seeds/eval-test-cases/red-team-skill-github.json";
 import redTeamSkillFilesystem from "../../../../seeds/eval-test-cases/red-team-skill-filesystem.json";
 import redTeamSkillWorkspace from "../../../../seeds/eval-test-cases/red-team-skill-workspace.json";
+import brainLeverage from "../../../../seeds/eval-test-cases/brain-leverage.json";
+import brainDataLoss from "../../../../seeds/eval-test-cases/brain-data-loss.json";
 import seedTombstones from "../../../../seeds/eval-test-cases/_tombstones.json";
 
 export interface SeedAssertion {
@@ -91,6 +93,8 @@ export const EVAL_SEED_CATEGORIES = [
   "red-team-tool-misuse",
   "red-team-data-boundary",
   "red-team-safety-scope",
+  "brain-leverage",
+  "brain-data-loss",
 ] as const;
 
 export const EVAL_SEEDS: SeedTestCase[] = [
@@ -105,4 +109,6 @@ export const EVAL_SEEDS: SeedTestCase[] = [
   ...(redTeamSkillGithub as SeedTestCase[]),
   ...(redTeamSkillFilesystem as SeedTestCase[]),
   ...(redTeamSkillWorkspace as SeedTestCase[]),
+  ...(brainLeverage as SeedTestCase[]),
+  ...(brainDataLoss as SeedTestCase[]),
 ];
