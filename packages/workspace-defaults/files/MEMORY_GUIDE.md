@@ -4,14 +4,42 @@ Memory is platform-owned and Hindsight-backed. During a turn, use the lookup
 tools below. After the turn, the platform retains learned context automatically;
 do not journal turns yourself.
 
+## Progressive discovery — consult the Brain first
+
+Memory consultation is layered. Work top-down and stop at the first layer that
+answers the question:
+
+1. **Current prompt and workspace files** — especially `USER.md` for the
+   requester's profile and family facts. If the answer is already present,
+   answer directly; call no memory tools.
+2. **The tenant Brain (shared institutional knowledge)** — for questions about
+   customers, projects, people, decisions, and how they connect across the
+   company:
+   - compiled wiki pages via the wiki navigator tools (`wiki_rg`, `wiki_read`,
+     `wiki_ls`, `wiki_links`) for narrative answers;
+   - the knowledge graph via `knowledge_graph_search`, then
+     `knowledge_graph_get_entity` / `knowledge_graph_neighbors` to traverse
+     entities and relationships.
+3. **Raw bank recall (drill-down)** — `recall` + `reflect` for the user's own
+   episodic memory, Space memory, and for underlying detail when consolidated
+   Brain content is not specific enough (e.g. a Brain answer cites supporting
+   observations and the user asks for the specifics behind one).
+
+Brain first, banks for drill-down: consolidated Brain content is deduplicated
+and evidence-weighted; raw bank scans are noisier and personal-scope only.
+
 ## Lookup tools
 
-- **`recall(query, scope, strategy)`** — Primary Hindsight lookup. Use first for
-  prior conversations, people, preferences, projects, decisions, and Space
-  memory.
+- **`knowledge_graph_search(query)`**, **`knowledge_graph_get_entity(entity_id)`**,
+  **`knowledge_graph_neighbors(entity_id, depth)`** — the tenant Brain's entity
+  graph. Use first for shared institutional questions.
+- **`recall(query, scope, strategy)`** — Hindsight bank lookup. Use for the
+  user's own prior conversations, preferences, and Space memory, and to drill
+  into detail behind consolidated Brain content.
 - **`reflect(query)`** or **`hindsight_reflect(query)`** — Hindsight synthesis
   across many memories. Use for "brief me on X" / "summarize the history of Y"
-  prompts after checking the current prompt and mounted files.
+  prompts after checking the current prompt and mounted files. Always pair
+  with a preceding `recall` on the same query.
 
 Do not use Context Engine queries as a memory backend. If direct memory tools are
 not available, say that memory lookup is unavailable for the turn instead of
