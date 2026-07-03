@@ -19,6 +19,7 @@ import {
 import { rollbackThreadIdleLearningRun } from "./rollbackThreadIdleLearningRun.mutation.js";
 import { spaceMemorySearch } from "./spaceMemorySearch.query.js";
 import { memoryRetainAttempts } from "./memoryRetainAttempts.query.js";
+import { brainDreamRuns } from "./brainDreamRuns.query.js";
 
 export const memoryQueries = {
   memoryRecords,
@@ -27,6 +28,7 @@ export const memoryQueries = {
   memoryGraph,
   memorySystemConfig,
   memoryRetainAttempts,
+  brainDreamRuns,
   mobileMemoryCaptures,
   mobileMemorySearch,
   mobileWikiSearch,

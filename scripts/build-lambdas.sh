@@ -237,6 +237,8 @@ build_handler "thread-idle-memory-learning" \
   "$REPO_ROOT/packages/api/src/handlers/thread-idle-memory-learning.ts"
 build_handler "requester-memory-dreaming" \
   "$REPO_ROOT/packages/api/src/handlers/requester-memory-dreaming.ts"
+build_handler "brain-dream-state" \
+  "$REPO_ROOT/packages/api/src/handlers/brain-dream-state.ts"
 
 build_handler "connector-poller" \
   "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"

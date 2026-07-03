@@ -1287,45 +1287,45 @@ module "api" {
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
-  lambda_zips_dir                               = var.lambda_zips_dir
-  api_auth_secret                               = var.api_auth_secret
-  db_password                                   = var.db_password
-  bootstrap_credential_lease_kms_key_id         = var.bootstrap_credential_lease_kms_key_id
-  agentcore_pi_function_name                    = module.agentcore_pi.agentcore_pi_function_name
-  agentcore_pi_function_arn                     = module.agentcore_pi.agentcore_pi_function_arn
-  enable_agentcore_pi_invoke_policy             = true
-  hindsight_endpoint                            = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id                           = module.agentcore_memory.memory_id
-  memory_engine                                 = local.resolved_memory_engine
-  cognee_enabled                                = local.cognee_enabled
-  cognee_endpoint                               = local.cognee_enabled ? module.cognee[0].cognee_endpoint : ""
-  cognee_log_group_name                         = local.cognee_enabled ? module.cognee[0].cognee_log_group_name : ""
-  cognee_backend_mode                           = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : ""
-  cognee_cluster_arn                            = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : ""
-  cognee_service_name                           = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
-  cognee_worker_subnet_ids                      = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
-  cognee_worker_security_group_ids              = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
-  okf_efs_subnet_ids                            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
-  okf_efs_security_group_ids                    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
-  okf_efs_mount_target_ids                      = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
-  okf_efs_file_system_arn                       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
-  okf_efs_refresh_access_point_arn              = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
-  twenty_provisioned                            = local.twenty_provisioned
-  twenty_runtime_enabled                        = local.twenty_runtime_enabled
-  twenty_url                                    = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
-  twenty_alb_arn                                = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : ""
-  twenty_target_group_arn                       = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : ""
-  twenty_cluster_arn                            = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : ""
-  twenty_server_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : ""
-  twenty_worker_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
-  twenty_server_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
-  twenty_worker_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
-  admin_url                                     = local.end_user_app_url
-  docs_url                                      = "https://${module.docs_site.distribution_domain}"
-  www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
-  stripe_price_ids_json                         = var.stripe_price_ids_json
-  appsync_realtime_url                          = module.appsync.graphql_realtime_url
-  ecr_repository_url                            = module.agentcore_platform.ecr_repository_url
+  lambda_zips_dir                       = var.lambda_zips_dir
+  api_auth_secret                       = var.api_auth_secret
+  db_password                           = var.db_password
+  bootstrap_credential_lease_kms_key_id = var.bootstrap_credential_lease_kms_key_id
+  agentcore_pi_function_name            = module.agentcore_pi.agentcore_pi_function_name
+  agentcore_pi_function_arn             = module.agentcore_pi.agentcore_pi_function_arn
+  enable_agentcore_pi_invoke_policy     = true
+  hindsight_endpoint                    = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id                   = module.agentcore_memory.memory_id
+  memory_engine                         = local.resolved_memory_engine
+  cognee_enabled                        = local.cognee_enabled
+  cognee_endpoint                       = local.cognee_enabled ? module.cognee[0].cognee_endpoint : ""
+  cognee_log_group_name                 = local.cognee_enabled ? module.cognee[0].cognee_log_group_name : ""
+  cognee_backend_mode                   = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : ""
+  cognee_cluster_arn                    = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : ""
+  cognee_service_name                   = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
+  cognee_worker_subnet_ids              = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
+  cognee_worker_security_group_ids      = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
+  okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
+  okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  okf_efs_mount_target_ids              = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
+  okf_efs_file_system_arn               = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
+  okf_efs_refresh_access_point_arn      = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
+  twenty_provisioned                    = local.twenty_provisioned
+  twenty_runtime_enabled                = local.twenty_runtime_enabled
+  twenty_url                            = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
+  twenty_alb_arn                        = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : ""
+  twenty_target_group_arn               = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : ""
+  twenty_cluster_arn                    = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : ""
+  twenty_server_service_name            = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : ""
+  twenty_worker_service_name            = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
+  twenty_server_log_group_name          = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
+  twenty_worker_log_group_name          = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
+  admin_url                             = local.end_user_app_url
+  docs_url                              = "https://${module.docs_site.distribution_domain}"
+  www_url                               = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
+  stripe_price_ids_json                 = var.stripe_price_ids_json
+  appsync_realtime_url                  = module.appsync.graphql_realtime_url
+  ecr_repository_url                    = module.agentcore_platform.ecr_repository_url
   # Static truth for count gating: agentcore_platform's ECR repo is
   # unconditional, but its URL attribute is unknown until apply. The runner
   # additionally needs its image tag seeded (CI does this for repo-managed
@@ -1356,6 +1356,8 @@ module "api" {
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
+  brain_dream_state_enabled                     = var.brain_dream_state_enabled
+  brain_dream_state_schedule_expression         = var.brain_dream_state_schedule_expression
   # Per-user OAuth client credentials — fed to Secrets Manager in
   # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*
   # tfvars that already flow to the Cognito federated-signin module.

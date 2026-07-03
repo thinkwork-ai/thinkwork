@@ -63,6 +63,13 @@ export interface MemoryAdapter {
    */
   ensureBankConfigured?(ownerId: string): Promise<void>;
 
+  /**
+   * Drive the engine's native bank consolidation (dedupe, contradiction
+   * reconciliation, decay). Raw-bank-id variant used by the dream state
+   * (THINK-133 U4) and ops scripts.
+   */
+  consolidateBankById?(bankId: string): Promise<void>;
+
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
   inspectTenant?(
