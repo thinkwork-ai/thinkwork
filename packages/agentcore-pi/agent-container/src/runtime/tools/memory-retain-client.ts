@@ -59,6 +59,26 @@ export interface RetainPayloadInput {
   messages_history?: unknown;
   /** Active thread_turns.id for this invocation. Used as the retain ledger source key. */
   thread_turn_id?: unknown;
+  /** Eval harness marker (THINK-133 U3 / KTD-5). `true` explicitly suppresses retain. */
+  eval_mode?: unknown;
+  /** Invocation channel; `"eval"` explicitly suppresses retain. */
+  trigger_channel?: unknown;
+}
+
+/**
+ * Eval-origin check (KTD-5: eval traffic is stamped at the source). Eval
+ * invocations already carry `eval_mode: true` and `trigger_channel: "eval"`
+ * (see packages/api/src/lib/evals/agentcore-direct.ts). Retain suppression
+ * used to ride only on the implicit combination of `use_memory: false` and a
+ * missing userId — this makes it an explicit contract so a future eval
+ * variant that turns memory on cannot silently pollute real banks.
+ */
+export function isEvalTrafficPayload(payload: RetainPayloadInput): boolean {
+  return (
+    payload.eval_mode === true ||
+    payload.eval_mode === "true" ||
+    payload.trigger_channel === "eval"
+  );
 }
 
 export interface MemoryRetainRequest {
@@ -72,6 +92,10 @@ export interface MemoryRetainRequest {
     threadTurnId?: string;
     spaceId?: string;
     sourceEventKey?: string;
+    /** Belt-and-braces eval stamp: if suppression is ever bypassed, the
+     * retained document still carries the marker so downstream consumers
+     * (KG ingest, dream-state quarantine, backfill wipes) can filter it. */
+    evalTraffic?: boolean;
   };
 }
 
@@ -138,6 +162,7 @@ export function buildMemoryRetainRequest(
     metadata.sourceEventKey = `thread-turn:${threadTurnId}`;
   }
   if (spaceId) metadata.spaceId = spaceId;
+  if (isEvalTrafficPayload(payload)) metadata.evalTraffic = true;
 
   return {
     tenantId: identity.tenantId,
@@ -182,6 +207,12 @@ export async function retainConversation(
   // (which uses `optionalBoolean(payload.use_memory)` returning false unless
   // the value is exactly `true` or the string `"true"`).
   if (payload.use_memory !== true && payload.use_memory !== "true") {
+    return { retained: false };
+  }
+
+  // Explicit eval suppression (KTD-5): eval traffic must never retain into
+  // real banks, even if a future eval variant sets use_memory: true.
+  if (isEvalTrafficPayload(payload)) {
     return { retained: false };
   }
 

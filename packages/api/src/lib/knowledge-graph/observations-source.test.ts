@@ -91,6 +91,32 @@ describe("collectTenantObservationCandidates", () => {
     expect(batch.truncated).toBe(false);
   });
 
+  it("excludes eval-marked memory units in the bank query (THINK-133 U3)", async () => {
+    const { db, execute } = routeDb([
+      { match: "FROM users", rows: [[{ id: USER_A }]] },
+      {
+        match: "hindsight.memory_units",
+        rows: [
+          [
+            obsRow(
+              "00000000-0000-0000-0000-00000000000a",
+              "2026-06-09T01:00:00.000Z",
+            ),
+          ],
+        ],
+      },
+    ]);
+    await collectTenantObservationCandidates({
+      db,
+      tenantId: TENANT_ID,
+      cursors: new Map(),
+    });
+    const bankQuery = execute.mock.calls
+      .map((call) => JSON.stringify(call[0]?.queryChunks ?? call[0]))
+      .find((text) => text.includes("hindsight.memory_units"));
+    expect(bankQuery).toContain("evalTraffic");
+  });
+
   it("caps candidates per run and flags truncation", async () => {
     const rows = Array.from({ length: 3 }, (_, i) =>
       obsRow(

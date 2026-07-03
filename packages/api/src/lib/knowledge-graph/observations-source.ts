@@ -97,6 +97,7 @@ async function readBankObservations(args: {
 			  AND fact_type = 'observation'
 			  AND source_memory_ids IS NOT NULL
 			  AND array_length(source_memory_ids, 1) > 0
+			  AND COALESCE(metadata->>'evalTraffic', '') NOT IN ('true')
 			  AND (
 				date_trunc('milliseconds', COALESCE(updated_at, created_at)) > ${cursorTs.toISOString()}::timestamptz
 				OR (
