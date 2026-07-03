@@ -45,6 +45,7 @@ import {
   ListChecks,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "urql";
@@ -90,6 +91,7 @@ import {
   cn,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import {
   CapabilityGrantClass,
   CapabilityGrantScope,
@@ -314,6 +316,8 @@ export function SettingsCapabilities() {
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
   // Capability Side Sheet (v1.1 item 2): the list lives here now.
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Config sheet (Agent page merge U1): Default Agent settings on this surface.
+  const [configOpen, setConfigOpen] = useState(false);
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -1139,6 +1143,16 @@ export function SettingsCapabilities() {
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 rounded-md"
+            onClick={() => setConfigOpen(true)}
+            data-testid="open-config-sheet"
+          >
+            <SlidersHorizontal className="size-4" />
+            Config
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-md"
             onClick={() => setSheetOpen(true)}
             data-testid="open-capability-sheet"
           >
@@ -1280,6 +1294,15 @@ export function SettingsCapabilities() {
 
       {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
           detach controls, opened from the toolbar or via tree jump-to-cause. */}
+      <AgentConfigSheet
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        spaces={(spacesResult.data?.spaces ?? []).map((space) => ({
+          id: space.id,
+          name: space.name,
+        }))}
+      />
+
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="right"
