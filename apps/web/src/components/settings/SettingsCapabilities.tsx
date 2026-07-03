@@ -3,40 +3,30 @@
  * U4 + U8; renamed from "Capabilities" in Composer plan U3, KTD-6 — the
  * route path stays /settings/capabilities).
  *
- * One operator door: the effective merged capability set for a selection —
- * space, agent profile, perspective user — one tab per capability class,
- * with a per-row state chip (active / inactive+reason / degraded) and
- * provenance line. Point-in-time semantics: results carry `computedAt` and
- * are only refreshed by selection changes or the explicit refresh action.
+ * Composer v1.1 (product-owner feedback) reshapes the surface into a normal
+ * editor:
  *
- * The toolbar reuses the Work Items token-filter pattern: Space / Agent
- * profile / Perspective user are single-select tokens that drive the
- * inspector QUERY (clearing them returns to the tenant-wide no-user
- * baseline), while Search and State tokens filter the returned rows
- * client-side.
+ *   1. the main area is the rendered-workspace EDITOR SHELL
+ *      (`ComposerWorkspaceEditor`): a full-height file tree beside a real
+ *      CodeMirror pane, backed by the read-only `createComposerPreviewClient`
+ *      adapter over `workspacePreview` / `workspacePreviewFile`. File CONTENTS
+ *      stay read-only/derived; the U7 generated-file split view is preserved;
+ *   2. the capability LIST (class tabs + rows + attach/detach) moves into a
+ *      right Side Sheet opened from the toolbar. Jump-to-cause from a tree node
+ *      opens the Sheet scrolled/focused to the row (with the State/Search
+ *      tokens reset and the tab switched);
+ *   3. the tree and the list tell one story: skill folders are decorated with
+ *      their inspector state (active vs gated + verbatim reason), and the class
+ *      tab counts read active/total;
+ *   4. the tree offers direct manipulation via a context menu — "Detach skill…"
+ *      on a `skills/<slug>/` folder and "Add skill…" on the `skills/` folder —
+ *      both routed through the SAME grant/detach + confirm + sync-pending
+ *      machinery the Sheet rows use.
  *
- * Because the inspector already renders the tenant pool (catalog skills and
- * registered MCP servers appear as `not_installed` rows), inventory + grant
- * + confirmation live on the same view (U8, R10): attach on not-installed
- * rows, detach behind a destructive confirm on granted rows, and every
- * write ends on the touched item's FRESH inspector state returned by the
- * mutation (R12) — including an explicit "sync pending" phase that polls
- * until the S3 materialization is visible, never a false "not installed".
- *
- * Grant actions render only for the agent/agent-profile write scopes: a
- * space or perspective-user selection is a read lens, not a grant target
- * (R11). Pi-extension assignment (which needs version identity the
- * inspector rows don't carry) stays on the Agents → Extensions surface,
- * which calls the same grant/detach mutations.
- *
- * Composer plan U2 adds the result-tree pane: a live, read-only preview of
- * the rendered workspace for the same selection (profile-invariant — the
- * Profile chip scopes the controls pane only), refreshed after each
- * mutation confirmation resolves. Skill nodes jump-to-cause IN-PAGE: the
- * focus first resets the State/Search filter tokens and switches to the
- * target's capability-class tab, because the page defaults to Active-only
- * rows on one tab and the diagnose flow (F2) targets exactly the rows
- * those defaults hide.
+ * Point-in-time semantics are unchanged: results carry `computedAt` and refresh
+ * only on selection changes or the explicit refresh action; every write ends on
+ * the touched item's FRESH inspector state (R12), including the sync-pending
+ * phase that polls until the S3 materialization is visible.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +42,7 @@ import {
   Boxes,
   CircleDotDashed,
   Info,
+  ListChecks,
   RefreshCw,
   Search,
   UserRound,
@@ -77,10 +68,16 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   Input,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   Skeleton,
   Tabs,
   TabsList,
@@ -101,7 +98,10 @@ import {
   SettingsHeader,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-import { ComposerWorkspaceTree } from "@/components/settings/ComposerWorkspaceTree";
+import {
+  ComposerWorkspaceEditor,
+  type SkillNodeState,
+} from "@/components/settings/ComposerWorkspaceEditor";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -128,10 +128,6 @@ const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
   mcp_server: CapabilityGrantClass.McpServer,
 };
 
-// Hidden filter-table columns (Work Items token-filter pattern). The
-// search/state columns filter rows client-side; the space/profile/user
-// columns are SELECTION tokens — they drive the inspector query, so their
-// row predicate always matches.
 const FILTER_COLUMNS = {
   search: "filterSearch",
   state: "filterState",
@@ -140,9 +136,6 @@ const FILTER_COLUMNS = {
   user: "filterUser",
 } as const;
 
-// Post-attach S3 materialization race: poll the inspector briefly and show
-// "sync pending" until the workspace read confirms — never a false
-// "not installed" (plan U8).
 const SYNC_POLL_ATTEMPTS = 4;
 const SYNC_POLL_INTERVAL_MS = 1500;
 
@@ -216,7 +209,8 @@ function selectedOptionValue(
   columnId: string,
 ): string | null {
   const raw = filters.find((filter) => filter.id === columnId)?.value as
-    DataTableTokenFilterValue | undefined;
+    | DataTableTokenFilterValue
+    | undefined;
   if (!raw || raw.operator === "is_not" || raw.operator === "is_none_of") {
     return null;
   }
@@ -244,7 +238,6 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
     accessorFn: (item) => (item.active ? "active" : "inactive"),
     filterFn: dataTableTokenFilterFns.option,
   },
-  // Selection tokens: never filter rows — they change the query.
   { id: FILTER_COLUMNS.space, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.profile, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
@@ -252,8 +245,6 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
 
 export function SettingsCapabilities() {
   const { tenantId } = useTenant();
-  // Default view: active capabilities only — remove or edit the State
-  // token (or Clear) to see the inactive pool and gate reasons.
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
     {
       id: FILTER_COLUMNS.state,
@@ -267,13 +258,16 @@ export function SettingsCapabilities() {
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const syncPollCount = useRef(0);
-  // Result-tree refresh (U2, R5): bumped when a mutation confirmation
-  // resolves in a non-pending state — including sync-pending completion —
-  // so the preview refetches exactly once per settled write.
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
-  // In-page jump-to-cause target: the focused row renders highlighted and
-  // is scrolled into view after the filter/tab reset makes it visible.
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
+  // Capability Side Sheet (v1.1 item 2): the list lives here now.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // Tree context-menu targets (v1.1 item 4).
+  const [addSkillOpen, setAddSkillOpen] = useState(false);
+  const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
+  const [removingSkillSlug, setRemovingSkillSlug] = useState<string | null>(
+    null,
+  );
 
   const [spacesResult] = useQuery({
     query: SettingsSpacesListQuery,
@@ -291,8 +285,6 @@ export function SettingsCapabilities() {
     pause: !tenantId,
   });
 
-  // Selection tokens drive the QUERY; Clear resets to the tenant-wide
-  // no-user baseline.
   const spaceId = selectedOptionValue(columnFilters, FILTER_COLUMNS.space);
   const agentProfileId = selectedOptionValue(
     columnFilters,
@@ -443,22 +435,41 @@ export function SettingsCapabilities() {
     : [];
 
   // Grant/detach exist only at agent and agent-profile scope (R11): a
-  // space or perspective-user selection is a read lens. Derived from the
-  // response's echoed selection so actions always match the rows shown.
+  // space or perspective-user selection is a read lens.
   const writeScope = !result?.spaceId && !result?.perspectiveUserId;
   const grantScope = agentProfileId
     ? CapabilityGrantScope.AgentProfile
     : CapabilityGrantScope.Agent;
 
-  // Sync-pending resolution: keep polling until the touched row reads
-  // active (or attempts run out — then show the true current state).
+  // Skill-node decoration for the tree (v1.1 item 3): capability state keyed
+  // by slug (capabilityId), from the FULL inspector item set (filter-independent).
+  const skillStateBySlug = useMemo(() => {
+    const map = new Map<string, SkillNodeState>();
+    for (const item of items) {
+      if (item.capabilityClass !== "skill") continue;
+      map.set(item.capabilityId, {
+        active: item.active,
+        reason: item.reason ?? null,
+      });
+    }
+    return map;
+  }, [items]);
+
+  // The Add-skill pool (v1.1 item 4): every skill the inspector knows about
+  // that is not currently active-installed — not_installed catalog entries and
+  // gated-but-detachable entries, each with its state shown.
+  const addSkillPool = useMemo(
+    () =>
+      items.filter((item) => item.capabilityClass === "skill" && !item.active),
+    [items],
+  );
+
+  // Sync-pending resolution: keep polling until the touched row reads active.
   useEffect(() => {
     if (!confirmation?.syncPending) return;
     const row = items.find((item) => rowKeyOf(item) === confirmation.rowKey);
     if (row?.active) {
       setConfirmation({ ...confirmation, item: row, syncPending: false });
-      // Sync-pending completion: the materialization is visible — refetch
-      // the full preview so the tree's ghost node becomes the real folder.
       setPreviewRefreshToken((token) => token + 1);
       return;
     }
@@ -521,8 +532,6 @@ export function SettingsCapabilities() {
       return;
     }
     const fresh = (payload?.item as InspectorItem | null | undefined) ?? null;
-    // Applied grant whose fresh state still reads not_installed = the S3
-    // materialization race; anything else resolves immediately.
     const syncPending =
       action === "attach" &&
       payload?.outcome === "applied" &&
@@ -536,9 +545,6 @@ export function SettingsCapabilities() {
       item: fresh,
       syncPending,
     });
-    // Immediate preview refetch for settled writes; sync-pending writes
-    // refetch when the pending phase resolves (the tree shows an explicit
-    // pending affordance in between).
     if (!syncPending) {
       setPreviewRefreshToken((token) => token + 1);
     }
@@ -546,12 +552,11 @@ export function SettingsCapabilities() {
   }
 
   /**
-   * In-page jump-to-cause landing (U2, KTD-5): before highlighting, reset
-   * the State/Search filter tokens (keeping the Space/Profile/User
-   * SELECTION tokens — they drive the query the tree is showing) and switch
-   * to the target's capability-class tab. The page defaults to Active-only
-   * rows on one tab, and the diagnose flow targets exactly the rows those
-   * defaults hide.
+   * In-page jump-to-cause landing (U2, KTD-5; v1.1 item 2): open the Side
+   * Sheet, reset the State/Search filter tokens (keeping the Space/Profile/User
+   * SELECTION tokens — they drive the query), switch to the target's class tab,
+   * and focus the row. The page defaults to Active-only rows on one tab, and
+   * the diagnose flow targets exactly the rows those defaults hide.
    */
   function focusCapabilityRow(capabilityClass: string, capabilityId: string) {
     setColumnFilters((current) =>
@@ -563,25 +568,46 @@ export function SettingsCapabilities() {
     );
     setActiveClass(capabilityClass);
     setFocusedRowKey(`${capabilityClass}:${capabilityId}`);
+    setSheetOpen(true);
   }
 
-  // Scroll the focused row into view once the reset render makes it
-  // visible (scrollIntoView is absent in jsdom — guard the call).
   useEffect(() => {
-    if (!focusedRowKey) return;
+    if (!focusedRowKey || !sheetOpen) return;
     const row = document.querySelector(
       '[data-testid="capability-row-focused"]',
     );
     row?.scrollIntoView?.({ block: "center" });
-  }, [focusedRowKey, activeClass, columnFilters]);
+  }, [focusedRowKey, activeClass, columnFilters, sheetOpen]);
+
+  // Tree context-menu detach (v1.1 item 4): reuse the destructive confirm +
+  // the SAME detach mutation, showing a "removing…" ghost on the folder.
+  function requestDetachSkill(slug: string) {
+    const item = items.find(
+      (candidate) =>
+        candidate.capabilityClass === "skill" &&
+        candidate.capabilityId === slug,
+    );
+    if (item) setDetachTarget(item);
+  }
+
+  async function confirmDetachFromTree() {
+    if (!detachTarget) return;
+    const item = detachTarget;
+    setDetachTarget(null);
+    setRemovingSkillSlug(item.capabilityId);
+    await runMutation("detach", item);
+    setRemovingSkillSlug(null);
+  }
+
+  async function pickSkillToAdd(item: InspectorItem) {
+    setAddSkillOpen(false);
+    await runMutation("attach", item);
+  }
 
   function rowActions(item: InspectorItem) {
     if (!writeScope || !GRANT_CLASS[item.capabilityClass]) return null;
     const rowKey = rowKeyOf(item);
     const busy = pendingRow !== null;
-    // Attach targets the not-installed tenant pool the inspector already
-    // lists; the pool renders on the default-agent view only (a profile
-    // view lists just the profile's granted subset).
     if (!item.active && item.reason === "not_installed" && !agentProfileId) {
       return (
         <Button
@@ -639,8 +665,20 @@ export function SettingsCapabilities() {
     return null;
   }
 
-  // One tab per capability class, in fixed order, with active counts.
-  const byClass = useMemo(() => {
+  // Class grouping for tabs + rows. Tab COUNTS read active/total from the FULL
+  // item set (v1.1 item 3) so they're independent of the State filter; the
+  // visible rows come from the FILTERED set.
+  const allByClass = useMemo(() => {
+    const map = new Map<string, InspectorItem[]>();
+    for (const item of items) {
+      const list = map.get(item.capabilityClass) ?? [];
+      list.push(item);
+      map.set(item.capabilityClass, list);
+    }
+    return map;
+  }, [items]);
+
+  const filteredByClass = useMemo(() => {
     const map = new Map<string, InspectorItem[]>();
     for (const item of filteredItems) {
       const list = map.get(item.capabilityClass) ?? [];
@@ -651,7 +689,7 @@ export function SettingsCapabilities() {
   }, [filteredItems]);
 
   const tabClasses = useMemo(() => {
-    const present = [...byClass.keys()];
+    const present = [...allByClass.keys()];
     const ordered = CLASS_ORDER.filter(
       (capabilityClass) =>
         present.includes(capabilityClass) ||
@@ -662,12 +700,12 @@ export function SettingsCapabilities() {
       if (!ordered.includes(capabilityClass)) ordered.push(capabilityClass);
     }
     return ordered;
-  }, [byClass]);
+  }, [allByClass]);
 
   const activeTab = tabClasses.includes(activeClass)
     ? activeClass
     : (tabClasses[0] ?? "skill");
-  const visibleItems = byClass.get(activeTab) ?? [];
+  const visibleItems = filteredByClass.get(activeTab) ?? [];
 
   const searchToken = columnFilters.find(
     (filter) => filter.id === FILTER_COLUMNS.search,
@@ -693,9 +731,6 @@ export function SettingsCapabilities() {
     });
   }
 
-  // Divergence summary (U13, R15): asserted only on fingerprint equality
-  // (KTD-3) — a fingerprint mismatch renders as "config changed", never
-  // as divergent.
   function divergenceChip() {
     if (!divergence) return null;
     if (divergence.state === "in_sync") {
@@ -738,18 +773,18 @@ export function SettingsCapabilities() {
     );
   }
 
-  // Post-attach sync window (U2): surface the affected skill folder in the
-  // tree as an explicit pending node instead of a frozen view.
+  // Post-attach sync window (U2): surface the affected skill folder in the tree
+  // as an explicit pending node instead of a frozen view.
   const pendingSkillSlug =
     confirmation?.syncPending && confirmation.rowKey.startsWith("skill:")
       ? confirmation.rowKey.slice("skill:".length)
       : null;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-6">
       <SettingsHeader
         title="Composer"
-        description="What the platform agent will actually get for a selection — every skill, tool, MCP server, extension, and plugin with its provenance and, when inactive, the exact gate that dropped it. Attach from the tenant pool or detach directly; every action ends on the item's live state."
+        description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
       />
 
       <div
@@ -768,6 +803,16 @@ export function SettingsCapabilities() {
           popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
         />
         <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-md"
+            onClick={() => setSheetOpen(true)}
+            data-testid="open-capability-sheet"
+          >
+            <ListChecks className="size-4" />
+            Capabilities
+          </Button>
           <Button
             variant="outline"
             size="icon-sm"
@@ -794,9 +839,10 @@ export function SettingsCapabilities() {
               <DialogHeader>
                 <DialogTitle>What this view shows</DialogTitle>
                 <DialogDescription>
-                  The effective capability set the platform agent would get for
-                  the current selection, computed through the same resolver the
-                  runtime uses.
+                  The rendered workspace the platform agent would mount for the
+                  current selection, computed through the same resolver the
+                  runtime uses. Open the capability list for the full effective
+                  set and its gate reasons.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2 text-sm" data-testid="view-info-body">
@@ -830,11 +876,10 @@ export function SettingsCapabilities() {
                   {searchValue ? ` · search "${searchValue}"` : ""}
                 </p>
                 <p className="text-muted-foreground">
-                  Inactive rows carry the exact gate that dropped them (trust
-                  gate, eval gate, OAuth, plugin activation, policy…) and the
-                  tenant pool appears as not_installed rows you can attach.
-                  Every attach/detach ends on the item&apos;s fresh post-write
-                  state.
+                  Skill folders in the tree carry their capability state —
+                  active or the exact gate that dropped them (trust gate, eval
+                  gate, OAuth, policy…). The capability list adds every other
+                  class and the not-installed tenant pool you can attach.
                 </p>
                 {predicted ? (
                   <p className="text-muted-foreground">
@@ -884,152 +929,269 @@ export function SettingsCapabilities() {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-6 lg:flex-row">
-        {/* Result tree (U2, R1/R2): live read-only preview of the rendered
-            workspace for this selection. Profile-invariant by design — the
-            Profile token is deliberately NOT passed (R4). */}
-        <div className="min-w-0 lg:w-[24rem] lg:shrink-0">
-          <ComposerWorkspaceTree
-            tenantId={tenantId ?? ""}
-            spaceId={spaceId}
-            perspectiveUserId={perspectiveUserId}
-            refreshToken={previewRefreshToken}
-            pendingSkillSlug={pendingSkillSlug}
-            onFocusCapabilityRow={focusCapabilityRow}
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          {loading ? (
-            <div className="space-y-3" data-testid="capability-loading">
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-            </div>
-          ) : inspection.error ? (
-            <p className="text-sm text-destructive">
-              Couldn&apos;t load the capability set: {inspection.error.message}
-            </p>
-          ) : result?.state === "invalid_selection" ? (
-            <p
-              className="text-sm text-destructive"
-              data-testid="invalid-selection"
-            >
-              Invalid selection: {result.stateDetail}
-            </p>
-          ) : result?.state === "resolution_fault" ? (
-            <p
-              className="text-sm text-destructive"
-              data-testid="resolution-fault"
-            >
-              Resolution fault — this selection could not be composed:{" "}
-              {result.stateDetail}
-            </p>
-          ) : predicted ? (
-            <>
-              <Tabs value={activeTab} onValueChange={setActiveClass}>
-                <TabsList className="mb-3 flex-wrap">
-                  {tabClasses.map((capabilityClass) => {
-                    const classItems = byClass.get(capabilityClass) ?? [];
-                    const activeCount = classItems.filter(
-                      (item) => item.active,
-                    ).length;
-                    return (
-                      <TabsTrigger
-                        key={capabilityClass}
-                        value={capabilityClass}
-                        data-testid={`capability-tab-${capabilityClass}`}
-                      >
-                        {CLASS_LABELS[capabilityClass] ?? capabilityClass}
-                        <span className="ml-1.5 text-xs font-semibold text-primary">
-                          {activeCount}
-                        </span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
-              </Tabs>
-
-              <SettingsSection>
-                {visibleItems.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-muted-foreground">
-                    Nothing in this category for the current selection.
-                  </p>
-                ) : (
-                  visibleItems.map((item) => (
-                    <div
-                      key={rowKeyOf(item)}
-                      className={cn(
-                        "flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0",
-                        focusedRowKey === rowKeyOf(item) &&
-                          "bg-primary/5 ring-1 ring-inset ring-primary/40",
-                      )}
-                      data-testid={
-                        focusedRowKey === rowKeyOf(item)
-                          ? "capability-row-focused"
-                          : "capability-row"
-                      }
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                          {item.displayName || item.capabilityId}
-                        </p>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {item.tokenStatus ? (
-                            <Badge
-                              variant="outline"
-                              className="text-muted-foreground"
-                            >
-                              token: {item.tokenStatus}
-                            </Badge>
-                          ) : null}
-                          {deltaByRowKey.has(rowKeyOf(item)) ? (
-                            <Badge
-                              variant="destructive"
-                              data-testid={`delta-${rowKeyOf(item)}`}
-                            >
-                              not loaded last turn
-                            </Badge>
-                          ) : null}
-                          {stateChip(item)}
-                          {rowActions(item)}
-                        </div>
-                      </div>
-                      {item.provenance ? (
-                        <p className="text-xs text-muted-foreground">
-                          {item.provenance}
-                        </p>
-                      ) : null}
-                      {item.detail ? (
-                        <p className="text-xs text-muted-foreground">
-                          {item.detail}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </SettingsSection>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  Computed {new Date(predicted.computedAt).toLocaleString()} ·
-                  fingerprint{" "}
-                  <span className="font-mono">
-                    {predicted.configFingerprint.slice(0, 12)}
-                  </span>
-                </span>
-                {divergenceChip()}
-                {extraInObserved.length > 0 ? (
-                  <span data-testid="extra-in-observed">
-                    +{extraInObserved.length} loaded at runtime only:{" "}
-                    {extraInObserved
-                      .map((delta) => delta.capabilityId)
-                      .join(", ")}
-                  </span>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-        </div>
+      {/* The Composer editor shell (v1.1 item 1): the rendered workspace as a
+          normal left-tree + CodeMirror editor. Profile-invariant by design —
+          the Profile token is deliberately NOT passed (R4). */}
+      <div className="h-[calc(100vh-18rem)] min-h-[28rem]">
+        <ComposerWorkspaceEditor
+          tenantId={tenantId ?? ""}
+          spaceId={spaceId}
+          perspectiveUserId={perspectiveUserId}
+          refreshToken={previewRefreshToken}
+          pendingSkillSlug={pendingSkillSlug}
+          removingSkillSlug={removingSkillSlug}
+          onFocusCapabilityRow={focusCapabilityRow}
+          skillStateBySlug={skillStateBySlug}
+          canManageSkills={writeScope}
+          onAddSkill={!agentProfileId ? () => setAddSkillOpen(true) : undefined}
+          onDetachSkill={requestDetachSkill}
+        />
       </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        {predicted ? (
+          <span>
+            Computed {new Date(predicted.computedAt).toLocaleString()} ·
+            fingerprint{" "}
+            <span className="font-mono">
+              {predicted.configFingerprint.slice(0, 12)}
+            </span>
+          </span>
+        ) : null}
+        {divergenceChip()}
+        {extraInObserved.length > 0 ? (
+          <span data-testid="extra-in-observed">
+            +{extraInObserved.length} loaded at runtime only:{" "}
+            {extraInObserved.map((delta) => delta.capabilityId).join(", ")}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
+          detach controls, opened from the toolbar or via tree jump-to-cause. */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+          data-testid="capability-sheet"
+        >
+          <SheetHeader className="border-b px-4 py-3">
+            <SheetTitle>Capabilities</SheetTitle>
+            <SheetDescription>
+              The effective set for this selection — every class, with the exact
+              gate on inactive rows. Attach from the tenant pool or detach
+              directly.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            {loading ? (
+              <div className="space-y-3" data-testid="capability-loading">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            ) : inspection.error ? (
+              <p className="text-sm text-destructive">
+                Couldn&apos;t load the capability set:{" "}
+                {inspection.error.message}
+              </p>
+            ) : result?.state === "invalid_selection" ? (
+              <p
+                className="text-sm text-destructive"
+                data-testid="invalid-selection"
+              >
+                Invalid selection: {result.stateDetail}
+              </p>
+            ) : result?.state === "resolution_fault" ? (
+              <p
+                className="text-sm text-destructive"
+                data-testid="resolution-fault"
+              >
+                Resolution fault — this selection could not be composed:{" "}
+                {result.stateDetail}
+              </p>
+            ) : predicted ? (
+              <>
+                <Tabs value={activeTab} onValueChange={setActiveClass}>
+                  <TabsList className="mb-3 flex-wrap">
+                    {tabClasses.map((capabilityClass) => {
+                      const classItems = allByClass.get(capabilityClass) ?? [];
+                      const activeCount = classItems.filter(
+                        (item) => item.active,
+                      ).length;
+                      return (
+                        <TabsTrigger
+                          key={capabilityClass}
+                          value={capabilityClass}
+                          data-testid={`capability-tab-${capabilityClass}`}
+                        >
+                          {CLASS_LABELS[capabilityClass] ?? capabilityClass}
+                          {/* Active/total (v1.1 item 3): "Skills 2/27". */}
+                          <span className="ml-1.5 text-xs font-semibold text-primary">
+                            {activeCount}/{classItems.length}
+                          </span>
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </Tabs>
+
+                <SettingsSection>
+                  {visibleItems.length === 0 ? (
+                    <p className="px-4 py-6 text-sm text-muted-foreground">
+                      Nothing in this category for the current selection.
+                    </p>
+                  ) : (
+                    visibleItems.map((item) => (
+                      <div
+                        key={rowKeyOf(item)}
+                        className={cn(
+                          "flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0",
+                          focusedRowKey === rowKeyOf(item) &&
+                            "bg-primary/5 ring-1 ring-inset ring-primary/40",
+                        )}
+                        data-testid={
+                          focusedRowKey === rowKeyOf(item)
+                            ? "capability-row-focused"
+                            : "capability-row"
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                            {item.displayName || item.capabilityId}
+                          </p>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {item.tokenStatus ? (
+                              <Badge
+                                variant="outline"
+                                className="text-muted-foreground"
+                              >
+                                token: {item.tokenStatus}
+                              </Badge>
+                            ) : null}
+                            {deltaByRowKey.has(rowKeyOf(item)) ? (
+                              <Badge
+                                variant="destructive"
+                                data-testid={`delta-${rowKeyOf(item)}`}
+                              >
+                                not loaded last turn
+                              </Badge>
+                            ) : null}
+                            {stateChip(item)}
+                            {rowActions(item)}
+                          </div>
+                        </div>
+                        {item.provenance ? (
+                          <p className="text-xs text-muted-foreground">
+                            {item.provenance}
+                          </p>
+                        ) : null}
+                        {item.detail ? (
+                          <p className="text-xs text-muted-foreground">
+                            {item.detail}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                </SettingsSection>
+              </>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Add-skill picker (v1.1 item 4): the not-installed / gated tenant pool. */}
+      <Dialog open={addSkillOpen} onOpenChange={setAddSkillOpen}>
+        <DialogContent data-testid="add-skill-dialog">
+          <DialogHeader>
+            <DialogTitle>Add a skill</DialogTitle>
+            <DialogDescription>
+              Skills in the tenant pool that aren&apos;t installed on this
+              agent. Attaching ends on the skill&apos;s live state — an honest
+              gate reason shows if it&apos;s held.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            {addSkillPool.length === 0 ? (
+              <p className="px-1 py-6 text-sm text-muted-foreground">
+                Every catalog skill is already installed for this selection.
+              </p>
+            ) : (
+              addSkillPool.map((item) => (
+                <div
+                  key={rowKeyOf(item)}
+                  className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                  data-testid={`add-skill-row-${item.capabilityId}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {item.displayName || item.capabilityId}
+                    </p>
+                    {item.detail ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.detail}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {stateChip(item)}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pendingRow !== null}
+                      onClick={() => void pickSkillToAdd(item)}
+                      data-testid={`add-skill-pick-${item.capabilityId}`}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddSkillOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tree context-menu detach confirm (v1.1 item 4): the SAME destructive
+          gate the Sheet rows use, driving the SAME detach mutation. */}
+      <AlertDialog
+        open={detachTarget !== null}
+        onOpenChange={(open) => !open && setDetachTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Detach {detachTarget?.displayName || detachTarget?.capabilityId}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes the installed skill folder from the agent workspace and
+              strips its CONTEXT.md wiring. The post-detach state is shown
+              before you leave.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pendingRow !== null}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pendingRow !== null}
+              onClick={() => void confirmDetachFromTree()}
+              data-testid="tree-detach-confirm"
+            >
+              Detach
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
