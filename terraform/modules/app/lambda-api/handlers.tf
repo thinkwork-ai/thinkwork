@@ -354,6 +354,10 @@ locals {
       # maximum_concurrency (eval-fanout.tf) — FIFO delivers at most one
       # in-flight message per group, so lanes < concurrency wastes workers.
       EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS = "40"
+      # Anthropic models run under a 10 RPM Bedrock quota in this account
+      # (quota increase PENDING) — pace their runs onto few lanes so they
+      # finish cleanly instead of throttling out. See evalLaneCountForModel.
+      EVAL_ANTHROPIC_MESSAGE_SHARDS = "2"
       # SSM parameter name for the Pi Bedrock AgentCore Runtime ID. deploy.yml's
       # runtime update job writes this in `update-agentcore-runtime-image.sh`;
       # eval-runner reads it via `loadRuntimeId(runtimeType)`.
