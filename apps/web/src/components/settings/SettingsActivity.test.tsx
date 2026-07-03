@@ -161,9 +161,9 @@ vi.mock("recharts", () => ({
       aria-label="Select May 31"
       type="button"
       onClick={() =>
-        onClick?.({
-          activePayload: [{ payload: { day: "2026-05-31" } }],
-        })
+        // recharts v3 click param: the clicked category value is on
+        // `activeLabel` (v2's `activePayload` was removed).
+        onClick?.({ activeLabel: "2026-05-31" })
       }
     >
       {children}
