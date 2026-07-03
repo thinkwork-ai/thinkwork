@@ -46,6 +46,26 @@ const searchPayload = {
   },
 };
 
+const entityDetailPayload = (field: string) => ({
+  data: {
+    [field]: {
+      entities: [
+        {
+          id: "e1",
+          label: "Acme Corp",
+          typeSlug: "company",
+          summary: "Customer.",
+          aliases: ["Acme"],
+          relationshipCount: 2,
+          evidenceCount: 3,
+          observationIds: ["obs-1"],
+        },
+      ],
+      relationships: [],
+    },
+  },
+});
+
 describe("createApiKnowledgeGraphProvider", () => {
   it("throws at construction when wiring is incomplete (snapshot-at-entry, fail loud)", () => {
     expect(() =>
@@ -212,5 +232,65 @@ describe("createApiKnowledgeGraphProvider", () => {
     });
     const result = await provider.search({ query: "Acme" });
     expect(result).toEqual({ entities: [], relationships: [] });
+  });
+
+  it("getEntity posts the knowledgeGraphGetEntity operation with the same turn-bound envelope", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(entityDetailPayload("knowledgeGraphGetEntity")),
+      );
+    const provider = createApiKnowledgeGraphProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.getEntity({ entityId: "e1" });
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers.authorization).toBe("Bearer service-secret");
+    expect(headers["x-thread-turn-id"]).toBe(baseOptions.threadTurnId);
+    expect(headers["x-tenant-id"]).toBeUndefined();
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.query).toContain("knowledgeGraphGetEntity");
+    expect(body.variables).toEqual({ entityId: "e1" });
+    expect(result.entities[0]?.id).toBe("e1");
+  });
+
+  it("neighbors posts the knowledgeGraphNeighbors operation with depth", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(entityDetailPayload("knowledgeGraphNeighbors")),
+      );
+    const provider = createApiKnowledgeGraphProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+
+    const result = await provider.neighbors({ entityId: "e1", depth: 2 });
+
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.query).toContain("knowledgeGraphNeighbors");
+    expect(body.variables).toEqual({ entityId: "e1", depth: 2 });
+    expect(result.entities).toHaveLength(1);
+  });
+
+  it("getEntity/neighbors reject empty entity ids without issuing a request", async () => {
+    const fetchImpl = vi.fn();
+    const provider = createApiKnowledgeGraphProvider({
+      ...baseOptions,
+      fetchImpl,
+    });
+    await expect(provider.getEntity({ entityId: " " })).rejects.toThrow(
+      ApiKnowledgeGraphProviderError,
+    );
+    await expect(provider.neighbors({ entityId: "" })).rejects.toThrow(
+      ApiKnowledgeGraphProviderError,
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

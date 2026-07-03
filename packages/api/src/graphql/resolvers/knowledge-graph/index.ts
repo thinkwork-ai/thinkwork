@@ -3,6 +3,10 @@ import { knowledgeGraphEntity } from "./entity.query.js";
 import { knowledgeGraphGraph } from "./graph.query.js";
 import { knowledgeGraphIngestRuns } from "./ingestRuns.query.js";
 import { knowledgeGraphSearch } from "./search.query.js";
+import {
+  knowledgeGraphGetEntity,
+  knowledgeGraphNeighbors,
+} from "./agent-traverse.query.js";
 import { startKnowledgeGraphObservationsIngest } from "./startObservationsIngest.mutation.js";
 import {
   startKnowledgeGraphIngest,
@@ -17,6 +21,8 @@ export const knowledgeGraphQueries = {
   knowledgeGraphGraph,
   knowledgeGraphEntity,
   knowledgeGraphSearch,
+  knowledgeGraphGetEntity,
+  knowledgeGraphNeighbors,
 };
 export const knowledgeGraphMutations = {
   startKnowledgeGraphIngest,

@@ -319,6 +319,15 @@ extend type Query {
     query: String!
     limit: Int = 10
   ): KnowledgeGraphSearchResult!
+  knowledgeGraphGetEntity(
+    tenantId: ID
+    entityId: ID!
+  ): KnowledgeGraphSearchResult!
+  knowledgeGraphNeighbors(
+    tenantId: ID
+    entityId: ID!
+    depth: Int = 1
+  ): KnowledgeGraphSearchResult!
 }
 
 extend type Mutation {

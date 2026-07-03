@@ -11,6 +11,8 @@ const CONTEXT_ENGINE_ALIASES = [
 
 const KNOWLEDGE_GRAPH_ALIASES = [
   "knowledge_graph_search",
+  "knowledge_graph_get_entity",
+  "knowledge_graph_neighbors",
   "knowledge-graph",
   "knowledge_graph",
 ] as const;
@@ -23,6 +25,8 @@ const OKF_WIKI_NAVIGATOR_ALIASES = [
 
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
   knowledge_graph_search: KNOWLEDGE_GRAPH_ALIASES,
+  knowledge_graph_get_entity: KNOWLEDGE_GRAPH_ALIASES,
+  knowledge_graph_neighbors: KNOWLEDGE_GRAPH_ALIASES,
   "knowledge-graph": KNOWLEDGE_GRAPH_ALIASES,
   knowledge_graph: KNOWLEDGE_GRAPH_ALIASES,
   okf_wiki_navigator: OKF_WIKI_NAVIGATOR_ALIASES,

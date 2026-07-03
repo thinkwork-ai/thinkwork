@@ -6522,9 +6522,11 @@ export type Query = {
   knowledgeBases: Array<KnowledgeBase>;
   knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
   knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
+  knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
   knowledgeGraphGraph: KnowledgeGraphGraph;
   knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
+  knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
   knowledgeGraphSearch: KnowledgeGraphSearchResult;
   knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
@@ -7155,6 +7157,12 @@ export type QueryKnowledgeGraphEntityArgs = {
 };
 
 
+export type QueryKnowledgeGraphGetEntityArgs = {
+  entityId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryKnowledgeGraphGraphArgs = {
   groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
   ontologyType?: InputMaybe<Scalars['String']['input']>;
@@ -7174,6 +7182,13 @@ export type QueryKnowledgeGraphIngestRunsArgs = {
   sourceRef?: InputMaybe<Scalars['String']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryKnowledgeGraphNeighborsArgs = {
+  depth?: InputMaybe<Scalars['Int']['input']>;
+  entityId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 

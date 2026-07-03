@@ -37,6 +37,8 @@ function makeFakeApi() {
  */
 function makeFakeGraph() {
   const searchCalls: KnowledgeGraphSearchRequest[] = [];
+  const getEntityCalls: Array<{ entityId: string }> = [];
+  const neighborsCalls: Array<{ entityId: string; depth?: number }> = [];
   const provider: KnowledgeGraphProvider = {
     search: async (request) => {
       searchCalls.push(request);
@@ -74,8 +76,16 @@ function makeFakeGraph() {
         ],
       };
     },
+    getEntity: async (request) => {
+      getEntityCalls.push(request);
+      return { entities: [], relationships: [] };
+    },
+    neighbors: async (request) => {
+      neighborsCalls.push(request);
+      return { entities: [], relationships: [] };
+    },
   };
-  return { provider, searchCalls };
+  return { provider, searchCalls, getEntityCalls, neighborsCalls };
 }
 
 function getTool(tools: ToolDefinition[], name: string): ToolDefinition {
@@ -92,7 +102,11 @@ describe("createKnowledgeGraphExtension", () => {
   it("has a stable kebab-case name and declares its tool in toolNames", () => {
     const extension = createKnowledgeGraphExtension();
     expect(extension.name).toBe("thinkwork-knowledge-graph");
-    expect(extension.toolNames).toEqual(["knowledge_graph_search"]);
+    expect(extension.toolNames).toEqual([
+      "knowledge_graph_search",
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ]);
   });
 
   it("fails loud at load when the host supplies no knowledgeGraph provider", () => {
@@ -109,7 +123,11 @@ describe("createKnowledgeGraphExtension", () => {
     await toExtensionFactory(createKnowledgeGraphExtension(), {
       knowledgeGraph: provider,
     })(api);
-    expect(tools.map((t) => t.name)).toEqual(["knowledge_graph_search"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "knowledge_graph_search",
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ]);
   });
 
   it("param schema carries NO tenant/user/thread identity fields (R15)", async () => {
@@ -154,9 +172,90 @@ describe("createKnowledgeGraphExtension", () => {
     expect(text).not.toMatch(/snippet/i);
   });
 
+  it("get_entity and neighbors call the provider with bounded, identity-free params", async () => {
+    const { provider, getEntityCalls, neighborsCalls } = makeFakeGraph();
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createKnowledgeGraphExtension(), {
+      knowledgeGraph: provider,
+    })(api);
+
+    for (const name of [
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ]) {
+      const schema = getTool(tools, name).parameters as {
+        properties?: Record<string, unknown>;
+      };
+      for (const param of Object.keys(schema.properties ?? {})) {
+        expect(param).not.toMatch(/tenant|user|agent|thread|turn|principal/i);
+      }
+    }
+
+    await getTool(tools, "knowledge_graph_get_entity").execute(
+      "call-ge",
+      { entity_id: "ent-1" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    expect(getEntityCalls).toEqual([{ entityId: "ent-1" }]);
+
+    await getTool(tools, "knowledge_graph_neighbors").execute(
+      "call-nb",
+      { entity_id: "ent-1", depth: 2 },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    expect(neighborsCalls).toEqual([{ entityId: "ent-1", depth: 2 }]);
+  });
+
+  it("get_entity/neighbors degrade to the unavailable result with distinct phases", async () => {
+    const errors: Array<{ phase: string }> = [];
+    const failing: KnowledgeGraphProvider = {
+      search: async () => ({ entities: [], relationships: [] }),
+      getEntity: async () => {
+        throw new Error("down");
+      },
+      neighbors: async () => {
+        throw new Error("down");
+      },
+    };
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createKnowledgeGraphExtension({
+        onError: (_error, context) => errors.push(context),
+      }),
+      { knowledgeGraph: failing },
+    )(api);
+
+    const getResult = await getTool(
+      tools,
+      "knowledge_graph_get_entity",
+    ).execute("c1", { entity_id: "x" }, NO_SIGNAL, NO_UPDATE, NO_CTX);
+    const nbResult = await getTool(tools, "knowledge_graph_neighbors").execute(
+      "c2",
+      { entity_id: "x" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    for (const result of [getResult, nbResult]) {
+      expect((result.content?.[0] as { text: string }).text).toBe(
+        "Knowledge graph is currently unavailable.",
+      );
+    }
+    expect(errors.map((e) => e.phase)).toEqual([
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ]);
+  });
+
   it("returns an explicit no-match message for an empty result", async () => {
     const provider: KnowledgeGraphProvider = {
       search: async () => ({ entities: [], relationships: [] }),
+      getEntity: async () => ({ entities: [], relationships: [] }),
+      neighbors: async () => ({ entities: [], relationships: [] }),
     };
     const { api, tools } = makeFakeApi();
     await toExtensionFactory(createKnowledgeGraphExtension(), {
@@ -180,6 +279,8 @@ describe("createKnowledgeGraphExtension", () => {
       search: async () => {
         throw new Error("backend down");
       },
+      getEntity: async () => ({ entities: [], relationships: [] }),
+      neighbors: async () => ({ entities: [], relationships: [] }),
     };
     const { api, tools } = makeFakeApi();
     await toExtensionFactory(

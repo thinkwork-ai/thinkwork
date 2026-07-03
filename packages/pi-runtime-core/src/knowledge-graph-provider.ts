@@ -73,6 +73,18 @@ export interface KnowledgeGraphSearchResult {
   relationships: KnowledgeGraphRelationshipItem[];
 }
 
+export interface KnowledgeGraphGetEntityRequest {
+  /** Graph entity id (from a prior search/neighbors result). */
+  entityId: string;
+}
+
+export interface KnowledgeGraphNeighborsRequest {
+  /** Anchor entity id to expand around. */
+  entityId: string;
+  /** Hop depth (bounded by the backend; default 1). */
+  depth?: number;
+}
+
 export interface KnowledgeGraphProvider {
   /**
    * Search the tenant knowledge graph: alias-tolerant entity match plus a
@@ -83,6 +95,24 @@ export interface KnowledgeGraphProvider {
    */
   search(
     request: KnowledgeGraphSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeGraphSearchResult>;
+
+  /**
+   * Entity detail by id: the entity plus its bounded 1-hop edges
+   * (THINK-133 U6). Unknown/out-of-scope ids resolve to an empty result.
+   */
+  getEntity(
+    request: KnowledgeGraphGetEntityRequest,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeGraphSearchResult>;
+
+  /**
+   * Depth-bounded neighborhood expansion around an anchor entity
+   * (THINK-133 U6). Depth and edge counts are bounded by the backend.
+   */
+  neighbors(
+    request: KnowledgeGraphNeighborsRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeGraphSearchResult>;
 }
