@@ -24,6 +24,7 @@ const {
   mockRegenerateManifest,
   mockParseWiringMd,
   mockGetConfig,
+  mockS3Send,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
   txOps: [] as Array<{ op: string; tx: unknown; args: unknown }>,
@@ -37,6 +38,7 @@ const {
   mockRegenerateManifest: vi.fn(),
   mockParseWiringMd: vi.fn(),
   mockGetConfig: vi.fn(),
+  mockS3Send: vi.fn(),
 }));
 
 function takeRows(): unknown[] {
@@ -167,8 +169,8 @@ vi.mock("@thinkwork/runtime-config", () => ({
 
 vi.mock("@aws-sdk/client-s3", () => ({
   S3Client: class {
-    async send() {
-      return { Body: { transformToString: async () => "# WIRING" } };
+    async send(...args: unknown[]) {
+      return mockS3Send(...args);
     }
   },
   GetObjectCommand: class {},
@@ -199,6 +201,7 @@ class FakeCatalogUninstallError extends Error {
 vi.mock("../../../lib/catalog-install.js", () => ({
   installCatalogSkill: mockInstallCatalogSkill,
   CatalogInstallError: FakeCatalogInstallError,
+  DEFAULT_WIRING_CHOICE_ID: "default",
 }));
 
 vi.mock("../../../lib/catalog-uninstall.js", () => ({
@@ -269,6 +272,9 @@ beforeEach(() => {
   mockRegenerateManifest.mockResolvedValue(undefined);
   mockParseWiringMd.mockReturnValue({ suggestions: [{ id: "default" }] });
   mockUpdatePiExtensionAssignment.mockResolvedValue({ id: "ext-1" });
+  mockS3Send.mockResolvedValue({
+    Body: { transformToString: async () => "# WIRING" },
+  });
 });
 
 describe("matrix conformance (R2)", () => {
@@ -408,6 +414,66 @@ describe("skill @ agent (catalog install)", () => {
       expect.objectContaining({ tenantId: TENANT_ID, agentId: AGENT_ID }),
       ctx,
     );
+  });
+
+  it("grant with no wiringChoice defaults to 'default' when the catalog skill has no WIRING.md", async () => {
+    rowsQueue.push([AGENT_ROW], [TENANT_ROW]);
+    // Live repro: `artifacts` ships SKILL.md but no WIRING.md — the S3 GET
+    // 404s. A missing WIRING.md is NOT a not-found; the grant falls through to
+    // the synthesized "default" wiring choice rather than throwing.
+    const noSuchKey = Object.assign(new Error("no such key"), {
+      name: "NoSuchKey",
+    });
+    mockS3Send.mockRejectedValue(noSuchKey);
+    mockCapabilityInspector.mockResolvedValue(
+      cannedInspection([
+        { capabilityClass: "skill", capabilityId: "artifacts", active: true },
+      ]),
+    );
+
+    const result = await grantCapability(
+      null,
+      {
+        input: {
+          tenantId: TENANT_ID,
+          capabilityClass: "SKILL",
+          scope: "AGENT",
+          agentId: AGENT_ID,
+          capabilityRef: "artifacts",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockInstallCatalogSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "artifacts", wiringChoice: "default" }),
+    );
+    expect(mockParseWiringMd).not.toHaveBeenCalled();
+    expect(result.outcome).toBe("applied");
+  });
+
+  it("grant surfaces a non-404 S3 error from the default-wiring read", async () => {
+    rowsQueue.push([AGENT_ROW], [TENANT_ROW]);
+    mockS3Send.mockRejectedValue(
+      Object.assign(new Error("access denied"), { name: "AccessDenied" }),
+    );
+
+    await expect(
+      grantCapability(
+        null,
+        {
+          input: {
+            tenantId: TENANT_ID,
+            capabilityClass: "SKILL",
+            scope: "AGENT",
+            agentId: AGENT_ID,
+            capabilityRef: "artifacts",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow("access denied");
+    expect(mockInstallCatalogSkill).not.toHaveBeenCalled();
   });
 
   it("idempotent re-grant is a no-op with accurate state and no audit event", async () => {

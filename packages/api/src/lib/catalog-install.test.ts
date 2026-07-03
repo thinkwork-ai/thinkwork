@@ -189,6 +189,129 @@ describe("installCatalogSkill", () => {
     expectContextMdUntouched();
   });
 
+  it("installs a SKILL.md-only skill (no WIRING.md) with the synthesized default wiring choice — CONTEXT.md untouched (U5)", async () => {
+    // `artifacts`-shaped catalog skill: SKILL.md + skill-card.md + scripts/,
+    // no WIRING.md. Post-Composer-U5 WIRING.md is metadata-only, so this must
+    // install cleanly using the synthesized "default" wiring choice.
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/artifacts/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/artifacts/SKILL.md" },
+          { Key: "tenants/acme/skill-catalog/artifacts/skill-card.md" },
+          { Key: "tenants/acme/skill-catalog/artifacts/scripts/build.py" },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/artifacts/SKILL.md",
+      })
+      .resolves(body("# Artifacts\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/artifacts/skill-card.md",
+      })
+      .resolves(body("# Card\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/artifacts/scripts/build.py",
+      })
+      .resolves(body("print('build')\n"));
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/skills/artifacts/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(CopyObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const result = await installCatalogSkill({
+      s3: new S3Client({}),
+      bucket: "test-bucket",
+      tenantSlug: "acme",
+      targetPrefix: "tenants/acme/agents/marco/",
+      slug: "artifacts",
+      wiringChoice: "default",
+      now: new Date("2026-07-02T16:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      installed_paths: [
+        "skills/artifacts/.catalog-ref.json",
+        "skills/artifacts/SKILL.md",
+        "skills/artifacts/scripts/build.py",
+        "skills/artifacts/skill-card.md",
+      ],
+    });
+
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    expect(puts).toHaveLength(1);
+    const refPut = puts.find((call) =>
+      String(call.args[0].input.Key).endsWith(".catalog-ref.json"),
+    );
+    expect(JSON.parse(String(refPut?.args[0].input.Body))).toMatchObject({
+      slug: "artifacts",
+      installed_at: "2026-07-02T16:00:00.000Z",
+      wiring_choice: "default",
+      snippet:
+        "- For tasks covered by the `artifacts` skill, read skills/artifacts/SKILL.md and follow it.\n",
+    });
+    expect(
+      s3Mock
+        .commandCalls(GetObjectCommand)
+        .some(
+          (call) =>
+            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+        ),
+    ).toBe(false);
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .some(
+          (call) =>
+            call.args[0].input.Key === "tenants/acme/agents/marco/CONTEXT.md",
+        ),
+    ).toBe(false);
+  });
+
+  it("rejects an explicit non-default wiring choice when the skill has no WIRING.md", async () => {
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/artifacts/",
+      })
+      .resolves({
+        Contents: [{ Key: "tenants/acme/skill-catalog/artifacts/SKILL.md" }],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/artifacts/SKILL.md",
+      })
+      .resolves(body("# Artifacts\n"));
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/skills/artifacts/",
+      })
+      .resolves({ Contents: [] });
+
+    await expect(
+      installCatalogSkill({
+        s3: new S3Client({}),
+        bucket: "test-bucket",
+        tenantSlug: "acme",
+        targetPrefix: "tenants/acme/agents/marco/",
+        slug: "artifacts",
+        wiringChoice: "always-on",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "wiring_choice_not_found",
+    } satisfies Partial<CatalogInstallError>);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
   it("rejects re-install when the skill folder already exists", async () => {
     mockCatalogSkill();
     s3Mock

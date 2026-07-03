@@ -275,32 +275,49 @@ async function skillAgentMutation(
   const slug = input.capabilityRef.trim();
 
   if (mode === "grant") {
-    const { installCatalogSkill, CatalogInstallError } =
-      await import("../../../lib/catalog-install.js");
+    const {
+      installCatalogSkill,
+      CatalogInstallError,
+      DEFAULT_WIRING_CHOICE_ID,
+    } = await import("../../../lib/catalog-install.js");
     let wiringChoice = input.wiringChoice?.trim() ?? "";
     if (!wiringChoice) {
       // Default to the skill's first WIRING.md suggestion (the eval-install
-      // convention) so simple grants need no wiring knowledge.
+      // convention) so simple grants need no wiring knowledge. Post-Composer-U5
+      // WIRING.md is metadata-only and optional: a missing WIRING.md is NOT a
+      // not-found — fall through to the synthesized "default" wiring choice so
+      // a SKILL.md-only skill installs (installCatalogSkill owns the genuine
+      // catalog-empty 404). A real (non-404) S3 error still propagates.
       const { parseWiringMd } = await import("../../../lib/wiring-md.js");
       const wiringKey = `tenants/${target.tenantSlug}/skill-catalog/${slug}/WIRING.md`;
-      let wiringMd: string;
+      let wiringMd: string | null;
       try {
         const resp = await s3.send(
           new GetObjectCommand({ Bucket: bucket, Key: wiringKey }),
         );
         wiringMd = (await resp.Body?.transformToString()) ?? "";
-      } catch {
-        throw notFound(
-          `catalog skill '${slug}' not found (no WIRING.md in the tenant catalog)`,
-        );
+      } catch (err) {
+        const name = (err as { name?: string } | null)?.name;
+        const status = (
+          err as { $metadata?: { httpStatusCode?: number } } | null
+        )?.$metadata?.httpStatusCode;
+        if (name === "NoSuchKey" || name === "NotFound" || status === 404) {
+          wiringMd = null;
+        } else {
+          throw err;
+        }
       }
-      const first = parseWiringMd(wiringMd).suggestions[0];
-      if (!first) {
-        throw badInput(
-          `catalog skill '${slug}' has no wiring suggestions — pass wiringChoice explicitly`,
-        );
+      if (wiringMd === null) {
+        wiringChoice = DEFAULT_WIRING_CHOICE_ID;
+      } else {
+        const first = parseWiringMd(wiringMd).suggestions[0];
+        if (!first) {
+          throw badInput(
+            `catalog skill '${slug}' has no wiring suggestions — pass wiringChoice explicitly`,
+          );
+        }
+        wiringChoice = first.id;
       }
-      wiringChoice = first.id;
     }
     try {
       await installCatalogSkill({

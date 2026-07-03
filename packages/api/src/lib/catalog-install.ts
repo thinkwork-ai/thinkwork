@@ -7,10 +7,21 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
-import type { CatalogRef } from "../types/catalog-skill.js";
+import type { CatalogRef, WiringSuggestion } from "../types/catalog-skill.js";
 import { isCatalogSlug } from "../types/catalog-skill.js";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { defaultSkillRoutingSnippet } from "./context-snippet-migration.js";
 import { parseWiringMd } from "./wiring-md.js";
+
+/**
+ * The id of the synthesized default wiring choice used when a catalog skill
+ * ships no WIRING.md. Post-Composer-U5, WIRING.md is metadata-only — routing
+ * is computed into the rendered CONTEXT.md `## Routing` section — so a skill
+ * with only a SKILL.md must still be installable. Absent WIRING.md, install
+ * synthesizes a single "default" suggestion whose snippet is the computed
+ * default routing line; `.catalog-ref.json` records `wiring_choice: "default"`.
+ */
+export const DEFAULT_WIRING_CHOICE_ID = "default";
 
 export type CatalogInstallOptions = {
   s3: S3Client;
@@ -103,16 +114,22 @@ export async function installCatalogSkill(
     })),
   );
   const wiring = files.find((file) => file.relativePath === "WIRING.md");
-  if (!wiring) {
-    throw new CatalogInstallError(
-      400,
-      "wiring_md_missing",
-      `Catalog skill '${slug}' does not have a WIRING.md file.`,
-    );
-  }
-
-  const parsed = parseWiringMd(wiring.content);
-  const suggestion = parsed.suggestions.find(
+  // Post-Composer-U5, WIRING.md is metadata-only: a missing WIRING.md is NOT
+  // an error. Synthesize a single "default" suggestion whose snippet is the
+  // computed default routing line so a SKILL.md-only skill installs cleanly.
+  // An explicit non-"default" wiringChoice with no WIRING.md still fails below
+  // with `wiring_choice_not_found`.
+  const suggestions: WiringSuggestion[] = wiring
+    ? parseWiringMd(wiring.content).suggestions
+    : [
+        {
+          id: DEFAULT_WIRING_CHOICE_ID,
+          title: "Default routing",
+          description: "",
+          snippet: defaultSkillRoutingSnippet(slug),
+        },
+      ];
+  const suggestion = suggestions.find(
     (candidate) => candidate.id === wiringChoice,
   );
   if (!suggestion) {
