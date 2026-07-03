@@ -247,6 +247,21 @@ export interface ContextRoutingSkillEntry {
    * matching capability-inspector gate-state semantics.
    */
   enabled?: boolean;
+  /**
+   * Effective-capability gate state for the perspective-INDEPENDENT gates
+   * the runtime applies to the loaded skill set — chiefly the skill trust
+   * gate (`skill-trust/runtime-gate.ts`) and any future composer-side eval
+   * gate. Absent = active. A skill that is NOT active carries no routing
+   * row: the runtime refuses to load trust-gated catalog skills, so a
+   * routing row for one would instruct the model to use a skill the
+   * platform never loads (the honesty gap Composer U4/U5 exists to close).
+   * Callers MUST derive this from the same predicate the runtime/inspector
+   * use (`loadTrustedCatalogSkillIds`) — never a re-implemented rule — so
+   * routing rows can never diverge from the effective loaded set. The
+   * per-requester plugin activation gate stays separate (`pluginGate`,
+   * perspective-DEPENDENT per KTD-8).
+   */
+  active?: boolean;
   /** Optional short description rendered into the row for routing context. */
   description?: string | null;
 }
@@ -268,13 +283,20 @@ function collapseWhitespace(value: string): string {
 
 /**
  * Compute the per-requester Routing rows from the effective capability
- * set. Perspective-dependent (KTD-8): the plugin activation gate is
- * applied per requester with the same fail-closed semantics as the
- * legacy snippet-line filter — an excluded plugin skill contributes NO
- * row. Callers pass the gate produced by `resolvePluginGate`, which
- * fails closed (never open) on any resolution error or unresolvable
- * requester. Attach/detach reflects immediately: rows are derived from
- * the skill entries present in the workspace at composition time.
+ * set. A row is emitted only for a skill that is ACTIVE in that set:
+ *   - assignment-enabled (`entry.enabled !== false`);
+ *   - active under the perspective-INDEPENDENT effective-capability gates
+ *     (`entry.active !== false` — the trust/eval gate the runtime applies
+ *     via `loadTrustedCatalogSkillIds`, supplied by the caller so this
+ *     function never re-implements gate rules);
+ *   - not excluded by the perspective-DEPENDENT plugin activation gate.
+ * Perspective-dependent (KTD-8): the plugin activation gate is applied per
+ * requester with the same fail-closed semantics as the legacy snippet-line
+ * filter — an excluded plugin skill contributes NO row. Callers pass the
+ * gate produced by `resolvePluginGate`, which fails closed (never open) on
+ * any resolution error or unresolvable requester. Attach/detach reflects
+ * immediately: rows are derived from the skill entries present in the
+ * workspace at composition time.
  */
 export function computeContextRoutingRows(input: {
   skills: readonly ContextRoutingSkillEntry[];
@@ -282,7 +304,7 @@ export function computeContextRoutingRows(input: {
 }): ContextRoutingRow[] {
   const gate = input.pluginGate ?? EMPTY_PLUGIN_GATE;
   return input.skills
-    .filter((entry) => entry.enabled !== false)
+    .filter((entry) => entry.enabled !== false && entry.active !== false)
     .map((entry) => ({
       slug: entry.slug,
       skillFolderPath: skillFolderPathFor(entry),

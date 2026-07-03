@@ -33,6 +33,8 @@ import {
   composeGeneratedContextMd,
   type ContextRoutingSkillEntry,
 } from "./managed-sections.js";
+import { isBuiltinToolSlug } from "../builtin-tool-slugs.js";
+import { loadTrustedCatalogSkillIds } from "../skill-trust/runtime-gate.js";
 import type {
   WorkspaceAgentProfileRoutingEntry,
   WorkspaceHydrateFile,
@@ -90,6 +92,23 @@ export interface RenderWorkspaceTupleDeps {
   pluginGateResolver?: (
     args: ResolvePluginGateArgs,
   ) => Promise<PluginActivationGate>;
+  /**
+   * Skill trust gate (Composer plan U4/U5 honesty fix). Injectable for
+   * tests; defaults to the SAME predicate the runtime and capability
+   * inspector apply (`loadTrustedCatalogSkillIds` in
+   * `skill-trust/runtime-gate.ts`) so the computed CONTEXT.md `## Routing`
+   * rows can never diverge from the effective loaded set — a catalog skill
+   * the runtime refuses to load (`trust_gate`) gets NO routing row.
+   * Returns the set of catalog skill slugs that pass the trust gate;
+   * built-in tool slugs bypass the gate exactly as the runtime does. The
+   * trust gate is perspective-INDEPENDENT (tenant-wide, not per requester),
+   * so unlike the plugin gate it needs no requester identity.
+   */
+  trustGateResolver?: (args: {
+    tenantId: string;
+    skillIds: string[];
+    logPrefix: string;
+  }) => Promise<Set<string>>;
   /**
    * Read-only compose seam (capability-mapping plan U2). When false, the
    * full pre-write composition runs unchanged — sources, plugin gate,
@@ -840,6 +859,26 @@ export async function renderWorkspaceTuple(
     const assignment = sourcePath.match(SKILL_ASSIGNMENT_RE);
     if (assignment) skillAssignmentKeys.set(assignment[1]!, object.key);
   }
+  // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
+  // reference skills the runtime will actually load. Consult the SAME
+  // predicate resolve-agent-runtime-config applies — catalog skills must
+  // carry a current passed trust report; built-in tool slugs bypass the
+  // gate exactly as the runtime does. Perspective-INDEPENDENT (tenant-wide),
+  // so it is resolved once per render, not per requester.
+  const resolveTrustGate = deps.trustGateResolver ?? loadTrustedCatalogSkillIds;
+  const catalogSkillFolders = skillFolders.filter(
+    (folder) => !isBuiltinToolSlug(folder),
+  );
+  const trustedCatalogSkillIds =
+    catalogSkillFolders.length > 0
+      ? await resolveTrustGate({
+          tenantId: tuple.tenantId,
+          skillIds: catalogSkillFolders,
+          logPrefix: `[compose-tuple ${tuple.tenantId}/${tuple.agentSlug}]`,
+        })
+      : new Set<string>();
+  const isSkillTrusted = (folder: string): boolean =>
+    isBuiltinToolSlug(folder) || trustedCatalogSkillIds.has(folder);
   const [contextBaseline, contextSkillEntries] = await Promise.all([
     contextSourceObject
       ? objectStore.getText({ bucket, key: contextSourceObject.key })
@@ -854,6 +893,7 @@ export async function renderWorkspaceTuple(
           slug: folder,
           skillFolderPath: `skills/${folder}/`,
           enabled: skillAssignmentEnabled(assignmentRaw),
+          active: isSkillTrusted(folder),
         };
       }),
     ),

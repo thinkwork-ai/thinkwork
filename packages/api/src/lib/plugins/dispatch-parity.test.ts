@@ -386,6 +386,10 @@ async function renderSurface(
       objectStore,
       pluginGateResolver: (args) =>
         resolvePluginGate(args, { store: pluginStore }),
+      // Trust gate is orthogonal to this suite's plugin-parity concern:
+      // trust every seeded catalog skill so routing rows depend only on the
+      // plugin gate under test.
+      trustGateResolver: async ({ skillIds }) => new Set(skillIds),
       now: () => new Date("2026-06-12T10:00:00.000Z"),
     },
   );
