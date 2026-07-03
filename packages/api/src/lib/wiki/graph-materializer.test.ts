@@ -25,8 +25,10 @@ vi.mock("./repository.js", async (importOriginal) => ({
 
 import { parseCompileDedupeBucket } from "./repository.js";
 import {
+  computePromotedEntityIds,
   materializeTenantWikiFromGraph,
   runGraphCompileJobById,
+  WIKI_PROMOTION_THRESHOLDS,
 } from "./graph-materializer.js";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
@@ -127,6 +129,116 @@ beforeEach(() => {
   mocks.listGraphMaterializedTenantPages.mockResolvedValue([]);
   mocks.archivePagesByIds.mockResolvedValue(0);
   mocks.completeCompileJob.mockResolvedValue(undefined);
+});
+
+describe("evidence-threshold promotion (THINK-133 U5)", () => {
+  const evidenceKeys = (pairs: Array<[string, string[]]>) =>
+    new Map(pairs.map(([id, keys]) => [id, new Set(keys)]));
+
+  it("promotes on distinct-evidence threshold with no ontology type involved (AE2)", () => {
+    const promoted = computePromotedEntityIds({
+      entityIds: ["ent-a", "ent-b"],
+      evidenceKeysByEntity: evidenceKeys([
+        ["ent-a", ["thread-1", "thread-2", "thread-3"]],
+        ["ent-b", ["thread-1"]],
+      ]),
+      adjacency: new Map(),
+    });
+    expect(promoted.has("ent-a")).toBe(true);
+    expect(promoted.has("ent-b")).toBe(false);
+  });
+
+  it("promotes a referenced-by-promoted entity despite low mentions, without cascading", () => {
+    // hub is base-promoted (3 evidence); leaf links to hub; far links only
+    // to leaf. Single propagation pass: leaf promotes, far does not.
+    const promoted = computePromotedEntityIds({
+      entityIds: ["hub", "leaf", "far"],
+      evidenceKeysByEntity: evidenceKeys([["hub", ["t1", "t2", "t3"]]]),
+      adjacency: new Map([
+        ["hub", ["leaf"]],
+        ["leaf", ["hub", "far"]],
+        ["far", ["leaf"]],
+      ]),
+      // Neutralize the relationship-count route so this test isolates the
+      // referenced-by-promoted propagation pass.
+      thresholds: { ...WIKI_PROMOTION_THRESHOLDS, minRelationships: 99 },
+    });
+    expect(promoted.has("hub")).toBe(true);
+    expect(promoted.has("leaf")).toBe(true);
+    expect(promoted.has("far")).toBe(false);
+  });
+
+  it("reads thresholds from the single config point", () => {
+    const promoted = computePromotedEntityIds({
+      entityIds: ["ent-a"],
+      evidenceKeysByEntity: evidenceKeys([["ent-a", ["t1", "t2"]]]),
+      adjacency: new Map(),
+      thresholds: { ...WIKI_PROMOTION_THRESHOLDS, minDistinctEvidence: 2 },
+    });
+    expect(promoted.has("ent-a")).toBe(true);
+  });
+
+  it("sub-threshold entity emits no page but the mirror rows are untouched (R9)", async () => {
+    const loner = {
+      id: "ent-loner",
+      label: "Loner Topic",
+      normalized_label: "loner topic",
+      ontology_type_slug: null,
+      summary: null,
+      aliases: [],
+    };
+    const { db, sqlSeen } = mirrorDb({
+      entities: [loner],
+      relationships: [],
+      evidence: [
+        { entity_id: "ent-loner", relationship_id: null, evidence_source_ref: "obs-1" },
+      ],
+    });
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      { tenantId: TENANT },
+      db as never,
+    );
+
+    expect(metrics.pages_below_threshold).toBe(1);
+    expect(metrics.pages_upserted).toBe(0);
+    expect(mocks.upsertPage).not.toHaveBeenCalled();
+    // The materializer never mutates KG rows — reads only.
+    for (const text of sqlSeen) {
+      expect(text).not.toMatch(/DELETE|UPDATE/i);
+    }
+  });
+
+  it("falling below threshold archives the existing page rather than deleting (demotion)", async () => {
+    const loner = {
+      id: "ent-loner",
+      label: "Loner Topic",
+      normalized_label: "loner topic",
+      ontology_type_slug: null,
+      summary: null,
+      aliases: [],
+    };
+    mocks.listGraphMaterializedTenantPages.mockResolvedValue([
+      { id: "page-old", slug: "loner-topic", type: "entity" },
+    ]);
+    mocks.archivePagesByIds.mockResolvedValue(1);
+    const { db } = mirrorDb({
+      entities: [loner],
+      relationships: [],
+      evidence: [],
+    });
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      { tenantId: TENANT },
+      db as never,
+    );
+
+    expect(mocks.archivePagesByIds).toHaveBeenCalledWith(
+      { pageIds: ["page-old"] },
+      expect.anything(),
+    );
+    expect(metrics.pages_archived).toBe(1);
+  });
 });
 
 describe("materializeTenantWikiFromGraph", () => {
@@ -235,7 +347,13 @@ describe("materializeTenantWikiFromGraph", () => {
     const { db } = mirrorDb({
       entities: [acmeEntity],
       relationships: [],
-      evidence,
+      // Three distinct observations: acme stays above the promotion gate so
+      // this test isolates vanished-entity reconciliation.
+      evidence: [
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+      ],
     });
     mocks.listGraphMaterializedTenantPages.mockResolvedValue([
       { id: "page-live", type: "entity", slug: "acme-corp" },
@@ -259,7 +377,12 @@ describe("materializeTenantWikiFromGraph", () => {
     const { db } = mirrorDb({
       entities: [{ ...acmeEntity, id: "ent-x", label: "???" }],
       relationships: [],
-      evidence: [],
+      // Promoted (3 distinct observations) so the slug check is what skips.
+      evidence: [
+        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-100" },
+        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-101" },
+        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-102" },
+      ],
     });
     const { metrics } = await materializeTenantWikiFromGraph(
       { tenantId: TENANT },
@@ -327,7 +450,12 @@ describe("graph compile job runner", () => {
     const { db } = mirrorDb({
       entities: [acmeEntity],
       relationships: [],
-      evidence,
+      // Above the promotion gate: three distinct observations.
+      evidence: [
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
+        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+      ],
     });
     const result = await runGraphCompileJobById("job-1", db as never);
     expect(result).toMatchObject({ jobId: "job-1", status: "succeeded" });
