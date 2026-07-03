@@ -1503,6 +1503,37 @@ export const SettingsPiExtensionsQuery = graphql(`
   }
 `);
 
+/**
+ * Lean Pi-extension registry read for the Composer (plan U8). Sources the
+ * version identity + current assignments the Composer's pi_extension controls
+ * need to render a version picker and detach — without pulling the full
+ * fragment-masked review payload the registry surface uses. Version identity
+ * lives here in the registry data (KTD-5), not in the inspector rows.
+ */
+export const SettingsComposerPiExtensionsQuery = graphql(`
+  query SettingsComposerPiExtensions($tenantId: ID!) {
+    piExtensions(tenantId: $tenantId) {
+      id
+      sourceId
+      displayName
+      repositoryName
+      repositoryOwner
+      sourceRef
+      status
+      permissionClasses
+      createdAt
+      updatedAt
+      assignments {
+        id
+        versionId
+        targetType
+        agentProfileId
+        enabled
+      }
+    }
+  }
+`);
+
 export const SettingsImportPiExtensionFromGitHubMutation = graphql(`
   mutation SettingsImportPiExtensionFromGitHub(
     $input: ImportPiExtensionFromGitHubInput!

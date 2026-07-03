@@ -2366,8 +2366,9 @@ export const ComputerKnowledgeBaseDetailQuery = gql`
 `;
 
 // ─── Customize page (apps/web Customize) ─────────────────────────────
-// The Skills tab (SkillCatalogQuery + enable/disableSkill documents) was
+// The Skills tab (SkillCatalogQuery + enableSkill documents) was
 // removed in Composer plan U3 — skill wiring lives in Settings→Composer.
+// The `disableSkill` mutation was retired from the schema in Composer plan U8.
 
 export const WorkflowTemplateCatalogQuery = gql`
   query WorkflowTemplateCatalog {

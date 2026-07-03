@@ -573,7 +573,7 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
       </Sheet>
       <SettingsTablePane
         title="Skill Library"
-        description="Browse, install, and manage the skills your agents can use."
+        description="The tenant skill inventory — import, review, and manage the trust and eval gates for catalog skills. Assign skills to the agent in the Composer."
         loading={
           view === "published"
             ? !skills && !error

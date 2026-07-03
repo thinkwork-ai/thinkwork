@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   queryState,
   refetchMock,
+  refetchExtensionsMock,
   grantMock,
   detachMock,
   toastMock,
@@ -34,8 +35,14 @@ const {
       fetching: false,
       error: undefined as { message: string } | undefined,
     },
+    extensions: {
+      data: { piExtensions: [] } as unknown,
+      fetching: false,
+      error: undefined as { message: string } | undefined,
+    },
   },
   refetchMock: vi.fn(),
+  refetchExtensionsMock: vi.fn(),
   grantMock: vi.fn(),
   detachMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
@@ -44,6 +51,7 @@ const {
     SettingsSpacesListQuery: Symbol("spacesList"),
     SettingsAgentProfilesQuery: Symbol("agentProfiles"),
     SettingsTenantMembersQuery: Symbol("tenantMembers"),
+    SettingsComposerPiExtensionsQuery: Symbol("composerPiExtensions"),
     SettingsGrantCapabilityMutation: Symbol("grantCapability"),
     SettingsDetachCapabilityMutation: Symbol("detachCapability"),
   },
@@ -66,6 +74,9 @@ vi.mock("urql", () => ({
         { data: { agentProfiles: [{ id: "prof-1", name: "Coding" }] } },
         vi.fn(),
       ];
+    }
+    if (query === queryDocs.SettingsComposerPiExtensionsQuery) {
+      return [queryState.extensions, refetchExtensionsMock];
     }
     return [
       {
@@ -277,6 +288,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   queryState.inspector = {
     data: inspection(),
+    fetching: false,
+    error: undefined,
+  };
+  queryState.extensions = {
+    data: { piExtensions: [] },
     fetching: false,
     error: undefined,
   };
@@ -606,7 +622,9 @@ describe("capability write actions (sheet rows)", () => {
     expect(screen.queryByTestId("detach-skill:approve-receipt")).toBeNull();
   });
 
-  it("extension rows carry no row actions here", () => {
+  it("a granted extension version that left the registry shows a disabled detach (plan U8)", () => {
+    // Empty registry: the active "Live Ext" (assignment-3) can't be resolved to
+    // a version, so its detach is disabled/error rather than silently absent.
     render(<SettingsCapabilities />);
     openSheet();
     fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
@@ -614,6 +632,143 @@ describe("capability write actions (sheet rows)", () => {
     });
     expect(screen.getByText("Live Ext")).toBeTruthy();
     expect(screen.queryByTestId("detach-pi_extension:assignment-3")).toBeNull();
+    expect(
+      (
+        screen.getByTestId(
+          "detach-pi_extension-missing:assignment-3",
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("detaches a granted extension version through the unified mutation (plan U8)", async () => {
+    // Registry data resolves assignment-3 → its version id; detach targets that.
+    queryState.extensions = {
+      data: {
+        piExtensions: [
+          {
+            id: "ver-live",
+            sourceId: "src-live",
+            displayName: "Live Ext",
+            repositoryName: "live-ext",
+            repositoryOwner: "acme",
+            sourceRef: "main",
+            status: "APPROVED",
+            permissionClasses: ["fs.read"],
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+            assignments: [
+              {
+                id: "assignment-3",
+                versionId: "ver-live",
+                targetType: "DEFAULT_AGENT",
+                agentProfileId: null,
+                enabled: true,
+              },
+            ],
+          },
+        ],
+      },
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    openSheet();
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
+      button: 0,
+    });
+    fireEvent.click(
+      screen.getByTestId("detach-confirm-pi_extension:assignment-3"),
+    );
+    await waitFor(() =>
+      expect(detachMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "PI_EXTENSION",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "ver-live",
+        },
+      }),
+    );
+  });
+
+  it("assigns an approved extension version from the Add picker (plan U8)", async () => {
+    // Two approved versions of one extension, none assigned yet → attachable,
+    // latest selected by default; grant targets the chosen version id.
+    queryState.extensions = {
+      data: {
+        piExtensions: [
+          {
+            id: "ver-old",
+            sourceId: "src-a",
+            displayName: "Alpha Ext",
+            repositoryName: "alpha",
+            repositoryOwner: "acme",
+            sourceRef: "v1",
+            status: "APPROVED",
+            permissionClasses: ["fs.read"],
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+            assignments: [],
+          },
+          {
+            id: "ver-new",
+            sourceId: "src-a",
+            displayName: "Alpha Ext",
+            repositoryName: "alpha",
+            repositoryOwner: "acme",
+            sourceRef: "v2",
+            status: "APPROVED",
+            permissionClasses: ["fs.read", "net.fetch"],
+            createdAt: "2026-06-20T00:00:00.000Z",
+            updatedAt: "2026-06-20T00:00:00.000Z",
+            assignments: [],
+          },
+        ],
+      },
+      fetching: false,
+      error: undefined,
+    };
+    grantMock.mockResolvedValue(grantResult(null));
+    render(<SettingsCapabilities />);
+    openSheet();
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
+      button: 0,
+    });
+    fireEvent.click(screen.getByTestId("open-add-extension"));
+    expect(screen.getByTestId("add-extension-dialog")).toBeTruthy();
+    expect(screen.getByTestId("add-extension-row-src-a")).toBeTruthy();
+    // Default = latest approved version (ver-new).
+    fireEvent.click(screen.getByTestId("add-extension-pick-src-a"));
+    await waitFor(() =>
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "PI_EXTENSION",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "ver-new",
+          grantedPermissions: ["fs.read", "net.fetch"],
+        },
+      }),
+    );
+  });
+
+  it("hides the Add-extension control under a space read lens (R11/AE4)", () => {
+    queryState.inspector = {
+      data: inspection({ spaceId: "space-1" }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    openSheet();
+    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
+      button: 0,
+    });
+    expect(screen.queryByTestId("open-add-extension")).toBeNull();
   });
 });
 

@@ -177,7 +177,7 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain("if (workspaceView)");
   });
 
-  it("wires Pi Extension import, review, and assignment mutations", () => {
+  it("wires Pi Extension import and review, but no longer assigns (plan U8)", () => {
     expect(queriesSource).toContain("query SettingsPiExtensions");
     expect(queriesSource).toContain("fragment SettingsPiExtensionFields");
     expect(queriesSource).toContain(
@@ -189,8 +189,7 @@ describe("SettingsAgents page", () => {
     expect(queriesSource).toContain(
       "mutation SettingsRejectPiExtensionVersion",
     );
-    // Assignment writes route through the unified capability mutations
-    // (capability-mapping plan U8, KTD-5).
+    // The unified capability mutations still exist for the Composer.
     expect(queriesSource).toContain("mutation SettingsGrantCapability");
     expect(queriesSource).toContain("mutation SettingsDetachCapability");
     expect(agentExtensionsSource).toContain(
@@ -202,28 +201,26 @@ describe("SettingsAgents page", () => {
     expect(agentExtensionsSource).toContain(
       "SettingsRejectPiExtensionVersionMutation",
     );
-    expect(agentExtensionsSource).toContain("SettingsGrantCapabilityMutation");
-    expect(agentExtensionsSource).toContain("SettingsDetachCapabilityMutation");
+    // Assignment moved to the Composer — the registry surface no longer holds
+    // the grant/detach write path (R3/R11).
+    expect(agentExtensionsSource).not.toContain(
+      "SettingsGrantCapabilityMutation",
+    );
+    expect(agentExtensionsSource).not.toContain(
+      "SettingsDetachCapabilityMutation",
+    );
   });
 
-  it("uses Pi extension language and disables assignments outside approved state", () => {
+  it("keeps Pi extension review language and a read-only assignment view", () => {
     expect(agentExtensionsSource).toContain("Pi extension");
     expect(agentExtensionsSource).toContain("Failed verification");
     expect(agentExtensionsSource).toContain(
-      "Assignment unavailable: this Pi extension failed verification.",
-    );
-    expect(agentExtensionsSource).toContain(
-      "Assignment unavailable: this Pi extension was rejected.",
-    );
-    expect(agentExtensionsSource).toContain(
-      "Assignment unavailable until an operator approves this Pi extension.",
-    );
-    expect(agentExtensionsSource).toContain(
       "PiExtensionVersionStatus.Approved",
     );
-    expect(agentExtensionsSource).toContain(
-      "disabled={!approved || assigning}",
-    );
+    // No assignment toggles or gating strings — assignment is a Composer action.
+    expect(agentExtensionsSource).not.toContain("Assignment unavailable");
+    expect(agentExtensionsSource).not.toContain("onSetAssignment");
+    expect(agentExtensionsSource).toContain("Assigned in the Composer");
     expect(agentExtensionsSource).not.toContain("Built-in Tools");
     expect(agentExtensionsSource).not.toContain("MCP Servers");
     expect(agentExtensionsSource).not.toContain("Installed skills");
