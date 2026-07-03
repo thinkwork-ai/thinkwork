@@ -1124,6 +1124,18 @@ variable "requester_memory_dreaming_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
+variable "brain_dream_state_enabled" {
+  description = "Enable the recurring Brain dream-state consolidation schedule (THINK-133 U4). Manual invokes work regardless via event.manual."
+  type        = bool
+  default     = false
+}
+
+variable "brain_dream_state_schedule_expression" {
+  description = "EventBridge Scheduler expression for Brain dream-state runs."
+  type        = string
+  default     = "cron(0 5 * * ? *)"
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------

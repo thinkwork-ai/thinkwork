@@ -89,6 +89,25 @@ type MemoryRetainAttempt {
   updatedAt: AWSDateTime
 }
 
+"""
+Dream-state run ledger row (THINK-133 U4). One row per (tenant, bank) dream
+run; per-action detail is summarized in plannedCounts/appliedCounts.
+"""
+type BrainDreamRun {
+  id: ID!
+  tenantId: ID!
+  bankId: String!
+  dedupeKey: String!
+  status: String!
+  plannedCounts: AWSJSON
+  appliedCounts: AWSJSON
+  errorMessage: String
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
 type MemoryGraphNode {
   id: ID!
   label: String!
@@ -275,6 +294,12 @@ extend type Query {
     status: String
     limit: Int = 50
   ): [MemoryRetainAttempt!]!
+  brainDreamRuns(
+    tenantId: ID
+    bankId: String
+    status: String
+    limit: Int = 50
+  ): [BrainDreamRun!]!
   threadIdleLearningRuns(
     tenantId: ID
     userId: ID
