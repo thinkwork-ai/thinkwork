@@ -454,3 +454,127 @@ export async function reconcileMcpAssignmentFolders(
   }
   return written;
 }
+
+// ── Parity helpers for the non-grantCapability writers (Composer U9
+// follow-up) ────────────────────────────────────────────────────────────────
+//
+// Every other writer of `agent_mcp_servers` (plugin/managed provisioning,
+// direct REST assign, server teardown) must keep the workspace files in step
+// or a plugin/managed server silently drops from an agent that already has
+// other `mcp/` files (the non-empty listing wins in `buildMcpConfigs`, no DB
+// fallback). These helpers mirror the U9a grant/detach dual-write:
+//
+//  - ATTACH (insert/upsert): reconcile the agent's WHOLE attached set so the
+//    just-added server materializes AND any pre-existing DB-only attachments
+//    are backfilled (never flip an agent to the file path with a partial set).
+//  - DETACH / server teardown: remove the per-agent `mcp/<slug>/` folder(s).
+//
+// All are bucket-gated at the top: with no workspace bucket they return early
+// BEFORE any DB read, so DB-mocked unit tests are unaffected. Best-effort by
+// contract — the `agent_mcp_servers` row stays authoritative until retirement.
+
+/**
+ * Reconcile the assignment folders of several agents after a server was
+ * attached to them (plugin/managed default-agent assignment, direct assign).
+ * Per-agent {@link reconcileMcpAssignmentFolders}, so the new server AND the
+ * agent's existing attached set both get files. Returns files written.
+ */
+export async function reconcileMcpAssignmentFoldersForAgents(
+  input: { agentIds: readonly string[]; tenantId: string },
+  deps: McpAssignmentStateDeps = {},
+): Promise<number> {
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return 0;
+  let written = 0;
+  for (const agentId of input.agentIds) {
+    written += await reconcileMcpAssignmentFolders(
+      { agentId, tenantId: input.tenantId },
+      { ...deps, bucket },
+    );
+  }
+  return written;
+}
+
+/** Resolve a tenant server's folder slug (its `mcp/<slug>/` name). */
+async function resolveMcpServerSlug(
+  registryServerId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
+    .from(tenantMcpServers)
+    .where(eq(tenantMcpServers.id, registryServerId))
+    .limit(1);
+  if (!row) return null;
+  return row.slug ?? row.name;
+}
+
+/**
+ * Snapshot the agents attached to a server (and the server's folder slug)
+ * BEFORE a server-wide teardown deletes the `agent_mcp_servers` rows — the
+ * caller feeds the result to {@link removeMcpAssignmentFoldersForAgents} after
+ * the DB delete commits. Bucket-gated: returns null (no DB read) with no
+ * workspace bucket.
+ */
+export async function snapshotMcpServerAttachment(
+  input: { tenantId: string; registryServerId: string },
+  deps: McpAssignmentStateDeps = {},
+): Promise<{ slug: string; agentIds: string[] } | null> {
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return null;
+  const slug = await resolveMcpServerSlug(input.registryServerId);
+  if (!slug) return null;
+  const rows = (await db
+    .select({ agent_id: agentMcpServers.agent_id })
+    .from(agentMcpServers)
+    .where(
+      and(
+        eq(agentMcpServers.mcp_server_id, input.registryServerId),
+        eq(agentMcpServers.tenant_id, input.tenantId),
+      ),
+    )) as { agent_id: string }[];
+  return { slug, agentIds: rows.map((r) => r.agent_id) };
+}
+
+/**
+ * Remove `mcp/<slug>/` from each agent's workspace (server-wide teardown).
+ * Best-effort per agent. Returns the count of folders removed.
+ */
+export async function removeMcpAssignmentFoldersForAgents(
+  input: { agentIds: readonly string[]; slug: string },
+  deps: McpAssignmentStateDeps = {},
+): Promise<number> {
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return 0;
+  let removed = 0;
+  for (const agentId of input.agentIds) {
+    const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
+    if (!targetPrefix) continue;
+    if (
+      await removeMcpAssignmentFolder(targetPrefix, input.slug, {
+        ...deps,
+        bucket,
+      })
+    ) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
+/**
+ * Remove ONE agent's `mcp/<slug>/` folder for a server (single-agent detach,
+ * e.g. the direct REST unassign). Resolves the folder slug from the registry
+ * row. Bucket-gated; best-effort.
+ */
+export async function removeMcpAssignmentForAgentServer(
+  input: { agentId: string; registryServerId: string },
+  deps: McpAssignmentStateDeps = {},
+): Promise<boolean> {
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return false;
+  const slug = await resolveMcpServerSlug(input.registryServerId);
+  if (!slug) return false;
+  const targetPrefix = await resolveAgentWorkspacePrefix(input.agentId);
+  if (!targetPrefix) return false;
+  return removeMcpAssignmentFolder(targetPrefix, slug, { ...deps, bucket });
+}

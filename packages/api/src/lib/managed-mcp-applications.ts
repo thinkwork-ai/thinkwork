@@ -353,6 +353,25 @@ async function ensureManagedMcpDefaultAgentAssignments(
         set: { enabled: true, updated_at: new Date() },
       });
   }
+
+  // Workspace-folder parity (Composer U9 follow-up): materialize the managed
+  // server's `mcp/<slug>/.assignment.json` (and backfill the agent's existing
+  // attached set) so it does not silently drop from an agent that already has
+  // other mcp/ files. Best-effort, bucket-gated — a no-op in DB-mocked tests.
+  try {
+    const { reconcileMcpAssignmentFoldersForAgents } = await import(
+      "./mcp/assignment-state.js"
+    );
+    await reconcileMcpAssignmentFoldersForAgents({
+      agentIds: platformAgents.map((agent) => agent.id),
+      tenantId,
+    });
+  } catch (err) {
+    console.error(
+      "[managed-mcp] MCP workspace-folder materialization failed (agent_mcp_servers rows remain authoritative):",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 function applyManagedMcpState(
@@ -499,6 +518,25 @@ async function destroyTwentyManagedMcp(
   const existing = await loadManagedTwentyRow(tenantId, db);
   if (!existing) return;
 
+  // Snapshot workspace-attached agents before the cascade removes the
+  // agent_mcp_servers rows (Composer U9 follow-up), so the `mcp/<slug>/`
+  // folders get removed too. Bucket-gated; null in DB-mocked tests.
+  let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
+  try {
+    const { snapshotMcpServerAttachment } = await import(
+      "./mcp/assignment-state.js"
+    );
+    folderSnapshot = await snapshotMcpServerAttachment({
+      tenantId,
+      registryServerId: existing.id,
+    });
+  } catch (err) {
+    console.warn(
+      "[managed-mcp] MCP workspace-folder snapshot failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   const tokens = (await db
     .select({ id: userMcpTokens.id, secret_ref: userMcpTokens.secret_ref })
     .from(userMcpTokens)
@@ -550,4 +588,18 @@ async function destroyTwentyManagedMcp(
         eq(tenantMcpServers.tenant_id, tenantId),
       ),
     );
+
+  if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
+    try {
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "./mcp/assignment-state.js"
+      );
+      await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+    } catch (err) {
+      console.warn(
+        "[managed-mcp] MCP workspace-folder removal failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 }

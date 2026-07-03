@@ -329,6 +329,53 @@ describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
     log.mockRestore();
   });
 
+  it("resolves a fresh plugin server via its file when the agent already has other mcp/ files (Composer U9 regression)", async () => {
+    // The exact dropped-server scenario: an agent already has server-a's file
+    // (non-empty listing → file path wins, no DB fallback). A plugin install
+    // adds server-b to the approved registry. WITHOUT server-b's file (the
+    // pre-fix bug) it drops; WITH it (the parity fix materializes it) both
+    // resolve.
+    const serverA = baseRow({
+      mcp_server_id: "srv-a",
+      slug: "server-a",
+      name: "Server A",
+      url: "https://mcp.example/a",
+    });
+    const serverPlugin = baseRow({
+      mcp_server_id: "srv-plugin",
+      slug: "lastmile--crm",
+      name: "LastMile CRM",
+      url: "https://mcp.example/plugin",
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+    });
+    mockRowsForJoin.mockReturnValue([serverA, serverPlugin]);
+
+    // Pre-fix: only server-a has a file → plugin server DROPS.
+    const dropped = await buildMcpConfigs("agent-1", null, "[test]", {
+      workspaceMcp: fileStore({
+        "server-a": state({ slug: "server-a", registryServerId: "srv-a" }),
+      }),
+    });
+    expect(dropped.map((c) => c.name)).toEqual(["server-a"]);
+
+    // Post-fix: the parity code materialized the plugin file too → both attach.
+    const fixed = await buildMcpConfigs("agent-1", null, "[test]", {
+      workspaceMcp: fileStore({
+        "server-a": state({ slug: "server-a", registryServerId: "srv-a" }),
+        "lastmile--crm": state({
+          slug: "lastmile--crm",
+          name: "LastMile CRM",
+          registryServerId: "srv-plugin",
+        }),
+      }),
+    });
+    expect(fixed.map((c) => c.name).sort()).toEqual([
+      "lastmile--crm",
+      "server-a",
+    ]);
+  });
+
   it("falls back without loading the store when the agent has no slug", async () => {
     mockRowsForAgent.mockReturnValue([{ tenant_id: "tenant-1", slug: null }]);
     const helpers = fileStore({ "test-server": state() });

@@ -464,6 +464,26 @@ export async function teardownPluginMcpComponent(args: {
       : null;
   if (!serverId) return; // never provisioned — nothing to tear down
 
+  // Snapshot the workspace-attached agents BEFORE the cascade deletes the
+  // agent_mcp_servers rows, so uninstall can remove their `mcp/<slug>/`
+  // folders too (Composer U9 follow-up). Bucket-gated — null (no DB read) in
+  // DB-mocked unit tests.
+  let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
+  try {
+    const { snapshotMcpServerAttachment } = await import(
+      "../../mcp/assignment-state.js"
+    );
+    folderSnapshot = await snapshotMcpServerAttachment({
+      tenantId: args.tenantId,
+      registryServerId: serverId,
+    });
+  } catch (err) {
+    console.warn(
+      "[plugin-mcp] MCP workspace-folder snapshot failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   const tokens = (await db
     .select({ id: userMcpTokens.id, secret_ref: userMcpTokens.secret_ref })
     .from(userMcpTokens)
@@ -515,6 +535,21 @@ export async function teardownPluginMcpComponent(args: {
         eq(tenantMcpServers.tenant_id, args.tenantId),
       ),
     );
+
+  // Remove the per-agent workspace folders now that the DB rows are gone.
+  if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
+    try {
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "../../mcp/assignment-state.js"
+      );
+      await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+    } catch (err) {
+      console.warn(
+        "[plugin-mcp] MCP workspace-folder removal failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 }
 
 async function ensurePluginMcpDefaultAgentAssignments(
@@ -542,5 +577,28 @@ async function ensurePluginMcpDefaultAgentAssignments(
         target: [agentMcpServers.agent_id, agentMcpServers.mcp_server_id],
         set: { enabled: true, updated_at: new Date() },
       });
+  }
+
+  // Workspace-folder parity (Composer U9 follow-up), AFTER the DB upserts.
+  // Without this the plugin server materializes NO `mcp/<slug>/.assignment.json`
+  // and silently drops from any agent that already has other mcp/ files (the
+  // non-empty listing wins in buildMcpConfigs with no DB fallback). Reconcile
+  // the WHOLE attached set per agent so the new server AND pre-existing DB-only
+  // attachments both get files. Best-effort: a failure logs and never fails the
+  // provision the DB row already committed. Bucket-gated — a no-op in
+  // DB-mocked unit tests.
+  try {
+    const { reconcileMcpAssignmentFoldersForAgents } = await import(
+      "../../mcp/assignment-state.js"
+    );
+    await reconcileMcpAssignmentFoldersForAgents({
+      agentIds: platformAgents.map((agent) => agent.id),
+      tenantId,
+    });
+  } catch (err) {
+    console.error(
+      "[plugin-mcp] MCP workspace-folder materialization failed (agent_mcp_servers rows remain authoritative):",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
