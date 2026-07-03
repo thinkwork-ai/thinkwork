@@ -1,8 +1,11 @@
+// Neutral payload home (plan 2026-07-03-005 KTD-5): structurally identical
+// to the legacy CogneeGraph* shapes; aliased locally to keep this file's
+// frozen normalization logic diff-free.
 import type {
-  CogneeGraphEdge,
-  CogneeGraphNode,
-  CogneeGraphPayload,
-} from "@thinkwork/plugin-company-brain/api/cognee-client";
+  GraphExtractionEdge as CogneeGraphEdge,
+  GraphExtractionNode as CogneeGraphNode,
+  GraphExtractionPayload as CogneeGraphPayload,
+} from "./graph-payload.js";
 import {
   normalizeOntologySlug,
   type KnowledgeGraphOntologyExport,

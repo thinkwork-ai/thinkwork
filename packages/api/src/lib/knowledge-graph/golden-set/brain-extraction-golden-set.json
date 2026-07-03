@@ -1,0 +1,43 @@
+{
+  "description": "Fixed extraction quality gate (plan 2026-07-03-005 U1/U4). Offline tests assert the fixture's internal shape; U4 runs the packets against the live model and holds the numeric bar: zero junk entities, >=80% expected-entity recall (case-insensitive label match). Expected relationships are directional (source -> target by entity label).",
+  "packets": [
+    { "id": "gs-01", "text": "Acme Corp is our key manufacturing customer; Jane Doe leads the renewal negotiation for them." },
+    { "id": "gs-02", "text": "The Q3 Renewal opportunity with Acme Corp is at risk because their plant in Toledo is pausing orders." },
+    { "id": "gs-03", "text": "Northwind Traders signed a two-year contract for the fleet analytics product." },
+    { "id": "gs-04", "text": "Project Falcon launch moved to September 15, 2026; Maria Chen owns the launch checklist." },
+    { "id": "gs-05", "text": "We decided to standardize invoicing on Stripe after the billing incident review." },
+    { "id": "gs-06", "text": "Tom Alvarez from Northwind Traders is the primary contact for the analytics rollout." },
+    { "id": "gs-07", "text": "The user asked about lunch options near the office and preferred the taco place." },
+    { "id": "gs-08", "text": "Support escalations for Acme Corp route to the Tier 2 queue owned by Priya Nair." },
+    { "id": "gs-09", "text": "No new information was retained from the standup discussion." },
+    { "id": "gs-10", "text": "GlobalTech Industries requested a security review before expanding their seat count." },
+    { "id": "gs-11", "text": "Maria Chen presented the Project Falcon risk register to the steering committee." },
+    { "id": "gs-12", "text": "The assistant summarized yesterday's conversation about weekend plans." }
+  ],
+  "expected_entities": [
+    "Acme Corp",
+    "Jane Doe",
+    "Q3 Renewal",
+    "Northwind Traders",
+    "Project Falcon",
+    "Maria Chen",
+    "Stripe",
+    "Tom Alvarez",
+    "Priya Nair",
+    "GlobalTech Industries"
+  ],
+  "junk_entities_must_not_appear": [
+    "user",
+    "assistant",
+    "lunch",
+    "taco place",
+    "standup",
+    "weekend plans",
+    "office"
+  ],
+  "expected_relationships": [
+    { "source": "Jane Doe", "target": "Acme Corp" },
+    { "source": "Tom Alvarez", "target": "Northwind Traders" },
+    { "source": "Maria Chen", "target": "Project Falcon" }
+  ]
+}
