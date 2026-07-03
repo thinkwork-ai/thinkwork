@@ -322,6 +322,54 @@ describe("memory-retain handler", () => {
     expect(result).toEqual({ ok: false, error: "MISSING_DOCUMENT_ID" });
   });
 
+  it("eval-marked events retain the marked conversation but skip fact extraction and wiki compile", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        { role: "user", content: "My user orbit checksum 8a9a4d57 is UserMarkerff3cbac6." },
+        { role: "assistant", content: "Noted." },
+      ],
+      metadata: { evalTraffic: true },
+    });
+
+    expect(result.ok).toBe(true);
+    // The conversation document is retained, with the marker in metadata so
+    // Hindsight persists it on the document for downstream exclusion.
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(retainConversationMock.mock.calls[0][0].metadata).toMatchObject({
+      evalTraffic: true,
+    });
+    // No synthetic high-confidence facts, no user_profiles projection, no
+    // wiki compile from eval traffic.
+    expect(executeMock).not.toHaveBeenCalled();
+    expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
+    expect(maybeEnqueueMock).not.toHaveBeenCalled();
+  });
+
+  it("unmarked traffic still extracts facts and enqueues wiki compile", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi" },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(maybeEnqueueMock).toHaveBeenCalledTimes(1);
+  });
+
   it("happy path: 32 DB rows + matching event tail → adapter receives 32 messages", async () => {
     buildRetainConversationServices();
     const dbRows = Array.from({ length: 32 }, (_, i) =>

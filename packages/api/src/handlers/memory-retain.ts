@@ -245,6 +245,7 @@ async function processClaimedRetainAttempt(
     rejected: RejectedHighConfidenceFactCandidate[];
   } = { documents: [], rejected: [] };
   let highConfidenceFactError: unknown = null;
+  const evalTraffic = isEvalTrafficMetadata(eventMetadata);
 
   try {
     const eventMessages = normalizeMessages(
@@ -284,15 +285,25 @@ async function processClaimedRetainAttempt(
         );
       }
 
-      const highConfidenceFactPromise = retainHighConfidenceFacts({
-        adapter,
-        attempt,
-        tenantId,
-        userId,
-        spaceId: attempt.space_id,
-        threadId: eventThreadId,
-        messages: merged,
-      });
+      // Eval/test traffic (THINK-133 U3): the conversation document is still
+      // retained (carrying the evalTraffic marker in its metadata so KG
+      // ingest and the dream state can exclude it), but high-confidence-fact
+      // extraction is skipped — it writes synthetic fixtures into
+      // hindsight.memory_units and user_profiles as if they were real facts.
+      const highConfidenceFactPromise = evalTraffic
+        ? Promise.resolve({
+            documents: [] as RetainedHighConfidenceFactDocument[],
+            rejected: [] as RejectedHighConfidenceFactCandidate[],
+          })
+        : retainHighConfidenceFacts({
+            adapter,
+            attempt,
+            tenantId,
+            userId,
+            spaceId: attempt.space_id,
+            threadId: eventThreadId,
+            messages: merged,
+          });
       const conversationPromise = adapter.retainConversation({
         ...owner,
         threadId: eventThreadId,
@@ -375,6 +386,11 @@ async function processClaimedRetainAttempt(
           retainedAt: new Date().toISOString(),
         }),
       });
+    }
+
+    if (evalTraffic) {
+      // Eval traffic never seeds the wiki pipeline.
+      return { ok: true, engine, attemptId: attempt.id };
     }
 
     const compileOutcome = await maybeEnqueuePostTurnCompile({
@@ -1004,4 +1020,19 @@ function boundedMessages(
 
 function stringField(value: unknown): string {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+/**
+ * Eval/test traffic marker (THINK-133 U3, KTD-5). Stamped by the runtime's
+ * retain client (`evalTraffic` metadata) or directly by smoke/eval fixtures
+ * that invoke this Lambda. Marked events retain the conversation document —
+ * with the marker propagated into Hindsight document metadata — but skip
+ * high-confidence-fact extraction and wiki compile.
+ */
+export function isEvalTrafficMetadata(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+  const value = (metadata as { evalTraffic?: unknown }).evalTraffic;
+  return value === true || value === "true";
 }

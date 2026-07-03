@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildMemoryRetainRequest,
   buildRetainTranscript,
+  isEvalTrafficPayload,
+  retainConversation,
 } from "./memory-retain-client.js";
+import type { RuntimeEnvSnapshot } from "../../handler-context.js";
 import type { IdentitySnapshot } from "../../handler-context.js";
 
 const identity: IdentitySnapshot = {
@@ -62,5 +65,64 @@ describe("memory-retain-client", () => {
         sourceEventKey: "thread-turn:turn-1",
       },
     });
+  });
+
+  it("recognizes eval traffic from eval_mode or trigger_channel", () => {
+    expect(isEvalTrafficPayload({ eval_mode: true })).toBe(true);
+    expect(isEvalTrafficPayload({ eval_mode: "true" })).toBe(true);
+    expect(isEvalTrafficPayload({ trigger_channel: "eval" })).toBe(true);
+    expect(isEvalTrafficPayload({ trigger_channel: "chat" })).toBe(false);
+    expect(isEvalTrafficPayload({})).toBe(false);
+  });
+
+  it("stamps evalTraffic into retain metadata for eval payloads", () => {
+    expect(
+      buildMemoryRetainRequest(
+        { use_memory: true, eval_mode: true, message: "synthetic" },
+        identity,
+        "ok",
+      ).metadata,
+    ).toMatchObject({ evalTraffic: true });
+    expect(
+      buildMemoryRetainRequest(
+        { use_memory: true, message: "real" },
+        identity,
+        "ok",
+      ).metadata?.evalTraffic,
+    ).toBeUndefined();
+  });
+
+  it("explicitly suppresses retain for eval traffic even when use_memory is true", async () => {
+    const env = {
+      memoryRetainFnName: "memory-retain-fn",
+      awsRegion: "us-east-1",
+    } as unknown as RuntimeEnvSnapshot;
+    const send = { calls: 0 };
+    const lambdaClient = {
+      send: async () => {
+        send.calls += 1;
+        return {};
+      },
+    } as never;
+
+    const evalResult = await retainConversation({
+      payload: { use_memory: true, eval_mode: true, message: "synthetic" },
+      identity,
+      env,
+      assistantContent: "ok",
+      lambdaClient,
+    });
+    expect(evalResult).toEqual({ retained: false });
+    expect(send.calls).toBe(0);
+
+    const realResult = await retainConversation({
+      payload: { use_memory: true, message: "real" },
+      identity,
+      env,
+      assistantContent: "ok",
+      lambdaClient,
+    });
+    expect(realResult).toEqual({ retained: true });
+    expect(send.calls).toBe(1);
   });
 });
