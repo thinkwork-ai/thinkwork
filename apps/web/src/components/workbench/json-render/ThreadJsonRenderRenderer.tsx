@@ -23,6 +23,8 @@ import { TaskReviewCard } from "@/components/workbench/genui/components/TaskRevi
 import { TaskStatusSummary } from "@/components/workbench/genui/components/TaskStatusSummary";
 import { WorkflowListPreview } from "@/components/workbench/genui/components/WorkflowListPreview";
 
+import { DataTableView } from "./components/DataTableView";
+
 import {
   threadJsonRenderCatalog,
   threadJsonRenderPrimitiveComponents,
@@ -117,6 +119,15 @@ function createDomainComponents(actionState: DurableActionState) {
         statusForAction={actionState.statusForAction}
       />
     )) satisfies ThreadJsonRenderComponentFn<"result.list">,
+    table: (({ props }) => (
+      <DataTableView
+        {...props}
+        actions={actionState.actions}
+        actionsDisabled={actionState.actionsDisabled}
+        onAction={actionState.onAction}
+        statusForAction={actionState.statusForAction}
+      />
+    )) satisfies ThreadJsonRenderComponentFn<"table">,
   } satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
 }
 

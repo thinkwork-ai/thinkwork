@@ -72,6 +72,21 @@ const resultListItemSchema = z.discriminatedUnion("variant", [
     .strict(),
 ]);
 
+const tableColumnSchema = z
+  .object({
+    id: z.string(),
+    header: z.string(),
+    accessor: z.string().nullable().optional(),
+    align: z.enum(["left", "right", "center"]).nullable().optional(),
+    sortable: z.boolean().optional(),
+  })
+  .strict();
+
+// Table rows are flat records of primitive cell values. Reserved keys `id`,
+// `primaryActionId`, and `secondaryActionId` (all string primitives) carry row
+// identity + durable-action references; every other key is a column cell.
+const tableRowSchema = z.record(z.string(), resultListMetaValueSchema);
+
 export const threadJsonRenderSchema = defineSchema((schema) => ({
   spec: schema.object({
     root: schema.string(),
@@ -238,6 +253,35 @@ export const threadJsonRenderDomainComponentDefinitions = {
           statusLabel: "Ready",
         },
       ],
+    },
+  },
+  table: {
+    props: z
+      .object({
+        title: z.string().nullable().optional(),
+        caption: z.string().nullable().optional(),
+        columns: z.array(tableColumnSchema).max(16),
+        rows: z.array(tableRowSchema).max(50),
+        sort: z
+          .object({
+            columnId: z.string(),
+            direction: z.enum(["asc", "desc"]),
+          })
+          .strict()
+          .nullable()
+          .optional(),
+      })
+      .strict(),
+    slots: ["default"],
+    description:
+      "Read-first ThinkWork data table with client-side sorting and durable per-row actions.",
+    example: {
+      title: "Open work items",
+      columns: [
+        { id: "name", header: "Name" },
+        { id: "status", header: "Status", sortable: true },
+      ],
+      rows: [{ id: "row-1", name: "Kickoff", status: "Ready" }],
     },
   },
 } as const;

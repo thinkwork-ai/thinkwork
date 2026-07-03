@@ -238,6 +238,75 @@ export function createResultListJsonRenderFixture(): ThreadJsonRenderPart {
   );
 }
 
+export function createTableJsonRenderFixture(): ThreadJsonRenderPart {
+  const spec = {
+    root: "table",
+    elements: {
+      table: {
+        type: "table",
+        props: {
+          title: "Open work items",
+          caption: "Sorted by score",
+          columns: [
+            { id: "name", header: "Name" },
+            { id: "owner", header: "Owner", sortable: true },
+            { id: "score", header: "Score", align: "right", sortable: true },
+          ],
+          rows: [
+            {
+              id: "row-1",
+              name: "Kickoff onboarding",
+              owner: "Codex",
+              score: 3,
+              primaryActionId: "complete-row-1",
+            },
+            {
+              id: "row-2",
+              name: "Draft launch plan",
+              owner: "Ada",
+              score: 1,
+            },
+            {
+              id: "row-3",
+              name: "Review guardrails",
+              owner: "Bao",
+              score: 2,
+            },
+          ],
+          sort: { columnId: "score", direction: "desc" },
+        },
+        children: [],
+      },
+    },
+  } satisfies ThreadJsonRenderSpec;
+
+  return createThreadJsonRenderPart(
+    "json-render:table:work-items",
+    spec,
+    {
+      title: "Open work items",
+      summary: "Three open work items sorted by score.",
+      lines: [
+        "Kickoff onboarding — Codex — 3",
+        "Review guardrails — Bao — 2",
+        "Draft launch plan — Ada — 1",
+      ],
+    },
+    [
+      {
+        id: "complete-row-1",
+        label: "Complete",
+        kind: "submit",
+        params: {
+          target: "work_item_status",
+          workItemId: "77777777-7777-7777-7777-777777777777",
+          statusCategory: "DONE",
+        },
+      },
+    ],
+  );
+}
+
 function createThreadJsonRenderPart(
   id: string,
   spec: ThreadJsonRenderSpec,
