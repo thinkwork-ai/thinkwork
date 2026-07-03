@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const updateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@thinkwork/database-pg", () => ({
+  getDb: () => ({ update: updateMock }),
+}));
 
 import {
   buildRetainSourceEventKey,
   classifyRetainError,
   nextRetryAt,
   runningAttemptStaleBefore,
+  sweepExhaustedRunningAttempts,
 } from "./retain-attempts.js";
 
 describe("retain-attempts helpers", () => {
@@ -60,6 +67,22 @@ describe("retain-attempts helpers", () => {
     });
   });
 
+  it("classifies an ALB 504 HTML error page as retryable backend failure", () => {
+    // Real shape observed on dev: the Hindsight ALB times out before the
+    // backend finishes and returns its own HTML 504 page.
+    expect(
+      classifyRetainError(
+        new Error(
+          "[hindsight-adapter] retainConversation failed: hindsight retainConversation 504: <html>\r\n<head><title>504 Gateway Time-out</title></head>",
+        ),
+      ),
+    ).toMatchObject({
+      status: "failed_backend",
+      retryable: true,
+      errorClass: "hindsight_504",
+    });
+  });
+
   it("classifies Hindsight 4xx as non-retryable dead letter", () => {
     expect(
       classifyRetainError(
@@ -82,12 +105,38 @@ describe("retain-attempts helpers", () => {
   });
 
   it("derives the stale running lease cutoff from the current time", () => {
-    const now = new Date("2026-06-28T00:05:00.000Z");
+    const now = new Date("2026-06-28T00:10:00.000Z");
+    // Default lease must exceed the memory-retain Lambda timeout (300s) so a
+    // live in-flight attempt is never reclaimed and double-run.
     expect(runningAttemptStaleBefore(now).toISOString()).toBe(
-      "2026-06-28T00:03:00.000Z",
+      "2026-06-28T00:04:00.000Z",
     );
     expect(runningAttemptStaleBefore(now, 30_000).toISOString()).toBe(
-      "2026-06-28T00:04:30.000Z",
+      "2026-06-28T00:09:30.000Z",
     );
+  });
+
+  it("sweeps exhausted stale running attempts to dead_lettered", async () => {
+    const returningMock = vi
+      .fn()
+      .mockResolvedValue([{ id: "a-1" }, { id: "a-2" }]);
+    const whereMock = vi.fn().mockReturnValue({ returning: returningMock });
+    const setMock = vi.fn().mockReturnValue({ where: whereMock });
+    updateMock.mockReturnValue({ set: setMock });
+
+    const swept = await sweepExhaustedRunningAttempts({
+      now: new Date("2026-06-28T00:10:00.000Z"),
+    });
+
+    expect(swept).toBe(2);
+    expect(setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "dead_lettered",
+        next_retry_at: null,
+        locked_at: null,
+        locked_by: null,
+      }),
+    );
+    expect(whereMock).toHaveBeenCalledTimes(1);
   });
 });

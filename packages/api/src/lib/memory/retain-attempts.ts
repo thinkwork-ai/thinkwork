@@ -39,7 +39,10 @@ const RETRYABLE_STATUSES = [
 
 const DEFAULT_MAX_ATTEMPTS = 5;
 const MAX_ERROR_MESSAGE_CHARS = 500;
-export const DEFAULT_RUNNING_ATTEMPT_STALE_AFTER_MS = 2 * 60 * 1000;
+// Must exceed the memory-retain Lambda timeout (300s in terraform) — a
+// `running` row younger than this may still have a live in-flight attempt,
+// and reclaiming it early double-runs the retain.
+export const DEFAULT_RUNNING_ATTEMPT_STALE_AFTER_MS = 6 * 60 * 1000;
 
 export function buildRetainSourceEventKey(input: {
   tenantId: string;
@@ -263,6 +266,44 @@ export async function listDueRetainAttempts(
     )
     .orderBy(asc(memoryRetainAttempts.next_retry_at))
     .limit(options.limit ?? 25);
+}
+
+/**
+ * Dead-letter `running` rows that can never be reclaimed: the claim and
+ * list-due paths both require `attempt_count < max_attempts`, so a row whose
+ * final attempt died without recording an outcome (e.g. Lambda hard timeout
+ * mid-retain) stays `running` forever. The drainer calls this before listing
+ * due work so those rows land in the dead-letter view instead of stranding.
+ */
+export async function sweepExhaustedRunningAttempts(
+  options: { now?: Date; staleAfterMs?: number } = {},
+): Promise<number> {
+  const now = options.now ?? new Date();
+  const staleRunningBefore = runningAttemptStaleBefore(
+    now,
+    options.staleAfterMs,
+  );
+  const rows = await getDb()
+    .update(memoryRetainAttempts)
+    .set({
+      status: "dead_lettered",
+      next_retry_at: null,
+      locked_at: null,
+      locked_by: null,
+      finished_at: now,
+      error_class: sql`COALESCE(${memoryRetainAttempts.error_class}, 'stale_running_exhausted')`,
+      error_message: sql`COALESCE(${memoryRetainAttempts.error_message}, 'final attempt died before recording an outcome (stale running sweep)')`,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(memoryRetainAttempts.status, "running"),
+        lte(memoryRetainAttempts.locked_at, staleRunningBefore),
+        sql`${memoryRetainAttempts.attempt_count} >= ${memoryRetainAttempts.max_attempts}`,
+      ),
+    )
+    .returning({ id: memoryRetainAttempts.id });
+  return rows.length;
 }
 
 export function runningAttemptStaleBefore(

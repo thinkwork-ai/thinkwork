@@ -194,6 +194,13 @@ resource "aws_lb" "hindsight" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = var.subnet_ids
 
+  # Synchronous retain runs LLM extraction + auto-consolidation and routinely
+  # exceeds the 60s ALB default, which returned 504s to the retain Lambda
+  # while Hindsight was still working (every dead-lettered retain attempt on
+  # dev showed ~60.1-60.5s backend latency). Must stay above the retain
+  # Lambda's HINDSIGHT_TIMEOUT_MS so the client, not the ALB, owns timeouts.
+  idle_timeout = 300
+
   tags = { Name = "thinkwork-${var.stage}-hindsight-alb" }
 }
 

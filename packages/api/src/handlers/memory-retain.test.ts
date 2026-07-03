@@ -22,6 +22,7 @@ const claimRetainAttemptMock = vi.hoisted(() => vi.fn());
 const markRetainAttemptRetainedMock = vi.hoisted(() => vi.fn());
 const markRetainAttemptFailedMock = vi.hoisted(() => vi.fn());
 const listDueRetainAttemptsMock = vi.hoisted(() => vi.fn());
+const sweepExhaustedRunningAttemptsMock = vi.hoisted(() => vi.fn());
 const classifyRetainErrorMock = vi.hoisted(() => vi.fn());
 const writeUserContextMdForUserMock = vi.hoisted(() => vi.fn());
 
@@ -40,6 +41,7 @@ vi.mock("../lib/memory/retain-attempts.js", () => ({
   markRetainAttemptRetained: markRetainAttemptRetainedMock,
   markRetainAttemptFailed: markRetainAttemptFailedMock,
   listDueRetainAttempts: listDueRetainAttemptsMock,
+  sweepExhaustedRunningAttempts: sweepExhaustedRunningAttemptsMock,
   classifyRetainError: classifyRetainErrorMock,
 }));
 
@@ -1000,6 +1002,21 @@ describe("memory-retain handler", () => {
     expect(retainConversationMock.mock.calls[0][0].messages).toEqual([
       expect.objectContaining({ content: "retry me" }),
     ]);
+  });
+
+  it("drain_due sweeps exhausted running attempts before listing due work", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    sweepExhaustedRunningAttemptsMock.mockResolvedValueOnce(3);
+    listDueRetainAttemptsMock.mockResolvedValueOnce([]);
+
+    const result = await handler({ kind: "drain_due" });
+
+    expect(sweepExhaustedRunningAttemptsMock).toHaveBeenCalled();
+    expect(
+      sweepExhaustedRunningAttemptsMock.mock.invocationCallOrder.at(-1),
+    ).toBeLessThan(listDueRetainAttemptsMock.mock.invocationCallOrder.at(-1)!);
+    expect(result).toMatchObject({ ok: true, processed: 0 });
   });
 
   it("100+ message merge does not silently cap", async () => {
