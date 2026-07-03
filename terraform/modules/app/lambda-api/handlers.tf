@@ -72,6 +72,12 @@ locals {
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
     THINKWORK_API_URL           = local.api_base_url
+    # Deterministic routines v1 (plan 2026-07-03-004 U6): activates the
+    # git-backed routine lifecycle tool suite on the admin-ops MCP server
+    # (routine_repo_list/read/commit, routine_run_fixtures, routine_runs).
+    # Read via getConfig() in admin-ops-mcp.ts; without this the tools are
+    # listed but every call returns not_yet_enabled.
+    ROUTINES_AGENT_TOOLS_ENABLED = "true"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled

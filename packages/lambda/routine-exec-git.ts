@@ -137,7 +137,7 @@ export interface RoutineExecGitOptions {
   now?: () => Date;
 }
 
-interface RepoCredential {
+export interface RepoCredential {
   repoUrl: string;
   token: string;
   branch: string;
@@ -440,7 +440,7 @@ export async function executeGitRoutine(
 // Repo credential
 // ---------------------------------------------------------------------------
 
-async function resolveRepoCredential(
+export async function resolveRepoCredential(
   tenantId: string,
   db: ReturnType<typeof getDb>,
   options: RoutineExecGitOptions,
