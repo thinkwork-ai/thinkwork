@@ -315,21 +315,18 @@ locals {
     # per-tenant dataset; the promotion-gate classifier reads
     # OBSERVATION_CLASSIFIER_MODEL_ID (Bedrock IAM via the shared
     # lambda_bedrock invoke policy).
+    # Observations → Knowledge Graph worker. Extraction is now a Bedrock
+    # structured-output call inside this Lambda (plan 2026-07-03-005); Cognee
+    # is retired, so no COGNEE_* env. KG_EXTRACTION_MODEL_ID pins the gpt-oss
+    # extraction model (Bedrock IAM via the shared lambda_bedrock invoke
+    # policy, same as the promotion-gate classifier).
     "knowledge-graph-observations-ingest" = {
-      COGNEE_ENDPOINT                 = var.cognee_endpoint
-      COGNEE_BACKEND_MODE             = var.cognee_backend_mode
-      COGNEE_INGEST_MODE              = "add_cognify"
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
-      # Per-run candidate cap: bounds classifier cost AND keeps each Cognee
-      # cognify small enough to index within budget on the single dogfood
-      # task; truncated runs self-invoke (Event) to drain the backlog across
-      # successive runs. COGNEE_INDEX_TIMEOUT_MS raised well above the default
-      # 240s (dogfood indexing of a fresh dataset is slow) but under the 900s
-      # Lambda ceiling, leaving room for graph fetch + normalize + snapshot.
+      KG_EXTRACTION_MODEL_ID          = var.kg_extraction_model_id
+      # Per-run candidate cap bounds classifier + extraction cost; truncated
+      # runs self-invoke (Event) to drain the backlog across successive runs.
       KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
-      COGNEE_INDEX_TIMEOUT_MS       = "700000"
-      COGNEE_INDEX_POLL_MS          = "7000"
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -755,7 +752,7 @@ resource "aws_lambda_function" "handler" {
   dynamic "vpc_config" {
     for_each = (
       (
-        contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) ||
+        contains(["knowledge-graph-thread-ingest"], each.key) ||
         (each.key == "graphql-http" && var.memory_engine == "cognee")
       ) && local.cognee_worker_vpc_enabled
     ) ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
@@ -1893,7 +1890,10 @@ resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
   name                = "thinkwork-${var.stage}-knowledge-graph-observations-ingest"
   group_name          = "default"
   schedule_expression = "rate(30 minutes)"
-  state               = "ENABLED"
+  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the Bedrock extractor
+  # replaces Cognee, and the schedule enables on dev only after a manual
+  # golden-set-validated run. Driven by the GHA WIKI_KG_INGEST_ENABLED var.
+  state = var.knowledge_graph_observations_ingest_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {
     mode = "OFF"

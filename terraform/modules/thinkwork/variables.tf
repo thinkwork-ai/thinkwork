@@ -1535,6 +1535,12 @@ variable "company_brain_backdoor_install_key_stages" {
   default     = ""
 }
 
+variable "knowledge_graph_observations_ingest_enabled" {
+  description = "Enable the Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled (plan 2026-07-03-005 U4)."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki compile pipeline source: 'planner' or 'graph' (THINK-133 U8/KTD-4)."
   type        = string

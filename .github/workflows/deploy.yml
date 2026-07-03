@@ -1579,6 +1579,7 @@ jobs:
             -var "n8n_cache_engine=$N8N_CACHE_ENGINE"
             -var "enable_workspace_orchestration=true"
             -var "wiki_source=${{ vars.WIKI_SOURCE || 'planner' }}"
+            -var "knowledge_graph_observations_ingest_enabled=${{ vars.WIKI_KG_INGEST_ENABLED || 'false' }}"
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
             -var "lambda_zips_dir=$LAMBDA_DIR"
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"

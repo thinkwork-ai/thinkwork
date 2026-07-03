@@ -548,6 +548,18 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
+variable "kg_extraction_model_id" {
+  description = "Bedrock model id for knowledge-graph entity/relationship extraction from observations (plan 2026-07-03-005). Defaults to a gpt-oss high-quota model; overridable per stage."
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
+variable "knowledge_graph_observations_ingest_enabled" {
+  description = "Enable the recurring Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled; dev flips on after a golden-set-validated manual run (plan 2026-07-03-005 U4)."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer over the knowledge-graph mirror and makes successful observation-ingest runs the compile trigger. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
   type        = string

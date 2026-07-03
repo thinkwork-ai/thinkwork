@@ -1,47 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  fetchDatasetGraphMock,
-  ingestDocumentMock,
-  waitForDatasetIndexingMock,
-  deleteDatasetByNameMock,
-  pruneAllMock,
+  extractorMock,
   loadApprovedOntologyExportMock,
   loadKnowledgeGraphIngestRunMock,
   loadObservationsKnowledgeGraphSourceMock,
-  countKnowledgeGraphEntitiesForSourceMock,
   markKnowledgeGraphRunFailedMock,
   markKnowledgeGraphRunRunningMock,
   markKnowledgeGraphRunStaleNoopMock,
-  replaceKnowledgeGraphSnapshotMock,
+  mergeKnowledgeGraphSnapshotMock,
+  purgeKnowledgeGraphSourceMock,
   createKnowledgeGraphObservationsIngestRunMock,
   reapStaleObservationIngestRunsMock,
 } = vi.hoisted(() => ({
-  fetchDatasetGraphMock: vi.fn(),
-  ingestDocumentMock: vi.fn(),
-  waitForDatasetIndexingMock: vi.fn(),
-  deleteDatasetByNameMock: vi.fn(),
-  pruneAllMock: vi.fn(),
+  extractorMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
   loadKnowledgeGraphIngestRunMock: vi.fn(),
   loadObservationsKnowledgeGraphSourceMock: vi.fn(),
-  countKnowledgeGraphEntitiesForSourceMock: vi.fn(),
   markKnowledgeGraphRunFailedMock: vi.fn(),
   markKnowledgeGraphRunRunningMock: vi.fn(),
   markKnowledgeGraphRunStaleNoopMock: vi.fn(),
-  replaceKnowledgeGraphSnapshotMock: vi.fn(),
+  mergeKnowledgeGraphSnapshotMock: vi.fn(),
+  purgeKnowledgeGraphSourceMock: vi.fn(),
   createKnowledgeGraphObservationsIngestRunMock: vi.fn(),
   reapStaleObservationIngestRunsMock: vi.fn(),
 }));
 
-vi.mock("@thinkwork/plugin-company-brain/api/cognee-client", () => ({
-  CogneeClient: vi.fn(() => ({
-    fetchDatasetGraph: fetchDatasetGraphMock,
-    ingestDocument: ingestDocumentMock,
-    waitForDatasetIndexing: waitForDatasetIndexingMock,
-    deleteDatasetByName: deleteDatasetByNameMock,
-    pruneAll: pruneAllMock,
-  })),
+vi.mock("../lib/knowledge-graph/bedrock-graph-extractor.js", () => ({
+  extractGraphFromPackets: extractorMock,
 }));
 
 vi.mock("../lib/knowledge-graph/ontology-export.js", async () => {
@@ -60,13 +46,12 @@ vi.mock("../lib/knowledge-graph/observations-source.js", () => ({
 }));
 
 vi.mock("../lib/knowledge-graph/repository.js", () => ({
-  countKnowledgeGraphEntitiesForSource:
-    countKnowledgeGraphEntitiesForSourceMock,
   loadKnowledgeGraphIngestRun: loadKnowledgeGraphIngestRunMock,
   markKnowledgeGraphRunFailed: markKnowledgeGraphRunFailedMock,
   markKnowledgeGraphRunRunning: markKnowledgeGraphRunRunningMock,
   markKnowledgeGraphRunStaleNoop: markKnowledgeGraphRunStaleNoopMock,
-  replaceKnowledgeGraphSnapshot: replaceKnowledgeGraphSnapshotMock,
+  mergeKnowledgeGraphSnapshot: mergeKnowledgeGraphSnapshotMock,
+  purgeKnowledgeGraphSource: purgeKnowledgeGraphSourceMock,
 }));
 
 vi.mock("../lib/knowledge-graph/runs.js", async () => {
@@ -96,10 +81,9 @@ const run = {
   metadata: {},
 };
 const ontology = {
-  mechanism: "cognee_owl_ontology" as const,
-  // "Company" is approved so the fake graph node grounds (the real
-  // normalizer drops unapproved-type nodes — entity counts matter to the
-  // shrink-guard assertions below).
+  mechanism: "custom_prompt" as const,
+  // "Company" is approved so the extracted node grounds through the REAL
+  // normalizer (unapproved-type nodes are dropped).
   entityTypes: [
     {
       id: "type-company",
@@ -112,7 +96,7 @@ const ontology = {
   relationshipTypes: [],
   customPrompt: "Extract",
   ontologyKey: "thinkwork_tenant_abc123",
-  ontologyOwlXml: "<rdf:RDF></rdf:RDF>",
+  ontologyOwlXml: null,
 };
 
 function makeCursorDeleteChain() {
@@ -142,13 +126,7 @@ function makeSourceResult(
       sourceKind: "observations" as const,
       sourceRef: run.source_ref,
       sourceLabel: "Hindsight observations",
-      document: [
-        "# Hindsight observations",
-        ...promotedIds.map(
-          (id) =>
-            `<!-- source_packet:${id} trusted_ontology_type:false -->\nAcme uses Delta.`,
-        ),
-      ].join("\n\n"),
+      document: "# Hindsight observations",
       evidence: promotedIds.map((id, ordinal) => ({
         id,
         role: "source",
@@ -179,7 +157,7 @@ function makeSourceResult(
       promoted: [],
       excluded: [],
       audit: {
-        classifierModelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        classifierModelId: "moonshotai.kimi-k2.5",
         classifierPromptVersion: "v1",
         promotedIds,
         excludedCounts: {
@@ -205,6 +183,31 @@ function makeSourceResult(
   };
 }
 
+function makeExtraction(
+  overrides: Partial<{
+    batchesDropped: number;
+    batchesTruncated: number;
+    nodes: unknown[];
+    edges: unknown[];
+  }> = {},
+) {
+  return {
+    payload: {
+      // "Acme" is a verbatim substring of the evidence text, so the real
+      // normalizer grounds it strong under the approved "company" type.
+      nodes: overrides.nodes ?? [
+        { id: "b0:acme", label: "Acme", type: "company", properties: null },
+      ],
+      edges: overrides.edges ?? [],
+    },
+    batchesTotal: 1,
+    batchesDropped: overrides.batchesDropped ?? 0,
+    batchesTruncated: overrides.batchesTruncated ?? 0,
+    inputTokens: 120,
+    outputTokens: 340,
+  };
+}
+
 beforeEach(() => {
   reapStaleObservationIngestRunsMock.mockReset().mockResolvedValue(0);
   createKnowledgeGraphObservationsIngestRunMock
@@ -214,56 +217,19 @@ beforeEach(() => {
   markKnowledgeGraphRunRunningMock.mockReset().mockResolvedValue(undefined);
   markKnowledgeGraphRunFailedMock.mockReset().mockResolvedValue(undefined);
   markKnowledgeGraphRunStaleNoopMock.mockReset().mockResolvedValue(undefined);
-  replaceKnowledgeGraphSnapshotMock.mockReset().mockResolvedValue(undefined);
-  countKnowledgeGraphEntitiesForSourceMock.mockReset().mockResolvedValue(0);
-  deleteDatasetByNameMock.mockReset().mockResolvedValue(1);
-  pruneAllMock.mockReset().mockResolvedValue(true);
+  mergeKnowledgeGraphSnapshotMock.mockReset().mockResolvedValue(undefined);
+  purgeKnowledgeGraphSourceMock.mockReset().mockResolvedValue(undefined);
   loadApprovedOntologyExportMock.mockReset().mockResolvedValue(ontology);
   loadObservationsKnowledgeGraphSourceMock
     .mockReset()
     .mockResolvedValue(makeSourceResult());
-  ingestDocumentMock.mockReset().mockResolvedValue({
-    datasetId: "11111111-1111-4111-8111-111111111111",
-    datasetName: run.cognee_dataset_name,
-    mode: "add_cognify",
-    pipelineRunId: "22222222-2222-4222-8222-222222222222",
-    raw: {},
-  });
-  waitForDatasetIndexingMock.mockReset().mockResolvedValue({
-    status: "completed",
-    rawStatus: "DATASET_PROCESSING_COMPLETED",
-    attempts: 2,
-    elapsedMs: 5000,
-    samples: [],
-  });
-  fetchDatasetGraphMock.mockReset().mockResolvedValue({
-    // Includes an observations NodeSet + belongs_to_set edge so the entity is
-    // in scope under the worker's scopeNodeSetSubstrings: ["observations"].
-    nodes: [
-      { id: "acme", label: "Acme", type: "Company", properties: {} },
-      {
-        id: "ns-obs",
-        label: "thinkwork_observations",
-        type: "NodeSet",
-        properties: {},
-      },
-    ],
-    edges: [
-      {
-        id: null,
-        source: "acme",
-        target: "ns-obs",
-        label: "belongs_to_set",
-        properties: {},
-      },
-    ],
-  });
+  extractorMock.mockReset().mockResolvedValue(makeExtraction());
   delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
   delete process.env.BRAIN_ARTIFACTS_BUCKET;
 });
 
 describe("knowledge-graph-observations-ingest handler", () => {
-  it("ingests an incremental bundle into the stable dataset and commits snapshot + cursors + audit together", async () => {
+  it("extracts promoted packets and merges snapshot + cursors + audit together", async () => {
     const { db } = makeDb();
 
     const result = await processKnowledgeGraphObservationsIngest(
@@ -286,45 +252,44 @@ describe("knowledge-graph-observations-ingest handler", () => {
       createKnowledgeGraphObservationsIngestRunMock.mock
         .invocationCallOrder[0]!,
     );
-    expect(ingestDocumentMock).toHaveBeenCalledTimes(1);
-    expect(ingestDocumentMock).toHaveBeenCalledWith(
+    // Extraction runs over the promoted packets (no Cognee round-trip).
+    expect(extractorMock).toHaveBeenCalledTimes(1);
+    expect(extractorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        tenantId: TENANT_ID,
-        sourceKind: "observations",
-        sourceRef: run.source_ref,
-        datasetName: `thinkwork:${TENANT_ID}:observations`,
-        filename: "thinkwork-observations.md",
+        packets: expect.arrayContaining([
+          expect.objectContaining({ id: "obs-1" }),
+        ]),
         ontology,
       }),
     );
 
-    // Snapshot replace + cursor advance + run completion ride ONE call into
-    // the repository transaction.
-    expect(replaceKnowledgeGraphSnapshotMock).toHaveBeenCalledTimes(1);
-    const replaceArgs = replaceKnowledgeGraphSnapshotMock.mock.calls[0]![0];
-    expect(replaceArgs).toEqual(
+    // Merge-upsert (not replace) + cursor advance + run completion ride ONE
+    // call into the repository transaction.
+    expect(mergeKnowledgeGraphSnapshotMock).toHaveBeenCalledTimes(1);
+    const mergeArgs = mergeKnowledgeGraphSnapshotMock.mock.calls[0]![0];
+    expect(mergeArgs).toEqual(
       expect.objectContaining({
         db,
         run,
-        cogneeDatasetId: "11111111-1111-4111-8111-111111111111",
-        ingestMode: "add_cognify",
+        ingestMode: "bedrock_extraction",
         runMetadata: undefined,
         sourceMetrics: expect.objectContaining({
           candidateCount: 3,
-          truncated: false,
           promotedIds: ["obs-1", "obs-2", "obs-3"],
-          classifierModelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-          classifierPromptVersion: "v1",
-          newestCandidateCursorAt: "2026-06-09T03:00:00.000Z",
+          extraction: expect.objectContaining({ batchesTotal: 1 }),
         }),
       }),
     );
+    // The grounded, verbatim-provenance entity survived the real normalizer.
+    expect(mergeArgs.snapshot.entities).toHaveLength(1);
+    expect(mergeArgs.snapshot.entities[0].groundingStatus).toBe("grounded");
+    expect(mergeArgs.snapshot.entities[0].provenanceStatus).toBe("strong");
 
     // Cursor advance happens via extraWork inside the same transaction.
     const onConflictDoUpdate = vi.fn(async () => undefined);
     const values = vi.fn(() => ({ onConflictDoUpdate }));
     const tx = { insert: vi.fn(() => ({ values })) };
-    await replaceArgs.extraWork(tx);
+    await mergeArgs.extraWork(tx);
     expect(tx.insert).toHaveBeenCalledTimes(2);
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -333,17 +298,10 @@ describe("knowledge-graph-observations-ingest handler", () => {
         last_record_id: "obs-3",
       }),
     );
-    expect(values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenant_id: TENANT_ID,
-        bank_id: "user_bbb",
-        last_record_id: "obs-2",
-      }),
-    );
     expect(markKnowledgeGraphRunFailedMock).not.toHaveBeenCalled();
   });
 
-  it("finishes as stale_noop without touching cursors when no candidates exist", async () => {
+  it("finishes as stale_noop without extracting or merging when no candidates exist", async () => {
     const { db, cursorDelete } = makeDb();
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
       ...makeSourceResult({ promotedIds: [] }),
@@ -362,15 +320,15 @@ describe("knowledge-graph-observations-ingest handler", () => {
     expect(markKnowledgeGraphRunStaleNoopMock).toHaveBeenCalledWith(
       expect.objectContaining({ db, runId: "run-1" }),
     );
-    expect(ingestDocumentMock).not.toHaveBeenCalled();
-    expect(replaceKnowledgeGraphSnapshotMock).not.toHaveBeenCalled();
+    expect(extractorMock).not.toHaveBeenCalled();
+    expect(mergeKnowledgeGraphSnapshotMock).not.toHaveBeenCalled();
     expect(cursorDelete.delete).not.toHaveBeenCalled();
   });
 
-  it("does not advance cursors when the snapshot transaction fails", async () => {
+  it("fails the run WITHOUT merging or advancing cursors when a batch drops (AE2)", async () => {
     const { db } = makeDb();
-    replaceKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
-      new Error("snapshot transaction failed"),
+    extractorMock.mockResolvedValueOnce(
+      makeExtraction({ batchesDropped: 1, batchesTruncated: 1 }),
     );
 
     const result = await processKnowledgeGraphObservationsIngest(
@@ -382,14 +340,49 @@ describe("knowledge-graph-observations-ingest handler", () => {
       expect.objectContaining({
         ok: false,
         status: "failed",
-        error: expect.stringContaining("snapshot transaction failed"),
+        error: expect.stringContaining("extraction dropped"),
+      }),
+    );
+    // No mirror write and no cursor advance — the next sweep re-reads the
+    // same candidates instead of skipping the unextracted observations.
+    expect(mergeKnowledgeGraphSnapshotMock).not.toHaveBeenCalled();
+    expect(markKnowledgeGraphRunFailedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        db,
+        runId: "run-1",
+        metrics: expect.objectContaining({
+          extraction: expect.objectContaining({
+            batchesDropped: 1,
+            batchesTruncated: 1,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("does not advance cursors when the merge transaction fails", async () => {
+    const { db } = makeDb();
+    mergeKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
+      new Error("merge transaction failed"),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        status: "failed",
+        error: expect.stringContaining("merge transaction failed"),
       }),
     );
     expect(markKnowledgeGraphRunFailedMock).toHaveBeenCalledWith(
       expect.objectContaining({ db, runId: "run-1" }),
     );
-    // Cursor writes live inside replaceKnowledgeGraphSnapshot's transaction;
-    // nothing else writes them, so a failed replace leaves cursors put.
+    // Cursor writes live inside the merge transaction; nothing else writes
+    // them, so a failed merge leaves cursors put.
     expect(db.delete as any).not.toHaveBeenCalled();
   });
 
@@ -410,42 +403,8 @@ describe("knowledge-graph-observations-ingest handler", () => {
     expect(result.status).toBe("succeeded");
   });
 
-  it("refuses to replace the mirror when the new snapshot shrinks beyond the threshold", async () => {
-    const { db } = makeDb();
-    // Prior snapshot had 10 entities; the new graph normalizes to 1.
-    countKnowledgeGraphEntitiesForSourceMock.mockResolvedValueOnce(10);
-
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db },
-    );
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        ok: false,
-        status: "failed",
-        error: expect.stringContaining("shrink guard"),
-      }),
-    );
-    expect(replaceKnowledgeGraphSnapshotMock).not.toHaveBeenCalled();
-    expect(markKnowledgeGraphRunFailedMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        db,
-        runId: "run-1",
-        error: expect.stringContaining("shrink guard"),
-        metrics: expect.objectContaining({
-          shrinkGuard: expect.objectContaining({
-            priorEntityCount: 10,
-            newEntityCount: 1,
-          }),
-        }),
-      }),
-    );
-  });
-
-  it("full rebuild resets cursors before reading and bypasses the shrink guard", async () => {
+  it("full rebuild resets cursors and purges the mirror before reading", async () => {
     const { db, cursorDelete } = makeDb();
-    countKnowledgeGraphEntitiesForSourceMock.mockResolvedValueOnce(10);
 
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID, fullRebuild: true },
@@ -454,53 +413,32 @@ describe("knowledge-graph-observations-ingest handler", () => {
 
     expect(result.status).toBe("succeeded");
     expect(cursorDelete.delete).toHaveBeenCalledTimes(1);
-    expect((db.delete as any).mock.invocationCallOrder[0]).toBeLessThan(
-      loadObservationsKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!,
-    );
-    expect(replaceKnowledgeGraphSnapshotMock).toHaveBeenCalledWith(
+    expect(purgeKnowledgeGraphSourceMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        runMetadata: { shrinkGuardBypassed: true },
+        db,
+        tenantId: TENANT_ID,
+        sourceKind: "observations",
+        sourceRef: run.source_ref,
       }),
     );
-  });
-
-  it("full rebuild purges this tenant's Cognee dataset before re-ingest", async () => {
-    const { db } = makeDb();
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID, fullRebuild: true },
-      { db },
+    // Purge before the source read (which drives extraction).
+    expect(purgeKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      loadObservationsKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!,
     );
-    expect(result.status).toBe("succeeded");
-    expect(deleteDatasetByNameMock).toHaveBeenCalledWith(
-      run.cognee_dataset_name,
-    );
-    expect(pruneAllMock).not.toHaveBeenCalled();
-    // purge happens before the re-ingest
-    expect(deleteDatasetByNameMock.mock.invocationCallOrder[0]!).toBeLessThan(
-      ingestDocumentMock.mock.invocationCallOrder[0]!,
+    expect(mergeKnowledgeGraphSnapshotMock).toHaveBeenCalledWith(
+      expect.objectContaining({ runMetadata: { fullRebuild: true } }),
     );
   });
 
-  it("cogneePruneAll wipes the whole store instead of one dataset", async () => {
-    const { db } = makeDb();
+  it("cogneePruneAll is treated as a full rebuild (purge + cursor reset)", async () => {
+    const { db, cursorDelete } = makeDb();
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID, cogneePruneAll: true },
       { db },
     );
     expect(result.status).toBe("succeeded");
-    expect(pruneAllMock).toHaveBeenCalledTimes(1);
-    expect(deleteDatasetByNameMock).not.toHaveBeenCalled();
-  });
-
-  it("a Cognee purge failure does not abort the rebuild", async () => {
-    const { db } = makeDb();
-    deleteDatasetByNameMock.mockRejectedValueOnce(new Error("cognee 503"));
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID, fullRebuild: true },
-      { db },
-    );
-    expect(result.status).toBe("succeeded");
-    expect(ingestDocumentMock).toHaveBeenCalledTimes(1);
+    expect(cursorDelete.delete).toHaveBeenCalledTimes(1);
+    expect(purgeKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
   });
 
   it("drops a concurrent start when an active run already holds the dedupe key", async () => {
@@ -519,7 +457,7 @@ describe("knowledge-graph-observations-ingest handler", () => {
       expect.objectContaining({ ok: true, status: "skipped", runId: "run-1" }),
     );
     expect(markKnowledgeGraphRunRunningMock).not.toHaveBeenCalled();
-    expect(ingestDocumentMock).not.toHaveBeenCalled();
+    expect(extractorMock).not.toHaveBeenCalled();
   });
 
   it("loads an existing run when invoked with a runId from the mutation", async () => {
@@ -638,8 +576,6 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
   it("loop guard: does not self-invoke on a truncated run with zero progress", async () => {
     const { db } = makeDb();
     const selfInvoke = vi.fn();
-    // Truncated but nothing promoted AND no cursor advanced — re-invoking
-    // would re-read the same candidates forever.
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
       ...makeSourceResult({ truncated: true }),
       nextCursors: new Map(),
@@ -680,7 +616,7 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
       makeSourceResult({ truncated: true }),
     );
-    replaceKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
+    mergeKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
       new Error("tx failed"),
     );
 
