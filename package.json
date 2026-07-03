@@ -47,7 +47,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@smithy/types": "4.14.0"
+      "@smithy/types": "4.14.0",
+      "react-is": "^19.2.7"
     }
   }
 }
