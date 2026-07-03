@@ -77,6 +77,12 @@ interface SpacesComposerProps {
    * Fired on submit. `files` is the user's attached File objects
    * (.xlsx / .xls / .csv only — `accept` constrains the picker).
    * Empty array when no files attached.
+   *
+   * Return `false` (or a promise resolving to `false`) when the send
+   * failed: the parent keeps the draft text on screen, so the composer
+   * keeps its mention/goal draft state too — otherwise a retry renders
+   * the mention chips from the text but silently sends no mentions.
+   * Any other return value counts as success and clears the draft state.
    */
   onSubmit: (
     files: File[],
@@ -85,7 +91,7 @@ interface SpacesComposerProps {
     pinnedSkills: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
-  ) => void;
+  ) => void | boolean | Promise<void | boolean>;
   mentionTargets?: MentionTarget[];
   /** Tenant skill catalog for the `/skill` force-pin popup. */
   skillCatalog?: SkillOption[];
@@ -272,8 +278,9 @@ export function SpacesComposer({
       skillCatalog,
     );
     const submittedGoalMode = goalModeSubmission.goalMode;
+    let result: void | boolean;
     if (selectedModelId && submittedGoalMode) {
-      onSubmit(
+      result = await onSubmit(
         files,
         submittedMentions,
         true,
@@ -282,7 +289,7 @@ export function SpacesComposer({
         submittedGoalMode,
       );
     } else if (selectedModelId) {
-      onSubmit(
+      result = await onSubmit(
         files,
         submittedMentions,
         effectiveAgentEnabled,
@@ -290,7 +297,7 @@ export function SpacesComposer({
         selectedModelId,
       );
     } else if (submittedGoalMode) {
-      onSubmit(
+      result = await onSubmit(
         files,
         submittedMentions,
         true,
@@ -299,8 +306,17 @@ export function SpacesComposer({
         submittedGoalMode,
       );
     } else {
-      onSubmit(files, submittedMentions, effectiveAgentEnabled, pinnedSkills);
+      result = await onSubmit(
+        files,
+        submittedMentions,
+        effectiveAgentEnabled,
+        pinnedSkills,
+      );
     }
+    // A failed send keeps the draft on screen, so the mention/goal state must
+    // survive for the retry (THINK-136 acceptance regression: the retry sent
+    // the chips as plain text with no mentions attached).
+    if (result === false) return;
     setMentions([]);
     setGoalModeEnabled(false);
     // Fresh draft after send: drop the manual override so the next new thread

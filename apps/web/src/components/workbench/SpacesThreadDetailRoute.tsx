@@ -3,6 +3,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Flag, Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
+import { describeSendMessageError } from "@/lib/send-message-error";
 import { Button } from "@thinkwork/ui";
 import {
   parseSpaceRecord,
@@ -2052,7 +2053,7 @@ export function SpacesThreadDetailRoute({
           setOptimisticMessage(null);
           if (attachmentRefs.length > 0) {
             toast.error(
-              "Files uploaded, but the message did not send. Try sending the message again.",
+              describeSendMessageError(result.error, { filesUploaded: true }),
             );
           }
           throw result.error;
