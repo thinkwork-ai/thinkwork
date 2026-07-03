@@ -193,6 +193,16 @@ const BASE_ITEMS = [
     tokenStatus: "expired",
   },
   {
+    capabilityClass: "mcp_server",
+    capabilityId: "slack",
+    displayName: "Slack",
+    active: false,
+    provenance: "tenant MCP registry",
+    reason: "oauth_missing",
+    detail: "no user OAuth token for this server",
+    tokenStatus: "missing",
+  },
+  {
     capabilityClass: "pi_extension",
     capabilityId: "assignment-9",
     displayName: "Broken Ext",
@@ -518,7 +528,9 @@ describe("capability write actions (sheet rows)", () => {
     clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
     // The sync window forwards the affected slug to the editor as a ghost.
-    await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBe("expenses"));
+    await waitFor(() =>
+      expect(editorProps()?.pendingSkillSlug).toBe("expenses"),
+    );
 
     queryState.inspector = {
       data: inspection({
@@ -537,9 +549,7 @@ describe("capability write actions (sheet rows)", () => {
       error: undefined,
     };
     view.rerender(<SettingsCapabilities />);
-    await waitFor(() =>
-      expect(editorProps()?.pendingSkillSlug).toBeNull(),
-    );
+    await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBeNull());
   });
 
   it("detach flows through the destructive confirm and shows the post-detach state", async () => {
@@ -669,6 +679,98 @@ describe("tree context-menu callbacks (item 4)", () => {
           input: expect.objectContaining({ capabilityRef: "expenses" }),
         }),
       ),
+    );
+  });
+});
+
+describe("MCP tree callbacks (U9c)", () => {
+  it("forwards mcp decoration state + sync/removing slugs to the editor", () => {
+    render(<SettingsCapabilities />);
+    const props = editorProps();
+    const map = props?.mcpStateBySlug as Map<
+      string,
+      { active: boolean; reason: string | null }
+    >;
+    expect(map.get("github")).toEqual({ active: true, reason: null });
+    expect(map.get("slack")).toEqual({
+      active: false,
+      reason: "oauth_missing",
+    });
+    expect(typeof props?.onAddMcpServer).toBe("function");
+    expect(typeof props?.onDetachMcpServer).toBe("function");
+  });
+
+  it("add-MCP picker lists the registered servers with state and grants with the MCP_SERVER class", async () => {
+    grantMock.mockResolvedValue({
+      data: {
+        grantCapability: {
+          outcome: "applied",
+          inspectionState: "ok",
+          computedAt: "2026-07-02T12:01:00.000Z",
+          configFingerprint: "fp-after",
+          item: {
+            capabilityClass: "mcp_server",
+            capabilityId: "slack",
+            displayName: "Slack",
+            active: true,
+            provenance: "agent: workspace folder (mcp/slack/)",
+            reason: null,
+            detail: null,
+            tokenStatus: null,
+          },
+        },
+      },
+      error: undefined,
+    });
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onAddMcpServer as () => void)();
+    });
+    expect(screen.getByTestId("add-mcp-dialog")).toBeTruthy();
+    // ALL registered servers list, with state shown; the attached one can't
+    // be re-added.
+    const githubRow = screen.getByTestId("add-mcp-row-github");
+    expect(githubRow.textContent).toContain("active");
+    expect(githubRow.textContent).toContain("token: expired");
+    expect(
+      (screen.getByTestId("add-mcp-pick-github") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    const slackRow = screen.getByTestId("add-mcp-row-slack");
+    // Verbatim gate reason + token status render in the picker.
+    expect(slackRow.textContent).toContain("oauth_missing");
+    expect(slackRow.textContent).toContain("token: missing");
+    fireEvent.click(screen.getByTestId("add-mcp-pick-slack"));
+    await waitFor(() =>
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "MCP_SERVER",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "slack",
+        },
+      }),
+    );
+  });
+
+  it("detach from an mcp/<slug> folder runs detachCapability with the MCP_SERVER class behind the confirm", async () => {
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onDetachMcpServer as (slug: string) => void)("github");
+    });
+    fireEvent.click(screen.getByTestId("tree-detach-confirm"));
+    await waitFor(() =>
+      expect(detachMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "MCP_SERVER",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "github",
+        },
+      }),
     );
   });
 });
