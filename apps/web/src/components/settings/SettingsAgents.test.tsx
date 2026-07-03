@@ -318,10 +318,13 @@ describe("SettingsAgents page", () => {
     expect(queriesSource).toContain("mutation SettingsDeleteAgentProfile");
     expect(routeSource).toContain("OperatorGuard");
     expect(routeSource).toContain('"/_authed/settings/agents/"');
-    expect(detailRouteSource).toContain("OperatorGuard");
+    // U7: the detail route is a redirect into the Profiles sheet — auth is
+    // enforced by the destination route's OperatorGuard.
     expect(detailRouteSource).toContain(
       '"/_authed/settings/agents/$profileId"',
     );
+    expect(detailRouteSource).toContain("throw redirect(");
+    expect(detailRouteSource).toContain('sheet: "profiles"');
     // The old standalone Main Agent route now redirects into the Agents
     // workspace view, preserving ?file=.
     expect(mainAgentRouteSource).toContain("throw redirect(");

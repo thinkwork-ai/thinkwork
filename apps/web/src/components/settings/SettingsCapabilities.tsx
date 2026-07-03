@@ -303,7 +303,35 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
   { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
 ];
 
-export function SettingsCapabilities() {
+export type ComposerSheetId =
+  | "config"
+  | "profiles"
+  | "extensions"
+  | "inspector";
+
+export function SettingsCapabilities({
+  urlSheet = null,
+  urlProfileId = null,
+  urlFocus = null,
+  initialTreeFile = null,
+  onUrlSheetChange,
+}: {
+  /** URL-driven sheet state (Agent page merge U7, KTD-1). Null = closed. */
+  urlSheet?: ComposerSheetId | null;
+  urlProfileId?: string | null;
+  urlFocus?: string | null;
+  /** Legacy `?view=workspace&file=…` deep links: select this tree file. */
+  initialTreeFile?: string | null;
+  /**
+   * When provided, the URL owns sheet state: open/close requests route
+   * through this callback and local state derives from `urlSheet`. Absent
+   * (tests, transitional hosts), sheets stay locally controlled.
+   */
+  onUrlSheetChange?: (
+    sheet: ComposerSheetId | null,
+    target?: { profileId?: string | null; focus?: string | null },
+  ) => void;
+} = {}) {
   const { tenantId } = useTenant();
   // No default filters (Agent page merge U12): the empty selection IS the
   // default agent in the default space, and every row state is visible.
@@ -331,6 +359,36 @@ export function SettingsCapabilities() {
     open: boolean;
     profileId: string | null;
   }>({ open: false, profileId: null });
+  // KTD-1 (U7): when a URL bridge is wired, the search params are the sheet
+  // state's source of truth — local state just mirrors them.
+  const urlDriven = onUrlSheetChange !== undefined;
+  useEffect(() => {
+    if (!urlDriven) return;
+    setConfigOpen(urlSheet === "config");
+    setExtensionsSheetOpen(urlSheet === "extensions");
+    setInspectorOpen(urlSheet === "inspector");
+    setProfilesSheet({
+      open: urlSheet === "profiles",
+      profileId: urlSheet === "profiles" ? (urlProfileId ?? null) : null,
+    });
+  }, [urlDriven, urlSheet, urlProfileId]);
+
+  function requestSheet(
+    sheet: ComposerSheetId | null,
+    target?: { profileId?: string | null; focus?: string | null },
+  ) {
+    if (onUrlSheetChange) {
+      onUrlSheetChange(sheet, target);
+      return;
+    }
+    setConfigOpen(sheet === "config");
+    setExtensionsSheetOpen(sheet === "extensions");
+    setInspectorOpen(sheet === "inspector");
+    setProfilesSheet({
+      open: sheet === "profiles",
+      profileId: sheet === "profiles" ? (target?.profileId ?? null) : null,
+    });
+  }
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -1134,7 +1192,7 @@ export function SettingsCapabilities() {
         title="Agent configuration"
         aria-label="Agent configuration"
         className={desktopToolbarButtonClassName}
-        onClick={() => setConfigOpen(true)}
+        onClick={() => requestSheet("config")}
         data-testid="open-config-sheet"
       >
         <SlidersHorizontal className="size-4" />
@@ -1146,7 +1204,7 @@ export function SettingsCapabilities() {
         title="Agent Profiles"
         aria-label="Agent Profiles"
         className={desktopToolbarButtonClassName}
-        onClick={() => setProfilesSheet({ open: true, profileId: null })}
+        onClick={() => requestSheet("profiles")}
         data-testid="open-profiles-sheet"
       >
         <Bot className="size-4" />
@@ -1158,7 +1216,7 @@ export function SettingsCapabilities() {
         title="Extensions"
         aria-label="Extensions"
         className={desktopToolbarButtonClassName}
-        onClick={() => setExtensionsSheetOpen(true)}
+        onClick={() => requestSheet("extensions")}
         data-testid="open-extensions-sheet"
       >
         <Puzzle className="size-4" />
@@ -1182,7 +1240,7 @@ export function SettingsCapabilities() {
         title="Inspector — read-only capability diagnostics"
         aria-label="Inspector"
         className={desktopToolbarButtonClassName}
-        onClick={() => setInspectorOpen(true)}
+        onClick={() => requestSheet("inspector")}
         data-testid="open-inspector-view"
       >
         <ScanSearch className="size-4" />
@@ -1326,11 +1384,12 @@ export function SettingsCapabilities() {
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
+          initialSelectedPath={initialTreeFile}
           onConfigureAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
               (profile) => profile.slug === slug,
             );
-            setProfilesSheet({ open: true, profileId: match?.id ?? null });
+            requestSheet("profiles", { profileId: match?.id ?? null });
           }}
         />
       </div>
@@ -1357,7 +1416,10 @@ export function SettingsCapabilities() {
       <AgentProfilesSheet
         open={profilesSheet.open}
         onOpenChange={(open) =>
-          setProfilesSheet((current) => ({ ...current, open }))
+          requestSheet(
+            open ? "profiles" : null,
+            open ? { profileId: profilesSheet.profileId } : undefined,
+          )
         }
         initialProfileId={profilesSheet.profileId}
       />
@@ -1366,13 +1428,16 @@ export function SettingsCapabilities() {
           detach controls, opened from the toolbar or via tree jump-to-cause. */}
       <AgentConfigSheet
         open={configOpen}
-        onOpenChange={setConfigOpen}
+        onOpenChange={(open) => requestSheet(open ? "config" : null)}
         spaces={(spacesResult.data?.spaces ?? []).map((space) => ({
           id: space.id,
           name: space.name,
         }))}
       />
-      <Sheet open={extensionsSheetOpen} onOpenChange={setExtensionsSheetOpen}>
+      <Sheet
+        open={extensionsSheetOpen}
+        onOpenChange={(open) => requestSheet(open ? "extensions" : null)}
+      >
         <SheetContent
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="agent-extensions-sheet"
@@ -1407,7 +1472,10 @@ export function SettingsCapabilities() {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}>
+      <Sheet
+        open={inspectorOpen}
+        onOpenChange={(open) => requestSheet(open ? "inspector" : null)}
+      >
         <SheetContent
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="inspector-sheet"
@@ -1424,6 +1492,7 @@ export function SettingsCapabilities() {
               items={items}
               deltas={deltas}
               loading={loading}
+              focusRowKey={urlFocus}
             />
           </div>
         </SheetContent>

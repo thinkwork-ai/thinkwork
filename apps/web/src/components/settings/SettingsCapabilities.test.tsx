@@ -402,6 +402,31 @@ describe("Composer shell wiring", () => {
   });
 });
 
+describe("URL-driven sheet state (U7, KTD-1)", () => {
+  it("derives open sheets from urlSheet and routes user intent through the bridge", () => {
+    const bridge = vi.fn();
+    render(
+      <SettingsCapabilities
+        urlSheet="inspector"
+        urlFocus="skill:approve-receipt"
+        onUrlSheetChange={bridge}
+      />,
+    );
+    // Inspector renders focused on the deep-linked row.
+    expect(
+      screen.getByTestId("inspector-row-skill:approve-receipt").className,
+    ).toContain("bg-accent");
+    // Opening another sheet is a URL request, not a local state flip.
+    fireEvent.click(screen.getByTestId("open-profiles-sheet"));
+    expect(bridge).toHaveBeenCalledWith("profiles", undefined);
+  });
+
+  it("legacy view=workspace deep links select the file in the tree", () => {
+    render(<SettingsCapabilities initialTreeFile="AGENTS.md" />);
+    expect(editorProps()?.initialSelectedPath).toBe("AGENTS.md");
+  });
+});
+
 describe("capability side sheet (read surface)", () => {
   it("class tab counts read active/total, independent of the State filter", () => {
     render(<SettingsCapabilities />);

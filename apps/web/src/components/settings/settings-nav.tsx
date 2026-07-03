@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 import {
   Bot,
   Brain,
-  ClipboardCheck,
   Clock,
   Cpu,
   History,
@@ -115,19 +114,12 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: Webhook,
     operatorOnly: true,
   },
+  // Agent page (THINK-132 U7): the single agent-configuration surface — the
+  // Composer merged in; singular per the one-platform-agent doctrine.
   {
-    label: "Agents",
+    label: "Agent",
     to: "/settings/agents",
     icon: Bot,
-    operatorOnly: true,
-  },
-  // Composer (Composer plan U3): the capability-configuration home. The
-  // route path stays /settings/capabilities (KTD-6) — only the label,
-  // heading, and nav entry are renamed.
-  {
-    label: "Composer",
-    to: "/settings/capabilities",
-    icon: ClipboardCheck,
     operatorOnly: true,
   },
 ];

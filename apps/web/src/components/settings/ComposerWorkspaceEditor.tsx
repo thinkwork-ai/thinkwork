@@ -171,6 +171,11 @@ export interface ComposerWorkspaceEditorProps {
    * write never masquerades as an agent-level one.
    */
   profileScopeName?: string | null;
+  /**
+   * Select this file once the manifest loads (Agent page merge U7): carries
+   * the legacy `?view=workspace&file=…` deep links into a tree selection.
+   */
+  initialSelectedPath?: string | null;
 }
 
 interface TreeNode {
@@ -466,6 +471,7 @@ export function ComposerWorkspaceEditor({
   onDetachMcpServer,
   onConfigureAgentProfile,
   profileScopeName = null,
+  initialSelectedPath = null,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
@@ -495,6 +501,7 @@ export function ComposerWorkspaceEditor({
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const appliedInitialPath = useRef(false);
   const [manifest, setManifest] = useState<ManifestState>({
     loading: true,
     error: null,
@@ -563,6 +570,15 @@ export function ComposerWorkspaceEditor({
 
   const result = manifest.data;
   const entries = useMemo(() => result?.entries ?? [], [result?.entries]);
+
+  // Apply the deep-linked tree selection once the manifest carries the file
+  // (U7). One-shot: later selection changes belong to the user.
+  useEffect(() => {
+    if (appliedInitialPath.current || !initialSelectedPath) return;
+    if (!entries.some((entry) => entry.path === initialSelectedPath)) return;
+    appliedInitialPath.current = true;
+    setSelectedPath(initialSelectedPath);
+  }, [entries, initialSelectedPath]);
   const entryByPath = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry])),
     [entries],
@@ -801,10 +817,8 @@ export function ComposerWorkspaceEditor({
         return;
       }
       case "agent_source":
-        void navigate({
-          to: "/settings/agents",
-          search: { view: "workspace", file: cause.file },
-        });
+        // KTD-7 (U7): this page IS the agent surface — select in place.
+        setSelectedPath(cause.file);
         return;
     }
   }
