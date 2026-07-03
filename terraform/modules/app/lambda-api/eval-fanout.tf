@@ -62,10 +62,14 @@ resource "aws_lambda_event_source_mapping" "eval_fanout" {
   function_response_types = ["ReportBatchItemFailures"]
 
   scaling_config {
-    # Keep in lockstep with EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS
-    # (handlers.tf): FIFO delivers one in-flight message per group, so
-    # effective concurrency = min(lanes, maximum_concurrency).
-    maximum_concurrency = 40
+    # Effective concurrency = min(FIFO lanes, maximum_concurrency);
+    # lanes (EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS, handlers.tf) and the
+    # function's reserved concurrency sit at 40 as headroom. This knob
+    # is the deliberate ceiling: at 40 the agent-tier AgentCore turns
+    # saturate the Bedrock TPM quota and blow the 180s response budget
+    # (benchmark run 62c6de45: 47 timeout errors vs 0 at 20). Raise only
+    # after a Bedrock quota bump, and this knob alone is enough.
+    maximum_concurrency = 20
   }
 }
 
