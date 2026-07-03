@@ -1535,6 +1535,17 @@ variable "company_brain_backdoor_install_key_stages" {
   default     = ""
 }
 
+variable "wiki_source" {
+  description = "Wiki compile pipeline source: 'planner' or 'graph' (THINK-133 U8/KTD-4)."
+  type        = string
+  default     = "planner"
+
+  validation {
+    condition     = contains(["planner", "graph"], var.wiki_source)
+    error_message = "wiki_source must be 'planner' or 'graph'."
+  }
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). 'true' to enable, anything else disables. Pinned in terraform so unrelated deploys don't reset it."
   type        = string

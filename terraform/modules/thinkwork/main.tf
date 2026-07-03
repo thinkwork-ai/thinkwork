@@ -1349,6 +1349,7 @@ module "api" {
   company_brain_backdoor_install_key_secret_arn = var.company_brain_backdoor_install_key_secret_arn
   company_brain_backdoor_install_key_stages     = var.company_brain_backdoor_install_key_stages
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
+  wiki_source                                   = var.wiki_source
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   enable_workspace_orchestration                = var.enable_workspace_orchestration

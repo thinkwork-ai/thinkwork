@@ -672,6 +672,17 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
+variable "wiki_source" {
+  description = "Wiki compile pipeline source: 'planner' (LLM compile) or 'graph' (deterministic graph->wiki materializer). Dev flips first per THINK-133 U8/KTD-4; the default flips for all stages only after dev comparison evidence holds."
+  type        = string
+  default     = "planner"
+
+  validation {
+    condition     = contains(["planner", "graph"], var.wiki_source)
+    error_message = "wiki_source must be 'planner' or 'graph'."
+  }
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -1082,6 +1093,7 @@ module "thinkwork" {
   wiki_compile_model_id                         = var.wiki_compile_model_id
   company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
+  wiki_source                                   = var.wiki_source
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
