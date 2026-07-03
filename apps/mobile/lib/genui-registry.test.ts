@@ -68,23 +68,31 @@ describe("mobile GenUI registry", () => {
     );
   });
 
-  it("renders analytics.display json-render parts from the required mobile fallback", () => {
+  it("renders chart json-render parts from the required mobile fallback", () => {
+    // analytics.display was retired (THINK-116 U5); chart is its successor.
     const part = {
       type: "data-json-render",
-      id: "json-render:analytics:support-volume",
+      id: "json-render:chart:support-volume",
       data: {
         schemaVersion: "thread-json-render/v1",
         catalogVersion: "thread-json-render-catalog/v1",
         status: "ready",
         spec: {
-          root: "analytics",
+          root: "chart",
           elements: {
-            analytics: {
-              type: "analytics.display",
+            chart: {
+              type: "chart",
               props: {
-                kind: "analytics.display",
-                analyticsDisplayVersion: "analytics-display/v1",
+                kind: "bar",
                 title: "Support Volume",
+                xKey: "week",
+                series: [
+                  { dataKey: "tickets", label: "Tickets", colorKey: "chart-1" },
+                ],
+                data: [
+                  { week: "W1", tickets: 42 },
+                  { week: "W2", tickets: 51 },
+                ],
               },
               children: [],
             },
@@ -102,9 +110,9 @@ describe("mobile GenUI registry", () => {
 
     expect(fallback).toEqual(
       expect.objectContaining({
-        id: "json-render:analytics:support-volume",
+        id: "json-render:chart:support-volume",
         title: "Support Volume",
-        component: "analytics.display",
+        component: "chart",
         status: "ready",
       }),
     );
