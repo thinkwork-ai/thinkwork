@@ -106,6 +106,28 @@ const DIRECT_AGENTCORE_MESSAGE_SHARDS = Math.max(
   Number(process.env.EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS ?? 20),
 );
 
+const ANTHROPIC_MESSAGE_SHARDS = Math.max(
+  1,
+  Number(process.env.EVAL_ANTHROPIC_MESSAGE_SHARDS ?? 2),
+);
+
+/**
+ * Model-aware lane count. Anthropic models in this account run under a
+ * 10 requests-per-MINUTE Bedrock quota (vs Kimi's 100 RPM) — observed
+ * live: full-lane Haiku 4.5 baseline runs throttled out 125/166 cases.
+ * Until the pending quota increase lands, Anthropic runs get a small
+ * fixed lane count so they finish slowly-but-cleanly instead of burning
+ * the redrive budget into error/throttle rows.
+ */
+export function evalLaneCountForModel(
+  modelId: string | null | undefined,
+): number {
+  if (modelId && /\banthropic\./i.test(modelId)) {
+    return Math.min(DIRECT_AGENTCORE_MESSAGE_SHARDS, ANTHROPIC_MESSAGE_SHARDS);
+  }
+  return DIRECT_AGENTCORE_MESSAGE_SHARDS;
+}
+
 export function selectedTestCaseIdsFromEvent(event: EvalRunnerEvent): string[] {
   const ids = event.input?.testCaseIds;
   if (!Array.isArray(ids)) return [];
@@ -209,9 +231,12 @@ export function chunkEvalWorkerMessages(
 }
 
 export function evalWorkerMessageGroupIdForMessage(
-  run: Pick<typeof evalRuns.$inferSelect, "computer_id" | "agent_id" | "id">,
+  run: Pick<
+    typeof evalRuns.$inferSelect,
+    "computer_id" | "agent_id" | "id" | "model"
+  >,
   message: Pick<EvalWorkerMessage, "index">,
-  shardCount = DIRECT_AGENTCORE_MESSAGE_SHARDS,
+  shardCount = evalLaneCountForModel(run.model),
 ): string {
   if (run.computer_id) return `eval-computer:${run.computer_id}`;
 
@@ -256,7 +281,10 @@ async function sendFanoutBatch(
   queueUrl: string,
   batch: EvalWorkerMessage[],
   client: SQSClient,
-  run: Pick<typeof evalRuns.$inferSelect, "computer_id" | "agent_id" | "id">,
+  run: Pick<
+    typeof evalRuns.$inferSelect,
+    "computer_id" | "agent_id" | "id" | "model"
+  >,
 ): Promise<void> {
   const resp = await client.send(
     new SendMessageBatchCommand({

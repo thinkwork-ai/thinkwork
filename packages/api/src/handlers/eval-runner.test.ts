@@ -4,6 +4,7 @@ import {
   buildEvalWorkerMessages,
   caseHasLlmRubricAssertion,
   chunkEvalWorkerMessages,
+  evalLaneCountForModel,
   evalWorkerMessageGroupIdForMessage,
   excludesComputerSurfaceByDefault,
   selectedTestCaseIdsFromEvent,
@@ -36,6 +37,7 @@ describe("selectedTestCaseIdsFromEvent", () => {
           id: "run-1",
           computer_id: "computer-1",
           agent_id: "agent-1",
+          model: null,
         },
         { index: 3 },
       ),
@@ -49,6 +51,7 @@ describe("selectedTestCaseIdsFromEvent", () => {
           id: "run-1",
           computer_id: null,
           agent_id: "agent-1",
+          model: null,
         },
         { index: 21 },
         20,
@@ -56,9 +59,39 @@ describe("selectedTestCaseIdsFromEvent", () => {
     ).toBe("eval-agentcore:run-1:1");
   });
 
+  it("paces Anthropic-model runs onto few lanes (10 RPM Bedrock quota)", () => {
+    expect(evalLaneCountForModel("moonshotai.kimi-k2.5")).toBe(20);
+    expect(evalLaneCountForModel(null)).toBe(20);
+    expect(
+      evalLaneCountForModel("us.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ).toBe(2);
+    // Default shard argument follows the run's model.
+    expect(
+      evalWorkerMessageGroupIdForMessage(
+        {
+          id: "run-1",
+          computer_id: null,
+          agent_id: "agent-1",
+          model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        },
+        { index: 3 },
+      ),
+    ).toBe("eval-agentcore:run-1:1");
+  });
+
   it("concurrent runs of the SAME agent get independent lanes (throughput fix)", () => {
-    const runA = { id: "run-a", computer_id: null, agent_id: "agent-1" };
-    const runB = { id: "run-b", computer_id: null, agent_id: "agent-1" };
+    const runA = {
+      id: "run-a",
+      computer_id: null,
+      agent_id: "agent-1",
+      model: null,
+    };
+    const runB = {
+      id: "run-b",
+      computer_id: null,
+      agent_id: "agent-1",
+      model: null,
+    };
     // Same shard index, same agent — different runs must not share a
     // FIFO lane, or one run's throttle-parked messages head-of-line
     // block the other run entirely.
