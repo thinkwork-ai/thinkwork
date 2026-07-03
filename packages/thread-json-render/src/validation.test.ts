@@ -9,9 +9,10 @@ import {
   type ThreadJsonRenderSpec,
 } from "./spec.js";
 import {
-  createAnalyticsJsonRenderFixture,
+  createChartJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
+  createTableJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
   createThreadJsonRenderPart,
 } from "./test-fixtures.js";
@@ -39,9 +40,6 @@ describe("thread json-render validation", () => {
       workItemId: "77777777-7777-7777-7777-777777777777",
       statusCategory: "DONE",
     });
-    expect(
-      validateThreadJsonRenderPart(createAnalyticsJsonRenderFixture()).ok,
-    ).toBe(true);
     expect(
       validateThreadJsonRenderPart(createResultListJsonRenderFixture()).ok,
     ).toBe(true);
@@ -81,6 +79,122 @@ describe("thread json-render validation", () => {
     );
     expect(codes(validateThreadJsonRenderPart(duplicateAction))).toContain(
       "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
+    );
+  });
+
+  it("accepts a valid table and enforces its row action references", () => {
+    const table = createTableJsonRenderFixture();
+    expect(validateThreadJsonRenderPart(table).ok).toBe(true);
+    expect(table.data.spec.elements.table.type).toBe("table");
+
+    const unknownAction = createTableJsonRenderFixture();
+    unknownAction.data.specHash = undefined;
+    const unknownRows = unknownAction.data.spec.elements.table.props
+      .rows as Array<Record<string, unknown>>;
+    unknownRows[0]!.primaryActionId = "not-a-durable-action";
+
+    expect(codes(validateThreadJsonRenderPart(unknownAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_MISSING",
+    );
+  });
+
+  it("rejects disabled and duplicated table row action references", () => {
+    const disabledAction = createTableJsonRenderFixture();
+    disabledAction.data.specHash = undefined;
+    disabledAction.data.durableActions![0]!.disabled = true;
+
+    const duplicateAction = createTableJsonRenderFixture();
+    duplicateAction.data.specHash = undefined;
+    const duplicateRows = duplicateAction.data.spec.elements.table.props
+      .rows as Array<Record<string, unknown>>;
+    duplicateRows[1]!.secondaryActionId = "complete-row-1";
+
+    expect(codes(validateThreadJsonRenderPart(disabledAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DISABLED",
+    );
+    expect(codes(validateThreadJsonRenderPart(duplicateAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
+    );
+  });
+
+  it("rejects forbidden and over-cap table props, allows empty rows", () => {
+    const forbidden = createTableJsonRenderFixture();
+    forbidden.data.specHash = undefined;
+    (
+      forbidden.data.spec.elements.table.props as Record<string, unknown>
+    ).className = "fixed inset-0";
+    expect(codes(validateThreadJsonRenderPart(forbidden))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
+
+    const overCap = createTableJsonRenderFixture();
+    overCap.data.specHash = undefined;
+    (overCap.data.spec.elements.table.props as Record<string, unknown>).rows =
+      Array.from({ length: 51 }, (_, index) => ({
+        id: `row-${index}`,
+        name: `Item ${index}`,
+      }));
+    expect(codes(validateThreadJsonRenderPart(overCap))).toContain(
+      "JSON_RENDER_PROPS_INVALID",
+    );
+
+    const emptyRows = createTableJsonRenderFixture();
+    emptyRows.data.specHash = undefined;
+    (emptyRows.data.spec.elements.table.props as Record<string, unknown>).rows =
+      [];
+    expect(validateThreadJsonRenderPart(emptyRows).ok).toBe(true);
+  });
+
+  it("accepts every chart kind and validates the series palette token", () => {
+    for (const kind of ["area", "bar", "line", "pie"] as const) {
+      const chart = createChartJsonRenderFixture(kind);
+      expect(validateThreadJsonRenderPart(chart).ok).toBe(true);
+      expect(chart.data.spec.elements.chart.type).toBe("chart");
+    }
+
+    const rawColor = createChartJsonRenderFixture("bar");
+    rawColor.data.specHash = undefined;
+    const rawColorSeries = rawColor.data.spec.elements.chart.props
+      .series as Array<Record<string, unknown>>;
+    rawColorSeries[0]!.color = "#0000ff";
+    expect(codes(validateThreadJsonRenderPart(rawColor))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
+
+    const rawFill = createChartJsonRenderFixture("bar");
+    rawFill.data.specHash = undefined;
+    (rawFill.data.spec.elements.chart.props as Record<string, unknown>).fill =
+      "#0000ff";
+    expect(codes(validateThreadJsonRenderPart(rawFill))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
+
+    const badToken = createChartJsonRenderFixture("bar");
+    badToken.data.specHash = undefined;
+    const badTokenSeries = badToken.data.spec.elements.chart.props
+      .series as Array<Record<string, unknown>>;
+    badTokenSeries[0]!.colorKey = "chart-99";
+    expect(codes(validateThreadJsonRenderPart(badToken))).toContain(
+      "JSON_RENDER_PROPS_INVALID",
+    );
+  });
+
+  it("accepts an empty chart data frame but rejects an over-cap one", () => {
+    const emptyData = createChartJsonRenderFixture("line");
+    emptyData.data.specHash = undefined;
+    (emptyData.data.spec.elements.chart.props as Record<string, unknown>).data =
+      [];
+    expect(validateThreadJsonRenderPart(emptyData).ok).toBe(true);
+
+    const overCap = createChartJsonRenderFixture("line");
+    overCap.data.specHash = undefined;
+    (overCap.data.spec.elements.chart.props as Record<string, unknown>).data =
+      Array.from({ length: 51 }, (_, index) => ({
+        week: `W${index}`,
+        completed: index,
+      }));
+    expect(codes(validateThreadJsonRenderPart(overCap))).toContain(
+      "JSON_RENDER_PROPS_INVALID",
     );
   });
 

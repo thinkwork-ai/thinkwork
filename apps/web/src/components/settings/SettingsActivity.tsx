@@ -701,8 +701,10 @@ function ActivityChart({
       <BarChart
         data={data}
         onClick={(state) => {
-          if (!state?.activePayload?.[0]) return;
-          const day = state.activePayload[0].payload.day as string;
+          // recharts v3: the clicked category value is on `activeLabel`
+          // (XAxis dataKey="day"); v2's `activePayload` was removed.
+          const day = state?.activeLabel;
+          if (typeof day !== "string") return;
           onSelectDay(selectedDay === day ? null : day);
         }}
         className="cursor-pointer"

@@ -84,6 +84,7 @@ import {
   type ActivityEmitEvent,
   type DelegationProvider,
   isFinalizeCallbackConfigured,
+  mergeFinalUiMessageParts,
   normalizeHistory,
   normalizeApprovedModelIds,
   normalizeModelRoutingPolicy,
@@ -92,6 +93,7 @@ import {
   readActivityCallbackConfig,
   readCapabilityManifestSinkConfig,
   runAgentLoop,
+  threadJsonRenderActivityEvent,
   type AgentProfileRunRecord,
   type ChildModelCaller,
   type InvocationResponse,
@@ -102,6 +104,11 @@ import {
   type ToolInvocationRecord,
   type WorkspaceBaseline,
 } from "@thinkwork/pi-runtime-core";
+import {
+  THREAD_JSON_RENDER_PART_TYPE,
+  detectAndConvert,
+  type ThreadJsonRenderPart,
+} from "@thinkwork/thread-json-render";
 
 import {
   InvocationValidationError,
@@ -3079,6 +3086,76 @@ export async function handleInvocation(
           emitActivity: activityEmitter.emit,
         },
       );
+    }
+    // Deterministic GenUI safety-net backstop (THINK-116 U7, KTD5). Catches
+    // structured content the model returned as *markdown* (a GFM table or a
+    // clean list of records) and, if it converts + validates through the SAME
+    // strict validator the emit tool uses, emits it as an additional
+    // data-json-render part. SHIP-INERT: gated on
+    // `thread_json_render_safety_net_enabled`; default/absent = OFF, so runtime
+    // behavior is byte-for-byte unchanged until a host opts in. The original
+    // assistant prose is always kept intact — this augments, never replaces.
+    if (args.payload.thread_json_render_safety_net_enabled === true) {
+      try {
+        const conversion = detectAndConvert(runResult.content);
+        if (conversion.matched && conversion.part) {
+          const safetyNetPart: ThreadJsonRenderPart = {
+            type: THREAD_JSON_RENDER_PART_TYPE,
+            id: `json-render:safety-net:${conversion.part.specHash ?? "table"}`,
+            data: conversion.part,
+          };
+          // Merge into the durable parts (finalize callback + response body)
+          // and emit the live-activity chunk — the same two sinks the emit
+          // tool feeds. mergeFinalUiMessageParts dedupes by id, so a part the
+          // model already emitted with the same id is not duplicated.
+          runResult = {
+            ...runResult,
+            uiMessageParts: mergeFinalUiMessageParts(runResult.uiMessageParts, [
+              safetyNetPart,
+            ]),
+          };
+          activityEmitter.emit(threadJsonRenderActivityEvent(safetyNetPart));
+          logStructured({
+            level: "info",
+            event: "json_render_safety_net_converted",
+            tenantId: identity.tenantId,
+            threadId: identity.threadId,
+            threadTurnId,
+            traceId: identity.traceId,
+            partId: safetyNetPart.id,
+          });
+        } else if (
+          conversion.diagnostics &&
+          conversion.diagnostics.length > 0
+        ) {
+          // Structured content WAS detected but the converted spec failed the
+          // strict validator, so it silently stayed as prose. This is the
+          // exact "silent fallback" case R6 makes observable. Log the
+          // diagnostic CODES only — never the assistant content.
+          logStructured({
+            level: "warn",
+            event: "json_render_safety_net_rejected",
+            tenantId: identity.tenantId,
+            threadId: identity.threadId,
+            threadTurnId,
+            traceId: identity.traceId,
+            diagnosticCodes: conversion.diagnostics.map((d) => d.code),
+          });
+        }
+      } catch (safetyNetErr) {
+        // Best-effort: any failure leaves the prose untouched and the turn
+        // unaffected. Log the error class only — never the assistant content.
+        logStructured({
+          level: "warn",
+          event: "json_render_safety_net_failed",
+          tenantId: identity.tenantId,
+          threadId: identity.threadId,
+          error:
+            safetyNetErr instanceof Error
+              ? safetyNetErr.message
+              : String(safetyNetErr),
+        });
+      }
     }
     // Flush any in-flight live-activity POSTs now that the turn is done — the
     // turn already completed, so this never extends its wall-clock, and it

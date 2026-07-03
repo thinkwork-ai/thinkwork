@@ -90,6 +90,18 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
     execute: async (_toolCallId, params) => {
       const result = normalizeRuntimeThreadJsonRenderInput(params);
       if (!result.ok || !result.part) {
+        // Observability (R6): a model-authored emit was rejected by the strict
+        // validator. Emit a structured line (Pi container logs ->
+        // /thinkwork/<stage>/agentcore-pi) carrying diagnostic CODES only, so
+        // rejection rates are countable. The diagnostics are also returned to
+        // the model below, which drives the in-turn repair loop.
+        console.warn(
+          JSON.stringify({
+            level: "warn",
+            event: "json_render_emit_rejected",
+            diagnosticCodes: (result.diagnostics ?? []).map((d) => d.code),
+          }),
+        );
         return {
           content: [
             {

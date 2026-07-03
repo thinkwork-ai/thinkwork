@@ -23,15 +23,15 @@ describe("Thread json-render catalog", () => {
       "workflow.status",
       "keyValue.list",
       "form.action",
-      "analytics.display",
       "result.list",
+      "table",
+      "chart",
     ]);
     expect(threadJsonRenderComponentNames).toEqual(
       expect.arrayContaining([
         "Card",
         "Button",
         "task.review",
-        "analytics.display",
         "result.list",
       ]),
     );

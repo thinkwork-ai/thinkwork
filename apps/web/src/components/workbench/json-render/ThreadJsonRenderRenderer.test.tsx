@@ -8,8 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createChartJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
+  createTableJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
 } from "./fixtures";
 import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
@@ -94,6 +96,35 @@ describe("ThreadJsonRenderRenderer", () => {
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Complete" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+  });
+
+  it("renders a table component through the json-render registry", () => {
+    const fixture = createTableJsonRenderFixture();
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        sourceMessageId="message-1"
+        threadId="thread-1"
+      />,
+    );
+
+    expect(screen.getByTestId("json-render-table")).toBeTruthy();
+    expect(screen.getByText("Open work items")).toBeTruthy();
+    expect(screen.getByText("Kickoff onboarding")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Owner/ })).toBeTruthy();
+  });
+
+  it("renders a chart component through the json-render registry", () => {
+    const fixture = createChartJsonRenderFixture("bar");
+
+    render(
+      <ThreadJsonRenderRenderer data={fixture.data} partId={fixture.id} />,
+    );
+
+    expect(screen.getByTestId("json-render-chart")).toBeTruthy();
+    expect(screen.getByText("Weekly throughput")).toBeTruthy();
   });
 
   it("keeps result.list item actions disabled while rendering live/read-only output", () => {

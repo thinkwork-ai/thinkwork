@@ -6,9 +6,10 @@ import {
   Renderer,
   type ComponentRenderer,
 } from "@json-render/react";
-import { shadcnComponents } from "@json-render/shadcn";
-import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
+import { threadJsonRenderPrimitiveComponentDefinitions } from "@thinkwork/thread-json-render";
 import { describe, expect, it } from "vitest";
+
+import { threadJsonRenderPrimitiveComponents } from "../json-render/primitives";
 
 const shadcnSchema = defineSchema((schema) => ({
   spec: schema.object({
@@ -28,12 +29,12 @@ const shadcnSchema = defineSchema((schema) => ({
 }));
 
 const shadcnCatalog = defineCatalog(shadcnSchema, {
-  components: shadcnComponentDefinitions,
+  components: threadJsonRenderPrimitiveComponentDefinitions,
   actions: {},
 });
 
 const { registry } = defineRegistry(shadcnCatalog, {
-  components: shadcnComponents,
+  components: threadJsonRenderPrimitiveComponents,
 });
 
 function validateShadcnSpec(spec: unknown) {
@@ -45,15 +46,15 @@ function validateShadcnSpec(spec: unknown) {
 
   for (const element of Object.values(catalogValidation.data.elements)) {
     const definition =
-      shadcnComponentDefinitions[
-        element.type as keyof typeof shadcnComponentDefinitions
+      threadJsonRenderPrimitiveComponentDefinitions[
+        element.type as keyof typeof threadJsonRenderPrimitiveComponentDefinitions
       ];
     const propsValidation = definition?.props.safeParse(element.props);
 
     if (!propsValidation?.success) {
       return {
         success: false as const,
-        error: propsValidation?.error ?? new Error("Unknown shadcn component"),
+        error: propsValidation?.error ?? new Error("Unknown primitive component"),
       };
     }
   }

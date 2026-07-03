@@ -5,9 +5,10 @@ import {
   Renderer,
   type ComponentRenderer,
 } from "@json-render/react";
-import { shadcnComponents } from "@json-render/shadcn";
-import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
+import { threadJsonRenderPrimitiveComponentDefinitions } from "@thinkwork/thread-json-render";
 import { createRoot } from "react-dom/client";
+
+import { threadJsonRenderPrimitiveComponents } from "../json-render/primitives";
 
 const bundleSmokeSchema = defineSchema((schema) => ({
   spec: schema.object({
@@ -27,7 +28,7 @@ const bundleSmokeSchema = defineSchema((schema) => ({
 }));
 
 const bundleSmokeCatalog = defineCatalog(bundleSmokeSchema, {
-  components: shadcnComponentDefinitions,
+  components: threadJsonRenderPrimitiveComponentDefinitions,
   actions: {},
 });
 
@@ -40,15 +41,15 @@ function validateBundleSmokeSpec(spec: unknown) {
 
   for (const element of Object.values(catalogValidation.data.elements)) {
     const definition =
-      shadcnComponentDefinitions[
-        element.type as keyof typeof shadcnComponentDefinitions
+      threadJsonRenderPrimitiveComponentDefinitions[
+        element.type as keyof typeof threadJsonRenderPrimitiveComponentDefinitions
       ];
     const propsValidation = definition?.props.safeParse(element.props);
 
     if (!propsValidation?.success) {
       return {
         success: false as const,
-        error: propsValidation?.error ?? new Error("Unknown shadcn component"),
+        error: propsValidation?.error ?? new Error("Unknown primitive component"),
       };
     }
   }
@@ -116,7 +117,7 @@ if (!validation.success) {
 }
 
 const { registry } = defineRegistry(bundleSmokeCatalog, {
-  components: shadcnComponents,
+  components: threadJsonRenderPrimitiveComponents,
 });
 
 const fallback: ComponentRenderer = ({ element }) => (

@@ -98,32 +98,6 @@ export function createTaskReviewJsonRenderFixture(): ThreadJsonRenderPart {
   );
 }
 
-export function createAnalyticsJsonRenderFixture(): ThreadJsonRenderPart {
-  const spec = {
-    root: "analytics",
-    elements: {
-      analytics: {
-        type: "analytics.display",
-        props: {
-          kind: "analytics.display",
-          analyticsDisplayVersion: "analytics-display/v1",
-          title: "Support volume",
-        },
-        children: [],
-      },
-    },
-  } satisfies ThreadJsonRenderSpec;
-
-  return createThreadJsonRenderPart(
-    "json-render:analytics:support-volume",
-    spec,
-    {
-      title: "Support volume",
-      summary: "Analytical display",
-    },
-  );
-}
-
 export function createResultListJsonRenderFixture(): ThreadJsonRenderPart {
   const spec = {
     root: "results",
@@ -236,6 +210,135 @@ export function createResultListJsonRenderFixture(): ThreadJsonRenderPart {
       },
     ],
   );
+}
+
+export function createTableJsonRenderFixture(): ThreadJsonRenderPart {
+  const spec = {
+    root: "table",
+    elements: {
+      table: {
+        type: "table",
+        props: {
+          title: "Open work items",
+          caption: "Sorted by score",
+          columns: [
+            { id: "name", header: "Name" },
+            { id: "owner", header: "Owner", sortable: true },
+            { id: "score", header: "Score", align: "right", sortable: true },
+          ],
+          rows: [
+            {
+              id: "row-1",
+              name: "Kickoff onboarding",
+              owner: "Codex",
+              score: 3,
+              primaryActionId: "complete-row-1",
+            },
+            {
+              id: "row-2",
+              name: "Draft launch plan",
+              owner: "Ada",
+              score: 1,
+            },
+            {
+              id: "row-3",
+              name: "Review guardrails",
+              owner: "Bao",
+              score: 2,
+            },
+          ],
+          sort: { columnId: "score", direction: "desc" },
+        },
+        children: [],
+      },
+    },
+  } satisfies ThreadJsonRenderSpec;
+
+  return createThreadJsonRenderPart(
+    "json-render:table:work-items",
+    spec,
+    {
+      title: "Open work items",
+      summary: "Three open work items sorted by score.",
+      lines: [
+        "Kickoff onboarding — Codex — 3",
+        "Review guardrails — Bao — 2",
+        "Draft launch plan — Ada — 1",
+      ],
+    },
+    [
+      {
+        id: "complete-row-1",
+        label: "Complete",
+        kind: "submit",
+        params: {
+          target: "work_item_status",
+          workItemId: "77777777-7777-7777-7777-777777777777",
+          statusCategory: "DONE",
+        },
+      },
+    ],
+  );
+}
+
+export function createChartJsonRenderFixture(
+  kind: "area" | "bar" | "line" | "pie" = "bar",
+): ThreadJsonRenderPart {
+  const cartesianProps = {
+    kind,
+    title: "Weekly throughput",
+    description: "Completed and reviewed work items per week",
+    footer: "Trending up 12% over the last month",
+    xKey: "week",
+    series: [
+      { dataKey: "completed", label: "Completed", colorKey: "chart-1" },
+      { dataKey: "reviewed", label: "Reviewed", colorKey: "chart-2" },
+    ],
+    data: [
+      { week: "W1", completed: 8, reviewed: 5 },
+      { week: "W2", completed: 12, reviewed: 9 },
+      { week: "W3", completed: 15, reviewed: 11 },
+      { week: "W4", completed: 14, reviewed: 13 },
+    ],
+  };
+
+  const pieProps = {
+    kind,
+    title: "Work by channel",
+    description: "Share of completed work items by channel",
+    footer: "Chat is the top channel this month",
+    xKey: "channel",
+    series: [{ dataKey: "count", label: "Items", colorKey: "chart-1" }],
+    data: [
+      { channel: "Chat", count: 24 },
+      { channel: "Email", count: 13 },
+      { channel: "Slack", count: 9 },
+      { channel: "API", count: 4 },
+    ],
+  };
+
+  const props = kind === "pie" ? pieProps : cartesianProps;
+
+  const spec = {
+    root: "chart",
+    elements: {
+      chart: {
+        type: "chart",
+        props,
+        children: [],
+      },
+    },
+  } satisfies ThreadJsonRenderSpec;
+
+  return createThreadJsonRenderPart(`json-render:chart:${kind}`, spec, {
+    title: props.title,
+    summary: props.description,
+    lines: props.data.map((row) =>
+      Object.values(row)
+        .map((value) => String(value))
+        .join(" — "),
+    ),
+  });
 }
 
 function createThreadJsonRenderPart(
