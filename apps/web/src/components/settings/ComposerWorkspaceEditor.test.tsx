@@ -197,7 +197,7 @@ function filePayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderEditor(
+function renderRaw(
   props: Partial<React.ComponentProps<typeof ComposerWorkspaceEditor>> = {},
 ) {
   return render(
@@ -209,6 +209,49 @@ function renderEditor(
       {...props}
     />,
   );
+}
+
+/**
+ * The tree defaults to fully COLLAPSED (every folder closed at every depth).
+ * Most tests operate on nested nodes, so this helper renders and then expands
+ * ALL folders for convenience; the default-collapsed behavior + icon swap are
+ * asserted in their own tests.
+ */
+async function renderEditor(
+  props: Partial<React.ComponentProps<typeof ComposerWorkspaceEditor>> = {},
+) {
+  const view = renderRaw(props);
+  try {
+    // Wait until the default-collapse has settled (a COLLAPSED folder toggle
+    // exists) before expanding — the collapse runs in an effect after the first
+    // render, so expanding too early would be undone. Loading / error / empty
+    // renders never produce a collapsed toggle and fall through the catch.
+    await waitFor(
+      () => {
+        if (
+          !document.querySelector(
+            '[data-testid^="tree-toggle-"][aria-expanded="false"]',
+          )
+        ) {
+          throw new Error("tree not collapsed yet");
+        }
+      },
+      { timeout: 800 },
+    );
+  } catch {
+    // loading / error / empty-tree render — nothing to expand.
+  }
+  // Expanding a folder reveals deeper (still-collapsed) folders, so iterate.
+  for (let pass = 0; pass < 12; pass += 1) {
+    const collapsed = Array.from(
+      document.querySelectorAll(
+        '[data-testid^="tree-toggle-"][aria-expanded="false"]',
+      ),
+    );
+    if (collapsed.length === 0) break;
+    collapsed.forEach((toggle) => fireEvent.click(toggle));
+  }
+  return view;
 }
 
 beforeEach(() => {
@@ -232,7 +275,7 @@ afterEach(() => cleanup());
 
 describe("ComposerWorkspaceEditor rendering", () => {
   it("renders skill, space, user, and generated nodes from the manifest", async () => {
-    renderEditor();
+    await renderEditor();
     expect(
       await screen.findByTestId("tree-node-skills/approve-receipt"),
     ).toBeTruthy();
@@ -255,7 +298,7 @@ describe("ComposerWorkspaceEditor rendering", () => {
   });
 
   it("collapses and expands folders", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-skills/approve-receipt/SKILL.md");
     fireEvent.click(screen.getByTestId("tree-toggle-skills"));
     expect(
@@ -267,8 +310,45 @@ describe("ComposerWorkspaceEditor rendering", () => {
     ).toBeTruthy();
   });
 
+  it("defaults to fully COLLAPSED at every depth (root folders closed, root files visible)", async () => {
+    renderRaw();
+    // Root folders render collapsed (the collapse settles in a mount effect).
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("tree-toggle-skills").getAttribute("aria-expanded"),
+      ).toBe("false"),
+    );
+    const skillsToggle = screen.getByTestId("tree-toggle-skills");
+    expect(screen.getByTestId("tree-file-AGENTS.md")).toBeTruthy();
+    // Nested content is hidden until its ancestors are opened.
+    expect(
+      screen.queryByTestId("tree-file-skills/approve-receipt/SKILL.md"),
+    ).toBeNull();
+    // Expanding a root reveals its immediate children — themselves collapsed.
+    fireEvent.click(skillsToggle);
+    const slugToggle = screen.getByTestId("tree-toggle-skills/approve-receipt");
+    expect(slugToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.queryByTestId("tree-file-skills/approve-receipt/SKILL.md"),
+    ).toBeNull();
+  });
+
+  it("swaps the folder icon to the open glyph when a folder is expanded", async () => {
+    renderRaw();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("tree-toggle-skills").getAttribute("aria-expanded"),
+      ).toBe("false"),
+    );
+    // Collapsed → no open-folder glyph.
+    expect(screen.queryByTestId("tree-folder-open-skills")).toBeNull();
+    fireEvent.click(screen.getByTestId("tree-toggle-skills"));
+    // Expanded → open-folder glyph present.
+    expect(screen.getByTestId("tree-folder-open-skills")).toBeTruthy();
+  });
+
   it("reloads the manifest when the selection changes", async () => {
-    const view = renderEditor();
+    const view = await renderEditor();
     await screen.findByTestId("tree-node-skills/approve-receipt");
     expect(getManifestMock).toHaveBeenCalledTimes(1);
     view.rerender(
@@ -283,7 +363,7 @@ describe("ComposerWorkspaceEditor rendering", () => {
   });
 
   it("bumping refreshToken reloads the manifest", async () => {
-    const view = renderEditor({ refreshToken: 0 });
+    const view = await renderEditor({ refreshToken: 0 });
     await screen.findByTestId("tree-node-skills/approve-receipt");
     expect(getManifestMock).toHaveBeenCalledTimes(1);
     view.rerender(
@@ -304,7 +384,7 @@ describe("skill-folder decoration (item 3)", () => {
     const skillStateBySlug = new Map<string, SkillNodeState>([
       ["approve-receipt", { active: false, reason: "trust_gate" }],
     ]);
-    renderEditor({ skillStateBySlug });
+    await renderEditor({ skillStateBySlug });
     const gate = await screen.findByTestId("tree-gate-skills/approve-receipt");
     expect(gate.textContent).toContain("trust_gate");
     // Dimmed row.
@@ -318,7 +398,7 @@ describe("skill-folder decoration (item 3)", () => {
   });
 
   it("renders the Spaces mount lowercase as a display alias (real path unchanged)", async () => {
-    renderEditor();
+    await renderEditor();
     const row = await screen.findByTestId("tree-node-Spaces");
     // Display-only: the label reads "spaces" while the node path stays "Spaces".
     expect(within(row).getByText("spaces")).toBeTruthy();
@@ -328,7 +408,7 @@ describe("skill-folder decoration (item 3)", () => {
     const skillStateBySlug = new Map<string, SkillNodeState>([
       ["approve-receipt", { active: true, reason: null }],
     ]);
-    renderEditor({ skillStateBySlug });
+    await renderEditor({ skillStateBySlug });
     await screen.findByTestId("tree-node-skills/approve-receipt");
     expect(screen.queryByTestId("tree-gate-skills/approve-receipt")).toBeNull();
   });
@@ -336,7 +416,7 @@ describe("skill-folder decoration (item 3)", () => {
 
 describe("context-menu actions (item 4)", () => {
   it("offers Add skill on the skills folder and Detach skill on an install", async () => {
-    renderEditor({
+    await renderEditor({
       canManageSkills: true,
       onAddSkill: addSkillMock,
       onDetachSkill: detachSkillMock,
@@ -349,7 +429,7 @@ describe("context-menu actions (item 4)", () => {
   });
 
   it("withholds destructive actions when writes aren't allowed", async () => {
-    renderEditor({ canManageSkills: false });
+    await renderEditor({ canManageSkills: false });
     await screen.findByTestId("tree-node-skills");
     expect(screen.queryByTestId("menu-add-skill")).toBeNull();
     expect(
@@ -358,7 +438,7 @@ describe("context-menu actions (item 4)", () => {
   });
 
   it("offers Open source on non-skill nodes", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");
     fireEvent.click(
       screen.getByTestId("menu-open-source-Spaces/customer-success/notes.md"),
@@ -373,7 +453,7 @@ describe("context-menu actions (item 4)", () => {
 
 describe("standard file-tree menu (v1.1)", () => {
   it("creates a new file inside a folder through the owning source client, then refetches", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-skills/approve-receipt");
     fireEvent.click(screen.getByTestId("menu-new-file-skills/approve-receipt"));
     fireEvent.change(await screen.findByTestId("composer-name-input"), {
@@ -392,7 +472,7 @@ describe("standard file-tree menu (v1.1)", () => {
   });
 
   it("creates a ROOT-level folder via the tree background menu (agent workspace root)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("composer-tree-scroll");
     fireEvent.click(screen.getByTestId("menu-root-new-folder"));
     fireEvent.change(await screen.findByTestId("composer-name-input"), {
@@ -412,13 +492,13 @@ describe("standard file-tree menu (v1.1)", () => {
 
   it("hides the tree-background create menu for non-operators", async () => {
     tenant.isOperator = false;
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("composer-tree-scroll");
     expect(screen.queryByTestId("menu-root-new-folder")).toBeNull();
   });
 
   it("renames a source file through renamePath (relative to its layer)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-CAPABILITIES.md");
     fireEvent.click(screen.getByTestId("menu-rename-CAPABILITIES.md"));
     fireEvent.change(await screen.findByTestId("composer-name-input"), {
@@ -435,7 +515,7 @@ describe("standard file-tree menu (v1.1)", () => {
   });
 
   it("deletes a Space source file through the space client (prefix stripped)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");
     fireEvent.click(
       screen.getByTestId("menu-delete-Spaces/customer-success/notes.md"),
@@ -450,14 +530,14 @@ describe("standard file-tree menu (v1.1)", () => {
   });
 
   it("offers NO standard ops on a generated file (derived)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-AGENTS.md");
     expect(screen.queryByTestId("menu-rename-AGENTS.md")).toBeNull();
     expect(screen.queryByTestId("menu-delete-AGENTS.md")).toBeNull();
   });
 
   it("maps a skill folder's destructive action to Detach, not raw Delete", async () => {
-    renderEditor({
+    await renderEditor({
       canManageSkills: true,
       onDetachSkill: detachSkillMock,
     });
@@ -473,10 +553,93 @@ describe("standard file-tree menu (v1.1)", () => {
 
   it("hides standard ops for non-operators", async () => {
     tenant.isOperator = false;
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-CAPABILITIES.md");
     expect(screen.queryByTestId("menu-rename-CAPABILITIES.md")).toBeNull();
     expect(screen.queryByTestId("menu-delete-CAPABILITIES.md")).toBeNull();
+  });
+});
+
+describe("user mount is fully editable (everything editable)", () => {
+  it("loads a user-owned file through the { userId } source client", async () => {
+    await renderEditor();
+    await screen.findByTestId("tree-file-User/USER.md");
+    fireEvent.click(screen.getByTestId("tree-file-User/USER.md"));
+    await waitFor(() =>
+      expect(sourceGetFileMock).toHaveBeenCalledWith(
+        { userId: "user-1" },
+        "USER.md",
+      ),
+    );
+    expect(screen.getByTestId("composer-editable-pane")).toBeTruthy();
+  });
+
+  it("saves a user-owned file through the { userId } client, then refetches", async () => {
+    await renderEditor();
+    await screen.findByTestId("tree-file-User/USER.md");
+    fireEvent.click(screen.getByTestId("tree-file-User/USER.md"));
+    await screen.findByTestId("composer-editable-pane");
+    getManifestMock.mockClear();
+    fireEvent.change(screen.getByTestId("cm-input"), {
+      target: { value: "# edited user profile" },
+    });
+    fireEvent.click(screen.getByTestId("cm-save"));
+    await waitFor(() =>
+      expect(putFileMock).toHaveBeenCalledWith(
+        { userId: "user-1" },
+        "USER.md",
+        "# edited user profile",
+      ),
+    );
+    await waitFor(() => expect(getManifestMock).toHaveBeenCalled());
+  });
+
+  it("renames and deletes user files through the { userId } client", async () => {
+    await renderEditor();
+    await screen.findByTestId("tree-node-User/USER.md");
+    fireEvent.click(screen.getByTestId("menu-rename-User/USER.md"));
+    fireEvent.change(await screen.findByTestId("composer-name-input"), {
+      target: { value: "PROFILE.md" },
+    });
+    fireEvent.click(screen.getByTestId("composer-name-submit"));
+    await waitFor(() =>
+      expect(renamePathMock).toHaveBeenCalledWith(
+        { userId: "user-1" },
+        "USER.md",
+        "PROFILE.md",
+      ),
+    );
+    fireEvent.click(screen.getByTestId("menu-delete-User/USER.md"));
+    fireEvent.click(await screen.findByTestId("composer-delete-confirm"));
+    await waitFor(() =>
+      expect(deleteFileMock).toHaveBeenCalledWith(
+        { userId: "user-1" },
+        "USER.md",
+      ),
+    );
+  });
+
+  it("creates a new folder inside the user mount through the { userId } client", async () => {
+    await renderEditor();
+    await screen.findByTestId("tree-node-User");
+    fireEvent.click(screen.getByTestId("menu-new-folder-User"));
+    fireEvent.change(await screen.findByTestId("composer-name-input"), {
+      target: { value: "packs" },
+    });
+    fireEvent.click(screen.getByTestId("composer-name-submit"));
+    await waitFor(() =>
+      expect(putFileMock).toHaveBeenCalledWith(
+        { userId: "user-1" },
+        "packs/.gitkeep",
+        "",
+      ),
+    );
+  });
+
+  it("renders the User mount lowercase as a display alias", async () => {
+    await renderEditor();
+    const row = await screen.findByTestId("tree-node-User");
+    expect(within(row).getByText("user")).toBeTruthy();
   });
 });
 
@@ -508,7 +671,7 @@ describe("jump-to-cause (KTD-5)", () => {
   });
 
   it("skill nodes have NO capability-sheet menu entry (gate badge handles focus)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-skills/approve-receipt");
     // No "Open in capabilities" / open-source entry on skill nodes.
     expect(
@@ -517,7 +680,7 @@ describe("jump-to-cause (KTD-5)", () => {
   });
 
   it("generated agent files navigate to the agent workspace editor", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-AGENTS.md");
     fireEvent.click(screen.getByTestId("menu-open-source-AGENTS.md"));
     expect(navigateMock).toHaveBeenCalledWith({
@@ -527,7 +690,7 @@ describe("jump-to-cause (KTD-5)", () => {
   });
 
   it("user nodes navigate to the perspective user's detail page", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-node-User/USER.md");
     fireEvent.click(screen.getByTestId("menu-open-source-User/USER.md"));
     expect(navigateMock).toHaveBeenCalledWith({
@@ -539,7 +702,7 @@ describe("jump-to-cause (KTD-5)", () => {
 
 describe("pending / removing affordances", () => {
   it("renders a ghost skill folder while an attach materializes", async () => {
-    renderEditor({ pendingSkillSlug: "expenses" });
+    await renderEditor({ pendingSkillSlug: "expenses" });
     expect(await screen.findByTestId("tree-node-skills/expenses")).toBeTruthy();
     expect(
       screen.getByTestId("tree-pending-skills/expenses").textContent,
@@ -547,7 +710,7 @@ describe("pending / removing affordances", () => {
   });
 
   it("marks a skill folder removing while a detach is in flight", async () => {
-    renderEditor({ removingSkillSlug: "approve-receipt" });
+    await renderEditor({ removingSkillSlug: "approve-receipt" });
     expect(
       (await screen.findByTestId("tree-removing-skills/approve-receipt"))
         .textContent,
@@ -568,7 +731,7 @@ describe("read-only fallback pane (no editable owning layer)", () => {
         entry: { path: "GOAL.md", owner: "thread_goal", generated: false },
       }),
     );
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-GOAL.md");
     fireEvent.click(screen.getByTestId("tree-file-GOAL.md"));
     await waitFor(() =>
@@ -591,7 +754,7 @@ describe("read-only fallback pane (no editable owning layer)", () => {
         content: null,
       }),
     );
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-GOAL.md");
     fireEvent.click(screen.getByTestId("tree-file-GOAL.md"));
     expect(
@@ -602,7 +765,7 @@ describe("read-only fallback pane (no editable owning layer)", () => {
 
 describe("live-editable source pane (v1.1)", () => {
   it("edits a non-generated source file and saves through the owning client, then refetches the preview", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-skills/approve-receipt/SKILL.md");
     fireEvent.click(
       screen.getByTestId("tree-file-skills/approve-receipt/SKILL.md"),
@@ -638,7 +801,7 @@ describe("live-editable source pane (v1.1)", () => {
   });
 
   it("edits a Space source file through the space client (mount prefix stripped)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-Spaces/customer-success/notes.md");
     fireEvent.click(
       screen.getByTestId("tree-file-Spaces/customer-success/notes.md"),
@@ -653,7 +816,7 @@ describe("live-editable source pane (v1.1)", () => {
 
   it("keeps a non-operator on a read-only source pane", async () => {
     tenant.isOperator = false;
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-CAPABILITIES.md");
     fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
     await screen.findByTestId("composer-editable-pane");
@@ -664,7 +827,7 @@ describe("live-editable source pane (v1.1)", () => {
 
   it("surfaces a source load error in the editable pane", async () => {
     sourceGetFileMock.mockRejectedValue(new Error("s3 unavailable"));
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-CAPABILITIES.md");
     fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
     expect(
@@ -675,7 +838,7 @@ describe("live-editable source pane (v1.1)", () => {
 
 describe("generated files (single full-width source editor)", () => {
   it("opens a generated agent file as ONE source editor with the generated badge (no split, no rendered pane)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
     const pane = await screen.findByTestId("composer-editable-pane");
@@ -699,7 +862,7 @@ describe("generated files (single full-width source editor)", () => {
   });
 
   it("opens a generated space file as one editor on the space source (prefix stripped)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-Spaces/customer-success/CONTEXT.md");
     fireEvent.click(
       screen.getByTestId("tree-file-Spaces/customer-success/CONTEXT.md"),
@@ -714,7 +877,7 @@ describe("generated files (single full-width source editor)", () => {
   });
 
   it("saving a generated file's prose writes the source and refetches the preview", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
     const pane = await screen.findByTestId("composer-editable-pane");
@@ -736,7 +899,7 @@ describe("generated files (single full-width source editor)", () => {
 
   it("gates editing to operators: a non-operator gets a read-only editor", async () => {
     tenant.isOperator = false;
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
     const pane = await screen.findByTestId("composer-editable-pane");
@@ -746,7 +909,7 @@ describe("generated files (single full-width source editor)", () => {
   });
 
   it("opens non-generated files as one editor too (no split)", async () => {
-    renderEditor();
+    await renderEditor();
     await screen.findByTestId("tree-file-CAPABILITIES.md");
     fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
     await screen.findByTestId("composer-editable-pane");
@@ -756,9 +919,9 @@ describe("generated files (single full-width source editor)", () => {
 });
 
 describe("loading and error states", () => {
-  it("shows skeletons while the manifest loads", () => {
+  it("shows skeletons while the manifest loads", async () => {
     getManifestMock.mockReturnValue(new Promise(() => {}));
-    renderEditor();
+    await renderEditor();
     expect(screen.getByTestId("preview-loading")).toBeTruthy();
   });
 
@@ -770,7 +933,7 @@ describe("loading and error states", () => {
         entries: [],
       }),
     );
-    renderEditor();
+    await renderEditor();
     expect(
       (await screen.findByTestId("preview-invalid-selection")).textContent,
     ).toContain("space not found in tenant");
@@ -784,7 +947,7 @@ describe("loading and error states", () => {
         entries: [],
       }),
     );
-    renderEditor();
+    await renderEditor();
     expect(
       (await screen.findByTestId("preview-resolution-fault")).textContent,
     ).toContain("compose failed");
@@ -792,7 +955,7 @@ describe("loading and error states", () => {
 
   it("renders transport errors", async () => {
     getManifestMock.mockRejectedValue(new Error("network sad"));
-    renderEditor();
+    await renderEditor();
     expect((await screen.findByTestId("preview-error")).textContent).toContain(
       "network sad",
     );

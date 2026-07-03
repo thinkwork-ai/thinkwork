@@ -4300,6 +4300,14 @@ describe("user context workspace target", () => {
         overridden: false,
       },
       {
+        // Non-hidden user source files are now visible + editable (the Composer
+        // is the agent configuration — everything editable).
+        path: "knowledge-pack.md",
+        source: "user",
+        sha256: "",
+        overridden: false,
+      },
+      {
         path: "memory/MEMORY.md",
         source: "user",
         sha256: "",
