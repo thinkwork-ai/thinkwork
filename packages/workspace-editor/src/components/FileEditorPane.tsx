@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
@@ -64,6 +64,17 @@ export interface FileEditorPaneProps {
    * on save (Composer plan U7). Empty disables the affordance.
    */
   managedHeadings?: readonly string[];
+  /**
+   * Extra badges rendered in the standard header row, right after the filename
+   * (e.g. the Composer's generated / layer-source / read-only / size badges).
+   * Keeps a single house header instead of a second outer one.
+   */
+  headerBadges?: ReactNode;
+  /**
+   * Extra actions rendered at the far right of the header row, after
+   * Save/Discard (e.g. the Composer's Close button).
+   */
+  headerActions?: ReactNode;
   onChange: (value: string) => void;
   onSave: () => void;
   onDiscard: () => void;
@@ -77,6 +88,8 @@ export function FileEditorPane({
   saving,
   readOnly = false,
   managedHeadings,
+  headerBadges,
+  headerActions,
   onChange,
   onSave,
   onDiscard,
@@ -114,6 +127,7 @@ export function FileEditorPane({
               {openFile}
             </span>
           )}
+          {headerBadges}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {!readOnly && !loading && hasPendingChanges && (
@@ -140,6 +154,7 @@ export function FileEditorPane({
               </Button>
             </>
           )}
+          {headerActions}
         </div>
       </div>
       {managedPresent.length > 0 ? (
