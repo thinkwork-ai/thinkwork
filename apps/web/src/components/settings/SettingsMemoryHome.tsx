@@ -9,14 +9,17 @@ import {
 } from "@/components/settings/SettingsMemory";
 import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
+import { SettingsWiki } from "@/components/settings/SettingsWiki";
 
 const MEMORY = "/settings/memory";
+const WIKI = "/settings/memory/wiki";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 const ONTOLOGY = "/settings/memory/ontology";
 
-type MemoryTab = "memory" | "knowledge-bases" | "ontology";
+type MemoryTab = "memory" | "wiki" | "knowledge-bases" | "ontology";
 
 function tabForPath(pathname: string): MemoryTab {
+  if (pathname.startsWith(WIKI)) return "wiki";
   if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
   if (pathname.startsWith(ONTOLOGY)) return "ontology";
   return "memory";
@@ -81,6 +84,7 @@ export function SettingsMemoryHome() {
     breadcrumbs: [{ label: "Memory" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
+      { to: WIKI, label: "Wiki" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
     ],
@@ -96,6 +100,7 @@ export function SettingsMemoryHome() {
           onRefreshControllerChange={updateRefreshController}
         />
       ) : null}
+      {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
       {activeTab === "knowledge-bases" ? (
         <SettingsKnowledgeBases embedded />
       ) : null}
