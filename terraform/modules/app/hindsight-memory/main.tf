@@ -36,7 +36,7 @@ variable "database_url" {
 variable "image_tag" {
   description = "Hindsight Docker image tag (ghcr.io/vectorize-io/hindsight:<tag>)"
   type        = string
-  default     = "0.5.0"
+  default     = "0.5.6"
 }
 
 variable "enable_auto_consolidation" {
