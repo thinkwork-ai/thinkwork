@@ -7,16 +7,15 @@
  * drawn from the read-only `createComposerPreviewClient` adapter over
  * `workspacePreview` (`listFiles` via `getManifest`).
  *
- * The editor pane is LIVE (v1.1 live-save):
- *   - a NON-generated source file (agent/space/user-owned — `skills/**`,
- *     `memory/**`, Space mounts, User files) is edited in place and saved
- *     through the owning layer's existing workspace-files client (resolved from
- *     the node's owner + path), then refetches the preview so the tree stays
- *     truthful. Operator-gated, with the shared managed-section locked regions +
- *     warn-on-save;
- *   - a GENERATED file (AGENTS.md, CONTEXT.md, `generated:true`) stays READ-ONLY
- *     in the rendered pane (loaded via the preview adapter's `getFilePayload`);
- *     the U7 side-by-side single-file source editor is its editing affordance.
+ * The editor pane is LIVE (v1.1 live-save). EVERY file — generated or not —
+ * opens as ONE full-width editor on its producing SOURCE file, edited in place
+ * and saved through the owning layer's existing workspace-files client (resolved
+ * from the node's owner + path), then refetches the preview so the tree stays
+ * truthful. Operator-gated. A GENERATED file (AGENTS.md, CONTEXT.md,
+ * `generated:true`) additionally carries the `generated` header badge and the
+ * shared computed-sections banner + locked managed regions, so recomposed
+ * bodies are marked and edits inside them warn on save. Files with no editable
+ * owning layer (thread-scoped) fall back to the read-only rendered preview.
  * The preview adapter itself is read-only (its `putFile` rejects) — edits ride
  * the source client, never the derived preview.
  *
@@ -35,11 +34,6 @@
  *     "Add skill…". Both route through the host's existing grant/detach +
  *     confirm + sync-pending machinery — the context menu is a second client of
  *     those actions, not a new write path.
- *
- * The U7 split view is preserved: opening a GENERATED file shows the read-only
- * rendered pane beside a single-file editor for the producing layer's source
- * (same chrome as the primary pane, no nested file tree) on the real `putFile`
- * path; saving refetches the preview.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -428,8 +422,9 @@ export function ComposerWorkspaceEditor({
       return;
     }
     const entry = entryByPath.get(selectedPath) ?? null;
-    const usesRenderedPane =
-      Boolean(entry?.generated) || !resolveSource(entry, result, spaceId);
+    // Only the fallback read-only rendered pane (files with no editable owning
+    // layer) needs the preview-file payload; everything else edits its source.
+    const usesRenderedPane = !resolveSource(entry, result, spaceId);
     if (!usesRenderedPane) {
       setFile({ loading: false, error: null, data: null });
       return;
@@ -758,43 +753,11 @@ export function ComposerWorkspaceEditor({
         {selectedPath ? (
           (() => {
             const source = resolveSource(selectedEntry, result, spaceId);
-            // Generated files stay READ-ONLY in the rendered pane; the U7 split
-            // provides the editing affordance on the producing layer's source.
-            if (selectedEntry?.generated) {
-              const rendered = (
-                <ComposerRenderedPane
-                  path={selectedPath}
-                  entry={selectedEntry}
-                  file={file}
-                  onClose={() => setSelectedPath(null)}
-                />
-              );
-              if (!source) return rendered;
-              return (
-                <div
-                  className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row xl:items-stretch"
-                  data-testid="composer-split-view"
-                >
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    {rendered}
-                  </div>
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <ComposerEditablePane
-                      key={`${source.targetKey}:${source.sourceFile}`}
-                      source={source}
-                      entry={null}
-                      readOnly={!canEditSource}
-                      onSaved={() => {
-                        void loadManifest();
-                        if (selectedPath) void loadFile(selectedPath);
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            }
-            // Non-generated SOURCE files edit in place and save through the
-            // owning layer's client (v1.1 live-save); operator-gated.
+            // Every file — generated or not — opens as ONE full-width editor on
+            // its producing SOURCE file. Generated files (AGENTS.md, CONTEXT.md)
+            // carry the generated badge + the computed-sections banner + locked
+            // managed regions (from the shared FileEditorPane); their prose edits
+            // save the source and refetch the preview. Operator-gated.
             if (source) {
               return (
                 <ComposerEditablePane
@@ -911,7 +874,7 @@ export function ComposerRenderedPane({
           {errorText}
         </p>
       ) : (
-        <div className="h-full min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <FileEditorPane
             openFile={path}
             content={payload?.content ?? ""}
@@ -1024,6 +987,14 @@ export function ComposerEditablePane({
         <span className="min-w-0 truncate font-mono text-xs text-foreground">
           {entry?.path ?? source.sourceFile}
         </span>
+        {entry?.generated ? (
+          <Badge
+            variant="outline"
+            className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+          >
+            generated
+          </Badge>
+        ) : null}
         <Badge
           variant="outline"
           className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
@@ -1058,7 +1029,7 @@ export function ComposerEditablePane({
           Couldn&apos;t load this file: {error}
         </p>
       ) : (
-        <div className="h-full min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <FileEditorPane
             openFile={source.sourceFile}
             content={content}

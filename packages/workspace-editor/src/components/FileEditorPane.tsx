@@ -8,22 +8,47 @@ import { languageForFile } from "../lib/codemirror-language.js";
 import { managedSectionHighlight } from "../lib/managed-section-decorations.js";
 import { managedSectionHeadingsPresent } from "../lib/managed-sections.js";
 
-const blackEditorSurface = EditorView.theme({
-  "&": { backgroundColor: "black" },
-  ".cm-scroller": { backgroundColor: "black" },
-  ".cm-content": { backgroundColor: "black" },
-  ".cm-gutters": { backgroundColor: "black" },
-  ".cm-gutter": { backgroundColor: "black" },
-  ".cm-lineNumbers": { backgroundColor: "black" },
-  ".cm-foldGutter": { backgroundColor: "black" },
-  ".cm-gutterElement": { backgroundColor: "black" },
+// House editor surface: the CodeMirror chrome (editor/scroller/gutters) reads as
+// the app's muted grey surface token — the same family as the tree/side panels —
+// instead of a stark black rectangle, and fills its container to the bottom
+// (`.cm-editor { height: 100% }`). Backgrounds carry `!important` to win over the
+// imported `vscodeDark` theme; syntax token FOREGROUND colors are left to
+// vscodeDark for now (a follow-up decision). Applies to every editor surface on
+// the page (main pane + split-view source pane) and to every other embed of the
+// shared editor (Settings → Workspace, scoped space/user editors).
+const houseEditorSurface = EditorView.theme({
+  "&": {
+    height: "100%",
+    backgroundColor: "var(--muted) !important",
+    color: "var(--foreground)",
+  },
+  ".cm-scroller": { backgroundColor: "var(--muted) !important" },
+  ".cm-content": {
+    backgroundColor: "var(--muted) !important",
+    color: "var(--foreground)",
+  },
+  ".cm-gutters": {
+    backgroundColor: "var(--muted) !important",
+    color: "var(--muted-foreground)",
+    border: "none",
+    borderRight: "1px solid var(--border)",
+  },
+  ".cm-gutter": { backgroundColor: "var(--muted) !important" },
+  ".cm-lineNumbers": { backgroundColor: "var(--muted) !important" },
+  ".cm-foldGutter": { backgroundColor: "var(--muted) !important" },
+  ".cm-gutterElement": { backgroundColor: "var(--muted) !important" },
   ".cm-activeLine": { backgroundColor: "transparent" },
-  ".cm-activeLineGutter": { backgroundColor: "black" },
-  // Forcing the surface black hid the selection highlight — restore a visible
-  // selection for both the drawn layer (focused + blurred) and native selection.
+  ".cm-activeLineGutter": { backgroundColor: "transparent" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--foreground)" },
+  // Keep a visible selection on the grey surface (drawn layer + native).
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
-    { backgroundColor: "#264f78 !important" },
-  ".cm-selectionMatch": { backgroundColor: "#3a3d41" },
+    {
+      backgroundColor:
+        "color-mix(in oklab, var(--primary) 24%, transparent) !important",
+    },
+  ".cm-selectionMatch": {
+    backgroundColor: "color-mix(in oklab, var(--primary) 14%, transparent)",
+  },
 });
 
 export interface FileEditorPaneProps {
@@ -132,7 +157,7 @@ export function FileEditorPane({
           </span>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-hidden bg-black [&>div]:h-full">
+      <div className="min-h-0 flex-1 overflow-hidden bg-muted [&>div]:h-full">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading...
@@ -147,11 +172,11 @@ export function FileEditorPane({
               ...languageForFile(openFile),
               ...managedExtension,
               EditorView.lineWrapping,
-              blackEditorSurface,
+              houseEditorSurface,
             ]}
             editable={!readOnly}
-            style={{ fontSize: "12px", backgroundColor: "black" }}
-            className="[&_.cm-editor]:!h-full [&_.cm-editor]:!bg-black [&_.cm-scroller]:!overflow-auto [&_.cm-scroller]:!bg-black [&_.cm-content]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-gutter]:!bg-black [&_.cm-lineNumbers]:!bg-black [&_.cm-foldGutter]:!bg-black [&_.cm-gutterElement]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-black"
+            style={{ fontSize: "12px" }}
+            className="h-full [&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto"
             basicSetup={{
               lineNumbers: true,
               foldGutter: true,

@@ -420,26 +420,35 @@ describe("pending / removing affordances", () => {
   });
 });
 
-describe("read-only rendered pane", () => {
-  it("loads content lazily and renders it in a read-only CodeMirror pane", async () => {
-    renderEditor();
-    await screen.findByTestId("tree-file-AGENTS.md");
-    expect(getFilePayloadMock).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
-    await waitFor(() =>
-      expect(getFilePayloadMock).toHaveBeenCalledWith("AGENTS.md"),
+describe("read-only fallback pane (no editable owning layer)", () => {
+  const THREAD_MANIFEST = manifest({
+    entries: [{ path: "GOAL.md", owner: "thread_goal", generated: false }],
+  });
+
+  it("loads a thread-scoped file read-only via the preview payload", async () => {
+    getManifestMock.mockResolvedValue(THREAD_MANIFEST);
+    getFilePayloadMock.mockResolvedValue(
+      filePayload({
+        content: "# goal",
+        entry: { path: "GOAL.md", owner: "thread_goal", generated: false },
+      }),
     );
-    // AGENTS.md is generated → split view; the rendered (left) pane is read-only.
+    renderEditor();
+    await screen.findByTestId("tree-file-GOAL.md");
+    fireEvent.click(screen.getByTestId("tree-file-GOAL.md"));
+    await waitFor(() =>
+      expect(getFilePayloadMock).toHaveBeenCalledWith("GOAL.md"),
+    );
     const viewer = await screen.findByTestId("composer-file-viewer");
-    const pane = within(viewer).getByTestId("cm-pane");
-    expect(pane.textContent).toContain("# Rendered body");
-    expect(pane.getAttribute("data-readonly")).toBe("true");
-    // Close returns to the empty pane.
+    expect(
+      within(viewer).getByTestId("cm-pane").getAttribute("data-readonly"),
+    ).toBe("true");
     fireEvent.click(within(viewer).getByTestId("composer-file-close"));
     expect(screen.getByTestId("composer-empty-pane")).toBeTruthy();
   });
 
-  it("renders viewer error states from a generated file's payload state", async () => {
+  it("renders payload error states in the fallback pane", async () => {
+    getManifestMock.mockResolvedValue(THREAD_MANIFEST);
     getFilePayloadMock.mockResolvedValue(
       filePayload({
         state: "not_found",
@@ -448,8 +457,8 @@ describe("read-only rendered pane", () => {
       }),
     );
     renderEditor();
-    await screen.findByTestId("tree-file-AGENTS.md");
-    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
+    await screen.findByTestId("tree-file-GOAL.md");
+    fireEvent.click(screen.getByTestId("tree-file-GOAL.md"));
     expect(
       (await screen.findByTestId("composer-file-error")).textContent,
     ).toContain("source object no longer exists");
@@ -529,18 +538,18 @@ describe("live-editable source pane (v1.1)", () => {
   });
 });
 
-describe("split-view template editor (U7)", () => {
-  it("opens a generated agent file split: read-only rendered pane + single-file agent source editor (no nested tree)", async () => {
+describe("generated files (single full-width source editor)", () => {
+  it("opens a generated agent file as ONE source editor with the generated badge (no split, no rendered pane)", async () => {
     renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
-    expect(await screen.findByTestId("composer-split-view")).toBeTruthy();
-    // Left: read-only rendered pane. Right: single-file editable source pane.
-    expect(screen.getByTestId("composer-file-viewer")).toBeTruthy();
-    const sourcePane = screen.getByTestId("composer-editable-pane");
-    expect(sourcePane).toBeTruthy();
-    // The source editor is a plain single-file editor — no embedded file tree.
-    expect(screen.queryByTestId("mock-editor")).toBeNull();
+    const pane = await screen.findByTestId("composer-editable-pane");
+    // One editor only — no split, no read-only rendered pane.
+    expect(screen.queryByTestId("composer-split-view")).toBeNull();
+    expect(screen.queryByTestId("composer-file-viewer")).toBeNull();
+    // The generated badge is kept in the header.
+    expect(within(pane).getByText("generated")).toBeTruthy();
+    // Edits the producing SOURCE file, editable for operators.
     await waitFor(() =>
       expect(sourceGetFileMock).toHaveBeenCalledWith(
         { agentId: "agent-1" },
@@ -548,21 +557,13 @@ describe("split-view template editor (U7)", () => {
       ),
     );
     expect(
-      within(sourcePane).getByTestId("cm-pane").getAttribute("data-readonly"),
+      within(pane).getByTestId("cm-pane").getAttribute("data-readonly"),
     ).toBe("false");
+    // The read-only preview payload path is not used for generated files.
+    expect(getFilePayloadMock).not.toHaveBeenCalled();
   });
 
-  it("opens a generated space file split with the space layer source (prefix stripped)", async () => {
-    getFilePayloadMock.mockResolvedValue(
-      filePayload({
-        entry: {
-          path: "Spaces/customer-success/CONTEXT.md",
-          owner: "space",
-          generated: true,
-          size: 900,
-        },
-      }),
-    );
+  it("opens a generated space file as one editor on the space source (prefix stripped)", async () => {
     renderEditor();
     await screen.findByTestId("tree-file-Spaces/customer-success/CONTEXT.md");
     fireEvent.click(
@@ -577,26 +578,17 @@ describe("split-view template editor (U7)", () => {
     );
   });
 
-  it("opens non-generated files single-pane in the live editor (no split)", async () => {
-    renderEditor();
-    await screen.findByTestId("tree-file-CAPABILITIES.md");
-    fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
-    await screen.findByTestId("composer-editable-pane");
-    expect(screen.queryByTestId("composer-split-view")).toBeNull();
-    expect(screen.queryByTestId("mock-editor")).toBeNull();
-  });
-
-  it("refetches the preview after the split source is saved", async () => {
+  it("saving a generated file's prose writes the source and refetches the preview", async () => {
     renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
-    const sourcePane = await screen.findByTestId("composer-editable-pane");
+    const pane = await screen.findByTestId("composer-editable-pane");
     await waitFor(() => expect(sourceGetFileMock).toHaveBeenCalled());
     getManifestMock.mockClear();
-    fireEvent.change(within(sourcePane).getByTestId("cm-input"), {
+    fireEvent.change(within(pane).getByTestId("cm-input"), {
       target: { value: "# edited template" },
     });
-    fireEvent.click(within(sourcePane).getByTestId("cm-save"));
+    fireEvent.click(within(pane).getByTestId("cm-save"));
     await waitFor(() =>
       expect(putFileMock).toHaveBeenCalledWith(
         { agentId: "agent-1" },
@@ -607,31 +599,24 @@ describe("split-view template editor (U7)", () => {
     await waitFor(() => expect(getManifestMock).toHaveBeenCalled());
   });
 
-  it("gates editing to operators: a non-operator gets a read-only split source pane", async () => {
+  it("gates editing to operators: a non-operator gets a read-only editor", async () => {
     tenant.isOperator = false;
     renderEditor();
     await screen.findByTestId("tree-file-AGENTS.md");
     fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
-    const sourcePane = await screen.findByTestId("composer-editable-pane");
+    const pane = await screen.findByTestId("composer-editable-pane");
     expect(
-      within(sourcePane).getByTestId("cm-pane").getAttribute("data-readonly"),
+      within(pane).getByTestId("cm-pane").getAttribute("data-readonly"),
     ).toBe("true");
   });
 
-  it("keeps the source pane when the rendered pane errors", async () => {
-    getFilePayloadMock.mockResolvedValue(
-      filePayload({ state: "resolution_fault", stateDetail: "compose failed" }),
-    );
+  it("opens non-generated files as one editor too (no split)", async () => {
     renderEditor();
-    await screen.findByTestId("tree-file-AGENTS.md");
-    fireEvent.click(screen.getByTestId("tree-file-AGENTS.md"));
-    // The rendered (left) pane shows its error; the source (right) editor stays.
-    expect(
-      await within(screen.getByTestId("composer-file-viewer")).findByTestId(
-        "composer-file-error",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByTestId("composer-editable-pane")).toBeTruthy();
+    await screen.findByTestId("tree-file-CAPABILITIES.md");
+    fireEvent.click(screen.getByTestId("tree-file-CAPABILITIES.md"));
+    await screen.findByTestId("composer-editable-pane");
+    expect(screen.queryByTestId("composer-split-view")).toBeNull();
+    expect(screen.queryByTestId("composer-file-viewer")).toBeNull();
   });
 });
 
