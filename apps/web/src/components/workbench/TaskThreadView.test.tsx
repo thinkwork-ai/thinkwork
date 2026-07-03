@@ -300,7 +300,7 @@ describe("TaskThreadView", () => {
         "Continue on cheaper model",
         [],
         [],
-        true,
+        "AUTO",
         [],
         "anthropic.claude-haiku",
       );
@@ -683,7 +683,7 @@ describe("TaskThreadView", () => {
         "Please continue",
         [],
         [],
-        true,
+        "AUTO",
         [],
       ),
     );
@@ -2152,7 +2152,7 @@ describe("TaskThreadView", () => {
       "Resume goal: Finish the launch plan",
       [],
       [],
-      true,
+      "FORCE_ON",
       undefined,
       undefined,
       {
@@ -4243,7 +4243,7 @@ describe("TaskThreadView", () => {
         "Add detail",
         [],
         [],
-        true,
+        "AUTO",
         [],
       );
     });
@@ -4308,7 +4308,7 @@ describe("TaskThreadView", () => {
         "Finish the migration",
         [],
         [],
-        true,
+        "FORCE_ON",
         [],
         undefined,
         {
@@ -4408,7 +4408,7 @@ describe("TaskThreadView", () => {
         "reconcile the customer list",
         [],
         [],
-        true,
+        "FORCE_ON",
         [],
         undefined,
         {
@@ -4450,7 +4450,7 @@ describe("TaskThreadView", () => {
         "Normal follow up",
         [],
         [],
-        true,
+        "AUTO",
         [],
       );
     });
@@ -4483,7 +4483,7 @@ describe("TaskThreadView", () => {
         "For humans only",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4497,7 +4497,7 @@ describe("TaskThreadView", () => {
         "Still just humans",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4715,7 +4715,7 @@ describe("TaskThreadView", () => {
         "Try once",
         [],
         [],
-        false,
+        "FORCE_OFF",
         [],
       );
     });
@@ -4788,7 +4788,7 @@ describe("TaskThreadView", () => {
             rawText: "@Scott Odom",
           },
         ],
-        false,
+        "AUTO",
         [],
       );
     });
@@ -4924,7 +4924,7 @@ describe("TaskThreadView", () => {
             rawText: "@agent",
           },
         ],
-        true,
+        "FORCE_ON",
         [],
       );
     });
@@ -5399,5 +5399,119 @@ describe("flag-for-evaluation affordance (Trust Core U7)", () => {
       <TaskThreadView thread={flagThread("running")} onFlagTurn={vi.fn()} />,
     );
     expect(screen.queryByTestId("flag-turn-turn-1")).toBeNull();
+  });
+});
+
+// THINK-136 U6 (R7/AE5): per-message dispatch failure + retry surface.
+describe("TaskThreadView dispatch indicator", () => {
+  function failedDispatchThread(senderId: string) {
+    return {
+      id: "thread-1",
+      title: "Dispatch failure",
+      lifecycleStatus: "COMPLETED",
+      messages: [
+        {
+          id: "message-1",
+          role: "USER",
+          content: "@Agent please summarize",
+          createdAt: "2026-07-03T15:00:00Z",
+          sender: { type: "USER", id: senderId, displayName: "Sender" },
+          metadata: {
+            dispatch: {
+              status: "failed",
+              reason: "default dispatch error: invoke rejected",
+              attempt: 1,
+              route: "default",
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  it("shows the failure label and a Retry control for the original sender", async () => {
+    const onRetryDispatch = vi.fn().mockResolvedValue(undefined);
+    render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={failedDispatchThread("user-current")}
+        onRetryDispatch={onRetryDispatch}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Agent dispatch failed:.*invoke rejected/i),
+    ).toBeTruthy();
+    const retry = screen.getByTestId("retry-dispatch-message-1");
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(onRetryDispatch).toHaveBeenCalledWith("message-1"),
+    );
+  });
+
+  it("shows the failure to a non-sender but withholds the Retry control", () => {
+    render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={failedDispatchThread("user-other")}
+        onRetryDispatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Agent dispatch failed/i)).toBeTruthy();
+    expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
+  });
+
+  it("disables Retry while a retry is in flight (no double-dispatch)", async () => {
+    let resolveRetry: () => void = () => {};
+    const onRetryDispatch = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRetry = resolve;
+        }),
+    );
+    render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={failedDispatchThread("user-current")}
+        onRetryDispatch={onRetryDispatch}
+      />,
+    );
+
+    const retry = screen.getByTestId("retry-dispatch-message-1");
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect((retry as HTMLButtonElement).disabled).toBe(true),
+    );
+    // A second click while in flight cannot mint another dispatch.
+    fireEvent.click(retry);
+    expect(onRetryDispatch).toHaveBeenCalledTimes(1);
+    resolveRetry();
+  });
+
+  it("renders no dispatch chrome for a plain user message (none state)", () => {
+    render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={{
+          id: "thread-1",
+          title: "No dispatch",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "just a note to a colleague",
+              createdAt: "2026-07-03T15:00:00Z",
+              sender: { type: "USER", id: "user-current" },
+            },
+          ],
+        }}
+        onRetryDispatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(/Agent dispatch failed/i)).toBeNull();
+    expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
   });
 });

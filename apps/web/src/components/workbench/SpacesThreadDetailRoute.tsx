@@ -47,6 +47,10 @@ import {
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
 import { normalizeSkillCreatorCommandContent } from "@/lib/skill-creator-command";
+import type {
+  AgentDispatchRequestValue,
+  ServerThreadMode,
+} from "@/lib/agent-mode";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -55,6 +59,7 @@ import {
   ComputerThreadTasksQuery,
   MyApprovedModelCatalogQuery,
   NewMessageSubscription,
+  RetryAgentDispatchMutation,
   RunbookRunsQuery,
   SendMessageMutation,
   SettingsActivityThreadTurnsQuery,
@@ -166,6 +171,13 @@ interface ThreadResult {
     title?: string | null;
     status?: string | null;
     pinnedAt?: string | null;
+    mode?: string | null;
+    modeOverride?: string | null;
+    participants?: Array<{
+      id: string;
+      participantType?: string | null;
+      userId?: string | null;
+    }> | null;
     spaceId?: string | null;
     space?: {
       id: string;
@@ -361,6 +373,7 @@ interface ThreadTurnRow {
   agent_id?: string | null;
   invocation_source?: string | null;
   runtime_type?: string | null;
+  triggering_message_id?: string | null;
   status?: string | null;
   started_at?: string | null;
   finished_at?: string | null;
@@ -379,6 +392,7 @@ interface ThreadTurnGraphqlRow {
   threadId?: string | null;
   invocationSource?: string | null;
   runtimeType?: string | null;
+  triggeringMessageId?: string | null;
   status?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -687,6 +701,7 @@ export function SpacesThreadDetailRoute({
       requestPolicy: "cache-and-network",
     });
   const [{ fetching: sending }, sendMessage] = useMutation(SendMessageMutation);
+  const [, retryAgentDispatch] = useMutation(RetryAgentDispatchMutation);
   const [{ fetching: completingThread }, updateThread] =
     useMutation(UpdateThreadMutation);
   const [{ fetching: reviewingGoal }, reviewGoal] =
@@ -1008,9 +1023,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-    (optimisticThreadStart.expectAssistantResponse === false ||
-      threadTurns.length > 0 ||
-      hasDurableAssistantAfterLatestUser(thread)),
+      (optimisticThreadStart.expectAssistantResponse === false ||
+        threadTurns.length > 0 ||
+        hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -1202,9 +1217,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-    (hasActiveAgentTurn ||
-      (effectiveOptimisticMessage &&
-        effectiveOptimisticMessage.expectAssistantResponse !== false)),
+      (hasActiveAgentTurn ||
+        (effectiveOptimisticMessage &&
+          effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1463,6 +1478,43 @@ export function SpacesThreadDetailRoute({
       tenantId,
     ],
   );
+  // Thread Mode override (THINK-136 R3/AE2). No optimistic flip — the shown
+  // value updates from the reexecuted thread query after the mutation; a
+  // failure re-enables the control with the prior value still displayed.
+  const [threadModeSaving, setThreadModeSaving] = useState(false);
+  const handleSetThreadMode = useCallback(
+    async (mode: ServerThreadMode) => {
+      if (!routeThread?.id) return;
+      setThreadModeSaving(true);
+      try {
+        const result = await updateThread({
+          id: routeThread.id,
+          input: { modeOverride: mode },
+        });
+        if (result.error) throw result.error;
+        reexecuteQuery({ requestPolicy: "network-only" });
+      } catch {
+        toast.error("Could not change the thread mode. Try again.");
+      } finally {
+        setThreadModeSaving(false);
+      }
+    },
+    [routeThread?.id, updateThread, reexecuteQuery],
+  );
+  const routeThreadMode: ServerThreadMode | null =
+    routeThread?.mode === "AGENT" || routeThread?.mode === "MULTIPLAYER"
+      ? routeThread.mode
+      : null;
+  // The Mode control edits only for USER-type participants (updateThread
+  // rejects non-participants server-side; the UI matches it, review-pinned).
+  const canEditThreadMode = Boolean(
+    userId &&
+      routeThread?.participants?.some(
+        (participant) =>
+          (participant.participantType ?? "").toUpperCase() === "USER" &&
+          participant.userId === userId,
+      ),
+  );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
       isOpen: threadInfoOpen,
@@ -1482,6 +1534,15 @@ export function SpacesThreadDetailRoute({
       bridgeRuns: data?.n8nAgentStepRuns ?? [],
       onDownloadAttachment: (attachmentId: string) =>
         downloadThreadAttachment(threadId, attachmentId),
+      mode: routeThreadMode
+        ? {
+            value: routeThreadMode,
+            isOverride: Boolean(routeThread?.modeOverride),
+            canEdit: canEditThreadMode,
+            isSaving: threadModeSaving,
+            onSetMode: handleSetThreadMode,
+          }
+        : null,
       goal:
         goal || goalFilesFetching || goalFilesError
           ? {
@@ -1585,6 +1646,10 @@ export function SpacesThreadDetailRoute({
       userId,
       workItemAssignees,
       workItemStatuses,
+      routeThreadMode,
+      canEditThreadMode,
+      threadModeSaving,
+      handleSetThreadMode,
     ],
   );
 
@@ -1829,6 +1894,7 @@ export function SpacesThreadDetailRoute({
       currentUser={{
         id: userId,
       }}
+      threadMode={routeThreadMode}
       artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
       onFlagTurn={
@@ -1841,11 +1907,23 @@ export function SpacesThreadDetailRoute({
           : undefined
       }
       onJsonRenderActionSuccess={handleJsonRenderActionSuccess}
+      onRetryDispatch={async (messageId) => {
+        // THINK-136 U6 (R7/AE5): re-drive a failed dispatch. The server mints a
+        // fresh attempt-keyed idempotency key (KTD4) and stamps the message
+        // pending; refetch surfaces the pending state and the eventual new turn.
+        const result = await retryAgentDispatch({ messageId });
+        if (result.error) {
+          toast.error(`Couldn't retry the agent: ${result.error.message}`);
+          throw result.error;
+        }
+        reexecuteQuery({ requestPolicy: "network-only" });
+        reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
+      }}
       onSendFollowUp={async (
         content,
         files,
         mentions = [],
-        agentRequested = true,
+        agentDispatch = "AUTO",
         pinnedSkills = [],
         requestedModelId,
         goalMode,
@@ -1853,9 +1931,20 @@ export function SpacesThreadDetailRoute({
         const skillCreatorCommand =
           normalizeSkillCreatorCommandContent(content);
         const normalizedContent = skillCreatorCommand.content;
+        // Mirror the server gate (KTD2): FORCE_ON always responds, FORCE_OFF
+        // never, AUTO follows mentions then Thread Mode.
+        const draftMentionsAgent = mentions.some(
+          (mention) =>
+            mention.targetType === "AGENT" ||
+            mention.targetType === "AGENT_PROFILE",
+        );
+        const expectAssistantResponse =
+          agentDispatch === "FORCE_ON" ||
+          (agentDispatch === "AUTO" &&
+            (draftMentionsAgent || routeThreadMode !== "MULTIPLAYER"));
         setOptimisticMessage({
           content: normalizedContent,
-          expectAssistantResponse: agentRequested !== false,
+          expectAssistantResponse,
           startedAt: new Date().toISOString(),
           // Show the attached file on the user message immediately, before the
           // upload + persist round-trip completes.
@@ -1925,7 +2014,7 @@ export function SpacesThreadDetailRoute({
             displayName: string;
             rawText: string;
           }>;
-          agentRequested?: boolean;
+          agentDispatch?: AgentDispatchRequestValue;
           modelId?: string;
         } = {
           threadId,
@@ -1952,8 +2041,11 @@ export function SpacesThreadDetailRoute({
         if (mentions.length > 0) {
           sendInput.mentions = mentions.map(toSendMention);
         }
-        if (agentRequested === false) {
-          sendInput.agentRequested = false;
+        // KTD2: explicit tri-state replaces the legacy boolean from this
+        // composer. AUTO rides as the omitted default (the server treats
+        // absence as AUTO).
+        if (agentDispatch !== "AUTO") {
+          sendInput.agentDispatch = agentDispatch;
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
@@ -2775,6 +2867,7 @@ function toThreadTurnRows(rows: ThreadTurnGraphqlRow[]): ThreadTurnRow[] {
     thread_id: row.threadId ?? null,
     invocation_source: row.invocationSource ?? null,
     runtime_type: row.runtimeType ?? null,
+    triggering_message_id: row.triggeringMessageId ?? null,
     status: row.status ?? null,
     started_at: row.startedAt ?? null,
     finished_at: row.finishedAt ?? null,
@@ -2803,6 +2896,7 @@ function toTaskThreadTurnsFromRows(
     .map((row) => ({
       id: row.id,
       status: row.status,
+      triggeringMessageId: row.triggering_message_id ?? null,
       invocationSource: row.invocation_source ?? "chat_message",
       runtimeType: row.runtime_type ?? null,
       startedAt: row.started_at ?? row.created_at,
@@ -2978,9 +3072,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

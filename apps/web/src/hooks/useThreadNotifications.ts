@@ -15,6 +15,8 @@ const THREAD_ACTIVITY_SUBSCRIPTION = graphql(`
       authorType
       snippet
       threadTitle
+      mentioned
+      shouldNotify
       createdAt
     }
   }
@@ -25,6 +27,15 @@ export interface ThreadActivityLike {
   authorId?: string | null;
   snippet?: string | null;
   threadTitle?: string | null;
+  /** Server-computed: this event directly @mentions the recipient (R10/R11). */
+  mentioned?: boolean | null;
+  /**
+   * Server-computed per-user notification decision (KTD5/R10). Absent/null on
+   * legacy events published before the field existed → treated as true for
+   * backward compat; only an explicit `false` (muted, not mentioned) suppresses
+   * the OS notification. Sidebar liveness (R9) is never gated on this.
+   */
+  shouldNotify?: boolean | null;
 }
 
 export interface NotificationSuppressionState {
@@ -35,8 +46,9 @@ export interface NotificationSuppressionState {
 }
 
 /**
- * Pure suppression decision (R3 + R5 + U7 toggle). Returns true when an OS
- * notification should be raised for this activity event.
+ * Pure suppression decision (R3 + R5 + R10 + U7 toggle). Returns true when an OS
+ * notification should be raised for this activity event. This is the OS-notify
+ * decision only — sidebar liveness (R9) always fires regardless of this result.
  */
 export function shouldRaiseNotification(
   activity: ThreadActivityLike,
@@ -44,6 +56,10 @@ export function shouldRaiseNotification(
 ): boolean {
   if (!state.enabled) return false; // U7 toggle off
   if (!activity.threadId) return false;
+  // R10: honor the server-computed per-user preference. Muted-and-not-mentioned
+  // events arrive with shouldNotify:false; a direct @mention punches through
+  // (server sets shouldNotify:true). Absent/null (legacy events) → notify.
+  if (activity.shouldNotify === false) return false;
   // R3: never notify for the current user's own message.
   if (activity.authorId && activity.authorId === state.userId) return false;
   // R5: never notify for the thread being actively viewed (app focused).
@@ -79,26 +95,40 @@ interface CoalesceEntry {
 }
 
 export interface UseThreadNotificationsOptions {
-  /** U7 global on/off toggle. Defaults to enabled. */
+  /** U7 global on/off toggle. Defaults to enabled. Gates OS notifications only. */
   enabled?: boolean;
   /**
    * The thread the user is actively viewing (route param), used by the R5
    * focused-thread suppression gate. Null when not on a thread route.
    */
   activeThreadId?: string | null;
+  /**
+   * Fired for EVERY received activity event — mentioned or not, muted or not,
+   * web or desktop, notifications on or off. The shell wires this to its
+   * coalesced thread-list refetch so a freshly-mentioned user's sidebar shows
+   * the thread + unread state without a reload (R9). Independent of the OS
+   * notification decision.
+   */
+  onActivity?: (activity: ThreadActivityLike) => void;
 }
 
 /**
  * Shell-mounted hook: subscribes to the current user's onThreadActivity stream
- * and raises native desktop notifications (per-thread coalesced, own-message and
- * focused-thread suppressed). No-op in the web build (no desktop bridge).
+ * (whenever a userId exists — web AND desktop, for sidebar liveness) and raises
+ * native desktop notifications on the desktop build (per-thread coalesced,
+ * own-message / focused-thread / muted suppressed). Sidebar liveness is driven
+ * via the `onActivity` callback regardless of the desktop bridge.
  */
 export function useThreadNotifications(
   options: UseThreadNotificationsOptions = {},
 ): void {
-  const { enabled = true, activeThreadId = null } = options;
+  const { enabled = true, activeThreadId = null, onActivity } = options;
   const { userId } = useTenant();
   const bridge = useMemo(() => getDesktopBridge(), []);
+
+  // Keep the latest onActivity without re-memoizing the subscription handler.
+  const onActivityRef = useRef(onActivity);
+  onActivityRef.current = onActivity;
 
   // App-focus state pushed from the main process. Defaults to focused (so the
   // web build / pre-event state never over-notifies the viewed thread).
@@ -151,7 +181,16 @@ export function useThreadNotifications(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (_prev: any, event: any) => {
       const activity = event?.onThreadActivity as ThreadActivityLike | undefined;
-      if (!activity || !bridge) return event;
+      if (!activity || !activity.threadId) return event;
+
+      // R9 sidebar liveness: every event (mentioned or not, muted or not, web or
+      // desktop, notifications on or off) drives the shell's coalesced list
+      // refetch. Independent of, and always ahead of, the OS-notify decision.
+      onActivityRef.current?.(activity);
+
+      // Native OS notification path — desktop only, gated on the server's
+      // per-user shouldNotify decision plus own/focused-thread suppression.
+      if (!bridge) return event;
       if (!shouldRaiseNotification(activity, stateRef.current)) return event;
 
       const map = coalesceRef.current;
@@ -179,7 +218,10 @@ export function useThreadNotifications(
     {
       query: THREAD_ACTIVITY_SUBSCRIPTION,
       variables: { userId: userId ?? "" },
-      pause: !userId || !bridge || !enabled,
+      // Subscribe whenever a userId exists — web AND desktop. The web build has
+      // no bridge (no OS notification) but still needs the event for sidebar
+      // liveness (R9), and liveness must not depend on the OS-notify toggle.
+      pause: !userId,
     },
     handler,
   );

@@ -18,6 +18,12 @@ enum MessageDispatchMode {
   MANAGED_DEFAULT
 }
 
+enum AgentDispatchRequest {
+  FORCE_ON
+  FORCE_OFF
+  AUTO
+}
+
 type Message {
   id: ID!
   threadId: ID!
@@ -146,6 +152,12 @@ input SendMessageInput {
   role: MessageRole!
   content: String
   agentRequested: Boolean
+  # THINK-136 KTD2: explicit tri-state dispatch request. Wins over the legacy
+  # agentRequested boolean when both are sent. FORCE_OFF suppresses even an
+  # agent mention (explicit-off-wins); AUTO defers to the thread's derived
+  # Thread Mode. Legacy boolean maps true->FORCE_ON, false->FORCE_OFF,
+  # absent->AUTO.
+  agentDispatch: AgentDispatchRequest
   dispatchMode: MessageDispatchMode
   senderType: String
   senderId: ID
@@ -197,4 +209,11 @@ extend type Mutation {
   # batch with answeredVia REPLY.
   answerUserQuestion(questionId: ID!, answers: AWSJSON!): UserQuestion!
   handleJsonRenderAction(input: HandleJsonRenderActionInput!): Message!
+  # THINK-136 U6 (R7/AE5): re-drive a user message's failed agent dispatch.
+  # Only the original message sender may retry (FORBIDDEN otherwise; NOT_FOUND
+  # on tenant mismatch/missing). Marks the prior attempt failed, then
+  # re-dispatches with an attempt-incremented idempotency key so the retry
+  # cannot no-op against the prior wakeup. The returned Message carries the
+  # updated metadata.dispatch ({ status: "pending", attempt, route }).
+  retryAgentDispatch(messageId: ID!): Message!
 }

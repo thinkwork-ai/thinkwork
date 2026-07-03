@@ -1,5 +1,8 @@
 import { notifyThreadActivity } from "../../graphql/notify.js";
-import { selectThreadParticipantUserIds } from "./thread-participants-query.js";
+import {
+  selectThreadParticipantsForActivity,
+  type ThreadNotificationPreference,
+} from "./thread-participants-query.js";
 
 type DbLike = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +20,24 @@ interface PublishThreadActivityArgs {
   snippet?: string | null;
   threadTitle?: string | null;
   createdAt?: string | null;
+  /**
+   * User ids first mentioned by THIS message. A muted or mentions-preference
+   * participant in this set still gets shouldNotify=true (mention punches
+   * through mute — R10/AE6). Must include users freshly @-tagged by this
+   * message (R11); callers pass the parsed user-mention target ids.
+   */
+  mentionedUserIds?: string[];
+}
+
+/**
+ * KTD5/R10: subscribed → always notify; mentions/muted → notify only when the
+ * user is mentioned by this message (mention punches through mute).
+ */
+function computeShouldNotify(
+  preference: ThreadNotificationPreference,
+  mentioned: boolean,
+): boolean {
+  return preference === "subscribed" ? true : mentioned;
 }
 
 /**
@@ -43,18 +64,25 @@ export async function publishThreadActivity({
   snippet,
   threadTitle,
   createdAt,
+  mentionedUserIds,
 }: PublishThreadActivityArgs): Promise<void> {
   // Best-effort: a notification-path failure (participant query or AppSync
   // post) must never break the originating send/create mutation. Log and move
   // on — unread state still reconciles on the client's next focus refetch.
   try {
-    const userIds = await selectThreadParticipantUserIds({ db, tenantId, threadId });
+    const mentioned = new Set(mentionedUserIds ?? []);
+    const participants = await selectThreadParticipantsForActivity({
+      db,
+      tenantId,
+      threadId,
+    });
     await Promise.all(
-      userIds
-        .filter((userId) => userId !== authorId)
-        .map((userId) =>
-          notifyThreadActivity({
-            userId,
+      participants
+        .filter((participant) => participant.userId !== authorId)
+        .map((participant) => {
+          const isMentioned = mentioned.has(participant.userId);
+          return notifyThreadActivity({
+            userId: participant.userId,
             tenantId,
             threadId,
             messageId,
@@ -63,8 +91,13 @@ export async function publishThreadActivity({
             snippet,
             threadTitle,
             createdAt,
-          }),
-        ),
+            mentioned: isMentioned,
+            shouldNotify: computeShouldNotify(
+              participant.notificationPreference,
+              isMentioned,
+            ),
+          });
+        }),
     );
   } catch (err) {
     console.error(`[publishThreadActivity] failed for thread ${threadId}:`, err);

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deriveAgentDefault, deriveAgentMode } from "./agent-mode";
+import {
+  deriveAgentDefault,
+  deriveAgentDispatch,
+  deriveAgentMode,
+  type AgentDispatchRequestValue,
+} from "./agent-mode";
 
 const me = "user-me";
 
@@ -110,4 +115,74 @@ describe("deriveAgentDefault", () => {
       }).agentDefaultOn,
     ).toBe(false);
   });
+
+  describe("server Thread Mode wins over local heuristics (THINK-136)", () => {
+    it("server AGENT forces single-player even when a human posted", () => {
+      // Heuristic alone would read multi-player (another human posted); the
+      // server override (mode: agent) must win.
+      const result = deriveAgentDefault({
+        currentUserId: me,
+        serverMode: "AGENT",
+        threadMessages: [
+          { role: "USER", senderId: me, senderType: "user" },
+          { role: "USER", senderId: "user-scott", senderType: "user" },
+        ],
+        draftMentions: [],
+      });
+      expect(result.mode).toBe("single");
+      expect(result.agentDefaultOn).toBe(true);
+    });
+
+    it("server MULTIPLAYER forces multi-player even for a solo thread", () => {
+      // Heuristic alone would read single-player (only me); the server's real
+      // participant count (e.g. a mentioned-but-not-yet-replied user) wins.
+      const result = deriveAgentDefault({
+        currentUserId: me,
+        serverMode: "MULTIPLAYER",
+        threadMessages: [{ role: "USER", senderId: me, senderType: "user" }],
+        draftMentions: [],
+      });
+      expect(result.mode).toBe("multi");
+      expect(result.agentDefaultOn).toBe(false);
+    });
+
+    it("falls back to the heuristic when server mode is absent (legacy data)", () => {
+      expect(
+        deriveAgentDefault({
+          currentUserId: me,
+          serverMode: null,
+          threadMessages: [
+            { role: "USER", senderId: me, senderType: "user" },
+            { role: "USER", senderId: "user-scott", senderType: "user" },
+          ],
+        }),
+      ).toEqual({ mode: "multi", agentDefaultOn: false });
+      expect(
+        deriveAgentDefault({
+          currentUserId: me,
+          threadMessages: [{ role: "USER", senderId: me, senderType: "user" }],
+        }),
+      ).toEqual({ mode: "single", agentDefaultOn: true });
+    });
+  });
+});
+
+describe("deriveAgentDispatch", () => {
+  const cases: Array<{
+    name: string;
+    overridden: boolean;
+    enabled: boolean;
+    expected: AgentDispatchRequestValue;
+  }> = [
+    { name: "untouched → AUTO (enabled)", overridden: false, enabled: true, expected: "AUTO" },
+    { name: "untouched → AUTO (disabled)", overridden: false, enabled: false, expected: "AUTO" },
+    { name: "manual ON → FORCE_ON", overridden: true, enabled: true, expected: "FORCE_ON" },
+    { name: "manual OFF → FORCE_OFF", overridden: true, enabled: false, expected: "FORCE_OFF" },
+  ];
+
+  for (const { name, overridden, enabled, expected } of cases) {
+    it(name, () => {
+      expect(deriveAgentDispatch({ overridden, enabled })).toBe(expected);
+    });
+  }
 });

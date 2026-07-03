@@ -35,7 +35,9 @@ describe("Space thread participants schema", () => {
     expect(getTableName(threadParticipants)).toBe("thread_participants");
     expect(columns.tenant_id.notNull).toBe(true);
     expect(columns.thread_id.notNull).toBe(true);
-    expect(columns.space_id.notNull).toBe(true);
+    // THINK-136 R14: space_id is nullable so mention/sender participants exist
+    // in threads without a Space (rows carry null; see drizzle/0202).
+    expect(columns.space_id.notNull).toBe(false);
     expect(columns.participant_type.notNull).toBe(true);
     expect(columns.user_id.notNull).toBe(false);
     expect(columns.agent_id.notNull).toBe(false);

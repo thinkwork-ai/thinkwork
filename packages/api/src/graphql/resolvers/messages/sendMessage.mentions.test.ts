@@ -114,6 +114,126 @@ describe("sendMessage mention collaboration path", () => {
   });
 });
 
+describe("sendMessage per-user activity fan-out (plan 2026-07-03-003 U1, R8-R11)", () => {
+  it("calls publishThreadActivity post-commit after notifyNewMessage", () => {
+    expect(source).toContain("publishThreadActivity");
+    // Fan-out runs after the transaction commits and after the new-message
+    // notify — the participant rows are already durable at this point.
+    expect(source.indexOf("return messageRow;")).toBeLessThan(
+      source.indexOf("publishThreadActivity({"),
+    );
+    expect(source.indexOf("notifyNewMessage({")).toBeLessThan(
+      source.indexOf("publishThreadActivity({"),
+    );
+  });
+
+  it("passes the user-mention target ids so a freshly-tagged user is in the fan-out (R11)", () => {
+    expect(source).toContain(
+      '.filter((mention) => mention.targetType === "user")',
+    );
+    expect(source).toContain("mentionedUserIds,");
+  });
+
+  it("threads the author/thread payload through the fan-out", () => {
+    const call = source.slice(source.indexOf("publishThreadActivity({"));
+    expect(call).toContain("authorId: senderId ?? null");
+    expect(call).toContain("authorType: senderType");
+    expect(call).toContain("messageId: row.id");
+    expect(call).toContain("createdAt: messageActivityAt.toISOString()");
+  });
+});
+
+describe("sendMessage sender-as-participant upsert (plan 2026-07-03-003 U2, R13)", () => {
+  it("upserts the human sender as a participant inside the message transaction", () => {
+    // The upsert must live inside the db.transaction callback alongside the
+    // message insert, so the participant row commits atomically with the
+    // message (mode derivation reads a truthful participant set).
+    expect(source).toContain('if (senderType === "user" && senderId) {');
+    const txStart = source.indexOf("db.transaction");
+    const upsertIdx = source.indexOf(
+      'if (senderType === "user" && senderId) {',
+    );
+    const returnRowIdx = source.indexOf("return messageRow;");
+    expect(txStart).toBeGreaterThanOrEqual(0);
+    expect(upsertIdx).toBeGreaterThan(txStart);
+    expect(upsertIdx).toBeLessThan(returnRowIdx);
+  });
+
+  it("inserts a source='sender' user participant with onConflictDoNothing", () => {
+    // participant_type user + source sender + idempotent conflict handling ⇒
+    // a sender without a row gets one; an existing participant is a no-op.
+    expect(source).toContain('participant_type: "user"');
+    expect(source).toContain('source: "sender"');
+    // The sender upsert is the second threadParticipants insert (after the
+    // mention-participants insert) and both are onConflictDoNothing.
+    const senderInsert = source.slice(
+      source.indexOf('if (senderType === "user" && senderId) {'),
+    );
+    expect(senderInsert).toContain(".insert(threadParticipants)");
+    expect(senderInsert).toContain(".onConflictDoNothing()");
+  });
+
+  it("gates the upsert to human senders so agent/system senders never get rows", () => {
+    // The senderType === "user" guard is the whole mechanism that keeps
+    // agent/system senders out of thread_participants.
+    expect(source).toMatch(
+      /if \(senderType === "user" && senderId\) \{\s*\n\s*await tx\s*\n?\s*\.insert\(threadParticipants\)/,
+    );
+  });
+
+  it("carries a null space for non-space threads (R14)", () => {
+    // thread.space_id ?? null ⇒ non-space threads still get a participant row,
+    // with a null space_id rather than being skipped.
+    expect(source).toContain("space_id: thread.space_id ?? null");
+  });
+
+  it("upserts the sender before marking their participant row read", () => {
+    // markSenderParticipantRead updates last_read_at on the sender's row; the
+    // insert must precede it so a brand-new row exists to be stamped.
+    expect(source.indexOf('source: "sender"')).toBeLessThan(
+      source.indexOf("await markSenderParticipantRead("),
+    );
+  });
+});
+
+describe("sendMessage sync-dispatch failure stamp (plan 2026-07-03-003 U6, R7)", () => {
+  it("stamps a failed dispatch state instead of only console.warn-ing (default route)", () => {
+    // The default-dispatch catch must no longer be a bare console.warn — it
+    // stamps messages.metadata.dispatch and pushes an update so the failure is
+    // visible + retryable, never a silent drop.
+    const defaultCatch = source.slice(
+      source.indexOf("[sendMessage] default agent dispatch failed:"),
+    );
+    expect(defaultCatch).toContain("stampDispatchFailure({");
+    expect(defaultCatch).toContain('route: "default"');
+  });
+
+  it("stamps a per-agent failed state on the mention route (not all-or-nothing)", () => {
+    // dispatchAgentMentions can fail per-agent; the caller inspects results
+    // for failures and names which agents failed in the stamped reason.
+    expect(source).toContain("mentionResults");
+    expect(source).toContain(".filter((result) => result.failed)");
+    expect(source).toContain(
+      "mention dispatch failed for agents:",
+    );
+    const mentionBlock = source.slice(
+      source.indexOf("const mentionResults = await dispatchAgentMentions("),
+    );
+    expect(mentionBlock).toContain("stampDispatchFailure({");
+    expect(mentionBlock).toContain('route: "mention"');
+  });
+
+  it("merges the dispatch stamp into existing metadata and pushes a message update", () => {
+    // The helper reads current metadata, merges (never clobbers) the dispatch
+    // key, writes it back tenant-scoped, and re-notifies via notifyNewMessage.
+    const helper = source.slice(source.indexOf("async function stampDispatchFailure"));
+    expect(helper).toContain("...existingMetadata");
+    expect(helper).toContain('status: "failed"');
+    expect(helper).toContain(".update(messages)");
+    expect(helper).toContain("notifyNewMessage({");
+  });
+});
+
 describe("sendMessage pending-question reply consumption (plan 2026-06-09-005 U3)", () => {
   it("CAS-consumes the pending batch with answeredVia 'reply' and the new message as the reference", () => {
     expect(source).toContain("consumePendingQuestions(db, {");
@@ -301,5 +421,40 @@ describe("sendMessage agent handling", () => {
         customerOnboardingHandled: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("sendMessage tri-state dispatch wiring (plan 2026-07-03-003 U4, R1/R4/R5)", () => {
+  it("exposes agentDispatch on SendMessageInput with the AgentDispatchRequest enum", () => {
+    expect(messagesGraphql).toContain("agentDispatch: AgentDispatchRequest");
+    expect(messagesGraphql).toContain("enum AgentDispatchRequest");
+  });
+
+  it("computes the dispatch Thread Mode post-commit with no extra ids — the transition message that @mentions a second human counts its own mention participants and does not auto-dispatch (R2/KTD2)", () => {
+    const postCommit = source.indexOf("const dispatchThreadMode =");
+    const transactionEnd = source.indexOf("const row = await db.transaction");
+    expect(postCommit).toBeGreaterThan(transactionEnd);
+    const block = source.slice(postCommit, source.indexOf("shouldDispatchDefaultAgentTurn", postCommit));
+    expect(block).toContain("resolveDispatchThreadMode");
+    expect(block).not.toContain("extraUserIds");
+  });
+
+  it("passes agentDispatch and threadMode into the default dispatch gate", () => {
+    const gateCall = source.slice(source.lastIndexOf("shouldDispatchDefaultAgentTurn({"));
+    expect(gateCall).toContain("agentDispatch: i.agentDispatch");
+    expect(gateCall).toContain("threadMode: dispatchThreadMode");
+  });
+
+  it("gates mention dispatch on explicit FORCE_OFF only (legacy boolean keeps mention-wins)", () => {
+    expect(source).toContain(
+      "!shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })",
+    );
+  });
+
+  it("predicts the pre-transaction goal-mode check by unioning sender and user mentions", () => {
+    const goalCheck = source.indexOf("Goal mode requires default agent dispatch");
+    const before = source.slice(0, goalCheck);
+    expect(before).toContain("extraUserIds");
+    expect(before).toContain('senderType === "user" ? senderId : null');
   });
 });

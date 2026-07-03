@@ -72,6 +72,8 @@ type ThreadActivityEvent {
   snippet: String
   threadTitle: String
   createdAt: AWSDateTime
+  mentioned: Boolean
+  shouldNotify: Boolean
 }
 
 type InboxItemStatusEvent {
@@ -205,6 +207,8 @@ type Mutation {
     snippet: String
     threadTitle: String
     createdAt: AWSDateTime
+    mentioned: Boolean
+    shouldNotify: Boolean
   ): ThreadActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyInboxItemUpdate(

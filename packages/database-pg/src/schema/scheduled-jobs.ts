@@ -111,6 +111,12 @@ export const threadTurns = pgTable(
     trigger_detail: text("trigger_detail"),
     wakeup_request_id: uuid("wakeup_request_id"),
     thread_id: uuid("thread_id"),
+    // THINK-136 U6/KTD3: the user message that triggered this turn. Durable
+    // turn→message link so the dispatch indicator can pair a turn to its
+    // message (UI falls back to timestamp pairing for legacy null rows).
+    // Nullable, NO FK — turns may outlive the message row (matches thread_id,
+    // which is also an un-referenced uuid here).
+    triggering_message_id: uuid("triggering_message_id"),
     turn_number: integer("turn_number"),
     runtime_type: text("runtime_type"),
     status: text("status").notNull().default("queued"), // queued | running | succeeded | failed | cancelled | timed_out | skipped

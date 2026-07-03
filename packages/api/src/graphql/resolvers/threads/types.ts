@@ -26,6 +26,7 @@ import {
   runtimeTypeFromTurn,
 } from "../triggers/threadTurnRuntime.js";
 import { toGraphqlSpace } from "../spaces/shared.js";
+import { deriveThreadMode, type ThreadMode } from "../../../lib/threads/thread-mode.js";
 
 const THREAD_PARTICIPANT_ENUM_FIELDS = new Set([
   "participantType",
@@ -296,6 +297,31 @@ export const threadTypeResolvers = {
   },
   lifecycleStatus: (thread: any, _args: any, ctx: GraphQLContext) => {
     return ctx.loaders.threadLifecycleStatus.load(thread.id);
+  },
+  // Server-authoritative Thread Mode (plan 2026-07-03-003 U3, R1). Counts human
+  // participants (participant_type 'user') for this thread and applies the
+  // per-thread override; agent participants are never counted. Returned in the
+  // GraphQL SCREAMING_CASE enum form.
+  mode: async (thread: any) => {
+    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
+    const conditions = [
+      eq(threadParticipants.thread_id, thread.id),
+      eq(threadParticipants.participant_type, "user"),
+    ];
+    if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
+      conditions.push(eq(threadParticipants.tenant_id, threadTenantId));
+    }
+    const [row] = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(threadParticipants)
+      .where(and(...conditions));
+    const humanCount = row?.count ?? 0;
+    const rawOverride = thread.modeOverride ?? thread.mode_override ?? null;
+    const override =
+      typeof rawOverride === "string"
+        ? (rawOverride.toLowerCase() as ThreadMode)
+        : null;
+    return deriveThreadMode(humanCount, override).toUpperCase();
   },
   // The thread's open ask_user_question batch, if any (plan 2026-06-09-005
   // U3). At most one pending row per thread (partial unique index).

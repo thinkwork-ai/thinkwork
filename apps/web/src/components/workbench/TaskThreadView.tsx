@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Search,
   Sparkles,
+  Users,
   Zap,
 } from "lucide-react";
 import {
@@ -133,7 +134,13 @@ import type {
 } from "@/lib/ui-message-types";
 import { useComposerState } from "@/lib/use-composer-state";
 import { cn } from "@/lib/utils";
-import { deriveAgentDefault } from "@/lib/agent-mode";
+import { deriveDispatchIndicatorState } from "@/components/workbench/dispatch-indicator";
+import {
+  deriveAgentDefault,
+  deriveAgentDispatch,
+  type AgentDispatchRequestValue,
+  type ServerThreadMode,
+} from "@/lib/agent-mode";
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
@@ -231,6 +238,12 @@ export interface TaskThread {
 export interface TaskThreadTurn {
   id: string;
   status?: string | null;
+  /**
+   * THINK-136 U6 (KTD3): id of the USER message whose send dispatched this
+   * turn. Null on legacy turns (predates the link) — those fall back to
+   * timestamp pairing in mapTurnsToUserMessages.
+   */
+  triggeringMessageId?: string | null;
   invocationSource?: string | null;
   runtimeType?: string | null;
   startedAt?: string | null;
@@ -272,7 +285,7 @@ interface TaskThreadViewProps {
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -280,6 +293,12 @@ interface TaskThreadViewProps {
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
   onSelectedModelChange?: (modelId: string) => void;
+  /**
+   * Server-derived Thread Mode (THINK-136 R1). When present it drives the
+   * composer's agent-toggle default; absent (legacy data) falls back to the
+   * local message-history heuristic.
+   */
+  threadMode?: ServerThreadMode | null;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
   /**
@@ -289,6 +308,12 @@ interface TaskThreadViewProps {
    */
   onFlagTurn?: (turn: TaskThreadTurn) => void;
   onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
+  /**
+   * THINK-136 U6 (R7/AE5): retry a user message's failed agent dispatch. The
+   * host runs the `retryAgentDispatch` mutation (original-sender-only,
+   * server-enforced) and refetches. Absent → no retry control is offered.
+   */
+  onRetryDispatch?: (messageId: string) => Promise<void> | void;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -313,6 +338,23 @@ export interface TaskThreadInfoPanelState {
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
   goal?: ThreadInfoGoalState | null;
   checklist?: ThreadInfoChecklistState | null;
+  mode?: ThreadInfoModeState | null;
+}
+
+/**
+ * Thread Mode row state (THINK-136 R3). `value` is the effective server-derived
+ * mode; `isOverride` distinguishes an explicit per-thread override from the
+ * automatic (participant-count) derivation. The control is read-only for
+ * non-participants (`canEdit` false) and disables while a change is in flight
+ * (`isSaving`); the displayed value updates from the notifyThreadUpdate-driven
+ * refetch, never optimistically.
+ */
+export interface ThreadInfoModeState {
+  value: ServerThreadMode;
+  isOverride: boolean;
+  canEdit: boolean;
+  isSaving: boolean;
+  onSetMode: (mode: ServerThreadMode) => void | Promise<void>;
 }
 
 export interface ThreadInfoGoalState {
@@ -431,10 +473,12 @@ export function TaskThreadView({
   onSelectedModelChange,
   currentUser,
   onSendFollowUp,
+  threadMode,
   artifactPanelState,
   infoPanelState,
   onFlagTurn,
   onJsonRenderActionSuccess,
+  onRetryDispatch,
 }: TaskThreadViewProps) {
   const { isOperator } = useTenant();
   const composerDockRef = useRef<HTMLDivElement | null>(null);
@@ -592,6 +636,7 @@ export function TaskThreadView({
                       viewerIsOperator={isOperator}
                       onFlagTurn={onFlagTurn}
                       onJsonRenderActionSuccess={onJsonRenderActionSuccess}
+                      onRetryDispatch={onRetryDispatch}
                     />
                   );
                 })
@@ -631,6 +676,7 @@ export function TaskThreadView({
               onSelectedModelChange={onSelectedModelChange}
               threadMessages={thread.messages}
               currentUserId={currentUser?.id ?? null}
+              serverMode={threadMode}
               prefill={composerPrefill}
               onSubmit={onSendFollowUp}
             />
@@ -789,6 +835,7 @@ function ThreadInfoPanelBody({
                 icon={<Zap className="size-4" />}
                 value={`Triggered by ${startedBy}`}
               />
+              {state.mode ? <ThreadModeRow mode={state.mode} /> : null}
               {isOperator && state.threadId ? (
                 <Link
                   to="/activity/$threadId"
@@ -1517,6 +1564,80 @@ function InfoPanelInlineRow({
   );
 }
 
+const THREAD_MODE_OPTIONS: ServerThreadMode[] = ["AGENT", "MULTIPLAYER"];
+
+function threadModeLabel(mode: ServerThreadMode): string {
+  return mode === "AGENT" ? "Agent" : "Multiplayer";
+}
+
+/**
+ * Thread Mode row (THINK-136 R3). Renders the current mode for every viewer;
+ * the Agent/Multiplayer control is disabled (read-only) for non-participants
+ * and while a change is in flight. No optimistic flip — the displayed value
+ * updates from the server refetch after the mutation, so a failed change simply
+ * leaves the prior value shown and re-enables the control.
+ */
+export function ThreadModeRow({ mode }: { mode: ThreadInfoModeState }) {
+  const controlDisabled = !mode.canEdit || mode.isSaving;
+  return (
+    <div className="space-y-1.5" data-testid="thread-mode-row">
+      <div className="flex min-w-0 items-center gap-2 text-sm text-white/75">
+        <span className="shrink-0 text-white/45">
+          {mode.value === "AGENT" ? (
+            <Bot className="size-4" />
+          ) : (
+            <Users className="size-4" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {`Mode: ${threadModeLabel(mode.value)}`}
+        </span>
+        <span className="shrink-0 text-[11px] uppercase tracking-normal text-white/35">
+          {mode.isOverride ? "Set" : "Automatic"}
+        </span>
+      </div>
+      <div
+        role="group"
+        aria-label="Thread mode"
+        className="flex gap-1 rounded-lg bg-white/5 p-0.5"
+      >
+        {THREAD_MODE_OPTIONS.map((option) => {
+          const active = mode.value === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              disabled={controlDisabled}
+              title={
+                mode.canEdit
+                  ? `Set thread mode to ${threadModeLabel(option)}`
+                  : "Only participants can change the thread mode"
+              }
+              onClick={() => {
+                if (!active && !controlDisabled) void mode.onSetMode(option);
+              }}
+              className={cn(
+                "flex-1 rounded-md px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                active
+                  ? "bg-white/15 text-white"
+                  : "text-white/60 hover:text-white",
+              )}
+            >
+              {threadModeLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+      {!mode.canEdit ? (
+        <p className="text-[11px] text-white/35">
+          Only participants can change the mode.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function InfoPanelCopyRow({
   label,
   value,
@@ -1717,6 +1838,7 @@ function TranscriptSegment({
   viewerIsOperator,
   onFlagTurn,
   onJsonRenderActionSuccess,
+  onRetryDispatch,
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1730,7 +1852,7 @@ function TranscriptSegment({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -1744,6 +1866,7 @@ function TranscriptSegment({
   viewerIsOperator?: boolean;
   onFlagTurn?: (turn: TaskThreadTurn) => void;
   onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
+  onRetryDispatch?: (messageId: string) => Promise<void> | void;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1783,6 +1906,12 @@ function TranscriptSegment({
           onSendFollowUp={onSendFollowUp}
         />
       ) : null}
+      <DispatchIndicator
+        message={message}
+        turn={turn}
+        currentUser={currentUser}
+        onRetryDispatch={onRetryDispatch}
+      />
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1840,6 +1969,84 @@ const FLAGGABLE_TURN_STATUSES = new Set([
   "timed_out",
 ]);
 
+/**
+ * Per-user-message dispatch indicator (THINK-136 U6, R6/R7). State is derived
+ * from the linked turn + the message's dispatch metadata stamp:
+ *   - none / running / completed → no chrome here (absence satisfies R6;
+ *     running renders via ThreadTurnActivity's shimmer; completed by the reply)
+ *   - pending → a lightweight "Working…" row for the window before a turn row
+ *     exists (e.g. a just-accepted retry)
+ *   - failed → a visible failure label plus a Retry control shown ONLY to the
+ *     original sender; non-senders see the failure without the control.
+ */
+function DispatchIndicator({
+  message,
+  turn,
+  currentUser,
+  onRetryDispatch,
+}: {
+  message: TaskThreadMessage;
+  turn?: TaskThreadTurn;
+  currentUser?: CurrentUserIdentity | null;
+  onRetryDispatch?: (messageId: string) => Promise<void> | void;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  const { state, failureReason } = deriveDispatchIndicatorState(message, turn);
+
+  if (state === "pending") {
+    // A turn surface (if any) already owns the running shimmer; only fill the
+    // pre-turn window here.
+    if (turn) return null;
+    return (
+      <ThinkingRow
+        title="Working…"
+        running
+        detail="Dispatching to the agent…"
+        ariaLabel="Dispatch pending"
+      />
+    );
+  }
+
+  if (state !== "failed") return null;
+
+  const isSender = isCurrentUserMessage(message, currentUser);
+  const handleRetry = async () => {
+    if (!onRetryDispatch || retrying) return;
+    setRetrying(true);
+    try {
+      await onRetryDispatch(message.id);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-wrap items-center gap-2 text-sm text-destructive"
+    >
+      <span>
+        {failureReason
+          ? `Agent dispatch failed: ${failureReason}`
+          : "Agent dispatch failed."}
+      </span>
+      {isSender && onRetryDispatch ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={retrying}
+          onClick={handleRetry}
+          data-testid={`retry-dispatch-${message.id}`}
+        >
+          {retrying ? "Retrying…" : "Retry"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function ThreadTurnActivity({
   turn,
   message,
@@ -1857,7 +2064,7 @@ function ThreadTurnActivity({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -2010,14 +2217,19 @@ function displayStartedAtForTurn(
 // (the last one created at or before the turn started).
 //
 // Notes:
+//  - THINK-136 U6 (KTD3): a turn carrying `triggeringMessageId` binds directly
+//    to that user message — the durable fix for the mis-attribution the causal
+//    heuristic below could not fully resolve. Legacy turns (null link) still
+//    timestamp-pair. Id links win; a legacy timestamp match never overwrites a
+//    message already bound by id.
 //  - A turn that precedes every user message (e.g. a scheduled-job trigger)
 //    anchors to the earliest user message so it stays discoverable.
 //  - When several turns map to the same user message, the latest turn wins —
 //    the transcript renders one activity disclosure per user message.
-//  - Limitation: turn.startedAt derives from the task's claim time, which can
-//    lag the trigger; two user messages sent before the first turn is claimed
-//    can mis-attribute. A turn->message id link would remove this; see plan U3.
-function mapTurnsToUserMessages(
+//  - Limitation (legacy only): turn.startedAt derives from the task's claim
+//    time, which can lag the trigger; two user messages sent before the first
+//    turn is claimed can mis-attribute. The id link removes this once stamped.
+export function mapTurnsToUserMessages(
   messages: TaskThreadMessage[],
   turns: TaskThreadTurn[],
 ): Map<string, TaskThreadTurn> {
@@ -2029,16 +2241,49 @@ function mapTurnsToUserMessages(
   );
   if (userMessages.length === 0) return map;
 
-  const userTimes = userMessages.map((message) =>
-    parseEventTimestamp(message.createdAt ?? null),
+  const userMessageById = new Map(
+    userMessages.map((message) => [message.id, message] as const),
   );
 
-  const sortedTurns = [...turns].sort((a, b) => {
+  // Pass 1 (KTD3): id-based pairing. A turn whose triggeringMessageId names a
+  // user message binds directly, immune to timestamp skew. Sorted ASC by
+  // startedAt so the latest turn wins when several link to one message.
+  const idLinkedMessageIds = new Set<string>();
+  const legacyTurns: TaskThreadTurn[] = [];
+  const idLinkedTurns: TaskThreadTurn[] = [];
+  for (const turn of turns) {
+    const link = turn.triggeringMessageId ?? null;
+    if (link && userMessageById.has(link)) {
+      idLinkedTurns.push(turn);
+    } else {
+      legacyTurns.push(turn);
+    }
+  }
+  const sortByStart = (a: TaskThreadTurn, b: TaskThreadTurn) => {
     const ta = parseEventTimestamp(a.startedAt ?? null);
     const tb = parseEventTimestamp(b.startedAt ?? null);
     if (ta !== tb) return ta - tb;
     return String(a.id ?? "").localeCompare(String(b.id ?? ""));
-  });
+  };
+  for (const turn of [...idLinkedTurns].sort(sortByStart)) {
+    const userMessage = userMessageById.get(
+      turn.triggeringMessageId as string,
+    )!;
+    idLinkedMessageIds.add(userMessage.id);
+    map.set(
+      userMessage.id,
+      withUserVisibleTurnTiming(turn, userMessage, messages),
+    );
+  }
+
+  // Pass 2: legacy turns without a usable id link fall back to timestamp (then
+  // positional) pairing. Never overwrite a message already bound by an id link.
+  if (legacyTurns.length === 0) return map;
+
+  const userTimes = userMessages.map((message) =>
+    parseEventTimestamp(message.createdAt ?? null),
+  );
+  const sortedTurns = [...legacyTurns].sort(sortByStart);
 
   // Causal pairing needs user-message timestamps. Older/synthetic threads omit
   // createdAt; fall back to positional pairing (i-th turn -> i-th user message)
@@ -2047,9 +2292,13 @@ function mapTurnsToUserMessages(
   if (!userTimesUsable) {
     const pairCount = Math.min(userMessages.length, sortedTurns.length);
     for (let i = 0; i < pairCount; i += 1) {
+      if (idLinkedMessageIds.has(userMessages[i].id)) continue;
       map.set(userMessages[i].id, sortedTurns[i]);
     }
-    if (sortedTurns.length > userMessages.length) {
+    if (
+      sortedTurns.length > userMessages.length &&
+      !idLinkedMessageIds.has(userMessages[userMessages.length - 1].id)
+    ) {
       map.set(
         userMessages[userMessages.length - 1].id,
         sortedTurns[sortedTurns.length - 1],
@@ -2071,6 +2320,7 @@ function mapTurnsToUserMessages(
     }
     // A turn before every user message anchors to the earliest one.
     if (targetIndex < 0) targetIndex = 0;
+    if (idLinkedMessageIds.has(userMessages[targetIndex].id)) continue;
     // Latest turn wins when several map to the same message.
     map.set(
       userMessages[targetIndex].id,
@@ -2210,7 +2460,7 @@ function resumeGoalRunFromThread(
   const content = goalRun.objective
     ? `Resume goal: ${goalRun.objective}`
     : "Resume goal";
-  return onSendFollowUp(content, [], [], true, undefined, undefined, {
+  return onSendFollowUp(content, [], [], "FORCE_ON", undefined, undefined, {
     enabled: true,
     action: "resume",
     ...(goalRun.objective ? { objective: goalRun.objective } : {}),
@@ -2805,10 +3055,7 @@ function titleFromHtml(html: string): string | null {
 function isHtmlMimeType(value: unknown): boolean {
   return (
     typeof value === "string" &&
-    value
-      .split(";", 1)[0]
-      .trim()
-      .toLowerCase() === "text/html"
+    value.split(";", 1)[0].trim().toLowerCase() === "text/html"
   );
 }
 
@@ -2848,6 +3095,7 @@ function FollowUpComposer({
   skillCatalog = [],
   threadMessages,
   currentUserId,
+  serverMode,
   prefill,
   onSubmit,
   approvedModels,
@@ -2862,12 +3110,13 @@ function FollowUpComposer({
   skillCatalog?: SkillOption[];
   threadMessages?: TaskThreadMessage[];
   currentUserId?: string | null;
+  serverMode?: ServerThreadMode | null;
   prefill?: { text: string; token: number } | null;
   onSubmit?: (
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
-    agentRequested?: boolean,
+    agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
@@ -2883,6 +3132,7 @@ function FollowUpComposer({
     () =>
       deriveAgentDefault({
         currentUserId,
+        serverMode,
         threadMessages: (threadMessages ?? []).map((message) => ({
           role: message.role,
           senderType: message.sender?.type ?? null,
@@ -2893,7 +3143,7 @@ function FollowUpComposer({
           targetId: mention.targetId,
         })),
       }).agentDefaultOn,
-    [currentUserId, threadMessages, mentions],
+    [currentUserId, serverMode, threadMessages, mentions],
   );
   const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
   // Whether the user has manually toggled the agent in this thread. While
@@ -3058,12 +3308,21 @@ function FollowUpComposer({
       );
       const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
       const submittedGoalMode = goalModeSubmission.goalMode;
+      // KTD2 tri-state: goal mode requires dispatch (FORCE_ON); otherwise the
+      // toggle maps untouched -> AUTO (server decides from Thread Mode),
+      // manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
+      const submittedDispatch: AgentDispatchRequestValue = submittedGoalMode
+        ? "FORCE_ON"
+        : deriveAgentDispatch({
+            overridden: agentOverriddenRef.current,
+            enabled: effectiveAgentEnabled,
+          });
       if (selectedModelId && submittedGoalMode) {
         await onSubmit(
           content,
           files,
           submittedMentions,
-          true,
+          submittedDispatch,
           pinnedSkills,
           selectedModelId,
           submittedGoalMode,
@@ -3073,7 +3332,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          effectiveAgentEnabled,
+          submittedDispatch,
           pinnedSkills,
           selectedModelId,
         );
@@ -3082,7 +3341,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          true,
+          submittedDispatch,
           pinnedSkills,
           undefined,
           submittedGoalMode,
@@ -3092,7 +3351,7 @@ function FollowUpComposer({
           content,
           files,
           submittedMentions,
-          effectiveAgentEnabled,
+          submittedDispatch,
           pinnedSkills,
         );
       }
@@ -4555,11 +4814,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-    stringValue(payload.profileSlug) ||
-    stringValue(payload.profile_name) ||
-    stringValue(payload.profileName) ||
-    stringValue(payload.profile_run_id) ||
-    stringValue(payload.profileRunId),
+      stringValue(payload.profileSlug) ||
+      stringValue(payload.profile_name) ||
+      stringValue(payload.profileName) ||
+      stringValue(payload.profile_run_id) ||
+      stringValue(payload.profileRunId),
   );
 }
 

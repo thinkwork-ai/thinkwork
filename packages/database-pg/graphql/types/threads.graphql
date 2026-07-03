@@ -36,6 +36,15 @@ enum ThreadChannel {
   SLACK
 }
 
+# Server-authoritative Thread Mode (plan 2026-07-03-003 U3). AGENT threads
+# auto-dispatch user messages to the agent; MULTIPLAYER threads require an
+# agent mention or an explicit per-message request. Derived from the human
+# participant count with an optional per-thread override that wins.
+enum ThreadMode {
+  AGENT
+  MULTIPLAYER
+}
+
 type Thread {
   id: ID!
   tenantId: ID!
@@ -52,6 +61,10 @@ type Thread {
   title: String!
   status: ThreadStatus!
   channel: ThreadChannel!
+  # Derived server-side from human participant count + modeOverride.
+  mode: ThreadMode!
+  # The explicit per-thread override, if set; null means mode is derived.
+  modeOverride: ThreadMode
   assigneeType: String
   assigneeId: ID
   assignee: User
@@ -174,6 +187,9 @@ input UpdateThreadInput {
   dueAt: AWSDateTime
   archivedAt: AWSDateTime
   lastReadAt: AWSDateTime
+  # Set (AGENT/MULTIPLAYER) or clear (null) the per-thread Thread Mode override.
+  # Requires the caller be a participant of the thread.
+  modeOverride: ThreadMode
 }
 
 input CreateThreadLabelInput {

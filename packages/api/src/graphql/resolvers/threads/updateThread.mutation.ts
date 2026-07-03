@@ -104,6 +104,16 @@ export const updateThread = async (
       updates.last_read_at = readState.lastReadAt;
     }
   }
+  // Thread Mode override (plan 2026-07-03-003 U3, R3). The general field-update
+  // path has no auth checks, so setting or clearing the override MUST verify the
+  // caller explicitly: tenant match on the thread (NOT_FOUND otherwise) plus an
+  // existing user participant row (FORBIDDEN otherwise). Because mode_override
+  // lands in `updates`, this is not a read-state-only change, so
+  // notifyThreadUpdate fires and every client refetches the new mode.
+  if (i.modeOverride !== undefined) {
+    await assertCallerCanSetThreadMode(args.id, ctx);
+    updates.mode_override = normalizeModeOverride(i.modeOverride);
+  }
 
   let row;
   if (Object.keys(updates).length > 0) {
@@ -222,6 +232,59 @@ export const updateThread = async (
       : row.last_read_at,
   });
 };
+
+function normalizeModeOverride(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  return String(raw).toLowerCase();
+}
+
+/**
+ * Authorize a Thread Mode override change (plan 2026-07-03-003 U3). Mirrors the
+ * tenant-check + participant-lookup pattern in `applyCallerReadState`: the
+ * caller must belong to the thread's tenant (else NOT_FOUND, so cross-tenant
+ * callers cannot even probe existence) and hold a user participant row on the
+ * thread (else FORBIDDEN).
+ */
+async function assertCallerCanSetThreadMode(
+  threadId: string,
+  ctx: GraphQLContext,
+): Promise<void> {
+  const callerTenantId = await resolveCallerTenantId(ctx);
+  const callerUserId = await resolveCallerUserId(ctx);
+  if (!callerTenantId || !callerUserId) {
+    throw new GraphQLError("Requester user identity required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+
+  const [threadRow] = await db
+    .select({ tenant_id: threads.tenant_id })
+    .from(threads)
+    .where(eq(threads.id, threadId));
+  if (!threadRow) throw new Error("Thread not found");
+  if (threadRow.tenant_id !== callerTenantId) {
+    throw new GraphQLError("Thread not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+
+  const [participantRow] = await db
+    .select({ id: threadParticipants.id })
+    .from(threadParticipants)
+    .where(
+      and(
+        eq(threadParticipants.tenant_id, callerTenantId),
+        eq(threadParticipants.thread_id, threadId),
+        eq(threadParticipants.participant_type, "user"),
+        eq(threadParticipants.user_id, callerUserId),
+      ),
+    );
+  if (!participantRow) {
+    throw new GraphQLError("Thread participant required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+}
 
 async function enforceGoalReviewPolicyBeforeThreadDone(input: {
   tenantId: string;

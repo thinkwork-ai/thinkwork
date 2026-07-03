@@ -12,6 +12,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
@@ -79,6 +80,13 @@ export const threads = pgTable(
      * fail-closed scoping the AuroraSessionStore enforces.
      */
     session_data: jsonb("session_data"),
+    /**
+     * Per-thread Thread Mode override (plan 2026-07-03-003 U3, R3). NULL means
+     * the mode is derived from human participant count (0–1 → agent, 2+ →
+     * multiplayer); a non-null value ('agent' | 'multiplayer') pins the mode
+     * for every participant until changed. Set from the thread info panel.
+     */
+    mode_override: text("mode_override"),
     due_at: timestamp("due_at", { withTimezone: true }),
     started_at: timestamp("started_at", { withTimezone: true }),
     completed_at: timestamp("completed_at", { withTimezone: true }),
@@ -119,6 +127,10 @@ export const threads = pgTable(
       table.tenant_id,
       table.space_id,
       table.updated_at,
+    ),
+    check(
+      "threads_mode_override_allowed",
+      sql`${table.mode_override} IS NULL OR ${table.mode_override} IN ('agent','multiplayer')`,
     ),
   ],
 );

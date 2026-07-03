@@ -258,6 +258,12 @@ export type AgentCount = {
   count: Scalars['Int']['output'];
 };
 
+export enum AgentDispatchRequest {
+  Auto = 'AUTO',
+  ForceOff = 'FORCE_OFF',
+  ForceOn = 'FORCE_ON'
+}
+
 export type AgentKnowledgeBase = {
   __typename?: 'AgentKnowledgeBase';
   agentId: Scalars['ID']['output'];
@@ -3878,6 +3884,7 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  retryAgentDispatch: Message;
   retryKnowledgeBase: KnowledgeBase;
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
@@ -4696,7 +4703,9 @@ export type MutationNotifyThreadActivityArgs = {
   authorId?: InputMaybe<Scalars['ID']['input']>;
   authorType: Scalars['String']['input'];
   createdAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  mentioned?: InputMaybe<Scalars['Boolean']['input']>;
   messageId: Scalars['ID']['input'];
+  shouldNotify?: InputMaybe<Scalars['Boolean']['input']>;
   snippet?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -4977,6 +4986,11 @@ export type MutationResubmitInboxItemArgs = {
 export type MutationResumeAgentWorkspaceRunArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
+};
+
+
+export type MutationRetryAgentDispatchArgs = {
+  messageId: Scalars['ID']['input'];
 };
 
 
@@ -8557,6 +8571,7 @@ export type ScheduledJob = {
 };
 
 export type SendMessageInput = {
+  agentDispatch?: InputMaybe<AgentDispatchRequest>;
   agentRequested?: InputMaybe<Scalars['Boolean']['input']>;
   content?: InputMaybe<Scalars['String']['input']>;
   dispatchMode?: InputMaybe<MessageDispatchMode>;
@@ -9550,6 +9565,8 @@ export type Thread = {
   lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  mode: ThreadMode;
+  modeOverride?: Maybe<ThreadMode>;
   number: Scalars['Int']['output'];
   participants: Array<ThreadParticipant>;
   pendingUserQuestion?: Maybe<UserQuestion>;
@@ -9577,7 +9594,9 @@ export type ThreadActivityEvent = {
   authorId?: Maybe<Scalars['ID']['output']>;
   authorType: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  mentioned?: Maybe<Scalars['Boolean']['output']>;
   messageId: Scalars['ID']['output'];
+  shouldNotify?: Maybe<Scalars['Boolean']['output']>;
   snippet?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
@@ -9764,6 +9783,11 @@ export type ThreadMentionTarget = {
   targetType: MessageMentionTargetType;
 };
 
+export enum ThreadMode {
+  Agent = 'AGENT',
+  Multiplayer = 'MULTIPLAYER'
+}
+
 export type ThreadParticipant = {
   __typename?: 'ThreadParticipant';
   agent?: Maybe<Agent>;
@@ -9847,6 +9871,7 @@ export type ThreadTurn = {
   triggerDetail?: Maybe<Scalars['String']['output']>;
   triggerId?: Maybe<Scalars['ID']['output']>;
   triggerName?: Maybe<Scalars['String']['output']>;
+  triggeringMessageId?: Maybe<Scalars['ID']['output']>;
   turnNumber?: Maybe<Scalars['Int']['output']>;
   usageJson?: Maybe<Scalars['AWSJSON']['output']>;
   wakeupRequestId?: Maybe<Scalars['ID']['output']>;
@@ -10374,6 +10399,7 @@ export type UpdateThreadInput = {
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   lastReadAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  modeOverride?: InputMaybe<ThreadMode>;
   status?: InputMaybe<ThreadStatus>;
   title?: InputMaybe<Scalars['String']['input']>;
 };
@@ -11612,7 +11638,7 @@ export type SpacesThreadActivitySubscriptionVariables = Exact<{
 }>;
 
 
-export type SpacesThreadActivitySubscription = { __typename?: 'Subscription', onThreadActivity?: { __typename?: 'ThreadActivityEvent', userId: string, tenantId: string, threadId: string, messageId: string, authorId?: string | null, authorType: string, snippet?: string | null, threadTitle?: string | null, createdAt?: any | null } | null };
+export type SpacesThreadActivitySubscription = { __typename?: 'Subscription', onThreadActivity?: { __typename?: 'ThreadActivityEvent', userId: string, tenantId: string, threadId: string, messageId: string, authorId?: string | null, authorType: string, snippet?: string | null, threadTitle?: string | null, mentioned?: boolean | null, shouldNotify?: boolean | null, createdAt?: any | null } | null };
 
 export type AdminAppletsQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -13032,7 +13058,7 @@ export const SettingsPiExtensionFieldsFragmentDoc = {"kind":"Document","definiti
 export const AppletStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AppletState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"appId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"instanceId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appletState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"appId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"appId"}}},{"kind":"Argument","name":{"kind":"Name","value":"instanceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"instanceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"instanceId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AppletStateQuery, AppletStateQueryVariables>;
 export const SaveAppletStateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SaveAppletState"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SaveAppletStateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"saveAppletState"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"instanceId"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SaveAppletStateMutation, SaveAppletStateMutationVariables>;
 export const TenantContextClaimPendingTenantDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"TenantContextClaimPendingTenant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"bootstrapUser"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<TenantContextClaimPendingTenantMutation, TenantContextClaimPendingTenantMutationVariables>;
-export const SpacesThreadActivityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"SpacesThreadActivity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"onThreadActivity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"threadTitle"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SpacesThreadActivitySubscription, SpacesThreadActivitySubscriptionVariables>;
+export const SpacesThreadActivityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"SpacesThreadActivity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"onThreadActivity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"threadTitle"}},{"kind":"Field","name":{"kind":"Name","value":"mentioned"}},{"kind":"Field","name":{"kind":"Name","value":"shouldNotify"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SpacesThreadActivitySubscription, SpacesThreadActivitySubscriptionVariables>;
 export const AdminAppletsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminApplets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"userId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"adminApplets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"userId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"userId"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"prompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"modelId"}},{"kind":"Field","name":{"kind":"Name","value":"generatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"stdlibVersionAtGeneration"}},{"kind":"Field","name":{"kind":"Name","value":"artifact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"favoritedAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"nextCursor"}}]}}]}}]} as unknown as DocumentNode<AdminAppletsQuery, AdminAppletsQueryVariables>;
 export const AdminUpdateAppletSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateAppletSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AdminUpdateAppletSourceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"adminUpdateAppletSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ok"}},{"kind":"Field","name":{"kind":"Name","value":"appId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"validated"}},{"kind":"Field","name":{"kind":"Name","value":"persisted"}},{"kind":"Field","name":{"kind":"Name","value":"errors"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateAppletSourceMutation, AdminUpdateAppletSourceMutationVariables>;
 export const EvalSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EvalSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalRuns"}},{"kind":"Field","name":{"kind":"Name","value":"latestPassRate"}},{"kind":"Field","name":{"kind":"Name","value":"avgPassRate"}},{"kind":"Field","name":{"kind":"Name","value":"regressionCount"}}]}}]}}]} as unknown as DocumentNode<EvalSummaryQuery, EvalSummaryQueryVariables>;

@@ -62,6 +62,11 @@ type ThreadTurn {
   threadId: ID
   turnNumber: Int
   runtimeType: String
+  # THINK-136 U6 (KTD3): durable turn→triggering-message link. Non-null value
+  # is the id of the USER message whose send dispatched this turn; the web UI
+  # pairs turns to messages by this id, falling back to timestamp pairing for
+  # legacy (null) rows.
+  triggeringMessageId: ID
   status: String!
   startedAt: AWSDateTime
   finishedAt: AWSDateTime

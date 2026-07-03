@@ -50,6 +50,23 @@ describe("createThread opening message mention routing", () => {
     expect(source).toContain("notifyThreadTurnUpdate");
   });
 
+  it("fires the per-user activity fan-out after the mention participant rows commit (plan 2026-07-03-003 U1, R11)", () => {
+    expect(source).toContain("publishThreadActivity");
+    // Ordering fix for the known notify-before-participant-insert race:
+    // publishThreadActivity must run AFTER persistOpeningMessageMentions has
+    // committed the mention participant rows.
+    expect(source.indexOf("persistOpeningMessageMentions({")).toBeLessThan(
+      source.indexOf("publishThreadActivity({"),
+    );
+    expect(source).toContain(
+      '.filter((mention) => mention.targetType === "user")',
+    );
+    const call = source.slice(source.indexOf("publishThreadActivity({"));
+    expect(call).toContain("messageId: firstMessageId");
+    expect(call).toContain("authorId: createdById ?? null");
+    expect(call).toContain("mentionedUserIds,");
+  });
+
   it("validates and persists selected parent models for opening messages", () => {
     expect(threadsGraphql).toContain("modelId: String");
     expect(source).toContain("resolveRequestedModelId");

@@ -258,6 +258,12 @@ export type AgentCount = {
   count: Scalars['Int']['output'];
 };
 
+export enum AgentDispatchRequest {
+  Auto = 'AUTO',
+  ForceOff = 'FORCE_OFF',
+  ForceOn = 'FORCE_ON'
+}
+
 export type AgentKnowledgeBase = {
   __typename?: 'AgentKnowledgeBase';
   agentId: Scalars['ID']['output'];
@@ -3878,6 +3884,7 @@ export type Mutation = {
   resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  retryAgentDispatch: Message;
   retryKnowledgeBase: KnowledgeBase;
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
@@ -4696,7 +4703,9 @@ export type MutationNotifyThreadActivityArgs = {
   authorId?: InputMaybe<Scalars['ID']['input']>;
   authorType: Scalars['String']['input'];
   createdAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  mentioned?: InputMaybe<Scalars['Boolean']['input']>;
   messageId: Scalars['ID']['input'];
+  shouldNotify?: InputMaybe<Scalars['Boolean']['input']>;
   snippet?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -4977,6 +4986,11 @@ export type MutationResubmitInboxItemArgs = {
 export type MutationResumeAgentWorkspaceRunArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars['ID']['input'];
+};
+
+
+export type MutationRetryAgentDispatchArgs = {
+  messageId: Scalars['ID']['input'];
 };
 
 
@@ -8557,6 +8571,7 @@ export type ScheduledJob = {
 };
 
 export type SendMessageInput = {
+  agentDispatch?: InputMaybe<AgentDispatchRequest>;
   agentRequested?: InputMaybe<Scalars['Boolean']['input']>;
   content?: InputMaybe<Scalars['String']['input']>;
   dispatchMode?: InputMaybe<MessageDispatchMode>;
@@ -9550,6 +9565,8 @@ export type Thread = {
   lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  mode: ThreadMode;
+  modeOverride?: Maybe<ThreadMode>;
   number: Scalars['Int']['output'];
   participants: Array<ThreadParticipant>;
   pendingUserQuestion?: Maybe<UserQuestion>;
@@ -9577,7 +9594,9 @@ export type ThreadActivityEvent = {
   authorId?: Maybe<Scalars['ID']['output']>;
   authorType: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  mentioned?: Maybe<Scalars['Boolean']['output']>;
   messageId: Scalars['ID']['output'];
+  shouldNotify?: Maybe<Scalars['Boolean']['output']>;
   snippet?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
@@ -9764,6 +9783,11 @@ export type ThreadMentionTarget = {
   targetType: MessageMentionTargetType;
 };
 
+export enum ThreadMode {
+  Agent = 'AGENT',
+  Multiplayer = 'MULTIPLAYER'
+}
+
 export type ThreadParticipant = {
   __typename?: 'ThreadParticipant';
   agent?: Maybe<Agent>;
@@ -9847,6 +9871,7 @@ export type ThreadTurn = {
   triggerDetail?: Maybe<Scalars['String']['output']>;
   triggerId?: Maybe<Scalars['ID']['output']>;
   triggerName?: Maybe<Scalars['String']['output']>;
+  triggeringMessageId?: Maybe<Scalars['ID']['output']>;
   turnNumber?: Maybe<Scalars['Int']['output']>;
   usageJson?: Maybe<Scalars['AWSJSON']['output']>;
   wakeupRequestId?: Maybe<Scalars['ID']['output']>;
@@ -10374,6 +10399,7 @@ export type UpdateThreadInput = {
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   lastReadAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  modeOverride?: InputMaybe<ThreadMode>;
   status?: InputMaybe<ThreadStatus>;
   title?: InputMaybe<Scalars['String']['input']>;
 };

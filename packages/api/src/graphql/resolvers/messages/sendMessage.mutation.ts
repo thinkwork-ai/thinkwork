@@ -25,6 +25,7 @@ import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agen
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
+import { publishThreadActivity } from "../../../lib/threads/publish-thread-activity.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
 import {
@@ -33,9 +34,16 @@ import {
 } from "../../../lib/thread-attachments/message-attachment-refs.js";
 import {
   normalizeMessageSenderType,
+  resolveAgentDispatchRequest,
   shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
+  shouldSuppressAgentMentionDispatch,
 } from "./sendMessage.agent-handling.js";
+import {
+  deriveThreadMode,
+  type ThreadMode,
+} from "../../../lib/threads/thread-mode.js";
+import { selectThreadParticipantUserIds } from "../../../lib/threads/thread-participants-query.js";
 import {
   assertUserModelApproved,
   ModelApprovalError,
@@ -51,6 +59,34 @@ import {
   toRuntimeGoalMode,
 } from "../../../lib/goal-mode.js";
 import { parseSkillCreatorCommandMetadata } from "../../../lib/skill-creator/command-metadata.js";
+
+// Thread Mode for dispatch decisions (U4/R1/R4): count distinct human
+// participants, union any not-yet-committed additions (the sender and this
+// message's user mentions for the pre-transaction goal-mode check), apply the
+// per-thread override. Post-commit callers pass no extras — the transaction
+// already inserted the sender/mention rows, so the count is exact.
+async function resolveDispatchThreadMode(params: {
+  tenantId: string;
+  threadId: string;
+  override: unknown;
+  extraUserIds?: Array<string | null | undefined>;
+}): Promise<ThreadMode> {
+  const ids = new Set(
+    await selectThreadParticipantUserIds({
+      db,
+      tenantId: params.tenantId,
+      threadId: params.threadId,
+    }),
+  );
+  for (const id of params.extraUserIds ?? []) {
+    if (id) ids.add(id);
+  }
+  const override =
+    params.override === "agent" || params.override === "multiplayer"
+      ? params.override
+      : null;
+  return deriveThreadMode(ids.size, override);
+}
 
 export const sendMessage = async (
   _parent: any,
@@ -74,6 +110,7 @@ export const sendMessage = async (
       user_id: threads.user_id,
       title: threads.title,
       status: threads.status,
+      mode_override: threads.mode_override,
     })
     .from(threads)
     .where(eq(threads.id, i.threadId));
@@ -222,10 +259,24 @@ export const sendMessage = async (
       isUserMessage,
       senderType,
       agentRequested: i.agentRequested,
+      agentDispatch: i.agentDispatch,
       dispatchMode: i.dispatchMode,
       hasAgentMentions,
       hasComputerThread: Boolean(thread.computer_id),
       customerOnboardingHandled: false,
+      // Pre-transaction check: predict the post-commit mode by unioning the
+      // sender and this message's user mentions into the participant set.
+      threadMode: await resolveDispatchThreadMode({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        override: thread.mode_override ?? null,
+        extraUserIds: [
+          senderType === "user" ? senderId : null,
+          ...parsedMentions
+            .filter((mention) => mention.targetType === "user")
+            .map((mention) => mention.targetId),
+        ],
+      }),
     })
   ) {
     throw new GraphQLError("Goal mode requires default agent dispatch.", {
@@ -288,6 +339,28 @@ export const sendMessage = async (
       );
     }
 
+    // R13/KTD6: a human sender becomes a thread participant in the same
+    // transaction as their message, so Thread Mode derivation (U3) reads the
+    // true participant set — a reply-joiner counts immediately, not on some
+    // later mention. Agent/system senders (senderType !== "user") never get
+    // participant rows. space_id is null for non-space threads (R14).
+    // onConflictDoNothing keeps repeat senders idempotent; the
+    // markSenderParticipantRead call below then stamps last_read_at on the
+    // (new or existing) row.
+    if (senderType === "user" && senderId) {
+      await tx
+        .insert(threadParticipants)
+        .values({
+          tenant_id: thread.tenant_id,
+          thread_id: i.threadId,
+          space_id: thread.space_id ?? null,
+          participant_type: "user",
+          user_id: senderId,
+          source: "sender",
+        })
+        .onConflictDoNothing();
+    }
+
     await markSenderParticipantRead(
       {
         tenantId: thread.tenant_id,
@@ -328,6 +401,7 @@ export const sendMessage = async (
       isUserMessage,
       senderType,
       agentRequested: i.agentRequested,
+      agentDispatch: i.agentDispatch,
       dispatchMode: i.dispatchMode,
       hasAgentMentions,
     })
@@ -423,9 +497,15 @@ export const sendMessage = async (
       );
     }
   }
-  if (hasAgentMentions) {
+  // R5/KTD2: an explicit tri-state FORCE_OFF suppresses even mention dispatch
+  // (explicit-off-wins). The legacy agentRequested boolean deliberately does
+  // NOT suppress mentions — see shouldSuppressAgentMentionDispatch.
+  if (
+    hasAgentMentions &&
+    !shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })
+  ) {
     try {
-      await dispatchAgentMentions({
+      const mentionResults = await dispatchAgentMentions({
         tenantId: thread.tenant_id,
         threadId: i.threadId,
         spaceId: thread.space_id,
@@ -436,19 +516,66 @@ export const sendMessage = async (
         ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });
+      // R7: mention dispatch can fail per-agent (multiple mentioned agents).
+      // Stamp a per-dispatch failed state naming which agents failed, rather
+      // than treating it as all-or-nothing.
+      const failedAgentIds = mentionResults
+        .filter((result) => result.failed)
+        .map((result) => result.agentId);
+      if (failedAgentIds.length > 0) {
+        console.warn(
+          `[sendMessage] agent mention dispatch failed for agents: ${failedAgentIds.join(", ")}`,
+        );
+        await stampDispatchFailure({
+          messageId: row.id,
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          route: "mention",
+          reason: `mention dispatch failed for agents: ${failedAgentIds.join(", ")}`,
+        });
+      }
     } catch (err) {
       console.warn("[sendMessage] agent mention dispatch failed:", err);
+      await stampDispatchFailure({
+        messageId: row.id,
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        route: "mention",
+        reason: `mention dispatch error: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
+  // Post-commit Thread Mode (R1/R4): the transaction above already inserted
+  // the sender/mention participant rows, so this count is exact — including
+  // the transition message that @mentions a second human (it derives
+  // Multiplayer and does not auto-dispatch, per R2/KTD2). Only computed when
+  // the AUTO branch could actually consult it.
+  const resolvedDispatchRequest = resolveAgentDispatchRequest({
+    agentDispatch: i.agentDispatch,
+    agentRequested: i.agentRequested,
+  });
+  const dispatchThreadMode =
+    isUserMessage &&
+    senderType === "user" &&
+    resolvedDispatchRequest === "AUTO" &&
+    !hasAgentMentions
+      ? await resolveDispatchThreadMode({
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          override: thread.mode_override ?? null,
+        })
+      : null;
   if (
     shouldDispatchDefaultAgentTurn({
       isUserMessage,
       senderType,
       agentRequested: i.agentRequested,
+      agentDispatch: i.agentDispatch,
       dispatchMode: i.dispatchMode,
       hasAgentMentions,
       hasComputerThread: Boolean(thread.computer_id),
       customerOnboardingHandled,
+      threadMode: dispatchThreadMode,
     })
   ) {
     try {
@@ -466,7 +593,16 @@ export const sendMessage = async (
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {
+      // R7: a synchronous dispatch failure is never only logged — stamp a
+      // visible failed state on the message so the sender can retry.
       console.warn("[sendMessage] default agent dispatch failed:", err);
+      await stampDispatchFailure({
+        messageId: row.id,
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        route: "default",
+        reason: `default dispatch error: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
 
@@ -478,6 +614,26 @@ export const sendMessage = async (
     content: row.content ?? undefined,
     senderType,
     senderId: senderId ?? undefined,
+  }).catch(() => {});
+
+  // Per-user activity fan-out (KTD5). Runs post-commit — the mention
+  // participant rows (lines ~254-289) and the sender participant upsert have
+  // already committed, so a freshly @-tagged user is in the participant set
+  // (R11). Best-effort: publishThreadActivity never throws.
+  const mentionedUserIds = parsedMentions
+    .filter((mention) => mention.targetType === "user")
+    .map((mention) => mention.targetId);
+  publishThreadActivity({
+    db,
+    tenantId: thread.tenant_id,
+    threadId: i.threadId,
+    messageId: row.id,
+    authorId: senderId ?? null,
+    authorType: senderType,
+    snippet: row.content ?? null,
+    threadTitle: thread.title,
+    createdAt: messageActivityAt.toISOString(),
+    mentionedUserIds,
   }).catch(() => {});
 
   // Auto-generate thread title from first user message (no updated_at bump)
@@ -545,6 +701,76 @@ export const sendMessage = async (
 
   return messageToCamel(responseMessage);
 };
+
+// R7/KTD3: a synchronous dispatch failure is stamped onto
+// `messages.metadata.dispatch` (merged, never clobbering existing metadata)
+// and pushed via the existing notifyNewMessage event so subscribed clients
+// refresh the message and render the failed indicator + retry control. The
+// `attempt` reflects the failed attempt number (base dispatch = 1);
+// retryAgentDispatch increments it. Best-effort: a stamp failure is logged,
+// never thrown — the message itself already committed.
+async function stampDispatchFailure(input: {
+  messageId: string;
+  tenantId: string;
+  threadId: string;
+  route: "mention" | "default";
+  reason: string;
+}): Promise<void> {
+  try {
+    const [current] = await db
+      .select({
+        metadata: messages.metadata,
+        role: messages.role,
+        content: messages.content,
+        senderType: messages.sender_type,
+        senderId: messages.sender_id,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.id, input.messageId),
+          eq(messages.tenant_id, input.tenantId),
+        ),
+      );
+    if (!current) return;
+    const existingMetadata =
+      (current.metadata as Record<string, unknown> | null) ?? {};
+    const priorDispatch =
+      (existingMetadata.dispatch as Record<string, unknown> | undefined) ?? {};
+    const attempt =
+      typeof priorDispatch.attempt === "number" ? priorDispatch.attempt : 1;
+    const metadata = {
+      ...existingMetadata,
+      dispatch: {
+        status: "failed",
+        reason: input.reason,
+        attempt,
+        route: input.route,
+        at: new Date().toISOString(),
+      },
+    };
+    await db
+      .update(messages)
+      .set({ metadata })
+      .where(
+        and(
+          eq(messages.id, input.messageId),
+          eq(messages.tenant_id, input.tenantId),
+        ),
+      );
+    await notifyNewMessage({
+      messageId: input.messageId,
+      threadId: input.threadId,
+      tenantId: input.tenantId,
+      role: current.role,
+      content: current.content ?? undefined,
+      senderType: current.senderType ?? undefined,
+      senderId: current.senderId ?? undefined,
+    });
+  } catch (err) {
+    console.warn("[sendMessage] failed to stamp dispatch failure:", err);
+  }
+}
 
 function profileSlugFromMentions(
   mentions: Array<{ targetType: string; targetId: string }>,

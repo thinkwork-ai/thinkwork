@@ -34,9 +34,9 @@ export const threadParticipants = pgTable(
     thread_id: uuid("thread_id")
       .references(() => threads.id, { onDelete: "cascade" })
       .notNull(),
-    space_id: uuid("space_id")
-      .references(() => spaces.id)
-      .notNull(),
+    // Nullable: non-space threads (R14) still get participant rows for mode
+    // derivation and mention discovery; those rows carry a null space_id.
+    space_id: uuid("space_id").references(() => spaces.id),
     participant_type: text("participant_type").notNull(),
     user_id: uuid("user_id").references(() => users.id, {
       onDelete: "cascade",

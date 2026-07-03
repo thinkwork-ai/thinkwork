@@ -74,7 +74,7 @@ interface SendMessageVars {
     content: string;
     metadata?: string;
     mentions?: SpacesComposerMention[];
-    agentRequested?: boolean;
+    agentDispatch?: "FORCE_ON" | "FORCE_OFF" | "AUTO";
     modelId?: string;
   };
 }
@@ -430,8 +430,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       if (Object.keys(metadata).length > 0) {
         sendInput.metadata = JSON.stringify(metadata);
       }
+      // KTD2 tri-state at the new-thread boundary: this composer's toggle
+      // derives from the draft only (no thread exists yet), so a toggle-off
+      // maps to an explicit FORCE_OFF and everything else rides as AUTO —
+      // the server derives the mode from the just-created participant set.
       if (agentRequested === false) {
-        sendInput.agentRequested = false;
+        sendInput.agentDispatch = "FORCE_OFF";
       }
       const sent = await sendMessage({
         input: sendInput,
