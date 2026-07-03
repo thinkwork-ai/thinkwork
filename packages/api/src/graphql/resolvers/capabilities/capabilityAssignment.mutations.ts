@@ -484,7 +484,12 @@ async function mcpAgentMutation(
   );
   const itemId = server.slug ?? server.name;
 
-  return db.transaction(async (tx) => {
+  // Captured out of the transaction so the S3 dual-write (below) runs
+  // AFTER the DB row commits — S3 side effects never ride a DB tx.
+  let appliedGrantConfig: Record<string, unknown> | null | undefined;
+  let appliedDetach = false;
+
+  const outcome = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select({
         id: agentMcpServers.id,
@@ -507,6 +512,7 @@ async function mcpAgentMutation(
       await tx
         .delete(agentMcpServers)
         .where(eq(agentMcpServers.id, existing.id));
+      appliedDetach = true;
       await emitAuditEvent(
         tx,
         audit({
@@ -545,6 +551,7 @@ async function mcpAgentMutation(
         config: nextConfig,
       });
     }
+    appliedGrantConfig = nextConfig;
     await emitAuditEvent(
       tx,
       audit({
@@ -561,6 +568,47 @@ async function mcpAgentMutation(
     );
     return { outcome: "applied" as const, auditEmitted: true, itemId };
   });
+
+  // ── Workspace-folder dual-write (Composer U9a), AFTER the DB commit.
+  // Ships INERT: the agent_mcp_servers row stays authoritative for the
+  // runtime (U9b repoints it). Every S3 op is best-effort — a failure logs
+  // and is swallowed so it never fails the grant/detach the DB already
+  // recorded. On an applied grant we materialize the target's manifest and
+  // reconcile the rest of the agent's attached set (the backfill hook that
+  // rides this config change); on an applied detach we remove the folder.
+  if (outcome.outcome === "applied") {
+    try {
+      const {
+        materializeMcpAssignmentFolder,
+        removeMcpAssignmentFolder,
+        reconcileMcpAssignmentFolders,
+      } = await import("../../../lib/mcp/assignment-state.js");
+      if (appliedDetach) {
+        await removeMcpAssignmentFolder(target.targetPrefix, itemId);
+      } else {
+        await materializeMcpAssignmentFolder({
+          targetPrefix: target.targetPrefix,
+          registryServerId: server.id,
+          tenantId: input.tenantId,
+          agentConfig: appliedGrantConfig as {
+            toolAllowlist?: unknown;
+          } | null,
+        });
+        await reconcileMcpAssignmentFolders({
+          agentId: target.agentId,
+          tenantId: input.tenantId,
+          targetPrefix: target.targetPrefix,
+        });
+      }
+    } catch (err) {
+      console.error(
+        `${LOG_PREFIX} MCP workspace-folder dual-write failed for '${itemId}' (agent_mcp_servers row remains authoritative):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  return outcome;
 }
 
 // ─── mcp_server @ profile: tool_policy.mcpServers subset ───────────────────
@@ -824,8 +872,8 @@ async function executeCapabilityMutation(
   const itemClass = capabilityClass;
   const items =
     (inspection.predicted?.items as
-      Array<{ capabilityClass: string; capabilityId: string }> | undefined) ??
-    [];
+      | Array<{ capabilityClass: string; capabilityId: string }>
+      | undefined) ?? [];
   const item =
     items.find(
       (candidate) =>

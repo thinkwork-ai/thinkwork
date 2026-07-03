@@ -625,6 +625,45 @@ describe("renderWorkspaceTuple", () => {
     expect(composed).not.toContain("\nold");
   });
 
+  it("flows an agent mcp/<slug>/.assignment.json into the hydrate manifest as owner=agent (Composer U9a)", async () => {
+    // An attached-MCP workspace folder is a plain agent-source file — it is
+    // included generically by prefix, so Composer's tree sees it for free.
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/mcp/github/.assignment.json": {
+          content: JSON.stringify({
+            slug: "github",
+            registryServerId: "srv-1",
+          }),
+          lastModified: "2026-05-22T09:04:00.000Z",
+        },
+      }),
+    );
+
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    expect(result.hydrateManifest.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          owner: "agent",
+          path: "mcp/github/.assignment.json",
+          sourceKey:
+            "tenants/acme/agents/finance-agent/mcp/github/.assignment.json",
+          sourcePath: "mcp/github/.assignment.json",
+          readOnly: false,
+        }),
+      ]),
+    );
+  });
+
   it("read-only compose (persist: false) performs zero writes and matches the persisting output (U2)", async () => {
     const input = {
       tenantId: "tenant-1",

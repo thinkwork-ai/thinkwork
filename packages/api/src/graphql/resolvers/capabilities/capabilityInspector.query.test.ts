@@ -16,12 +16,14 @@ const {
   mockResolveAgentRuntimeConfig,
   mockRenderWorkspaceTuple,
   mockResolvePluginGate,
+  mockListWorkspaceMcpSlugs,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
   mockRequireAdminOrServiceCaller: vi.fn(),
   mockResolveAgentRuntimeConfig: vi.fn(),
   mockRenderWorkspaceTuple: vi.fn(),
   mockResolvePluginGate: vi.fn(),
+  mockListWorkspaceMcpSlugs: vi.fn(),
 }));
 
 function takeRows(): unknown[] {
@@ -111,6 +113,14 @@ vi.mock("../../../lib/workspace-renderer/compose-tuple.js", () => ({
 
 vi.mock("../../../lib/plugins/gating.js", () => ({
   resolvePluginGate: mockResolvePluginGate,
+}));
+
+// Composer U9a: attached-MCP workspace-folder lookup. Default (empty)
+// preserves the pre-U9a "tenant MCP registry" provenance for existing
+// tests; a test overrides it to assert workspace-folder provenance.
+vi.mock("../../../lib/mcp/assignment-state.js", () => ({
+  resolveAgentWorkspacePrefix: vi.fn(async () => "tenants/acme/agents/ada/"),
+  listWorkspaceMcpSlugs: mockListWorkspaceMcpSlugs,
 }));
 
 import { capabilityInspector } from "./capabilityInspector.query.js";
@@ -260,6 +270,8 @@ beforeEach(() => {
     },
   });
   mockResolvePluginGate.mockResolvedValue(EMPTY_GATE);
+  // Default: no attached-MCP workspace folders → pre-U9a registry provenance.
+  mockListWorkspaceMcpSlugs.mockResolvedValue([]);
 });
 
 /** Stage the selection lookups + inventory queries for a happy-path call. */
@@ -414,7 +426,12 @@ describe("item assembly", () => {
     expect(builtin?.capabilityClass).toBe("builtin_tool");
 
     const mcp = items.find((i) => i.capabilityId === "github");
-    expect(mcp).toMatchObject({ active: true, tokenStatus: "active" });
+    // No attached-MCP folders (default) → pre-U9a registry provenance.
+    expect(mcp).toMatchObject({
+      active: true,
+      tokenStatus: "active",
+      provenance: "tenant MCP registry",
+    });
 
     expect(items).toContainEqual(
       expect.objectContaining({
@@ -448,6 +465,27 @@ describe("item assembly", () => {
         detail: expect.stringContaining("pending"),
       }),
     );
+  });
+
+  it("U9a: an MCP server with a workspace folder reports workspace-folder provenance", async () => {
+    // `github` has a materialized mcp/github/ folder; `prod-db` does not.
+    mockListWorkspaceMcpSlugs.mockResolvedValue(["github"]);
+    stageHappyPath();
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID },
+      ctx,
+    );
+    const items = res.predicted?.items ?? [];
+    expect(items.find((i) => i.capabilityId === "github")).toMatchObject({
+      capabilityClass: "mcp_server",
+      active: true,
+      provenance: "agent: workspace folder (mcp/github/)",
+    });
+    // A server without a folder keeps registry provenance (no over-claim).
+    expect(items.find((i) => i.capabilityId === "prod-db")).toMatchObject({
+      provenance: "tenant MCP registry",
+    });
   });
 
   it("workspace MCP policy marks blocked servers blocked_by_policy (space selection)", async () => {

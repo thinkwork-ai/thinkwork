@@ -58,6 +58,10 @@ import {
 } from "../../../lib/capability-fingerprint.js";
 import { isBuiltinToolSlug } from "../../../lib/builtin-tool-slugs.js";
 import { renderWorkspaceTuple } from "../../../lib/workspace-renderer/compose-tuple.js";
+import {
+  listWorkspaceMcpSlugs,
+  resolveAgentWorkspacePrefix as resolveMcpAgentWorkspacePrefix,
+} from "../../../lib/mcp/assignment-state.js";
 import { spaceTriggerServiceIdentity } from "../../../lib/workspace-renderer/space-membership-check.js";
 import type { EffectiveWorkspacePolicy } from "../../../lib/workspace-renderer/effective-policy-composer.js";
 
@@ -104,7 +108,10 @@ interface CapabilityInspectionOut {
   } | null;
   divergence?: {
     state:
-      "no_manifest_yet" | "config_changed_since_turn" | "in_sync" | "divergent";
+      | "no_manifest_yet"
+      | "config_changed_since_turn"
+      | "in_sync"
+      | "divergent";
     manifestId?: string | null;
     manifestCreatedAt?: string | null;
     manifestFingerprint?: string | null;
@@ -496,6 +503,22 @@ export async function capabilityInspector(
       .where(eq(pluginInstalls.tenant_id, args.tenantId)),
   ]);
 
+  // ── Attached-MCP workspace folders (Composer U9a): a server whose
+  // `mcp/<slug>/.assignment.json` exists reports workspace-folder
+  // provenance, mirroring how skill rows report it. Best-effort and
+  // read-only — a lookup fault degrades to registry provenance, never
+  // failing inspection (and never writing, per KTD-1 probe purity).
+  const attachedMcpSlugs = new Set<string>();
+  try {
+    const mcpPrefix = await resolveMcpAgentWorkspacePrefix(agentId);
+    if (mcpPrefix) {
+      const slugs = await listWorkspaceMcpSlugs(mcpPrefix);
+      for (const slug of slugs ?? []) attachedMcpSlugs.add(slug);
+    }
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} MCP folder lookup failed:`, err);
+  }
+
   // ── Item construction.
   const items: CapabilityItemOut[] = [];
   const seen = new Set<string>();
@@ -622,7 +645,9 @@ export async function capabilityInspector(
         capabilityClass: "mcp_server",
         capabilityId: server.name,
         active: !blocked && !allowlistMiss,
-        provenance: "tenant MCP registry",
+        provenance: attachedMcpSlugs.has(server.name)
+          ? `agent: workspace folder (mcp/${server.name}/)`
+          : "tenant MCP registry",
         reason: blocked
           ? "blocked_by_policy"
           : allowlistMiss
