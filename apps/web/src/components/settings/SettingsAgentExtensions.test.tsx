@@ -8,6 +8,10 @@ const source = readFileSync(
   join(process.cwd(), "src/components/settings/SettingsAgentExtensions.tsx"),
   "utf8",
 );
+const capabilitiesSource = readFileSync(
+  join(process.cwd(), "src/components/settings/SettingsCapabilities.tsx"),
+  "utf8",
+);
 
 describe("SettingsAgentExtensions", () => {
   it("formats every Pi extension status for operators", () => {
@@ -66,5 +70,13 @@ describe("SettingsAgentExtensions", () => {
     // But it still shows a read-only view of where a version is assigned.
     expect(source).toContain("Assigned in the Composer");
     expect(source).toContain("ReadOnlyAssignments");
+  });
+
+  // Agent page merge (THINK-132 U3): the registry relocated into a Composer
+  // side sheet; the component contract and its own query shape are untouched.
+  it("mounts inside the Composer Extensions sheet", () => {
+    expect(capabilitiesSource).toContain('data-testid="open-extensions-sheet"');
+    expect(capabilitiesSource).toContain('data-testid="agent-extensions-sheet"');
+    expect(capabilitiesSource).toContain("<SettingsAgentExtensions");
   });
 });

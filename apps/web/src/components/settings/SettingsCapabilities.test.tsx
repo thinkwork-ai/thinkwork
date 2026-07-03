@@ -52,6 +52,9 @@ const {
     SettingsAgentProfilesQuery: Symbol("agentProfiles"),
     SettingsTenantMembersQuery: Symbol("tenantMembers"),
     SettingsComposerPiExtensionsQuery: Symbol("composerPiExtensions"),
+    // Agent page merge U3: registry-shaped read for the Extensions sheet.
+    SettingsPiExtensionsQuery: Symbol("piExtensionsRegistry"),
+    SettingsPiExtensionFieldsFragment: Symbol("piExtensionFields"),
     SettingsGrantCapabilityMutation: Symbol("grantCapability"),
     SettingsDetachCapabilityMutation: Symbol("detachCapability"),
   },
@@ -77,6 +80,9 @@ vi.mock("urql", () => ({
     }
     if (query === queryDocs.SettingsComposerPiExtensionsQuery) {
       return [queryState.extensions, refetchExtensionsMock];
+    }
+    if (query === queryDocs.SettingsPiExtensionsQuery) {
+      return [{ data: { piExtensions: [] }, fetching: false }, vi.fn()];
     }
     return [
       {
