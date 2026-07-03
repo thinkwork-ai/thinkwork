@@ -41,13 +41,26 @@ import { useNavigate } from "@tanstack/react-router";
 import { useClient } from "urql";
 import {
   ChevronRight,
+  ClipboardPaste,
+  FilePlus,
   FileText,
   Folder,
+  FolderPlus,
   FolderTree,
+  Pencil,
   Plus,
+  Scissors,
   Trash2,
 } from "lucide-react";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
   Button,
   ContextMenu,
@@ -55,6 +68,16 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
   Skeleton,
   cn,
 } from "@thinkwork/ui";
@@ -294,6 +317,70 @@ function skillSlugForFolder(node: TreeNode): string | null {
   return match ? match[1] : null;
 }
 
+interface PathSource {
+  target: WorkspaceFilesTarget;
+  /** Path relative to the owning layer's tree (mount prefix stripped). */
+  rel: string;
+  layer: "agent" | "space" | "user";
+}
+
+/**
+ * Owner→client resolution for standard file-tree ops (v1.1 standard menu),
+ * path-based so it works for folders as well as files — the same owning-layer
+ * routing the live-save editor uses. Returns null when the owning id isn't
+ * resolvable.
+ */
+export function resolvePathSource(
+  path: string,
+  ids: {
+    agentId?: string | null;
+    spaceId?: string | null;
+    perspectiveUserId?: string | null;
+  } | null,
+): PathSource | null {
+  const seg = path.split("/");
+  if (seg[0] === "Spaces") {
+    const spaceId = ids?.spaceId;
+    if (!spaceId) return null;
+    return { target: { spaceId }, rel: seg.slice(2).join("/"), layer: "space" };
+  }
+  if (seg[0] === "User" || seg[0] === "Users") {
+    const userId = ids?.perspectiveUserId;
+    if (!userId) return null;
+    return { target: { userId }, rel: seg.slice(1).join("/"), layer: "user" };
+  }
+  const agentId = ids?.agentId;
+  if (!agentId) return null;
+  return { target: { agentId }, rel: path, layer: "agent" };
+}
+
+function parentPathOf(path: string): string {
+  const parts = path.split("/");
+  parts.pop();
+  return parts.join("/");
+}
+
+function basenamePathOf(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1] ?? path;
+}
+
+const INVALID_BASENAME = /[/\\]/;
+
+interface NameDialogState {
+  mode: "new-file" | "new-folder" | "rename";
+  /** Parent folder path for create; the target path for rename. */
+  anchorPath: string;
+  value: string;
+  busy?: boolean;
+  error?: string | null;
+}
+
+interface DeleteConfirmState {
+  path: string;
+  isFolder: boolean;
+}
+
 interface ManifestState {
   loading: boolean;
   error: string | null;
@@ -357,6 +444,13 @@ export function ComposerWorkspaceEditor({
     error: null,
     data: null,
   });
+  // Standard file-tree menu (v1.1): create/rename dialog, delete confirm, and a
+  // single cut clipboard. All ops write through the owning source layer.
+  const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(
+    null,
+  );
+  const [clipboardPath, setClipboardPath] = useState<string | null>(null);
 
   // Manifest load: on selection change (client identity) and on each
   // refreshToken bump. A request id guards against out-of-order resolutions.
@@ -411,6 +505,125 @@ export function ComposerWorkspaceEditor({
   const entryByPath = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry])),
     [entries],
+  );
+
+  const srcForPath = useCallback(
+    (path: string) => resolvePathSource(path, result),
+    [result],
+  );
+
+  // Standard-menu writes go through the owning source client, then refetch the
+  // preview so the tree stays truthful (v1.1). Operator-gated by the caller.
+  const submitNameDialog = useCallback(async () => {
+    if (!nameDialog) return;
+    const name = nameDialog.value.trim();
+    if (!name || INVALID_BASENAME.test(name)) {
+      setNameDialog({
+        ...nameDialog,
+        error: "Enter a valid name (no slashes).",
+      });
+      return;
+    }
+    setNameDialog({ ...nameDialog, busy: true, error: null });
+    try {
+      if (nameDialog.mode === "rename") {
+        const path = nameDialog.anchorPath;
+        const src = srcForPath(path);
+        if (!src) throw new Error("This file has no editable source layer.");
+        const parentRel = parentPathOf(src.rel);
+        const toRel = parentRel ? `${parentRel}/${name}` : name;
+        await spacesWorkspaceFilesClient.renamePath?.(
+          src.target,
+          src.rel,
+          toRel,
+        );
+        const parentTree = parentPathOf(path);
+        const toTree = parentTree ? `${parentTree}/${name}` : name;
+        await loadManifest();
+        if (selectedPath === path) setSelectedPath(toTree);
+        else if (selectedPath?.startsWith(`${path}/`)) {
+          setSelectedPath(selectedPath.replace(path, toTree));
+        }
+      } else {
+        const parent = nameDialog.anchorPath;
+        const src = srcForPath(parent || name);
+        if (!src) throw new Error("This folder has no editable source layer.");
+        const childTree = parent ? `${parent}/${name}` : name;
+        const childRel = src.rel ? `${src.rel}/${name}` : name;
+        await spacesWorkspaceFilesClient.putFile(
+          src.target,
+          nameDialog.mode === "new-folder" ? `${childRel}/.gitkeep` : childRel,
+          "",
+        );
+        await loadManifest();
+        if (nameDialog.mode === "new-file") setSelectedPath(childTree);
+        else
+          setCollapsed((c) => new Set([...c].filter((p) => p !== childTree)));
+      }
+      setNameDialog(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`Couldn't complete: ${message}`);
+      setNameDialog((current) =>
+        current ? { ...current, busy: false, error: message } : current,
+      );
+    }
+  }, [nameDialog, srcForPath, loadManifest, selectedPath]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    const { path, isFolder } = deleteConfirm;
+    setDeleteConfirm(null);
+    try {
+      const targets = isFolder
+        ? entries
+            .filter((e) => e.path === path || e.path.startsWith(`${path}/`))
+            .map((e) => e.path)
+        : [path];
+      for (const t of targets) {
+        const src = srcForPath(t);
+        if (src)
+          await spacesWorkspaceFilesClient.deleteFile(src.target, src.rel);
+      }
+      await loadManifest();
+      if (
+        selectedPath &&
+        (selectedPath === path || selectedPath.startsWith(`${path}/`))
+      ) {
+        setSelectedPath(null);
+      }
+    } catch (err) {
+      toast.error(
+        `Delete failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }, [deleteConfirm, entries, srcForPath, loadManifest, selectedPath]);
+
+  const pasteInto = useCallback(
+    async (folderPath: string) => {
+      if (!clipboardPath) return;
+      const from = srcForPath(clipboardPath);
+      const to = srcForPath(folderPath);
+      if (!from || !to) return;
+      if (from.layer !== to.layer) {
+        toast.error("Moving across layers isn't supported here.");
+        return;
+      }
+      try {
+        await spacesWorkspaceFilesClient.movePath?.(
+          from.target,
+          from.rel,
+          to.rel,
+        );
+        await loadManifest();
+        setClipboardPath(null);
+      } catch (err) {
+        toast.error(
+          `Move failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+    [clipboardPath, srcForPath, loadManifest],
   );
 
   // Only the READ-ONLY rendered pane (generated files, or non-generated files
@@ -540,8 +753,38 @@ export function ComposerWorkspaceEditor({
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
     );
     const canAddHere = Boolean(isSkillsRoot && canManageSkills && onAddSkill);
+
+    // Standard file-tree ops (v1.1), routed through the owning SOURCE layer.
+    // Generated files, the `skills`/`Spaces` containers, and source roots are
+    // derived / structural — no destructive ops there.
+    const src = srcForPath(node.path);
+    const isSpacesContainer = node.path === "Spaces";
+    const isSourceRoot = Boolean(src) && src!.rel === "";
+    const stdEligible = Boolean(
+      canEditSource && src && !isSpacesContainer && !isSkillsRoot,
+    );
+    const canNewInside = stdEligible; // create inside any editable folder (incl. skill folder)
+    const canRename = Boolean(
+      stdEligible && !node.isFolder
+        ? !node.entry?.generated
+        : stdEligible && node.isFolder && !skillSlug && !isSourceRoot,
+    );
+    const canDelete = canRename;
+    const canCut = canRename;
+    const canPaste = Boolean(
+      node.isFolder &&
+      stdEligible &&
+      clipboardPath &&
+      srcForPath(clipboardPath)?.layer === src?.layer,
+    );
+    const hasStdOps =
+      (node.isFolder && canNewInside) || canRename || canDelete || canPaste;
+
     const hasMenu =
-      canDetachThis || canAddHere || (canJump && Boolean(jumpEntry));
+      canDetachThis ||
+      canAddHere ||
+      hasStdOps ||
+      (canJump && Boolean(jumpEntry));
 
     const row = (
       <div
@@ -657,7 +900,81 @@ export function ComposerWorkspaceEditor({
               <Trash2 className="mr-2 size-4" /> Detach skill…
             </ContextMenuItem>
           ) : null}
-          {(canAddHere || canDetachThis) && canJump && jumpEntry ? (
+          {(canAddHere || canDetachThis) && hasStdOps ? (
+            <ContextMenuSeparator />
+          ) : null}
+          {node.isFolder && canNewInside ? (
+            <ContextMenuItem
+              onSelect={() =>
+                setNameDialog({
+                  mode: "new-file",
+                  anchorPath: node.path,
+                  value: "",
+                })
+              }
+              data-testid={`menu-new-file-${node.path}`}
+            >
+              <FilePlus className="mr-2 size-4" /> New File
+            </ContextMenuItem>
+          ) : null}
+          {node.isFolder && canNewInside ? (
+            <ContextMenuItem
+              onSelect={() =>
+                setNameDialog({
+                  mode: "new-folder",
+                  anchorPath: node.path,
+                  value: "",
+                })
+              }
+              data-testid={`menu-new-folder-${node.path}`}
+            >
+              <FolderPlus className="mr-2 size-4" /> New Folder
+            </ContextMenuItem>
+          ) : null}
+          {canRename ? (
+            <ContextMenuItem
+              onSelect={() =>
+                setNameDialog({
+                  mode: "rename",
+                  anchorPath: node.path,
+                  value: basenamePathOf(node.path),
+                })
+              }
+              data-testid={`menu-rename-${node.path}`}
+            >
+              <Pencil className="mr-2 size-4" /> Rename
+            </ContextMenuItem>
+          ) : null}
+          {canCut ? (
+            <ContextMenuItem
+              onSelect={() => setClipboardPath(node.path)}
+              data-testid={`menu-cut-${node.path}`}
+            >
+              <Scissors className="mr-2 size-4" /> Cut
+            </ContextMenuItem>
+          ) : null}
+          {canPaste ? (
+            <ContextMenuItem
+              onSelect={() => void pasteInto(node.path)}
+              data-testid={`menu-paste-${node.path}`}
+            >
+              <ClipboardPaste className="mr-2 size-4" /> Paste
+            </ContextMenuItem>
+          ) : null}
+          {canDelete ? (
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() =>
+                setDeleteConfirm({ path: node.path, isFolder: node.isFolder })
+              }
+              data-testid={`menu-delete-${node.path}`}
+            >
+              <Trash2 className="mr-2 size-4" /> Delete
+            </ContextMenuItem>
+          ) : null}
+          {(canAddHere || canDetachThis || hasStdOps) &&
+          canJump &&
+          jumpEntry ? (
             <ContextMenuSeparator />
           ) : null}
           {canJump && jumpEntry ? (
@@ -746,50 +1063,151 @@ export function ComposerWorkspaceEditor({
       className="flex h-full w-full min-h-0 overflow-hidden rounded-md border"
       data-testid="composer-editor"
     >
-      <div className="flex w-[20rem] min-w-0 shrink-0 flex-col border-r">
-        {treePanel}
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {selectedPath ? (
-          (() => {
-            const source = resolveSource(selectedEntry, result, spaceId);
-            // Every file — generated or not — opens as ONE full-width editor on
-            // its producing SOURCE file. Generated files (AGENTS.md, CONTEXT.md)
-            // carry the generated badge + the computed-sections banner + locked
-            // managed regions (from the shared FileEditorPane); their prose edits
-            // save the source and refetch the preview. Operator-gated.
-            if (source) {
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel
+          defaultSize="26%"
+          minSize="18%"
+          className="flex min-h-0 flex-col border-r"
+        >
+          {treePanel}
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
+          {selectedPath ? (
+            (() => {
+              const source = resolveSource(selectedEntry, result, spaceId);
+              // Every file — generated or not — opens as ONE full-width editor on
+              // its producing SOURCE file. Generated files (AGENTS.md, CONTEXT.md)
+              // carry the generated badge + the computed-sections banner + locked
+              // managed regions (from the shared FileEditorPane); their prose edits
+              // save the source and refetch the preview. Operator-gated.
+              if (source) {
+                return (
+                  <ComposerEditablePane
+                    key={`${source.targetKey}:${source.sourceFile}`}
+                    source={source}
+                    entry={selectedEntry}
+                    readOnly={!canEditSource}
+                    onClose={() => setSelectedPath(null)}
+                    onSaved={() => void loadManifest()}
+                  />
+                );
+              }
+              // No editable owning layer (thread files, unresolved ids) → the
+              // read-only rendered preview.
               return (
-                <ComposerEditablePane
-                  key={`${source.targetKey}:${source.sourceFile}`}
-                  source={source}
+                <ComposerRenderedPane
+                  path={selectedPath}
                   entry={selectedEntry}
-                  readOnly={!canEditSource}
+                  file={file}
                   onClose={() => setSelectedPath(null)}
-                  onSaved={() => void loadManifest()}
                 />
               );
+            })()
+          ) : (
+            <div
+              className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground"
+              data-testid="composer-empty-pane"
+            >
+              Select a file to preview its rendered output.
+            </div>
+          )}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+
+      {/* Standard-menu create/rename dialog (v1.1). */}
+      <Dialog
+        open={nameDialog !== null}
+        onOpenChange={(open) => !open && setNameDialog(null)}
+      >
+        <DialogContent data-testid="composer-name-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              {nameDialog?.mode === "rename"
+                ? "Rename"
+                : nameDialog?.mode === "new-folder"
+                  ? "New folder"
+                  : "New file"}
+            </DialogTitle>
+            <DialogDescription>
+              {nameDialog?.mode === "rename"
+                ? "Renames the source file/folder in its owning layer."
+                : "Creates it in the owning source layer; the rendered tree refreshes after."}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            aria-label="Name"
+            data-testid="composer-name-input"
+            value={nameDialog?.value ?? ""}
+            disabled={nameDialog?.busy}
+            onChange={(event) =>
+              setNameDialog((current) =>
+                current
+                  ? { ...current, value: event.target.value, error: null }
+                  : current,
+              )
             }
-            // No editable owning layer (thread files, unresolved ids) → the
-            // read-only rendered preview.
-            return (
-              <ComposerRenderedPane
-                path={selectedPath}
-                entry={selectedEntry}
-                file={file}
-                onClose={() => setSelectedPath(null)}
-              />
-            );
-          })()
-        ) : (
-          <div
-            className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground"
-            data-testid="composer-empty-pane"
-          >
-            Select a file to preview its rendered output.
-          </div>
-        )}
-      </div>
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submitNameDialog();
+              }
+            }}
+          />
+          {nameDialog?.error ? (
+            <p className="text-xs text-destructive">{nameDialog.error}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={nameDialog?.busy}
+              onClick={() => setNameDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={nameDialog?.busy}
+              data-testid="composer-name-submit"
+              onClick={() => void submitNameDialog()}
+            >
+              {nameDialog?.mode === "rename" ? "Rename" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Standard-menu delete confirm (v1.1). */}
+      <AlertDialog
+        open={deleteConfirm !== null}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteConfirm?.isFolder ? "folder" : "file"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirm
+                ? `This removes ${deleteConfirm.path}${
+                    deleteConfirm.isFolder ? " and everything inside it" : ""
+                  } from its source layer.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="composer-delete-confirm"
+              onClick={() => void confirmDelete()}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

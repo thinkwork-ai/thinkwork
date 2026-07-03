@@ -460,26 +460,25 @@ describe("capability write actions (sheet rows)", () => {
     openSheet();
     clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
+    // No persistent banner — the mutation fires and the view refetches so the
+    // live tree + sheet reflect the result.
     await waitFor(() =>
-      expect(screen.getByTestId("mutation-confirmation")).toBeTruthy(),
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "SKILL",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "expenses",
+        },
+      }),
     );
-    expect(grantMock).toHaveBeenCalledWith({
-      input: {
-        tenantId: "tenant-1",
-        capabilityClass: "SKILL",
-        scope: "AGENT",
-        agentId: null,
-        agentProfileId: null,
-        capabilityRef: "expenses",
-      },
-    });
-    const banner = screen.getByTestId("mutation-confirmation");
-    expect(banner.textContent).toContain("Expenses");
-    expect(banner.textContent).toContain("active");
-    expect(refetchMock).toHaveBeenCalled();
+    expect(screen.queryByTestId("mutation-confirmation")).toBeNull();
+    await waitFor(() => expect(refetchMock).toHaveBeenCalled());
   });
 
-  it("a held gate shows the true gate state, not success", async () => {
+  it("a held gate leaves no stuck pending node (no sync ghost)", async () => {
     grantMock.mockResolvedValue(
       grantResult({
         capabilityClass: "skill",
@@ -496,15 +495,12 @@ describe("capability write actions (sheet rows)", () => {
     openSheet();
     clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
-    await waitFor(() =>
-      expect(screen.getByTestId("mutation-confirmation")).toBeTruthy(),
-    );
-    const banner = screen.getByTestId("mutation-confirmation");
-    expect(banner.textContent).toContain("eval_gate");
-    expect(banner.textContent).not.toContain("sync pending");
+    await waitFor(() => expect(grantMock).toHaveBeenCalled());
+    // A held gate (reason ≠ not_installed) is settled immediately — no ghost.
+    expect(editorProps()?.pendingSkillSlug).toBeNull();
   });
 
-  it("post-attach S3 lag renders sync pending, resolving to active when the row lands", async () => {
+  it("post-attach S3 lag forwards a sync ghost to the editor, cleared when the row lands active", async () => {
     grantMock.mockResolvedValue(
       grantResult({
         capabilityClass: "skill",
@@ -521,11 +517,8 @@ describe("capability write actions (sheet rows)", () => {
     openSheet();
     clearDefaultFilters();
     fireEvent.click(screen.getByTestId("attach-skill:expenses"));
-    await waitFor(() =>
-      expect(screen.getByTestId("sync-pending")).toBeTruthy(),
-    );
     // The sync window forwards the affected slug to the editor as a ghost.
-    expect(editorProps()?.pendingSkillSlug).toBe("expenses");
+    await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBe("expenses"));
 
     queryState.inspector = {
       data: inspection({
@@ -545,10 +538,7 @@ describe("capability write actions (sheet rows)", () => {
     };
     view.rerender(<SettingsCapabilities />);
     await waitFor(() =>
-      expect(screen.queryByTestId("sync-pending")).toBeNull(),
-    );
-    expect(screen.getByTestId("mutation-confirmation").textContent).toContain(
-      "active",
+      expect(editorProps()?.pendingSkillSlug).toBeNull(),
     );
   });
 
@@ -578,21 +568,20 @@ describe("capability write actions (sheet rows)", () => {
     openSheet();
     fireEvent.click(screen.getByTestId("detach-confirm-skill:approve-receipt"));
     await waitFor(() =>
-      expect(screen.getByTestId("mutation-confirmation")).toBeTruthy(),
+      expect(detachMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "SKILL",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "approve-receipt",
+        },
+      }),
     );
-    expect(detachMock).toHaveBeenCalledWith({
-      input: {
-        tenantId: "tenant-1",
-        capabilityClass: "SKILL",
-        scope: "AGENT",
-        agentId: null,
-        agentProfileId: null,
-        capabilityRef: "approve-receipt",
-      },
-    });
-    expect(screen.getByTestId("mutation-confirmation").textContent).toContain(
-      "not_installed",
-    );
+    // No persistent banner; the refetch reflects the post-detach state.
+    expect(screen.queryByTestId("mutation-confirmation")).toBeNull();
+    await waitFor(() => expect(refetchMock).toHaveBeenCalled());
   });
 
   it("grant actions are absent on a space selection (R11)", () => {
