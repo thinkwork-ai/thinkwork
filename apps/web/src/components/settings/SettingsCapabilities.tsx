@@ -45,6 +45,7 @@ import {
   ListChecks,
   Puzzle,
   RefreshCw,
+  ScanSearch,
   Search,
   SlidersHorizontal,
   UserRound,
@@ -120,6 +121,7 @@ import {
   ComposerWorkspaceEditor,
   type SkillNodeState,
 } from "@/components/settings/ComposerWorkspaceEditor";
+import { CapabilityInspectorView } from "@/components/settings/CapabilityInspectorView";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -327,6 +329,9 @@ export function SettingsCapabilities() {
   // relocated from the Agents page, mounted with its own fragment-shaped
   // query so the component contract is untouched.
   const [extensionsSheetOpen, setExtensionsSheetOpen] = useState(false);
+  // Inspector view (Agent page merge U8): read-only diagnostics for every
+  // class — survives the capability list's retirement (U9).
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -1193,6 +1198,17 @@ export function SettingsCapabilities() {
             variant="outline"
             size="icon-sm"
             className="h-8 w-8 rounded-md"
+            aria-label="Inspector"
+            title="Inspector — read-only capability diagnostics"
+            onClick={() => setInspectorOpen(true)}
+            data-testid="open-inspector-view"
+          >
+            <ScanSearch className="size-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="h-8 w-8 rounded-md"
             aria-label="Refresh"
             onClick={() => refetchInspection({ requestPolicy: "network-only" })}
             disabled={loading}
@@ -1362,6 +1378,28 @@ export function SettingsCapabilities() {
                 refetchExtensions({ requestPolicy: "network-only" });
                 refetchInspection({ requestPolicy: "network-only" });
               }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}>
+        <SheetContent
+          className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+          data-testid="inspector-sheet"
+        >
+          <SheetHeader>
+            <SheetTitle>Inspector</SheetTitle>
+            <SheetDescription>
+              Read-only view of the effective capability set for the current
+              selection — gate reasons and runtime divergence, no writes.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+            <CapabilityInspectorView
+              items={items}
+              deltas={deltas}
+              loading={loading}
             />
           </div>
         </SheetContent>
