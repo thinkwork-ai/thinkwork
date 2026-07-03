@@ -66,11 +66,13 @@ export async function notifyThreadActivity(payload: {
   snippet?: string | null;
   threadTitle?: string | null;
   createdAt?: string | null;
+  mentioned?: boolean | null;
+  shouldNotify?: boolean | null;
 }): Promise<void> {
   await postToAppSync(
-    `mutation($userId: ID!, $tenantId: ID!, $threadId: ID!, $messageId: ID!, $authorId: ID, $authorType: String!, $snippet: String, $threadTitle: String, $createdAt: AWSDateTime) {
-			notifyThreadActivity(userId: $userId, tenantId: $tenantId, threadId: $threadId, messageId: $messageId, authorId: $authorId, authorType: $authorType, snippet: $snippet, threadTitle: $threadTitle, createdAt: $createdAt) {
-				userId threadId messageId authorId authorType snippet threadTitle createdAt
+    `mutation($userId: ID!, $tenantId: ID!, $threadId: ID!, $messageId: ID!, $authorId: ID, $authorType: String!, $snippet: String, $threadTitle: String, $createdAt: AWSDateTime, $mentioned: Boolean, $shouldNotify: Boolean) {
+			notifyThreadActivity(userId: $userId, tenantId: $tenantId, threadId: $threadId, messageId: $messageId, authorId: $authorId, authorType: $authorType, snippet: $snippet, threadTitle: $threadTitle, createdAt: $createdAt, mentioned: $mentioned, shouldNotify: $shouldNotify) {
+				userId threadId messageId authorId authorType snippet threadTitle createdAt mentioned shouldNotify
 			}
 		}`,
     {
@@ -83,6 +85,8 @@ export async function notifyThreadActivity(payload: {
       snippet: payload.snippet ?? null,
       threadTitle: payload.threadTitle ?? null,
       createdAt: payload.createdAt ?? null,
+      mentioned: payload.mentioned ?? null,
+      shouldNotify: payload.shouldNotify ?? null,
     },
   );
 }

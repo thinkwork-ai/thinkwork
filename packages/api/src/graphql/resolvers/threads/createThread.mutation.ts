@@ -33,6 +33,7 @@ import {
   toThreadParticipantInsert,
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
+import { publishThreadActivity } from "../../../lib/threads/publish-thread-activity.js";
 import { canPostToSpace } from "../spaces/shared.js";
 import {
   PlatformAgentNotFoundError,
@@ -493,6 +494,30 @@ export const createThread = async (
           content: i.firstMessage,
         })
       : [];
+
+  // Per-user activity fan-out for the opening message (KTD5, R11). Ordered
+  // AFTER persistOpeningMessageMentions has committed the mention participant
+  // rows so a freshly @-tagged user is already in the participant set — this
+  // fixes the known createThread notify-before-participant-insert race for
+  // this signal (spaces-urql-doc-cache-no-live-invalidation). Best-effort:
+  // publishThreadActivity never throws.
+  if (firstMessageId && i.firstMessage) {
+    const mentionedUserIds = parsedOpeningMentions
+      .filter((mention) => mention.targetType === "user")
+      .map((mention) => mention.targetId);
+    publishThreadActivity({
+      db,
+      tenantId: row.tenant_id,
+      threadId: row.id,
+      messageId: firstMessageId,
+      authorId: createdById ?? null,
+      authorType: createdByType,
+      snippet: i.firstMessage,
+      threadTitle: row.title,
+      createdAt: openingMessageCreatedAt?.toISOString() ?? null,
+      mentionedUserIds,
+    }).catch(() => {});
+  }
 
   const hasOpeningAgentMentions = parsedOpeningMentions.some(
     (mention) => mention.targetType === "agent",

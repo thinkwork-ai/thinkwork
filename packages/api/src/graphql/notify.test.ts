@@ -36,12 +36,16 @@ describe("notifyThreadActivity", () => {
       snippet: "hello there",
       threadTitle: "General",
       createdAt: "2026-05-29T00:00:00.000Z",
+      mentioned: true,
+      shouldNotify: true,
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const { query, variables } = lastBody();
     expect(query).toContain("notifyThreadActivity");
     expect(query).toContain("$authorType: String!");
+    expect(query).toContain("$mentioned: Boolean");
+    expect(query).toContain("$shouldNotify: Boolean");
     expect(variables).toEqual({
       userId: "u1",
       tenantId: "t1",
@@ -52,6 +56,8 @@ describe("notifyThreadActivity", () => {
       snippet: "hello there",
       threadTitle: "General",
       createdAt: "2026-05-29T00:00:00.000Z",
+      mentioned: true,
+      shouldNotify: true,
     });
   });
 
@@ -71,6 +77,8 @@ describe("notifyThreadActivity", () => {
       snippet: null,
       threadTitle: null,
       createdAt: null,
+      mentioned: null,
+      shouldNotify: null,
     });
   });
 });

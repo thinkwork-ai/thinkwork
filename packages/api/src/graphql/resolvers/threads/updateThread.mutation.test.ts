@@ -374,6 +374,74 @@ describe("updateThread participant-scoped read state", () => {
   });
 });
 
+describe("updateThread Thread Mode override (plan 2026-07-03-003 U3)", () => {
+  it("lets a participant set the override and fires notifyThreadUpdate", async () => {
+    await updateThread(
+      {},
+      {
+        id: "thread-1",
+        input: { modeOverride: "MULTIPLAYER" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updatedThreadValues).toHaveLength(1);
+    expect(updatedThreadValues[0]?.mode_override).toBe("multiplayer");
+    expect(mockNotifyThreadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the override with null and still writes + notifies", async () => {
+    await updateThread(
+      {},
+      {
+        id: "thread-1",
+        input: { modeOverride: null },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updatedThreadValues).toHaveLength(1);
+    expect(updatedThreadValues[0]?.mode_override).toBeNull();
+    expect(mockNotifyThreadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a non-participant caller with FORBIDDEN and writes nothing", async () => {
+    state.participantRows = [];
+
+    await expect(
+      updateThread(
+        {},
+        {
+          id: "thread-1",
+          input: { modeOverride: "AGENT" },
+        },
+        { auth: { authType: "cognito" } } as any,
+      ),
+    ).rejects.toThrow("Thread participant required");
+
+    expect(updatedThreadValues).toHaveLength(0);
+    expect(mockNotifyThreadUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cross-tenant caller with NOT_FOUND and writes nothing", async () => {
+    state.threadRow.tenant_id = "tenant-2";
+
+    await expect(
+      updateThread(
+        {},
+        {
+          id: "thread-1",
+          input: { modeOverride: "AGENT" },
+        },
+        { auth: { authType: "cognito" } } as any,
+      ),
+    ).rejects.toThrow("Thread not found");
+
+    expect(updatedThreadValues).toHaveLength(0);
+    expect(mockNotifyThreadUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe("updateThread pending-question cancel hygiene (plan 2026-06-09-005 U3)", () => {
   it("cancels pending questions when the thread is archived", async () => {
     await updateThread(

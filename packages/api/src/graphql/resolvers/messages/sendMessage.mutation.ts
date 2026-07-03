@@ -25,6 +25,7 @@ import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agen
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
+import { publishThreadActivity } from "../../../lib/threads/publish-thread-activity.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
 import {
@@ -500,6 +501,26 @@ export const sendMessage = async (
     content: row.content ?? undefined,
     senderType,
     senderId: senderId ?? undefined,
+  }).catch(() => {});
+
+  // Per-user activity fan-out (KTD5). Runs post-commit — the mention
+  // participant rows (lines ~254-289) and the sender participant upsert have
+  // already committed, so a freshly @-tagged user is in the participant set
+  // (R11). Best-effort: publishThreadActivity never throws.
+  const mentionedUserIds = parsedMentions
+    .filter((mention) => mention.targetType === "user")
+    .map((mention) => mention.targetId);
+  publishThreadActivity({
+    db,
+    tenantId: thread.tenant_id,
+    threadId: i.threadId,
+    messageId: row.id,
+    authorId: senderId ?? null,
+    authorType: senderType,
+    snippet: row.content ?? null,
+    threadTitle: thread.title,
+    createdAt: messageActivityAt.toISOString(),
+    mentionedUserIds,
   }).catch(() => {});
 
   // Auto-generate thread title from first user message (no updated_at bump)

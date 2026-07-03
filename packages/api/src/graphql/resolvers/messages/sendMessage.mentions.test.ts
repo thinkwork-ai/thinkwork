@@ -114,6 +114,35 @@ describe("sendMessage mention collaboration path", () => {
   });
 });
 
+describe("sendMessage per-user activity fan-out (plan 2026-07-03-003 U1, R8-R11)", () => {
+  it("calls publishThreadActivity post-commit after notifyNewMessage", () => {
+    expect(source).toContain("publishThreadActivity");
+    // Fan-out runs after the transaction commits and after the new-message
+    // notify — the participant rows are already durable at this point.
+    expect(source.indexOf("return messageRow;")).toBeLessThan(
+      source.indexOf("publishThreadActivity({"),
+    );
+    expect(source.indexOf("notifyNewMessage({")).toBeLessThan(
+      source.indexOf("publishThreadActivity({"),
+    );
+  });
+
+  it("passes the user-mention target ids so a freshly-tagged user is in the fan-out (R11)", () => {
+    expect(source).toContain(
+      '.filter((mention) => mention.targetType === "user")',
+    );
+    expect(source).toContain("mentionedUserIds,");
+  });
+
+  it("threads the author/thread payload through the fan-out", () => {
+    const call = source.slice(source.indexOf("publishThreadActivity({"));
+    expect(call).toContain("authorId: senderId ?? null");
+    expect(call).toContain("authorType: senderType");
+    expect(call).toContain("messageId: row.id");
+    expect(call).toContain("createdAt: messageActivityAt.toISOString()");
+  });
+});
+
 describe("sendMessage sender-as-participant upsert (plan 2026-07-03-003 U2, R13)", () => {
   it("upserts the human sender as a participant inside the message transaction", () => {
     // The upsert must live inside the db.transaction callback alongside the
