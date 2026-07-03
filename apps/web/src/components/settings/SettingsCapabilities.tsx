@@ -1275,7 +1275,7 @@ export function SettingsCapabilities({
   );
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-6 py-6">
       <div className="shrink-0">
         <SettingsHeader
           title="Agents"
