@@ -74,33 +74,4 @@ describe("ManagedApplicationRouteGuard", () => {
     expect(screen.getByText("CRM settings")).toBeTruthy();
     expect(screen.queryByText("Navigate to /settings/general")).toBeNull();
   });
-
-  it("renders disabled app routes when disabled state is explicitly allowed", () => {
-    useQueryMock.mockReturnValue([
-      {
-        fetching: false,
-        data: {
-          deploymentStatus: {
-            managedApplications: [
-              {
-                key: "cognee",
-                provisioned: false,
-                runtimeEnabled: false,
-              },
-            ],
-          },
-        },
-      },
-      vi.fn(),
-    ]);
-
-    render(
-      <ManagedApplicationRouteGuard appKey="cognee" allowDisabled>
-        <div>Cognee settings</div>
-      </ManagedApplicationRouteGuard>,
-    );
-
-    expect(screen.getByText("Cognee settings")).toBeTruthy();
-    expect(screen.queryByText("Navigate to /settings/general")).toBeNull();
-  });
 });

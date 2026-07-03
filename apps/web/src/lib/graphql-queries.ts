@@ -2275,7 +2275,6 @@ export const ComputerMemorySystemConfigQuery = gql`
       activeEngine
       managedMemoryEnabled
       hindsightEnabled
-      cogneeMemoryEnabled
       userMemoryEnabled
       spaceMemoryEnabled
       legacyHindsightAvailable

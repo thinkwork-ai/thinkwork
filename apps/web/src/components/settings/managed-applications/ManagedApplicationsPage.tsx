@@ -6,7 +6,6 @@ import { ManagedApplicationRow } from "./ManagedApplicationRow";
 import {
   SettingsDeploymentStatusQuery,
   SettingsManagedApplicationsQuery,
-  SettingsPluginInstallsQuery,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -23,27 +22,13 @@ export function ManagedApplicationsPage() {
     query: SettingsDeploymentStatusQuery,
     requestPolicy: "cache-and-network",
   });
-  const [installsResult] = useQuery({
-    query: SettingsPluginInstallsQuery,
-    requestPolicy: "cache-and-network",
-  });
 
   // Transition IA: once an app has a plugin install, Plugins owns the lifecycle
   // home and this legacy managed-app list hides that backing app row. Query
   // failures keep legacy rows visible so operators do not lose access.
-  const pluginInstalls = installsResult.data?.pluginInstalls ?? [];
-  const twentyPluginInstalled = pluginInstalls.some(
-    (install) => install.pluginKey === "twenty",
-  );
-  const companyBrainPluginInstalled = pluginInstalls.some(
-    (install) => install.pluginKey === "company-brain",
-  );
-
   const allApps = appsResult.data?.managedApplications ?? [];
   const apps = allApps.filter((app) => {
-    if (twentyPluginInstalled && app.key === "twenty") return false;
-    if (companyBrainPluginInstalled && app.key === "cognee") return false;
-    return true;
+    return app.key === "twenty" || app.key === "n8n";
   });
   const runtimeApps =
     statusResult.data?.deploymentStatus.managedApplications ?? [];
@@ -71,7 +56,7 @@ export function ManagedApplicationsPage() {
     <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Applications"
-        description="Legacy managed-application operations. ThinkWork Brain and Twenty CRM move to Plugins once installed."
+        description="Legacy managed-application operations. Runtime apps move to Plugins once installed."
         actions={
           <Button
             type="button"

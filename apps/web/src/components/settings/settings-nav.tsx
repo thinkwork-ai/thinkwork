@@ -29,13 +29,6 @@ export interface SettingsNavItem {
   operatorOnly?: boolean;
   /** When true, only render in the desktop build (needs the local bridge). */
   desktopOnly?: boolean;
-  /**
-   * Optional managed app that must be runtime-enabled before the item shows.
-   * Cognee-only since the U10 Twenty plugin migration: Twenty's surfaces
-   * (plugin detail + /settings/crm) gate on plugin/deployment state, not on
-   * a nav-level managed-app guard.
-   */
-  managedAppKey?: "cognee";
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
@@ -80,9 +73,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   // "Applications" (managed-applications) is retired from the nav — Plugins
-  // supersedes it. Twenty already moved to a plugin; Cognee is managed-app
-  // only until the ThinkWork Brain plugin absorbs it. The route still resolves
-  // by URL until that lands; the deployment plan dialog stays for plugin infra.
+  // supersedes it. The route still resolves by URL for plugin infrastructure.
   // Plugins is deliberately NOT operatorOnly (plan 2026-06-12-001 U8): all
   // members can browse and connect; install/update/uninstall gate at render
   // time inside the pages.
@@ -150,14 +141,11 @@ export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
   isDesktop: boolean;
-  managedApplications?: Partial<Record<"cognee", boolean>>;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
     (item) =>
       (!item.operatorOnly || (opts.roleResolved && opts.isOperator)) &&
-      (!item.desktopOnly || opts.isDesktop) &&
-      (!item.managedAppKey ||
-        opts.managedApplications?.[item.managedAppKey] === true),
+      (!item.desktopOnly || opts.isDesktop),
   );
 }
 

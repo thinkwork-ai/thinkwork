@@ -20,16 +20,13 @@ export function ManagedApplicationRow({
   runtime?: RuntimeDeployment;
 }) {
   const key = app.key as ManagedAppKey;
-  const displayName = key === "cognee" ? "ThinkWork Brain" : app.displayName;
+  const displayName = app.displayName;
   const runtimeEnabled =
     runtime?.runtimeEnabled ?? app.currentStatus === "running";
   const status = runtime?.status ?? app.currentStatus;
   const detailPath =
     key === "twenty" ? "/settings/crm" : "/settings/plugins/$pluginKey";
-  const detailParams =
-    key === "twenty"
-      ? undefined
-      : { pluginKey: key === "cognee" ? "company-brain" : key };
+  const detailParams = key === "twenty" ? undefined : { pluginKey: key };
 
   return (
     <Link
@@ -80,7 +77,7 @@ function managedAppDescription(key: ManagedAppKey): string {
   if (key === "n8n") {
     return "Self-hosted workflow automation runtime with queue workers, retained workflow data, and native MCP integration.";
   }
-  return "ThinkWork Brain private context substrate with dedicated graph/vector storage and provider credentials.";
+  return "Managed application runtime operated by ThinkWork.";
 }
 
 function statusBadgeClassName(status: string) {

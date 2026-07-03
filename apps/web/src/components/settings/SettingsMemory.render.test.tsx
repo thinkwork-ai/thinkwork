@@ -428,13 +428,10 @@ describe("SettingsMemory render", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText("Memory service update required")).toBeNull();
-    expect(
-      screen.queryByText(/has not switched to Hindsight/i),
-    ).toBeNull();
+    expect(screen.queryByText(/has not switched to Hindsight/i)).toBeNull();
     expect(screen.queryByText(/MEMORY_ENGINE/i)).toBeNull();
     expect(screen.queryByText(/Redeploy required/i)).toBeNull();
     expect(screen.queryByText("Company distillation")).toBeNull();
     expect(screen.queryByText("Wiki projection")).toBeNull();
-    expect(screen.queryByText("Cognee")).toBeNull();
   });
 });

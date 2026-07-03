@@ -64,7 +64,7 @@ export function ManagedApplicationPlanDialog({
   );
   // Raw string key: plugin-created jobs reuse this dialog, so the key is
   // no longer coerced into the closed ManagedAppKey union.
-  const key = currentJob?.appKey ?? "cognee";
+  const key = currentJob?.appKey ?? "application";
   const destructiveConfirmation = destructiveConfirmationFor(key);
   const ready =
     !!currentJob?.planDigest && currentJob.status === "awaiting_approval";
@@ -87,7 +87,12 @@ export function ManagedApplicationPlanDialog({
         : "Deploy application";
 
   useEffect(() => {
-    if (!open || !jobId || !currentJob || terminalJobStatus(currentJob.status)) {
+    if (
+      !open ||
+      !jobId ||
+      !currentJob ||
+      terminalJobStatus(currentJob.status)
+    ) {
       return;
     }
     const timer = window.setInterval(() => {
@@ -210,18 +215,13 @@ export function ManagedApplicationPlanDialog({
                     Data impact
                   </p>
                   <Badge
-                    variant={
-                      dataImpact.destructive ? "destructive" : "outline"
-                    }
+                    variant={dataImpact.destructive ? "destructive" : "outline"}
                   >
-                    {dataImpact.destructive
-                      ? "destructive"
-                      : "non-destructive"}
+                    {dataImpact.destructive ? "destructive" : "non-destructive"}
                   </Badge>
                 </div>
                 <p className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
-                  {dataImpact.summary ??
-                    "No destructive data impact reported."}
+                  {dataImpact.summary ?? "No destructive data impact reported."}
                 </p>
                 {dataImpact.resources?.length ? (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
@@ -287,9 +287,7 @@ export function ManagedApplicationPlanDialog({
               onClick={() => refreshJob({ requestPolicy: "network-only" })}
             >
               <RefreshCw
-                className={`size-4${
-                  jobResult.fetching ? " animate-spin" : ""
-                }`}
+                className={`size-4${jobResult.fetching ? " animate-spin" : ""}`}
               />
               Refresh status
             </Button>

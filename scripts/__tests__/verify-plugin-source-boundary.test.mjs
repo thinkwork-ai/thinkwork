@@ -161,16 +161,10 @@ describe("verify-plugin-source-boundary", () => {
         dir,
         "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
       );
-      await writeFixtureFile(
-        dir,
-        "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
-      );
       const fixtureSharedAllowlist = sharedPluginTermAllowlist.filter(
         (entry) =>
           entry.path ===
-            "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts" ||
-          entry.path ===
-            "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
+          "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
       );
 
       const result = await findPluginSourceBoundaryViolations({
@@ -182,7 +176,7 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations, []);
       assert.deepEqual(result.staleAllowlistEntries, []);
       assert.equal(result.allowlistMatchCount, 0);
-      assert.equal(result.sharedAllowlistMatchCount, 2);
+      assert.equal(result.sharedAllowlistMatchCount, 1);
     });
   });
 

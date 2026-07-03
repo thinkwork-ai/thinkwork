@@ -162,7 +162,6 @@ export function PluginDetail() {
   const installNeedsKey = Boolean(
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
-  const isCompanyBrain = pluginKey === "company-brain";
   const isWorkosAuth = pluginKey === WORKOS_AUTH_PLUGIN_KEY;
   const twentyDeploymentProvisioned = Boolean(
     pluginKey === "twenty" &&
@@ -630,37 +629,10 @@ export function PluginDetail() {
                         {component.lastError}
                       </p>
                     ) : null}
-                    {isCompanyBrain &&
-                    component.componentType === "infrastructure" &&
-                    handlerRefBoolean(
-                      component.handlerRef,
-                      "adoptionRequiresNoChange",
-                    ) ? (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Adoption plan verifies the existing Brain substrate
-                        before ownership changes.
-                      </p>
-                    ) : null}
                   </div>
                 ))}
               </div>
             )}
-          </SettingsSection>
-        ) : null}
-
-        {isCompanyBrain && (install || hasActiveEntitlement) ? (
-          <SettingsSection label="Workspace">
-            <SettingsRow
-              label="Context diagnostics"
-              description="Inspect substrate status, migration posture, evidence, and operator actions."
-            >
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/context-diagnostics">
-                  <Settings2 className="size-4" />
-                  Open diagnostics
-                </Link>
-              </Button>
-            </SettingsRow>
           </SettingsSection>
         ) : null}
 
@@ -1262,9 +1234,6 @@ function pluginDetailDescription(entry: {
   pluginKey: string;
   description: string;
 }): string {
-  if (entry.pluginKey === "company-brain") {
-    return entry.description.replace(/^Premium\s+/i, "");
-  }
   return entry.description;
 }
 
@@ -1307,23 +1276,6 @@ function findPluginDeploymentJobId(
     }
   }
   return null;
-}
-
-function handlerRefBoolean(value: unknown, key: string): boolean {
-  let ref = value;
-  if (typeof ref === "string") {
-    try {
-      ref = JSON.parse(ref);
-    } catch {
-      return false;
-    }
-  }
-  return Boolean(
-    ref &&
-    typeof ref === "object" &&
-    !Array.isArray(ref) &&
-    (ref as Record<string, unknown>)[key] === true,
-  );
 }
 
 /**
