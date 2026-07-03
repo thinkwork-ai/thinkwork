@@ -5,12 +5,14 @@ description: The operator-facing Evaluations UI — dashboard, Studio, Run Evalu
 
 import { Aside } from "@astrojs/starlight/components";
 
-The Evaluations pages are where operators author test cases, start runs, and drill into per-test results. They sit on top of the same GraphQL + `eval-runner` Lambda path the [`thinkwork eval` CLI](/guides/evaluations/#from-the-cli) uses, so runs started in the UI show up in the CLI and vice versa.
+The Evaluations pages are where operators author test cases, manage profiles, start runs, and drill into per-test results. They sit on top of the same GraphQL + `eval-runner`/`eval-worker` Lambda path the [`thinkwork eval` CLI](/guides/evaluations/#from-the-cli) uses, so runs started in the UI show up in the CLI and vice versa.
 
-**Route:** `/evaluations`
-**File:** `apps/web/src/routes/_authed/_tenant/evaluations/`
+**Route:** `/settings/evaluations`
+**File:** `apps/web/src/components/settings/SettingsEval*.tsx`
 
-See the [Evaluations guide](/guides/evaluations/) for the architecture, assertion types, scoring model, and CLI reference. This page walks through the UI itself.
+Sub-pages: `/settings/evaluations/studio` (test cases), `/settings/evaluations/datasets` (datasets), `/settings/evaluations/profiles` (profiles), `/settings/evaluations/compare` (run comparison), `/settings/evaluations/$runId` (run detail).
+
+See the [Evaluations guide](/guides/evaluations/) for the architecture, profiles, execution tiers, assertion types, scoring model, and CLI reference. This page walks through the UI itself.
 
 ## Agent target
 
@@ -22,15 +24,27 @@ Cost attribution: `cost_events.agent_id` on eval-source events now equals the pl
 
 ## Dashboard
 
-The dashboard at `/evaluations` is the operator's at-a-glance view.
+The dashboard at `/settings/evaluations` is the operator's at-a-glance view.
 
 - **Summary metric cards** — Total Runs, Latest Pass Rate, Average Score, Regressions. The pass-rate card colours green ≥ 90%, yellow ≥ 70%, red below. Regressions turns red when > 0.
 - **Pass Rate Trend** chart — the last 30 days, zero-filled so the x-axis stays consistent even when there are only a handful of runs. Backed by `EvalTimeSeriesQuery`.
-- **Recent Runs** table — every completed/running/pending run for the tenant. Columns: status, categories, template, model, tests, pass rate, cost, date. **Click any row to open the Run Results page** for that run.
+- **Recent Runs** table — every completed/running/pending run for the tenant. Columns: status, categories, source, profile, model, tests, pass rate, **errors**, **unstable**, cost. **Click any row to open the Run Results page** for that run.
 
-The header has three actions:
+<Aside type="tip" title="Reading the Errors column">
+  Errors are infrastructure failures (mostly Bedrock throttles/timeouts), **not**
+  failed test cases — they never count against the pass rate. A high Errors
+  count with a healthy pass rate means the scored results are still valid; the
+  run just couldn't complete every case. The usual cause is a low Bedrock
+  requests-per-minute quota on the run's model — see
+  [Throughput](/guides/evaluations/#throughput).
+</Aside>
 
-- **Studio** → `/evaluations/studio` — the test-case CRUD surface.
+The header actions:
+
+- **Studio** → `/settings/evaluations/studio` — the test-case CRUD surface.
+- **Datasets** → `/settings/evaluations/datasets` — dataset list + per-dataset case view.
+- **Profiles** → `/settings/evaluations/profiles` — the [profile editor](#profiles).
+- **Compare** → `/settings/evaluations/compare` — [side-by-side run comparison](#compare).
 - **Schedules** → the shared Scheduled Jobs page filtered to `trigger_type: "eval_scheduled"`.
 - **Run Evaluation** → opens the [Run Evaluation dialog](#run-evaluation-dialog).
 
@@ -49,40 +63,60 @@ The model column shortens Bedrock IDs so `us.anthropic.claude-haiku-4-5-20251001
 
 ## Run Evaluation dialog
 
-The dialog is where a run gets started. It has two inputs:
+The dialog is where a run gets started:
 
-| Field          | Purpose                                                                                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Model**      | Optional override of the platform agent's default eval model. Overrides must be enabled in the tenant [Model Catalog](/applications/admin/model-catalog/). |
-| **Categories** | Multi-select pills. Click **All Categories** to run every enabled test case; click individual chips to run a subset.                                       |
+| Field              | Purpose                                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Profile**        | The [eval profile](/guides/evaluations/#eval-profiles) (model + judge + trials) to run against. Blank = the tenant's **Default** profile (Kimi K2.5). |
+| **Scope**          | A whole dataset, **All Categories**, a category subset (multi-select pills), or specific test cases.                                              |
+| **Full fidelity**  | Optional toggle. Forces every case through the [agent tier](/guides/evaluations/#execution-tiers) regardless of its `execution_tier` — highest signal, slowest/most expensive. |
 
-On submit the dialog calls `startEvalRun`, the row shows up in Recent Runs as `pending`, and the `eval-runner` Lambda picks it up asynchronously. The invocation target is always the tenant platform agent (see [Agent target](#agent-target) above).
+On submit the dialog calls `startEvalRun` with the chosen `profileId` (and `fullFidelity` when set); the row shows up in Recent Runs as `pending`, and the fan-out Lambdas pick it up asynchronously. The invocation target is always the tenant platform agent (see [Agent target](#agent-target) above).
 
-If an override is absent from the tenant catalog or has been disabled there, the
-API rejects the run instead of falling back to a globally seeded model.
+A profile's model and judge must be enabled in the tenant [Model Catalog](/applications/admin/model-catalog/); if a pinned model is absent or disabled there, the API rejects the run instead of falling back to a globally seeded model.
+
+## Profiles
+
+**Route:** `/settings/evaluations/profiles`
+
+A profile bundles the **model** the platform agent runs under, the **judge model** for `llm-rubric` scoring (blank = deployed default), and a **trials** count. Every tenant has a synthesized **Default** (Kimi K2.5, default judge, 1 trial); create more to compare models on the same dataset — e.g. a "Haiku 4.5" profile.
+
+Profiles are operator-gated (model/judge must exist in the Model Catalog). Each run pins its resolved profile into `profileSnapshot`, so editing or deleting a profile never rewrites what a past run measured.
+
+## Compare
+
+**Route:** `/settings/evaluations/compare`
+
+Pick two completed runs to see their pass rates, per-category deltas, and cost side by side. Compare reads each run's pinned snapshot and raises **comparability flags** when the two aren't apples-to-apples — different dataset version, scoring version, profile, or [execution-tier mix](/guides/evaluations/#execution-tiers). Heed the flags: a model-tier-heavy run and an all-agent run aren't directly comparable even on the same cases.
+
+## Datasets
+
+**Route:** `/settings/evaluations/datasets`
+
+Lists the tenant's datasets — **Baseline Red Team** plus any custom or per-skill datasets. Open one to see its cases and each case's **quality state** (`active` / `needs-revision` / `retired`). Dataset-launched runs pin the dataset version and run only `active` cases, so a curated-out rubric can't pollute the score. See [Datasets and the starter pack](/guides/evaluations/#datasets-and-the-starter-pack) for the curation model.
 
 ## Studio — test case list
 
-The Studio at `/evaluations/studio` is the test-case CRUD surface. Every row is a test case stored in `eval_test_cases`; the row lives per-tenant and carries the assertion + evaluator config.
+The Studio at `/settings/evaluations/studio` is the test-case CRUD surface. Every row is a test case stored in `eval_test_cases`; the row lives per-tenant and carries the assertion + evaluator config.
 
-**Route:** `/evaluations/studio`
+**Route:** `/settings/evaluations/studio`
 
 Columns: Name (clickable → [Test Case detail](#test-case-detail)), Category, Evaluators (count), Assertions (count), Enabled toggle, Updated.
 
 Actions:
 
-- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the 189-test ThinkWork RedTeam pack across 4 categories. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
-- **New test case** → `/evaluations/studio/new` — the form described below.
+- **Import starter pack** — calls the `seedEvalTestCases` mutation to idempotently import the ThinkWork RedTeam pack (189 seeded cases; 166 `active`, the rest parked `needs-revision`) across 4 dimensions over 3 surfaces. Re-runs are safe (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
+- **New test case** → `/settings/evaluations/studio/new` — the form described below.
 - **Search by name** — free-text filter over `evalTestCases(tenantId, search)`.
 - **Trash icon** per row — `deleteEvalTestCase` mutation, confirms first.
 
 ### First-visit auto-seed
 
-The Studio auto-seeds the 189-case starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent so re-visits don't duplicate.
+The Studio auto-seeds the starter pack on a tenant's first visit (the `evalTestCases` query checks for any `source='yaml-seed'` rows and imports if zero). The seed is idempotent and versioned, so re-visits don't duplicate and a baseline-version bump re-propagates curation state without clobbering local edits.
 
 ## Test Case detail
 
-**Route:** `/evaluations/studio/$testCaseId`
+**Route:** `/settings/evaluations/studio/$testCaseId`
 
 Two sections:
 
@@ -93,7 +127,7 @@ The header shows the Enabled badge plus **Edit** and **Delete** actions.
 
 ## Test Case editor
 
-**Route:** `/evaluations/studio/edit/$testCaseId` (or `/evaluations/studio/new`)
+**Route:** `/settings/evaluations/studio/edit/$testCaseId` (or `/settings/evaluations/studio/new`)
 
 The editor is a react-hook-form + zod flow covering every field on an `eval_test_cases` row:
 
@@ -106,13 +140,13 @@ There is no per-test-case agent picker — every case runs against the tenant pl
 
 ## Run Results
 
-**Route:** `/evaluations/$runId`
+**Route:** `/settings/evaluations/$runId`
 
 The run-detail page is the operator's drill-in view. It has three layers:
 
-1. **Header** — status badge, pass rate, total cost, agent template name, timestamp. Live while `pending`/`running` — subscription-driven with a 3s poll fallback. The trailing action button is **Cancel** while running, **Delete** otherwise.
+1. **Header** — status badge, pass rate, unstable count, total cost (marked _partial_ when a case threw or throttled), profile, timestamp. Live while `pending`/`running` — subscription-driven with a 3s poll fallback. The trailing action button is **Cancel** while running, **Delete** otherwise.
 2. **Category filter badges** — one per category present in the run, each coloured by its per-category pass rate (green ≥ 90%, yellow ≥ 70%, red below) and showing the percentage inline (`red-team-prompt-injection 21%`). Click to filter; click again to clear.
-3. **Results DataTable** — per-test rows with test name, category badge, status, score, duration. **Click any row to open the [Result Detail Sheet](#result-detail-sheet)**.
+3. **Results DataTable** — per-test rows with test name, category badge, status, score, duration, and a **model call** badge on [model-tier](/guides/evaluations/#execution-tiers) rows. **Click any row to open the [Result Detail Sheet](#result-detail-sheet)**.
 
 ### Result Detail Sheet
 
@@ -129,14 +163,14 @@ Clicking a row slides a right-docked Sheet over the table with:
   The `reason` string is your friend. Look for the prefix: `LLM judge: ...`
   means the Bedrock judge ran and returned a verdict; `Heuristic rubric check
   ...` means Bedrock rejected the invoke and the keyword-fallback ran. If you
-  see heuristic fallbacks across a run, check the `eval-runner` Lambda's IAM —
+  see heuristic fallbacks across a run, check the eval Lambda role's IAM —
   see the [Architecture section](/guides/evaluations/#architecture) for the
   Bedrock access model.
 </Aside>
 
 ## Scheduled runs
 
-The **Schedules** button in the dashboard header navigates to `/scheduled-jobs?type=eval_scheduled` — the shared scheduled-jobs UI filtered to eval triggers. Create a schedule with the same inputs the Run Evaluation dialog takes (template, categories, optional model); the `job-trigger` Lambda fires `startEvalRun` on cron, and the resulting run appears in Recent Runs like any UI-started run.
+The **Schedules** button in the dashboard header navigates to `/scheduled-jobs?type=eval_scheduled` — the shared scheduled-jobs UI filtered to eval triggers. Create a schedule with the same inputs the Run Evaluation dialog takes (profile, dataset/categories, evaluator IDs); the `job-trigger` Lambda fires `startEvalRun` on cron, and the resulting run appears in Recent Runs like any UI-started run.
 
 ## Keyboard / accessibility
 
@@ -146,6 +180,6 @@ The **Schedules** button in the dashboard header navigates to `/scheduled-jobs?t
 
 ## Related
 
-- [Evaluations guide](/guides/evaluations/) — architecture, assertion types, scoring, CLI reference
+- [Evaluations guide](/guides/evaluations/) — architecture, profiles, execution tiers, assertion types, scoring, CLI reference
+- [Model Catalog](/applications/admin/model-catalog/) — enable the models a profile can pin
 - [Automations](/applications/web/automations/) — the cron UI that powers eval schedules
-- [Agent Templates](/applications/web/agent-templates/) — the templates the Run Evaluation dialog picks from

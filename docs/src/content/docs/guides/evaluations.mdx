@@ -1,13 +1,13 @@
 ---
 title: Evaluations
-description: Evaluate agents with reusable test cases scored by deterministic assertions, LLM-as-judge rubrics, and AWS Bedrock AgentCore's built-in evaluators. Author in the Studio UI, run from the CLI or UI, and see per-test results with reasons.
+description: Evaluate agents with reusable test cases scored by deterministic assertions, LLM-as-judge rubrics, and AWS Bedrock AgentCore's built-in evaluators. Author in the Studio UI, pick an eval profile, run from the CLI or UI, and see per-test results with reasons.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Evaluations measure how well your agents behave on a known set of prompts. You write a test case once, run it against an agent template, and ThinkWork scores the response using a mix of deterministic assertions (contains/not-contains/regex/equals), an LLM-as-judge rubric, and AWS Bedrock AgentCore's built-in evaluators (helpfulness, tool-selection accuracy, refusal, etc.).
+Evaluations measure how well your agents behave on a known set of prompts. You write a test case once, run it against an [eval profile](#eval-profiles) (a pinned model + judge + trial count), and ThinkWork scores the response using a mix of deterministic assertions (contains/not-contains/regex/equals), an LLM-as-judge rubric, and AWS Bedrock AgentCore's built-in evaluators (helpfulness, tool-selection accuracy, refusal, etc.).
 
-Runs are first-class objects stored in Postgres. Every run has per-test results with the input, the agent's output, each assertion's pass/fail + reason, per-evaluator scores with explanations, duration, and cost. You can re-open a run weeks later and see exactly what happened.
+Runs are first-class objects stored in Postgres. Every run has per-test results with the input, the agent's output, each assertion's pass/fail + reason, per-evaluator scores with explanations, duration, per-turn tokens/cost, and an execution-tier badge. You can re-open a run weeks later and see exactly what happened — and the profile it ran against is pinned into the run, so a later model or judge change never rewrites history.
 
 <Aside type="note" title="Managed execution">
   Evaluation runs execute through the managed AgentCore path. Desktop and mobile
@@ -17,32 +17,67 @@ Runs are first-class objects stored in Postgres. Every run has per-test results 
 
 ## How a run works
 
-Evaluation runs follow the managed eval-runner path:
+Evaluation runs follow the managed eval-runner path. A run fans out one SQS message per `(case, trial)` and a pool of `eval-worker` invocations scores them in parallel:
 
 ```
-User clicks "Run Evaluation" in Studio      ← or `thinkwork eval run`
-  ↓ GraphQL: startEvalRun(tenantId, input)
+User clicks "Run Evaluation"              ← or `thinkwork eval run`
+  ↓ GraphQL: startEvalRun(tenantId, input)   (input carries profileId + scope)
   ↓ eval_runs row inserted (status=pending)
-  ↓ System Workflow: evaluation-runs Standard Step Functions parent
-  ↓ SnapshotTestPack checkpoint records selected categories / testCaseIds
-  ↓ RunEvaluation Task invokes eval-runner Lambda
+  ↓ resolved profile is pinned into eval_runs.profileSnapshot
+  ↓   ({ model, judgeModel, trials, tierCounts, composedSystemPrompt })
+  ↓ eval-runner Lambda: expand scope → one message per (case, trial)
+  ↓   • model-tier cases carry the run's composed system prompt
+  ↓   • the FIFO lane count is model-aware (see Throughput)
   ↓
-eval-runner (concurrency=5 per run):
-  1. Load test cases for the run:
-     explicit testCaseIds first, then categories, then all enabled cases
-  2. For each test case, in parallel batches:
-     a. InvokeAgentRuntimeCommand on AgentCore with the test case query
-     b. Wait for OTel spans to land in CloudWatch (session.id attribute)
-     c. Run deterministic assertions locally on the response
-     d. llm-rubric assertions → Bedrock Converse with claude-haiku-4-5 judge
-     e. Per-test AgentCore evaluators → EvaluateCommand(sessionSpans)
-     f. Insert eval_results row with all scores + reasons
-  3. Update eval_runs aggregates (passed / failed / pass_rate / cost_usd)
-  4. Record System Workflow step events + score-summary evidence
-  5. Notify AppSync so subscribed UI tabs live-update
+eval-worker (parallel across FIFO lanes):
+  1. Execute the case at its tier:
+     • agent tier → InvokeAgentRuntime on AgentCore (a full Pi turn)
+     • model tier → one stateless Bedrock Converse call against the
+       run's pinned composed system prompt (no tools, no workspace)
+  2. Run deterministic assertions locally on the response
+  3. llm-rubric assertions → Bedrock Converse with the profile's judge model
+  4. Per-test AgentCore evaluators → EvaluateCommand(sessionSpans)
+  5. Insert eval_results row: scores + reasons + executedTier + per-turn
+     tokens/cost (agent tier); throttles redrive, never a false zero
+  ↓
+Aggregation: trials collapse to one case verdict (majority; ties →
+  unstable), run rollups update (passed / failed / unstable / pass_rate /
+  cost_usd / cost_partial / p50 + p95 latency), AppSync notifies the UI.
 ```
 
-Every run executes against the tenant's [platform agent](/applications/web/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and baseline model that AgentCore loads come from that agent's configuration. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
+Every run executes against the tenant's [platform agent](/applications/admin/evaluations/#agent-target) — the single `agents` row with `is_platform_default = true`. The workspace, tools, and (for agent-tier cases) the composed system prompt that AgentCore loads come from that agent's configuration and the run's chosen profile. Tests that turn on tool-surface assumptions (for example, "the agent should refuse to web-search") depend on what's enabled on the platform agent.
+
+## Eval profiles
+
+A **profile** is the agent-under-test configuration a run executes against. It bundles three things:
+
+| Field        | Meaning                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `model`      | The Bedrock model the platform agent runs under for this run (must be enabled in the tenant [Model Catalog](/applications/admin/model-catalog/)). |
+| `judgeModel` | The model that scores `llm-rubric` assertions. `null` = the deployed default (`claude-haiku-4-5`). |
+| `trials`     | How many times each rubric-bearing case runs, to smooth judge flakiness (see [Trials](#trials-and-unstable-verdicts)). |
+
+Every tenant has a **Default** profile (model `moonshotai.kimi-k2.5`, default judge, 1 trial), synthesized on first use. Create more profiles — e.g. a "Haiku 4.5" profile — to compare models on the same dataset. The Run dialog picks a profile; the CLI always uses the default.
+
+At dispatch the resolved profile is **pinned** into `eval_runs.profileSnapshot`, so editing or deleting the profile later never changes what an old run measured. The [Compare](/applications/admin/evaluations/#compare) view reads these snapshots and warns when two runs aren't apples-to-apples (different dataset version, scoring version, or profile).
+
+## Execution tiers
+
+Not every case needs a full agent turn. Each case carries an `execution_tier`:
+
+- **`agent`** (default) — the case runs as a complete Pi turn on AgentCore: workspace mounted, tools available, memory in play. This is required whenever a "pass" means the agent _declines to call a tool_ or refuses a workspace mutation — the behavior only exists when the tools exist. Data-boundary, tool-misuse, and all skill cases are agent-tier.
+- **`model`** — the case runs as a single stateless Bedrock Converse call against the run's composed system prompt, with no tools and no workspace. Roughly 3–5× faster and far cheaper. Suitable for cases that test what the model _says_ (prompt-injection resistance, safety-scope refusals) rather than what it _does_.
+
+The composed system prompt for model-tier cases is captured **once per run** (a single agent ping) and pinned into the profile snapshot, so all model-tier cases in a run score against the exact same prompt. If that capture fails, the run degrades safely to all-agent-tier.
+
+<Aside type="caution" title="Full-fidelity override">
+  Set **Full fidelity** on a run (`fullFidelity: true`) to force every case
+  through the agent tier regardless of its `execution_tier`. Use it when you
+  want the highest-signal run and don't care about speed or cost — e.g. a
+  release gate.
+</Aside>
+
+The run detail table shows a **model call** badge on model-tier rows, and the run pins a `tierCounts` object (model + agent counts) so you can see the mix at a glance. Mixing tiers changes comparability — Compare flags two runs whose tier mix differs.
 
 ## Authoring test cases
 
@@ -94,9 +129,18 @@ Example test case (what the Studio editor writes):
 
 ### `llm-rubric` — LLM-as-judge
 
-`llm-rubric` assertions are judged by Bedrock Converse against `claude-haiku-4-5` (override via the `EVAL_JUDGE_MODEL_ID` env var on the eval-runner Lambda). The judge is given the query, the agent's response, and the rubric text, and returns a JSON verdict with `passed`, `reasoning`, and a 0–1 `score`.
+`llm-rubric` assertions are judged by Bedrock Converse against the **profile's judge model** — `claude-haiku-4-5` unless the profile pins a different `judgeModel`. The judge is given the query, the agent's response, and the rubric text, and returns a JSON verdict with `passed`, `reasoning`, and a 0–1 `score`.
 
 If Bedrock rejects the call (e.g. model access not granted), the evaluator falls back to a keyword heuristic: rubrics that mention "refuse" / "should not" / "should refuse" pass when the response contains a refusal phrase (`i can't`, `sorry`, `not authorized`, etc.). The fallback is by design — test runs keep producing data instead of erroring.
+
+### Trials and unstable verdicts
+
+LLM judges are slightly non-deterministic — the same response can score pass one call and fail the next. A profile's `trials` count runs each **rubric-bearing** case that many times (deterministic assertions never flake, so they run once regardless). The trials collapse to a single case verdict by majority:
+
+- Majority pass → `pass`; majority fail → `fail`.
+- A tie (no majority) → **`unstable`** — the case ran but the judge couldn't agree with itself. Unstable cases are counted separately (`eval_runs.unstable`) and don't silently inflate or deflate the pass rate.
+
+An operator can settle an `unstable` case, or overturn a majority, with a case-level verdict override — a separate field that never mutates the judge's original verdicts, so the underlying trial record stays intact.
 
 ### AgentCore built-in evaluators
 
@@ -111,11 +155,21 @@ Evaluators run one call per evaluator per test case (AgentCore enforces a 1-eval
 
 ### Scoring
 
-A test case's final `score` is the average across all assertion + evaluator scores, with each assertion defaulting to `1.0` if `passed` and `0.0` otherwise. A test with two passing `not-contains` assertions and one failing `llm-rubric` scores `0.67`. Status is `pass` only when every assertion + evaluator clears its threshold; otherwise `fail`.
+A test case's final `score` is the average across all assertion + evaluator scores, with each assertion defaulting to `1.0` if `passed` and `0.0` otherwise. A test with two passing `not-contains` assertions and one failing `llm-rubric` scores `0.67`. Status is `pass` only when every assertion + evaluator clears its threshold; otherwise `fail`. (For multi-trial cases the per-trial statuses collapse by majority — see [Trials](#trials-and-unstable-verdicts).)
 
-## Seeding the starter pack
+Infrastructure failures are kept honest. A Bedrock throttle **redrives** through the queue rather than recording a false `fail`; only a genuine crash records `error` (with an `error_cause` like `timeout` or `throttle`). Errors never count toward the pass rate — a run with throttle errors still reports a trustworthy rate over the cases that actually scored, and marks its cost `partial` so a throttled run never advertises a falsely low cost.
 
-ThinkWork ships a 189-test RedTeam starter pack across four adversarial dimensions: `red-team-prompt-injection`, `red-team-tool-misuse`, `red-team-data-boundary`, and `red-team-safety-scope`. First-visit seeding is automatic — opening the Studio for the first time on a new tenant imports the pack. Idempotent: re-running skips anything already present (unique index on `(tenant_id, name)` for `source='yaml-seed'` rows).
+## Datasets and the starter pack
+
+Test cases live in **datasets**. Every tenant gets the **Baseline Red Team** dataset plus any custom datasets you create (including per-skill datasets fed by [flagging threads](/applications/admin/evaluations/)). A run launched against a dataset pins the dataset **version** and case scope at dispatch, so the run measures a fixed corpus even if the dataset changes mid-flight.
+
+The baseline ships **189 seeded RedTeam cases** across four adversarial dimensions — `red-team-prompt-injection`, `red-team-tool-misuse`, `red-team-data-boundary`, `red-team-safety-scope` — over three agent surfaces (agent, computer, skill). Cases carry a **quality state**:
+
+- **`active`** — counts toward dataset-launched runs. **166** of the 189 are active.
+- **`needs-revision`** — a case whose rubric was found ambiguous or broken during curation. It stays in the pack for reference but is **excluded** from dataset-launched runs so bad rubrics don't pollute the score. (23 cases are currently parked here.)
+- **`retired`** — tombstoned; never runs.
+
+First-visit seeding is automatic — opening the Studio on a new tenant imports the pack. It's idempotent, versioned (the baseline version marker short-circuits repeat seeds), and one-way: curation state and execution tiers propagate to existing tenants on a version bump without clobbering local edits.
 
 Manual trigger:
 
@@ -126,12 +180,13 @@ Manual trigger:
 
 ### From the UI
 
-Web and Admin use the cloud/backend eval target:
+The Evaluations pages live under **Settings → Evaluations** (`/settings/evaluations`):
 
-1. Open `/evaluations`, click **Run Evaluation**.
-2. Optional: override **Model**. Blank = platform agent's default (Kimi K2.5).
-3. Pick a **scope**: All Categories, a subset (multi-select), or specific test cases.
-4. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as the Lambda works through the pack. The run targets the tenant's [platform agent](/applications/web/evaluations/#agent-target).
+1. Open `/settings/evaluations`, click **Run Evaluation**.
+2. Pick a **Profile** (model + judge + trials). Blank = the tenant's Default profile (Kimi K2.5). Manage profiles at `/settings/evaluations/profiles`.
+3. Pick a **scope**: a whole dataset, All Categories, a subset (multi-select), or specific test cases.
+4. Optional: toggle **Full fidelity** to force every case through the agent tier.
+5. Click **Start Evaluation**. The run appears in Recent Runs with `status=pending` and transitions to `running → completed` as workers score the pack. The run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target).
 
 Live updates come via the `onEvalRunUpdated` AppSync subscription plus a 3s poll fallback — the dashboard and Run Results page stay in sync without a manual refresh.
 
@@ -141,9 +196,9 @@ historical comparison, but Desktop Pi is not a current run target.
 
 ### From the CLI
 
-`thinkwork eval` mirrors the Studio feature-for-feature. Interactive mode prompts for missing values in a TTY; non-TTY mode fails fast on missing required flags.
+`thinkwork eval` mirrors the Studio for authoring and running. Interactive mode prompts for missing values in a TTY; non-TTY mode fails fast on missing required flags.
 
-Every run targets the tenant's [platform agent](/applications/web/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag.
+Every run targets the tenant's [platform agent](/applications/admin/evaluations/#agent-target); there is no `--agent`/`--agent-template` flag. The CLI always runs against the tenant's **Default** profile — profile selection and full-fidelity are UI features. `--model` is deprecated and ignored (it warns and runs the default).
 
 ```bash
 # Fully interactive — prompts for scope, confirmation
@@ -189,25 +244,25 @@ Auth comes from the existing `thinkwork login --stage <s>` Cognito session or an
 
 ## Reading a run
 
-`/evaluations/<runId>` shows:
+`/settings/evaluations/<runId>` shows:
 
-- Header — status, pass rate, cost, agent template name, timestamps, cancel/delete actions
+- Header — status, pass rate, unstable count, cost (marked _partial_ if any case throttled), profile, timestamps, cancel/delete actions
 - **Category filter badges** — colour-coded by per-category pass rate (green ≥90%, yellow ≥70%, red below). Click to filter the table.
-- **Results table** — per-test-case rows (name / category / status / score / duration). Click a row to open the side-docked Sheet with:
+- **Results table** — per-test-case rows (name / category / status / score / duration), with a **model call** badge on model-tier rows. Click a row to open the side-docked Sheet with:
   - **Input** — the query sent to the agent
   - **Expected** — the assertion specs, joined as a human summary
   - **Actual Output** — the agent's full response (scrollable)
   - **Assertions** — full JSON with per-assertion `passed` + `reason` + `score`
   - **Error** — stack trace if the test errored out
 
-Individual test cases have their own history page at `/evaluations/studio/<testCaseId>` showing the Test Configuration card plus a Run History table of every time that test was part of a run.
+Individual test cases have their own history page at `/settings/evaluations/studio/<testCaseId>` showing the Test Configuration card plus a Run History table of every time that test was part of a run.
 
 ## Scheduling
 
 Recurring evals use the shared `scheduled_jobs` infrastructure — the same EventBridge Scheduler path that powers automations.
 
-1. `/evaluations` → **Schedules** opens the scheduled-jobs UI filtered to `trigger_type: "eval_scheduled"`.
-2. Create a schedule with a cron expression + the same inputs the Run Evaluation dialog takes (agent template, categories, evaluator IDs).
+1. `/settings/evaluations` → **Schedules** opens the scheduled-jobs UI filtered to `trigger_type: "eval_scheduled"`.
+2. Create a schedule with a cron expression + the same inputs the Run Evaluation dialog takes (profile, dataset/categories, evaluator IDs).
 3. On fire, the `job-trigger` Lambda invokes `startEvalRun` with the stored config. Results show up in Recent Runs like any UI-started run.
 
 ## Architecture
@@ -220,34 +275,45 @@ Recurring evals use the shared `scheduled_jobs` infrastructure — the same Even
 | GraphQL types           | `packages/database-pg/graphql/types/evaluations.graphql`                |
 | Resolvers               | `packages/api/src/graphql/resolvers/evaluations/index.ts`               |
 | System Workflow runtime | `packages/api/src/lib/system-workflows/*`                               |
-| Lambda                  | `packages/api/src/handlers/eval-runner.ts`                              |
-| Legacy Desktop eval API | `packages/api/src/handlers/desktop-eval-runs.ts` tombstone              |
+| Dispatcher Lambda       | `packages/api/src/handlers/eval-runner.ts` (fans out one message per case/trial) |
+| Worker Lambda           | `packages/api/src/handlers/eval-worker.ts` (scores one case; agent or model tier) |
+| Model-tier scoring      | `packages/api/src/lib/evals/model-direct.ts`                            |
+| Fan-out substrate       | `terraform/modules/app/lambda-api/eval-fanout.tf` (SQS FIFO + DLQ)      |
 | AppSync notify          | `packages/api/src/lib/eval-notify.ts`                                   |
-| Seeds                   | `seeds/eval-test-cases/*.json` (11 files, 189 cases)                    |
-| Studio UI               | `apps/web/src/routes/_authed/_tenant/evaluations/`                    |
+| Seeds                   | `seeds/eval-test-cases/*.json` (11 packs, 189 cases; 166 active)        |
+| UI                      | `apps/web/src/components/settings/SettingsEval*.tsx` (`/settings/evaluations`) |
 | CLI                     | `apps/cli/src/commands/eval/`                                           |
-| Terraform               | `terraform/modules/app/lambda-api/main.tf` (`eval-runner` Lambda + IAM) |
+| Terraform               | `terraform/modules/app/lambda-api/` (`eval-runner` + `eval-worker` Lambdas + IAM) |
 
 **Runtime dependencies** (AWS, us-east-1):
 
-- Bedrock AgentCore Runtime — hosts the eval test agent; invoked per test case via `InvokeAgentRuntimeCommand`. Session IDs are deterministic per `(runId, testCaseId, index)`.
-- AWS Step Functions — `evaluation-runs` is started as a ThinkWork System Workflow so the run is inspectable under Automations with step events, execution ARN, pass/fail gate, and score-summary evidence.
-- CloudWatch Transaction Search — must be enabled (X-Ray destination = `CloudWatchLogs`, 100% sampling) so eval-runner can query spans by `attributes.session.id`.
+- Bedrock AgentCore Runtime — hosts the eval test agent; agent-tier cases invoke it via `InvokeAgentRuntimeCommand`. Session IDs are deterministic per `(runId, testCaseId, trialIndex)`.
+- CloudWatch Transaction Search — must be enabled (X-Ray destination = `CloudWatchLogs`, 100% sampling) so the worker can query spans by `attributes.session.id`.
 - Bedrock AgentCore Evaluations — 16 built-in evaluators pre-provisioned at `arn:aws:bedrock-agentcore:::evaluator/Builtin.*`. No `CreateEvaluator` calls.
-- Bedrock Runtime — Converse API against `claude-haiku-4-5` for the llm-rubric judge. Requires `bedrock:InvokeModel` on both `foundation-model/*` and `inference-profile/*` in **every** region the cross-region profile can route to — the IAM policy uses a region wildcard.
-- Postgres — `eval_runs`, `eval_results`, `eval_test_cases` tables.
+- Bedrock Runtime — Converse API for both the llm-rubric judge (profile's `judgeModel`, default `claude-haiku-4-5`) and model-tier case execution. Requires `bedrock:InvokeModel` on both `foundation-model/*` and `inference-profile/*` in **every** region the cross-region profile can route to — the IAM policy uses a region wildcard.
+- Postgres — `eval_runs`, `eval_results`, `eval_test_cases`, `eval_datasets`, `eval_profiles` tables.
 
-The eval-runner Lambda is timeout-bounded at 900s. Concurrency=5 keeps a 19-test pack well under that (~3–4 min). Larger packs can bump `CONCURRENCY` in `eval-runner.ts` or run subsets by category.
+### Throughput
+
+The dispatcher fans out one SQS FIFO message per `(case, trial)`; the `eval-worker` event source runs them in parallel, capped by the mapping's `maximum_concurrency`. FIFO delivers one in-flight message per group, so the **lane count** is the effective concurrency:
+
+- Lanes are **run-scoped** — concurrent runs of the same agent get independent lanes, so one run's throttled messages never head-of-line-block another.
+- Lanes are **model-aware** — models under a low Bedrock requests-per-minute quota (e.g. Anthropic models in an un-bumped account) pace onto a small fixed lane count (`EVAL_ANTHROPIC_MESSAGE_SHARDS`, default 2) so the run finishes slowly-but-cleanly instead of burning its redrive budget into throttle errors. Everything else uses the full fan-out (`EVAL_DIRECT_AGENTCORE_MESSAGE_SHARDS`).
+- Throttles are absorbed in-worker with backoff and, past that, redrive on a **short** visibility timeout so a throttled lane frees in seconds, not the queue's full 5-minute default.
+
+Raise `maximum_concurrency` and the lane env vars in lockstep after a Bedrock quota increase — the lanes, the event-source concurrency, and the worker's reserved concurrency must move together or the apply is rejected.
 
 ## Cost
 
 A single test case costs roughly:
 
-- **AgentCore Runtime invoke**: one full agent turn (varies with template / model / tool calls)
-- **`llm-rubric` judge**: ~256 output tokens against `claude-haiku-4-5` ≈ $0.0002 per rubric
-- **AgentCore evaluator**: priced per-evaluator-call (see AWS console)
+- **Case execution**: agent tier = one full agent turn (varies with template / model / tool calls); model tier = one Converse call, far cheaper.
+- **`llm-rubric` judge**: ~256 output tokens against the profile's judge model ≈ $0.0002 per rubric, multiplied by the profile's `trials`.
+- **AgentCore evaluator**: priced per-evaluator-call (see AWS console).
 
-A 15-test red-team slice with Helpfulness + Refusal evaluators runs around $0.30–$0.40 end-to-end. The per-run total is aggregated into `eval_runs.cost_usd` and surfaced in the dashboard's Cost column.
+Per-turn agent tokens and cost are recorded on each `eval_results` row and rolled up into `eval_runs.cost_usd`, surfaced in the dashboard's Cost column. The rollup marks itself **partial** (`cost_partial`) whenever a case threw or throttled, so a run never advertises a falsely low cost.
+
+Concrete figures from the baseline (166 active cases): an all-agent-tier run lands around **$1.10**; the same run with model-tier cases (prompt-injection + safety-scope) runs about **$0.60**. A cheaper judge/model profile (e.g. Haiku 4.5) drops it further — around **$0.40** — because agent-tier turns dominate the bill.
 
 ## Design choices
 
