@@ -32,6 +32,7 @@ function fakeDb(state: {
   executions?: Record<string, unknown>[];
   credentials?: Record<string, unknown>[];
   members?: Record<string, unknown>[];
+  repairEvents?: Record<string, unknown>[];
 }) {
   const inserts: { table: unknown; values: Record<string, unknown> }[] = [];
   const rowsFor = (table: unknown): Record<string, unknown>[] => {
@@ -39,6 +40,7 @@ function fakeDb(state: {
     if (table === routineExecutions) return state.executions ?? [];
     if (table === tenantCredentials) return state.credentials ?? [];
     if (table === tenantMembers) return state.members ?? [];
+    if (table === schema.routineRepairEvents) return state.repairEvents ?? [];
     return [];
   };
   const db = {
@@ -494,5 +496,168 @@ describe("read primitives", () => {
     expect(invokeExecutor).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "dry_run", routineId: ROUTINE_ID }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U8: repair-attempt accounting + budget breaker at the commit seam
+// ---------------------------------------------------------------------------
+
+describe("commitRoutine repair budget (U8)", () => {
+  const routineRepairEventsTable = schema.routineRepairEvents;
+
+  function repairCommitDeps(state: Parameters<typeof fakeDb>[0]) {
+    const { db, inserts } = fakeDb(state);
+    const octokit = fakeOctokit({
+      headSha: HEAD_SHA,
+      files: { [MODULE]: OLD_MODULE_CODE },
+    });
+    return { db, inserts, octokit };
+  }
+
+  function repairCommitInput() {
+    return {
+      tenantId: TENANT,
+      routineId: ROUTINE_ID,
+      files: {
+        [MODULE]: OLD_MODULE_CODE.replace("len(data)", "len(data or [])"),
+      },
+      message: "guard against null payload",
+      parentSha: HEAD_SHA,
+      repair: { executionId: "exec-1", threadRef: "thread-9" },
+    };
+  }
+
+  it("records a green repair_attempt that consumes no budget (R13)", async () => {
+    const { db, inserts, octokit } = repairCommitDeps({
+      routines: [gitRoutineRow()],
+      executions: [{ id: "exec-1", status: "failed" }],
+      credentials: [repoCredentialRow()],
+    });
+    await commitRoutine(repairCommitInput(), {
+      database: db as never,
+      octokitFactory: () => octokit as never,
+      secretsManagerClient: fakeSecrets() as never,
+      invokeExecutor: vi.fn(async () => ({
+        status: "gate_green" as const,
+        gate: { status: "green" as const, sha: "new", fixtures: [] },
+      })) as never,
+    });
+    const attempt = inserts.find(
+      (i) =>
+        i.table === routineRepairEventsTable &&
+        i.values.event_type === "repair_attempt",
+    );
+    expect(attempt?.values).toMatchObject({
+      gate_result: "green",
+      envelope_verdict: "in_envelope",
+      thread_ref: "thread-9",
+      budget_snapshot: 3,
+    });
+  });
+
+  it("counts a red repair_attempt against the budget", async () => {
+    const { db, inserts, octokit } = repairCommitDeps({
+      routines: [gitRoutineRow()],
+      executions: [{ id: "exec-1", status: "failed" }],
+      credentials: [repoCredentialRow()],
+    });
+    await commitRoutine(repairCommitInput(), {
+      database: db as never,
+      octokitFactory: () => octokit as never,
+      secretsManagerClient: fakeSecrets() as never,
+      invokeExecutor: vi.fn(async () => ({
+        status: "gate_red" as const,
+        gate: { status: "red" as const, sha: "new", fixtures: [] },
+      })) as never,
+    });
+    const attempt = inserts.find(
+      (i) =>
+        i.table === routineRepairEventsTable &&
+        i.values.event_type === "repair_attempt",
+    );
+    expect(attempt?.values).toMatchObject({
+      gate_result: "red",
+      budget_snapshot: 2,
+    });
+    // Budget not exhausted — no disable.
+    expect(
+      inserts.find(
+        (i) =>
+          i.table === routineRepairEventsTable &&
+          i.values.event_type === "disabled",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("disables the routine on the third red attempt of the UTC day (AE4)", async () => {
+    const priorRed = (n: number) => ({
+      id: `evt-${n}`,
+      event_type: "repair_attempt",
+      gate_result: "red",
+      created_at: new Date("2026-07-03T0" + n + ":00:00Z"),
+    });
+    const { db, inserts, octokit } = repairCommitDeps({
+      routines: [gitRoutineRow()],
+      executions: [{ id: "exec-1", status: "failed" }],
+      credentials: [repoCredentialRow()],
+      repairEvents: [priorRed(1), priorRed(2)],
+    });
+    await commitRoutine(repairCommitInput(), {
+      database: db as never,
+      octokitFactory: () => octokit as never,
+      secretsManagerClient: fakeSecrets() as never,
+      invokeExecutor: vi.fn(async () => ({
+        status: "gate_red" as const,
+        gate: { status: "red" as const, sha: "new", fixtures: [] },
+      })) as never,
+    });
+    const disabled = inserts.find(
+      (i) =>
+        i.table === routineRepairEventsTable &&
+        i.values.event_type === "disabled",
+    );
+    expect(disabled).toBeDefined();
+    const inbox = inserts.find(
+      (i) =>
+        i.table === inboxItems &&
+        (i.values.type as string) === "routine_repair_budget_exhausted",
+    );
+    expect(inbox).toBeDefined();
+  });
+
+  it("records a pending_commit event that consumes no attempt (AE9)", async () => {
+    const { db, inserts, octokit } = repairCommitDeps({
+      routines: [gitRoutineRow()],
+      executions: [{ id: "exec-1", status: "failed" }],
+      credentials: [repoCredentialRow()],
+    });
+    await commitRoutine(
+      {
+        ...repairCommitInput(),
+        files: { [MODULE]: "import os\n" + OLD_MODULE_CODE },
+      },
+      {
+        database: db as never,
+        octokitFactory: () => octokit as never,
+        secretsManagerClient: fakeSecrets() as never,
+        invokeExecutor: vi.fn() as never,
+      },
+    );
+    const pending = inserts.find(
+      (i) =>
+        i.table === routineRepairEventsTable &&
+        i.values.event_type === "pending_commit",
+    );
+    expect(pending?.values).toMatchObject({
+      envelope_verdict: "out_of_envelope",
+    });
+    expect(
+      inserts.find(
+        (i) =>
+          i.table === routineRepairEventsTable &&
+          i.values.event_type === "repair_attempt",
+      ),
+    ).toBeUndefined();
   });
 });

@@ -55,6 +55,11 @@ import {
 } from "./routine-task-python.js";
 import { type CredentialBindingInput } from "./routine-credential-resolver.js";
 import {
+  dispatchRoutineRepair,
+  type RepairDispatchInput,
+  type RepairDispatchResult,
+} from "./routine-repair-dispatch.js";
+import {
   GetSecretValueCommand,
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
@@ -150,6 +155,12 @@ export interface RoutineExecGitOptions {
    * timeout 360s + margin). */
   staleRunningMs?: number;
   now?: () => Date;
+  /** Tier-1 escalation (U8). Injectable for tests; defaults to
+   * dispatchRoutineRepair. */
+  repairDispatcher?: (
+    input: RepairDispatchInput,
+    deps: { database?: ReturnType<typeof getDb>; now?: () => Date },
+  ) => Promise<RepairDispatchResult>;
 }
 
 export interface RepoCredential {
@@ -487,6 +498,35 @@ export async function executeGitRoutine(
         : (task.errorMessage ??
           `run() exited ${task.exitCode}; stdout: ${task.stdoutPreview.slice(0, 500)}`),
     });
+
+    // ---- Tier-1 escalation (U8, R12/R13): the mechanical tiers are
+    // exhausted on a code failure — wake the platform agent with a
+    // pointer payload, or trip the budget breaker. Dispatch failures
+    // must never mask the run's own result.
+    if (!succeeded) {
+      try {
+        const dispatcher = options.repairDispatcher ?? dispatchRoutineRepair;
+        await dispatcher(
+          {
+            tenantId: routine.tenant_id,
+            routineId: routine.id,
+            routineName: routine.name,
+            executionId,
+            failingSha: execSha,
+            lastValidatedSha: revertedToSha ?? routine.validated_sha,
+            errorClass: task.errorClass ?? "code_run_failed",
+            errorSummary:
+              task.errorMessage ?? task.stdoutPreview.slice(0, 2_000),
+          },
+          { database: db, now },
+        );
+      } catch (dispatchErr) {
+        console.warn(
+          `[routine-exec-git] repair dispatch failed for ${routine.id}: ${(dispatchErr as Error).message}`,
+        );
+      }
+    }
+
     return {
       status: succeeded ? "succeeded" : "failed",
       executionId,

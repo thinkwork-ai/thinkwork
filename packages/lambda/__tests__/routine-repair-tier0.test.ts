@@ -356,3 +356,69 @@ describe("tier-0 mechanical repair", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("tier-1 escalation chain (U8)", () => {
+  it("hands an exhausted code failure to the repair dispatcher with pointers (AE3)", async () => {
+    const { db } = fakeDb({
+      routines: [gitRoutineRow()],
+      credentials: [repoCredentialRow()],
+    });
+    const repairDispatcher = vi.fn(async () => ({
+      status: "wakeup_enqueued" as const,
+    }));
+    const result = await executeGitRoutine(
+      { routineId: ROUTINE_ID },
+      optionsWith({
+        database: db as never,
+        pythonTask: vi.fn(async () => failedTask("KeyError: dispatches")),
+        repairDispatcher: repairDispatcher as never,
+      }),
+    );
+    expect(result.needsRepair).toBe(true);
+    expect(repairDispatcher).toHaveBeenCalledTimes(1);
+    const [input] = repairDispatcher.mock.calls[0] as unknown[];
+    expect(input).toMatchObject({
+      routineId: ROUTINE_ID,
+      failingSha: VALIDATED_SHA,
+      errorClass: "code_run_failed",
+    });
+  });
+
+  it("never invokes the repair dispatcher for infra failures (R17)", async () => {
+    const { db } = fakeDb({
+      routines: [gitRoutineRow({ validated_sha: null })],
+      credentials: [],
+    });
+    const repairDispatcher = vi.fn();
+    const result = await executeGitRoutine(
+      { routineId: ROUTINE_ID },
+      optionsWith({
+        database: db as never,
+        repairDispatcher: repairDispatcher as never,
+      }),
+    );
+    expect(result.errorClass).toBe("infra_repo_credential");
+    expect(repairDispatcher).not.toHaveBeenCalled();
+  });
+
+  it("a run that recovers on retry does not escalate", async () => {
+    const { db } = fakeDb({
+      routines: [gitRoutineRow()],
+      credentials: [repoCredentialRow()],
+    });
+    let calls = 0;
+    const repairDispatcher = vi.fn();
+    await executeGitRoutine(
+      { routineId: ROUTINE_ID },
+      optionsWith({
+        database: db as never,
+        pythonTask: vi.fn(async () => {
+          calls += 1;
+          return calls === 1 ? failedTask() : okTask({ ok: true });
+        }),
+        repairDispatcher: repairDispatcher as never,
+      }),
+    );
+    expect(repairDispatcher).not.toHaveBeenCalled();
+  });
+});
