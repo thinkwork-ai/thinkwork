@@ -1676,6 +1676,7 @@ export const SettingsActivityThreadTurnsQuery = gql`
       threadId
       turnNumber
       runtimeType
+      triggeringMessageId
       status
       startedAt
       finishedAt
@@ -1688,6 +1689,23 @@ export const SettingsActivityThreadTurnsQuery = gql`
       retryAttempt
       originTurnId
       systemPrompt
+      createdAt
+    }
+  }
+`;
+
+// THINK-136 U6 (R7/AE5): retry a user message's failed agent dispatch.
+// Original-sender-only (server-enforced); returns the updated Message with
+// metadata.dispatch stamped to { status: "pending", attempt, route }.
+export const RetryAgentDispatchMutation = gql`
+  mutation RetryAgentDispatch($messageId: ID!) {
+    retryAgentDispatch(messageId: $messageId) {
+      id
+      threadId
+      tenantId
+      role
+      content
+      metadata
       createdAt
     }
   }

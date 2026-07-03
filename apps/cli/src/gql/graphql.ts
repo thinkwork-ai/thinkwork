@@ -9871,6 +9871,7 @@ export type ThreadTurn = {
   triggerDetail?: Maybe<Scalars['String']['output']>;
   triggerId?: Maybe<Scalars['ID']['output']>;
   triggerName?: Maybe<Scalars['String']['output']>;
+  triggeringMessageId?: Maybe<Scalars['ID']['output']>;
   turnNumber?: Maybe<Scalars['Int']['output']>;
   usageJson?: Maybe<Scalars['AWSJSON']['output']>;
   wakeupRequestId?: Maybe<Scalars['ID']['output']>;

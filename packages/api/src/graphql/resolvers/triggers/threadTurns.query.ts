@@ -39,6 +39,7 @@ export const threadTurns_ = async (
       invocation_source: threadTurns.invocation_source,
       trigger_detail: threadTurns.trigger_detail,
       wakeup_request_id: threadTurns.wakeup_request_id,
+      triggering_message_id: threadTurns.triggering_message_id,
       status: threadTurns.status,
       started_at: threadTurns.started_at,
       finished_at: threadTurns.finished_at,
