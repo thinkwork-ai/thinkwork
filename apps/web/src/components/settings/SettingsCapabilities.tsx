@@ -781,14 +781,16 @@ export function SettingsCapabilities() {
       : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-6">
-      <SettingsHeader
-        title="Composer"
-        description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
-      />
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
+      <div className="shrink-0">
+        <SettingsHeader
+          title="Composer"
+          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
+        />
+      </div>
 
       <div
-        className="mb-4 flex flex-wrap items-center gap-2"
+        className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
         data-testid="capability-toolbar"
       >
         <CapabilityToolbarSearch value={searchValue} onChange={setSearch} />
@@ -898,7 +900,7 @@ export function SettingsCapabilities() {
 
       {confirmation ? (
         <div
-          className="mb-4 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
+          className="mb-4 flex shrink-0 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
           data-testid="mutation-confirmation"
         >
           <span className="font-medium">{confirmation.label}</span>
@@ -932,7 +934,7 @@ export function SettingsCapabilities() {
       {/* The Composer editor shell (v1.1 item 1): the rendered workspace as a
           normal left-tree + CodeMirror editor. Profile-invariant by design —
           the Profile token is deliberately NOT passed (R4). */}
-      <div className="h-[calc(100vh-18rem)] min-h-[28rem]">
+      <div className="flex min-h-0 flex-1">
         <ComposerWorkspaceEditor
           tenantId={tenantId ?? ""}
           spaceId={spaceId}
@@ -948,7 +950,7 @@ export function SettingsCapabilities() {
         />
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {predicted ? (
           <span>
             Computed {new Date(predicted.computedAt).toLocaleString()} ·
