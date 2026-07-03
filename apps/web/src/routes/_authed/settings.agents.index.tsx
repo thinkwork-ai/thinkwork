@@ -10,9 +10,8 @@ import {
 // single agent-configuration page. Sheet identity and target are URL state
 // (KTD-1) so profile deep links, refresh, and Back behave consistently:
 //   ?sheet=config|profiles|extensions|inspector, ?profile=<id>, ?focus=<row>.
-// The legacy `?view=workspace&file=…` shape (still emitted by the grace
-// redirects in settings.main-agent.tsx / settings.local-workspace.tsx) is
-// honored as "select this file in the tree" until those routes retire (U10).
+// The legacy `?view=workspace&file=…` grace shape and its redirect routes were
+// removed in U10; only the sheet/profile/focus params remain.
 
 const SHEET_IDS = ["config", "profiles", "extensions", "inspector"] as const;
 
@@ -22,10 +21,6 @@ export type SettingsAgentsSearch = {
   profile?: string;
   /** Inspector row focus (gate-badge deep links). */
   focus?: string;
-  /** Legacy: `workspace` selected the retired workspace view; now tree-select. */
-  view?: "workspace";
-  /** Legacy: file to select in the tree (defaults to AGENTS.md with `view`). */
-  file?: string;
 };
 
 export const Route = createFileRoute("/_authed/settings/agents/")({
@@ -35,8 +30,6 @@ export const Route = createFileRoute("/_authed/settings/agents/")({
       : undefined,
     profile: typeof search.profile === "string" ? search.profile : undefined,
     focus: typeof search.focus === "string" ? search.focus : undefined,
-    view: search.view === "workspace" ? "workspace" : undefined,
-    file: isSafeWorkspaceFile(search.file) ? search.file : undefined,
   }),
   component: AgentPage,
 });
@@ -68,16 +61,12 @@ function AgentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const treeFile =
-    search.view === "workspace" ? (search.file ?? "AGENTS.md") : search.file;
-
   return (
     <OperatorGuard>
       <SettingsCapabilities
         urlSheet={search.sheet ?? null}
         urlProfileId={search.profile ?? null}
         urlFocus={search.focus ?? null}
-        initialTreeFile={treeFile ?? null}
         onUrlSheetChange={(sheet, target) =>
           void navigate({
             to: "/settings/agents",
@@ -101,10 +90,4 @@ function AgentPage() {
       />
     </OperatorGuard>
   );
-}
-
-function isSafeWorkspaceFile(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const clean = value.trim();
-  return Boolean(clean) && !clean.split("/").some((part) => part === "..");
 }

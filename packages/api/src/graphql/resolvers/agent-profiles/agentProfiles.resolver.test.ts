@@ -510,6 +510,80 @@ describe("Agent Profile resolvers", () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
+  it("U11: updateAgentProfile writes only builtInTools; skillSlugs/mcpServers untouched", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows(builtInKeyRows()))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-custom",
+            tenant_id: "tenant-1",
+            slug: "custom",
+            name: "Custom",
+            built_in_key: null,
+            source_space_id: null,
+            // Unified grant/detach path owns these:
+            tool_policy: {
+              builtInTools: ["web-search"],
+              mcpServers: ["github"],
+            },
+            skill_policy: { skillSlugs: ["approve-receipt"] },
+          },
+        ]),
+      )
+      // loadAgentProfileSpaceIds (no spaceIds in input)
+      .mockReturnValueOnce(queryRows([]));
+    const captured: Array<Record<string, unknown>> = [];
+    mockUpdate.mockReturnValue(
+      updateReturningRows(
+        [
+          {
+            id: "profile-custom",
+            tenant_id: "tenant-1",
+            slug: "custom",
+            name: "Custom Renamed",
+            built_in_key: null,
+            tool_policy: {
+              builtInTools: ["file_read"],
+              mcpServers: ["github"],
+            },
+            skill_policy: { skillSlugs: ["approve-receipt"] },
+          },
+        ],
+        captured,
+      ),
+    );
+
+    await updateMod.updateAgentProfile(
+      null,
+      {
+        tenantId: "tenant-1",
+        id: "profile-custom",
+        input: {
+          name: "Custom Renamed",
+          // A stale caller tries to overwrite skillSlugs + mcpServers:
+          toolPolicy: JSON.stringify({
+            builtInTools: ["file_read"],
+            mcpServers: [],
+          }),
+          skillPolicy: JSON.stringify({ skillSlugs: [] }),
+        },
+      },
+      ctx(),
+    );
+
+    const set = captured[0];
+    // Non-policy field still saves.
+    expect(set.name).toBe("Custom Renamed");
+    // builtInTools is written; mcpServers preserved from the current row.
+    expect(set.tool_policy).toEqual({
+      builtInTools: ["file_read"],
+      mcpServers: ["github"],
+    });
+    // skill_policy is never written by updateAgentProfile.
+    expect(set).not.toHaveProperty("skill_policy");
+  });
+
   it("refuses to delete built-in profiles", async () => {
     mockSelect
       .mockReturnValueOnce(
@@ -719,6 +793,22 @@ function updateRows(captured: Array<Record<string, unknown>>) {
       return chain;
     },
     where: () => Promise.resolve(undefined),
+  };
+  return chain;
+}
+
+/** Update chain that supports `.where(...).returning()` (updateAgentProfile). */
+function updateReturningRows(
+  returningRows: unknown[],
+  captured: Array<Record<string, unknown>>,
+) {
+  const chain = {
+    set: (values: Record<string, unknown>) => {
+      captured.push(values);
+      return chain;
+    },
+    where: () => chain,
+    returning: () => Promise.resolve(returningRows),
   };
   return chain;
 }

@@ -86,12 +86,30 @@ export async function updateAgentProfile(
     updates.model_id = input.modelId;
   }
   if (input.enabled !== undefined) updates.enabled = input.enabled ?? true;
+  // U11 — write-path exclusivity (R12): the unified grant/detach mutations are
+  // the ONLY writers of `skillPolicy.skillSlugs` and `toolPolicy.mcpServers`.
+  // `updateAgentProfile` owns `toolPolicy.builtInTools` alone: it merges the
+  // incoming built-in list into the current tool policy (preserving mcpServers
+  // written by the unified path) and never touches skill_policy. The input
+  // fields stay in the schema — accepted, but skillSlugs/mcpServers are ignored.
   if (input.toolPolicy !== undefined) {
-    updates.tool_policy = parseJsonInput(input.toolPolicy) ?? {};
+    const incoming = (parseJsonInput(input.toolPolicy) ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const currentToolPolicy = (existing.tool_policy ?? {}) as Record<
+      string,
+      unknown
+    >;
+    updates.tool_policy = {
+      ...currentToolPolicy,
+      builtInTools: Array.isArray(incoming.builtInTools)
+        ? incoming.builtInTools
+        : (currentToolPolicy.builtInTools ?? []),
+    };
   }
-  if (input.skillPolicy !== undefined) {
-    updates.skill_policy = parseJsonInput(input.skillPolicy) ?? {};
-  }
+  // skillPolicy is intentionally NOT written here (U11) — skillSlugs are owned
+  // by grantCapability/detachCapability at profile scope.
   if (input.executionControls !== undefined) {
     updates.execution_controls = normalizeExecutionControlsForStorage(
       parseJsonInput(input.executionControls) ?? {},
