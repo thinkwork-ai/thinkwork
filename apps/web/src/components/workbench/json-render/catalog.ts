@@ -1,11 +1,12 @@
 import { defineCatalog } from "@json-render/core";
 import { defineRegistry } from "@json-render/react";
-import { shadcnComponents } from "@json-render/shadcn";
 import {
   threadJsonRenderLocalActionDefinitions,
   threadJsonRenderPrimitiveComponentDefinitions,
   threadJsonRenderSchema,
 } from "@thinkwork/thread-json-render";
+
+import { threadJsonRenderPrimitiveComponents } from "./primitives";
 
 /**
  * Catalog *definitions* (schema, component prop schemas, names, the assembled
@@ -14,8 +15,10 @@ import {
  * system-prompt catalog list, and this renderer without a second edit (KTD4).
  *
  * This module only owns the web-specific concern: mapping those definitions to
- * concrete React implementations via `@json-render/react`. Definitions are
- * re-exported below so existing importers keep the same import path.
+ * concrete React implementations via `@json-render/react`. The primitive
+ * implementations are ThinkWork-owned (Base UI + styled semantic HTML) and live
+ * in `./primitives` — the former `@json-render/shadcn` layer is gone (U10).
+ * Definitions are re-exported below so existing importers keep the same path.
  */
 export {
   threadJsonRenderCatalog,
@@ -29,7 +32,7 @@ export {
   threadJsonRenderSchema,
 } from "@thinkwork/thread-json-render";
 
-// Web-only: the upstream shadcn primitive React components and their registry.
+// Web-only: the ThinkWork-owned primitive React components and their registry.
 export const threadJsonRenderPrimitiveCatalog = defineCatalog(
   threadJsonRenderSchema,
   {
@@ -41,8 +44,8 @@ export const threadJsonRenderPrimitiveCatalog = defineCatalog(
 export const { registry: threadJsonRenderPrimitiveRegistry } = defineRegistry(
   threadJsonRenderPrimitiveCatalog,
   {
-    components: shadcnComponents,
+    components: threadJsonRenderPrimitiveComponents,
   },
 );
 
-export { shadcnComponents as threadJsonRenderPrimitiveComponents };
+export { threadJsonRenderPrimitiveComponents };

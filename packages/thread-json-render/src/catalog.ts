@@ -1,6 +1,7 @@
 import { defineCatalog, defineSchema } from "@json-render/core";
-import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import { z } from "zod";
+
+import { threadJsonRenderPrimitiveComponentDefinitions } from "./primitive-catalog";
 
 const resultListMetaValueSchema = z.union([
   z.string(),
@@ -333,8 +334,7 @@ export const threadJsonRenderDomainComponentNames = Object.keys(
   threadJsonRenderDomainComponentDefinitions,
 ) as ThreadJsonRenderDomainComponent[];
 
-export const threadJsonRenderPrimitiveComponentDefinitions =
-  shadcnComponentDefinitions;
+export { threadJsonRenderPrimitiveComponentDefinitions };
 
 export const threadJsonRenderPrimitiveComponentNames = Object.keys(
   threadJsonRenderPrimitiveComponentDefinitions,
