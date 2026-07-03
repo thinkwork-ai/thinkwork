@@ -115,9 +115,12 @@ export function createMemoryExtension(
           "the same ground: they are deduplicated and evidence-weighted. " +
           "For explicit user memory, Space memory, or long-term-memory retrieval requests, " +
           "use this tool directly; do not search workspace files, `User/USER.md`, or `SPACE.md` " +
-          "as a substitute memory backend. For questions about shared institutional entities and their " +
-          "relationships (customers, projects, decisions across the company), use " +
-          "`knowledge_graph_search` instead — recall is the user's own episodic memory.\n\n" +
+          "as a substitute memory backend. Consult the Brain FIRST for shared institutional " +
+          "questions (customers, projects, decisions across the company): the wiki navigator " +
+          "tools and `knowledge_graph_search`/`knowledge_graph_get_entity`/" +
+          "`knowledge_graph_neighbors`. Recall is the user's own episodic memory and the " +
+          "drill-down layer — use it when consolidated Brain content is not specific enough " +
+          "and you need the underlying detail.\n\n" +
           "REQUIRED FOLLOW-UP: after recall you MUST call `reflect` on the same query to " +
           "synthesize the raw units into a coherent answer. Returning recall output without " +
           "reflect produces fragmented, low-quality responses.",
@@ -185,8 +188,11 @@ export function createMemoryExtension(
           "raw facts. Call this AFTER `recall` on the same query for explicit user memory, " +
           "Space memory, or long-term-memory retrieval requests. Do not use workspace files, " +
           "`User/USER.md`, or `SPACE.md` as a substitute memory backend. For shared " +
-          "institutional entity/relationship questions, prefer `knowledge_graph_search` over " +
-          "the recall/reflect chain — reflect synthesizes the user's own episodic memory.",
+          "institutional entity/relationship questions, consult the Brain first (wiki " +
+          "navigator tools and `knowledge_graph_search`/`knowledge_graph_get_entity`/" +
+          "`knowledge_graph_neighbors`) over the recall/reflect chain — reflect synthesizes " +
+          "the user's own episodic memory, the drill-down layer beneath consolidated Brain " +
+          "content.",
         parameters: Type.Object({
           query: Type.String({
             description:
