@@ -43,6 +43,7 @@ import {
   CircleDotDashed,
   Info,
   ListChecks,
+  Puzzle,
   RefreshCw,
   Search,
   SlidersHorizontal,
@@ -92,6 +93,8 @@ import {
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
+import { useFragment } from "@/gql/fragment-masking";
+import { SettingsAgentExtensions } from "@/components/settings/SettingsAgentExtensions";
 import {
   CapabilityGrantClass,
   CapabilityGrantScope,
@@ -104,6 +107,8 @@ import {
   SettingsComposerPiExtensionsQuery,
   SettingsDetachCapabilityMutation,
   SettingsGrantCapabilityMutation,
+  SettingsPiExtensionFieldsFragment,
+  SettingsPiExtensionsQuery,
   SettingsSpacesListQuery,
   SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
@@ -318,6 +323,10 @@ export function SettingsCapabilities() {
   const [sheetOpen, setSheetOpen] = useState(false);
   // Config sheet (Agent page merge U1): Default Agent settings on this surface.
   const [configOpen, setConfigOpen] = useState(false);
+  // Extensions sheet (Agent page merge U3): the trust/import registry
+  // relocated from the Agents page, mounted with its own fragment-shaped
+  // query so the component contract is untouched.
+  const [extensionsSheetOpen, setExtensionsSheetOpen] = useState(false);
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -356,6 +365,17 @@ export function SettingsCapabilities() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  // Registry-shaped read for the relocated Extensions sheet (Agent page
+  // merge U3) — fragment-masked rows for SettingsAgentExtensions.
+  const [registryExtensionsResult, refetchRegistryExtensions] = useQuery({
+    query: SettingsPiExtensionsQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const registryExtensions = useFragment(
+    SettingsPiExtensionFieldsFragment,
+    registryExtensionsResult.data?.piExtensions ?? [],
+  );
 
   const spaceId = selectedOptionValue(columnFilters, FILTER_COLUMNS.space);
   const agentProfileId = selectedOptionValue(
@@ -1153,6 +1173,16 @@ export function SettingsCapabilities() {
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 rounded-md"
+            onClick={() => setExtensionsSheetOpen(true)}
+            data-testid="open-extensions-sheet"
+          >
+            <Puzzle className="size-4" />
+            Extensions
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-md"
             onClick={() => setSheetOpen(true)}
             data-testid="open-capability-sheet"
           >
@@ -1302,6 +1332,40 @@ export function SettingsCapabilities() {
           name: space.name,
         }))}
       />
+      <Sheet open={extensionsSheetOpen} onOpenChange={setExtensionsSheetOpen}>
+        <SheetContent
+          className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+          data-testid="agent-extensions-sheet"
+        >
+          <SheetHeader>
+            <SheetTitle>Extensions</SheetTitle>
+            <SheetDescription>
+              Import, review, and assign Pi extensions — the trust registry
+              for code that runs inside the agent.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+            <SettingsAgentExtensions
+              tenantId={tenantId ?? ""}
+              extensions={registryExtensions}
+              profiles={(profilesResult.data?.agentProfiles ?? []).map(
+                (profile) => ({
+                  id: profile.id,
+                  name: profile.name,
+                  slug: profile.slug,
+                }),
+              )}
+              fetching={registryExtensionsResult.fetching}
+              errorMessage={registryExtensionsResult.error?.message}
+              onChanged={() => {
+                refetchRegistryExtensions({ requestPolicy: "network-only" });
+                refetchExtensions({ requestPolicy: "network-only" });
+                refetchInspection({ requestPolicy: "network-only" });
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
