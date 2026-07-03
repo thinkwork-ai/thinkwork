@@ -28,9 +28,9 @@ describe("SettingsMemoryHome", () => {
   it("publishes the Memory tabs into the page header", () => {
     expect(source).toContain("tabs: [");
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
+    expect(source).toContain('{ to: WIKI, label: "Wiki" }');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
     expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
-    expect(source).not.toContain('label: "Wiki"');
     expect(source).not.toContain('label: "Graph"');
   });
 
@@ -46,7 +46,7 @@ describe("SettingsMemoryHome", () => {
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<SettingsKnowledgeBases embedded");
     expect(source).toContain("<KnowledgeGraphTab");
-    expect(source).not.toContain("<SettingsWiki embedded");
+    expect(source).toContain("<SettingsWiki embedded");
     // No in-body tab strip — the tabs live in the header now.
     expect(source).not.toContain("TabsList");
   });
@@ -62,7 +62,7 @@ describe("SettingsMemoryHome", () => {
 
   it("mounts the combined page across the Memory sub-routes", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
-    expect(memoryWikiRoute).toContain('redirect({ to: "/settings/memory" })');
+    expect(memoryWikiRoute).toContain("SettingsMemoryHome");
     expect(memoryKbRoute).toContain("SettingsMemoryHome");
     expect(memoryOntologyRoute).toContain("SettingsMemoryHome");
     expect(memoryKgRoute).toContain(
