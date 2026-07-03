@@ -97,6 +97,20 @@ The operator surface (GraphQL query + Settings page + CLI read command) that ren
 ### Capability Manifest
 Per-turn runtime evidence of what the agent actually received: which skills, tools, MCP servers, and extensions loaded, which were gated out, and why. The runtime-truth counterpart to the config-derived effective capability set; divergence between the two is a defect signal, and the manifest doubles as the action-time capability snapshot the compliance direction requires.
 
+## Memory & Brain
+
+### Tenant Brain
+The single tenant-level consolidated memory layer: a lightweight knowledge graph in plain Postgres plus the wiki pages materialized from it. Sits above the raw Hindsight user and Space banks as the only consolidation target — there is no team or per-space brain tier; team and space are scope attributes on Brain content, not separate stores.
+
+### Dream State
+The recurring background consolidation pass over memory banks. It does two jobs: hygiene on the banks in place (merge duplicates, resolve contradictions, decay or forget stale and junk memories, quarantine eval-test residue — real deletion, not view filtering) and distillation of consolidated facts into the Tenant Brain's knowledge graph as evidence. It is the only ingestion path into the Brain.
+
+### Evidence-Threshold Promotion
+The mechanical rule deciding which knowledge-graph entities earn wiki pages: an entity is promoted when it crosses observable evidence thresholds (distinct-thread mentions over time, relationship count, referenced by another page). Ontology types are optional labels and never gate promotion. Sub-threshold entities remain fully agent-queryable in the graph; promotion controls only the human wiki window.
+
+### Progressive Discovery
+The agent's Brain-first memory read path: consult the compiled wiki and knowledge graph first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
+
 ## Flagged ambiguities
 
 ## MCP Apps
