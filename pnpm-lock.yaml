@@ -1126,9 +1126,6 @@ importers:
 
   packages/deployment-runner:
     dependencies:
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../../plugins/company-brain
       '@thinkwork/plugin-n8n':
         specifier: workspace:*
         version: link:../../plugins/n8n

@@ -147,7 +147,6 @@ export interface ControllerDeployInput {
   };
   features: {
     baseInstall: {
-      cognee: false;
       slack: false;
       stripe: false;
       twenty: false;
@@ -411,7 +410,6 @@ export function buildControllerDeployInput(options: {
     },
     features: {
       baseInstall: {
-        cognee: false,
         slack: false,
         stripe: false,
         twenty: false,
@@ -705,7 +703,8 @@ async function publishRuntimeConfig(
     appsyncApiKey: await output("appsync_api_key"),
     userPoolId: await output("user_pool_id"),
     adminClientId:
-      (await output("admin_client_id")) || (await output("admin_client_id_out")),
+      (await output("admin_client_id")) ||
+      (await output("admin_client_id_out")),
     issuedAt: new Date().toISOString(),
   });
   const tempDir = mkdtempSync(pathJoinTmp("thinkwork-runtime-config-"));
@@ -732,7 +731,9 @@ async function publishRuntimeConfig(
       `Could not publish runtime config: ${(put.stderr ?? "").trim().slice(0, 200)}`,
     );
   }
-  printSuccess(`Runtime config published to s3://${bucket}/thinkwork-runtime-config.json`);
+  printSuccess(
+    `Runtime config published to s3://${bucket}/thinkwork-runtime-config.json`,
+  );
 
   // CloudFront's SPA fallback (403/404 → index.html) may have cached an HTML
   // response for this path before the object existed — invalidate so the

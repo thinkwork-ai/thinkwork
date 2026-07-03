@@ -2,11 +2,6 @@ export const pluginSourceBoundaryAllowlist = [];
 
 export const sharedPluginTermAllowlist = [
   {
-    path: "apps/cli/__tests__/terraform-cognee-fixture.test.ts",
-    reason:
-      "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
-  },
-  {
     path: "apps/cli/__tests__/terraform-n8n-fixture.test.ts",
     reason:
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
@@ -25,14 +20,6 @@ export const sharedPluginTermAllowlist = [
     path: "apps/web/src/routes/_authed/settings.plugins.data-integrations.tsx",
     reason:
       "legacy settings URL redirect only; Company ETL UI source is owned by the canonical company-etl plugin detail.",
-  },
-  {
-    path: "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
-    reason: "historical database migration coverage",
-  },
-  {
-    path: "packages/database-pg/__tests__/migration-0167-company-brain-artifact-manifests.test.ts",
-    reason: "historical database migration coverage",
   },
   {
     path: "packages/database-pg/src/schema/email-channel.ts",

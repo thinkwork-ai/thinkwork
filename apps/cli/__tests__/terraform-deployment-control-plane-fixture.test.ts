@@ -94,15 +94,11 @@ describe("deployment control plane Terraform fixture", () => {
     expect(runner).toMatch(/VITE_COGNITO_DOMAIN/);
     expect(runner).toMatch(/managed_app_terraform_overrides/);
     expect(runner).toMatch(
-      /"enable_cognee": bool\(state_output\(current_outputs, "cognee_enabled", False\)\)/,
-    );
-    expect(runner).toMatch(
       /"twenty_provisioned": bool\(state_output\(current_outputs, "twenty_provisioned", False\)\)/,
     );
     expect(runner).toMatch(
       /"twenty_runtime_enabled": bool\(\s*state_output\(current_outputs, "twenty_runtime_enabled", False\)/,
     );
-    expect(runner).toMatch(/enable_cognee\s+= var\.enable_cognee/);
     expect(runner).toMatch(/twenty_provisioned\s+= var\.twenty_provisioned/);
     expect(runner).toMatch(
       /twenty_runtime_enabled\s+= var\.twenty_runtime_enabled/,

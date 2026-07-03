@@ -189,7 +189,7 @@ const PRIOR = {
   releaseVersion: "v0.1.0-canary.172",
   agentcorePiSourceImageUri:
     "ghcr.io/thinkwork-ai/thinkwork-agentcore:pinned@sha256:abc",
-  features: { baseInstall: { cognee: true }, optionalApps: [] },
+  features: { baseInstall: { twenty: true }, optionalApps: [] },
   terraform: { stateRecovery: { mode: "state", recoverByTags: false } },
 };
 

@@ -14,11 +14,6 @@
     "./api/migration": "./src/api/migration.ts",
     "./deployment/cognee-managed-app": "./src/deployment/cognee-managed-app.ts"
   },
-  "scripts": {
-    "build": "tsc --build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
   "thinkworkPlugin": {
     "catalogPublication": "deferred"
   },

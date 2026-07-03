@@ -256,11 +256,10 @@ export function registerConfigCommand(program: Command): void {
           if (
             value !== "managed" &&
             value !== "hindsight" &&
-            value !== "agentcore" &&
-            value !== "cognee"
+            value !== "agentcore"
           ) {
             printError(
-              `Invalid memory engine "${value}". Must be 'managed', 'hindsight', 'agentcore', or 'cognee'.`,
+              `Invalid memory engine "${value}". Must be 'managed', 'hindsight', or 'agentcore'.`,
             );
             process.exit(1);
           }
@@ -269,10 +268,6 @@ export function registerConfigCommand(program: Command): void {
               "memory_engine value 'managed' is deprecated — storing it as 'agentcore'.",
             );
             tfValue = "agentcore";
-          } else if (value === "cognee") {
-            printWarning(
-              "memory_engine value 'cognee' is legacy diagnostic compatibility. Hindsight is the supported user/Space memory provider; Cognee should be enabled through ThinkWork Brain infrastructure when needed.",
-            );
           }
         }
 
