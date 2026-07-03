@@ -161,10 +161,16 @@ export interface ComposerWorkspaceEditorProps {
   onDetachMcpServer?: (slug: string) => void;
   /**
    * Profile treatment for `agents/<slug>.md` files (Agent page merge U2):
-   * "Configure Agent Profile" opens the Profiles sheet at that profile's
+   * "Edit Agent Profile" opens the Profiles sheet at that profile's
    * detail, replacing the generic agent-source navigation for these files.
    */
   onConfigureAgentProfile?: (slug: string) => void;
+  /** Context menu on the `agents/` folder: create a new Agent Profile. */
+  onCreateAgentProfile?: () => void;
+  /** "Delete Agent Profile" on a deletable (non-built-in) profile file. */
+  onDeleteAgentProfile?: (slug: string) => void;
+  /** Slugs whose profiles may be deleted (built-ins are excluded). */
+  deletableProfileSlugs?: ReadonlySet<string>;
   /**
    * Selected profile's display name (Agent page merge U6): when set,
    * attach/detach menu labels carry the profile scope so a profile-scoped
@@ -470,6 +476,9 @@ export function ComposerWorkspaceEditor({
   onAddMcpServer,
   onDetachMcpServer,
   onConfigureAgentProfile,
+  onCreateAgentProfile,
+  onDeleteAgentProfile,
+  deletableProfileSlugs,
   profileScopeName = null,
   initialSelectedPath = null,
 }: ComposerWorkspaceEditorProps) {
@@ -852,31 +861,35 @@ export function ComposerWorkspaceEditor({
     );
     const jumpEntry = jumpEntryFor(node);
     const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;
-    // Profile files get the dedicated Configure treatment (U2); the generic
+    // Profile files get the dedicated Edit/Delete treatment (U2); the generic
     // "Open agent source" item is suppressed for them by contract (R5).
     const profileSlug = agentProfileSlugForFile(node);
     const canConfigureProfile = Boolean(
       profileSlug && onConfigureAgentProfile,
     );
+    const canDeleteProfile = Boolean(
+      profileSlug &&
+      onDeleteAgentProfile &&
+      deletableProfileSlugs?.has(profileSlug),
+    );
+    // The agents/ root is structural: profiles are created through the
+    // Profiles sheet, never as raw files.
+    const isAgentsRoot = node.isFolder && node.path === "agents";
+    const canAddProfileHere = Boolean(isAgentsRoot && onCreateAgentProfile);
     // "Open …source" navigation is offered ONLY for nodes that open a real
-    // owning editor — Spaces file → space editor, User file → user detail,
-    // generated agent file → agent workspace editor. Skill nodes get NO menu
-    // entry pointing at the capability sheet (the gate-badge click still does);
-    // tree-first interactions win.
+    // owning editor — Spaces file → space editor, User file → user detail.
+    // Agent-owned files just select locally in this tree (KTD-7), so they get
+    // no menu entry; skill nodes likewise (the gate-badge click still jumps).
     const canOpenSource =
       !canConfigureProfile &&
       Boolean(jumpEntry) &&
-      (causeKind === "space" || causeKind === "agent_source"
+      (causeKind === "space"
         ? true
         : causeKind === "user"
           ? Boolean(result?.perspectiveUserId ?? perspectiveUserId)
           : false);
     const openSourceLabel =
-      causeKind === "space"
-        ? "Open space source"
-        : causeKind === "user"
-          ? "Open user source"
-          : "Open agent source";
+      causeKind === "space" ? "Open space source" : "Open user source";
     const isSkillsRoot = node.isFolder && node.path === "skills";
     const isMcpRoot = node.isFolder && node.path === "mcp";
     const canDetachThis = Boolean(
@@ -898,7 +911,12 @@ export function ComposerWorkspaceEditor({
     const isSpacesContainer = node.path === "Spaces";
     const isSourceRoot = Boolean(src) && src!.rel === "";
     const stdEligible = Boolean(
-      canEditSource && src && !isSpacesContainer && !isSkillsRoot && !isMcpRoot,
+      canEditSource &&
+      src &&
+      !isSpacesContainer &&
+      !isSkillsRoot &&
+      !isMcpRoot &&
+      !isAgentsRoot,
     );
     const canNewInside = stdEligible; // create inside any editable folder (incl. skill folder)
     // Capability folders (skills/<slug>, mcp/<slug>) map their destructive
@@ -930,6 +948,8 @@ export function ComposerWorkspaceEditor({
       canDetachMcp ||
       canAddMcpHere ||
       canConfigureProfile ||
+      canDeleteProfile ||
+      canAddProfileHere ||
       hasStdOps ||
       canOpenSource;
 
@@ -1045,6 +1065,14 @@ export function ComposerWorkspaceEditor({
       <ContextMenu>
         <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
         <ContextMenuContent data-testid={`tree-menu-${node.path}`}>
+          {canAddProfileHere ? (
+            <ContextMenuItem
+              onSelect={() => onCreateAgentProfile?.()}
+              data-testid="menu-add-agent-profile"
+            >
+              <Plus className="mr-2 size-4" /> Add New Agent…
+            </ContextMenuItem>
+          ) : null}
           {canConfigureProfile ? (
             <ContextMenuItem
               onSelect={() =>
@@ -1052,8 +1080,18 @@ export function ComposerWorkspaceEditor({
               }
               data-testid={`menu-configure-profile-${profileSlug}`}
             >
-              <SlidersHorizontal className="mr-2 size-4" /> Configure Agent
-              Profile
+              <SlidersHorizontal className="mr-2 size-4" /> Edit Agent Profile
+            </ContextMenuItem>
+          ) : null}
+          {canDeleteProfile ? (
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() =>
+                profileSlug && onDeleteAgentProfile?.(profileSlug)
+              }
+              data-testid={`menu-delete-profile-${profileSlug}`}
+            >
+              <Trash2 className="mr-2 size-4" /> Delete Agent Profile
             </ContextMenuItem>
           ) : null}
           {canAddHere ? (

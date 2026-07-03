@@ -64,10 +64,10 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
-  it("labels the agent home Agent on /settings/agents; Composer entry retired (U7)", () => {
+  it("labels the agent home Agents on /settings/agents; Composer entry retired (U7)", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === "/settings/agents");
     expect(item).toBeDefined();
-    expect(item?.label).toBe("Agent");
+    expect(item?.label).toBe("Agents");
     expect(item?.operatorOnly).toBe(true);
     // The Composer nav entry collapsed into the Agent page; the route now
     // redirects, so no nav item may point at it.

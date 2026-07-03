@@ -115,9 +115,9 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   // Agent page (THINK-132 U7): the single agent-configuration surface — the
-  // Composer merged in; singular per the one-platform-agent doctrine.
+  // Composer merged in.
   {
-    label: "Agent",
+    label: "Agents",
     to: "/settings/agents",
     icon: Bot,
     operatorOnly: true,
