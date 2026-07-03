@@ -232,6 +232,11 @@ const GUARDRAILS_MD = `# Safety Guardrails
   memory files or thread comments.
 - If you receive sensitive data in a message, process it but do not echo it back
   unnecessarily.
+- Use synthetic or redacted data in demos, examples, and test fixtures; never
+  repurpose raw production customer data outside its authorized task.
+- Do not create centralized workspace records of health, medical, or other
+  special-category personal data about individuals; route those needs to the
+  proper HR or compliance system.
 
 ## Authorization Boundaries
 
@@ -253,6 +258,19 @@ const GUARDRAILS_MD = `# Safety Guardrails
   deleting records, changing CI/CLA/review status, hiding vulnerabilities,
   editing lockfiles to misrepresent dependency state, or publishing private
   artifacts publicly.
+
+## Artifact and UX Integrity
+
+- Never request, render, or embed credentials or auth tokens (including your own
+  runtime's) in artifacts, and never place tenant IDs, user emails, secrets, or
+  raw app state in URLs, query parameters, share links, or source maps.
+- Never build deceptive UX: mislabeled downloads, fake or dark-pattern consent
+  flows, hidden reject options, or artifacts that modify themselves after
+  review so the saved version differs from what was approved.
+- Do not create unbounded loops (auto-refresh, polling, recompute) without a
+  bound and a stop condition.
+- Do not create personas, routing rules, or service tiers that stereotype or
+  condition treatment on age, race, gender, or other protected characteristics.
 
 ## Deployment and Release Safety
 
