@@ -165,6 +165,12 @@ export interface ComposerWorkspaceEditorProps {
    * detail, replacing the generic agent-source navigation for these files.
    */
   onConfigureAgentProfile?: (slug: string) => void;
+  /**
+   * Selected profile's display name (Agent page merge U6): when set,
+   * attach/detach menu labels carry the profile scope so a profile-scoped
+   * write never masquerades as an agent-level one.
+   */
+  profileScopeName?: string | null;
 }
 
 interface TreeNode {
@@ -459,6 +465,7 @@ export function ComposerWorkspaceEditor({
   onAddMcpServer,
   onDetachMcpServer,
   onConfigureAgentProfile,
+  profileScopeName = null,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
@@ -1040,7 +1047,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onAddSkill?.()}
               data-testid="menu-add-skill"
             >
-              <Plus className="mr-2 size-4" /> Add skill…
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add skill for ${profileScopeName}…`
+                : "Add skill…"}
             </ContextMenuItem>
           ) : null}
           {canDetachThis ? (
@@ -1049,7 +1059,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => skillSlug && onDetachSkill?.(skillSlug)}
               data-testid={`menu-detach-skill-${skillSlug}`}
             >
-              <Trash2 className="mr-2 size-4" /> Detach skill…
+              <Trash2 className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Detach skill for ${profileScopeName}…`
+                : "Detach skill…"}
             </ContextMenuItem>
           ) : null}
           {canAddMcpHere ? (
@@ -1057,7 +1070,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onAddMcpServer?.()}
               data-testid="menu-add-mcp-server"
             >
-              <Plus className="mr-2 size-4" /> Add MCP server…
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add MCP server for ${profileScopeName}…`
+                : "Add MCP server…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (
@@ -1066,7 +1082,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => mcpSlug && onDetachMcpServer?.(mcpSlug)}
               data-testid={`menu-detach-mcp-${mcpSlug}`}
             >
-              <Trash2 className="mr-2 size-4" /> Detach MCP server…
+              <Trash2 className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Detach MCP server for ${profileScopeName}…`
+                : "Detach MCP server…"}
             </ContextMenuItem>
           ) : null}
           {(canAddHere || canDetachThis || canAddMcpHere || canDetachMcp) &&
