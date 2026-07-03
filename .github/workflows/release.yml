@@ -66,7 +66,6 @@ jobs:
           echo "version=${RELEASE_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "asset_base_url=https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "agentcore_repository=ghcr.io/${OWNER}/thinkwork-agentcore" >> "$GITHUB_OUTPUT"
-          echo "cognee_repository=ghcr.io/${OWNER}/thinkwork-cognee" >> "$GITHUB_OUTPUT"
           echo "n8n_repository=ghcr.io/${OWNER}/thinkwork-n8n" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -166,21 +165,6 @@ jobs:
           cache-to: type=gha,scope=release-pi-arm64,mode=max
           provenance: false
 
-      - name: Build and push Cognee amd64
-        id: cognee-amd64
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: plugins/company-brain/runtime/cognee/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ steps.release.outputs.cognee_repository }}:${{ env.RELEASE_REF_NAME }}-cognee-amd64
-            ${{ steps.release.outputs.cognee_repository }}:${{ steps.release.outputs.commit }}-cognee-amd64
-          cache-from: type=gha,scope=release-cognee-amd64
-          cache-to: type=gha,scope=release-cognee-amd64,mode=max
-          provenance: false
-
       - name: Build and push n8n runtime amd64
         id: n8n-amd64
         uses: docker/build-push-action@v6
@@ -202,7 +186,6 @@ jobs:
       - name: Build release manifest
         run: |
           AGENTCORE_REPOSITORY="${{ steps.release.outputs.agentcore_repository }}"
-          COGNEE_REPOSITORY="${{ steps.release.outputs.cognee_repository }}"
           N8N_REPOSITORY="${{ steps.n8n_runtime_repository.outputs.value }}"
           SIGN_ARGS=()
           if [[ -n "${RELEASE_MANIFEST_PRIVATE_KEY:-}" && -n "${RELEASE_MANIFEST_KEY_ID:-}" ]]; then
@@ -220,7 +203,6 @@ jobs:
             exit 1
           fi
           MANAGED_APP_IMAGE_ARGS=(
-            --image "name=cognee,repository=${COGNEE_REPOSITORY},tag=${RELEASE_REF_NAME}-cognee-amd64,digest=${{ steps.cognee-amd64.outputs.digest }},architecture=amd64"
             --image "name=n8n-runtime,repository=${N8N_REPOSITORY},tag=${RELEASE_REF_NAME}-n8n-amd64,digest=${{ steps.n8n-amd64.outputs.digest }},architecture=amd64"
             --image "name=twenty,uri=${TWENTY_IMAGE_URI},architecture=amd64"
           )

@@ -31,10 +31,6 @@ const COGNEE_README = resolve(
   REPO_ROOT,
   "plugins/company-brain/terraform/cognee/README.md",
 );
-const COGNEE_DOCKERFILE = resolve(
-  REPO_ROOT,
-  "plugins/company-brain/runtime/cognee/Dockerfile",
-);
 const BUSINESS_ONTOLOGY_OPS_DOC = resolve(
   REPO_ROOT,
   "docs/src/content/docs/guides/business-ontology-operations.mdx",
@@ -604,26 +600,24 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/output "cognee_endpoint"/);
   });
 
-  it("keeps CI Terraform runs disabled by default but aligned with Cognee deployment inputs", () => {
+  it("removes Cognee deployment inputs from CI Terraform runs", () => {
     for (const workflow of [read(VERIFY_WORKFLOW), read(DEPLOY_WORKFLOW)]) {
-      expect(workflow).toMatch(/COGNEE_ENABLED_INPUT/);
-      expect(workflow).toMatch(/vars\.COGNEE_ENABLED \|\| 'false'/);
-      expect(workflow).toMatch(/cognee\/cognee@sha256:5ce7e4052b1d/);
-      expect(workflow).toMatch(
+      expect(workflow).not.toMatch(/COGNEE_ENABLED_INPUT/);
+      expect(workflow).not.toMatch(/vars\.COGNEE_ENABLED/);
+      expect(workflow).not.toMatch(/cognee\/cognee@sha256:5ce7e4052b1d/);
+      expect(workflow).not.toMatch(
         /thinkwork\/\$\{STAGE\}\/cognee\/db-credentials/,
       );
-      expect(workflow).toMatch(/cognee_bedrock_model_resource_arns/);
-      expect(workflow).toMatch(/amazon\.nova-lite-v1:0/);
-      expect(workflow).toMatch(/amazon\.titan-embed-text-v2:0/);
-      expect(workflow).toMatch(/-var "enable_cognee=\$/);
-      expect(workflow).toMatch(/-var "cognee_image_uri=\$/);
-      expect(workflow).toMatch(/-var "cognee_db_username=\$/);
-      expect(workflow).toMatch(/-var "cognee_db_name=\$/);
-      expect(workflow).toMatch(/-var "cognee_db_password_secret_arn=\$/);
-      expect(workflow).toMatch(/-var "cognee_backend_mode=\$/);
-      expect(workflow).toMatch(/-var "cognee_desired_count=\$/);
-      expect(workflow).toMatch(/-var "cognee_llm_provider=\$/);
-      expect(workflow).toMatch(/-var "cognee_embedding_provider=\$/);
+      expect(workflow).not.toMatch(/cognee_bedrock_model_resource_arns/);
+      expect(workflow).not.toMatch(/-var "enable_cognee=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_image_uri=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_db_username=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_db_name=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_db_password_secret_arn=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_backend_mode=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_desired_count=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_llm_provider=\$/);
+      expect(workflow).not.toMatch(/-var "cognee_embedding_provider=\$/);
     }
 
     expect(read(VERIFY_WORKFLOW)).toContain('memory_engine="hindsight"');
@@ -632,75 +626,45 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(read(DEPLOY_WORKFLOW)).not.toContain('MEMORY_ENGINE="cognee"');
   });
 
-  it("builds a pinned Cognee image with Bedrock runtime dependencies for deploy", () => {
-    const dockerfile = read(COGNEE_DOCKERFILE);
+  it("does not build or pass a deprecated graph image during deploy", () => {
     const deployWorkflow = read(DEPLOY_WORKFLOW);
 
-    expect(dockerfile).toMatch(
-      /ARG COGNEE_BASE_IMAGE=cognee\/cognee@sha256:5ce7e4052b1d/,
-    );
-    expect(dockerfile).toMatch(/\/usr\/local\/bin\/python -m pip install/);
-    expect(dockerfile).toMatch(
-      /--target \/app\/\.venv\/lib\/python3\.12\/site-packages/,
-    );
-    expect(dockerfile).toMatch(/"boto3>=1\.34\.0"/);
-    expect(dockerfile).not.toMatch(/cognee\/cognee:main/);
-
-    expect(deployWorkflow).toMatch(
+    expect(deployWorkflow).not.toMatch(
       /'plugins\/company-brain\/runtime\/cognee\/\*\*'/,
     );
-    expect(deployWorkflow).toMatch(
+    expect(deployWorkflow).not.toMatch(
       /'plugins\/company-brain\/terraform\/cognee\/\*\*'/,
     );
-    expect(deployWorkflow).toMatch(/Build and push deprecated graph image/);
-    expect(deployWorkflow).toMatch(/if: \$\{\{ false \}\}/);
-    expect(deployWorkflow).toMatch(
+    expect(deployWorkflow).not.toMatch(/Build and push deprecated graph image/);
+    expect(deployWorkflow).not.toMatch(
       /file: plugins\/company-brain\/runtime\/cognee\/Dockerfile/,
     );
-    expect(deployWorkflow).toMatch(/github\.sha }}-cognee/);
-    expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_DIGEST/);
-    expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_REPOSITORY/);
-    expect(deployWorkflow).toMatch(/COGNEE_IMAGE_URI_INPUT/);
-    expect(deployWorkflow).toMatch(
+    expect(deployWorkflow).not.toMatch(/github\.sha }}-cognee/);
+    expect(deployWorkflow).not.toMatch(/COGNEE_BUILT_IMAGE_DIGEST/);
+    expect(deployWorkflow).not.toMatch(/COGNEE_BUILT_IMAGE_REPOSITORY/);
+    expect(deployWorkflow).not.toMatch(/COGNEE_IMAGE_URI_INPUT/);
+    expect(deployWorkflow).not.toMatch(
       /cognee_image_uri="\$\{COGNEE_BUILT_IMAGE_REPOSITORY\}@\$\{COGNEE_BUILT_IMAGE_DIGEST\}"/,
     );
   });
 
-  it("prepares the deprecated graph DB secret and role before Terraform apply when enabled", () => {
+  it("does not prepare deprecated graph database credentials during deploy", () => {
     const workflow = read(DEPLOY_WORKFLOW);
-    const cogneeDbPrep = workflow.slice(
-      workflow.indexOf("Prepare deprecated graph database credentials"),
-      workflow.indexOf("Prepare Twenty CRM runtime secrets and database"),
-    );
 
-    expect(workflow).toMatch(/Prepare deprecated graph database credentials/);
-    expect(workflow).toMatch(
+    expect(workflow).not.toMatch(/Prepare deprecated graph database credentials/);
+    expect(workflow).not.toMatch(
       /if \[ "\$\{COGNEE_ENABLED:-false\}" != "true" \]/,
     );
-    expect(workflow).toMatch(/Deprecated graph memory disabled; skipping/);
-    expect(workflow).toMatch(/openssl rand -hex 32/);
-    expect(workflow).toMatch(
+    expect(workflow).not.toMatch(/Deprecated graph memory disabled; skipping/);
+    expect(workflow).not.toMatch(
       /\[\[ ! "\$cognee_password" =~ \^\[A-Za-z0-9\._~-\]\+\$ \]\]/,
     );
-    expect(workflow).toMatch(/aws secretsmanager create-secret/);
-    expect(workflow).toMatch(/aws secretsmanager put-secret-value/);
-    expect(workflow).toMatch(/COGNEE_DB_PASSWORD_SECRET_ARN=\$secret_arn/);
-    expect(workflow).toMatch(/CREATE ROLE %I LOGIN PASSWORD %L/);
-    expect(workflow).toMatch(/ALTER ROLE %I LOGIN PASSWORD %L/);
-    expect(workflow).toMatch(/COGNEE_DB_NAME_INPUT/);
-    expect(workflow).toMatch(/CREATE DATABASE %I/);
-    expect(cogneeDbPrep).not.toMatch(/CREATE DATABASE %I OWNER %I/);
-    expect(cogneeDbPrep).not.toMatch(/ALTER DATABASE %I OWNER TO %I/);
-    expect(workflow).toMatch(/GRANT CONNECT ON DATABASE :\"cognee_db\"/);
-    expect(workflow).toMatch(/\\connect :\"cognee_db\"/);
-    expect(workflow).toMatch(/GRANT USAGE, CREATE ON SCHEMA public/);
-    expect(workflow).toMatch(
-      /GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES/,
-    );
-    expect(workflow).toMatch(
-      /GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES/,
-    );
-    expect(workflow).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public/);
+    expect(workflow).not.toMatch(/new_cognee_password/);
+    expect(workflow).not.toMatch(/cognee_password/);
+    expect(workflow).not.toMatch(/COGNEE_DB_PASSWORD_SECRET_ARN=\$secret_arn/);
+    expect(workflow).not.toMatch(/COGNEE_DB_NAME_INPUT/);
+    expect(workflow).not.toMatch(/GRANT CONNECT ON DATABASE :\"cognee_db\"/);
+    expect(workflow).not.toMatch(/\\connect :\"cognee_db\"/);
   });
 
   it("keeps Knowledge Graph deploy dispatch defaults out of the GraphQL Lambda env", () => {
