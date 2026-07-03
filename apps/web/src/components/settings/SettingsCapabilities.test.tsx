@@ -9,6 +9,8 @@
  * SAME grant/detach machinery.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   act,
   cleanup,
@@ -57,6 +59,10 @@ const {
     SettingsPiExtensionFieldsFragment: Symbol("piExtensionFields"),
     SettingsGrantCapabilityMutation: Symbol("grantCapability"),
     SettingsDetachCapabilityMutation: Symbol("detachCapability"),
+    // U9: SettingsAgentExtensions mounts inside the Extensions sheet.
+    SettingsImportPiExtensionFromGitHubMutation: Symbol("importPiExtension"),
+    SettingsApprovePiExtensionVersionMutation: Symbol("approvePiExtension"),
+    SettingsRejectPiExtensionVersionMutation: Symbol("rejectPiExtension"),
     // Agent page merge U2: AgentProfilesSheet's own operations.
     SettingsCreateAgentProfileMutation: Symbol("createAgentProfile"),
     SettingsDeleteAgentProfileMutation: Symbol("deleteAgentProfile"),
@@ -161,6 +167,26 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: () => {},
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
+
+// Agent page merge U12: page actions render in the AppTopBar via
+// SettingsHeader's `actions` prop; render them inline here so the suite can
+// click the header icons without mounting the app chrome.
+vi.mock("@/components/settings/SettingsContent", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    SettingsHeader: (props: {
+      title: string;
+      description?: string;
+      actions?: React.ReactNode;
+    }) => (
+      <div>
+        <div>{props.title}</div>
+        <div data-testid="header-actions-inline">{props.actions}</div>
+      </div>
+    ),
+  };
+});
 
 // The editor shell is exercised in its own suite — stub it and capture props.
 vi.mock("@/components/settings/ComposerWorkspaceEditor", () => ({
@@ -328,7 +354,8 @@ function openSheet() {
 }
 
 function clearDefaultFilters() {
-  fireEvent.click(screen.getByText("Clear"));
+  // No default filters (Agent page merge U12): nothing to clear — the full
+  // pool renders immediately. Kept as a no-op so call sites read as intent.
 }
 
 function expandSearch() {
@@ -379,92 +406,37 @@ describe("Composer shell wiring", () => {
   });
 });
 
+describe("URL-driven sheet state (U7, KTD-1)", () => {
+  it("derives open sheets from urlSheet and routes user intent through the bridge", () => {
+    const bridge = vi.fn();
+    render(
+      <SettingsCapabilities
+        urlSheet="inspector"
+        urlFocus="skill:approve-receipt"
+        onUrlSheetChange={bridge}
+      />,
+    );
+    // Inspector renders focused on the deep-linked row.
+    expect(
+      screen.getByTestId("inspector-row-skill:approve-receipt").className,
+    ).toContain("bg-accent");
+    // Opening another sheet is a URL request, not a local state flip.
+    fireEvent.click(screen.getByTestId("open-profiles-sheet"));
+    expect(bridge).toHaveBeenCalledWith("profiles", undefined);
+  });
+
+  it("legacy view=workspace deep links select the file in the tree", () => {
+    render(<SettingsCapabilities initialTreeFile="AGENTS.md" />);
+    expect(editorProps()?.initialSelectedPath).toBe("AGENTS.md");
+  });
+});
+
 describe("capability side sheet (read surface)", () => {
-  it("class tab counts read active/total, independent of the State filter", () => {
-    render(<SettingsCapabilities />);
-    openSheet();
-    // Skills: 1 active (approve-receipt) of 3 total — even though the default
-    // State token hides the 2 inactive rows.
-    expect(screen.getByTestId("capability-tab-skill").textContent).toContain(
-      "Skills",
-    );
-    expect(screen.getByTestId("capability-tab-skill").textContent).toContain(
-      "1/3",
-    );
-    expect(
-      screen.getByTestId("capability-tab-mcp_server").textContent,
-    ).toContain("MCP servers");
-  });
 
-  it("renders verbatim reason chips and token status across tabs", () => {
-    render(<SettingsCapabilities />);
-    openSheet();
-    clearDefaultFilters();
-    expect(screen.getByText("trust_gate")).toBeTruthy();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
-      button: 0,
-    });
-    expect(screen.getByText("extension_validation_failed")).toBeTruthy();
-    expect(
-      screen.getByText("verification artifact hash is stale"),
-    ).toBeTruthy();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-mcp_server"), {
-      button: 0,
-    });
-    expect(screen.getByText("token: expired")).toBeTruthy();
-  });
 
-  it("defaults to active-only rows; clearing filters reveals the pool", () => {
-    render(<SettingsCapabilities />);
-    openSheet();
-    expect(screen.queryByText("trust_gate")).toBeNull();
-    clearDefaultFilters();
-    expect(screen.getByText("trust_gate")).toBeTruthy();
-  });
 
-  it("quick search filters rows when expanded", () => {
-    render(<SettingsCapabilities />);
-    openSheet();
-    clearDefaultFilters();
-    expandSearch();
-    fireEvent.change(screen.getByTestId("capability-search"), {
-      target: { value: "expenses" },
-    });
-    const rowText = screen
-      .queryAllByTestId("capability-row")
-      .map((row) => row.textContent)
-      .join(" ");
-    expect(rowText).toContain("Expenses");
-    expect(rowText).not.toContain("approve-receipt");
-  });
 
-  it("shows the loading state while a refetch is in flight", () => {
-    queryState.inspector = {
-      data: undefined,
-      fetching: true,
-      error: undefined,
-    };
-    render(<SettingsCapabilities />);
-    openSheet();
-    expect(screen.getByTestId("capability-loading")).toBeTruthy();
-  });
 
-  it("renders fault + invalid selection states in the sheet", () => {
-    queryState.inspector = {
-      data: inspection({
-        state: "resolution_fault",
-        stateDetail: "db unavailable",
-        predicted: null,
-      }),
-      fetching: false,
-      error: undefined,
-    };
-    render(<SettingsCapabilities />);
-    openSheet();
-    expect(screen.getByTestId("resolution-fault").textContent).toContain(
-      "db unavailable",
-    );
-  });
 
   it("explains the no-user baseline in the view-info dialog", () => {
     render(<SettingsCapabilities />);
@@ -473,46 +445,12 @@ describe("capability side sheet (read surface)", () => {
       "no-user baseline",
     );
     expect(screen.getByTestId("view-info-body").textContent).toContain(
-      "state active",
+      "all states",
     );
   });
 });
 
 describe("capability write actions (sheet rows)", () => {
-  it("attach on a not-installed pool row invokes grantCapability and ends on the fresh state", async () => {
-    grantMock.mockResolvedValue(
-      grantResult({
-        capabilityClass: "skill",
-        capabilityId: "expenses",
-        displayName: "Expenses",
-        active: true,
-        provenance: "agent: workspace folder",
-        reason: null,
-        detail: null,
-        tokenStatus: null,
-      }),
-    );
-    render(<SettingsCapabilities />);
-    openSheet();
-    clearDefaultFilters();
-    fireEvent.click(screen.getByTestId("attach-skill:expenses"));
-    // No persistent banner — the mutation fires and the view refetches so the
-    // live tree + sheet reflect the result.
-    await waitFor(() =>
-      expect(grantMock).toHaveBeenCalledWith({
-        input: {
-          tenantId: "tenant-1",
-          capabilityClass: "SKILL",
-          scope: "AGENT",
-          agentId: null,
-          agentProfileId: null,
-          capabilityRef: "expenses",
-        },
-      }),
-    );
-    expect(screen.queryByTestId("mutation-confirmation")).toBeNull();
-    await waitFor(() => expect(refetchMock).toHaveBeenCalled());
-  });
 
   it("a held gate leaves no stuck pending node (no sync ghost)", async () => {
     grantMock.mockResolvedValue(
@@ -528,9 +466,10 @@ describe("capability write actions (sheet rows)", () => {
       }),
     );
     render(<SettingsCapabilities />);
-    openSheet();
-    clearDefaultFilters();
-    fireEvent.click(screen.getByTestId("attach-skill:expenses"));
+    act(() => {
+      (editorProps()?.onAddSkill as () => void)();
+    });
+    fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
     await waitFor(() => expect(grantMock).toHaveBeenCalled());
     // A held gate (reason ≠ not_installed) is settled immediately — no ghost.
     expect(editorProps()?.pendingSkillSlug).toBeNull();
@@ -550,9 +489,10 @@ describe("capability write actions (sheet rows)", () => {
       }),
     );
     const view = render(<SettingsCapabilities />);
-    openSheet();
-    clearDefaultFilters();
-    fireEvent.click(screen.getByTestId("attach-skill:expenses"));
+    act(() => {
+      (editorProps()?.onAddSkill as () => void)();
+    });
+    fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
     // The sync window forwards the affected slug to the editor as a ghost.
     await waitFor(() =>
       expect(editorProps()?.pendingSkillSlug).toBe("expenses"),
@@ -578,68 +518,13 @@ describe("capability write actions (sheet rows)", () => {
     await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBeNull());
   });
 
-  it("detach flows through the destructive confirm and shows the post-detach state", async () => {
-    detachMock.mockResolvedValue({
-      data: {
-        detachCapability: {
-          outcome: "applied",
-          inspectionState: "ok",
-          computedAt: "2026-07-02T12:01:00.000Z",
-          configFingerprint: "fp-after",
-          item: {
-            capabilityClass: "skill",
-            capabilityId: "approve-receipt",
-            displayName: null,
-            active: false,
-            provenance: "tenant catalog",
-            reason: "not_installed",
-            detail: null,
-            tokenStatus: null,
-          },
-        },
-      },
-      error: undefined,
-    });
-    render(<SettingsCapabilities />);
-    openSheet();
-    fireEvent.click(screen.getByTestId("detach-confirm-skill:approve-receipt"));
-    await waitFor(() =>
-      expect(detachMock).toHaveBeenCalledWith({
-        input: {
-          tenantId: "tenant-1",
-          capabilityClass: "SKILL",
-          scope: "AGENT",
-          agentId: null,
-          agentProfileId: null,
-          capabilityRef: "approve-receipt",
-        },
-      }),
-    );
-    // No persistent banner; the refetch reflects the post-detach state.
-    expect(screen.queryByTestId("mutation-confirmation")).toBeNull();
-    await waitFor(() => expect(refetchMock).toHaveBeenCalled());
-  });
 
-  it("grant actions are absent on a space selection (R11)", () => {
-    queryState.inspector = {
-      data: inspection({ spaceId: "space-1" }),
-      fetching: false,
-      error: undefined,
-    };
-    render(<SettingsCapabilities />);
-    openSheet();
-    expect(screen.queryByTestId("attach-skill:expenses")).toBeNull();
-    expect(screen.queryByTestId("detach-skill:approve-receipt")).toBeNull();
-  });
 
   it("a granted extension version that left the registry shows a disabled detach (plan U8)", () => {
     // Empty registry: the active "Live Ext" (assignment-3) can't be resolved to
     // a version, so its detach is disabled/error rather than silently absent.
     render(<SettingsCapabilities />);
-    openSheet();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
-      button: 0,
-    });
+    fireEvent.click(screen.getByTestId("open-extensions-sheet"));
     expect(screen.getByText("Live Ext")).toBeTruthy();
     expect(screen.queryByTestId("detach-pi_extension:assignment-3")).toBeNull();
     expect(
@@ -683,10 +568,7 @@ describe("capability write actions (sheet rows)", () => {
       error: undefined,
     };
     render(<SettingsCapabilities />);
-    openSheet();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
-      button: 0,
-    });
+    fireEvent.click(screen.getByTestId("open-extensions-sheet"));
     fireEvent.click(
       screen.getByTestId("detach-confirm-pi_extension:assignment-3"),
     );
@@ -743,10 +625,7 @@ describe("capability write actions (sheet rows)", () => {
     };
     grantMock.mockResolvedValue(grantResult(null));
     render(<SettingsCapabilities />);
-    openSheet();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
-      button: 0,
-    });
+    fireEvent.click(screen.getByTestId("open-extensions-sheet"));
     fireEvent.click(screen.getByTestId("open-add-extension"));
     expect(screen.getByTestId("add-extension-dialog")).toBeTruthy();
     expect(screen.getByTestId("add-extension-row-src-a")).toBeTruthy();
@@ -774,29 +653,29 @@ describe("capability write actions (sheet rows)", () => {
       error: undefined,
     };
     render(<SettingsCapabilities />);
-    openSheet();
-    fireEvent.mouseDown(screen.getByTestId("capability-tab-pi_extension"), {
-      button: 0,
-    });
+    fireEvent.click(screen.getByTestId("open-extensions-sheet"));
     expect(screen.queryByTestId("open-add-extension")).toBeNull();
   });
 });
 
 describe("tree context-menu callbacks (item 4)", () => {
-  it("jump-to-cause opens the sheet, resets State/Search, switches tab, focuses the row", () => {
+  it("jump-to-cause and gate badges land on the read-only Inspector (U9, AE7)", () => {
     render(<SettingsCapabilities />);
-    // Sheet closed initially.
-    expect(screen.queryByTestId("capability-row-focused")).toBeNull();
+    expect(screen.queryByTestId("capability-inspector-view")).toBeNull();
     act(() => {
       (editorProps()?.onFocusCapabilityRow as (c: string, i: string) => void)(
         "skill",
         "stale-skill",
       );
     });
-    // The hidden diagnose target is now visible + focused inside the open sheet.
-    expect(screen.getByText("trust_gate")).toBeTruthy();
-    const focused = screen.getByTestId("capability-row-focused");
-    expect(focused.textContent).toContain("stale-skill");
+    // The diagnose target renders focused in the Inspector — no write
+    // affordances anywhere on that surface.
+    expect(
+      screen.getByTestId("inspector-row-skill:stale-skill").className,
+    ).toContain("bg-accent");
+    expect(
+      screen.getByTestId("inspector-reason-skill:stale-skill").textContent,
+    ).toContain("trust_gate");
   });
 
   it("detach from the tree runs the SAME detach mutation behind a confirm", async () => {
@@ -814,6 +693,33 @@ describe("tree context-menu callbacks (item 4)", () => {
         }),
       ),
     );
+  });
+
+  // Agent page merge U6: tree adds are no longer gated on profile selection —
+  // grantScope already switches to AGENT_PROFILE when a profile chip is set.
+  it("no longer gates tree add affordances on profile selection", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/settings/SettingsCapabilities.tsx"),
+      "utf8",
+    );
+    expect(source).not.toContain("!agentProfileId ? () => setAddSkillOpen");
+    expect(source).not.toContain("!agentProfileId ? () => setAddMcpOpen");
+    expect(source).toContain("profileScopeName={selectedProfileName}");
+  });
+
+  it("MCP picker empty state links to the MCP Servers registry", () => {
+    queryState.inspector = {
+      data: inspection({
+        predicted: null,
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onAddMcpServer as () => void)();
+    });
+    expect(screen.getByTestId("add-mcp-empty-registry-link")).toBeTruthy();
   });
 
   it("add-skill picker lists the not-installed pool and grants on pick", async () => {
@@ -941,7 +847,7 @@ describe("MCP tree callbacks (U9c)", () => {
 });
 
 describe("divergence surface (U13)", () => {
-  it("renders per-row deltas and the divergent summary", () => {
+  it("renders the divergent summary in the footer with per-row deltas on the Inspector (U9)", () => {
     queryState.inspector = {
       data: inspection({
         divergence: {
@@ -974,11 +880,13 @@ describe("divergence surface (U13)", () => {
     expect(screen.getByTestId("extra-in-observed").textContent).toContain(
       "shadow-server",
     );
-    // The per-row delta badge is in the sheet.
-    openSheet();
+    // Per-row divergence renders on the read-only Inspector (U9).
+    fireEvent.click(screen.getByTestId("open-inspector-view"));
     expect(
-      screen.getByTestId("delta-skill:approve-receipt").textContent,
-    ).toContain("not loaded last turn");
+      screen.getByTestId(
+        "inspector-divergent-skill:approve-receipt",
+      ).textContent,
+    ).toContain("Not loaded last turn");
   });
 
   it("renders config-changed as its own state, never divergent", () => {

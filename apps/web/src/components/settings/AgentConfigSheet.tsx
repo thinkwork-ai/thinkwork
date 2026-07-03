@@ -291,14 +291,14 @@ export function AgentConfigSheet({
         className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
         data-testid="agent-config-sheet"
       >
-        <SheetHeader>
+        <SheetHeader className="px-6">
           <SheetTitle>Agent configuration</SheetTitle>
           <SheetDescription>
             Default Agent settings for this tenant. Fields save as you change
             them.
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
           <AgentConfigSection spaces={spaces} />
         </div>
       </SheetContent>

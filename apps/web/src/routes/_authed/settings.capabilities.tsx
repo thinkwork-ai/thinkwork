@@ -1,15 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsCapabilities } from "@/components/settings/SettingsCapabilities";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// Composer (Composer plan U3): the surface is labeled "Composer" but the
-// route path deliberately stays /settings/capabilities (KTD-6) so deep
-// links and the route tree don't churn on a cosmetic rename.
-
+// The Composer's standalone route is retired (THINK-132 U7): Settings → Agent
+// at /settings/agents IS the Composer surface now. This redirect holds for one
+// release before removal so existing deep links keep resolving.
 export const Route = createFileRoute("/_authed/settings/capabilities")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsCapabilities />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/agents", replace: true });
+  },
 });

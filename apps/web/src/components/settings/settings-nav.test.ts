@@ -64,20 +64,20 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
-  it("labels the capability home Composer on the unchanged capabilities path (Composer U3)", () => {
-    const item = SETTINGS_NAV_ITEMS.find(
-      (i) => i.to === "/settings/capabilities",
-    );
+  it("labels the agent home Agent on /settings/agents; Composer entry retired (U7)", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === "/settings/agents");
     expect(item).toBeDefined();
-    expect(item?.label).toBe("Composer");
+    expect(item?.label).toBe("Agent");
     expect(item?.operatorOnly).toBe(true);
-    // The old label is gone everywhere in the nav.
+    // The Composer nav entry collapsed into the Agent page; the route now
+    // redirects, so no nav item may point at it.
+    expect(
+      SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/capabilities"),
+    ).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Composer")).toBe(false);
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Capabilities")).toBe(
       false,
     );
-    expect(settingsCrumbForPath("/settings/capabilities")).toEqual([
-      { label: "Composer" },
-    ]);
   });
 
   it("shows Agents to operators and hides it for members", () => {

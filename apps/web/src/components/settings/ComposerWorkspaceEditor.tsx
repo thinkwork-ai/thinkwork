@@ -165,6 +165,17 @@ export interface ComposerWorkspaceEditorProps {
    * detail, replacing the generic agent-source navigation for these files.
    */
   onConfigureAgentProfile?: (slug: string) => void;
+  /**
+   * Selected profile's display name (Agent page merge U6): when set,
+   * attach/detach menu labels carry the profile scope so a profile-scoped
+   * write never masquerades as an agent-level one.
+   */
+  profileScopeName?: string | null;
+  /**
+   * Select this file once the manifest loads (Agent page merge U7): carries
+   * the legacy `?view=workspace&file=…` deep links into a tree selection.
+   */
+  initialSelectedPath?: string | null;
 }
 
 interface TreeNode {
@@ -459,6 +470,8 @@ export function ComposerWorkspaceEditor({
   onAddMcpServer,
   onDetachMcpServer,
   onConfigureAgentProfile,
+  profileScopeName = null,
+  initialSelectedPath = null,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
@@ -488,6 +501,7 @@ export function ComposerWorkspaceEditor({
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const appliedInitialPath = useRef(false);
   const [manifest, setManifest] = useState<ManifestState>({
     loading: true,
     error: null,
@@ -556,6 +570,15 @@ export function ComposerWorkspaceEditor({
 
   const result = manifest.data;
   const entries = useMemo(() => result?.entries ?? [], [result?.entries]);
+
+  // Apply the deep-linked tree selection once the manifest carries the file
+  // (U7). One-shot: later selection changes belong to the user.
+  useEffect(() => {
+    if (appliedInitialPath.current || !initialSelectedPath) return;
+    if (!entries.some((entry) => entry.path === initialSelectedPath)) return;
+    appliedInitialPath.current = true;
+    setSelectedPath(initialSelectedPath);
+  }, [entries, initialSelectedPath]);
   const entryByPath = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry])),
     [entries],
@@ -794,10 +817,8 @@ export function ComposerWorkspaceEditor({
         return;
       }
       case "agent_source":
-        void navigate({
-          to: "/settings/agents",
-          search: { view: "workspace", file: cause.file },
-        });
+        // KTD-7 (U7): this page IS the agent surface — select in place.
+        setSelectedPath(cause.file);
         return;
     }
   }
@@ -1040,7 +1061,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onAddSkill?.()}
               data-testid="menu-add-skill"
             >
-              <Plus className="mr-2 size-4" /> Add skill…
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add skill for ${profileScopeName}…`
+                : "Add skill…"}
             </ContextMenuItem>
           ) : null}
           {canDetachThis ? (
@@ -1049,7 +1073,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => skillSlug && onDetachSkill?.(skillSlug)}
               data-testid={`menu-detach-skill-${skillSlug}`}
             >
-              <Trash2 className="mr-2 size-4" /> Detach skill…
+              <Trash2 className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Detach skill for ${profileScopeName}…`
+                : "Detach skill…"}
             </ContextMenuItem>
           ) : null}
           {canAddMcpHere ? (
@@ -1057,7 +1084,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onAddMcpServer?.()}
               data-testid="menu-add-mcp-server"
             >
-              <Plus className="mr-2 size-4" /> Add MCP server…
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add MCP server for ${profileScopeName}…`
+                : "Add MCP server…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (
@@ -1066,7 +1096,10 @@ export function ComposerWorkspaceEditor({
               onSelect={() => mcpSlug && onDetachMcpServer?.(mcpSlug)}
               data-testid={`menu-detach-mcp-${mcpSlug}`}
             >
-              <Trash2 className="mr-2 size-4" /> Detach MCP server…
+              <Trash2 className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Detach MCP server for ${profileScopeName}…`
+                : "Detach MCP server…"}
             </ContextMenuItem>
           ) : null}
           {(canAddHere || canDetachThis || canAddMcpHere || canDetachMcp) &&

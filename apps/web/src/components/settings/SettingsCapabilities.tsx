@@ -1,32 +1,24 @@
 /**
- * Composer — the capability-configuration home (capability-mapping plan
- * U4 + U8; renamed from "Capabilities" in Composer plan U3, KTD-6 — the
- * route path stays /settings/capabilities).
- *
- * Composer v1.1 (product-owner feedback) reshapes the surface into a normal
- * editor:
+ * The Agent page's Composer surface (THINK-132): the single agent-
+ * configuration home rendered at /settings/agents.
  *
  *   1. the main area is the rendered-workspace EDITOR SHELL
  *      (`ComposerWorkspaceEditor`): a full-height file tree beside a real
  *      CodeMirror pane, backed by the read-only `createComposerPreviewClient`
- *      adapter over `workspacePreview` / `workspacePreviewFile`. File CONTENTS
- *      stay read-only/derived; the U7 generated-file split view is preserved;
- *   2. the capability LIST (class tabs + rows + attach/detach) moves into a
- *      right Side Sheet opened from the toolbar. Jump-to-cause from a tree node
- *      opens the Sheet scrolled/focused to the row (with the State/Search
- *      tokens reset and the tab switched);
- *   3. the tree and the list tell one story: skill folders are decorated with
- *      their inspector state (active vs gated + verbatim reason), and the class
- *      tab counts read active/total;
- *   4. the tree offers direct manipulation via a context menu — "Detach skill…"
- *      on a `skills/<slug>/` folder and "Add skill…" on the `skills/` folder —
- *      both routed through the SAME grant/detach + confirm + sync-pending
- *      machinery the Sheet rows use.
+ *      adapter over `workspacePreview` / `workspacePreviewFile`;
+ *   2. non-file concerns live in side sheets — Config (Default Agent),
+ *      Profiles (list → detail), Extensions (trust registry + assignment) —
+ *      with sheet identity in the URL (?sheet=…, KTD-1);
+ *   3. capability WRITES are tree-first: Add/Detach for skills and MCP at
+ *      agent or profile scope through the unified grant/detach mutations,
+ *      with sync-pending ghosts until the S3 materialization is visible;
+ *   4. diagnostics are read-only on the Inspector view (all classes, verbatim
+ *      gate reasons, runtime divergence) — gate badges and jump-to-cause land
+ *      there. The old capability list is retired (U9).
  *
- * Point-in-time semantics are unchanged: results carry `computedAt` and refresh
- * only on selection changes or the explicit refresh action; every write ends on
- * the touched item's FRESH inspector state (R12), including the sync-pending
- * phase that polls until the S3 materialization is visible.
+ * Point-in-time semantics are unchanged: results carry `computedAt` and
+ * refresh only on selection changes or the explicit refresh action; every
+ * write ends on the touched item's FRESH inspector state (R12).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,13 +32,11 @@ import {
 import {
   Bot,
   Boxes,
-  CircleDotDashed,
   Info,
   ListChecks,
   Puzzle,
   RefreshCw,
   ScanSearch,
-  Search,
   SlidersHorizontal,
   UserRound,
 } from "lucide-react";
@@ -92,6 +82,11 @@ import {
   TabsTrigger,
   cn,
 } from "@thinkwork/ui";
+import { Link } from "@tanstack/react-router";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 import { useTenant } from "@/context/TenantContext";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import { useFragment } from "@/gql/fragment-masking";
@@ -150,8 +145,6 @@ const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
 };
 
 const FILTER_COLUMNS = {
-  search: "filterSearch",
-  state: "filterState",
   space: "filterSpace",
   profile: "filterProfile",
   user: "filterUser",
@@ -281,49 +274,49 @@ function selectedOptionValue(
 }
 
 const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
-  {
-    id: FILTER_COLUMNS.search,
-    accessorFn: (item) =>
-      [
-        item.displayName,
-        item.capabilityId,
-        item.provenance,
-        item.reason,
-        item.detail,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    filterFn: dataTableTokenFilterFns.text,
-  },
-  {
-    id: FILTER_COLUMNS.state,
-    accessorFn: (item) => (item.active ? "active" : "inactive"),
-    filterFn: dataTableTokenFilterFns.option,
-  },
   { id: FILTER_COLUMNS.space, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.profile, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
 ];
 
-export function SettingsCapabilities() {
+export type ComposerSheetId =
+  | "config"
+  | "profiles"
+  | "extensions"
+  | "inspector";
+
+export function SettingsCapabilities({
+  urlSheet = null,
+  urlProfileId = null,
+  urlFocus = null,
+  initialTreeFile = null,
+  onUrlSheetChange,
+}: {
+  /** URL-driven sheet state (Agent page merge U7, KTD-1). Null = closed. */
+  urlSheet?: ComposerSheetId | null;
+  urlProfileId?: string | null;
+  urlFocus?: string | null;
+  /** Legacy `?view=workspace&file=…` deep links: select this tree file. */
+  initialTreeFile?: string | null;
+  /**
+   * When provided, the URL owns sheet state: open/close requests route
+   * through this callback and local state derives from `urlSheet`. Absent
+   * (tests, transitional hosts), sheets stay locally controlled.
+   */
+  onUrlSheetChange?: (
+    sheet: ComposerSheetId | null,
+    target?: { profileId?: string | null; focus?: string | null },
+  ) => void;
+} = {}) {
   const { tenantId } = useTenant();
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
-    {
-      id: FILTER_COLUMNS.state,
-      value: {
-        operator: "is_any_of",
-        value: ["active"],
-      } satisfies DataTableTokenFilterValue,
-    },
-  ]);
-  const [activeClass, setActiveClass] = useState<string>("skill");
+  // No default filters (Agent page merge U12): the empty selection IS the
+  // default agent in the default space, and every row state is visible.
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const syncPollCount = useRef(0);
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
   const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
-  // Capability Side Sheet (v1.1 item 2): the list lives here now.
-  const [sheetOpen, setSheetOpen] = useState(false);
   // Config sheet (Agent page merge U1): Default Agent settings on this surface.
   const [configOpen, setConfigOpen] = useState(false);
   // Extensions sheet (Agent page merge U3): the trust/import registry
@@ -339,6 +332,36 @@ export function SettingsCapabilities() {
     open: boolean;
     profileId: string | null;
   }>({ open: false, profileId: null });
+  // KTD-1 (U7): when a URL bridge is wired, the search params are the sheet
+  // state's source of truth — local state just mirrors them.
+  const urlDriven = onUrlSheetChange !== undefined;
+  useEffect(() => {
+    if (!urlDriven) return;
+    setConfigOpen(urlSheet === "config");
+    setExtensionsSheetOpen(urlSheet === "extensions");
+    setInspectorOpen(urlSheet === "inspector");
+    setProfilesSheet({
+      open: urlSheet === "profiles",
+      profileId: urlSheet === "profiles" ? (urlProfileId ?? null) : null,
+    });
+  }, [urlDriven, urlSheet, urlProfileId]);
+
+  function requestSheet(
+    sheet: ComposerSheetId | null,
+    target?: { profileId?: string | null; focus?: string | null },
+  ) {
+    if (onUrlSheetChange) {
+      onUrlSheetChange(sheet, target);
+      return;
+    }
+    setConfigOpen(sheet === "config");
+    setExtensionsSheetOpen(sheet === "extensions");
+    setInspectorOpen(sheet === "inspector");
+    setProfilesSheet({
+      open: sheet === "profiles",
+      profileId: sheet === "profiles" ? (target?.profileId ?? null) : null,
+    });
+  }
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -463,22 +486,9 @@ export function SettingsCapabilities() {
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
   });
-  const filteredItems = filterTable
-    .getFilteredRowModel()
-    .rows.map((row) => row.original);
 
   const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
     () => [
-      {
-        id: FILTER_COLUMNS.state,
-        label: "State",
-        type: "option",
-        icon: <CircleDotDashed className="size-4" />,
-        options: [
-          { value: "active", label: "Active" },
-          { value: "inactive", label: "Inactive" },
-        ],
-      },
       {
         id: FILTER_COLUMNS.space,
         label: "Space",
@@ -528,15 +538,6 @@ export function SettingsCapabilities() {
   const memberName = members.find(
     (member) => member.id === perspectiveUserId,
   )?.name;
-  const stateToken = columnFilters.find(
-    (filter) => filter.id === FILTER_COLUMNS.state,
-  )?.value as DataTableTokenFilterValue | undefined;
-  const stateFilterValues = stateToken
-    ? (Array.isArray(stateToken.value)
-        ? stateToken.value
-        : [stateToken.value]
-      ).filter((value): value is string => typeof value === "string")
-    : [];
 
   // Grant/detach exist only at agent and agent-profile scope (R11): a
   // space or perspective-user selection is a read lens.
@@ -544,6 +545,13 @@ export function SettingsCapabilities() {
   const grantScope = agentProfileId
     ? CapabilityGrantScope.AgentProfile
     : CapabilityGrantScope.Agent;
+  // Profile overlay (Agent page merge U6): the selected profile's name scopes
+  // the tree's attach/detach labels so profile-scoped writes read as such.
+  const selectedProfileName = agentProfileId
+    ? ((profilesResult.data?.agentProfiles ?? []).find(
+        (profile) => profile.id === agentProfileId,
+      )?.name ?? null)
+    : null;
 
   // Skill-node decoration for the tree (v1.1 item 3): capability state keyed
   // by slug (capabilityId), from the FULL inspector item set (filter-independent).
@@ -832,25 +840,13 @@ export function SettingsCapabilities() {
    * the diagnose flow targets exactly the rows those defaults hide.
    */
   function focusCapabilityRow(capabilityClass: string, capabilityId: string) {
-    setColumnFilters((current) =>
-      current.filter(
-        (filter) =>
-          filter.id !== FILTER_COLUMNS.state &&
-          filter.id !== FILTER_COLUMNS.search,
-      ),
-    );
-    setActiveClass(capabilityClass);
-    setFocusedRowKey(`${capabilityClass}:${capabilityId}`);
-    setSheetOpen(true);
+    // Gate badges and diagnose flows land on the read-only Inspector (U9,
+    // R14/AE7) — the capability list is retired; writes live on the tree
+    // and the sheets.
+    const rowKey = `${capabilityClass}:${capabilityId}`;
+    setFocusedRowKey(rowKey);
+    requestSheet("inspector", { focus: rowKey });
   }
-
-  useEffect(() => {
-    if (!focusedRowKey || !sheetOpen) return;
-    const row = document.querySelector(
-      '[data-testid="capability-row-focused"]',
-    );
-    row?.scrollIntoView?.({ block: "center" });
-  }, [focusedRowKey, activeClass, columnFilters, sheetOpen]);
 
   // Tree context-menu detach (v1.1 item 4): reuse the destructive confirm +
   // the SAME detach mutation, showing a "removing…" ghost on the folder.
@@ -1039,60 +1035,6 @@ export function SettingsCapabilities() {
     return map;
   }, [items]);
 
-  const filteredByClass = useMemo(() => {
-    const map = new Map<string, InspectorItem[]>();
-    for (const item of filteredItems) {
-      const list = map.get(item.capabilityClass) ?? [];
-      list.push(item);
-      map.set(item.capabilityClass, list);
-    }
-    return map;
-  }, [filteredItems]);
-
-  const tabClasses = useMemo(() => {
-    const present = [...allByClass.keys()];
-    const ordered = CLASS_ORDER.filter(
-      (capabilityClass) =>
-        present.includes(capabilityClass) ||
-        capabilityClass === "skill" ||
-        capabilityClass === "mcp_server" ||
-        capabilityClass === "pi_extension",
-    );
-    for (const capabilityClass of present) {
-      if (!ordered.includes(capabilityClass)) ordered.push(capabilityClass);
-    }
-    return ordered;
-  }, [allByClass]);
-
-  const activeTab = tabClasses.includes(activeClass)
-    ? activeClass
-    : (tabClasses[0] ?? "skill");
-  const visibleItems = filteredByClass.get(activeTab) ?? [];
-
-  const searchToken = columnFilters.find(
-    (filter) => filter.id === FILTER_COLUMNS.search,
-  )?.value as DataTableTokenFilterValue | undefined;
-  const searchValue =
-    searchToken && typeof searchToken.value === "string"
-      ? searchToken.value
-      : "";
-
-  function setSearch(value: string) {
-    setColumnFilters((current) => {
-      const rest = current.filter(
-        (filter) => filter.id !== FILTER_COLUMNS.search,
-      );
-      if (!value) return rest;
-      return [
-        ...rest,
-        {
-          id: FILTER_COLUMNS.search,
-          value: { operator: "contains", value } as DataTableTokenFilterValue,
-        },
-      ];
-    });
-  }
-
   function divergenceChip() {
     if (!divergence) return null;
     if (divergence.state === "in_sync") {
@@ -1146,101 +1088,80 @@ export function SettingsCapabilities() {
       ? confirmation.rowKey.slice("mcp_server:".length)
       : null;
 
-  return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
-      <div className="shrink-0">
-        <SettingsHeader
-          title="Composer"
-          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
-        />
-      </div>
 
-      <div
-        className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
-        data-testid="capability-toolbar"
+  // Agent page merge U12: page actions live in the header bar as muted icons
+  // (Evaluations pattern) — the in-body row keeps only search + filters.
+  const composerHeaderActions = (
+    <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Agent configuration"
+        aria-label="Agent configuration"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("config")}
+        data-testid="open-config-sheet"
       >
-        <CapabilityToolbarSearch value={searchValue} onChange={setSearch} />
-        <DataTableTokenFilter
-          table={filterTable}
-          columns={tokenFilterColumns}
-          addLabel="Filter"
-          showAddLabel={false}
-          clearLabel="Clear"
-          flattenToolbar
-          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
-          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
-        />
-        <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setConfigOpen(true)}
-            data-testid="open-config-sheet"
-          >
-            <SlidersHorizontal className="size-4" />
-            Config
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setExtensionsSheetOpen(true)}
-            data-testid="open-extensions-sheet"
-          >
-            <Puzzle className="size-4" />
-            Extensions
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() =>
-              setProfilesSheet({ open: true, profileId: null })
-            }
-            data-testid="open-profiles-sheet"
-          >
-            <Bot className="size-4" />
-            Profiles
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setSheetOpen(true)}
-            data-testid="open-capability-sheet"
-          >
-            <ListChecks className="size-4" />
-            Capabilities
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="h-8 w-8 rounded-md"
-            aria-label="Inspector"
-            title="Inspector — read-only capability diagnostics"
-            onClick={() => setInspectorOpen(true)}
-            data-testid="open-inspector-view"
-          >
-            <ScanSearch className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="h-8 w-8 rounded-md"
-            aria-label="Refresh"
-            onClick={() => refetchInspection({ requestPolicy: "network-only" })}
-            disabled={loading}
-          >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-          </Button>
+        <SlidersHorizontal className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Agent Profiles"
+        aria-label="Agent Profiles"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("profiles")}
+        data-testid="open-profiles-sheet"
+      >
+        <Bot className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Extensions"
+        aria-label="Extensions"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("extensions")}
+        data-testid="open-extensions-sheet"
+      >
+        <Puzzle className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Inspector — read-only capability diagnostics"
+        aria-label="Inspector"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("inspector")}
+        data-testid="open-inspector-view"
+      >
+        <ScanSearch className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Refresh"
+        aria-label="Refresh"
+        className={desktopToolbarButtonClassName}
+        onClick={() => refetchInspection({ requestPolicy: "network-only" })}
+        disabled={loading}
+      >
+        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+      </Button>
           <Dialog>
             <DialogTrigger asChild>
               <Button
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="icon-sm"
-                className="h-8 w-8 rounded-md"
+                title="What am I looking at?"
                 aria-label="What am I looking at?"
+                className={desktopToolbarButtonClassName}
                 data-testid="view-info-trigger"
               >
                 <Info className="size-4" />
@@ -1280,11 +1201,7 @@ export function SettingsCapabilities() {
                   </p>
                 ) : null}
                 <p>
-                  <span className="font-medium">Filters:</span>{" "}
-                  {stateFilterValues.length > 0
-                    ? `state ${stateFilterValues.join(", ")}`
-                    : "all states"}
-                  {searchValue ? ` · search "${searchValue}"` : ""}
+                  <span className="font-medium">Filters:</span> all states
                 </p>
                 <p className="text-muted-foreground">
                   Skill folders in the tree carry their capability state —
@@ -1304,7 +1221,34 @@ export function SettingsCapabilities() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
+      <div className="shrink-0">
+        <SettingsHeader
+          title="Composer"
+          actions={composerHeaderActions}
+          actionKey="composer-header-actions"
+          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
+        />
+      </div>
+
+      <div
+        className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
+        data-testid="capability-toolbar"
+      >
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={tokenFilterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
       </div>
 
       {/* No persistent confirmation banner — the live tree + sheet state (and,
@@ -1326,20 +1270,20 @@ export function SettingsCapabilities() {
           onFocusCapabilityRow={focusCapabilityRow}
           skillStateBySlug={skillStateBySlug}
           canManageSkills={writeScope}
-          onAddSkill={!agentProfileId ? () => setAddSkillOpen(true) : undefined}
+          profileScopeName={selectedProfileName}
+          onAddSkill={() => setAddSkillOpen(true)}
           onDetachSkill={requestDetachSkill}
           mcpStateBySlug={mcpStateBySlug}
           pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
-          onAddMcpServer={
-            !agentProfileId ? () => setAddMcpOpen(true) : undefined
-          }
+          onAddMcpServer={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
+          initialSelectedPath={initialTreeFile}
           onConfigureAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
               (profile) => profile.slug === slug,
             );
-            setProfilesSheet({ open: true, profileId: match?.id ?? null });
+            requestSheet("profiles", { profileId: match?.id ?? null });
           }}
         />
       </div>
@@ -1366,7 +1310,10 @@ export function SettingsCapabilities() {
       <AgentProfilesSheet
         open={profilesSheet.open}
         onOpenChange={(open) =>
-          setProfilesSheet((current) => ({ ...current, open }))
+          requestSheet(
+            open ? "profiles" : null,
+            open ? { profileId: profilesSheet.profileId } : undefined,
+          )
         }
         initialProfileId={profilesSheet.profileId}
       />
@@ -1375,25 +1322,28 @@ export function SettingsCapabilities() {
           detach controls, opened from the toolbar or via tree jump-to-cause. */}
       <AgentConfigSheet
         open={configOpen}
-        onOpenChange={setConfigOpen}
+        onOpenChange={(open) => requestSheet(open ? "config" : null)}
         spaces={(spacesResult.data?.spaces ?? []).map((space) => ({
           id: space.id,
           name: space.name,
         }))}
       />
-      <Sheet open={extensionsSheetOpen} onOpenChange={setExtensionsSheetOpen}>
+      <Sheet
+        open={extensionsSheetOpen}
+        onOpenChange={(open) => requestSheet(open ? "extensions" : null)}
+      >
         <SheetContent
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="agent-extensions-sheet"
         >
-          <SheetHeader>
+          <SheetHeader className="px-6">
             <SheetTitle>Extensions</SheetTitle>
             <SheetDescription>
               Import, review, and assign Pi extensions — the trust registry
               for code that runs inside the agent.
             </SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
             <SettingsAgentExtensions
               tenantId={tenantId ?? ""}
               extensions={registryExtensions}
@@ -1412,182 +1362,96 @@ export function SettingsCapabilities() {
                 refetchInspection({ requestPolicy: "network-only" });
               }}
             />
+
+            {/* Extension ASSIGNMENT for the current selection (U9): folded in
+                from the retired capability list — trust/import above, reach
+                below, one sheet. Writes ride the same unified mutations. */}
+            <div className="mt-6" data-testid="extension-assignments">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">
+                  Assigned for this selection
+                </p>
+                {writeScope ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddExtensionOpen(true)}
+                    data-testid="open-add-extension"
+                  >
+                    Add extension
+                  </Button>
+                ) : null}
+              </div>
+              <div className="divide-y divide-border">
+                {(allByClass.get("pi_extension") ?? []).length === 0 ? (
+                  <p className="py-4 text-sm text-muted-foreground">
+                    No Pi extensions assigned for this selection.
+                  </p>
+                ) : (
+                  (allByClass.get("pi_extension") ?? []).map((item) => (
+                    <div
+                      key={rowKeyOf(item)}
+                      className="flex flex-col gap-1 py-3"
+                      data-testid="extension-assignment-row"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                          {item.displayName || item.capabilityId}
+                        </p>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {deltaByRowKey.has(rowKeyOf(item)) ? (
+                            <Badge
+                              variant="destructive"
+                              data-testid={`delta-${rowKeyOf(item)}`}
+                            >
+                              not loaded last turn
+                            </Badge>
+                          ) : null}
+                          {stateChip(item)}
+                          {rowActions(item)}
+                        </div>
+                      </div>
+                      {item.provenance ? (
+                        <p className="text-xs text-muted-foreground">
+                          {item.provenance}
+                        </p>
+                      ) : null}
+                      {item.detail ? (
+                        <p className="text-xs text-muted-foreground">
+                          {item.detail}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
 
-      <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}>
+      <Sheet
+        open={inspectorOpen}
+        onOpenChange={(open) => requestSheet(open ? "inspector" : null)}
+      >
         <SheetContent
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="inspector-sheet"
         >
-          <SheetHeader>
+          <SheetHeader className="px-6">
             <SheetTitle>Inspector</SheetTitle>
             <SheetDescription>
               Read-only view of the effective capability set for the current
               selection — gate reasons and runtime divergence, no writes.
             </SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
             <CapabilityInspectorView
               items={items}
               deltas={deltas}
               loading={loading}
+              focusRowKey={urlFocus ?? focusedRowKey}
             />
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
-          data-testid="capability-sheet"
-        >
-          <SheetHeader className="border-b px-4 py-3">
-            <SheetTitle>Capabilities</SheetTitle>
-            <SheetDescription>
-              The effective set for this selection — every class, with the exact
-              gate on inactive rows. Attach from the tenant pool or detach
-              directly.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            {loading ? (
-              <div className="space-y-3" data-testid="capability-loading">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-24 w-full" />
-              </div>
-            ) : inspection.error ? (
-              <p className="text-sm text-destructive">
-                Couldn&apos;t load the capability set:{" "}
-                {inspection.error.message}
-              </p>
-            ) : result?.state === "invalid_selection" ? (
-              <p
-                className="text-sm text-destructive"
-                data-testid="invalid-selection"
-              >
-                Invalid selection: {result.stateDetail}
-              </p>
-            ) : result?.state === "resolution_fault" ? (
-              <p
-                className="text-sm text-destructive"
-                data-testid="resolution-fault"
-              >
-                Resolution fault — this selection could not be composed:{" "}
-                {result.stateDetail}
-              </p>
-            ) : predicted ? (
-              <>
-                <Tabs value={activeTab} onValueChange={setActiveClass}>
-                  <TabsList className="mb-3 flex-wrap">
-                    {tabClasses.map((capabilityClass) => {
-                      const classItems = allByClass.get(capabilityClass) ?? [];
-                      const activeCount = classItems.filter(
-                        (item) => item.active,
-                      ).length;
-                      return (
-                        <TabsTrigger
-                          key={capabilityClass}
-                          value={capabilityClass}
-                          data-testid={`capability-tab-${capabilityClass}`}
-                        >
-                          {CLASS_LABELS[capabilityClass] ?? capabilityClass}
-                          {/* Active/total (v1.1 item 3): "Skills 2/27". */}
-                          <span className="ml-1.5 text-xs font-semibold text-primary">
-                            {activeCount}/{classItems.length}
-                          </span>
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                </Tabs>
-
-                {/* Pi-extension assignment folded in from the retired Agents →
-                    Extensions surface (plan U8): the version-picker + attach
-                    live in the Add dialog; per-row detach is in rowActions. */}
-                {activeTab === "pi_extension" && writeScope ? (
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {agentProfileId
-                        ? "Assign an approved Pi extension to this agent profile."
-                        : "Assign an approved Pi extension to the Agent."}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAddExtensionOpen(true)}
-                      data-testid="open-add-extension"
-                    >
-                      Add extension
-                    </Button>
-                  </div>
-                ) : null}
-
-                <SettingsSection>
-                  {visibleItems.length === 0 ? (
-                    <p className="px-4 py-6 text-sm text-muted-foreground">
-                      {activeTab === "pi_extension"
-                        ? "No Pi extensions assigned for this selection."
-                        : "Nothing in this category for the current selection."}
-                    </p>
-                  ) : (
-                    visibleItems.map((item) => (
-                      <div
-                        key={rowKeyOf(item)}
-                        className={cn(
-                          "flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0",
-                          focusedRowKey === rowKeyOf(item) &&
-                            "bg-primary/5 ring-1 ring-inset ring-primary/40",
-                        )}
-                        data-testid={
-                          focusedRowKey === rowKeyOf(item)
-                            ? "capability-row-focused"
-                            : "capability-row"
-                        }
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="min-w-0 truncate text-sm font-medium text-foreground">
-                            {item.displayName || item.capabilityId}
-                          </p>
-                          <div className="flex shrink-0 items-center gap-2">
-                            {item.tokenStatus ? (
-                              <Badge
-                                variant="outline"
-                                className="text-muted-foreground"
-                              >
-                                token: {item.tokenStatus}
-                              </Badge>
-                            ) : null}
-                            {deltaByRowKey.has(rowKeyOf(item)) ? (
-                              <Badge
-                                variant="destructive"
-                                data-testid={`delta-${rowKeyOf(item)}`}
-                              >
-                                not loaded last turn
-                              </Badge>
-                            ) : null}
-                            {stateChip(item)}
-                            {rowActions(item)}
-                          </div>
-                        </div>
-                        {item.provenance ? (
-                          <p className="text-xs text-muted-foreground">
-                            {item.provenance}
-                          </p>
-                        ) : null}
-                        {item.detail ? (
-                          <p className="text-xs text-muted-foreground">
-                            {item.detail}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))
-                  )}
-                </SettingsSection>
-              </>
-            ) : null}
           </div>
         </SheetContent>
       </Sheet>
@@ -1669,7 +1533,15 @@ export function SettingsCapabilities() {
           <div className="max-h-80 overflow-y-auto">
             {addMcpPool.length === 0 ? (
               <p className="px-1 py-6 text-sm text-muted-foreground">
-                No MCP servers are registered for this tenant.
+                No MCP servers are registered for this tenant.{" "}
+                <Link
+                  to="/settings/mcp-servers"
+                  className="text-foreground underline underline-offset-2"
+                  data-testid="add-mcp-empty-registry-link"
+                >
+                  Register one in MCP Servers
+                </Link>
+                .
               </p>
             ) : (
               addMcpPool.map((item) => (
@@ -1852,59 +1724,3 @@ export function SettingsCapabilities() {
   );
 }
 
-function CapabilityToolbarSearch({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const isOpen = expanded || value.length > 0;
-
-  useEffect(() => {
-    if (expanded) inputRef.current?.focus();
-  }, [expanded]);
-
-  if (!isOpen) {
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-sm"
-        className="h-8 w-8 rounded-md"
-        aria-label="Search capabilities"
-        data-testid="capability-search-toggle"
-        onClick={() => setExpanded(true)}
-      >
-        <Search className="size-4" aria-hidden="true" />
-      </Button>
-    );
-  }
-
-  return (
-    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center rounded-md border border-input">
-      <Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
-      <Input
-        ref={inputRef}
-        aria-label="Search capabilities"
-        data-testid="capability-search"
-        placeholder="Search capabilities..."
-        className="h-8 rounded-md border-transparent bg-transparent pl-8 shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-        value={value}
-        onBlur={() => {
-          if (!value) setExpanded(false);
-        }}
-        onChange={(event) => onChange(event.target.value.trimStart())}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onChange("");
-            setExpanded(false);
-          }
-        }}
-      />
-    </div>
-  );
-}
