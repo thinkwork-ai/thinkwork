@@ -44,6 +44,7 @@ export interface KnowledgeGraphExtensionOptions {
 }
 
 const MAX_SEARCH_LIMIT = 10;
+const MAX_NEIGHBOR_DEPTH = 2;
 const UNAVAILABLE_TEXT = "Knowledge graph is currently unavailable.";
 
 function formatEntity(entity: KnowledgeGraphEntityItem, index: number): string {
@@ -102,9 +103,13 @@ export function createKnowledgeGraphExtension(
 ): ThinkworkExtension {
   return defineExtension({
     name: "thinkwork-knowledge-graph",
-    // Must be folded into the createAgentSession allowlist or this tool
-    // registers but never reaches the model (the SDK gates to the allowlist).
-    toolNames: ["knowledge_graph_search"],
+    // Must be folded into the createAgentSession allowlist or these tools
+    // register but never reach the model (the SDK gates to the allowlist).
+    toolNames: [
+      "knowledge_graph_search",
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ],
     register(pi, providers) {
       // Fail loud at load if the host forgot the provider — better than a
       // silent no-op mid-turn (the all-optional ProviderBundle invites that).
@@ -184,7 +189,131 @@ export function createKnowledgeGraphExtension(
         },
       };
 
+      const getEntityTool: ToolDefinition = {
+        name: "knowledge_graph_get_entity",
+        label: "Knowledge Graph",
+        description:
+          "Fetch one knowledge-graph entity by id — its summary, aliases, supporting-" +
+          "observation references, and every relationship edge touching it. Use after " +
+          "`knowledge_graph_search` (or `knowledge_graph_neighbors`) surfaces an entity " +
+          "id you want the full picture of. Results carry labels, summaries, and " +
+          "observation-ID references only — for the underlying detail behind an " +
+          "observation, drill into `recall`.",
+        parameters: Type.Object({
+          entity_id: Type.String({
+            description:
+              "Entity id from a prior knowledge_graph_search or knowledge_graph_neighbors result.",
+          }),
+        }),
+        executionMode: "sequential",
+        async execute(_toolCallId, params, signal) {
+          const { entity_id: entityId } = params as { entity_id: string };
+          const trimmed = (entityId ?? "").trim();
+          if (!trimmed) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "knowledge_graph_get_entity requires an entity_id.",
+                },
+              ],
+              details: { ok: false },
+            };
+          }
+          try {
+            const result = await graph.getEntity({ entityId: trimmed }, signal);
+            const text =
+              result.entities.length === 0
+                ? "No such entity in the knowledge graph."
+                : formatSearchResult(result);
+            return {
+              content: [{ type: "text", text }],
+              details: {
+                entityId: trimmed,
+                entityCount: result.entities.length,
+                relationshipCount: result.relationships.length,
+              },
+            };
+          } catch (error) {
+            options.onError?.(error, { phase: "knowledge_graph_get_entity" });
+            return {
+              content: [{ type: "text", text: UNAVAILABLE_TEXT }],
+              details: { ok: false, entityId: trimmed },
+            };
+          }
+        },
+      };
+
+      const neighborsTool: ToolDefinition = {
+        name: "knowledge_graph_neighbors",
+        label: "Knowledge Graph",
+        description:
+          "Expand the neighborhood around a knowledge-graph entity: the entities it " +
+          "connects to and the relationship edges between them, up to a bounded hop " +
+          "depth. Use to traverse the Brain outward from a known entity " +
+          '("what surrounds the Acme account?"). Results carry labels, summaries, and ' +
+          "observation-ID references only.",
+        parameters: Type.Object({
+          entity_id: Type.String({
+            description: "Anchor entity id to expand around.",
+          }),
+          depth: Type.Optional(
+            Type.Integer({
+              description: `Hop depth (1-${MAX_NEIGHBOR_DEPTH}; default 1).`,
+              minimum: 1,
+              maximum: MAX_NEIGHBOR_DEPTH,
+            }),
+          ),
+        }),
+        executionMode: "sequential",
+        async execute(_toolCallId, params, signal) {
+          const { entity_id: entityId, depth } = params as {
+            entity_id: string;
+            depth?: number;
+          };
+          const trimmed = (entityId ?? "").trim();
+          if (!trimmed) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "knowledge_graph_neighbors requires an entity_id.",
+                },
+              ],
+              details: { ok: false },
+            };
+          }
+          try {
+            const result = await graph.neighbors(
+              { entityId: trimmed, depth },
+              signal,
+            );
+            const text =
+              result.entities.length === 0
+                ? "No such entity in the knowledge graph."
+                : formatSearchResult(result);
+            return {
+              content: [{ type: "text", text }],
+              details: {
+                entityId: trimmed,
+                depth: depth ?? 1,
+                entityCount: result.entities.length,
+                relationshipCount: result.relationships.length,
+              },
+            };
+          } catch (error) {
+            options.onError?.(error, { phase: "knowledge_graph_neighbors" });
+            return {
+              content: [{ type: "text", text: UNAVAILABLE_TEXT }],
+              details: { ok: false, entityId: trimmed },
+            };
+          }
+        },
+      };
+
       pi.registerTool(searchTool);
+      pi.registerTool(getEntityTool);
+      pi.registerTool(neighborsTool);
     },
   });
 }

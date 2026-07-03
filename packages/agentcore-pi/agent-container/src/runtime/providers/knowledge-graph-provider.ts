@@ -1,5 +1,7 @@
 import type {
   KnowledgeGraphEntityItem,
+  KnowledgeGraphGetEntityRequest,
+  KnowledgeGraphNeighborsRequest,
   KnowledgeGraphProvider,
   KnowledgeGraphRelationshipItem,
   KnowledgeGraphSearchRequest,
@@ -51,6 +53,42 @@ const SEARCH_QUERY = /* GraphQL */ `
         fromLabel
         toLabel
       }
+    }
+  }
+`;
+
+const RESULT_FIELDS = /* GraphQL */ `
+  entities {
+    id
+    label
+    typeSlug
+    summary
+    aliases
+    relationshipCount
+    evidenceCount
+    observationIds
+  }
+  relationships {
+    id
+    label
+    typeSlug
+    fromLabel
+    toLabel
+  }
+`;
+
+const GET_ENTITY_QUERY = /* GraphQL */ `
+  query KnowledgeGraphGetEntity($entityId: ID!) {
+    knowledgeGraphGetEntity(entityId: $entityId) {
+      ${RESULT_FIELDS}
+    }
+  }
+`;
+
+const NEIGHBORS_QUERY = /* GraphQL */ `
+  query KnowledgeGraphNeighbors($entityId: ID!, $depth: Int) {
+    knowledgeGraphNeighbors(entityId: $entityId, depth: $depth) {
+      ${RESULT_FIELDS}
     }
   }
 `;
@@ -167,6 +205,81 @@ export function createApiKnowledgeGraphProvider(
     ? { "x-thread-turn-id": options.threadTurnId.trim() }
     : { "x-thread-id": options.threadId!.trim() };
 
+  async function executeGraphQuery(
+    queryDoc: string,
+    variables: Record<string, unknown>,
+    resultField: string,
+    signal?: AbortSignal,
+  ): Promise<KnowledgeGraphSearchResult> {
+    // Compose the caller's signal with the request timeout so the caller's
+    // cancellation still wins, but a hung backend aborts after timeoutMs.
+    // Single attempt — in-turn tool latency beats retry completeness.
+    const attemptSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${options.apiSecret}`,
+          ...turnHeaders,
+        },
+        body: JSON.stringify({ query: queryDoc, variables }),
+        signal: attemptSignal,
+      });
+    } catch (err) {
+      throw new ApiKnowledgeGraphProviderError(
+        `Knowledge graph transport error: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new ApiKnowledgeGraphProviderError(
+        `Knowledge graph API ${response.status}: ${text.slice(0, 400)}`,
+        response.status,
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      throw new ApiKnowledgeGraphProviderError(
+        "Knowledge graph API returned a non-JSON response.",
+      );
+    }
+    const record = (payload ?? {}) as Record<string, unknown>;
+    if (Array.isArray(record.errors) && record.errors.length > 0) {
+      const first = record.errors[0] as Record<string, unknown> | undefined;
+      const message =
+        typeof first?.message === "string" ? first.message : "unknown error";
+      throw new ApiKnowledgeGraphProviderError(
+        `Knowledge graph query failed: ${message}`,
+      );
+    }
+    const data = (record.data ?? {}) as Record<string, unknown>;
+    const result = (data[resultField] ?? {}) as Record<string, unknown>;
+    return {
+      entities: (Array.isArray(result.entities) ? result.entities : [])
+        .map(toEntity)
+        .filter((item): item is KnowledgeGraphEntityItem => item !== null),
+      relationships: (Array.isArray(result.relationships)
+        ? result.relationships
+        : []
+      )
+        .map(toRelationship)
+        .filter(
+          (item): item is KnowledgeGraphRelationshipItem => item !== null,
+        ),
+    };
+  }
+
   return {
     async search(
       request: KnowledgeGraphSearchRequest,
@@ -178,80 +291,48 @@ export function createApiKnowledgeGraphProvider(
           "search called with an empty query.",
         );
       }
+      return executeGraphQuery(
+        SEARCH_QUERY,
+        { query, limit: request.limit ?? null },
+        "knowledgeGraphSearch",
+        signal,
+      );
+    },
 
-      // Compose the caller's signal with the request timeout so the caller's
-      // cancellation still wins, but a hung backend aborts after timeoutMs.
-      // Single attempt — in-turn tool latency beats retry completeness.
-      const attemptSignal = signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-        : AbortSignal.timeout(timeoutMs);
-
-      let response: Response;
-      try {
-        response = await fetchImpl(url, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${options.apiSecret}`,
-            ...turnHeaders,
-          },
-          body: JSON.stringify({
-            query: SEARCH_QUERY,
-            variables: { query, limit: request.limit ?? null },
-          }),
-          signal: attemptSignal,
-        });
-      } catch (err) {
+    async getEntity(
+      request: KnowledgeGraphGetEntityRequest,
+      signal?: AbortSignal,
+    ): Promise<KnowledgeGraphSearchResult> {
+      const entityId = request.entityId?.trim();
+      if (!entityId) {
         throw new ApiKnowledgeGraphProviderError(
-          `Knowledge graph transport error: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+          "getEntity called with an empty entityId.",
         );
       }
+      return executeGraphQuery(
+        GET_ENTITY_QUERY,
+        { entityId },
+        "knowledgeGraphGetEntity",
+        signal,
+      );
+    },
 
-      const text = await response.text();
-      if (!response.ok) {
+    async neighbors(
+      request: KnowledgeGraphNeighborsRequest,
+      signal?: AbortSignal,
+    ): Promise<KnowledgeGraphSearchResult> {
+      const entityId = request.entityId?.trim();
+      if (!entityId) {
         throw new ApiKnowledgeGraphProviderError(
-          `Knowledge graph API ${response.status}: ${text.slice(0, 400)}`,
-          response.status,
+          "neighbors called with an empty entityId.",
         );
       }
-
-      let payload: unknown;
-      try {
-        payload = text ? JSON.parse(text) : null;
-      } catch {
-        throw new ApiKnowledgeGraphProviderError(
-          "Knowledge graph API returned a non-JSON response.",
-        );
-      }
-      const record = (payload ?? {}) as Record<string, unknown>;
-      if (Array.isArray(record.errors) && record.errors.length > 0) {
-        const first = record.errors[0] as Record<string, unknown> | undefined;
-        const message =
-          typeof first?.message === "string" ? first.message : "unknown error";
-        throw new ApiKnowledgeGraphProviderError(
-          `Knowledge graph query failed: ${message}`,
-        );
-      }
-      const data = (record.data ?? {}) as Record<string, unknown>;
-      const result = (data.knowledgeGraphSearch ?? {}) as Record<
-        string,
-        unknown
-      >;
-      return {
-        entities: (Array.isArray(result.entities) ? result.entities : [])
-          .map(toEntity)
-          .filter((item): item is KnowledgeGraphEntityItem => item !== null),
-        relationships: (Array.isArray(result.relationships)
-          ? result.relationships
-          : []
-        )
-          .map(toRelationship)
-          .filter(
-            (item): item is KnowledgeGraphRelationshipItem => item !== null,
-          ),
-      };
+      return executeGraphQuery(
+        NEIGHBORS_QUERY,
+        { entityId, depth: request.depth ?? null },
+        "knowledgeGraphNeighbors",
+        signal,
+      );
     },
   };
 }

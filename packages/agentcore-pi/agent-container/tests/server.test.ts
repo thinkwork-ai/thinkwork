@@ -3386,11 +3386,16 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     });
 
     // Folded into the allowlist (extension tools are silently gated
-    // otherwise) but NOT a plain AgentTool.
-    expect(bundle.extensionToolNames).toContain("knowledge_graph_search");
-    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
+    // otherwise) but NOT plain AgentTools. All three KG tools ride the one
+    // extension's toolNames (THINK-133 U6).
+    for (const name of [
       "knowledge_graph_search",
-    );
+      "knowledge_graph_get_entity",
+      "knowledge_graph_neighbors",
+    ]) {
+      expect(bundle.extensionToolNames).toContain(name);
+      expect(bundle.tools.map((tool) => tool.name)).not.toContain(name);
+    }
   });
 
   it("does not register knowledge_graph_search when the payload flag is off or in eval mode", async () => {
