@@ -63,7 +63,6 @@ import type {
   McpServerComponent,
 } from "@thinkwork/plugin-catalog";
 import { db as defaultDb } from "../../../graphql/utils.js";
-import { readCogneeStatus } from "../../../graphql/resolvers/core/managedApplications.js";
 import { computeMcpUrlHash } from "../../mcp-server-hash.js";
 
 type DbLike = typeof defaultDb;
@@ -224,17 +223,6 @@ function browserBaseUrlFromPublicUrl(url: URL): string | undefined {
   return undefined;
 }
 
-function cogneeEndpointFallback(
-  endpointFrom: NonNullable<McpServerComponent["endpointFrom"]>,
-): Record<string, unknown> | null {
-  if (endpointFrom.managedApp !== "cognee") return null;
-  const cognee = readCogneeStatus();
-  if (!cognee.enabled || !cognee.endpoint) return null;
-  return {
-    [endpointFrom.configKey]: cognee.endpoint,
-  };
-}
-
 function pluginMcpRuntimeMetadata(
   component: McpServerComponent,
   resolvedEndpoint: ResolvedPluginMcpEndpoint,
@@ -289,14 +277,12 @@ async function resolvePluginMcpEndpointContext(args: {
     )
     .limit(1)) as { desired_config: unknown }[];
 
-  const fallbackConfig = cogneeEndpointFallback(endpointFrom);
-  if (!row && !fallbackConfig) {
+  if (!row) {
     throw new Error(
       `MCP component "${component.key}": managed application "${endpointFrom.managedApp}" has no row for this tenant yet — retry after its infrastructure component is configured and deployed`,
     );
   }
   const desiredConfig = {
-    ...(fallbackConfig ?? {}),
     ...((row?.desired_config ?? {}) as Record<string, unknown>),
   };
   const baseUrl = desiredConfig[endpointFrom.configKey];
@@ -470,9 +456,8 @@ export async function teardownPluginMcpComponent(args: {
   // DB-mocked unit tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "../../mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("../../mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId: args.tenantId,
       registryServerId: serverId,
@@ -539,9 +524,8 @@ export async function teardownPluginMcpComponent(args: {
   // Remove the per-agent workspace folders now that the DB rows are gone.
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "../../mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("../../mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
     } catch (err) {
       console.warn(
@@ -588,9 +572,8 @@ async function ensurePluginMcpDefaultAgentAssignments(
   // provision the DB row already committed. Bucket-gated — a no-op in
   // DB-mocked unit tests.
   try {
-    const { reconcileMcpAssignmentFoldersForAgents } = await import(
-      "../../mcp/assignment-state.js"
-    );
+    const { reconcileMcpAssignmentFoldersForAgents } =
+      await import("../../mcp/assignment-state.js");
     await reconcileMcpAssignmentFoldersForAgents({
       agentIds: platformAgents.map((agent) => agent.id),
       tenantId,

@@ -753,7 +753,6 @@ function summarizePreservedConfig(varsJson: Record<string, unknown> | null) {
     appCertificateArn: stringValue(varsJson.app_certificate_arn) || null,
     optionalApps: {
       hindsight: booleanValue(varsJson.enable_hindsight),
-      cognee: booleanValue(varsJson.enable_cognee),
       twenty: booleanValue(varsJson.twenty_provisioned),
       n8n: booleanValue(varsJson.n8n_provisioned),
     },

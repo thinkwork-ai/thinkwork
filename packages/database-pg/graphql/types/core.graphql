@@ -139,12 +139,6 @@ type DeploymentStatus {
   agentcoreStatus: String
   hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
-  cogneeEnabled: Boolean!
-  cogneeEndpoint: String
-  cogneeLogGroupName: String
-  cogneeBackendMode: String
-  cogneeClusterArn: String
-  cogneeServiceName: String
   twentyProvisioned: Boolean!
   twentyRuntimeEnabled: Boolean!
   twentyUrl: String
@@ -187,21 +181,6 @@ type ManagedApplicationDeployment {
   workflowReadinessState: String!
   workflowReadinessReasons: AWSJSON!
   workflowCapabilityFlags: AWSJSON!
-}
-
-type KnowledgeGraphDeploymentChange {
-  desiredEnabled: Boolean!
-  workflowUrl: String!
-  message: String!
-}
-
-type KnowledgeGraphHealthCheck {
-  healthy: Boolean!
-  statusCode: Int
-  latencyMs: Int!
-  endpoint: String
-  checkedAt: AWSDateTime!
-  message: String!
 }
 
 type ManagedApplicationDeploymentChange {
@@ -260,11 +239,6 @@ input UpdateTenantSettingsInput {
   autoCloseThreadMinutes: Int
   maxAgents: Int
   features: AWSJSON
-}
-
-input SetKnowledgeGraphDeploymentInput {
-  enabled: Boolean!
-  idempotencyKey: String
 }
 
 input SetManagedApplicationDeploymentInput {
@@ -350,7 +324,6 @@ extend type Query {
   user(id: ID!): User
   tenantMembers(tenantId: ID!): [TenantMember!]!
   deploymentStatus: DeploymentStatus!
-  knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck!
   managedApplicationHealthCheck(key: String!): ManagedApplicationHealthCheck!
   """
   Returns the caller's own role on the caller's own tenant.
@@ -430,9 +403,6 @@ extend type Mutation {
     tenantId: ID!
     input: UpdateTenantSettingsInput!
   ): TenantSettings!
-  setKnowledgeGraphDeployment(
-    input: SetKnowledgeGraphDeploymentInput!
-  ): KnowledgeGraphDeploymentChange!
   setManagedApplicationDeployment(
     input: SetManagedApplicationDeploymentInput!
   ): ManagedApplicationDeploymentChange!

@@ -48,12 +48,6 @@ export interface KnowledgeGraphObservationsIngestEvent {
   /** Scheduled drainer mode — enumerate all tenants and run each. */
   sweep?: boolean;
   fullRebuild?: boolean;
-  /**
-   * Nuclear clear of the ENTIRE Cognee store before re-ingest (all datasets +
-   * system graph), not just this tenant's observations dataset. Single-tenant
-   * /dev only — wipes other tenants' and thread graphs too. Implies fullRebuild.
-   */
-  cogneePruneAll?: boolean;
   trigger?: "manual" | "scheduled";
 }
 
@@ -80,7 +74,6 @@ interface KnowledgeGraphObservationsIngestDeps {
     trigger: "manual" | "scheduled";
   }) => Promise<void>;
 }
-
 
 /**
  * Per-run candidate cap. A 500-candidate backlog times out a 480 s Lambda
@@ -172,7 +165,6 @@ export async function processKnowledgeGraphObservationsIngest(
       tenantId: event.tenantId,
       runId: event.runId,
       fullRebuild: event.fullRebuild,
-      cogneePruneAll: event.cogneePruneAll,
       trigger: event.trigger ?? "manual",
     },
     deps,
@@ -185,7 +177,6 @@ async function processTenantObservationsIngest(
     tenantId: string;
     runId?: string;
     fullRebuild?: boolean;
-    cogneePruneAll?: boolean;
     trigger: "manual" | "scheduled";
   },
   deps: KnowledgeGraphObservationsIngestDeps,
@@ -236,12 +227,8 @@ async function processTenantObservationsIngest(
   }
 
   const runInput = run.input as Record<string, unknown> | null;
-  const cogneePruneAll =
-    args.cogneePruneAll === true || runInput?.cogneePruneAll === true;
   const fullRebuild =
-    cogneePruneAll ||
-    args.fullRebuild === true ||
-    runInput?.fullRebuild === true;
+    args.fullRebuild === true || runInput?.fullRebuild === true;
 
   try {
     await markKnowledgeGraphRunRunning({ db: database, runId: run.id });

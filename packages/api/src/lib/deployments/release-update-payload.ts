@@ -72,7 +72,6 @@ export function buildReleaseUpdateControllerPayload({
     },
     features: {
       baseInstall: {
-        cognee: optionalApps.includes("cognee"),
         slack: false,
         stripe: false,
         twenty: optionalApps.includes("twenty"),
@@ -124,7 +123,6 @@ function preservedConfigFromSummary(
     appDomain: stringValue(fields.appDomain),
     appCertificateArn: stringValue(fields.appCertificateArn),
     enableHindsight: booleanOrUndefined(optionalApps.hindsight),
-    enableCognee: booleanOrUndefined(optionalApps.cognee),
     twentyProvisioned: booleanOrUndefined(optionalApps.twenty),
     n8nProvisioned: booleanOrUndefined(optionalApps.n8n),
   });
@@ -134,7 +132,6 @@ function optionalAppsFromPreservedConfig(
   preservedConfig: Record<string, unknown>,
 ): string[] {
   const apps: string[] = [];
-  if (preservedConfig.enableCognee === true) apps.push("cognee");
   if (preservedConfig.twentyProvisioned === true) apps.push("twenty");
   if (preservedConfig.n8nProvisioned === true) apps.push("n8n");
   return apps;

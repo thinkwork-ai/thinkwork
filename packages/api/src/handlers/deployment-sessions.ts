@@ -1260,7 +1260,6 @@ function buildControllerInput(
     },
     features: {
       baseInstall: {
-        cognee: false,
         slack: false,
         stripe: false,
         twenty: false,

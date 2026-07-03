@@ -1096,85 +1096,6 @@ export type ClaimNextOpenEngineWorkItemInput = {
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
-export type CompanyBrainCapabilities = {
-  __typename?: 'CompanyBrainCapabilities';
-  launch: Array<CompanyBrainCapability>;
-  optional: Array<CompanyBrainCapability>;
-};
-
-export type CompanyBrainCapability = {
-  __typename?: 'CompanyBrainCapability';
-  key: Scalars['String']['output'];
-  message?: Maybe<Scalars['String']['output']>;
-  source?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type CompanyBrainMigrationStatus = {
-  __typename?: 'CompanyBrainMigrationStatus';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  fromStorageTier?: Maybe<Scalars['String']['output']>;
-  id?: Maybe<Scalars['ID']['output']>;
-  phase: Scalars['String']['output'];
-  requestedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  rollbackWindowClosesAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  toStorageTier?: Maybe<Scalars['String']['output']>;
-  validationSummary?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
-export type CompanyBrainOperationalCounters = {
-  __typename?: 'CompanyBrainOperationalCounters';
-  failedIngestCount: Scalars['Int']['output'];
-  graphEdgeCount?: Maybe<Scalars['Int']['output']>;
-  graphEntityCount?: Maybe<Scalars['Int']['output']>;
-  ingestionQueueDepth: Scalars['Int']['output'];
-  latestIngestAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  latestProjectionAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  ontologyVersion?: Maybe<Scalars['String']['output']>;
-  sourceArtifactCount?: Maybe<Scalars['Int']['output']>;
-  vaultProjectionCount?: Maybe<Scalars['Int']['output']>;
-};
-
-export type CompanyBrainOperatorEvidence = {
-  __typename?: 'CompanyBrainOperatorEvidence';
-  backendMode?: Maybe<Scalars['String']['output']>;
-  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
-  cogneeVersion?: Maybe<Scalars['String']['output']>;
-  efsFileSystemId?: Maybe<Scalars['String']['output']>;
-  embeddingModel?: Maybe<Scalars['String']['output']>;
-  graphProvider?: Maybe<Scalars['String']['output']>;
-  latestDeploymentJobId?: Maybe<Scalars['ID']['output']>;
-  managedApplicationId?: Maybe<Scalars['ID']['output']>;
-  migrationEvidence?: Maybe<Scalars['AWSJSON']['output']>;
-  neptuneEndpoint?: Maybe<Scalars['String']['output']>;
-  neptuneGraphId?: Maybe<Scalars['String']['output']>;
-  operatorEvidence?: Maybe<Scalars['AWSJSON']['output']>;
-  productionPosture?: Maybe<Scalars['String']['output']>;
-  s3ArtifactRoot?: Maybe<Scalars['String']['output']>;
-  s3ManifestRoot?: Maybe<Scalars['String']['output']>;
-  s3VaultProjectionRoot?: Maybe<Scalars['String']['output']>;
-  vectorDimension?: Maybe<Scalars['Int']['output']>;
-  vectorProvider?: Maybe<Scalars['String']['output']>;
-};
-
-export type CompanyBrainStatus = {
-  __typename?: 'CompanyBrainStatus';
-  activeBackend: Scalars['String']['output'];
-  capabilities: CompanyBrainCapabilities;
-  counters: CompanyBrainOperationalCounters;
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  evidence?: Maybe<CompanyBrainOperatorEvidence>;
-  healthStatus: Scalars['String']['output'];
-  migration: CompanyBrainMigrationStatus;
-  status: Scalars['String']['output'];
-  storageTier: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-};
-
 export enum ComplianceActorType {
   Agent = 'AGENT',
   System = 'SYSTEM',
@@ -1892,12 +1813,6 @@ export type DeploymentStatus = {
   appsyncRealtimeUrl?: Maybe<Scalars['String']['output']>;
   appsyncUrl?: Maybe<Scalars['String']['output']>;
   bucketName?: Maybe<Scalars['String']['output']>;
-  cogneeBackendMode?: Maybe<Scalars['String']['output']>;
-  cogneeClusterArn?: Maybe<Scalars['String']['output']>;
-  cogneeEnabled: Scalars['Boolean']['output'];
-  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
-  cogneeLogGroupName?: Maybe<Scalars['String']['output']>;
-  cogneeServiceName?: Maybe<Scalars['String']['output']>;
   databaseEndpoint?: Maybe<Scalars['String']['output']>;
   deploymentControllerArn?: Maybe<Scalars['String']['output']>;
   deploymentEvidenceBucket?: Maybe<Scalars['String']['output']>;
@@ -2799,13 +2714,6 @@ export type KnowledgeGraphArtifactManifestSummary = {
   vectorDimension?: Maybe<Scalars['Int']['output']>;
 };
 
-export type KnowledgeGraphDeploymentChange = {
-  __typename?: 'KnowledgeGraphDeploymentChange';
-  desiredEnabled: Scalars['Boolean']['output'];
-  message: Scalars['String']['output'];
-  workflowUrl: Scalars['String']['output'];
-};
-
 export type KnowledgeGraphEntity = {
   __typename?: 'KnowledgeGraphEntity';
   aliases: Array<Scalars['String']['output']>;
@@ -2909,16 +2817,6 @@ export enum KnowledgeGraphGroundingStatus {
   Ungrounded = 'UNGROUNDED',
   Unknown = 'UNKNOWN'
 }
-
-export type KnowledgeGraphHealthCheck = {
-  __typename?: 'KnowledgeGraphHealthCheck';
-  checkedAt: Scalars['AWSDateTime']['output'];
-  endpoint?: Maybe<Scalars['String']['output']>;
-  healthy: Scalars['Boolean']['output'];
-  latencyMs: Scalars['Int']['output'];
-  message: Scalars['String']['output'];
-  statusCode?: Maybe<Scalars['Int']['output']>;
-};
 
 export type KnowledgeGraphIngestRun = {
   __typename?: 'KnowledgeGraphIngestRun';
@@ -3384,12 +3282,6 @@ export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
   /** Active long-term memory engine selected by MEMORY_ENGINE. */
   activeEngine: Scalars['String']['output'];
-  /**
-   * True when Cognee is explicitly selected as the active memory engine.
-   * This is a compatibility/diagnostic signal; Hindsight is the canonical
-   * user and Space memory engine for this pass.
-   */
-  cogneeMemoryEnabled: Scalars['Boolean']['output'];
   /**
    * ThinkWork Brain distillation is intentionally deferred from this memory
    * provider pivot.
@@ -3859,7 +3751,6 @@ export type Mutation = {
   renameTenantSlug: Tenant;
   reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
-  requestCompanyBrainProductionMigration: CompanyBrainMigrationStatus;
   requestRevision: InboxItem;
   resendMemberInvite: ResendMemberInviteResult;
   /**
@@ -3895,7 +3786,6 @@ export type Mutation = {
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
-  setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
@@ -3948,7 +3838,6 @@ export type Mutation = {
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
-  updateCompanyBrainMigration: CompanyBrainMigrationStatus;
   updateEmailReadinessCheck: EmailReadinessCheck;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
@@ -4934,11 +4823,6 @@ export type MutationReorderQuickActionsArgs = {
 };
 
 
-export type MutationRequestCompanyBrainProductionMigrationArgs = {
-  input: RequestCompanyBrainProductionMigrationInput;
-};
-
-
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -5074,11 +4958,6 @@ export type MutationSetAgentKnowledgeBasesArgs = {
 
 export type MutationSetDefaultEvalProfileArgs = {
   id: Scalars['ID']['input'];
-};
-
-
-export type MutationSetKnowledgeGraphDeploymentArgs = {
-  input: SetKnowledgeGraphDeploymentInput;
 };
 
 
@@ -5273,11 +5152,6 @@ export type MutationUpdateAgentProfileArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
-};
-
-
-export type MutationUpdateCompanyBrainMigrationArgs = {
-  input: UpdateCompanyBrainMigrationInput;
 };
 
 
@@ -6427,7 +6301,6 @@ export type Query = {
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   capabilityInspector: CapabilityInspection;
-  companyBrainStatus: CompanyBrainStatus;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
    * event_id see null (existence-oracle defense — SQL filter applies in the
@@ -6512,7 +6385,6 @@ export type Query = {
   knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
   knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
   knowledgeGraphGraph: KnowledgeGraphGraph;
-  knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
   knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
   knowledgeGraphSearch: KnowledgeGraphSearchResult;
@@ -8060,15 +7932,6 @@ export type ReorderQuickActionsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type RequestCompanyBrainProductionMigrationInput = {
-  allowEmptySourceSet?: InputMaybe<Scalars['Boolean']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  emptySourceReason?: InputMaybe<Scalars['String']['input']>;
-  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  vectorDimension?: InputMaybe<Scalars['Int']['input']>;
-};
-
 export type RequestRevisionInput = {
   reviewNotes: Scalars['String']['input'];
 };
@@ -8592,11 +8455,6 @@ export type SendMessageMentionInput = {
   startOffset?: InputMaybe<Scalars['Int']['input']>;
   targetId: Scalars['ID']['input'];
   targetType: MessageMentionTargetType;
-};
-
-export type SetKnowledgeGraphDeploymentInput = {
-  enabled: Scalars['Boolean']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type SetManagedApplicationDeploymentInput = {
@@ -10066,17 +9924,6 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
-};
-
-export type UpdateCompanyBrainMigrationInput = {
-  errorMessage?: InputMaybe<Scalars['String']['input']>;
-  migrationId: Scalars['ID']['input'];
-  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
-  phase: Scalars['String']['input'];
-  rollbackWindowClosesAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  validationSummary?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateEmailReadinessCheckInput = {
@@ -12265,13 +12112,6 @@ export type SettingsRemediateReleaseRunnerMutationVariables = Exact<{
 
 export type SettingsRemediateReleaseRunnerMutation = { __typename?: 'Mutation', remediateReleaseRunner: { __typename?: 'ReleaseUpdateJob', id: string, status: string, targetReleaseVersion: string, currentReleaseVersion?: string | null, manifestSha256: string, manifestSigned: boolean, manifestTrustPolicy?: string | null, terraformModuleVersion?: string | null, preflightSummary: any, preservedConfigSummary: any, remediationSummary: any, stateMachineArn?: string | null, executionArn?: string | null, codebuildBuildArn?: string | null, evidenceBucket?: string | null, evidencePrefix?: string | null, statusPointerBucket?: string | null, statusPointerKey?: string | null, finalStatus: any, failureCategory?: string | null, failureMessage?: string | null, recoveryAction?: string | null, events: Array<{ __typename?: 'ReleaseUpdateEvent', id: string, eventType: string, message: string, payload: any, createdAt: any }> } };
 
-export type SettingsSetKnowledgeGraphDeploymentMutationVariables = Exact<{
-  enabled: Scalars['Boolean']['input'];
-}>;
-
-
-export type SettingsSetKnowledgeGraphDeploymentMutation = { __typename?: 'Mutation', setKnowledgeGraphDeployment: { __typename?: 'KnowledgeGraphDeploymentChange', desiredEnabled: boolean, workflowUrl: string, message: string } };
-
 export type SettingsSetManagedApplicationDeploymentMutationVariables = Exact<{
   key: Scalars['String']['input'];
   action: ManagedApplicationDeploymentAction;
@@ -12326,11 +12166,6 @@ export type SettingsRejectManagedApplicationDeploymentMutationVariables = Exact<
 
 
 export type SettingsRejectManagedApplicationDeploymentMutation = { __typename?: 'Mutation', rejectManagedApplicationDeployment: { __typename?: 'ManagedApplicationDeploymentJob', id: string, appKey: string, operation: string, status: string, releaseVersion: string, manifestDigest: string, desiredConfigVersion: string, stateMachineArn?: string | null, planExecutionArn?: string | null, applyExecutionArn?: string | null, codebuildBuildArn?: string | null, planDigest?: string | null, planSummary: any, dataImpact: any, evidenceBucket?: string | null, evidencePrefix?: string | null, approvalRequired: boolean, approvedAt?: any | null, rejectedAt?: any | null, errorMessage?: string | null, createdAt: any, updatedAt: any, events: Array<{ __typename?: 'ManagedApplicationDeploymentEvent', id: string, eventType: string, message: string, payload: any, createdAt: any }> } };
-
-export type SettingsKnowledgeGraphHealthCheckQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type SettingsKnowledgeGraphHealthCheckQuery = { __typename?: 'Query', knowledgeGraphHealthCheck: { __typename?: 'KnowledgeGraphHealthCheck', healthy: boolean, statusCode?: number | null, latencyMs: number, endpoint?: string | null, checkedAt: any, message: string } };
 
 export type SettingsManagedApplicationHealthCheckQueryVariables = Exact<{
   key: Scalars['String']['input'];
@@ -13091,7 +12926,6 @@ export const SettingsStartDeploymentReleaseUpdateDocument = {"kind":"Document","
 export const SettingsStartReleaseUpdatePreflightDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsStartReleaseUpdatePreflight"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartReleaseUpdatePreflightInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startReleaseUpdatePreflight"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSigned"}},{"kind":"Field","name":{"kind":"Name","value":"manifestTrustPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"terraformModuleVersion"}},{"kind":"Field","name":{"kind":"Name","value":"preflightSummary"}},{"kind":"Field","name":{"kind":"Name","value":"preservedConfigSummary"}},{"kind":"Field","name":{"kind":"Name","value":"remediationSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"executionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerBucket"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerKey"}},{"kind":"Field","name":{"kind":"Name","value":"finalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"failureCategory"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryAction"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsStartReleaseUpdatePreflightMutation, SettingsStartReleaseUpdatePreflightMutationVariables>;
 export const SettingsReleaseUpdateJobDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsReleaseUpdateJob"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseUpdateJob"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"jobId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSigned"}},{"kind":"Field","name":{"kind":"Name","value":"manifestTrustPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"terraformModuleVersion"}},{"kind":"Field","name":{"kind":"Name","value":"preflightSummary"}},{"kind":"Field","name":{"kind":"Name","value":"preservedConfigSummary"}},{"kind":"Field","name":{"kind":"Name","value":"remediationSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"executionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerBucket"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerKey"}},{"kind":"Field","name":{"kind":"Name","value":"finalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"failureCategory"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryAction"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsReleaseUpdateJobQuery, SettingsReleaseUpdateJobQueryVariables>;
 export const SettingsRemediateReleaseRunnerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRemediateReleaseRunner"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RemediateReleaseRunnerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"remediateReleaseRunner"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSigned"}},{"kind":"Field","name":{"kind":"Name","value":"manifestTrustPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"terraformModuleVersion"}},{"kind":"Field","name":{"kind":"Name","value":"preflightSummary"}},{"kind":"Field","name":{"kind":"Name","value":"preservedConfigSummary"}},{"kind":"Field","name":{"kind":"Name","value":"remediationSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"executionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerBucket"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerKey"}},{"kind":"Field","name":{"kind":"Name","value":"finalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"failureCategory"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryAction"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsRemediateReleaseRunnerMutation, SettingsRemediateReleaseRunnerMutationVariables>;
-export const SettingsSetKnowledgeGraphDeploymentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsSetKnowledgeGraphDeployment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setKnowledgeGraphDeployment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"ObjectValue","fields":[{"kind":"ObjectField","name":{"kind":"Name","value":"enabled"},"value":{"kind":"Variable","name":{"kind":"Name","value":"enabled"}}}]}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"desiredEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"workflowUrl"}},{"kind":"Field","name":{"kind":"Name","value":"message"}}]}}]}}]} as unknown as DocumentNode<SettingsSetKnowledgeGraphDeploymentMutation, SettingsSetKnowledgeGraphDeploymentMutationVariables>;
 export const SettingsSetManagedApplicationDeploymentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsSetManagedApplicationDeployment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"action"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ManagedApplicationDeploymentAction"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setManagedApplicationDeployment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"ObjectValue","fields":[{"kind":"ObjectField","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}},{"kind":"ObjectField","name":{"kind":"Name","value":"action"},"value":{"kind":"Variable","name":{"kind":"Name","value":"action"}}}]}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"action"}},{"kind":"Field","name":{"kind":"Name","value":"desiredEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"provisioned"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"workflowUrl"}},{"kind":"Field","name":{"kind":"Name","value":"message"}}]}}]}}]} as unknown as DocumentNode<SettingsSetManagedApplicationDeploymentMutation, SettingsSetManagedApplicationDeploymentMutationVariables>;
 export const SettingsInstallManagedApplicationMcpServerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsInstallManagedApplicationMcpServer"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installManagedApplicationMcpServer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"installed"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"message"}}]}}]}}]} as unknown as DocumentNode<SettingsInstallManagedApplicationMcpServerMutation, SettingsInstallManagedApplicationMcpServerMutationVariables>;
 export const SettingsManagedApplicationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsManagedApplications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"managedApplications"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"desiredStatus"}},{"kind":"Field","name":{"kind":"Name","value":"currentStatus"}},{"kind":"Field","name":{"kind":"Name","value":"selectedReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"selectedManifestDigest"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsManagedApplicationsQuery, SettingsManagedApplicationsQueryVariables>;
@@ -13100,7 +12934,6 @@ export const SettingsDeploymentEvidenceDocument = {"kind":"Document","definition
 export const SettingsStartManagedApplicationPlanDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsStartManagedApplicationPlan"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartManagedApplicationPlanInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startManagedApplicationPlan"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"operation"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestDigest"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfigVersion"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"planExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"applyExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"planDigest"}},{"kind":"Field","name":{"kind":"Name","value":"planSummary"}},{"kind":"Field","name":{"kind":"Name","value":"dataImpact"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsStartManagedApplicationPlanMutation, SettingsStartManagedApplicationPlanMutationVariables>;
 export const SettingsApproveManagedApplicationDeploymentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsApproveManagedApplicationDeployment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ApproveManagedApplicationDeploymentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approveManagedApplicationDeployment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"operation"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestDigest"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfigVersion"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"planExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"applyExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"planDigest"}},{"kind":"Field","name":{"kind":"Name","value":"planSummary"}},{"kind":"Field","name":{"kind":"Name","value":"dataImpact"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsApproveManagedApplicationDeploymentMutation, SettingsApproveManagedApplicationDeploymentMutationVariables>;
 export const SettingsRejectManagedApplicationDeploymentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRejectManagedApplicationDeployment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RejectManagedApplicationDeploymentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rejectManagedApplicationDeployment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"operation"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestDigest"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfigVersion"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"planExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"applyExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"planDigest"}},{"kind":"Field","name":{"kind":"Name","value":"planSummary"}},{"kind":"Field","name":{"kind":"Name","value":"dataImpact"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsRejectManagedApplicationDeploymentMutation, SettingsRejectManagedApplicationDeploymentMutationVariables>;
-export const SettingsKnowledgeGraphHealthCheckDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphHealthCheck"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeGraphHealthCheck"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"healthy"}},{"kind":"Field","name":{"kind":"Name","value":"statusCode"}},{"kind":"Field","name":{"kind":"Name","value":"latencyMs"}},{"kind":"Field","name":{"kind":"Name","value":"endpoint"}},{"kind":"Field","name":{"kind":"Name","value":"checkedAt"}},{"kind":"Field","name":{"kind":"Name","value":"message"}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphHealthCheckQuery, SettingsKnowledgeGraphHealthCheckQueryVariables>;
 export const SettingsManagedApplicationHealthCheckDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsManagedApplicationHealthCheck"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"key"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"managedApplicationHealthCheck"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"key"},"value":{"kind":"Variable","name":{"kind":"Name","value":"key"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"healthy"}},{"kind":"Field","name":{"kind":"Name","value":"statusCode"}},{"kind":"Field","name":{"kind":"Name","value":"latencyMs"}},{"kind":"Field","name":{"kind":"Name","value":"endpoint"}},{"kind":"Field","name":{"kind":"Name","value":"checkedAt"}},{"kind":"Field","name":{"kind":"Name","value":"message"}}]}}]}}]} as unknown as DocumentNode<SettingsManagedApplicationHealthCheckQuery, SettingsManagedApplicationHealthCheckQueryVariables>;
 export const SettingsKnowledgeGraphOntologyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphOntology"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ontologyDefinitions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"entityTypes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"broadType"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleStatus"}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"relationshipTypes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceTypeSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleStatus"}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"subjectKind"}},{"kind":"Field","name":{"kind":"Name","value":"subjectId"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphOntologyQuery, SettingsKnowledgeGraphOntologyQueryVariables>;
 export const SettingsKnowledgeGraphIngestRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphIngestRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeGraphIngestRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"entityCount"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipCount"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"diagnosticCount"}},{"kind":"Field","name":{"kind":"Name","value":"messageCount"}},{"kind":"Field","name":{"kind":"Name","value":"metrics"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphIngestRunsQuery, SettingsKnowledgeGraphIngestRunsQueryVariables>;

@@ -237,11 +237,6 @@ function desiredConfigPatchFromTerraformOutputs(
   appKey: string,
   outputs: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (appKey === "cognee") {
-    return compactRecord({
-      cogneeEndpoint: stringOutputValue(outputs, "cognee_endpoint"),
-    });
-  }
   if (appKey !== "n8n") return {};
   const publicUrl = stringOutputValue(outputs, "n8n_url");
   return compactRecord({
@@ -446,17 +441,14 @@ function currentStatusFromTerraformOutputs(
 }
 
 function isManagedAppKey(value: string): value is ManagedAppKey {
-  return value === "cognee" || value === "n8n" || value === "twenty";
+  return value === "n8n" || value === "twenty";
 }
 
 function hasManagedAppStatusIndicator(
   appKey: ManagedAppKey,
   outputs: Record<string, unknown>,
 ): boolean {
-  const keys =
-    appKey === "cognee"
-      ? ["cognee_enabled"]
-      : [`${appKey}_provisioned`, `${appKey}_runtime_enabled`];
+  const keys = [`${appKey}_provisioned`, `${appKey}_runtime_enabled`];
   return keys.some((key) => Object.prototype.hasOwnProperty.call(outputs, key));
 }
 

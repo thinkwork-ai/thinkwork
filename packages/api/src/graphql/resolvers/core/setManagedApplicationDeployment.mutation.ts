@@ -6,7 +6,7 @@ import {
   readGithubToken,
   requirePlatformOperator,
   upsertGithubActionsVariable,
-} from "./setKnowledgeGraphDeployment.mutation.js";
+} from "./deploymentControl.js";
 import {
   type ManagedApplicationKey,
   normalizeManagedApplicationKey,
@@ -83,17 +83,12 @@ function resolveDeploymentAction(
       : null;
 
   if (action) {
-    if (key === "cognee" && action === "PARK") {
-      throw new GraphQLError("Cognee does not support parked runtime state", {
-        extensions: { code: "BAD_USER_INPUT" },
-      });
-    }
     return action;
   }
 
   if (typeof input?.enabled === "boolean") {
     if (input.enabled) return "ENABLE";
-    return key === "cognee" ? "DESTROY" : "PARK";
+    return "PARK";
   }
 
   throw new GraphQLError("Managed application action is required", {
@@ -149,15 +144,6 @@ function deploymentVariablesFor(
   key: ManagedApplicationKey,
   action: DeploymentAction,
 ): DeploymentVariable[] {
-  if (key === "cognee") {
-    return [
-      {
-        name: "COGNEE_ENABLED",
-        value: action === "ENABLE" ? "true" : "false",
-      },
-    ];
-  }
-
   const enable = action === "ENABLE";
   const park = action === "PARK";
   if (key === "twenty") {
@@ -186,10 +172,7 @@ function deploymentStateFor(
   key: ManagedApplicationKey,
   action: DeploymentAction,
 ): { provisioned: boolean; runtimeEnabled: boolean } {
-  if (key === "cognee") {
-    const enabled = action === "ENABLE";
-    return { provisioned: enabled, runtimeEnabled: enabled };
-  }
+  void key;
   return {
     provisioned: action === "ENABLE" || action === "PARK",
     runtimeEnabled: action === "ENABLE",
@@ -200,9 +183,6 @@ function deploymentMessageFor(
   key: ManagedApplicationKey,
   action: DeploymentAction,
 ): string {
-  if (key === "cognee") {
-    return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
-  }
   const label = key === "twenty" ? "Twenty CRM" : "n8n";
   if (action === "ENABLE") {
     return `${label} enable deployment queued.`;

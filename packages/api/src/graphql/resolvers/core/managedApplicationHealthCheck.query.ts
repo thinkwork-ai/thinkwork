@@ -1,8 +1,8 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
-import { knowledgeGraphHealthCheck } from "./knowledgeGraphHealthCheck.query.js";
 import {
+  type ManagedApplicationKey,
   normalizeManagedApplicationKey,
   readManagedApplication,
 } from "./managedApplications.js";
@@ -29,16 +29,14 @@ export const managedApplicationHealthCheck = async (
     });
   }
 
-  if (key === "cognee") {
-    const result = await knowledgeGraphHealthCheck(_parent, {}, ctx);
-    return { key, ...result };
-  }
-
-  return twentyHealthCheck(tenantId);
+  return managedAppHttpHealthCheck(key, tenantId);
 };
 
-async function twentyHealthCheck(tenantId: string | null) {
-  const application = await readManagedApplication("twenty", tenantId);
+async function managedAppHttpHealthCheck(
+  key: ManagedApplicationKey,
+  tenantId: string | null,
+) {
+  const application = await readManagedApplication(key, tenantId);
   const startedAt = Date.now();
   const checkedAt = new Date(startedAt).toISOString();
   const endpoint = application.url;
@@ -51,7 +49,7 @@ async function twentyHealthCheck(tenantId: string | null) {
       latencyMs: 0,
       endpoint,
       checkedAt,
-      message: "Twenty CRM is not provisioned for this stage.",
+      message: `${application.displayName} is not provisioned for this stage.`,
     };
   }
 
@@ -63,7 +61,7 @@ async function twentyHealthCheck(tenantId: string | null) {
       latencyMs: 0,
       endpoint,
       checkedAt,
-      message: "Twenty CRM runtime is parked; CRM data is retained.",
+      message: `${application.displayName} runtime is parked; data is retained.`,
     };
   }
 
@@ -86,15 +84,15 @@ async function twentyHealthCheck(tenantId: string | null) {
       endpoint,
       checkedAt,
       message: response.ok
-        ? "Twenty CRM /healthz is healthy."
-        : `Twenty CRM /healthz returned ${response.status}.`,
+        ? `${application.displayName} /healthz is healthy.`
+        : `${application.displayName} /healthz returned ${response.status}.`,
     };
   } catch (error) {
     const latencyMs = Date.now() - startedAt;
     const message =
       error instanceof Error && error.name === "AbortError"
-        ? "Twenty CRM health check timed out."
-        : "Twenty CRM health check could not be completed.";
+        ? `${application.displayName} health check timed out.`
+        : `${application.displayName} health check could not be completed.`;
     return {
       key: "twenty",
       healthy: false,

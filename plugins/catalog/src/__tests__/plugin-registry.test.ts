@@ -19,11 +19,6 @@ describe("generated first-party plugin registry", () => {
       })),
     ).toEqual([
       {
-        packageKey: "company-brain",
-        packageName: "@thinkwork/plugin-company-brain",
-        exportName: "companyBrainPluginPackage",
-      },
-      {
         packageKey: "company-data",
         packageName: "@thinkwork/plugin-company-data",
         exportName: "companyDataPluginPackage",

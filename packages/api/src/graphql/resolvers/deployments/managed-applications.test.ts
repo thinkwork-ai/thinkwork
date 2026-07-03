@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  type ThinkWorkReleaseManifest,
-} from "@thinkwork/release-manifest";
+import { type ThinkWorkReleaseManifest } from "@thinkwork/release-manifest";
 
 const {
   selectQueue,
@@ -126,13 +124,37 @@ beforeEach(async () => {
 describe("managed application plan jobs", () => {
   it("keeps plugin-owned adapters out of the operator catalog while allowing internal deployment", () => {
     expect(sharedMod.MANAGED_APP_CATALOG.map((app) => app.key)).toEqual([
-      "cognee",
       "twenty",
     ]);
     expect(sharedMod.normalizeManagedAppKey("n8n")).toBe("n8n");
   });
 
-  it("creates a Cognee plan job, records release metadata, and starts Step Functions", async () => {
+  it("rejects retired managed application aliases", async () => {
+    vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
+    vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "evidence-bucket");
+    await expect(
+      startMod.startManagedApplicationPlan(
+        null,
+        {
+          input: {
+            key: "knowledge-graph",
+            operation: "ENABLE",
+            releaseVersion: "1.2.3",
+            manifestUrl:
+              "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+            manifestDigest: "a".repeat(64),
+            manifestImages: "{}",
+            desiredConfig: "{}",
+            idempotencyKey: "idem-1",
+          },
+        },
+        {} as any,
+      ),
+    ).rejects.toThrow("Unknown managed application key");
+    expect(mockStartExecution).not.toHaveBeenCalled();
+  });
+
+  it("creates an n8n plan job, records release metadata, and starts Step Functions", async () => {
     vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
     vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "evidence-bucket");
     selectQueue.push([]); // idempotency lookup
@@ -142,7 +164,7 @@ describe("managed application plan jobs", () => {
       {
         id: "job-1",
         tenant_id: "tenant-1",
-        app_key: "cognee",
+        app_key: "n8n",
         operation: "ENABLE",
         status: "planning",
         release_version: "1.2.3",
@@ -157,7 +179,7 @@ describe("managed application plan jobs", () => {
       {
         id: "job-1",
         tenant_id: "tenant-1",
-        app_key: "cognee",
+        app_key: "n8n",
         operation: "ENABLE",
         status: "planning",
         release_version: "1.2.3",
@@ -171,14 +193,14 @@ describe("managed application plan jobs", () => {
       null,
       {
         input: {
-          key: "knowledge-graph",
+          key: "n8n",
           operation: "ENABLE",
           releaseVersion: "1.2.3",
           manifestUrl:
             "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
           manifestDigest: "a".repeat(64),
           manifestImages: JSON.stringify({
-            cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+            n8n: `public.ecr.aws/thinkwork/n8n@sha256:${"1".repeat(64)}`,
           }),
           desiredConfig: '{"region":"us-east-1"}',
           idempotencyKey: "idem-1",
@@ -209,7 +231,7 @@ describe("managed application plan jobs", () => {
           contract: "thinkwork.deployment.controller.v1",
           tenantId: "tenant-1",
           jobId: "job-1",
-          appKey: "cognee",
+          appKey: "n8n",
           operation: "ENABLE",
           manifestDigest: "a".repeat(64),
           release: expect.objectContaining({
@@ -224,13 +246,13 @@ describe("managed application plan jobs", () => {
           appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
           evidence: expect.objectContaining({
             bucket: "evidence-bucket",
-            prefix: "tenant-1/cognee/job-1/plan",
+            prefix: "tenant-1/n8n/job-1/plan",
           }),
           features: expect.objectContaining({
-            optionalApps: ["cognee"],
+            optionalApps: ["n8n"],
           }),
           manifestImages: {
-            cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+            n8n: `public.ecr.aws/thinkwork/n8n@sha256:${"1".repeat(64)}`,
           },
         }),
       }),
@@ -239,16 +261,16 @@ describe("managed application plan jobs", () => {
       expect.arrayContaining([
         expect.objectContaining({
           tenant_id: "tenant-1",
-          app_key: "cognee",
+          app_key: "n8n",
           idempotency_key: "idem-1",
           evidence_bucket: "evidence-bucket",
-          evidence_prefix: "tenant-1/cognee/job-1/plan",
+          evidence_prefix: "tenant-1/n8n/job-1/plan",
           plan_summary: expect.objectContaining({
             releaseManifestUrl:
               "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
-            desiredConfig: { region: "us-east-1" },
+            desiredConfig: expect.objectContaining({ region: "us-east-1" }),
             manifestImages: {
-              cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+              n8n: `public.ecr.aws/thinkwork/n8n@sha256:${"1".repeat(64)}`,
             },
           }),
         }),

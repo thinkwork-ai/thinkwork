@@ -579,7 +579,6 @@ describe("deployment session handler", () => {
       }),
     );
     expect(payload.features.baseInstall).toEqual({
-      cognee: false,
       slack: false,
       stripe: false,
       twenty: false,
@@ -714,7 +713,6 @@ describe("deployment session handler", () => {
       }),
     );
     expect(payload.features.baseInstall).toEqual({
-      cognee: false,
       slack: false,
       stripe: false,
       twenty: false,
