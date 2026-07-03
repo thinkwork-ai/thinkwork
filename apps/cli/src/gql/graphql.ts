@@ -9387,6 +9387,7 @@ export enum TenantCredentialKind {
   ApiKey = 'api_key',
   BasicAuth = 'basic_auth',
   BearerToken = 'bearer_token',
+  GithubRepo = 'github_repo',
   Json = 'json',
   SoapPartner = 'soap_partner',
   WebhookSigningSecret = 'webhook_signing_secret'

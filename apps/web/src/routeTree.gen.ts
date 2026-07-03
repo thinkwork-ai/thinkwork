@@ -22,6 +22,7 @@ import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
 import { Route as AuthedSettingsWikiRouteImport } from "./routes/_authed/settings.wiki";
 import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
+import { Route as AuthedSettingsRoutineRepoRouteImport } from "./routes/_authed/settings.routine-repo";
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
 import { Route as AuthedSettingsManagedApplicationsRouteImport } from "./routes/_authed/settings.managed-applications";
@@ -184,6 +185,12 @@ const AuthedSettingsToolsRoute = AuthedSettingsToolsRouteImport.update({
   path: "/tools",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsRoutineRepoRoute =
+  AuthedSettingsRoutineRepoRouteImport.update({
+    id: "/routine-repo",
+    path: "/routine-repo",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsModelCatalogRoute =
   AuthedSettingsModelCatalogRouteImport.update({
     id: "/model-catalog",
@@ -779,6 +786,7 @@ export interface FileRoutesByFullPath {
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
@@ -885,6 +893,7 @@ export interface FileRoutesByTo {
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
@@ -999,6 +1008,7 @@ export interface FileRoutesById {
   "/_authed/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
@@ -1112,6 +1122,7 @@ export interface FileRouteTypes {
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
+    | "/settings/routine-repo"
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings/"
@@ -1218,6 +1229,7 @@ export interface FileRouteTypes {
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
+    | "/settings/routine-repo"
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings"
@@ -1331,6 +1343,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/managed-applications"
     | "/_authed/settings/memory"
     | "/_authed/settings/model-catalog"
+    | "/_authed/settings/routine-repo"
     | "/_authed/settings/tools"
     | "/_authed/settings/wiki"
     | "/_authed/settings/"
@@ -1518,6 +1531,13 @@ declare module "@tanstack/react-router" {
       path: "/tools";
       fullPath: "/settings/tools";
       preLoaderRoute: typeof AuthedSettingsToolsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/routine-repo": {
+      id: "/_authed/settings/routine-repo";
+      path: "/routine-repo";
+      fullPath: "/settings/routine-repo";
+      preLoaderRoute: typeof AuthedSettingsRoutineRepoRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/model-catalog": {
@@ -2445,6 +2465,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsManagedApplicationsRoute: typeof AuthedSettingsManagedApplicationsRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
+  AuthedSettingsRoutineRepoRoute: typeof AuthedSettingsRoutineRepoRoute;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
@@ -2508,6 +2529,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsManagedApplicationsRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
   AuthedSettingsModelCatalogRoute: AuthedSettingsModelCatalogRoute,
+  AuthedSettingsRoutineRepoRoute: AuthedSettingsRoutineRepoRoute,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,

@@ -6,6 +6,7 @@ import {
   normalizeSlug,
   slugFromDisplayName,
 } from "./shared";
+import { normalizeCredentialSecret } from "../../../lib/tenant-credentials/secret-store";
 
 describe("tenant credential resolver helpers", () => {
   it("normalizes display names into stable slugs", () => {
@@ -18,6 +19,23 @@ describe("tenant credential resolver helpers", () => {
   it("rejects unsupported kind and status values before hitting the database", () => {
     expect(() => assertKnownKind("oauth_user")).toThrow(/Unsupported/);
     expect(() => assertKnownStatus("revealed")).toThrow(/Unsupported/);
+  });
+
+  it("accepts the routine-repo kind and enforces its required fields", () => {
+    expect(() => assertKnownKind("github_repo")).not.toThrow();
+    expect(() =>
+      normalizeCredentialSecret("github_repo", {
+        repoUrl: "https://github.com/acme/routines",
+        token: "ghp_x",
+        branch: "main",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      normalizeCredentialSecret("github_repo", {
+        repoUrl: "https://github.com/acme/routines",
+        token: "ghp_x",
+      }),
+    ).toThrow(/branch/);
   });
 
   it("removes secret_ref from GraphQL output while preserving metadata", () => {
