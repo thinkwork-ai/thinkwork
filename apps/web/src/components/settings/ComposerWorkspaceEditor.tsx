@@ -51,6 +51,7 @@ import {
   Pencil,
   Plus,
   Scissors,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import {
@@ -158,6 +159,12 @@ export interface ComposerWorkspaceEditorProps {
   onAddMcpServer?: () => void;
   /** Open the destructive detach confirm for an `mcp/<slug>/` folder. */
   onDetachMcpServer?: (slug: string) => void;
+  /**
+   * Profile treatment for `agents/<slug>.md` files (Agent page merge U2):
+   * "Configure Agent Profile" opens the Profiles sheet at that profile's
+   * detail, replacing the generic agent-source navigation for these files.
+   */
+  onConfigureAgentProfile?: (slug: string) => void;
 }
 
 interface TreeNode {
@@ -351,6 +358,13 @@ function mcpSlugForFolder(node: TreeNode): string | null {
   return match ? match[1] : null;
 }
 
+/** Agent Profile slug for an `agents/<slug>.md` file node, else null (U2). */
+function agentProfileSlugForFile(node: TreeNode): string | null {
+  if (node.isFolder) return null;
+  const match = /^agents\/([^/]+)\.md$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
 interface PathSource {
   target: WorkspaceFilesTarget;
   /** Path relative to the owning layer's tree (mount prefix stripped). */
@@ -444,6 +458,7 @@ export function ComposerWorkspaceEditor({
   removingMcpSlug = null,
   onAddMcpServer,
   onDetachMcpServer,
+  onConfigureAgentProfile,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
@@ -816,12 +831,19 @@ export function ComposerWorkspaceEditor({
     );
     const jumpEntry = jumpEntryFor(node);
     const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;
+    // Profile files get the dedicated Configure treatment (U2); the generic
+    // "Open agent source" item is suppressed for them by contract (R5).
+    const profileSlug = agentProfileSlugForFile(node);
+    const canConfigureProfile = Boolean(
+      profileSlug && onConfigureAgentProfile,
+    );
     // "Open …source" navigation is offered ONLY for nodes that open a real
     // owning editor — Spaces file → space editor, User file → user detail,
     // generated agent file → agent workspace editor. Skill nodes get NO menu
     // entry pointing at the capability sheet (the gate-badge click still does);
     // tree-first interactions win.
     const canOpenSource =
+      !canConfigureProfile &&
       Boolean(jumpEntry) &&
       (causeKind === "space" || causeKind === "agent_source"
         ? true
@@ -886,6 +908,7 @@ export function ComposerWorkspaceEditor({
       canAddHere ||
       canDetachMcp ||
       canAddMcpHere ||
+      canConfigureProfile ||
       hasStdOps ||
       canOpenSource;
 
@@ -1001,6 +1024,17 @@ export function ComposerWorkspaceEditor({
       <ContextMenu>
         <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
         <ContextMenuContent data-testid={`tree-menu-${node.path}`}>
+          {canConfigureProfile ? (
+            <ContextMenuItem
+              onSelect={() =>
+                profileSlug && onConfigureAgentProfile?.(profileSlug)
+              }
+              data-testid={`menu-configure-profile-${profileSlug}`}
+            >
+              <SlidersHorizontal className="mr-2 size-4" /> Configure Agent
+              Profile
+            </ContextMenuItem>
+          ) : null}
           {canAddHere ? (
             <ContextMenuItem
               onSelect={() => onAddSkill?.()}

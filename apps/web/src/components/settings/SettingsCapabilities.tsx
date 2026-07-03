@@ -122,6 +122,7 @@ import {
   type SkillNodeState,
 } from "@/components/settings/ComposerWorkspaceEditor";
 import { CapabilityInspectorView } from "@/components/settings/CapabilityInspectorView";
+import { AgentProfilesSheet } from "@/components/settings/AgentProfilesSheet";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -332,6 +333,12 @@ export function SettingsCapabilities() {
   // Inspector view (Agent page merge U8): read-only diagnostics for every
   // class — survives the capability list's retirement (U9).
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Profiles sheet (Agent page merge U2): list → detail editing; the tree's
+  // "Configure Agent Profile" deep-links straight to a profile's detail.
+  const [profilesSheet, setProfilesSheet] = useState<{
+    open: boolean;
+    profileId: string | null;
+  }>({ open: false, profileId: null });
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
@@ -1188,6 +1195,18 @@ export function SettingsCapabilities() {
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 rounded-md"
+            onClick={() =>
+              setProfilesSheet({ open: true, profileId: null })
+            }
+            data-testid="open-profiles-sheet"
+          >
+            <Bot className="size-4" />
+            Profiles
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 rounded-md"
             onClick={() => setSheetOpen(true)}
             data-testid="open-capability-sheet"
           >
@@ -1316,6 +1335,12 @@ export function SettingsCapabilities() {
             !agentProfileId ? () => setAddMcpOpen(true) : undefined
           }
           onDetachMcpServer={requestDetachMcp}
+          onConfigureAgentProfile={(slug) => {
+            const match = (profilesResult.data?.agentProfiles ?? []).find(
+              (profile) => profile.slug === slug,
+            );
+            setProfilesSheet({ open: true, profileId: match?.id ?? null });
+          }}
         />
       </div>
 
@@ -1337,6 +1362,14 @@ export function SettingsCapabilities() {
           </span>
         ) : null}
       </div>
+
+      <AgentProfilesSheet
+        open={profilesSheet.open}
+        onOpenChange={(open) =>
+          setProfilesSheet((current) => ({ ...current, open }))
+        }
+        initialProfileId={profilesSheet.profileId}
+      />
 
       {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
           detach controls, opened from the toolbar or via tree jump-to-cause. */}
