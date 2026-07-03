@@ -59,8 +59,14 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 
-const { routines, routineExecutions, routineCodeCache, tenantCredentials } =
-  schema;
+const {
+  routines,
+  routineExecutions,
+  routineCodeCache,
+  routineRepairEvents,
+  tenantCredentials,
+  inboxItems,
+} = schema;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,6 +119,15 @@ export interface RoutineExecGitResult {
   errorClass?: string;
   errorMessage?: string;
   gate?: GateResult;
+  /** Tier-0 (plan 2026-07-03-004 U7): the run succeeded on its single
+   * mechanical retry. */
+  retried?: boolean;
+  /** Tier-0 reverted validated_sha to this prior SHA after the freshly
+   * promoted SHA failed in production. */
+  revertedToSha?: string | null;
+  /** Mechanical tiers exhausted — tier 1 (agent repair, U8) is next.
+   * Never set for infra failures (R17). */
+  needsRepair?: boolean;
 }
 
 export interface RoutineExecGitOptions {
@@ -378,7 +393,7 @@ export async function executeGitRoutine(
       options,
     });
 
-    const task = await runRoutineModule({
+    let task = await runRoutineModule({
       routine,
       moduleCode,
       input: event.input,
@@ -387,8 +402,81 @@ export async function executeGitRoutine(
       gateMode: false,
     });
 
+    // ---- Tier-0 mechanical repair (U7, R11): retry once at zero cost ----
+    let retried = false;
+    if (task.exitCode !== 0 || task.errorClass) {
+      retried = true;
+      await recordRepairEvent(db, {
+        tenant_id: routine.tenant_id,
+        routine_id: routine.id,
+        execution_id: executionId,
+        event_type: "retry",
+        from_sha: execSha,
+        to_sha: execSha,
+        detail_json: {
+          errorClass: task.errorClass ?? "code_run_failed",
+          errorMessage: task.errorMessage ?? null,
+        },
+      });
+      task = await runRoutineModule({
+        routine,
+        moduleCode,
+        input: event.input,
+        executionId,
+        options,
+        gateMode: false,
+      });
+    }
+
     const output = extractResult(task);
     const succeeded = task.exitCode === 0 && !task.errorClass;
+
+    // ---- Tier-0 revert (U7, R11): a freshly promoted SHA that fails in
+    // production hands the validated pointer back to the prior SHA so the
+    // next run executes known-good code; the repair ladder targets the
+    // new SHA.
+    let revertedToSha: string | null = null;
+    const priorValidated = routine.validated_sha;
+    if (!succeeded && execSha && priorValidated && execSha !== priorValidated) {
+      revertedToSha = priorValidated;
+      await db
+        .update(routines)
+        .set({ validated_sha: priorValidated, updated_at: now() })
+        .where(eq(routines.id, routine.id));
+      await db
+        .update(routineCodeCache)
+        .set({
+          fixture_status: "red",
+          fixture_result_json: JSON.stringify([
+            {
+              path: "(production run)",
+              passed: false,
+              detail:
+                task.errorMessage ?? "failed in production after promotion",
+            },
+          ]),
+          validated_at: null,
+        })
+        .where(
+          and(
+            eq(routineCodeCache.routine_id, routine.id),
+            eq(routineCodeCache.sha, execSha),
+          ),
+        );
+      await recordRepairEvent(db, {
+        tenant_id: routine.tenant_id,
+        routine_id: routine.id,
+        execution_id: executionId,
+        event_type: "revert",
+        from_sha: execSha,
+        to_sha: priorValidated,
+        detail_json: {
+          errorClass: task.errorClass ?? "code_run_failed",
+          errorMessage: task.errorMessage ?? null,
+        },
+      });
+    }
+
     await terminalUpdate(db, executionId, {
       status: succeeded ? "succeeded" : "failed",
       finished_at: now(),
@@ -411,7 +499,11 @@ export async function executeGitRoutine(
         : {
             errorClass: task.errorClass ?? "code_run_failed",
             errorMessage: task.errorMessage ?? undefined,
+            // Mechanical tiers exhausted — tier 1 (agent repair, U8) next.
+            needsRepair: true,
           }),
+      ...(retried && succeeded ? { retried: true } : {}),
+      ...(revertedToSha ? { revertedToSha } : {}),
       gate,
     };
   } catch (err) {
@@ -1074,7 +1166,7 @@ async function terminalUpdate(
 
 async function recordInfraFailureRun(
   db: ReturnType<typeof getDb>,
-  routine: { id: string; tenant_id: string },
+  routine: { id: string; tenant_id: string; name?: string },
   event: RoutineExecGitInput,
   now: () => Date,
   err: { errorClass: string; errorMessage: string },
@@ -1093,12 +1185,75 @@ async function recordInfraFailureRun(
     error_code: err.errorClass,
     error_message: err.errorMessage,
   });
+  // R17/AE8: infra failures notify the operator and never consume the
+  // repair budget — no needsRepair flag, an inbox item instead. One
+  // pending item per routine (a failing 5-minute schedule must not spam
+  // the inbox).
+  if (err.errorClass.startsWith("infra_")) {
+    await recordRepairEvent(db, {
+      tenant_id: routine.tenant_id,
+      routine_id: routine.id,
+      execution_id: executionId,
+      event_type: "infra_failure",
+      detail_json: {
+        errorClass: err.errorClass,
+        errorMessage: err.errorMessage,
+      },
+    });
+    const [pending] = await db
+      .select({ id: inboxItems.id })
+      .from(inboxItems)
+      .where(
+        and(
+          eq(inboxItems.tenant_id, routine.tenant_id),
+          eq(inboxItems.type, "routine_infra_failure"),
+          eq(inboxItems.entity_id, routine.id),
+          eq(inboxItems.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (!pending) {
+      await db.insert(inboxItems).values({
+        tenant_id: routine.tenant_id,
+        type: "routine_infra_failure",
+        status: "pending",
+        title: `Routine infrastructure failure: ${routine.name ?? routine.id}`,
+        description: `${err.errorClass}: ${err.errorMessage}`,
+        entity_type: "routine",
+        entity_id: routine.id,
+        config: { executionId, errorClass: err.errorClass },
+      });
+    }
+  }
   return {
     status: "failed",
     executionId,
     errorClass: err.errorClass,
     errorMessage: err.errorMessage,
   };
+}
+
+/** Repair-ladder history (KTD-7). Failures to write history must never
+ * fail the run itself. */
+async function recordRepairEvent(
+  db: ReturnType<typeof getDb>,
+  values: {
+    tenant_id: string;
+    routine_id: string;
+    execution_id?: string | null;
+    event_type: string;
+    from_sha?: string | null;
+    to_sha?: string | null;
+    detail_json?: unknown;
+  },
+): Promise<void> {
+  try {
+    await db.insert(routineRepairEvents).values(values);
+  } catch (err) {
+    console.warn(
+      `[routine-exec-git] failed to record repair event: ${(err as Error).message}`,
+    );
+  }
 }
 
 function failResult(
