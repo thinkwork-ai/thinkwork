@@ -40,7 +40,6 @@ import {
 import {
   Bot,
   Boxes,
-  CircleDotDashed,
   Info,
   ListChecks,
   Puzzle,
@@ -93,6 +92,10 @@ import {
   cn,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
+import {
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
 import { useTenant } from "@/context/TenantContext";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import { useFragment } from "@/gql/fragment-masking";
@@ -152,7 +155,6 @@ const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
 
 const FILTER_COLUMNS = {
   search: "filterSearch",
-  state: "filterState",
   space: "filterSpace",
   profile: "filterProfile",
   user: "filterUser",
@@ -296,11 +298,6 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
         .join(" "),
     filterFn: dataTableTokenFilterFns.text,
   },
-  {
-    id: FILTER_COLUMNS.state,
-    accessorFn: (item) => (item.active ? "active" : "inactive"),
-    filterFn: dataTableTokenFilterFns.option,
-  },
   { id: FILTER_COLUMNS.space, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.profile, accessorFn: () => "", filterFn: () => true },
   { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
@@ -308,15 +305,9 @@ const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
 
 export function SettingsCapabilities() {
   const { tenantId } = useTenant();
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
-    {
-      id: FILTER_COLUMNS.state,
-      value: {
-        operator: "is_any_of",
-        value: ["active"],
-      } satisfies DataTableTokenFilterValue,
-    },
-  ]);
+  // No default filters (Agent page merge U12): the empty selection IS the
+  // default agent in the default space, and every row state is visible.
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [activeClass, setActiveClass] = useState<string>("skill");
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -471,16 +462,6 @@ export function SettingsCapabilities() {
   const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
     () => [
       {
-        id: FILTER_COLUMNS.state,
-        label: "State",
-        type: "option",
-        icon: <CircleDotDashed className="size-4" />,
-        options: [
-          { value: "active", label: "Active" },
-          { value: "inactive", label: "Inactive" },
-        ],
-      },
-      {
         id: FILTER_COLUMNS.space,
         label: "Space",
         type: "option",
@@ -529,15 +510,6 @@ export function SettingsCapabilities() {
   const memberName = members.find(
     (member) => member.id === perspectiveUserId,
   )?.name;
-  const stateToken = columnFilters.find(
-    (filter) => filter.id === FILTER_COLUMNS.state,
-  )?.value as DataTableTokenFilterValue | undefined;
-  const stateFilterValues = stateToken
-    ? (Array.isArray(stateToken.value)
-        ? stateToken.value
-        : [stateToken.value]
-      ).filter((value): value is string => typeof value === "string")
-    : [];
 
   // Grant/detach exist only at agent and agent-profile scope (R11): a
   // space or perspective-user selection is a read lens.
@@ -841,11 +813,7 @@ export function SettingsCapabilities() {
    */
   function focusCapabilityRow(capabilityClass: string, capabilityId: string) {
     setColumnFilters((current) =>
-      current.filter(
-        (filter) =>
-          filter.id !== FILTER_COLUMNS.state &&
-          filter.id !== FILTER_COLUMNS.search,
-      ),
+      current.filter((filter) => filter.id !== FILTER_COLUMNS.search),
     );
     setActiveClass(capabilityClass);
     setFocusedRowKey(`${capabilityClass}:${capabilityId}`);
@@ -1154,101 +1122,92 @@ export function SettingsCapabilities() {
       ? confirmation.rowKey.slice("mcp_server:".length)
       : null;
 
-  return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
-      <div className="shrink-0">
-        <SettingsHeader
-          title="Composer"
-          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
-        />
-      </div>
 
-      <div
-        className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
-        data-testid="capability-toolbar"
+  // Agent page merge U12: page actions live in the header bar as muted icons
+  // (Evaluations pattern) — the in-body row keeps only search + filters.
+  const composerHeaderActions = (
+    <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Agent configuration"
+        aria-label="Agent configuration"
+        className={desktopToolbarButtonClassName}
+        onClick={() => setConfigOpen(true)}
+        data-testid="open-config-sheet"
       >
-        <CapabilityToolbarSearch value={searchValue} onChange={setSearch} />
-        <DataTableTokenFilter
-          table={filterTable}
-          columns={tokenFilterColumns}
-          addLabel="Filter"
-          showAddLabel={false}
-          clearLabel="Clear"
-          flattenToolbar
-          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
-          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
-        />
-        <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setConfigOpen(true)}
-            data-testid="open-config-sheet"
-          >
-            <SlidersHorizontal className="size-4" />
-            Config
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setExtensionsSheetOpen(true)}
-            data-testid="open-extensions-sheet"
-          >
-            <Puzzle className="size-4" />
-            Extensions
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() =>
-              setProfilesSheet({ open: true, profileId: null })
-            }
-            data-testid="open-profiles-sheet"
-          >
-            <Bot className="size-4" />
-            Profiles
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 rounded-md"
-            onClick={() => setSheetOpen(true)}
-            data-testid="open-capability-sheet"
-          >
-            <ListChecks className="size-4" />
-            Capabilities
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="h-8 w-8 rounded-md"
-            aria-label="Inspector"
-            title="Inspector — read-only capability diagnostics"
-            onClick={() => setInspectorOpen(true)}
-            data-testid="open-inspector-view"
-          >
-            <ScanSearch className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="h-8 w-8 rounded-md"
-            aria-label="Refresh"
-            onClick={() => refetchInspection({ requestPolicy: "network-only" })}
-            disabled={loading}
-          >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-          </Button>
+        <SlidersHorizontal className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Agent Profiles"
+        aria-label="Agent Profiles"
+        className={desktopToolbarButtonClassName}
+        onClick={() => setProfilesSheet({ open: true, profileId: null })}
+        data-testid="open-profiles-sheet"
+      >
+        <Bot className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Extensions"
+        aria-label="Extensions"
+        className={desktopToolbarButtonClassName}
+        onClick={() => setExtensionsSheetOpen(true)}
+        data-testid="open-extensions-sheet"
+      >
+        <Puzzle className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Capability list"
+        aria-label="Capability list"
+        className={desktopToolbarButtonClassName}
+        onClick={() => setSheetOpen(true)}
+        data-testid="open-capability-sheet"
+      >
+        <ListChecks className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Inspector — read-only capability diagnostics"
+        aria-label="Inspector"
+        className={desktopToolbarButtonClassName}
+        onClick={() => setInspectorOpen(true)}
+        data-testid="open-inspector-view"
+      >
+        <ScanSearch className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Refresh"
+        aria-label="Refresh"
+        className={desktopToolbarButtonClassName}
+        onClick={() => refetchInspection({ requestPolicy: "network-only" })}
+        disabled={loading}
+      >
+        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+      </Button>
           <Dialog>
             <DialogTrigger asChild>
               <Button
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="icon-sm"
-                className="h-8 w-8 rounded-md"
+                title="What am I looking at?"
                 aria-label="What am I looking at?"
+                className={desktopToolbarButtonClassName}
                 data-testid="view-info-trigger"
               >
                 <Info className="size-4" />
@@ -1288,10 +1247,7 @@ export function SettingsCapabilities() {
                   </p>
                 ) : null}
                 <p>
-                  <span className="font-medium">Filters:</span>{" "}
-                  {stateFilterValues.length > 0
-                    ? `state ${stateFilterValues.join(", ")}`
-                    : "all states"}
+                  <span className="font-medium">Filters:</span> all states
                   {searchValue ? ` · search "${searchValue}"` : ""}
                 </p>
                 <p className="text-muted-foreground">
@@ -1312,7 +1268,35 @@ export function SettingsCapabilities() {
               </div>
             </DialogContent>
           </Dialog>
-        </div>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
+      <div className="shrink-0">
+        <SettingsHeader
+          title="Composer"
+          actions={composerHeaderActions}
+          actionKey="composer-header-actions"
+          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
+        />
+      </div>
+
+      <div
+        className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
+        data-testid="capability-toolbar"
+      >
+        <CapabilityToolbarSearch value={searchValue} onChange={setSearch} />
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={tokenFilterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
       </div>
 
       {/* No persistent confirmation banner — the live tree + sheet state (and,
@@ -1393,14 +1377,14 @@ export function SettingsCapabilities() {
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="agent-extensions-sheet"
         >
-          <SheetHeader>
+          <SheetHeader className="px-6">
             <SheetTitle>Extensions</SheetTitle>
             <SheetDescription>
               Import, review, and assign Pi extensions — the trust registry
               for code that runs inside the agent.
             </SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
             <SettingsAgentExtensions
               tenantId={tenantId ?? ""}
               extensions={registryExtensions}
@@ -1428,14 +1412,14 @@ export function SettingsCapabilities() {
           className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
           data-testid="inspector-sheet"
         >
-          <SheetHeader>
+          <SheetHeader className="px-6">
             <SheetTitle>Inspector</SheetTitle>
             <SheetDescription>
               Read-only view of the effective capability set for the current
               selection — gate reasons and runtime divergence, no writes.
             </SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
             <CapabilityInspectorView
               items={items}
               deltas={deltas}

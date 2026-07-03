@@ -220,7 +220,7 @@ export function AgentProfilesSheet({
         className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
         data-testid="agent-profiles-sheet"
       >
-        <SheetHeader>
+        <SheetHeader className="px-6">
           <SheetTitle>
             {detail ? (
               <span className="flex items-center gap-2">
@@ -251,7 +251,7 @@ export function AgentProfilesSheet({
               : "Reusable task profiles the parent Agent delegates through Pi subagents. Skill and MCP shaping is tree-first — select the profile chip and work the tree."}
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
           {profilesResult.error ? (
             <p className="p-4 text-sm text-destructive">
               {profilesResult.error.message}
