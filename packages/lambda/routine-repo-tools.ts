@@ -38,10 +38,16 @@ import {
   type RoutineExecGitInput,
   type RoutineExecGitResult,
 } from "./routine-exec-git.js";
+import {
+  disableRoutineForBudget,
+  repairAttemptsToday,
+  REPAIR_BUDGET_PER_DAY,
+} from "./routine-repair-dispatch.js";
 
 const {
   routines,
   routineExecutions,
+  routineRepairEvents,
   tenantCredentials,
   tenantMembers,
   inboxItems,
@@ -483,6 +489,19 @@ export async function commitRoutine(
 
   // ---- Out-of-envelope repair → pending + operator approval (AE9) ---------
   if (outOfEnvelope && routine) {
+    // Ladder history: pending commits count NO repair attempt until an
+    // operator decides (R13/KTD-4).
+    await db.insert(routineRepairEvents).values({
+      tenant_id: input.tenantId,
+      routine_id: routine.id,
+      execution_id: input.repair?.executionId ?? null,
+      event_type: "pending_commit",
+      thread_ref: input.repair?.threadRef ?? null,
+      from_sha: headSha,
+      to_sha: commitSha,
+      envelope_verdict: "out_of_envelope",
+      detail_json: { envelopeViolations, branch: targetBranch },
+    });
     const [inboxRow] = await db
       .insert(inboxItems)
       .values({
@@ -516,10 +535,43 @@ export async function commitRoutine(
   }
 
   // ---- In-envelope repair → synchronous gate on the new SHA ---------------
+  // Green auto-advances validated_sha (the gate is its only writer); red
+  // consumes a repair attempt against the 3/day UTC budget (R13) and trips
+  // the breaker on exhaustion (AE4).
   let gate: RoutineExecGitResult | undefined;
-  if (isRepair) {
+  if (isRepair && routine) {
     const invoke = deps.invokeExecutor ?? defaultInvokeExecutor;
     gate = await invoke({ routineId, mode: "gate" });
+    const gateGreen = gate.status === "gate_green";
+    const now = new Date();
+    const attemptsBefore = await repairAttemptsToday(
+      db as never,
+      routine.id,
+      now,
+    );
+    const attemptsAfter = gateGreen ? attemptsBefore : attemptsBefore + 1;
+    await db.insert(routineRepairEvents).values({
+      tenant_id: input.tenantId,
+      routine_id: routine.id,
+      execution_id: input.repair?.executionId ?? null,
+      event_type: "repair_attempt",
+      thread_ref: input.repair?.threadRef ?? null,
+      from_sha: headSha,
+      to_sha: commitSha,
+      gate_result: gateGreen ? "green" : "red",
+      envelope_verdict: "in_envelope",
+      budget_snapshot: Math.max(0, REPAIR_BUDGET_PER_DAY - attemptsAfter),
+      detail_json: gate.gate ? { fixtures: gate.gate.fixtures } : null,
+    });
+    if (!gateGreen && attemptsAfter >= REPAIR_BUDGET_PER_DAY) {
+      await disableRoutineForBudget(db as never, {
+        tenantId: input.tenantId,
+        routineId: routine.id,
+        routineName: routine.name,
+        executionId: input.repair?.executionId ?? null,
+        now,
+      });
+    }
   }
 
   return {
