@@ -455,9 +455,9 @@ describe("context-menu actions (item 4)", () => {
   });
 
   // Agent page merge (THINK-132 U2): profile files get the dedicated
-  // Configure treatment; the generic "Open agent source" item is suppressed
+  // Edit treatment; the generic "Open agent source" item is suppressed
   // for them (R5) — the file itself stays a normal editable tree node.
-  it("offers Configure Agent Profile on agents/<slug>.md and fires the callback", async () => {
+  it("offers Edit Agent Profile on agents/<slug>.md and fires the callback", async () => {
     getManifestMock.mockResolvedValue(
       manifest({
         entries: [
@@ -476,7 +476,7 @@ describe("context-menu actions (item 4)", () => {
     ).toBeNull();
   });
 
-  it("keeps the generic agent-source treatment for profile files when no handler is wired", async () => {
+  it("offers no profile items and no agent-source item when no handler is wired", async () => {
     getManifestMock.mockResolvedValue(
       manifest({
         entries: [
@@ -488,9 +488,52 @@ describe("context-menu actions (item 4)", () => {
     await renderEditor({});
     await screen.findByTestId("tree-file-agents/analyst.md");
     expect(screen.queryByTestId("menu-configure-profile-analyst")).toBeNull();
+    // "Open agent source" is retired: agent-owned files just select locally.
     expect(
-      screen.getByTestId("menu-open-source-agents/analyst.md"),
-    ).toBeTruthy();
+      screen.queryByTestId("menu-open-source-agents/analyst.md"),
+    ).toBeNull();
+  });
+
+  it("offers Add New Agent… on the agents/ folder and hides raw file ops there", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+        ],
+      }),
+    );
+    const createMock = vi.fn();
+    await renderEditor({ onCreateAgentProfile: createMock });
+    await screen.findByTestId("tree-node-agents");
+    fireEvent.click(screen.getByTestId("menu-add-agent-profile"));
+    expect(createMock).toHaveBeenCalled();
+    // The agents/ root is structural — no raw New File/New Folder/Delete.
+    expect(screen.queryByTestId("menu-new-file-agents")).toBeNull();
+    expect(screen.queryByTestId("menu-new-folder-agents")).toBeNull();
+    expect(screen.queryByTestId("menu-delete-agents")).toBeNull();
+  });
+
+  it("offers Delete Agent Profile only for deletable (non-built-in) slugs", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+          { path: "agents/custom.md", owner: "agent", generated: false, size: 64 },
+        ],
+      }),
+    );
+    const deleteMock = vi.fn();
+    await renderEditor({
+      onConfigureAgentProfile: vi.fn(),
+      onDeleteAgentProfile: deleteMock,
+      deletableProfileSlugs: new Set(["custom"]),
+    });
+    await screen.findByTestId("tree-file-agents/custom.md");
+    expect(screen.queryByTestId("menu-delete-profile-analyst")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-delete-profile-custom"));
+    expect(deleteMock).toHaveBeenCalledWith("custom");
   });
 
   // Profile overlay (Agent page merge U6): a selected profile scopes the
@@ -842,17 +885,15 @@ describe("jump-to-cause (KTD-5)", () => {
   });
 
   // KTD-7 (Agent page merge U7): /settings/agents IS this surface after the
-  // cutover, so "Open source" on an agent-owned file selects it in place —
-  // it must not navigate to the retired workspace view. Deliberate rewrite
-  // of the pre-cutover navigation contract.
-  it("agent-owned files select in place instead of navigating (U7)", async () => {
+  // cutover, so "Open agent source" is retired outright — an agent-owned
+  // file gets no source-navigation menu entry at all.
+  it("agent-owned files have no Open source menu entry (U7)", async () => {
     await renderEditor();
     await screen.findByTestId("tree-node-CAPABILITIES.md");
-    fireEvent.click(screen.getByTestId("menu-open-source-CAPABILITIES.md"));
-    expect(navigateMock).not.toHaveBeenCalled();
     expect(
-      screen.getByTestId("tree-file-CAPABILITIES.md").className,
-    ).toContain("text-foreground");
+      screen.queryByTestId("menu-open-source-CAPABILITIES.md"),
+    ).toBeNull();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   it("applies a deep-linked initial tree selection once (U7)", async () => {

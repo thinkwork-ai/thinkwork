@@ -101,6 +101,7 @@ import {
   SettingsAgentProfilesQuery,
   SettingsCapabilityInspectorQuery,
   SettingsComposerPiExtensionsQuery,
+  SettingsDeleteAgentProfileMutation,
   SettingsDetachCapabilityMutation,
   SettingsGrantCapabilityMutation,
   SettingsPiExtensionFieldsFragment,
@@ -371,6 +372,13 @@ export function SettingsCapabilities({
     Record<string, string>
   >({});
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
+  // Tree context-menu profile ops: "Add New Agent…" (create counter handed to
+  // the Profiles sheet) and "Delete Agent Profile" (destructive confirm here).
+  const [profilesCreateRequest, setProfilesCreateRequest] = useState(0);
+  const [deleteProfileTarget, setDeleteProfileTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [removingSkillSlug, setRemovingSkillSlug] = useState<string | null>(
     null,
   );
@@ -381,7 +389,7 @@ export function SettingsCapabilities({
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
-  const [profilesResult] = useQuery({
+  const [profilesResult, refetchProfiles] = useQuery({
     query: SettingsAgentProfilesQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
@@ -436,6 +444,7 @@ export function SettingsCapabilities({
   });
   const [, grantCapability] = useMutation(SettingsGrantCapabilityMutation);
   const [, detachCapability] = useMutation(SettingsDetachCapabilityMutation);
+  const [, deleteAgentProfile] = useMutation(SettingsDeleteAgentProfileMutation);
 
   const loading = inspection.fetching;
   const result = inspection.data?.capabilityInspector;
@@ -532,6 +541,17 @@ export function SettingsCapabilities({
   const spaceName = (spacesResult.data?.spaces ?? []).find(
     (space) => space.id === spaceId,
   )?.name;
+  // Custom (non-built-in) profiles are the only ones the tree may delete.
+  const deletableProfileSlugs = useMemo(
+    () =>
+      new Set(
+        (profilesResult.data?.agentProfiles ?? [])
+          .filter((profile) => !profile.builtInKey)
+          .map((profile) => profile.slug),
+      ),
+    [profilesResult.data?.agentProfiles],
+  );
+
   const profileName = (profilesResult.data?.agentProfiles ?? []).find(
     (profile) => profile.id === agentProfileId,
   )?.name;
@@ -882,6 +902,24 @@ export function SettingsCapabilities({
     setRemoving(null);
   }
 
+  // Tree context-menu profile delete: same mutation the Profiles sheet uses,
+  // behind the same destructive-confirm treatment as tree detach.
+  async function confirmDeleteProfileFromTree() {
+    if (!tenantId || !deleteProfileTarget) return;
+    const target = deleteProfileTarget;
+    setDeleteProfileTarget(null);
+    const result = await deleteAgentProfile({ tenantId, id: target.id });
+    if (result.error) {
+      toast.error("Could not delete Agent Profile", {
+        description: result.error.message,
+      });
+      return;
+    }
+    toast.success("Agent Profile deleted");
+    refetchProfiles({ requestPolicy: "network-only" });
+    refetchInspection({ requestPolicy: "network-only" });
+  }
+
   async function pickSkillToAdd(item: InspectorItem) {
     setAddSkillOpen(false);
     await runMutation("attach", item);
@@ -1228,10 +1266,10 @@ export function SettingsCapabilities({
     <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-4 py-6">
       <div className="shrink-0">
         <SettingsHeader
-          title="Composer"
+          title="Agents"
           actions={composerHeaderActions}
           actionKey="composer-header-actions"
-          description="What the platform agent will actually get for a selection — the rendered workspace as a normal editor, with every skill, tool, MCP server, extension, and plugin one click away in the capability list. Right-click a skill folder to attach or detach; every action ends on the item's live state."
+          description="The agent's workspace — files, skills, tools, and profiles in one place."
         />
       </div>
 
@@ -1285,6 +1323,19 @@ export function SettingsCapabilities({
             );
             requestSheet("profiles", { profileId: match?.id ?? null });
           }}
+          onCreateAgentProfile={() => {
+            setProfilesCreateRequest((count) => count + 1);
+            requestSheet("profiles");
+          }}
+          onDeleteAgentProfile={(slug) => {
+            const match = (profilesResult.data?.agentProfiles ?? []).find(
+              (profile) => profile.slug === slug,
+            );
+            if (match && !match.builtInKey) {
+              setDeleteProfileTarget({ id: match.id, name: match.name });
+            }
+          }}
+          deletableProfileSlugs={deletableProfileSlugs}
         />
       </div>
 
@@ -1316,6 +1367,7 @@ export function SettingsCapabilities({
           )
         }
         initialProfileId={profilesSheet.profileId}
+        createRequest={profilesCreateRequest}
       />
 
       {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
@@ -1339,8 +1391,7 @@ export function SettingsCapabilities({
           <SheetHeader className="px-6">
             <SheetTitle>Extensions</SheetTitle>
             <SheetDescription>
-              Import, review, and assign Pi extensions — the trust registry
-              for code that runs inside the agent.
+              Import, review, and assign Pi extensions.
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
@@ -1441,8 +1492,7 @@ export function SettingsCapabilities({
           <SheetHeader className="px-6">
             <SheetTitle>Inspector</SheetTitle>
             <SheetDescription>
-              Read-only view of the effective capability set for the current
-              selection — gate reasons and runtime divergence, no writes.
+              Read-only capability diagnostics for the current selection.
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
@@ -1716,6 +1766,34 @@ export function SettingsCapabilities({
               data-testid="tree-detach-confirm"
             >
               Detach
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Tree context-menu "Delete Agent Profile" confirm — the same
+          destructive gate, driving the Profiles sheet's delete mutation. */}
+      <AlertDialog
+        open={deleteProfileTarget !== null}
+        onOpenChange={(open) => !open && setDeleteProfileTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {deleteProfileTarget?.name ?? "this Agent Profile"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes the profile and its agents/ file from the workspace.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmDeleteProfileFromTree()}
+              data-testid="tree-delete-profile-confirm"
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -8,7 +8,7 @@
 // through verbatim and `toolPolicy` merges only `builtInTools` — so a sheet
 // save can never clobber tree-written grants while `updateAgentProfile`
 // still replace-writes whole policy fields (retires in U11).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -126,11 +126,17 @@ export function AgentProfilesSheet({
   open,
   onOpenChange,
   initialProfileId,
+  createRequest = 0,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target: open directly on this profile's detail. */
   initialProfileId?: string | null;
+  /**
+   * Increment to request a new-profile creation (tree "Add New Agent…").
+   * Fires once per increment, after the model catalog is available.
+   */
+  createRequest?: number;
 }) {
   const { tenantId } = useTenant();
   const [profilesResult, refetchProfiles] = useQuery({
@@ -200,6 +206,22 @@ export function AgentProfilesSheet({
     if (id) setDetailId(id);
   }
 
+  // Tree-menu create ("Add New Agent…"): the request arrives before this
+  // sheet's queries resolve, so fire once per increment only after a model
+  // id is derivable — otherwise create would fail on an empty catalog.
+  const [lastCreateRequest, setLastCreateRequest] = useState(createRequest);
+  const canDeriveModel = Boolean(
+    catalog?.models?.[0]?.modelId ?? profiles[0]?.modelId,
+  );
+  useEffect(() => {
+    if (!open || createRequest === lastCreateRequest || !canDeriveModel) {
+      return;
+    }
+    setLastCreateRequest(createRequest);
+    void onCreateProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, createRequest, lastCreateRequest, canDeriveModel]);
+
   async function onDeleteProfile(profile: AgentProfileRow) {
     if (!tenantId || profile.builtInKey) return;
     const result = await deleteProfile({ tenantId, id: profile.id });
@@ -248,7 +270,7 @@ export function AgentProfilesSheet({
           <SheetDescription>
             {detail
               ? `${detail.slug} · ${detail.model?.displayName ?? detail.modelId}`
-              : "Reusable task profiles the parent Agent delegates through Pi subagents. Skill and MCP shaping is tree-first — select the profile chip and work the tree."}
+              : "Task profiles the parent Agent can delegate work to."}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
