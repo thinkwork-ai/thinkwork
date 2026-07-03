@@ -62,7 +62,6 @@ describe("deploy controller path", () => {
       }),
     );
     expect(payload.features.baseInstall).toEqual({
-      cognee: false,
       slack: false,
       stripe: false,
       twenty: false,

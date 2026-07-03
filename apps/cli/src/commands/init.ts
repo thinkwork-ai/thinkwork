@@ -166,11 +166,6 @@ function buildTfvars(config: Record<string, string>): string {
     `enable_hindsight = ${config.enable_hindsight === "true"}`,
     `memory_engine    = ""`,
     ``,
-    `# ── Ontology / Knowledge Graph ────────────────────────────────────`,
-    `# Cognee is disabled by default. Enabling it also requires`,
-    `# an immutable cognee_image_uri, dedicated DB secret ARN, and Bedrock ARNs.`,
-    `enable_cognee = false`,
-    ``,
     `# ── Managed Applications ──────────────────────────────────────────`,
     `# Twenty CRM is optional and disabled by default. Enabling it requires`,
     `# a pinned twenty_image_uri plus deploy-prepared database/encryption secrets.`,
@@ -678,131 +673,6 @@ variable "enable_hindsight" {
   default = true
 }
 
-variable "enable_cognee" {
-  type    = bool
-  default = false
-}
-
-variable "cognee_image_uri" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_db_username" {
-  type    = string
-  default = "thinkwork_cognee"
-}
-
-variable "cognee_db_name" {
-  type    = string
-  default = "thinkwork_cognee"
-}
-
-variable "cognee_db_password_secret_arn" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_allowed_internal_cidr_blocks" {
-  type    = list(string)
-  default = []
-}
-
-variable "cognee_allowed_internal_security_group_ids" {
-  type    = list(string)
-  default = []
-}
-
-variable "cognee_backend_mode" {
-  type    = string
-  default = "dogfood"
-}
-
-variable "cognee_desired_count" {
-  type    = number
-  default = 1
-}
-
-variable "cognee_llm_provider" {
-  type    = string
-  default = "bedrock"
-}
-
-variable "cognee_llm_model" {
-  type    = string
-  default = "bedrock/amazon.nova-lite-v1:0"
-}
-
-variable "cognee_llm_api_key_secret_arn" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_embedding_provider" {
-  type    = string
-  default = "bedrock"
-}
-
-variable "cognee_embedding_model" {
-  type    = string
-  default = "amazon.titan-embed-text-v2:0"
-}
-
-variable "cognee_embedding_dimensions" {
-  type    = number
-  default = 1024
-}
-
-variable "cognee_embedding_api_key_secret_arn" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_vector_db_provider" {
-  type    = string
-  default = "lancedb"
-}
-
-variable "cognee_vector_db_url" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_vector_db_key_secret_arn" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_graph_database_provider" {
-  type    = string
-  default = "kuzu"
-}
-
-variable "cognee_graph_database_url" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_graph_database_username" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_graph_database_password_secret_arn" {
-  type    = string
-  default = ""
-}
-
-variable "cognee_bedrock_model_resource_arns" {
-  type    = list(string)
-  default = []
-}
-
-variable "cognee_kms_key_arns" {
-  type    = list(string)
-  default = []
-}
-
 variable "twenty_provisioned" {
   type    = bool
   default = false
@@ -1019,31 +889,6 @@ module "thinkwork" {
   db_password                = var.db_password
   database_engine            = var.database_engine
   enable_hindsight           = var.enable_hindsight
-  enable_cognee              = var.enable_cognee
-  cognee_image_uri           = var.cognee_image_uri
-  cognee_db_username         = var.cognee_db_username
-  cognee_db_name             = var.cognee_db_name
-  cognee_db_password_secret_arn = var.cognee_db_password_secret_arn
-  cognee_allowed_internal_cidr_blocks = var.cognee_allowed_internal_cidr_blocks
-  cognee_allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
-  cognee_backend_mode = var.cognee_backend_mode
-  cognee_desired_count = var.cognee_desired_count
-  cognee_llm_provider = var.cognee_llm_provider
-  cognee_llm_model = var.cognee_llm_model
-  cognee_llm_api_key_secret_arn = var.cognee_llm_api_key_secret_arn
-  cognee_embedding_provider = var.cognee_embedding_provider
-  cognee_embedding_model = var.cognee_embedding_model
-  cognee_embedding_dimensions = var.cognee_embedding_dimensions
-  cognee_embedding_api_key_secret_arn = var.cognee_embedding_api_key_secret_arn
-  cognee_vector_db_provider = var.cognee_vector_db_provider
-  cognee_vector_db_url = var.cognee_vector_db_url
-  cognee_vector_db_key_secret_arn = var.cognee_vector_db_key_secret_arn
-  cognee_graph_database_provider = var.cognee_graph_database_provider
-  cognee_graph_database_url = var.cognee_graph_database_url
-  cognee_graph_database_username = var.cognee_graph_database_username
-  cognee_graph_database_password_secret_arn = var.cognee_graph_database_password_secret_arn
-  cognee_bedrock_model_resource_arns = var.cognee_bedrock_model_resource_arns
-  cognee_kms_key_arns = var.cognee_kms_key_arns
   twenty_provisioned = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
   twenty_image_uri = var.twenty_image_uri
@@ -1143,18 +988,6 @@ output "hindsight_enabled" {
 
 output "hindsight_endpoint" {
   value = module.thinkwork.hindsight_endpoint
-}
-
-output "cognee_enabled" {
-  value = module.thinkwork.cognee_enabled
-}
-
-output "cognee_endpoint" {
-  value = module.thinkwork.cognee_endpoint
-}
-
-output "cognee_log_group_name" {
-  value = module.thinkwork.cognee_log_group_name
 }
 
 output "twenty_provisioned" {

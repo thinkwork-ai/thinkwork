@@ -1,11 +1,10 @@
-import { cogneeAdapter } from "@thinkwork/plugin-company-brain/deployment/cognee-managed-app";
 import { n8nAdapter } from "@thinkwork/plugin-n8n/deployment/managed-app";
 import { twentyAdapter } from "@thinkwork/plugin-twenty/deployment/managed-app";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";
 
-export type ManagedAppKey = "cognee" | "n8n" | "twenty";
+export type ManagedAppKey = "n8n" | "twenty";
 
 export interface SmokeContract {
   id: string;
@@ -75,11 +74,7 @@ export interface ManagedAppAdapter {
   extractStatus(terraformOutputs: Record<string, unknown>): ManagedAppStatus;
 }
 
-export const managedAppRegistry = [
-  cogneeAdapter,
-  n8nAdapter,
-  twentyAdapter,
-] as const;
+export const managedAppRegistry = [n8nAdapter, twentyAdapter] as const;
 
 export function getManagedAppAdapter(appKey: ManagedAppKey): ManagedAppAdapter {
   const adapter = managedAppRegistry.find((candidate) => {

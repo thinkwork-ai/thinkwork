@@ -28,13 +28,11 @@ import {
 } from "../core/resolve-auth-user.js";
 
 const MANAGED_APP_METADATA = [
-  ...managedAppRegistry
-    .filter((adapter) => adapter.appKey !== "cognee")
-    .map((adapter) => ({
-      key: adapter.appKey,
-      displayName: adapter.displayName,
-      catalogVisible: adapter.catalogVisible,
-    })),
+  ...managedAppRegistry.map((adapter) => ({
+    key: adapter.appKey,
+    displayName: adapter.displayName,
+    catalogVisible: adapter.catalogVisible,
+  })),
 ] as const;
 
 export const MANAGED_APP_CATALOG = MANAGED_APP_METADATA.filter(

@@ -185,20 +185,15 @@ It must not include secrets.
 Run managed-app smokes after deploy, destroy, park, or release upgrade jobs:
 
 ```bash
-SMOKE_ENABLE_COGNEE_MANAGED_APP=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_EVIDENCE_FILE=deploy-artifacts/cognee-smoke.json \
-  node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs
-
 SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/twenty-smoke.json \
   node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
-Cognee and Twenty smokes skip with explicit evidence when the app is not
-enabled, unprovisioned, or parked. A skipped smoke is valid evidence only when
-that app state is intentional for the stage.
+Twenty smokes skip with explicit evidence when the app is not enabled,
+unprovisioned, or parked. A skipped smoke is valid evidence only when that app
+state is intentional for the stage.
 
 ## Workflow Components
 

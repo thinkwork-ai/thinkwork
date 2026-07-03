@@ -286,7 +286,6 @@ export function buildControllerUpdateInput(options: {
     },
     features: prior.features ?? {
       baseInstall: {
-        cognee: false,
         slack: false,
         stripe: false,
         twenty: false,

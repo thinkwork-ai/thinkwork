@@ -48,6 +48,6 @@ describe("wiki compile — graph-mode flags and help", () => {
     rebuild.configureOutput({ writeOut: (s) => void (rendered += s) });
     rebuild.outputHelp({ error: false });
     expect(rendered).toMatch(/wiki source is graph/i);
-    expect(rendered).toMatch(/Cognee graph full-rebuild/i);
+    expect(rendered).toMatch(/graph full-rebuild/i);
   });
 });
