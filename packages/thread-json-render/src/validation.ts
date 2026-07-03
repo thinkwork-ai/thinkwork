@@ -174,7 +174,7 @@ export function validateThreadJsonRenderData(
     } else {
       validateSpecGraph(catalogValidation.data, limits, diagnostics);
       validateComponentProps(catalogValidation.data, limits, diagnostics);
-      validateResultListActionReferences(
+      validateRowActionReferences(
         catalogValidation.data,
         input.durableActions,
         diagnostics,
@@ -505,7 +505,12 @@ function validateComponentProps(
   }
 }
 
-function validateResultListActionReferences(
+// Both `result.list` items and `table` rows carry optional
+// primaryActionId/secondaryActionId references into `durableActions`. The
+// integrity rules (must be a non-empty string, must resolve, must not be
+// disabled, must not be shared across rows) are identical, so the check is
+// generalized over the row-bearing prop that each component exposes.
+function validateRowActionReferences(
   spec: ThreadJsonRenderSpec,
   inputActions: unknown,
   diagnostics: ThreadJsonRenderDiagnostic[],
@@ -523,25 +528,24 @@ function validateResultListActionReferences(
 
   const referencedBy = new Map<string, string>();
   for (const [elementId, element] of Object.entries(spec.elements)) {
-    if (element.type !== "result.list") continue;
-    const props = element.props;
-    if (!isRecord(props) || !Array.isArray(props.items)) continue;
+    const rowsProp = rowBearingProp(element);
+    if (!rowsProp) continue;
 
-    props.items.forEach((item, itemIndex) => {
-      if (!isRecord(item)) return;
-      const itemId =
-        typeof item.id === "string" && item.id.length > 0
-          ? item.id
-          : `item-${itemIndex}`;
+    rowsProp.rows.forEach((row, rowIndex) => {
+      if (!isRecord(row)) return;
+      const rowId =
+        typeof row.id === "string" && row.id.length > 0
+          ? row.id
+          : `${rowsProp.kind}-${rowIndex}`;
       for (const field of ["primaryActionId", "secondaryActionId"] as const) {
-        const actionId = item[field];
+        const actionId = row[field];
         if (actionId == null) continue;
-        const actionPath = `$.spec.elements.${elementId}.props.items[${itemIndex}].${field}`;
+        const actionPath = `$.spec.elements.${elementId}.props.${rowsProp.field}[${rowIndex}].${field}`;
         if (typeof actionId !== "string" || actionId.trim().length === 0) {
           diagnostics.push(
             error(
               "JSON_RENDER_ACTION_REFERENCE_INVALID",
-              "Result list action references must be non-empty strings.",
+              "Row action references must be non-empty strings.",
               actionPath,
             ),
           );
@@ -553,7 +557,7 @@ function validateResultListActionReferences(
           diagnostics.push(
             error(
               "JSON_RENDER_ACTION_REFERENCE_MISSING",
-              `Result list action ${actionId} must reference a durable action.`,
+              `Row action ${actionId} must reference a durable action.`,
               actionPath,
             ),
           );
@@ -563,19 +567,19 @@ function validateResultListActionReferences(
           diagnostics.push(
             error(
               "JSON_RENDER_ACTION_REFERENCE_DISABLED",
-              `Result list action ${actionId} cannot reference a disabled durable action.`,
+              `Row action ${actionId} cannot reference a disabled durable action.`,
               actionPath,
             ),
           );
         }
 
         const previousReference = referencedBy.get(actionId);
-        const currentReference = `${elementId}:${itemId}:${field}`;
+        const currentReference = `${elementId}:${rowId}:${field}`;
         if (previousReference && previousReference !== currentReference) {
           diagnostics.push(
             error(
               "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
-              `Result list action ${actionId} cannot be shared by multiple result rows.`,
+              `Row action ${actionId} cannot be shared by multiple rows.`,
               actionPath,
             ),
           );
@@ -585,6 +589,22 @@ function validateResultListActionReferences(
       }
     });
   }
+}
+
+// Returns the row-bearing prop for components that support durable per-row
+// actions: `result.list` exposes `items`, `table` exposes `rows`.
+function rowBearingProp(
+  element: ThreadJsonRenderSpec["elements"][string],
+): { field: "items" | "rows"; kind: string; rows: unknown[] } | null {
+  const props = element.props;
+  if (!isRecord(props)) return null;
+  if (element.type === "result.list" && Array.isArray(props.items)) {
+    return { field: "items", kind: "item", rows: props.items };
+  }
+  if (element.type === "table" && Array.isArray(props.rows)) {
+    return { field: "rows", kind: "row", rows: props.rows };
+  }
+  return null;
 }
 
 function validateFallback(

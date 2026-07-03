@@ -25,6 +25,7 @@ describe("Thread json-render catalog", () => {
       "form.action",
       "analytics.display",
       "result.list",
+      "table",
     ]);
     expect(threadJsonRenderComponentNames).toEqual(
       expect.arrayContaining([

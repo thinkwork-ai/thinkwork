@@ -12,6 +12,7 @@ import {
   createAnalyticsJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
+  createTableJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
   createThreadJsonRenderPart,
 } from "./test-fixtures.js";
@@ -82,6 +83,68 @@ describe("thread json-render validation", () => {
     expect(codes(validateThreadJsonRenderPart(duplicateAction))).toContain(
       "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
     );
+  });
+
+  it("accepts a valid table and enforces its row action references", () => {
+    const table = createTableJsonRenderFixture();
+    expect(validateThreadJsonRenderPart(table).ok).toBe(true);
+    expect(table.data.spec.elements.table.type).toBe("table");
+
+    const unknownAction = createTableJsonRenderFixture();
+    unknownAction.data.specHash = undefined;
+    const unknownRows = unknownAction.data.spec.elements.table.props
+      .rows as Array<Record<string, unknown>>;
+    unknownRows[0]!.primaryActionId = "not-a-durable-action";
+
+    expect(codes(validateThreadJsonRenderPart(unknownAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_MISSING",
+    );
+  });
+
+  it("rejects disabled and duplicated table row action references", () => {
+    const disabledAction = createTableJsonRenderFixture();
+    disabledAction.data.specHash = undefined;
+    disabledAction.data.durableActions![0]!.disabled = true;
+
+    const duplicateAction = createTableJsonRenderFixture();
+    duplicateAction.data.specHash = undefined;
+    const duplicateRows = duplicateAction.data.spec.elements.table.props
+      .rows as Array<Record<string, unknown>>;
+    duplicateRows[1]!.secondaryActionId = "complete-row-1";
+
+    expect(codes(validateThreadJsonRenderPart(disabledAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DISABLED",
+    );
+    expect(codes(validateThreadJsonRenderPart(duplicateAction))).toContain(
+      "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
+    );
+  });
+
+  it("rejects forbidden and over-cap table props, allows empty rows", () => {
+    const forbidden = createTableJsonRenderFixture();
+    forbidden.data.specHash = undefined;
+    (forbidden.data.spec.elements.table.props as Record<string, unknown>).className =
+      "fixed inset-0";
+    expect(codes(validateThreadJsonRenderPart(forbidden))).toContain(
+      "JSON_RENDER_FORBIDDEN_PROP",
+    );
+
+    const overCap = createTableJsonRenderFixture();
+    overCap.data.specHash = undefined;
+    (overCap.data.spec.elements.table.props as Record<string, unknown>).rows =
+      Array.from({ length: 51 }, (_, index) => ({
+        id: `row-${index}`,
+        name: `Item ${index}`,
+      }));
+    expect(codes(validateThreadJsonRenderPart(overCap))).toContain(
+      "JSON_RENDER_PROPS_INVALID",
+    );
+
+    const emptyRows = createTableJsonRenderFixture();
+    emptyRows.data.specHash = undefined;
+    (emptyRows.data.spec.elements.table.props as Record<string, unknown>).rows =
+      [];
+    expect(validateThreadJsonRenderPart(emptyRows).ok).toBe(true);
   });
 
   it("rejects unapproved result.list fields and nested imperative props", () => {
