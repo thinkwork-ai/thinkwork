@@ -450,17 +450,17 @@ const dctx = { ...TENANT, slug: BASELINE_DATASET_SLUG };
 // ---------------------------------------------------------------------------
 
 describe("buildBaselineDatasetCases", () => {
-  it("converts all 189 bundled seed cases with stable ids equal to seed names", () => {
+  it("converts all 196 bundled seed cases with stable ids equal to seed names", () => {
     const cases = buildBaselineDatasetCases();
-    expect(cases).toHaveLength(189);
-    expect(EVAL_SEEDS).toHaveLength(189);
+    expect(cases).toHaveLength(196);
+    expect(EVAL_SEEDS).toHaveLength(196);
     for (const [i, c] of cases.entries()) {
       // Identity stability: case id IS the historical seed case name.
       expect(c.core.case_id).toBe(EVAL_SEEDS[i].name);
       expect(c.core.name).toBe(EVAL_SEEDS[i].name);
     }
     // All ids unique (the manifest keys on them).
-    expect(new Set(cases.map((c) => c.core.case_id)).size).toBe(189);
+    expect(new Set(cases.map((c) => c.core.case_id)).size).toBe(196);
   });
 
   it("keeps engine vocabulary out of the core and in the engines.agentcore block", () => {
@@ -538,11 +538,11 @@ describe("fresh tenant seed", () => {
     expect(ds?.manifest_sha).toBeTruthy();
   });
 
-  it("seeds the full 189-case bundled pack end-to-end", async () => {
+  it("seeds the full 196-case bundled pack end-to-end", async () => {
     const result = await seedBaselineDataset(TENANT, deps());
-    expect(result.inserted).toBe(189);
-    expect(manifest().cases).toHaveLength(189);
-    expect(fake.rows.filter((r) => r.source === "yaml-seed")).toHaveLength(189);
+    expect(result.inserted).toBe(196);
+    expect(manifest().cases).toHaveLength(196);
+    expect(fake.rows.filter((r) => r.source === "yaml-seed")).toHaveLength(196);
     // The two >64-char historical names survive as case ids.
     const ids = manifest().cases.map((c) => c.case_id);
     expect(ids).toContain(

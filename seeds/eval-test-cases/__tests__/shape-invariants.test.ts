@@ -66,6 +66,16 @@ const ALLOWED_RED_TEAM_CATEGORIES = new Set([
   "red-team-safety-scope",
 ]);
 
+// THINK-133 U9 Brain packs: leverage assertions + dream-state data-loss
+// gates. They share the core case shape but not the red-team desktop-pi
+// metadata contract.
+const ALLOWED_BRAIN_CATEGORIES = new Set(["brain-leverage", "brain-data-loss"]);
+
+const BRAIN_CASE_COUNT_BY_FILE: Record<string, number> = {
+  "brain-leverage.json": 4,
+  "brain-data-loss.json": 3,
+};
+
 const EXPECTED_CASE_COUNT_BY_FILE: Record<string, number> = {
   "red-team-agents-prompt-injection.json": 15,
   "red-team-agents-tool-misuse.json": 15,
@@ -274,16 +284,70 @@ describe("eval seed shape invariants", () => {
     );
 
     expect(fileNames.sort()).toEqual(
-      Object.keys(EXPECTED_CASE_COUNT_BY_FILE).sort(),
+      [
+        ...Object.keys(EXPECTED_CASE_COUNT_BY_FILE),
+        ...Object.keys(BRAIN_CASE_COUNT_BY_FILE),
+      ].sort(),
     );
 
     for (const fileName of fileNames) {
+      if (fileName.startsWith("brain-")) {
+        for (const testCase of readSeedFile(fileName)) {
+          expect(
+            ALLOWED_BRAIN_CATEGORIES.has(testCase.category as string),
+            `${fileName}:${testCase.name}`,
+          ).toBe(true);
+        }
+        continue;
+      }
       expect(fileName.startsWith("red-team-"), fileName).toBe(true);
       for (const testCase of readSeedFile(fileName)) {
         expect(
           ALLOWED_RED_TEAM_CATEGORIES.has(testCase.category as string),
           `${fileName}:${testCase.name}`,
         ).toBe(true);
+      }
+    }
+  });
+
+  it("brain packs keep the core case shape (THINK-133 U9)", () => {
+    for (const [fileName, expectedCount] of Object.entries(
+      BRAIN_CASE_COUNT_BY_FILE,
+    )) {
+      const cases = readSeedFile(fileName);
+      expect(cases, fileName).toHaveLength(expectedCount);
+      for (const testCase of cases) {
+        expect(ALLOWED_BRAIN_CATEGORIES.has(testCase.category as string)).toBe(
+          true,
+        );
+        expect(testCase.target_surface).toBe("agent");
+        expect(testCase.execution_tier).toBe("agent");
+        expect(typeof testCase.name).toBe("string");
+        expect(typeof testCase.prompt).toBe("string");
+        expect((testCase.prompt as string).length).toBeGreaterThan(20);
+        expect(testCase.query).toBe(testCase.prompt);
+        expect(typeof testCase.expected_behavior).toBe("string");
+        expect(typeof testCase.threshold).toBe("number");
+        expect(testCase.threshold as number).toBeGreaterThan(0);
+        expect(testCase.threshold as number).toBeLessThanOrEqual(1);
+        expect(testCase.tags).toContain(`category:${testCase.category}`);
+        expectDesktopPiProse(fileName, testCase);
+
+        expect(Array.isArray(testCase.agentcore_evaluator_ids)).toBe(true);
+        for (const evaluatorId of testCase.agentcore_evaluator_ids as unknown[]) {
+          expect(
+            ALLOWED_EVALUATORS.has(evaluatorId as string),
+            `${evaluatorId}`,
+          ).toBe(true);
+        }
+        expect(Array.isArray(testCase.assertions)).toBe(true);
+        expect((testCase.assertions as unknown[]).length).toBeGreaterThan(0);
+        for (const assertion of testCase.assertions as SeedAssertion[]) {
+          expect(
+            ALLOWED_ASSERTIONS.has(assertion.type as string),
+            `${assertion.type}`,
+          ).toBe(true);
+        }
       }
     }
   });
