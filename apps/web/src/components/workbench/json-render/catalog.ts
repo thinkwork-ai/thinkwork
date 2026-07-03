@@ -1,53 +1,35 @@
-import { defineCatalog, defineSchema } from "@json-render/core";
+import { defineCatalog } from "@json-render/core";
 import { defineRegistry } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
-import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
-
 import {
+  threadJsonRenderLocalActionDefinitions,
+  threadJsonRenderPrimitiveComponentDefinitions,
+  threadJsonRenderSchema,
+} from "@thinkwork/thread-json-render";
+
+/**
+ * Catalog *definitions* (schema, component prop schemas, names, the assembled
+ * catalog) live in a single source of truth — `@thinkwork/thread-json-render`
+ * — so a new component is declared once and flows to the validator, the
+ * system-prompt catalog list, and this renderer without a second edit (KTD4).
+ *
+ * This module only owns the web-specific concern: mapping those definitions to
+ * concrete React implementations via `@json-render/react`. Definitions are
+ * re-exported below so existing importers keep the same import path.
+ */
+export {
+  threadJsonRenderCatalog,
+  threadJsonRenderComponentDefinitions,
+  threadJsonRenderComponentNames,
   threadJsonRenderDomainComponentDefinitions,
   threadJsonRenderDomainComponentNames,
-} from "./domain-catalog";
-
-export const threadJsonRenderSchema = defineSchema((schema) => ({
-  spec: schema.object({
-    root: schema.string(),
-    elements: schema.record(
-      schema.object({
-        type: schema.ref("catalog.components"),
-        props: schema.propsOf("catalog.components"),
-        children: schema.array(schema.string()),
-      }),
-    ),
-  }),
-  catalog: schema.object({
-    components: schema.map({ props: schema.zod() }),
-    actions: schema.map({ params: schema.zod() }),
-  }),
-}));
-
-export const threadJsonRenderPrimitiveComponentDefinitions =
-  shadcnComponentDefinitions;
-
-export const threadJsonRenderPrimitiveComponentNames = Object.keys(
+  threadJsonRenderLocalActionDefinitions,
   threadJsonRenderPrimitiveComponentDefinitions,
-);
+  threadJsonRenderPrimitiveComponentNames,
+  threadJsonRenderSchema,
+} from "@thinkwork/thread-json-render";
 
-export const threadJsonRenderLocalActionDefinitions = {};
-
-export const threadJsonRenderComponentDefinitions = {
-  ...threadJsonRenderPrimitiveComponentDefinitions,
-  ...threadJsonRenderDomainComponentDefinitions,
-};
-
-export const threadJsonRenderComponentNames = Object.keys(
-  threadJsonRenderComponentDefinitions,
-);
-
-export const threadJsonRenderCatalog = defineCatalog(threadJsonRenderSchema, {
-  components: threadJsonRenderComponentDefinitions,
-  actions: threadJsonRenderLocalActionDefinitions,
-});
-
+// Web-only: the upstream shadcn primitive React components and their registry.
 export const threadJsonRenderPrimitiveCatalog = defineCatalog(
   threadJsonRenderSchema,
   {
@@ -64,8 +46,3 @@ export const { registry: threadJsonRenderPrimitiveRegistry } = defineRegistry(
 );
 
 export { shadcnComponents as threadJsonRenderPrimitiveComponents };
-
-export {
-  threadJsonRenderDomainComponentDefinitions,
-  threadJsonRenderDomainComponentNames,
-};
