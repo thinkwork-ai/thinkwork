@@ -196,7 +196,9 @@ export async function runOpenEngineQueueOnce(
   const message =
     dispatchResult.status === "failed"
       ? dispatchResult.error
-      : dispatchResult.reason;
+      : dispatchResult.status === "skipped"
+        ? dispatchResult.reason
+        : `unexpected dispatch status ${dispatchResult.status}`;
   await recordFailedDispatchReceipt({
     deps,
     input,

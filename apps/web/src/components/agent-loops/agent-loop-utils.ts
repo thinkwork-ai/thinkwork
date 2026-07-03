@@ -123,6 +123,8 @@ export function defaultAgentLoopDraft(
     suitabilityGoalStable: false,
     suitabilityEvidenceAvailable: false,
     suitabilityBudgeted: false,
+    routineActionRoutineIds: [],
+    routineAgentTurn: true,
   };
 }
 
@@ -152,6 +154,14 @@ export function draftFromVersion(
   const judge = jsonRecord(version?.judgeSpec);
   const policy = jsonRecord(version?.loopPolicy);
   const evidence = jsonRecord(version?.evidencePolicy);
+  const routineActions = jsonRecord(version?.routineActionsSpec);
+  const routineActionRoutineIds = Array.isArray(routineActions.actions)
+    ? (routineActions.actions as { routineId?: unknown }[])
+        .map((action) =>
+          typeof action?.routineId === "string" ? action.routineId : null,
+        )
+        .filter((id): id is string => Boolean(id))
+    : [];
 
   return {
     ...fallback,
@@ -203,6 +213,8 @@ export function draftFromVersion(
     suitabilityBudgeted: boolValue(
       jsonRecord(version?.sourceMetadata).suitabilityBudgeted,
     ),
+    routineActionRoutineIds,
+    routineAgentTurn: routineActions.agentTurn !== false,
   };
 }
 
@@ -261,6 +273,15 @@ export function draftToPayload(input: {
     retainRawEvidence: input.draft.retainRawEvidence,
     retentionDays: optionalPositiveInt(input.draft.retentionDays),
   };
+  const routineActionsSpec =
+    input.draft.routineActionRoutineIds.length > 0
+      ? {
+          actions: input.draft.routineActionRoutineIds.map((routineId) => ({
+            routineId,
+          })),
+          agentTurn: input.draft.routineAgentTurn,
+        }
+      : null;
   return {
     id: input.id,
     tenantId: input.tenantId,
@@ -275,6 +296,7 @@ export function draftToPayload(input: {
     judgeSpec,
     loopPolicy,
     evidencePolicy,
+    routineActionsSpec,
     sourceMetadata: {
       createdFrom:
         input.draft.creationMode === "advanced"

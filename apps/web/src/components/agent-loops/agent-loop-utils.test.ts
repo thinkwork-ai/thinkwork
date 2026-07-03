@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultAgentLoopDraft,
+  draftFromVersion,
   draftToPayload,
   validateDraft,
 } from "./agent-loop-utils";
@@ -18,9 +19,7 @@ const spaces: AgentLoopSpaceOption[] = [
 
 describe("agent-loop-utils", () => {
   it("defaults new Automation drafts to a schedule trigger", () => {
-    expect(
-      defaultAgentLoopDraft(workers, spaces, "space-1"),
-    ).toMatchObject({
+    expect(defaultAgentLoopDraft(workers, spaces, "space-1")).toMatchObject({
       triggerFamily: "schedule",
       scheduleType: "rate",
       scheduleExpression: "rate(7 days)",
@@ -91,5 +90,59 @@ describe("agent-loop-utils", () => {
     ).toMatchObject({
       name: "Route Linear issues to the right worker",
     });
+  });
+
+  it("emits routineActionsSpec only when routines are attached (U5)", () => {
+    const spaces: never[] = [];
+    const base = defaultAgentLoopDraft(workers, spaces, null);
+    const without = draftToPayload({
+      draft: base,
+      tenantId: "tenant-1",
+      workerOptions: workers,
+    });
+    expect(without.routineActionsSpec).toBeNull();
+
+    const withRoutines = draftToPayload({
+      draft: {
+        ...base,
+        routineActionRoutineIds: ["33333333-3333-4333-8333-333333333333"],
+        routineAgentTurn: false,
+      },
+      tenantId: "tenant-1",
+      workerOptions: workers,
+    });
+    expect(withRoutines.routineActionsSpec).toEqual({
+      actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+      agentTurn: false,
+    });
+  });
+
+  it("seeds routine actions back into the draft from a saved version (U5)", () => {
+    const draft = draftFromVersion(
+      {
+        name: "LastMile check",
+        lifecycleStatus: "active",
+        enabled: true,
+        currentVersion: {
+          id: "v1",
+          versionNumber: 1,
+          triggerSpec: { family: "schedule", enabled: true, config: {} },
+          goalSpec: { objective: "check", completionCriteria: [] },
+          workerSpec: { type: "agent", id: "agent-1" },
+          judgeSpec: { mode: "self_check", criteria: [] },
+          loopPolicy: { maxIterations: 1 },
+          evidencePolicy: { redactionState: "summary_only" },
+          routineActionsSpec: {
+            actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+            agentTurn: false,
+          },
+        },
+      },
+      workers,
+    );
+    expect(draft.routineActionRoutineIds).toEqual([
+      "33333333-3333-4333-8333-333333333333",
+    ]);
+    expect(draft.routineAgentTurn).toBe(false);
   });
 });

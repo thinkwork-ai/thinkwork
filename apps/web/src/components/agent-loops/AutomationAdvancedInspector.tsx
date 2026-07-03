@@ -23,16 +23,19 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import type { AgentLoopDraft, AgentLoopWorkerOption } from "./agent-loop-types";
+import { AutomationRoutineActionsPicker } from "./AutomationRoutineActionsPicker";
 
 export function AutomationAdvancedInspector({
   open,
   onOpenChange,
+  tenantId,
   draft,
   setDraft,
   workerOptions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  tenantId: string;
   draft: AgentLoopDraft;
   setDraft: Dispatch<SetStateAction<AgentLoopDraft>>;
   workerOptions: AgentLoopWorkerOption[];
@@ -98,6 +101,14 @@ export function AutomationAdvancedInspector({
                     />
                   </InspectorField>
                 </div>
+              </InspectorSection>
+
+              <InspectorSection label="Run routines">
+                <AutomationRoutineActionsPicker
+                  tenantId={tenantId}
+                  draft={draft}
+                  setDraft={setDraft}
+                />
               </InspectorSection>
 
               <InspectorSection label="Suitability">

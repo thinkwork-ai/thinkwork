@@ -533,6 +533,7 @@ export const SettingsAgentLoopsQuery = gql`
         judgeSpec
         loopPolicy
         evidencePolicy
+        routineActionsSpec
         sourceMetadata
         publishedAt
         createdAt
@@ -593,6 +594,7 @@ export const SettingsAgentLoopQuery = gql`
         judgeSpec
         loopPolicy
         evidencePolicy
+        routineActionsSpec
         sourceMetadata
         publishedAt
         createdAt
@@ -648,6 +650,7 @@ export const SettingsAgentLoopRunQuery = gql`
         judgeSpec
         loopPolicy
         evidencePolicy
+        routineActionsSpec
         sourceMetadata
       }
       status
@@ -740,6 +743,23 @@ export const SettingsAgentLoopRunQuery = gql`
   }
 `;
 
+// Deterministic routines picker (plan 2026-07-03-004 U5): git_python
+// routines attachable to an Automation as token-free actions.
+export const SettingsGitRoutinesQuery = gql`
+  query SettingsGitRoutines($tenantId: ID!) {
+    routines(tenantId: $tenantId) {
+      id
+      name
+      description
+      engine
+      status
+      validatedSha
+      fixturePaths
+      disabledReason
+    }
+  }
+`;
+
 export const SettingsSaveAgentLoopMutation = gql`
   mutation SettingsSaveAgentLoop($input: SaveAgentLoopInput!) {
     saveAgentLoop(input: $input) {
@@ -761,6 +781,7 @@ export const SettingsSaveAgentLoopMutation = gql`
         judgeSpec
         loopPolicy
         evidencePolicy
+        routineActionsSpec
         sourceMetadata
       }
       updatedAt
@@ -810,6 +831,7 @@ export const SettingsConfirmAutomationDraftMutation = gql`
         judgeSpec
         loopPolicy
         evidencePolicy
+        routineActionsSpec
         sourceMetadata
       }
       updatedAt

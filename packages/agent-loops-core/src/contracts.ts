@@ -354,3 +354,105 @@ function compact<T extends Record<string, unknown>>(value: T): T {
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as T;
 }
+
+// ---------------------------------------------------------------------------
+// Routine actions (deterministic routines v1 — plan 2026-07-03-004 U5)
+// ---------------------------------------------------------------------------
+
+/** One "Run routine" action attached to an Automation version. Executes a
+ * git_python routine deterministically (zero agent turns) before any agent
+ * work in the run. */
+export interface RoutineActionSpec {
+  /** routines.id of a git_python routine. */
+  routineId: string;
+  /** Optional input forwarded to run(input). */
+  input?: Record<string, unknown> | null;
+  /** Display label for run detail / the picker. */
+  label?: string | null;
+}
+
+/** The version-level field. `agentTurn: false` marks a routine-only
+ * Automation — the run completes after the actions with no wakeup. */
+export interface RoutineActionsSpec {
+  actions: RoutineActionSpec[];
+  agentTurn: boolean;
+}
+
+/** Per-action outcome recorded on the iteration and injected into the
+ * agent-turn payload for mixed Automations. */
+export interface RoutineActionResult {
+  routineId: string;
+  label?: string | null;
+  status: "succeeded" | "failed";
+  executionId?: string | null;
+  commitSha?: string | null;
+  cacheServed?: boolean;
+  outputJson?: unknown;
+  errorClass?: string | null;
+  errorMessage?: string | null;
+}
+
+export const MAX_ROUTINE_ACTIONS_PER_LOOP = 5;
+
+const UUID_VALUE_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Normalizes a raw routineActionsSpec value. Returns null when the field
+ * is absent/empty (the common no-routines case); throws on a malformed
+ * shape so a bad save is rejected rather than stored. */
+export function normalizeRoutineActionsSpec(
+  value: unknown,
+): RoutineActionsSpec | null {
+  if (value === undefined || value === null || value === "") return null;
+  const source = typeof value === "string" ? JSON.parse(value) : value;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new Error("routineActionsSpec must be an object");
+  }
+  const record = source as Record<string, unknown>;
+  const rawActions = record.actions;
+  if (rawActions === undefined || rawActions === null) return null;
+  if (!Array.isArray(rawActions)) {
+    throw new Error("routineActionsSpec.actions must be an array");
+  }
+  if (rawActions.length === 0) return null;
+  if (rawActions.length > MAX_ROUTINE_ACTIONS_PER_LOOP) {
+    throw new Error(
+      `routineActionsSpec.actions must include at most ${MAX_ROUTINE_ACTIONS_PER_LOOP} actions`,
+    );
+  }
+  const actions = rawActions.map((entry, index): RoutineActionSpec => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`routineActionsSpec.actions[${index}] must be an object`);
+    }
+    const action = entry as Record<string, unknown>;
+    const routineId = action.routineId;
+    if (typeof routineId !== "string" || !UUID_VALUE_RE.test(routineId)) {
+      throw new Error(
+        `routineActionsSpec.actions[${index}].routineId must be a routine id`,
+      );
+    }
+    const input = action.input;
+    if (
+      input !== undefined &&
+      input !== null &&
+      (typeof input !== "object" || Array.isArray(input))
+    ) {
+      throw new Error(
+        `routineActionsSpec.actions[${index}].input must be an object`,
+      );
+    }
+    const label = action.label;
+    return compact({
+      routineId,
+      input: (input as Record<string, unknown> | null | undefined) ?? undefined,
+      label:
+        typeof label === "string" && label.trim()
+          ? label.trim().slice(0, 120)
+          : undefined,
+    });
+  });
+  return {
+    actions,
+    agentTurn: record.agentTurn !== false,
+  };
+}
