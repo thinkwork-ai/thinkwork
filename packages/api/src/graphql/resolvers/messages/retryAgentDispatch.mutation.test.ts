@@ -36,6 +36,7 @@ function deps(overrides: Partial<RetryAgentDispatchDeps> = {}): {
   const saved: Array<{ metadata: Record<string, unknown> }> = [];
   const base: RetryAgentDispatchDeps = {
     loadMessage: vi.fn(async () => messageRow()),
+    hasFailedLinkedTurn: vi.fn(async () => false),
     saveDispatchMetadata: vi.fn(async ({ metadata }) => {
       saved.push({ metadata });
       return messageRow({ metadata });
@@ -201,5 +202,49 @@ describe("KTD4: retry mints a fresh idempotency key that differs from the base",
       "agent-mention:tenant-1:message-1:agent-9:attempt-3",
     );
     expect(retry.idempotencyKey).not.toBe(base.idempotencyKey);
+  });
+});
+
+describe("retryAgentDispatch failure-evidence guard", () => {
+  it("rejects a retry when the message has no failed dispatch (sync stamp absent, no failed linked turn)", async () => {
+    const { deps: d, redispatched } = deps({
+      loadMessage: vi.fn(async () => messageRow({ metadata: null })),
+      hasFailedLinkedTurn: vi.fn(async () => false),
+    });
+    await expect(
+      runRetryAgentDispatch(
+        { messageId: "message-1", tenantId: TENANT, callerUserId: SENDER },
+        d,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+    expect(redispatched).toEqual([]);
+  });
+
+  it("allows a retry on async failure evidence (failed linked turn, no metadata stamp)", async () => {
+    const { deps: d, redispatched } = deps({
+      loadMessage: vi.fn(async () => messageRow({ metadata: null })),
+      hasFailedLinkedTurn: vi.fn(async () => true),
+    });
+    const result = await runRetryAgentDispatch(
+      { messageId: "message-1", tenantId: TENANT, callerUserId: SENDER },
+      d,
+    );
+    expect(redispatched).toHaveLength(1);
+    expect(
+      (result.metadata?.dispatch as Record<string, unknown>).status,
+    ).toBe("pending");
+  });
+
+  it("does not consult the turn lookup when the sync failure stamp is present", async () => {
+    const hasFailedLinkedTurn = vi.fn(async () => false);
+    const { deps: d, redispatched } = deps({ hasFailedLinkedTurn });
+    await runRetryAgentDispatch(
+      { messageId: "message-1", tenantId: TENANT, callerUserId: SENDER },
+      d,
+    );
+    expect(hasFailedLinkedTurn).not.toHaveBeenCalled();
+    expect(redispatched).toHaveLength(1);
   });
 });

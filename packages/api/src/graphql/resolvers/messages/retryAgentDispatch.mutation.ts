@@ -1,6 +1,14 @@
 import type { GraphQLContext } from "../../context.js";
 import { GraphQLError } from "graphql";
-import { db, and, eq, messages, threads, messageToCamel } from "../../utils.js";
+import {
+  db,
+  and,
+  eq,
+  messages,
+  threads,
+  threadTurns,
+  messageToCamel,
+} from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
 import { dispatchAgentMentions } from "../../../lib/mentions/dispatch-agent-mentions.js";
@@ -45,6 +53,15 @@ export interface RetryAgentDispatchDeps {
     messageId: string;
     tenantId: string;
   }): Promise<RetryMessageRow | null>;
+  /**
+   * Whether a turn linked to this message (triggering_message_id) failed —
+   * the async-failure evidence that authorizes a retry when the sync
+   * metadata stamp is absent.
+   */
+  hasFailedLinkedTurn(input: {
+    messageId: string;
+    tenantId: string;
+  }): Promise<boolean>;
   saveDispatchMetadata(input: {
     messageId: string;
     tenantId: string;
@@ -110,6 +127,26 @@ export async function runRetryAgentDispatch(
     });
   }
 
+  // Retry requires evidence of a failed dispatch (R7 is about failures, not
+  // re-firing successful turns): either the sync-failure metadata stamp, or a
+  // failed turn linked via triggering_message_id (the async-failure path).
+  // Without this guard a sender could re-dispatch any of their messages,
+  // double-firing the agent (found live during THINK-136 acceptance smoke).
+  const dispatchMeta =
+    (message.metadata?.dispatch as Record<string, unknown> | undefined) ?? {};
+  const hasSyncFailureStamp = dispatchMeta.status === "failed";
+  if (!hasSyncFailureStamp) {
+    const hasAsyncFailure = await deps.hasFailedLinkedTurn({
+      messageId: message.id,
+      tenantId: message.tenantId,
+    });
+    if (!hasAsyncFailure) {
+      throw new GraphQLError("Message has no failed dispatch to retry", {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+  }
+
   const prior = readPriorDispatch(message.metadata);
   const nextAttempt = prior.attempt + 1;
   const metadata: Record<string, unknown> = {
@@ -162,6 +199,20 @@ function drizzleRetryDeps(): RetryAgentDispatchDeps {
         senderId: row.senderId ?? null,
         metadata: (row.metadata as Record<string, unknown> | null) ?? null,
       };
+    },
+    async hasFailedLinkedTurn({ messageId, tenantId }) {
+      const [row] = await db
+        .select({ id: threadTurns.id })
+        .from(threadTurns)
+        .where(
+          and(
+            eq(threadTurns.tenant_id, tenantId),
+            eq(threadTurns.triggering_message_id, messageId),
+            eq(threadTurns.status, "failed"),
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
     },
     async saveDispatchMetadata({ messageId, tenantId, metadata }) {
       const [row] = await db
