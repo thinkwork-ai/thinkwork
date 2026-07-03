@@ -37,6 +37,7 @@ import {
   listDueRetainAttempts,
   markRetainAttemptFailed,
   markRetainAttemptRetained,
+  sweepExhaustedRunningAttempts,
   upsertRetainAttempt,
   type RetainAttemptRow,
 } from "../lib/memory/retain-attempts.js";
@@ -448,6 +449,12 @@ async function processClaimedRetainAttempt(
 }
 
 async function drainDueRetainAttempts(limit = 25): Promise<MemoryRetainResult> {
+  const swept = await sweepExhaustedRunningAttempts();
+  if (swept > 0) {
+    console.warn(
+      `[memory-retain] drain swept ${swept} exhausted running attempt(s) to dead_lettered`,
+    );
+  }
   const due = await listDueRetainAttempts({ limit });
   let retained = 0;
   let failed = 0;
