@@ -493,6 +493,26 @@ describe("context-menu actions (item 4)", () => {
     ).toBeTruthy();
   });
 
+  // Profile overlay (Agent page merge U6): a selected profile scopes the
+  // attach/detach labels so profile writes never masquerade as agent-level.
+  it("scopes attach/detach labels to the selected profile", async () => {
+    await renderEditor({
+      canManageSkills: true,
+      onAddSkill: addSkillMock,
+      onDetachSkill: detachSkillMock,
+      onAddMcpServer: addMcpMock,
+      onDetachMcpServer: detachMcpMock,
+      profileScopeName: "Analyst",
+    });
+    await screen.findByTestId("tree-node-skills");
+    expect(screen.getByTestId("menu-add-skill").textContent).toContain(
+      "Add skill for Analyst…",
+    );
+    expect(
+      screen.getByTestId("menu-detach-skill-approve-receipt").textContent,
+    ).toContain("Detach skill for Analyst…");
+  });
+
   it("offers Open source on non-skill nodes", async () => {
     await renderEditor();
     await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");

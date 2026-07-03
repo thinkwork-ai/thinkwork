@@ -9,6 +9,8 @@
  * SAME grant/detach machinery.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   act,
   cleanup,
@@ -814,6 +816,33 @@ describe("tree context-menu callbacks (item 4)", () => {
         }),
       ),
     );
+  });
+
+  // Agent page merge U6: tree adds are no longer gated on profile selection —
+  // grantScope already switches to AGENT_PROFILE when a profile chip is set.
+  it("no longer gates tree add affordances on profile selection", () => {
+    const source = readFileSync(
+      join(process.cwd(), "src/components/settings/SettingsCapabilities.tsx"),
+      "utf8",
+    );
+    expect(source).not.toContain("!agentProfileId ? () => setAddSkillOpen");
+    expect(source).not.toContain("!agentProfileId ? () => setAddMcpOpen");
+    expect(source).toContain("profileScopeName={selectedProfileName}");
+  });
+
+  it("MCP picker empty state links to the MCP Servers registry", () => {
+    queryState.inspector = {
+      data: inspection({
+        predicted: null,
+      }),
+      fetching: false,
+      error: undefined,
+    };
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onAddMcpServer as () => void)();
+    });
+    expect(screen.getByTestId("add-mcp-empty-registry-link")).toBeTruthy();
   });
 
   it("add-skill picker lists the not-installed pool and grants on pick", async () => {

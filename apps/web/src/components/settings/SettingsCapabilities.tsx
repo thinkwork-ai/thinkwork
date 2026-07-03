@@ -92,6 +92,7 @@ import {
   TabsTrigger,
   cn,
 } from "@thinkwork/ui";
+import { Link } from "@tanstack/react-router";
 import { useTenant } from "@/context/TenantContext";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import { useFragment } from "@/gql/fragment-masking";
@@ -544,6 +545,13 @@ export function SettingsCapabilities() {
   const grantScope = agentProfileId
     ? CapabilityGrantScope.AgentProfile
     : CapabilityGrantScope.Agent;
+  // Profile overlay (Agent page merge U6): the selected profile's name scopes
+  // the tree's attach/detach labels so profile-scoped writes read as such.
+  const selectedProfileName = agentProfileId
+    ? ((profilesResult.data?.agentProfiles ?? []).find(
+        (profile) => profile.id === agentProfileId,
+      )?.name ?? null)
+    : null;
 
   // Skill-node decoration for the tree (v1.1 item 3): capability state keyed
   // by slug (capabilityId), from the FULL inspector item set (filter-independent).
@@ -1326,14 +1334,13 @@ export function SettingsCapabilities() {
           onFocusCapabilityRow={focusCapabilityRow}
           skillStateBySlug={skillStateBySlug}
           canManageSkills={writeScope}
-          onAddSkill={!agentProfileId ? () => setAddSkillOpen(true) : undefined}
+          profileScopeName={selectedProfileName}
+          onAddSkill={() => setAddSkillOpen(true)}
           onDetachSkill={requestDetachSkill}
           mcpStateBySlug={mcpStateBySlug}
           pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
-          onAddMcpServer={
-            !agentProfileId ? () => setAddMcpOpen(true) : undefined
-          }
+          onAddMcpServer={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
           onConfigureAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
@@ -1669,7 +1676,15 @@ export function SettingsCapabilities() {
           <div className="max-h-80 overflow-y-auto">
             {addMcpPool.length === 0 ? (
               <p className="px-1 py-6 text-sm text-muted-foreground">
-                No MCP servers are registered for this tenant.
+                No MCP servers are registered for this tenant.{" "}
+                <Link
+                  to="/settings/mcp-servers"
+                  className="text-foreground underline underline-offset-2"
+                  data-testid="add-mcp-empty-registry-link"
+                >
+                  Register one in MCP Servers
+                </Link>
+                .
               </p>
             ) : (
               addMcpPool.map((item) => (
