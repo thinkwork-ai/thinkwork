@@ -31,6 +31,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { agents, spaces, tenants } from "@thinkwork/database-pg/schema";
 import { loadFile } from "@thinkwork/workspace-defaults";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { loadTrustedCatalogSkillIds } from "./skill-trust/runtime-gate.js";
 import { spaceSourcePrefix } from "./spaces/template-migration.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { regenerateManifestForPrefix } from "./workspace-manifest.js";
@@ -647,12 +648,29 @@ async function loadWorkspaceMapRenderContext(
     if (contextContent) contextByFolder.set(folder, contextContent);
   }
 
-  const skillInfos: SkillInfo[] = (
+  const discoveredCatalogSkills = (
     await discoverWorkspaceSkillsFromPaths(workspaceObjectPaths, (path) =>
       readS3Text(bucket, `${prefix}${path}`),
     )
-  )
-    .filter((skill) => !isBuiltinToolSlug(skill.slug))
+  ).filter((skill) => !isBuiltinToolSlug(skill.slug));
+
+  // Skill trust gate (Composer U4/U5 honesty fix): the AGENTS.md
+  // `## Skills & Tools` inventory is model-facing, so it must not advertise a
+  // catalog skill the runtime refuses to load. The trust gate is
+  // perspective-INDEPENDENT (tenant-wide), which per KTD-8 permits applying it
+  // on the map path where this section is baked. Reuse the SAME predicate the
+  // runtime and capability inspector apply (`loadTrustedCatalogSkillIds`) so
+  // the baked inventory can never diverge from the effective loaded set.
+  const trustedMapSkillIds =
+    discoveredCatalogSkills.length > 0
+      ? await loadTrustedCatalogSkillIds({
+          tenantId: agent.tenant_id,
+          skillIds: discoveredCatalogSkills.map((skill) => skill.slug),
+          logPrefix: `[workspace-map ${tenantSlug}/${agentSlug}]`,
+        })
+      : new Set<string>();
+  const skillInfos: SkillInfo[] = discoveredCatalogSkills
+    .filter((skill) => trustedMapSkillIds.has(skill.slug))
     .map((skill) => ({
       skillId: skill.slug,
       name: skill.name,

@@ -277,6 +277,55 @@ describe("computeContextRoutingRows — plugin gate (fail-closed) + attach/detac
     expect(rows.map((row) => row.slug)).toEqual(["notes-helper"]);
   });
 
+  it("omits trust-gated skills (active === false carries no routing row) while an active skill does", () => {
+    const rows = computeContextRoutingRows({
+      skills: [
+        { slug: "crm-dashboard", active: true },
+        { slug: "finance-audit-xls", active: false },
+      ],
+    });
+    expect(rows.map((row) => row.slug)).toEqual(["crm-dashboard"]);
+    expect(renderContextRoutingSectionBody(rows)).not.toContain(
+      "finance-audit-xls",
+    );
+  });
+
+  it("flipping the trust-gate state flips the routing row", () => {
+    const gated = computeContextRoutingRows({
+      skills: [{ slug: "finance-statement-analysis", active: false }],
+    });
+    expect(gated).toEqual([]);
+
+    const trusted = computeContextRoutingRows({
+      skills: [{ slug: "finance-statement-analysis", active: true }],
+    });
+    expect(trusted.map((row) => row.slug)).toEqual([
+      "finance-statement-analysis",
+    ]);
+  });
+
+  it("treats absent `active` as active (default), independent of the plugin gate", () => {
+    const rows = computeContextRoutingRows({
+      skills: [{ slug: "notes-helper" }],
+      pluginGate: EMPTY_PLUGIN_GATE,
+    });
+    expect(rows.map((row) => row.slug)).toEqual(["notes-helper"]);
+  });
+
+  it("applies the trust gate and the plugin gate together (both must pass)", () => {
+    const rows = computeContextRoutingRows({
+      // trust-gated non-plugin skill, active plugin skill, trusted skill
+      skills: [
+        { slug: "finance-audit-xls", active: false },
+        { slug: "lastmile--crm-basics", active: true },
+        { slug: "crm-dashboard", active: true },
+      ],
+      pluginGate: gateBlocking(["skills/lastmile--", "skills/lastmile-"]),
+    });
+    // trust gate drops finance-audit-xls; plugin gate drops lastmile--crm-basics
+    expect(rows.map((row) => row.slug)).toEqual(["crm-dashboard"]);
+  });
+
   it("collapses description whitespace so rows cannot inject markdown structure", () => {
     const body = renderContextRoutingSectionBody(
       computeContextRoutingRows({

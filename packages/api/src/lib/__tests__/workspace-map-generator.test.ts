@@ -10,6 +10,7 @@ const {
   dbTableReads,
   mockRegenerateManifest,
   mockRegenerateManifestForPrefix,
+  mockLoadTrustedCatalogSkillIds,
 } = vi.hoisted(() => ({
   state: {
     agent: {
@@ -51,6 +52,9 @@ const {
   dbTableReads: [] as string[],
   mockRegenerateManifest: vi.fn(),
   mockRegenerateManifestForPrefix: vi.fn(),
+  mockLoadTrustedCatalogSkillIds: vi.fn(
+    async ({ skillIds }: { skillIds: string[] }) => new Set(skillIds),
+  ),
 }));
 
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -181,6 +185,15 @@ vi.mock("../workspace-manifest.js", () => ({
   regenerateManifestForPrefix: mockRegenerateManifestForPrefix,
 }));
 
+// Skill trust gate (Composer U4/U5): the AGENTS.md `## Skills & Tools`
+// inventory omits catalog skills the runtime would refuse to load. These
+// suites characterize section machinery, not trust semantics, so trust every
+// discovered skill; the trust-gate predicate itself is covered by
+// runtime-gate.test.ts.
+vi.mock("../skill-trust/runtime-gate.js", () => ({
+  loadTrustedCatalogSkillIds: mockLoadTrustedCatalogSkillIds,
+}));
+
 // drizzle-orm helpers — test cares about table dispatch only, not predicates.
 vi.mock("drizzle-orm", () => ({
   eq: () => ({}),
@@ -220,6 +233,10 @@ function resetState(): void {
   dbTableReads.length = 0;
   mockRegenerateManifest.mockReset();
   mockRegenerateManifestForPrefix.mockReset();
+  mockLoadTrustedCatalogSkillIds.mockReset();
+  mockLoadTrustedCatalogSkillIds.mockImplementation(
+    async ({ skillIds }: { skillIds: string[] }) => new Set(skillIds),
+  );
 }
 
 function lastWrittenAgentsMd(path = "AGENTS.md"): string | null {
@@ -392,6 +409,46 @@ describe("regenerateAgentsMdDerivedSections", () => {
     );
     expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits a trust-gated catalog skill from the Skills & Tools table (Composer U4/U5 honesty)", async () => {
+    state.listObjectsResponses = [
+      "AGENTS.md",
+      "CONTEXT.md",
+      "skills/editor-review/SKILL.md",
+      "skills/finance-audit-xls/SKILL.md",
+    ];
+    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, "# Map\n");
+    state.s3GetResponses.set(
+      `${PREFIX}skills/editor-review/SKILL.md`,
+      "---\ndisplay_name: Editor Review\ndescription: Review edits\n---\n",
+    );
+    state.s3GetResponses.set(
+      `${PREFIX}skills/finance-audit-xls/SKILL.md`,
+      "---\ndisplay_name: Finance Audit XLS\ndescription: Audit spreadsheets\n---\n",
+    );
+    // Runtime trust gate passes only editor-review; finance-audit-xls has no
+    // current passed trust report, so the runtime refuses to load it.
+    mockLoadTrustedCatalogSkillIds.mockImplementation(
+      async ({ skillIds }: { skillIds: string[] }) =>
+        new Set(skillIds.filter((id) => id === "editor-review")),
+    );
+
+    await regenerateAgentsMdDerivedSections("agent-1");
+
+    const written = lastWrittenAgentsMd() ?? "";
+    expect(written).toContain("| Editor Review | baseline | Review edits |");
+    expect(written).not.toContain("Finance Audit XLS");
+    // The predicate was consulted with both discovered catalog slugs.
+    expect(mockLoadTrustedCatalogSkillIds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        skillIds: expect.arrayContaining([
+          "editor-review",
+          "finance-audit-xls",
+        ]),
+      }),
+    );
   });
 
   it("does not query legacy KB or workflow tables during section refresh", async () => {

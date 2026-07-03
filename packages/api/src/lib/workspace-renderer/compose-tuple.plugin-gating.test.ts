@@ -154,12 +154,23 @@ function gateFor(
   return (args) => resolvePluginGate(args, { store: pluginStore });
 }
 
+// Trust gate is orthogonal to plugin activation: trust every seeded catalog
+// skill by default so these suites isolate the plugin gate. The dedicated
+// trust-gate suite below overrides this to exercise gated skills.
+const trustAll = async ({ skillIds }: { skillIds: string[] }) =>
+  new Set(skillIds);
+
 async function render(
   store: FakeStore,
   userId: string | null,
   pluginGateResolver: (
     args: ResolvePluginGateArgs,
   ) => Promise<PluginActivationGate>,
+  trustGateResolver: (args: {
+    tenantId: string;
+    skillIds: string[];
+    logPrefix: string;
+  }) => Promise<Set<string>> = trustAll,
 ) {
   return renderWorkspaceTuple(
     {
@@ -174,6 +185,7 @@ async function render(
       repository: new FakeRepository(),
       objectStore: store,
       pluginGateResolver,
+      trustGateResolver,
       now: () => new Date("2026-06-12T10:00:00.000Z"),
     },
   );
@@ -294,6 +306,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
         repository: new FakeRepository(),
         objectStore: readOnlyStore,
         pluginGateResolver: gate,
+        trustGateResolver: trustAll,
         now: () => new Date("2026-06-12T10:00:00.000Z"),
         persist: false,
         includeGeneratedContents: true,
@@ -464,5 +477,76 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
         expect(paths).toContain("skills/lastmile--crm-basics/SKILL.md");
       }
     }
+  });
+});
+
+describe("renderWorkspaceTuple — skill trust gate (Composer U4/U5 honesty)", () => {
+  const noPluginGate = (args: ResolvePluginGateArgs) =>
+    resolvePluginGate(args, { store: createInMemoryPluginEngineStore() });
+
+  it("a trust-gated catalog skill produces NO routing row; a trusted skill does", async () => {
+    const store = seededStore();
+    // Runtime trust gate trusts only notes-helper; lastmile--crm-basics is
+    // the plugin skill (activated below), so this exercises the trust gate on
+    // a catalog skill via a second untrusted folder.
+    store.set(`${AGENT_PREFIX}skills/finance-audit-xls/SKILL.md`, "# Fin\n");
+    const trustOnlyNotes = async ({ skillIds }: { skillIds: string[] }) =>
+      new Set(skillIds.filter((id) => id === "notes-helper"));
+
+    const generated = await render(
+      store,
+      "user-activated",
+      gateFor({ "install-lastmile": true }),
+      trustOnlyNotes,
+    ).then(() => renderedContext(store));
+
+    const routing = getMarkdownSectionBody(generated, "Routing")!;
+    expect(routing).toContain("skills/notes-helper/SKILL.md");
+    // Untrusted catalog skill: the runtime refuses to load it, so no row.
+    expect(routing).not.toContain("finance-audit-xls");
+    // The plugin skill (activated + not passed through the trust resolver's
+    // allowlist) is ALSO gated out — the two gates compose.
+    expect(routing).not.toContain("lastmile--crm-basics");
+  });
+
+  it("flipping the trust-gate state flips the routing row", async () => {
+    const gated = seededStore();
+    await render(
+      gated,
+      null,
+      noPluginGate,
+      async () => new Set<string>(), // trust NOTHING
+    );
+    expect(
+      getMarkdownSectionBody(await renderedContext(gated), "Routing"),
+    ).not.toContain("skills/notes-helper/SKILL.md");
+
+    const trusted = seededStore();
+    await render(
+      trusted,
+      null,
+      noPluginGate,
+      async ({ skillIds }) => new Set(skillIds), // trust EVERYTHING
+    );
+    expect(
+      getMarkdownSectionBody(await renderedContext(trusted), "Routing"),
+    ).toContain("skills/notes-helper/SKILL.md");
+  });
+
+  it("the trust resolver is NOT consulted when the agent source has no catalog skill folders (built-ins bypass the gate)", async () => {
+    const store = new FakeStore();
+    store.set(`${AGENT_PREFIX}AGENTS.md`, "# AGENTS.md\n");
+    store.set(`${AGENT_PREFIX}CONTEXT.md`, "# Context\n");
+    // web-search is a built-in tool slug — it bypasses the trust gate.
+    store.set(`${AGENT_PREFIX}skills/web-search/SKILL.md`, "# Search\n");
+    const trustResolver = vi.fn(
+      async ({ skillIds }: { skillIds: string[] }) => new Set(skillIds),
+    );
+    await render(store, null, noPluginGate, trustResolver);
+    expect(trustResolver).not.toHaveBeenCalled();
+    // The built-in still gets a routing row (runtime always loads built-ins).
+    expect(
+      getMarkdownSectionBody(await renderedContext(store), "Routing"),
+    ).toContain("skills/web-search/SKILL.md");
   });
 });
