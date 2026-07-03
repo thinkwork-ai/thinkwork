@@ -28,6 +28,21 @@ The integrity-pinned description of a platform release — its artifact bundles,
 ### Deployment Evidence
 The per-run record a Deployment Runner writes for operators and the control plane: what was planned, what was applied, run status, and which inputs the runner actually consumed. Evidence is how version skew and dropped inputs become visible.
 
+### State Backend
+The per-account store holding the Terraform state and locks for every Stage deployed into that AWS account. It is provisioned before any Stage exists and is shared by all of them, so destroying one Stage must never remove it — the State Backend outlives Stages and is dismantled only during Account Exit.
+
+### Clean-Slate Destroy
+The CLI's hardened teardown of a single Stage: it removes the obstacles that make naive destroys fail partway (protected databases, non-empty buckets, lingering secrets and logs) and finishes with an Orphan Scan. Its scope is the Stage's own resources; it deliberately leaves the account-shared State Backend, delegation records held at an external DNS parent, and log groups auto-created by AWS services — those belong to Account Exit or the parent-zone operator.
+
+### Account Exit
+The complete removal of the platform from an AWS account, beyond destroying its Stages: dismantling the State Backend and the residue a Clean-Slate Destroy cannot reach. An Account Exit is accepted only when an Orphan Scan across the account's resource-bearing services returns nothing.
+
+### Orphan Scan
+The per-service sweep that enumerates platform-named resources remaining in an AWS account or Stage after a teardown. An empty scan is the acceptance proof for both a Clean-Slate Destroy and an Account Exit; a non-empty scan names exactly what still needs removal.
+
+### Graduation
+The status that marks a Stage as protected because it carries durable value (a production or customer environment). Destroying a Graduated Stage requires explicitly re-asserting the stage and account identity — the protection exists to make the destructive intent unmistakable, not to forbid the act.
+
 ## Evaluations
 
 ### Verdict taxonomy
@@ -64,6 +79,23 @@ A saved Work Items list or board configuration. A Work Item View preserves view 
 
 ### Linked Task Compatibility
 The transitional bridge between legacy `linked_tasks` rows and native Work Items. During migration, `linked_tasks` can carry compatibility pointers, snapshots, or provider-shaped data for older onboarding UI/tool callers, but native Work Items are canonical for ThinkWork-owned task state. Compatibility should be removed only after production data is backfilled or accounted for, web/mobile/Pi callers use Work Items directly, agent status tools no longer require `set_task_status`, and the remaining cleanup is tracked explicitly.
+
+## Agent Capabilities
+
+### Capability Mapping Matrix
+The canonical contract for agent capabilities: capability class (skill, built-in tool, MCP server, Pi extension, plugin, context/memory) × assignment layer (agent, Agent Profile, Space, user), where every cell states assignable-or-not and the injection destination — the workspace folder, runtime-config field, or payload field the assignment lands in. A class/layer combination absent from the matrix is not offered anywhere in the product, and capability-wiring changes are reviewed against the cell they implement.
+
+### Grant vs Shape
+The two capability verbs in the layering model. The default agent and Agent Profiles *grant* reach — skills, MCP servers, extensions, built-in tools. Spaces and users *shape* behavior without granting reach: a Space carries context, skills, and restrictive overrides (blocked tools, model/budget/guardrails); a user carries identity, memory, and self-serve connections (OAuth, plugin activations) and is never directly assigned capabilities.
+
+### Effective Capability Set
+The merged result of all layers for a concrete context — agent × Space × Agent Profile × requesting user — after precedence (blocked = union, allowed = intersection, blocked wins; a Space skill overrides an agent skill with the same slug) and gating (trust report, eval gate, OAuth activation, plugin activation, allowlist). Requester-dependent by construction: two users in the same Space can have different effective sets.
+
+### Capability Inspector
+The operator surface (GraphQL query + Settings page + CLI read command) that renders the effective capability set for a selected agent × Space × Agent Profile × perspective-user combination, with per-item provenance and a why-not-active reason from the enumerated gate taxonomy. It computes through the runtime's own composer (never a parallel implementation) and stamps each response with a computed-at time and resolved-config fingerprint so manifest divergence can be asserted honestly.
+
+### Capability Manifest
+Per-turn runtime evidence of what the agent actually received: which skills, tools, MCP servers, and extensions loaded, which were gated out, and why. The runtime-truth counterpart to the config-derived effective capability set; divergence between the two is a defect signal, and the manifest doubles as the action-time capability snapshot the compliance direction requires.
 
 ## Flagged ambiguities
 

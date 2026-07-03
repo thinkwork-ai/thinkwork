@@ -9,6 +9,7 @@ tags:
   - acm
   - api-gateway
 date: 2026-04-23
+last_updated: 2026-07-02
 ---
 
 # MCP custom domain setup (Cloudflare DNS + ACM + API Gateway v2)
@@ -158,13 +159,13 @@ Expected: `200` with a JSON-RPC response listing the 29 admin-ops tools.
 
 ## Rollback
 
-Unset the GitHub variables (or set `MCP_CUSTOM_DOMAIN = ""`) and redeploy. Terraform destroys the domain, mapping, and cert. Cloudflare DNS records are left in place — delete manually via the Cloudflare dashboard or a future `--cleanup` flag on the sync script.
+Unset the GitHub variables (or set `MCP_CUSTOM_DOMAIN = ""`) and redeploy. Terraform destroys the domain, mapping, and cert. Cloudflare DNS records are left in place — Terraform never managed them, so they must be deleted via the Cloudflare API using the operator token held in SSM (`/thinkwork/dev/cloudflare-namespace-token`). The worked deletion procedure (list records by name, delete each by id) is in [thinkwork-destroy teardown residue scope](../workflow-issues/thinkwork-destroy-teardown-residue-scope-and-dns-forensics.md) — the same residue class applies to any Cloudflare records created out-of-band for AWS resources that Terraform later destroys. Leaving stale records pointing at destroyed targets produces confusing DNS failures (for NS delegation, a SERVFAIL/REFUSED signature; for CNAMEs, a dangling target).
 
 ## Token hygiene
 
 - The Cloudflare API token is passed only via `CLOUDFLARE_API_TOKEN` env. The sync script never writes it to disk or logs it.
 - **Rotate the token after setup** unless ongoing DNS management is expected. Rotation in Cloudflare → Profile → API Tokens.
-- For automated deploys, store the token in AWS Secrets Manager and have the deploy CLI fetch it at apply time. Out of scope for this PR.
+- An operator-side token now lives in SSM Parameter Store at `/thinkwork/dev/cloudflare-namespace-token` — fetch with `aws ssm get-parameter --with-decryption` for operator DNS work. It is deliberately **never shipped in or fetched by the customer CLI**; the scale path for customer subdomain delegation is the namespace-claim control-plane API (THINK-117), which keeps the token on the platform's control plane.
 
 ## Known limitations
 
