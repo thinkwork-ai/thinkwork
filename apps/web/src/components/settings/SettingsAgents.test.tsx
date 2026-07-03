@@ -37,18 +37,34 @@ const builtInProfilesSource = readFileSync(
   ),
   "utf8",
 );
+// Agent page merge (THINK-132 U1): the Default Agent section body moved to
+// AgentConfigSheet.tsx so the Composer surface can mount it as a side sheet;
+// the Agents page keeps its mount via the shared component until the cutover.
+const agentConfigSheetSource = readFileSync(
+  join(process.cwd(), "src/components/settings/AgentConfigSheet.tsx"),
+  "utf8",
+);
+const capabilitiesSource = readFileSync(
+  join(process.cwd(), "src/components/settings/SettingsCapabilities.tsx"),
+  "utf8",
+);
 
 describe("SettingsAgents page", () => {
   it("owns the default Agent configuration that used to live in General", () => {
     expect(agentsSource).toContain('title="Agents"');
-    expect(agentsSource).toContain('label="Default Agent"');
-    expect(agentsSource).toContain("SettingsTenantAgentQuery");
-    expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
-    expect(agentsSource).toContain("SettingsTenantGoalBudgetQuery");
-    expect(agentsSource).toContain("SettingsUpdateTenantGoalBudgetMutation");
-    expect(agentsSource).toContain('label="Goal token budget"');
-    expect(agentsSource).toContain("goalDefaultTokenBudget");
-    expect(agentsSource).toContain("validGoalTokenBudgetOrEmpty");
+    expect(agentsSource).toContain("<AgentConfigSection");
+    expect(agentConfigSheetSource).toContain('label="Default Agent"');
+    expect(agentConfigSheetSource).toContain("SettingsTenantAgentQuery");
+    expect(agentConfigSheetSource).toContain(
+      "SettingsUpdateTenantAgentMutation",
+    );
+    expect(agentConfigSheetSource).toContain("SettingsTenantGoalBudgetQuery");
+    expect(agentConfigSheetSource).toContain(
+      "SettingsUpdateTenantGoalBudgetMutation",
+    );
+    expect(agentConfigSheetSource).toContain('label="Goal token budget"');
+    expect(agentConfigSheetSource).toContain("goalDefaultTokenBudget");
+    expect(agentConfigSheetSource).toContain("validGoalTokenBudgetOrEmpty");
     expect(agentsSource).not.toContain("/settings/local-workspace");
     expect(agentsSource).not.toContain("/settings/main-agent");
     expect(agentsSource).not.toContain("Edit AGENTS.md");
@@ -56,6 +72,11 @@ describe("SettingsAgents page", () => {
     expect(generalSource).not.toContain("AgentConfigSection");
     expect(generalSource).not.toContain("SettingsTenantAgentQuery");
     expect(generalSource).not.toContain("Default model");
+  });
+
+  it("mounts the Config sheet on the Composer surface (Agent page merge U1)", () => {
+    expect(capabilitiesSource).toContain("AgentConfigSheet");
+    expect(capabilitiesSource).toContain('data-testid="open-config-sheet"');
   });
 
   it("toggles between config and workspace views via the header icon", () => {
