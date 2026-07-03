@@ -31,6 +31,14 @@ import { eq, isNull, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { tenantMcpAdminKeys } from "@thinkwork/database-pg/schema";
 import {
+  commitRoutine,
+  listGitRoutines,
+  listRoutineRuns,
+  readRoutineRepo,
+  runRoutineFixtures,
+  type CommitRoutineInput,
+} from "./routine-repo-tools.js";
+import {
   AdminOpsError,
   createClient,
   tenants as tenantOps,
@@ -491,7 +499,7 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
     {
       name: "create_routine",
       description:
-        "Create a new agent-private routine from a supported natural-language intent using the recipe-backed Routine authoring path. Returns the created executable routine, or an authoring error for unsupported intents. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+        "DEPRECATED alias for the git birth flow (deterministic routines v1). Author a Python module (def run(input: dict) -> dict) plus at least one fixture, dry-run them with routine_run_fixtures, then commit + register with routine_repo_commit. This tool only returns those instructions. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
       inputSchema: {
         type: "object",
         properties: {
@@ -535,34 +543,16 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
         if (!routinesAgentToolsEnabled()) {
           return notYetEnabled("create_routine");
         }
-        const a = args as {
-          tenantId?: string;
-          agentId: string;
-          name: string;
-          description?: string;
-          intent: string;
-          suggestedSteps?: string[];
+        void args;
+        return {
+          status: "use_git_birth_flow",
+          message:
+            "Routines are git-backed now. Author routines/<slug>/main.py exposing " +
+            "def run(input: dict) -> dict plus at least one fixture " +
+            "(routines/<slug>/fixtures/*.json with {input, expected, mode: exact|shape}), " +
+            "dry-run via routine_run_fixtures {files}, then commit + register via " +
+            "routine_repo_commit {register, files, parentSha, message}.",
         };
-        if (a.intent.trim().length < 10) {
-          throw new Error(
-            "intent must be at least 10 chars — describe the work specifically enough to generate ASL.",
-          );
-        }
-        const client = clientFor(args);
-        const tenantId = client.tenantId;
-        if (!tenantId) {
-          throw new Error(
-            "tenantId required: pass via args or use a tenant-pinned admin key.",
-          );
-        }
-        return routineOps.createAgentRoutine(client, {
-          tenantId,
-          agentId: a.agentId,
-          name: a.name,
-          description: a.description,
-          intent: a.intent,
-          suggestedSteps: a.suggestedSteps,
-        });
       },
     },
     {
@@ -633,7 +623,268 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
         });
       },
     },
+
+    // -------------------------------------------------------------------
+    // Deterministic routines — git-backed lifecycle suite
+    // (plan 2026-07-03-004 U6, KTD-5). Invariants R9/R15/R16/R18/R20 are
+    // enforced server-side in routine-repo-tools.ts at the commit seam.
+    // -------------------------------------------------------------------
+    {
+      name: "routine_repo_list",
+      description:
+        "List the tenant's git-backed deterministic routines: id, name, module path, fixture paths, credential refs, validated SHA, enabled state, and disable reason. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description:
+              "Tenant UUID (omit when the admin key already pins the tenant).",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!routinesAgentToolsEnabled()) {
+          return notYetEnabled("routine_repo_list");
+        }
+        const tenantId = requireTenantId(clientFor(args));
+        return listGitRoutines(tenantId);
+      },
+    },
+    {
+      name: "routine_repo_read",
+      description:
+        "Read a git-backed routine's code and fixtures from the tenant repo (at branch HEAD, or a specific ref). Returns the ref that was read plus each file's content — commit against that ref as parentSha. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (optional with a pinned key).",
+          },
+          routineId: { type: "string", description: "Routine UUID." },
+          ref: {
+            type: "string",
+            description: "Commit SHA or ref to read; defaults to branch HEAD.",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["routineId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!routinesAgentToolsEnabled()) {
+          return notYetEnabled("routine_repo_read");
+        }
+        const a = args as { routineId: string; ref?: string };
+        const tenantId = requireTenantId(clientFor(args));
+        return readRoutineRepo({
+          tenantId,
+          routineId: a.routineId,
+          ref: a.ref,
+        });
+      },
+    },
+    {
+      name: "routine_run_fixtures",
+      description:
+        "Run a routine's fixtures. With `files` (path → content, module + fixtures), dry-runs your WORKING content before committing — this is the same code path as the production fixture gate, so green here means green at the gate. Without `files`, gates the repo branch HEAD. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (optional with a pinned key).",
+          },
+          routineId: { type: "string", description: "Routine UUID." },
+          files: {
+            type: "object",
+            description:
+              "Working files keyed by repo path (module + fixture JSON files). Omit to gate the repo HEAD.",
+            additionalProperties: { type: "string" },
+          },
+          modulePath: {
+            type: "string",
+            description:
+              "Module path within files (defaults to the routine's registered module path).",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["routineId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!routinesAgentToolsEnabled()) {
+          return notYetEnabled("routine_run_fixtures");
+        }
+        const a = args as {
+          routineId: string;
+          files?: Record<string, string>;
+          modulePath?: string;
+        };
+        const tenantId = requireTenantId(clientFor(args));
+        return runRoutineFixtures({
+          tenantId,
+          routineId: a.routineId,
+          files: a.files,
+          modulePath: a.modulePath,
+        });
+      },
+    },
+    {
+      name: "routine_repo_commit",
+      description:
+        "Commit routine files to the tenant repo and (for new routines) register the routine. Composite + atomic: commits against a stated parentSha (conflict if the branch moved — never force), requires at least one fixture for NEW routines, requires the initiating operator's principalId for birth-path commits, and in repair mode accepts code-only changes referencing a failed execution — repairs outside the auto-publish envelope (new imports, new network primitives, large diffs) land on a pending branch with an operator-approval inbox item instead of the live branch. In-envelope repair commits run the fixture gate synchronously and return its verdict. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (optional with a pinned key).",
+          },
+          principalId: {
+            type: "string",
+            description:
+              "Initiating operator's user UUID — REQUIRED for birth-path (non-repair) commits (R20).",
+          },
+          routineId: {
+            type: "string",
+            description:
+              "Existing routine UUID (omit with `register` for a new routine).",
+          },
+          register: {
+            type: "object",
+            description: "Birth registration metadata for a NEW routine.",
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              modulePath: {
+                type: "string",
+                description: "e.g. routines/<slug>/main.py",
+              },
+              fixturePaths: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Repo paths of the fixture files (at least one, included in files).",
+              },
+              credentialRefs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    alias: { type: "string" },
+                    credentialId: { type: "string" },
+                  },
+                  required: ["alias", "credentialId"],
+                  additionalProperties: false,
+                },
+                description:
+                  "Named tenant credentials the routine declares; only these are injected into its sandbox (R19).",
+              },
+            },
+            required: ["name", "modulePath", "fixturePaths"],
+            additionalProperties: false,
+          },
+          files: {
+            type: "object",
+            description: "Files to write, repo path → content.",
+            additionalProperties: { type: "string" },
+          },
+          message: { type: "string", description: "Commit summary line." },
+          parentSha: {
+            type: "string",
+            description:
+              "Branch HEAD you read (routine_repo_read returns it). The commit applies only if the branch is still there.",
+          },
+          repair: {
+            type: "object",
+            description:
+              "Repair mode: code-only fix for a failed execution. Accepted only when executionId references a failed run of this routine.",
+            properties: {
+              executionId: { type: "string" },
+              threadRef: { type: "string" },
+            },
+            required: ["executionId"],
+            additionalProperties: false,
+          },
+        },
+        required: ["files", "message", "parentSha"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!routinesAgentToolsEnabled()) {
+          return notYetEnabled("routine_repo_commit");
+        }
+        const tenantId = requireTenantId(clientFor(args));
+        const a = args as unknown as Omit<CommitRoutineInput, "tenantId"> & {
+          principalId?: string;
+        };
+        return commitRoutine({
+          ...a,
+          tenantId,
+          principalId: a.principalId ?? auth.createdByUserId ?? null,
+        });
+      },
+    },
+    {
+      name: "routine_runs",
+      description:
+        "List a git-backed routine's recent executions with status, commit SHA, cache-served flag, and error detail — the context a repair needs. Disabled until ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (optional with a pinned key).",
+          },
+          routineId: { type: "string", description: "Routine UUID." },
+          limit: {
+            type: "number",
+            description: "Max rows (default 10, cap 50).",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["routineId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!routinesAgentToolsEnabled()) {
+          return notYetEnabled("routine_runs");
+        }
+        const a = args as { routineId: string; limit?: number };
+        const tenantId = requireTenantId(clientFor(args));
+        return listRoutineRuns({
+          tenantId,
+          routineId: a.routineId,
+          limit: a.limit,
+        });
+      },
+    },
   ];
+}
+
+function requireTenantId(client: { tenantId?: string }): string {
+  if (!client.tenantId) {
+    throw new Error(
+      "tenantId required: pass via args or use a tenant-pinned admin key.",
+    );
+  }
+  return client.tenantId;
 }
 
 // ---------------------------------------------------------------------------
