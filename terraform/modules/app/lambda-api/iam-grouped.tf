@@ -217,6 +217,31 @@ locals {
         ]
         Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/*"
       },
+      # routine-exec-git SHA code cache (plan 2026-07-03-004 U3, KTD-7):
+      # read-through cache under routine-code-cache/<tenant>/<routine>/<sha>/.
+      # GetObject for cache reads; ListBucket so a cache miss surfaces as
+      # NoSuchKey (404) instead of AccessDenied — without it the executor
+      # cannot distinguish "not cached yet" from a real permission error
+      # and the fixture gate fails closed (caught live in the U9 sweep).
+      {
+        Sid    = "RoutineExecGitCodeCacheRead"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+        ]
+        Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/routine-code-cache/*"
+      },
+      {
+        Sid      = "RoutineExecGitCodeCacheList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output"
+        Condition = {
+          StringLike = {
+            "s3:prefix" = "routine-code-cache/*"
+          }
+        }
+      },
       # (was standalone managed policy "lambda_model_catalog_import_read")
       # Settings -> Model Catalog imports call Bedrock's foundation-model
       # catalog and AWS Price List APIs from graphql-http. These read/list
