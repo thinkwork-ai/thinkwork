@@ -536,6 +536,16 @@ locals {
           # invokes this with RequestResponse so SkillSpector completion is a
           # server-side publish gate, not just an operator UI affordance.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-skill-trust-runner",
+          # routine-exec-git (plan 2026-07-03-004 U5/U6): job-trigger
+          # RequestResponse-invokes it for Automation routine actions, and
+          # admin-ops-mcp invokes it for agent fixture runs + the
+          # synchronous repair gate. Caught live in the U9 sweep.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-exec-git",
+          # job-trigger self-target (plan 2026-07-03-004 U5, KTD-3): the
+          # manual GraphQL trigger Event-invokes job-trigger with the
+          # agent_loop_continue_dispatch event so routine actions never run
+          # inline in graphql-http.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger",
         ]
       },
       # (was standalone managed policy "workspace_renderer_invoke")
