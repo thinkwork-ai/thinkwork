@@ -273,7 +273,6 @@ describe("PluginsPage", () => {
       "Open Docs Sync",
       "Open LastMile",
       "Open SendGrid Email",
-      "Open ThinkWork Brain",
       "Open Twenty CRM",
       "Open WorkOS Auth",
     ]);
@@ -346,25 +345,6 @@ describe("PluginsPage", () => {
     );
   });
 
-  it("keeps key-gated catalog rows status-only", () => {
-    render(<PluginsPage />);
-
-    const brainRow = screen.getByRole("link", {
-      name: "Open ThinkWork Brain",
-    });
-    expect(
-      within(brainRow).getByText("private context substrate.", {
-        exact: false,
-      }),
-    ).toBeTruthy();
-    expect(within(brainRow).queryByText("Premium")).toBeNull();
-    expect(within(brainRow).queryByText("Key required")).toBeNull();
-    expect(
-      within(brainRow).queryByRole("link", { name: /enter key/i }),
-    ).toBeNull();
-    expect(within(brainRow).getByText("Not installed")).toBeTruthy();
-  });
-
   it("filters to installed-only when the toggle is switched", () => {
     render(<PluginsPage />);
 
@@ -423,11 +403,11 @@ describe("PluginsPage", () => {
   it("opens plugin details from the full catalog row", () => {
     render(<PluginsPage />);
 
-    fireEvent.click(screen.getByRole("link", { name: "Open ThinkWork Brain" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open Docs Sync" }));
 
     expect(navigateMock).toHaveBeenCalledWith({
       to: "/settings/plugins/$pluginKey",
-      params: { pluginKey: "company-brain" },
+      params: { pluginKey: "docs-sync" },
     });
   });
 
@@ -625,31 +605,6 @@ const catalogEntries = [
       },
     ],
     install: installedPlugins[1],
-  },
-  {
-    __typename: "PluginCatalogEntry" as const,
-    pluginKey: "company-brain",
-    displayName: "ThinkWork Brain",
-    description: "Premium private context substrate.",
-    latestVersion: "0.1.0",
-    launchUrl: null,
-    updateAvailable: false,
-    premium: {
-      entitlementProductKey: "company-brain",
-      installKeyRequired: true,
-      installKeyPrompt:
-        "Enter the ThinkWork Brain install key provided by ThinkWork.",
-    },
-    entitlement: null,
-    versions: [
-      {
-        version: "0.1.0",
-        payloadSha256: "sha256:brain",
-        requiredOauthScopes: [],
-        components: [],
-      },
-    ],
-    install: null,
   },
   {
     __typename: "PluginCatalogEntry" as const,

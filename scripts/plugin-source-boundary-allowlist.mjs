@@ -22,11 +22,6 @@ export const sharedPluginTermAllowlist = [
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
   },
   {
-    path: "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
-    reason:
-      "legacy settings URL redirect only; Company Brain UI source is owned by plugin detail.",
-  },
-  {
     path: "apps/web/src/routes/_authed/settings.plugins.data-integrations.tsx",
     reason:
       "legacy settings URL redirect only; Company ETL UI source is owned by the canonical company-etl plugin detail.",

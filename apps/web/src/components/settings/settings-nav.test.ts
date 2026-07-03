@@ -59,9 +59,7 @@ describe("visibleSettingsNavItems", () => {
 
   it("does not list Artifacts in navigation while the surface is being rethought", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === ARTIFACTS)).toBe(false);
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Artifacts")).toBe(
-      false,
-    );
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Artifacts")).toBe(false);
   });
 
   it("labels the agent home Agents on /settings/agents; Composer entry retired (U7)", () => {
@@ -141,8 +139,7 @@ describe("visibleSettingsNavItems", () => {
   });
 
   it("no longer lists a standalone Knowledge Graph nav entry", () => {
-    // The Knowledge Graph explorer is now a tab of the Memory page; Company
-    // Brain plugin detail owns the substrate lifecycle surface.
+    // The Knowledge Graph explorer is now a tab of the Memory page.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(
       false,
     );
@@ -151,14 +148,9 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
-  it("carries no twenty managed-app nav guard (U10: Twenty lives under Plugins)", () => {
-    // The managedAppKey guard mechanism is Cognee-only now; a stale
-    // 'twenty' guard would go permanently false once the env-served
-    // runtime flag retired, silently hiding its section.
+  it("carries no managed-app nav guards", () => {
     for (const item of SETTINGS_NAV_ITEMS) {
-      expect(
-        item.managedAppKey === undefined || item.managedAppKey === "cognee",
-      ).toBe(true);
+      expect("managedAppKey" in item).toBe(false);
     }
   });
 
@@ -185,8 +177,8 @@ describe("visibleSettingsNavItems", () => {
 
   it("retires the Applications nav item (superseded by Plugins)", () => {
     // The managed-applications surface left the nav — Plugins supersedes it.
-    // The route still resolves by URL until the Company Brain plugin absorbs
-    // Cognee, so the breadcrumb falls back to the generic settings label.
+    // The route still resolves by URL, so the breadcrumb falls back to the
+    // generic settings label.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(
       false,
     );

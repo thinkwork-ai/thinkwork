@@ -10,7 +10,7 @@ export function ManagedApplicationRouteGuard({
   allowDisabled,
   children,
 }: {
-  appKey: "cognee" | "twenty";
+  appKey: "twenty";
   requireProvisioned?: boolean;
   allowDisabled?: boolean;
   children: ReactNode;
@@ -41,16 +41,8 @@ export function ManagedApplicationRouteGuard({
   const enabled = allowDisabled
     ? Boolean(app)
     : requireProvisioned
-      ? (app?.provisioned ??
-        (appKey === "twenty" ? deployment?.twentyProvisioned : undefined) ??
-        false)
-      : (app?.runtimeEnabled ??
-        (appKey === "cognee"
-          ? deployment?.cogneeEnabled
-          : appKey === "twenty"
-            ? deployment?.twentyRuntimeEnabled
-            : undefined) ??
-        false);
+      ? (app?.provisioned ?? deployment?.twentyProvisioned ?? false)
+      : (app?.runtimeEnabled ?? deployment?.twentyRuntimeEnabled ?? false);
 
   if (result.error || !enabled) {
     return <Navigate to="/settings/general" />;
