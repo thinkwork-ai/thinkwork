@@ -23,6 +23,7 @@ import { TaskReviewCard } from "@/components/workbench/genui/components/TaskRevi
 import { TaskStatusSummary } from "@/components/workbench/genui/components/TaskStatusSummary";
 import { WorkflowListPreview } from "@/components/workbench/genui/components/WorkflowListPreview";
 
+import { ChartView } from "./components/ChartView";
 import { DataTableView } from "./components/DataTableView";
 
 import {
@@ -128,6 +129,15 @@ function createDomainComponents(actionState: DurableActionState) {
         statusForAction={actionState.statusForAction}
       />
     )) satisfies ThreadJsonRenderComponentFn<"table">,
+    // Charts are display-only (no durable actions, no action wiring).
+    chart: (({ props }) => (
+      <ChartView
+        {...props}
+        title={props.title ?? undefined}
+        description={props.description ?? undefined}
+        footer={props.footer ?? undefined}
+      />
+    )) satisfies ThreadJsonRenderComponentFn<"chart">,
   } satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
 }
 

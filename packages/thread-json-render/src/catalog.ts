@@ -87,6 +87,32 @@ const tableColumnSchema = z
 // identity + durable-action references; every other key is a column cell.
 const tableRowSchema = z.record(z.string(), resultListMetaValueSchema);
 
+// Chart data rows mirror the table row shape: flat records of primitive values.
+// The renderer reads `xKey` for the category axis and each `series[].dataKey`
+// for a plotted value.
+const chartDataRowSchema = z.record(z.string(), resultListMetaValueSchema);
+
+// Series colors are an enum palette token (NOT a raw color string) so the
+// strict validator does not reject them as free-form styling. Note: the key is
+// deliberately `colorKey`, not `colorToken` — the validator forbids any prop
+// key containing "token". The renderer maps each token to a themed CSS var.
+const chartColorKeySchema = z.enum([
+  "chart-1",
+  "chart-2",
+  "chart-3",
+  "chart-4",
+  "chart-5",
+  "chart-6",
+]);
+
+const chartSeriesSchema = z
+  .object({
+    dataKey: z.string(),
+    label: z.string().nullable().optional(),
+    colorKey: chartColorKeySchema,
+  })
+  .strict();
+
 export const threadJsonRenderSchema = defineSchema((schema) => ({
   spec: schema.object({
     root: schema.string(),
@@ -282,6 +308,35 @@ export const threadJsonRenderDomainComponentDefinitions = {
         { id: "status", header: "Status", sortable: true },
       ],
       rows: [{ id: "row-1", name: "Kickoff", status: "Ready" }],
+    },
+  },
+  chart: {
+    props: z
+      .object({
+        kind: z.enum(["area", "bar", "line", "pie"]),
+        title: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
+        footer: z.string().nullable().optional(),
+        xKey: z.string(),
+        series: z.array(chartSeriesSchema).max(6),
+        data: z.array(chartDataRowSchema).max(50),
+      })
+      .strict(),
+    slots: ["default"],
+    description:
+      "Display-only ThinkWork chart (area, bar, line, or pie) backed by recharts. Series colors reference an enum palette token via `colorKey`.",
+    example: {
+      kind: "bar",
+      title: "Weekly throughput",
+      description: "Completed work items per week",
+      xKey: "week",
+      series: [
+        { dataKey: "completed", label: "Completed", colorKey: "chart-1" },
+      ],
+      data: [
+        { week: "W1", completed: 8 },
+        { week: "W2", completed: 12 },
+      ],
     },
   },
 } as const;
