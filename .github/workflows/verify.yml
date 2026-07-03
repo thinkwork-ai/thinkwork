@@ -199,17 +199,6 @@ jobs:
         working-directory: terraform/examples/greenfield
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
-          COGNEE_ENABLED_INPUT: ${{ vars.COGNEE_ENABLED || 'false' }}
-          COGNEE_IMAGE_URI_INPUT: ${{ vars.COGNEE_IMAGE_URI || '' }}
-          COGNEE_DB_USERNAME_INPUT: ${{ vars.COGNEE_DB_USERNAME || 'thinkwork_cognee' }}
-          COGNEE_DB_NAME_INPUT: ${{ vars.COGNEE_DB_NAME || 'thinkwork_cognee' }}
-          COGNEE_DB_PASSWORD_SECRET_ARN_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ARN || '' }}
-          COGNEE_DB_PASSWORD_SECRET_ID_INPUT: ${{ vars.COGNEE_DB_PASSWORD_SECRET_ID || '' }}
-          COGNEE_BACKEND_MODE_INPUT: ${{ vars.COGNEE_BACKEND_MODE || 'dogfood' }}
-          COGNEE_DESIRED_COUNT_INPUT: ${{ vars.COGNEE_DESIRED_COUNT || '1' }}
-          COGNEE_LLM_PROVIDER_INPUT: ${{ vars.COGNEE_LLM_PROVIDER || 'bedrock' }}
-          COGNEE_EMBEDDING_PROVIDER_INPUT: ${{ vars.COGNEE_EMBEDDING_PROVIDER || 'bedrock' }}
-          COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT: ${{ vars.COGNEE_BEDROCK_MODEL_RESOURCE_ARNS || '' }}
           TWENTY_PROVISIONED_INPUT: ${{ vars.TWENTY_PROVISIONED || 'false' }}
           TWENTY_RUNTIME_ENABLED_INPUT: ${{ vars.TWENTY_RUNTIME_ENABLED || 'false' }}
           TWENTY_DESTROY_DATA_INPUT: ${{ vars.TWENTY_DESTROY_DATA || 'false' }}
@@ -227,26 +216,6 @@ jobs:
           # We treat 2 (drift) as a soft signal and write a summary instead
           # of failing — operators triage manually rather than getting
           # paged by every benign drift.
-          requested_cognee_enabled=$(printf '%s' "$COGNEE_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
-          if [ "$requested_cognee_enabled" != "true" ] && [ "$requested_cognee_enabled" != "false" ]; then
-            echo "::error::COGNEE_ENABLED must be true or false."
-            exit 1
-          fi
-          if [ "$requested_cognee_enabled" = "true" ]; then
-            echo "::warning::Deprecated graph memory is ignored. Planning with enable_cognee=false."
-          fi
-          cognee_enabled="false"
-
-          cognee_image_uri="${COGNEE_IMAGE_URI_INPUT:-cognee/cognee@sha256:5ce7e4052b1d16738d1e24476d64847fcb5b1666631b642651e8ccce414046f8}"
-          cognee_db_username="${COGNEE_DB_USERNAME_INPUT:-thinkwork_cognee}"
-          cognee_db_name="${COGNEE_DB_NAME_INPUT:-thinkwork_cognee}"
-          cognee_db_password_secret_id="${COGNEE_DB_PASSWORD_SECRET_ID_INPUT:-thinkwork/${STAGE}/cognee/db-credentials}"
-          cognee_db_password_secret_arn="$COGNEE_DB_PASSWORD_SECRET_ARN_INPUT"
-          cognee_backend_mode="${COGNEE_BACKEND_MODE_INPUT:-dogfood}"
-          cognee_desired_count="${COGNEE_DESIRED_COUNT_INPUT:-1}"
-          cognee_llm_provider="${COGNEE_LLM_PROVIDER_INPUT:-bedrock}"
-          cognee_embedding_provider="${COGNEE_EMBEDDING_PROVIDER_INPUT:-bedrock}"
-          cognee_bedrock_model_resource_arns="${COGNEE_BEDROCK_MODEL_RESOURCE_ARNS_INPUT:-[\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.nova-lite-v1:0\",\"arn:aws:bedrock:${AWS_REGION}::foundation-model/amazon.titan-embed-text-v2:0\"]}"
           twenty_provisioned=$(printf '%s' "$TWENTY_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
           twenty_runtime_enabled=$(printf '%s' "$TWENTY_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
           twenty_destroy_data=$(printf '%s' "$TWENTY_DESTROY_DATA_INPUT" | tr '[:upper:]' '[:lower:]')
@@ -275,15 +244,6 @@ jobs:
           twenty_public_url="${TWENTY_PUBLIC_URL_INPUT:-}"
           twenty_certificate_arn="${TWENTY_CERTIFICATE_ARN_INPUT:-}"
 
-          if [ "$cognee_enabled" = "true" ] && [ -z "$cognee_db_password_secret_arn" ]; then
-            cognee_db_password_secret_arn=$(aws secretsmanager describe-secret \
-              --secret-id "$cognee_db_password_secret_id" \
-              --query ARN --output text 2>/dev/null || echo "")
-            if [ -z "$cognee_db_password_secret_arn" ] || [ "$cognee_db_password_secret_arn" = "None" ]; then
-              echo "::error::COGNEE_ENABLED=true but the Cognee DB secret does not exist yet. Run the deploy workflow once to create it."
-              exit 1
-            fi
-          fi
           if [ "$twenty_provisioned" = "true" ]; then
             if [[ ! "$twenty_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::TWENTY_IMAGE_URI must be pinned to an immutable sha256 digest when TWENTY_PROVISIONED=true."
@@ -317,7 +277,6 @@ jobs:
             fi
           fi
 
-          # The deprecated graph memory path is disabled for all deploys.
           # Hindsight is the authoritative user and Space memory engine.
           memory_engine="hindsight"
 
@@ -333,16 +292,6 @@ jobs:
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
             -var "memory_engine=$memory_engine" \
-            -var "enable_cognee=$cognee_enabled" \
-            -var "cognee_image_uri=$cognee_image_uri" \
-            -var "cognee_db_username=$cognee_db_username" \
-            -var "cognee_db_name=$cognee_db_name" \
-            -var "cognee_db_password_secret_arn=$cognee_db_password_secret_arn" \
-            -var "cognee_backend_mode=$cognee_backend_mode" \
-            -var "cognee_desired_count=$cognee_desired_count" \
-            -var "cognee_llm_provider=$cognee_llm_provider" \
-            -var "cognee_embedding_provider=$cognee_embedding_provider" \
-            -var "cognee_bedrock_model_resource_arns=$cognee_bedrock_model_resource_arns" \
             -var "twenty_provisioned=$twenty_provisioned" \
             -var "twenty_runtime_enabled=$twenty_runtime_enabled" \
             -var "twenty_image_uri=$twenty_image_uri" \

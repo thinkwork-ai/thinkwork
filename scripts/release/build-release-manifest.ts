@@ -719,22 +719,6 @@ async function main(): Promise<void> {
 function defaultManagedApps(version: string): ManagedAppDescriptor[] {
   return [
     {
-      id: "cognee",
-      displayName: "Cognee",
-      terraformModule: {
-        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/cognee`,
-        version,
-      },
-      requiredImages: ["cognee"],
-      smokeContracts: [
-        {
-          id: "cognee-health",
-          command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
-          required: true,
-        },
-      ],
-    },
-    {
       id: "n8n",
       displayName: "n8n",
       terraformModule: {

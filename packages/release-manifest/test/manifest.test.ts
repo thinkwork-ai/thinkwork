@@ -94,22 +94,6 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
     ],
     managedApps: [
       {
-        id: "cognee",
-        displayName: "Cognee",
-        terraformModule: {
-          source: "thinkwork-ai/thinkwork/aws//modules/app/cognee",
-          version: "1.2.3",
-        },
-        requiredImages: ["agentcore-pi-amd64"],
-        smokeContracts: [
-          {
-            id: "cognee-health",
-            command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
-            required: true,
-          },
-        ],
-      },
-      {
         id: "twenty",
         displayName: "Twenty CRM",
         terraformModule: {
@@ -139,10 +123,7 @@ describe("release manifest contract", () => {
     const parsed = validateReleaseManifest(manifest());
 
     expect(parsed.release.version).toBe("1.2.3");
-    expect(parsed.managedApps.map((app) => app.id)).toEqual([
-      "cognee",
-      "twenty",
-    ]);
+    expect(parsed.managedApps.map((app) => app.id)).toEqual(["twenty"]);
     expect(releaseManifestSha256(parsed)).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -231,13 +212,12 @@ describe("release manifest contract", () => {
         ...manifest(),
         managedApps: [
           {
-            id: "cognee",
-            displayName: "Cognee",
+            id: "twenty",
+            displayName: "Twenty CRM",
             smokeContracts: [
               {
-                id: "cognee-health",
-                command:
-                  "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
+                id: "twenty-health",
+                command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
               },
             ],
           },
