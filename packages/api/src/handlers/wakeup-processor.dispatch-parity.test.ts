@@ -5,6 +5,8 @@ import {
   REQUIRED_DISPATCH_FIELDS,
   type AgentDispatchControlFieldArgs,
 } from "../lib/agent-dispatch-payload.js";
+import { buildDefaultAgentTurnWakeup } from "../lib/mentions/default-agent-routing.js";
+import { buildAgentMentionWakeups } from "../lib/mentions/dispatch-agent-mentions.js";
 
 /**
  * Standing dispatch-payload parity contract (plan 2026-06-12-002 U1).
@@ -326,6 +328,69 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     );
     expect(wakeupSource).toMatch(
       /assertUserModelApproved\(\{\s*tenantId: wakeup\.tenant_id,\s*userId: wakeup\.requested_by_actor_id,\s*modelId: requestedParentModel,/,
+    );
+  });
+
+  // THINK-136 U6/KTD3: the durable turn→triggering-message link is the SAME
+  // three-time-recurring parity seam — a field that must land on BOTH the
+  // direct-invoke turn insert (chat-agent-invoke) and the wakeup turn insert
+  // (wakeup-processor) or the dispatch indicator mis-attributes on resume
+  // turns. These pins fail if either handler stops stamping it.
+  it("both dispatch handlers stamp triggering_message_id on the turn row they create", () => {
+    const chatSource = handlerSource("chat-agent-invoke.ts");
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+
+    // Direct-invoke path stamps from the invoke event's messageId…
+    expect(chatSource).toContain("triggering_message_id: event.messageId");
+    // …and the wakeup path stamps from the payload's messageId (parity).
+    expect(wakeupSource).toContain("triggering_message_id: messageId");
+  });
+
+  it("both wakeup builders carry messageId into the payload so it reaches the turn row (first turn AND resume)", () => {
+    // First (opening) turn.
+    const firstDefault = buildDefaultAgentTurnWakeup({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-open",
+      agentId: "agent-1",
+      content: "hello",
+      sender: { type: "user", id: "user-bob" },
+    });
+    expect(firstDefault.payload.messageId).toBe("message-open");
+
+    const [firstMention] = buildAgentMentionWakeups({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-open",
+      content: "@Coordinator hi",
+      mentions: [
+        {
+          targetType: "agent" as const,
+          targetId: "agent-1",
+          displayName: "Coordinator",
+          rawText: "@Coordinator",
+          startOffset: 0,
+          endOffset: 12,
+        },
+      ],
+      sender: { type: "user", id: "user-bob" },
+    });
+    expect(firstMention.payload.messageId).toBe("message-open");
+
+    // Resume turn — the seam that masked the bug three times (first-turn-only
+    // E2E passed). A second message re-enqueues through the same builders and
+    // must carry its own messageId so the resumed turn links correctly.
+    const resumeDefault = buildDefaultAgentTurnWakeup({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-resume",
+      agentId: "agent-1",
+      content: "the answer",
+      sender: { type: "user", id: "user-bob" },
+    });
+    expect(resumeDefault.payload.messageId).toBe("message-resume");
+    expect(resumeDefault.payload.messageId).not.toBe(
+      firstDefault.payload.messageId,
     );
   });
 

@@ -196,6 +196,44 @@ describe("sendMessage sender-as-participant upsert (plan 2026-07-03-003 U2, R13)
   });
 });
 
+describe("sendMessage sync-dispatch failure stamp (plan 2026-07-03-003 U6, R7)", () => {
+  it("stamps a failed dispatch state instead of only console.warn-ing (default route)", () => {
+    // The default-dispatch catch must no longer be a bare console.warn — it
+    // stamps messages.metadata.dispatch and pushes an update so the failure is
+    // visible + retryable, never a silent drop.
+    const defaultCatch = source.slice(
+      source.indexOf("[sendMessage] default agent dispatch failed:"),
+    );
+    expect(defaultCatch).toContain("stampDispatchFailure({");
+    expect(defaultCatch).toContain('route: "default"');
+  });
+
+  it("stamps a per-agent failed state on the mention route (not all-or-nothing)", () => {
+    // dispatchAgentMentions can fail per-agent; the caller inspects results
+    // for failures and names which agents failed in the stamped reason.
+    expect(source).toContain("mentionResults");
+    expect(source).toContain(".filter((result) => result.failed)");
+    expect(source).toContain(
+      "mention dispatch failed for agents:",
+    );
+    const mentionBlock = source.slice(
+      source.indexOf("const mentionResults = await dispatchAgentMentions("),
+    );
+    expect(mentionBlock).toContain("stampDispatchFailure({");
+    expect(mentionBlock).toContain('route: "mention"');
+  });
+
+  it("merges the dispatch stamp into existing metadata and pushes a message update", () => {
+    // The helper reads current metadata, merges (never clobbers) the dispatch
+    // key, writes it back tenant-scoped, and re-notifies via notifyNewMessage.
+    const helper = source.slice(source.indexOf("async function stampDispatchFailure"));
+    expect(helper).toContain("...existingMetadata");
+    expect(helper).toContain('status: "failed"');
+    expect(helper).toContain(".update(messages)");
+    expect(helper).toContain("notifyNewMessage({");
+  });
+});
+
 describe("sendMessage pending-question reply consumption (plan 2026-06-09-005 U3)", () => {
   it("CAS-consumes the pending batch with answeredVia 'reply' and the new message as the reference", () => {
     expect(source).toContain("consumePendingQuestions(db, {");

@@ -118,6 +118,75 @@ describe("dispatchAgentMentions", () => {
     expect(wakeup.payload).not.toHaveProperty("pendingQuestionAnswers");
   });
 
+  it("appends an attempt suffix to each mention key for retries (KTD4)", () => {
+    const [wakeup] = buildAgentMentionWakeups({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      messageId: "message-1",
+      content: "@Coordinator retry",
+      mentions,
+      sender: { type: "user", id: "user-1" },
+      attempt: 4,
+    });
+    expect(wakeup.idempotencyKey).toBe(
+      "agent-mention:tenant-1:message-1:11111111-1111-4111-8111-111111111111:attempt-4",
+    );
+  });
+
+  it("records per-agent failures without aborting the remaining dispatches (R7)", async () => {
+    // Multi-agent mention where the first createWakeup throws: the loop must
+    // still attempt the rest and report the failure per-agent.
+    let calls = 0;
+    const repository = {
+      async findExistingWakeup() {
+        return null;
+      },
+      async createWakeup() {
+        calls += 1;
+        if (calls === 1) throw new Error("boom");
+        return { id: "wakeup-ok" };
+      },
+    } satisfies AgentMentionDispatchRepository;
+
+    const twoAgents = [
+      mentions[0],
+      {
+        targetType: "agent" as const,
+        targetId: "44444444-4444-4444-8444-444444444444",
+        displayName: "Reviewer",
+        rawText: "@Reviewer",
+        startOffset: 20,
+        endOffset: 29,
+      },
+    ];
+
+    const results = await dispatchAgentMentions(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "@Coordinator @Reviewer",
+        mentions: twoAgents,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+    );
+
+    expect(results).toEqual([
+      {
+        agentId: "11111111-1111-4111-8111-111111111111",
+        enqueued: false,
+        failed: true,
+        error: "boom",
+      },
+      {
+        agentId: "44444444-4444-4444-8444-444444444444",
+        enqueued: true,
+        wakeupRequestId: "wakeup-ok",
+      },
+    ]);
+  });
+
   it("does not enqueue when the mention wakeup already exists", async () => {
     const repository = makeRepository("existing-wakeup");
 

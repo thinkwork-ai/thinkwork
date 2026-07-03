@@ -73,6 +73,13 @@ export interface DispatchDefaultAgentTurnInput {
     type?: string | null;
     id?: string | null;
   } | null;
+  /**
+   * THINK-136 U6/KTD4: retry attempt counter. When > 0 the wakeup fallback
+   * mints an `...:attempt-N`-suffixed idempotency key so the retry does not
+   * no-op against the prior (base-key) wakeup row. Absent / 0 keeps the base
+   * key for the original dispatch.
+   */
+  attempt?: number | null;
 }
 
 export interface DefaultAgentChatInvoke {
@@ -323,7 +330,9 @@ export function buildDefaultAgentTurnWakeup(
         ? { pendingQuestionAnswers: input.pendingQuestionAnswers }
         : {}),
     },
-    idempotencyKey: `agent-default:${input.tenantId}:${input.messageId}:${input.agentId}`,
+    idempotencyKey: `agent-default:${input.tenantId}:${input.messageId}:${input.agentId}${
+      input.attempt && input.attempt > 0 ? `:attempt-${input.attempt}` : ""
+    }`,
     requestedByActorType: input.sender?.type ?? "user",
     requestedByActorId: input.sender?.id ?? null,
   };

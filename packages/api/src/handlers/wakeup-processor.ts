@@ -1373,6 +1373,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       wakeup_request_id: wakeup.id,
       invocation_source: wakeup.source,
       trigger_detail: wakeup.trigger_detail,
+      // THINK-136 U6/KTD3: durable turn→message link for the dispatch
+      // indicator. Mirrors chat-agent-invoke's stamp (parity test enforces
+      // both). Null for non-chat wakeups (payload carries no messageId).
+      triggering_message_id: messageId,
       runtime_type: runtimeType,
       status: "running",
       started_at: now,
@@ -3392,6 +3396,12 @@ async function failWakeupBeforeRun(input: {
         wakeup_request_id: input.wakeup.id,
         invocation_source: input.wakeup.source,
         trigger_detail: input.wakeup.trigger_detail,
+        // THINK-136 U6/KTD3: attribute the failed turn to its triggering
+        // message so the linked message can surface the async failure.
+        triggering_message_id:
+          typeof input.payload?.messageId === "string"
+            ? input.payload.messageId
+            : null,
         runtime_type: input.runtimeType,
         status: "failed",
         started_at: now,

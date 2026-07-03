@@ -4,6 +4,7 @@ import { deleteMessage } from "./deleteMessage.mutation.js";
 import { refreshGenUI } from "./refreshGenUI.mutation.js";
 import { answerUserQuestion } from "./answerUserQuestion.mutation.js";
 import { handleJsonRenderAction } from "./handleJsonRenderAction.mutation.js";
+import { retryAgentDispatch } from "./retryAgentDispatch.mutation.js";
 
 export const messageQueries = { messages };
 export const messageMutations = {
@@ -12,4 +13,5 @@ export const messageMutations = {
   refreshGenUI,
   answerUserQuestion,
   handleJsonRenderAction,
+  retryAgentDispatch,
 };

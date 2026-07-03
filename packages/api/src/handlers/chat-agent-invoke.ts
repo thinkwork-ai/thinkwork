@@ -934,6 +934,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             invocation_source: desktopDelegation
               ? "desktop_managed_delegation"
               : "chat_message",
+            // THINK-136 U6/KTD3: durable turn→message link for the dispatch
+            // indicator. The wakeup-processor path stamps the same field from
+            // its payload.messageId — parity enforced by the dispatch-parity
+            // test.
+            triggering_message_id: event.messageId,
             trigger_detail: desktopDelegation?.reason,
             origin_turn_id: desktopDelegation?.parentThreadTurnId,
             runtime_type: runtimeType,

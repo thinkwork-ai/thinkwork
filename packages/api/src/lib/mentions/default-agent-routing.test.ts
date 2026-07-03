@@ -35,6 +35,35 @@ describe("default agent routing", () => {
     });
   });
 
+  it("appends an attempt suffix to the idempotency key for retries (KTD4)", () => {
+    // The base dispatch keys on messageId and the enqueue no-ops on a match;
+    // a retry must therefore mint a DISTINCT key so it is not silently
+    // swallowed. attempt > 0 appends `:attempt-N`.
+    expect(
+      buildDefaultAgentTurnWakeup({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        agentId: "agent-1",
+        content: "retry me",
+        sender: { type: "user", id: "user-1" },
+        attempt: 2,
+      }).idempotencyKey,
+    ).toBe("agent-default:tenant-1:message-1:agent-1:attempt-2");
+    // attempt 0 / absent keeps the base key unchanged.
+    expect(
+      buildDefaultAgentTurnWakeup({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        agentId: "agent-1",
+        content: "first",
+        sender: { type: "user", id: "user-1" },
+        attempt: 0,
+      }).idempotencyKey,
+    ).toBe("agent-default:tenant-1:message-1:agent-1");
+  });
+
   it("does not enqueue when no subscribed/default agent exists", async () => {
     const repository = makeRepository(null);
     await expect(

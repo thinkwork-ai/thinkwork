@@ -505,7 +505,7 @@ export const sendMessage = async (
     !shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })
   ) {
     try {
-      await dispatchAgentMentions({
+      const mentionResults = await dispatchAgentMentions({
         tenantId: thread.tenant_id,
         threadId: i.threadId,
         spaceId: thread.space_id,
@@ -516,8 +516,33 @@ export const sendMessage = async (
         ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });
+      // R7: mention dispatch can fail per-agent (multiple mentioned agents).
+      // Stamp a per-dispatch failed state naming which agents failed, rather
+      // than treating it as all-or-nothing.
+      const failedAgentIds = mentionResults
+        .filter((result) => result.failed)
+        .map((result) => result.agentId);
+      if (failedAgentIds.length > 0) {
+        console.warn(
+          `[sendMessage] agent mention dispatch failed for agents: ${failedAgentIds.join(", ")}`,
+        );
+        await stampDispatchFailure({
+          messageId: row.id,
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          route: "mention",
+          reason: `mention dispatch failed for agents: ${failedAgentIds.join(", ")}`,
+        });
+      }
     } catch (err) {
       console.warn("[sendMessage] agent mention dispatch failed:", err);
+      await stampDispatchFailure({
+        messageId: row.id,
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        route: "mention",
+        reason: `mention dispatch error: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
   // Post-commit Thread Mode (R1/R4): the transaction above already inserted
@@ -568,7 +593,16 @@ export const sendMessage = async (
         sender: { type: senderType, id: senderId },
       });
     } catch (err) {
+      // R7: a synchronous dispatch failure is never only logged — stamp a
+      // visible failed state on the message so the sender can retry.
       console.warn("[sendMessage] default agent dispatch failed:", err);
+      await stampDispatchFailure({
+        messageId: row.id,
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        route: "default",
+        reason: `default dispatch error: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
 
@@ -667,6 +701,76 @@ export const sendMessage = async (
 
   return messageToCamel(responseMessage);
 };
+
+// R7/KTD3: a synchronous dispatch failure is stamped onto
+// `messages.metadata.dispatch` (merged, never clobbering existing metadata)
+// and pushed via the existing notifyNewMessage event so subscribed clients
+// refresh the message and render the failed indicator + retry control. The
+// `attempt` reflects the failed attempt number (base dispatch = 1);
+// retryAgentDispatch increments it. Best-effort: a stamp failure is logged,
+// never thrown — the message itself already committed.
+async function stampDispatchFailure(input: {
+  messageId: string;
+  tenantId: string;
+  threadId: string;
+  route: "mention" | "default";
+  reason: string;
+}): Promise<void> {
+  try {
+    const [current] = await db
+      .select({
+        metadata: messages.metadata,
+        role: messages.role,
+        content: messages.content,
+        senderType: messages.sender_type,
+        senderId: messages.sender_id,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.id, input.messageId),
+          eq(messages.tenant_id, input.tenantId),
+        ),
+      );
+    if (!current) return;
+    const existingMetadata =
+      (current.metadata as Record<string, unknown> | null) ?? {};
+    const priorDispatch =
+      (existingMetadata.dispatch as Record<string, unknown> | undefined) ?? {};
+    const attempt =
+      typeof priorDispatch.attempt === "number" ? priorDispatch.attempt : 1;
+    const metadata = {
+      ...existingMetadata,
+      dispatch: {
+        status: "failed",
+        reason: input.reason,
+        attempt,
+        route: input.route,
+        at: new Date().toISOString(),
+      },
+    };
+    await db
+      .update(messages)
+      .set({ metadata })
+      .where(
+        and(
+          eq(messages.id, input.messageId),
+          eq(messages.tenant_id, input.tenantId),
+        ),
+      );
+    await notifyNewMessage({
+      messageId: input.messageId,
+      threadId: input.threadId,
+      tenantId: input.tenantId,
+      role: current.role,
+      content: current.content ?? undefined,
+      senderType: current.senderType ?? undefined,
+      senderId: current.senderId ?? undefined,
+    });
+  } catch (err) {
+    console.warn("[sendMessage] failed to stamp dispatch failure:", err);
+  }
+}
 
 function profileSlugFromMentions(
   mentions: Array<{ targetType: string; targetId: string }>,
