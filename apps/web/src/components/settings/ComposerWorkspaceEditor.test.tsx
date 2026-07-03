@@ -64,6 +64,8 @@ vi.mock("@thinkwork/workspace-editor", () => ({
   FileEditorPane: (props: {
     value: string;
     readOnly?: boolean;
+    headerBadges?: React.ReactNode;
+    headerActions?: React.ReactNode;
     onChange?: (value: string) => void;
     onSave?: () => void;
   }) => (
@@ -71,6 +73,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
       data-testid="cm-pane"
       data-readonly={props.readOnly ? "true" : "false"}
     >
+      {props.headerBadges}
       <textarea
         data-testid="cm-input"
         value={props.value}
@@ -80,6 +83,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
       <button type="button" data-testid="cm-save" onClick={props.onSave}>
         save
       </button>
+      {props.headerActions}
     </div>
   ),
   WorkspaceFileEditor: (props: Record<string, unknown>) => {

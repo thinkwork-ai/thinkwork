@@ -828,51 +828,63 @@ export function ComposerRenderedPane({
             }`
       : null;
 
+  const headerBadges = (
+    <>
+      {entry?.generated ? (
+        <Badge
+          variant="outline"
+          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+        >
+          generated
+        </Badge>
+      ) : null}
+      <Badge
+        variant="outline"
+        className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+      >
+        read-only
+      </Badge>
+      {typeof entry?.size === "number" ? (
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {formatBytes(entry.size)}
+        </span>
+      ) : null}
+    </>
+  );
+  const closeAction = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-6 px-2 text-[11px] text-muted-foreground"
+      data-testid="composer-file-close"
+      onClick={onClose}
+    >
+      Close
+    </Button>
+  );
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       data-testid="composer-file-viewer"
     >
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3">
-        <span className="min-w-0 truncate font-mono text-xs text-foreground">
-          {path}
-        </span>
-        {entry?.generated ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
-          >
-            generated
-          </Badge>
-        ) : null}
-        <Badge
-          variant="outline"
-          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
-        >
-          read-only
-        </Badge>
-        {typeof entry?.size === "number" ? (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            {formatBytes(entry.size)}
-          </span>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto h-6 px-2 text-[11px] text-muted-foreground"
-          data-testid="composer-file-close"
-          onClick={onClose}
-        >
-          Close
-        </Button>
-      </div>
       {failed ? (
-        <p
-          className="p-3 text-xs text-destructive"
-          data-testid="composer-file-error"
-        >
-          {errorText}
-        </p>
+        <>
+          {/* Error state keeps a minimal header so Close isn't lost. */}
+          <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3">
+            <span className="min-w-0 truncate font-mono text-xs text-foreground">
+              {path}
+            </span>
+            {headerBadges}
+            <div className="ml-auto">{closeAction}</div>
+          </div>
+          <p
+            className="p-3 text-xs text-destructive"
+            data-testid="composer-file-error"
+          >
+            {errorText}
+          </p>
+        </>
       ) : (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <FileEditorPane
@@ -883,6 +895,8 @@ export function ComposerRenderedPane({
             saving={false}
             readOnly
             managedHeadings={[]}
+            headerBadges={headerBadges}
+            headerActions={closeAction}
             onChange={() => {}}
             onSave={() => {}}
             onDiscard={() => {}}
@@ -978,56 +992,68 @@ export function ComposerEditablePane({
     }
   }
 
+  // Folded into the standard FileEditorPane header (one house header, no outer
+  // row): the badges sit after the filename, Close sits after Save/Discard.
+  const headerBadges = (
+    <>
+      {entry?.generated ? (
+        <Badge
+          variant="outline"
+          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+        >
+          generated
+        </Badge>
+      ) : null}
+      <Badge
+        variant="outline"
+        className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+      >
+        {source.layer} source
+      </Badge>
+      {readOnly ? (
+        <Badge
+          variant="outline"
+          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+        >
+          read-only
+        </Badge>
+      ) : null}
+    </>
+  );
+  const closeAction = onClose ? (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-6 px-2 text-[11px] text-muted-foreground"
+      data-testid="composer-file-close"
+      onClick={onClose}
+    >
+      Close
+    </Button>
+  ) : null;
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       data-testid="composer-editable-pane"
     >
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3">
-        <span className="min-w-0 truncate font-mono text-xs text-foreground">
-          {entry?.path ?? source.sourceFile}
-        </span>
-        {entry?.generated ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
-          >
-            generated
-          </Badge>
-        ) : null}
-        <Badge
-          variant="outline"
-          className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
-        >
-          {source.layer} source
-        </Badge>
-        {readOnly ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
-          >
-            read-only
-          </Badge>
-        ) : null}
-        {onClose ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto h-6 px-2 text-[11px] text-muted-foreground"
-            data-testid="composer-file-close"
-            onClick={onClose}
-          >
-            Close
-          </Button>
-        ) : null}
-      </div>
       {error ? (
-        <p
-          className="p-3 text-xs text-destructive"
-          data-testid="composer-file-error"
-        >
-          Couldn&apos;t load this file: {error}
-        </p>
+        <>
+          {/* Error state keeps a minimal header so Close isn't lost. */}
+          <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3">
+            <span className="min-w-0 truncate font-mono text-xs text-foreground">
+              {source.sourceFile}
+            </span>
+            {headerBadges}
+            {closeAction ? <div className="ml-auto">{closeAction}</div> : null}
+          </div>
+          <p
+            className="p-3 text-xs text-destructive"
+            data-testid="composer-file-error"
+          >
+            Couldn&apos;t load this file: {error}
+          </p>
+        </>
       ) : (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <FileEditorPane
@@ -1038,6 +1064,8 @@ export function ComposerEditablePane({
             saving={saving}
             readOnly={readOnly}
             managedHeadings={DEFAULT_MANAGED_SECTION_HEADINGS}
+            headerBadges={headerBadges}
+            headerActions={closeAction}
             onChange={setValue}
             onSave={() => void handleSave()}
             onDiscard={() => setValue(content)}
