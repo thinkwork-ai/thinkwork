@@ -490,6 +490,7 @@ export type AgentLoopVersion = {
   judgeSpec: Scalars['AWSJSON']['output'];
   loopPolicy: Scalars['AWSJSON']['output'];
   publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  routineActionsSpec?: Maybe<Scalars['AWSJSON']['output']>;
   sourceMetadata: Scalars['AWSJSON']['output'];
   tenantId: Scalars['ID']['output'];
   triggerSpec: Scalars['AWSJSON']['output'];
@@ -8476,6 +8477,7 @@ export type SaveAgentLoopInput = {
   name: Scalars['String']['input'];
   ownerAgentId?: InputMaybe<Scalars['ID']['input']>;
   ownerUserId?: InputMaybe<Scalars['ID']['input']>;
+  routineActionsSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
   sourceMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;

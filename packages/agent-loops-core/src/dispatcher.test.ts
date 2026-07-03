@@ -250,3 +250,180 @@ describe("dispatchAgentLoop", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Deterministic routine actions (plan 2026-07-03-004 U5)
+// ---------------------------------------------------------------------------
+
+import { continueAgentLoopDispatch } from "./dispatcher";
+import type { RoutineActionResult } from "./contracts";
+
+function routineVersion(overrides: Record<string, unknown> = {}) {
+  const base = baseInput().version!;
+  return {
+    ...base,
+    routineActionsSpec: {
+      actions: [
+        {
+          routineId: "33333333-3333-4333-8333-333333333333",
+          label: "LastMile check",
+        },
+      ],
+      agentTurn: true,
+      ...overrides,
+    },
+  };
+}
+
+function okRoutineResult(): RoutineActionResult {
+  return {
+    routineId: "33333333-3333-4333-8333-333333333333",
+    label: "LastMile check",
+    status: "succeeded",
+    executionId: "exec-1",
+    commitSha: "abc123",
+    outputJson: { late: 2 },
+  };
+}
+
+describe("dispatchAgentLoop routine actions", () => {
+  it("executes routine actions before the agent turn and injects results into the wakeup payload", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    const recordRoutineActionResults = vi.fn();
+    Object.assign(ledger, { runRoutineAction, recordRoutineActionResults });
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: routineVersion() }),
+      ledger,
+    );
+
+    expect(result.status).toBe("queued");
+    expect(runRoutineAction).toHaveBeenCalledTimes(1);
+    expect(recordRoutineActionResults).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-1",
+        iterationId: "iteration-1",
+        results: [okRoutineResult()],
+      }),
+    );
+    expect(ledger.wakeups[0].payload.agentLoop.routineActionResults).toEqual([
+      okRoutineResult(),
+    ]);
+  });
+
+  it("completes a routine-only run with zero wakeups (AE1)", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    const completeRoutineOnlyRun = vi.fn();
+    Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: routineVersion({ agentTurn: false }) }),
+      ledger,
+    );
+
+    expect(result.status).toBe("completed_routine_only");
+    expect(ledger.wakeups).toHaveLength(0);
+    expect(completeRoutineOnlyRun).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(ledger.updateLoopAfterDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" }),
+    );
+  });
+
+  it("marks a routine-only run failed when an action fails — no wakeup, repair is the executor's move", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => ({
+      ...okRoutineResult(),
+      status: "failed" as const,
+      errorClass: "code_run_failed",
+    }));
+    const completeRoutineOnlyRun = vi.fn();
+    Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: routineVersion({ agentTurn: false }) }),
+      ledger,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(ledger.wakeups).toHaveLength(0);
+    expect(completeRoutineOnlyRun).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
+    );
+  });
+
+  it("converts a runner throw into a failed action result instead of losing the run", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => {
+      throw new Error("lambda timed out");
+    });
+    Object.assign(ledger, { runRoutineAction });
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: routineVersion() }),
+      ledger,
+    );
+
+    expect(result.status).toBe("queued");
+    const injected = ledger.wakeups[0].payload.agentLoop.routineActionResults;
+    expect(injected?.[0]).toMatchObject({
+      status: "failed",
+      errorClass: "routine_invoke_failed",
+    });
+  });
+
+  it("fails the dispatch when actions exist but the ledger has no runner (KTD-3 misconfiguration)", async () => {
+    const ledger = fakeLedger();
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: routineVersion() }),
+      ledger,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(ledger.markDispatchFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: "routine_runner_unavailable" }),
+    );
+    expect(ledger.wakeups).toHaveLength(0);
+  });
+
+  it("defers the continuation when requested and continues later through the same code path", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    Object.assign(ledger, { runRoutineAction });
+
+    const deferred = await dispatchAgentLoop(
+      baseInput({ version: routineVersion() }),
+      ledger,
+      { deferContinuation: true },
+    );
+    expect(deferred).toEqual({
+      status: "deferred",
+      runId: "run-1",
+      iterationId: "iteration-1",
+    });
+    expect(runRoutineAction).not.toHaveBeenCalled();
+    expect(ledger.wakeups).toHaveLength(0);
+
+    const continued = await continueAgentLoopDispatch(
+      baseInput({ version: routineVersion() }),
+      { runId: "run-1", iterationId: "iteration-1" },
+      ledger,
+    );
+    expect(continued.status).toBe("queued");
+    expect(runRoutineAction).toHaveBeenCalledTimes(1);
+    expect(ledger.wakeups[0].payload.agentLoop.routineActionResults).toEqual([
+      okRoutineResult(),
+    ]);
+  });
+
+  it("leaves Automations without routine actions untouched (runtime preserved)", async () => {
+    const ledger = fakeLedger();
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+    expect(result.status).toBe("queued");
+    expect(ledger.wakeups[0].payload.agentLoop.routineActionResults).toBeNull();
+  });
+});

@@ -1,4 +1,12 @@
-import type { GoalSpec, JudgeSpec, LoopPolicy, WorkerSpec } from "./contracts";
+import type {
+  GoalSpec,
+  JudgeSpec,
+  LoopPolicy,
+  RoutineActionResult,
+  RoutineActionSpec,
+  RoutineActionsSpec,
+  WorkerSpec,
+} from "./contracts";
 
 export const AGENT_LOOP_WAKEUP_SOURCE = "agent_loop";
 export const AGENT_LOOP_SCHEDULE_TRIGGER_TYPE = "agent_loop_schedule";
@@ -49,6 +57,9 @@ export interface DispatchableAgentLoopVersion {
   workerSpec: WorkerSpec;
   judgeSpec: JudgeSpec;
   loopPolicy: LoopPolicy;
+  /** Deterministic routine actions (plan 2026-07-03-004 U5). Null on
+   * versions without routine actions. */
+  routineActionsSpec?: RoutineActionsSpec | null;
 }
 
 export interface AgentLoopTriggerContext {
@@ -163,6 +174,10 @@ export interface AgentLoopWakeupPayload {
     completionCriteria: string[];
     judgeMode: string;
     loopPolicy: LoopPolicy;
+    /** Outcomes of routine actions executed before this agent turn (mixed
+     * Automations). Present on the initial AND resume payloads so the
+     * agent always sees what the deterministic steps produced. */
+    routineActionResults?: RoutineActionResult[] | null;
   };
 }
 
@@ -202,6 +217,35 @@ export interface AgentLoopDispatchLedger {
     summary?: Record<string, unknown>;
     now: Date;
   }): Promise<void>;
+  /** Executes one routine action (RequestResponse invoke of the
+   * routine-exec-git Lambda) and returns its outcome. Optional: ledgers
+   * that cannot run routines (e.g. inside graphql-http, KTD-3) omit it
+   * and defer continuation to job-trigger instead. */
+  runRoutineAction?(input: {
+    tenantId: string;
+    runId: string;
+    iterationId: string;
+    action: RoutineActionSpec;
+    now: Date;
+  }): Promise<RoutineActionResult>;
+  /** Persists per-action outcomes on the iteration record so the resume
+   * payload path can re-inject them (payload parity). */
+  recordRoutineActionResults?(input: {
+    tenantId: string;
+    runId: string;
+    iterationId: string;
+    results: RoutineActionResult[];
+    now: Date;
+  }): Promise<void>;
+  /** Completes a routine-only run (agentTurn: false) without a wakeup. */
+  completeRoutineOnlyRun?(input: {
+    tenantId: string;
+    runId: string;
+    iterationId: string;
+    status: "completed" | "failed";
+    results: RoutineActionResult[];
+    now: Date;
+  }): Promise<void>;
 }
 
 export type AgentLoopDispatchResult =
@@ -209,6 +253,17 @@ export type AgentLoopDispatchResult =
       status: "reused";
       runId: string;
       runStatus: AgentLoopRunStatus;
+    }
+  | {
+      status: "deferred";
+      runId: string;
+      iterationId: string;
+    }
+  | {
+      status: "completed_routine_only";
+      runId: string;
+      iterationId: string;
+      routineActionResults: RoutineActionResult[];
     }
   | {
       status: "queued";
@@ -236,6 +291,7 @@ export function buildAgentLoopWakeupPayload(input: {
   runId: string;
   iterationId: string;
   goalModeAction?: "start" | "resume";
+  routineActionResults?: RoutineActionResult[] | null;
 }): AgentLoopWakeupPayload {
   const tokenBudget =
     input.version.loopPolicy.maxTokens ?? DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET;
@@ -265,6 +321,7 @@ export function buildAgentLoopWakeupPayload(input: {
       completionCriteria: input.version.goalSpec.completionCriteria,
       judgeMode: input.version.judgeSpec.mode,
       loopPolicy: input.version.loopPolicy,
+      routineActionResults: input.routineActionResults ?? null,
     },
   };
 }

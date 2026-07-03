@@ -15,6 +15,9 @@
 import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
+  continueAgentLoopDispatch,
+  normalizeRoutineActionsSpec,
+  type RoutineActionResult,
   dispatchAgentLoop,
   workerAgentId,
   type AgentLoopDispatchLedger,
@@ -149,7 +152,9 @@ interface JobTriggerEvent {
   triggerId: string;
   // agent_heartbeat | agent_reminder | agent_scheduled | routine_schedule |
   // routine_one_time | eval_scheduled | skill_run (Unit 6) |
-  // thread_idle_memory_learning | manual | webhook | event
+  // thread_idle_memory_learning | manual | webhook | event |
+  // agent_loop_continue_dispatch (deferred manual dispatch, plan
+  // 2026-07-03-004 U5/KTD-3)
   triggerType: string;
   tenantId: string;
   agentId?: string;
@@ -161,7 +166,18 @@ interface JobTriggerEvent {
   fireId?: string;
   scheduledTime?: string;
   time?: string;
+  // agent_loop_continue_dispatch fields — the manual GraphQL trigger
+  // creates the run/iteration rows then hands the continuation (routine
+  // actions + wakeup) here so graphql-http never runs the executor inline.
+  agentLoopId?: string;
+  runId?: string;
+  iterationId?: string;
+  actorId?: string | null;
+  threadId?: string | null;
 }
+
+export const AGENT_LOOP_CONTINUE_DISPATCH_TRIGGER_TYPE =
+  "agent_loop_continue_dispatch";
 
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
 
@@ -383,8 +399,9 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -482,8 +499,9 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -651,7 +669,219 @@ function createAgentLoopLedger(db: JobTriggerDb): AgentLoopDispatchLedger {
         })
         .where(eq(agentLoops.id, input.loopId));
     },
+
+    // ---- Deterministic routine actions (plan 2026-07-03-004 U5) --------
+
+    async runRoutineAction(input) {
+      const { LambdaClient, InvokeCommand } = await import(
+        "@aws-sdk/client-lambda"
+      );
+      const lambda = new LambdaClient({});
+      const fnName = runtimeFunctionName(
+        "ROUTINE_EXEC_GIT_FUNCTION_NAME",
+        "routine-exec-git",
+      );
+      // RequestResponse and surface errors — never fire-and-forget.
+      const response = await lambda.send(
+        new InvokeCommand({
+          FunctionName: fnName,
+          InvocationType: "RequestResponse",
+          Payload: new TextEncoder().encode(
+            JSON.stringify({
+              routineId: input.action.routineId,
+              input: input.action.input ?? {},
+              triggerSource: "automation",
+            }),
+          ),
+        }),
+      );
+      if (response.FunctionError) {
+        return {
+          routineId: input.action.routineId,
+          label: input.action.label ?? null,
+          status: "failed",
+          errorClass: "routine_invoke_failed",
+          errorMessage: `executor function error: ${response.FunctionError}`,
+        };
+      }
+      const text = response.Payload
+        ? new TextDecoder().decode(response.Payload)
+        : "";
+      let parsed: {
+        status?: string;
+        executionId?: string;
+        commitSha?: string | null;
+        cacheServed?: boolean;
+        outputJson?: unknown;
+        errorClass?: string;
+        errorMessage?: string;
+      } = {};
+      try {
+        parsed = text ? JSON.parse(text) : {};
+      } catch {
+        return {
+          routineId: input.action.routineId,
+          label: input.action.label ?? null,
+          status: "failed",
+          errorClass: "routine_invoke_failed",
+          errorMessage: "executor returned malformed JSON",
+        };
+      }
+      const succeeded = parsed.status === "succeeded";
+      const result: RoutineActionResult = {
+        routineId: input.action.routineId,
+        label: input.action.label ?? null,
+        status: succeeded ? "succeeded" : "failed",
+        executionId: parsed.executionId ?? null,
+        commitSha: parsed.commitSha ?? null,
+        cacheServed: parsed.cacheServed === true,
+        outputJson: succeeded ? (parsed.outputJson ?? null) : undefined,
+        errorClass: succeeded ? null : (parsed.errorClass ?? parsed.status),
+        errorMessage: succeeded ? null : (parsed.errorMessage ?? null),
+      };
+      return result;
+    },
+
+    async recordRoutineActionResults(input) {
+      // Merge into the iteration record so the resume-turn payload path
+      // re-injects the same results (payload parity).
+      await db
+        .update(agentLoopIterations)
+        .set({
+          input_summary: sql`coalesce(${agentLoopIterations.input_summary}, '{}'::jsonb) || ${JSON.stringify(
+            { routineActionResults: input.results },
+          )}::jsonb`,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopIterations.id, input.iterationId));
+    },
+
+    async completeRoutineOnlyRun(input) {
+      const outcome = {
+        source: "routine_actions",
+        routineActions: {
+          total: input.results.length,
+          failed: input.results.filter((r) => r.status !== "succeeded").length,
+        },
+      };
+      await db
+        .update(agentLoopIterations)
+        .set({
+          status: input.status === "completed" ? "completed" : "failed",
+          output_summary: outcome,
+          finished_at: input.now,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopIterations.id, input.iterationId));
+      await db
+        .update(agentLoopRuns)
+        .set({
+          status: input.status,
+          output_summary: outcome,
+          finished_at: input.now,
+          last_event_at: input.now,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopRuns.id, input.runId));
+    },
   };
+}
+
+/**
+ * Deferred manual dispatch (plan 2026-07-03-004 U5, KTD-3): the manual
+ * GraphQL trigger created the run + iteration rows and handed off here so
+ * routine actions execute inside job-trigger's timeout, never inline in
+ * graphql-http. One continuation code path — continueAgentLoopDispatch —
+ * shared with the scheduled dispatch.
+ */
+async function handleAgentLoopContinueDispatch(input: {
+  db: JobTriggerDb;
+  event: JobTriggerEvent;
+}): Promise<void> {
+  const { db, event } = input;
+  const { tenantId, agentLoopId, runId, iterationId } = event;
+  if (!agentLoopId || !runId || !iterationId || !tenantId) {
+    console.error(
+      "[job-trigger] agent_loop_continue_dispatch missing agentLoopId/runId/iterationId",
+      event,
+    );
+    return;
+  }
+  const [loop] = await db
+    .select({
+      id: agentLoops.id,
+      tenant_id: agentLoops.tenant_id,
+      name: agentLoops.name,
+      enabled: agentLoops.enabled,
+      lifecycle_status: agentLoops.lifecycle_status,
+      current_version_id: agentLoops.current_version_id,
+    })
+    .from(agentLoops)
+    .where(
+      and(eq(agentLoops.id, agentLoopId), eq(agentLoops.tenant_id, tenantId)),
+    )
+    .limit(1);
+  if (!loop?.current_version_id) {
+    console.error(
+      `[job-trigger] agent_loop_continue_dispatch: loop ${agentLoopId} not found or has no version`,
+    );
+    return;
+  }
+  const [version] = await db
+    .select({
+      id: agentLoopVersions.id,
+      version_status: agentLoopVersions.version_status,
+      goal_spec: agentLoopVersions.goal_spec,
+      worker_spec: agentLoopVersions.worker_spec,
+      judge_spec: agentLoopVersions.judge_spec,
+      loop_policy: agentLoopVersions.loop_policy,
+      routine_actions_spec: agentLoopVersions.routine_actions_spec,
+    })
+    .from(agentLoopVersions)
+    .where(eq(agentLoopVersions.id, loop.current_version_id))
+    .limit(1);
+  if (!version) {
+    console.error(
+      `[job-trigger] agent_loop_continue_dispatch: version missing for loop ${agentLoopId}`,
+    );
+    return;
+  }
+  const result = await continueAgentLoopDispatch(
+    {
+      tenantId,
+      loop: {
+        id: loop.id,
+        tenantId: loop.tenant_id,
+        name: loop.name,
+        enabled: loop.enabled,
+        lifecycleStatus: loop.lifecycle_status,
+      },
+      version: {
+        id: version.id,
+        versionStatus: version.version_status,
+        goalSpec: version.goal_spec,
+        workerSpec: version.worker_spec,
+        judgeSpec: version.judge_spec,
+        loopPolicy: version.loop_policy,
+        routineActionsSpec: normalizeRoutineActionsSpec(
+          version.routine_actions_spec,
+        ),
+      },
+      trigger: {
+        family: "manual",
+        source: "manual_run",
+        actorType: event.actorId ? "user" : "system",
+        actorId: event.actorId ?? null,
+        threadId: event.threadId ?? null,
+        spaceId: event.spaceId ?? null,
+      },
+    },
+    { runId, iterationId },
+    createAgentLoopLedger(db),
+  );
+  console.log(
+    `[job-trigger] agent_loop_continue_dispatch run=${runId} status=${result.status}`,
+  );
 }
 
 function scheduledAgentLoopIdempotencyKey(event: JobTriggerEvent): string {
@@ -809,6 +1039,7 @@ async function handleAgentLoopSchedule(input: {
             worker_spec: agentLoopVersions.worker_spec,
             judge_spec: agentLoopVersions.judge_spec,
             loop_policy: agentLoopVersions.loop_policy,
+            routine_actions_spec: agentLoopVersions.routine_actions_spec,
           })
           .from(agentLoopVersions)
           .where(eq(agentLoopVersions.id, loop.current_version_id))
@@ -874,6 +1105,9 @@ async function handleAgentLoopSchedule(input: {
             workerSpec: version.worker_spec,
             judgeSpec: version.judge_spec,
             loopPolicy: version.loop_policy,
+            routineActionsSpec: normalizeRoutineActionsSpec(
+              version.routine_actions_spec,
+            ),
           }
         : null,
       trigger: {
@@ -965,6 +1199,12 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
 
   try {
     const db = getDb();
+
+    if (triggerType === AGENT_LOOP_CONTINUE_DISPATCH_TRIGGER_TYPE) {
+      await handleAgentLoopContinueDispatch({ db, event });
+      return;
+    }
+
     const isAgentLoopSchedule =
       triggerType === AGENT_LOOP_SCHEDULE_TRIGGER_TYPE;
 
@@ -1239,8 +1479,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } =
-          await import("@aws-sdk/client-lambda");
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -1651,8 +1892,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } =
-          await import("@aws-sdk/client-scheduler");
+        const { SchedulerClient, DeleteScheduleCommand } = await import(
+          "@aws-sdk/client-scheduler"
+        );
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

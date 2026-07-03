@@ -546,6 +546,30 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
       if (!agentId) {
         throw new Error("AgentLoop continuation requires a worker agent.");
       }
+      // Payload parity (plan 2026-07-03-004 U5): routine actions ran once
+      // at dispatch and their results were recorded on iteration 1 — the
+      // resume turn re-injects the same results so a resumed agent sees
+      // what the deterministic steps produced.
+      const [firstIteration] = await db
+        .select({ input_summary: agentLoopIterations.input_summary })
+        .from(agentLoopIterations)
+        .where(
+          and(
+            eq(agentLoopIterations.agent_loop_run_id, input.runId),
+            eq(agentLoopIterations.iteration_number, 1),
+          ),
+        )
+        .limit(1);
+      const routineActionResults =
+        firstIteration?.input_summary &&
+        typeof firstIteration.input_summary === "object" &&
+        Array.isArray(
+          (firstIteration.input_summary as Record<string, unknown>)
+            .routineActionResults,
+        )
+          ? ((firstIteration.input_summary as Record<string, unknown>)
+              .routineActionResults as never[])
+          : null;
       const payload = buildAgentLoopWakeupPayload({
         loop: input.loop,
         version: input.version,
@@ -556,6 +580,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         runId: input.runId,
         iterationId: input.iterationId,
         goalModeAction: "resume",
+        routineActionResults,
       });
       const [row] = await db
         .insert(agentWakeupRequests)

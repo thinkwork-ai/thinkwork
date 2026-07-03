@@ -226,6 +226,9 @@ export const agentLoopVersions = pgTable(
       .default(
         sql`'{"redactionState":"summary_only","retainRawEvidence":false}'::jsonb`,
       ),
+    // Deterministic routine actions (plan 2026-07-03-004 U5). Null on
+    // versions without routine actions; {actions[], agentTurn} otherwise.
+    routine_actions_spec: jsonb("routine_actions_spec"),
     source_metadata: jsonb("source_metadata")
       .$type<Record<string, unknown>>()
       .notNull()

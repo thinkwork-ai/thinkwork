@@ -285,6 +285,7 @@ export function AgentLoopForm({
       <AutomationAdvancedInspector
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}
+        tenantId={tenantId}
         draft={draft}
         setDraft={setDraft}
         workerOptions={workerOptions}
