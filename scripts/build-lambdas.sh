@@ -524,8 +524,6 @@ build_handler "memory-retain" \
 build_handler "wiki-compile" \
   "$REPO_ROOT/packages/api/src/handlers/wiki-compile.ts"
 
-build_handler "knowledge-graph-thread-ingest" \
-  "$REPO_ROOT/packages/api/src/handlers/knowledge-graph-thread-ingest.ts"
 # Uses BUNDLED_AGENTCORE_ESBUILD_FLAGS — the promotion-gate classifier needs
 # @aws-sdk/client-bedrock-runtime newer than the runtime's built-in SDK.
 build_handler "knowledge-graph-observations-ingest" \

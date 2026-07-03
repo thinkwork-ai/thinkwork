@@ -3024,21 +3024,6 @@ export enum KnowledgeGraphSourceKind {
   Wiki = 'WIKI'
 }
 
-export type KnowledgeGraphThreadCandidate = {
-  __typename?: 'KnowledgeGraphThreadCandidate';
-  lastIngestRun?: Maybe<KnowledgeGraphIngestRun>;
-  lastMessageAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  messageCount: Scalars['Int']['output'];
-  number: Scalars['Int']['output'];
-  requesterName?: Maybe<Scalars['String']['output']>;
-  requesterUserId?: Maybe<Scalars['ID']['output']>;
-  spaceId?: Maybe<Scalars['ID']['output']>;
-  spaceName?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-};
-
 export type LinkedTask = {
   __typename?: 'LinkedTask';
   assigneeDisplay?: Maybe<Scalars['String']['output']>;
@@ -3923,9 +3908,7 @@ export type Mutation = {
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
   startEvalRun: EvalRun;
-  startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
-  startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
   startReleaseUpdatePreflight: ReleaseUpdateJob;
@@ -5171,18 +5154,8 @@ export type MutationStartEvalRunArgs = {
 };
 
 
-export type MutationStartKnowledgeGraphIngestArgs = {
-  input: StartKnowledgeGraphIngestInput;
-};
-
-
 export type MutationStartKnowledgeGraphObservationsIngestArgs = {
   input?: InputMaybe<StartKnowledgeGraphObservationsIngestInput>;
-};
-
-
-export type MutationStartKnowledgeGraphThreadIngestArgs = {
-  input: StartKnowledgeGraphThreadIngestInput;
 };
 
 
@@ -6542,7 +6515,6 @@ export type Query = {
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
   knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
   knowledgeGraphSearch: KnowledgeGraphSearchResult;
-  knowledgeGraphThreadCandidates: Array<KnowledgeGraphThreadCandidate>;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   managedApplications: Array<ManagedApplication>;
@@ -7209,14 +7181,6 @@ export type QueryKnowledgeGraphNeighborsArgs = {
 export type QueryKnowledgeGraphSearchArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphThreadCandidatesArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query?: InputMaybe<Scalars['String']['input']>;
-  requesterUserId?: InputMaybe<Scalars['ID']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
@@ -9119,29 +9083,10 @@ export type StartEvalRunInput = {
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
-export type StartKnowledgeGraphIngestInput = {
-  force?: InputMaybe<Scalars['Boolean']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  ownerUserId?: InputMaybe<Scalars['ID']['input']>;
-  pageIds?: InputMaybe<Array<Scalars['ID']['input']>>;
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceLabel?: InputMaybe<Scalars['String']['input']>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
 export type StartKnowledgeGraphObservationsIngestInput = {
   fullRebuild?: InputMaybe<Scalars['Boolean']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-export type StartKnowledgeGraphThreadIngestInput = {
-  force?: InputMaybe<Scalars['Boolean']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId: Scalars['ID']['input'];
 };
 
 export type StartManagedApplicationPlanInput = {

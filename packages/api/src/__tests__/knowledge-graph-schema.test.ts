@@ -133,21 +133,10 @@ describe("Knowledge Graph GraphQL contract", () => {
       ]),
     );
     expect(typeFields("KnowledgeGraphGraph")).toEqual(["nodes", "edges"]);
-    expect(typeFields("KnowledgeGraphThreadCandidate")).toEqual(
-      expect.arrayContaining([
-        "threadId",
-        "title",
-        "number",
-        "requesterUserId",
-        "messageCount",
-        "lastIngestRun",
-      ]),
-    );
   });
 
-  it("adds read queries for candidates, runs, entities, graph, and entity detail", () => {
+  it("adds read queries for runs, entities, graph, and entity detail", () => {
     for (const fieldName of [
-      "knowledgeGraphThreadCandidates",
       "knowledgeGraphIngestRuns",
       "knowledgeGraphEntities",
       "knowledgeGraphGraph",
@@ -174,29 +163,26 @@ describe("Knowledge Graph GraphQL contract", () => {
     expect(queryFields.knowledgeGraphGraph.type).toBeInstanceOf(GraphQLNonNull);
   });
 
-  it("adds the manual thread ingest mutation input contract", () => {
-    const mutation = mutationFields.startKnowledgeGraphThreadIngest;
+  it("adds the observations ingest mutation input contract", () => {
+    const mutation = mutationFields.startKnowledgeGraphObservationsIngest;
     expect(mutation).toBeTruthy();
     expect(mutation.type).toBeInstanceOf(GraphQLNonNull);
 
-    const inputType = schema.getType("StartKnowledgeGraphThreadIngestInput");
+    const inputType = schema.getType(
+      "StartKnowledgeGraphObservationsIngestInput",
+    );
     expect(inputType).toBeInstanceOf(GraphQLInputObjectType);
     const inputFields = (inputType as GraphQLInputObjectType).getFields();
     expect(Object.keys(inputFields)).toEqual([
       "tenantId",
-      "threadId",
-      "force",
+      "fullRebuild",
       "metadata",
     ]);
-    expect(inputFields.threadId.type).toBeInstanceOf(GraphQLNonNull);
   });
 
   it("returns list shapes where the Explorer will page table and graph data", () => {
     expect(
       unwrapNonNull(queryFields.knowledgeGraphEntities.type),
-    ).toBeInstanceOf(GraphQLList);
-    expect(
-      unwrapNonNull(queryFields.knowledgeGraphThreadCandidates.type),
     ).toBeInstanceOf(GraphQLList);
     expect(
       unwrapNonNull(queryFields.knowledgeGraphIngestRuns.type),

@@ -277,16 +277,6 @@ output "cognee_worker_security_group_id" {
   value       = local.cognee_enabled ? aws_security_group.cognee_worker[0].id : null
 }
 
-output "knowledge_graph_thread_ingest_fn_name" {
-  description = "Knowledge Graph thread ingest worker Lambda function name"
-  value       = module.api.knowledge_graph_thread_ingest_fn_name
-}
-
-output "knowledge_graph_thread_ingest_fn_arn" {
-  description = "Knowledge Graph thread ingest worker Lambda ARN"
-  value       = module.api.knowledge_graph_thread_ingest_fn_arn
-}
-
 output "brain_artifacts_bucket_name" {
   description = "Canonical Company Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
   value       = module.api.brain_artifacts_bucket_name

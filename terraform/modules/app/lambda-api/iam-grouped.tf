@@ -480,10 +480,6 @@ locals {
           # retainTurn when the tenant's wiki_compile_enabled flag is on.
           # compileWikiNow admin mutation also Event-invokes.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
-          # knowledge-graph-thread-ingest: graphql-http's
-          # startKnowledgeGraphThreadIngest mutation invokes this with
-          # RequestResponse after inserting the durable ingest run.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-thread-ingest",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
           # RequestResponse; the worker also Event-invokes ITSELF to drain a

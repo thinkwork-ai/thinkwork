@@ -34,7 +34,6 @@ This kit fills the gap.
 | `foundation-bootstrap-smoke.mjs`                                     | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                                                                                                                                                                                                                                                   |
 | `deployment-profile-binding-smoke.mjs`                               | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                                                                                                                                                                                                                                                              |
 | `deployment-evidence.mjs`                                            | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                                                                                                                                                                                                                                                          |
-| `knowledge-graph-thread-ingest-smoke.mjs`                            | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                                                                                                                                                                                                                                                            |
 | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`                  | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                                                                                                                                                                                                                                                       |
 | `managed-app-controller-readiness-smoke.mjs`                         | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for managed apps without starting any managed-app job.                                                                                                                                                                                                                                                                          |
 | `deployment-teardown-readiness-smoke.mjs`                            | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                                                                                                                                                                       |
@@ -341,42 +340,6 @@ descriptors are present but runtime images are missing; this makes it useful for
 diagnosing the next gap without breaking read-only demo validation. Set
 `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` for the final optional-app gate. In
 strict mode, missing managed-app images or smoke contracts fail closed.
-
-## Knowledge Graph thread ingest smoke
-
-The Knowledge Graph smoke covers Phase II Cognee thread ingest and Explorer
-reads:
-
-```sh
-node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
-SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_KG_THREAD_ID=<thread-id> \
-  node scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
-```
-
-Live mode requires deployed GraphQL credentials from `apps/web/.env` or
-equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
-`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key. The default live path
-uses bearer/API-key service auth scoped by `SMOKE_TENANT_ID`; alternatively,
-provide `DATABASE_URL` and the script resolves a tenant from an active
-owner/admin membership row. If `SMOKE_KG_THREAD_ID` is omitted, the smoke uses
-`knowledgeGraphThreadCandidates` and optional `SMOKE_KG_THREAD_QUERY` to pick a
-thread with messages. Set `SMOKE_KG_FORCE=1` to request a fresh ingest.
-
-To exercise the stricter admin-skill impersonation path instead of service
-auth, also set `SMOKE_USER_ID` and `SMOKE_KG_AGENT_ID` for an agent whose
-`thinkwork-admin` assignment allows the Knowledge Graph operation.
-
-Passing live mode means:
-
-- `startKnowledgeGraphThreadIngest` returns a run.
-- The run reaches `SUCCEEDED` before `SMOKE_TIMEOUT_MS`.
-- `knowledgeGraphEntities` and `knowledgeGraphGraph` read the same normalized
-  thread snapshot through ThinkWork GraphQL.
-- When entities exist, `knowledgeGraphEntity` can load the first detail sheet
-  payload. If Cognee returns no graph nodes, the script exits successfully with
-  an explicit `emptyGraphDiagnostic` object instead of hiding the empty output.
 
 ## One-time setup per tenant
 
