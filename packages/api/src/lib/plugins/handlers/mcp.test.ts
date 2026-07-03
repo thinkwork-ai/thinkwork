@@ -85,6 +85,30 @@ vi.mock("../../../graphql/resolvers/core/managedApplications.js", () => ({
   readCogneeStatus: () => cogneeStatus,
 }));
 
+// The handler dynamic-imports the assignment-state parity helpers after its
+// DB writes (Composer U9 follow-up). Mock them so the unit test asserts the
+// wiring without loading the S3/runtime-config graph.
+const {
+  reconcileForAgentsSpy,
+  snapshotSpy,
+  removeForAgentsSpy,
+  snapshotResult,
+} = vi.hoisted(() => ({
+  reconcileForAgentsSpy: vi.fn(async () => 0),
+  snapshotSpy: vi.fn(
+    async () => null as { slug: string; agentIds: string[] } | null,
+  ),
+  removeForAgentsSpy: vi.fn(async () => 0),
+  snapshotResult: {
+    value: null as { slug: string; agentIds: string[] } | null,
+  },
+}));
+vi.mock("../../mcp/assignment-state.js", () => ({
+  reconcileMcpAssignmentFoldersForAgents: reconcileForAgentsSpy,
+  snapshotMcpServerAttachment: snapshotSpy,
+  removeMcpAssignmentFoldersForAgents: removeForAgentsSpy,
+}));
+
 import { tenantMcpServers, userMcpTokens } from "@thinkwork/database-pg/schema";
 import type { McpServerComponent } from "@thinkwork/plugin-catalog";
 import {
@@ -115,6 +139,11 @@ beforeEach(() => {
   cogneeStatus.enabled = false;
   cogneeStatus.endpoint = null;
   cogneeStatus.backendMode = null;
+  reconcileForAgentsSpy.mockClear();
+  snapshotSpy.mockClear();
+  removeForAgentsSpy.mockClear();
+  snapshotResult.value = null;
+  snapshotSpy.mockImplementation(async () => snapshotResult.value);
 });
 
 describe("provisionPluginMcpComponent", () => {
@@ -218,6 +247,29 @@ describe("provisionPluginMcpComponent", () => {
     // No tenant_mcp_servers insert — only the agent-assignment upsert.
     expect(insertCalls).toHaveLength(1);
     expect(insertCalls[0]).toMatchObject({ mcp_server_id: "server-9" });
+  });
+
+  it("materializes workspace assignment files for the assigned platform agents", async () => {
+    // Regression for the Composer U9 gap: the plugin server must materialize
+    // its `mcp/<slug>/.assignment.json` (via a whole-set reconcile) or it
+    // silently drops from any agent that already has other mcp/ files.
+    selectQueue.push([]); // no existing plugin row
+    selectQueue.push([]); // no manual row with the same endpoint
+    returningQueue.push([{ id: "server-1" }]);
+    selectQueue.push([{ id: "agent-1" }, { id: "agent-2" }]); // platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "lastmile",
+      component,
+      db: mockDb as never,
+    });
+
+    expect(reconcileForAgentsSpy).toHaveBeenCalledWith({
+      agentIds: ["agent-1", "agent-2"],
+      tenantId: "tenant-1",
+    });
   });
 
   it("namespaces slugs as <pluginKey>--<componentKey>", () => {
@@ -861,6 +913,27 @@ describe("teardownPluginMcpComponent", () => {
       db: mockDb as never,
     });
     expect(deleteCalls).toHaveLength(0);
+  });
+
+  it("removes the per-agent workspace folders for the attached agents", async () => {
+    // A bucket-present snapshot names the agents that carried the server.
+    snapshotResult.value = { slug: "lastmile--crm", agentIds: ["agent-1"] };
+    selectQueue.push([]); // no token rows
+
+    await teardownPluginMcpComponent({
+      tenantId: "tenant-1",
+      handlerRef: { tenantMcpServerId: "server-1" },
+      db: mockDb as never,
+    });
+
+    expect(snapshotSpy).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      registryServerId: "server-1",
+    });
+    expect(removeForAgentsSpy).toHaveBeenCalledWith({
+      slug: "lastmile--crm",
+      agentIds: ["agent-1"],
+    });
   });
 
   it("continues teardown when secret deletion fails", async () => {

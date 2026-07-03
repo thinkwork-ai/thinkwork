@@ -156,6 +156,26 @@ export function createDefaultTwentyCutoverDeps(
     },
 
     async removeLegacyRow({ tenantId, serverId, audit }) {
+      // Snapshot the legacy server's workspace-attached agents BEFORE the tx
+      // deletes their agent_mcp_servers rows (Composer U9 follow-up), so the
+      // legacy `mcp/twenty-crm/` folders can be removed after commit. S3 side
+      // effects never ride the DB tx. Bucket-gated; null in DB-mocked tests.
+      let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
+      try {
+        const { snapshotMcpServerAttachment } = await import(
+          "../../mcp/assignment-state.js"
+        );
+        folderSnapshot = await snapshotMcpServerAttachment({
+          tenantId,
+          registryServerId: serverId,
+        });
+      } catch (err) {
+        console.warn(
+          "[twenty-cutover] MCP workspace-folder snapshot failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+
       await db.transaction(async (tx) => {
         await tx
           .delete(tenantMcpContextTools)
@@ -179,6 +199,20 @@ export function createDefaultTwentyCutoverDeps(
           );
         await emitAuditEvent(tx, audit);
       });
+
+      if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
+        try {
+          const { removeMcpAssignmentFoldersForAgents } = await import(
+            "../../mcp/assignment-state.js"
+          );
+          await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+        } catch (err) {
+          console.warn(
+            "[twenty-cutover] MCP workspace-folder removal failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
     },
   };
 }

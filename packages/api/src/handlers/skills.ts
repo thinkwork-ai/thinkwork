@@ -1458,6 +1458,26 @@ async function mcpDeleteServer(
       ? { actorId: verdictUserId, actorType: "user" }
       : { actorId: "platform-credential", actorType: "system" };
 
+  // Snapshot the workspace-attached agents BEFORE the cascade deletes their
+  // agent_mcp_servers rows (Composer U9 follow-up), so their `mcp/<slug>/`
+  // folders get removed after commit. S3 side effects never ride the DB tx.
+  // Bucket-gated; null (no DB read) in DB-mocked tests.
+  let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
+  try {
+    const { snapshotMcpServerAttachment } = await import(
+      "../lib/mcp/assignment-state.js"
+    );
+    folderSnapshot = await snapshotMcpServerAttachment({
+      tenantId,
+      registryServerId: serverId,
+    });
+  } catch (err) {
+    console.warn(
+      "[skills] MCP workspace-folder snapshot failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   // Wrap the cascade delete + audit emit in a single transaction
   // (control-evidence tier). `.returning()` captures the deleted row's
   // url in one round-trip — no SELECT-before-DELETE needed.
@@ -1528,6 +1548,21 @@ async function mcpDeleteServer(
     });
 
   if (!result) return notFound("MCP server not found");
+
+  if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
+    try {
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "../lib/mcp/assignment-state.js"
+      );
+      await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+    } catch (err) {
+      console.warn(
+        "[skills] MCP workspace-folder removal failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return json({ ok: true, deleted: serverId });
 }
 
@@ -2502,11 +2537,33 @@ async function mcpAssignToAgent(
       ),
     );
 
+  // Workspace-folder parity (Composer U9 follow-up): reconcile the agent's
+  // whole attached set after the assign so the newly-attached server
+  // materializes its `mcp/<slug>/.assignment.json` (and any pre-existing
+  // DB-only attachments are backfilled). Best-effort, bucket-gated.
+  const reconcileAgentMcpFolders = async () => {
+    try {
+      const { reconcileMcpAssignmentFolders } = await import(
+        "../lib/mcp/assignment-state.js"
+      );
+      await reconcileMcpAssignmentFolders({
+        agentId,
+        tenantId: agentRow.tenant_id,
+      });
+    } catch (err) {
+      console.warn(
+        "[skills] MCP workspace-folder materialization failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  };
+
   if (existing) {
     await db
       .update(agentMcpServers)
       .set({ enabled: true, config: config || null, updated_at: new Date() })
       .where(eq(agentMcpServers.id, existing.id));
+    await reconcileAgentMcpFolders();
     return json({ id: existing.id, updated: true });
   }
 
@@ -2520,6 +2577,7 @@ async function mcpAssignToAgent(
     })
     .returning({ id: agentMcpServers.id });
 
+  await reconcileAgentMcpFolders();
   return json({ id: inserted.id, created: true });
 }
 
@@ -2538,6 +2596,24 @@ async function mcpUnassignFromAgent(
     .returning({ id: agentMcpServers.id });
 
   if (deleted.length === 0) return notFound("MCP server assignment not found");
+
+  // Remove the agent's `mcp/<slug>/` folder for this server (Composer U9
+  // follow-up). Best-effort, bucket-gated.
+  try {
+    const { removeMcpAssignmentForAgentServer } = await import(
+      "../lib/mcp/assignment-state.js"
+    );
+    await removeMcpAssignmentForAgentServer({
+      agentId,
+      registryServerId: mcpServerId,
+    });
+  } catch (err) {
+    console.warn(
+      "[skills] MCP workspace-folder removal failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return json({ ok: true });
 }
 
@@ -2692,8 +2768,9 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } =
-        await import("@aws-sdk/client-secrets-manager");
+      const { SecretsManagerClient, DeleteSecretCommand } = await import(
+        "@aws-sdk/client-secrets-manager"
+      );
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -2749,8 +2826,9 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } =
-    await import("@thinkwork/database-pg/schema");
+  const { agents, userMcpTokens } = await import(
+    "@thinkwork/database-pg/schema"
+  );
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -3543,8 +3621,9 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes
