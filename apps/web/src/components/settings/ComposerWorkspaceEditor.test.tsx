@@ -454,6 +454,45 @@ describe("context-menu actions (item 4)", () => {
     ).toBeNull();
   });
 
+  // Agent page merge (THINK-132 U2): profile files get the dedicated
+  // Configure treatment; the generic "Open agent source" item is suppressed
+  // for them (R5) — the file itself stays a normal editable tree node.
+  it("offers Configure Agent Profile on agents/<slug>.md and fires the callback", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+        ],
+      }),
+    );
+    const configureMock = vi.fn();
+    await renderEditor({ onConfigureAgentProfile: configureMock });
+    await screen.findByTestId("tree-file-agents/analyst.md");
+    fireEvent.click(screen.getByTestId("menu-configure-profile-analyst"));
+    expect(configureMock).toHaveBeenCalledWith("analyst");
+    expect(
+      screen.queryByTestId("menu-open-source-agents/analyst.md"),
+    ).toBeNull();
+  });
+
+  it("keeps the generic agent-source treatment for profile files when no handler is wired", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+        ],
+      }),
+    );
+    await renderEditor({});
+    await screen.findByTestId("tree-file-agents/analyst.md");
+    expect(screen.queryByTestId("menu-configure-profile-analyst")).toBeNull();
+    expect(
+      screen.getByTestId("menu-open-source-agents/analyst.md"),
+    ).toBeTruthy();
+  });
+
   it("offers Open source on non-skill nodes", async () => {
     await renderEditor();
     await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");

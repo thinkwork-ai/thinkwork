@@ -57,6 +57,10 @@ const {
     SettingsPiExtensionFieldsFragment: Symbol("piExtensionFields"),
     SettingsGrantCapabilityMutation: Symbol("grantCapability"),
     SettingsDetachCapabilityMutation: Symbol("detachCapability"),
+    // Agent page merge U2: AgentProfilesSheet's own operations.
+    SettingsCreateAgentProfileMutation: Symbol("createAgentProfile"),
+    SettingsDeleteAgentProfileMutation: Symbol("deleteAgentProfile"),
+    SettingsUpdateAgentProfileMutation: Symbol("updateAgentProfile"),
   },
   editorPropsSpy: vi.fn(),
 }));
