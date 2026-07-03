@@ -27,10 +27,6 @@ const migration0166 = readFileSync(
   join(HERE, "..", "drizzle", "0166_company_brain_substrate_contract.sql"),
   "utf-8",
 );
-const brainTypes = readFileSync(
-  join(HERE, "..", "graphql", "types", "brain.graphql"),
-  "utf-8",
-);
 
 describe("migration 0166 — Company Brain substrate contract", () => {
   it("exports substrate tables and vocabularies from the schema index", () => {
@@ -234,14 +230,4 @@ describe("migration 0166 — Company Brain substrate contract", () => {
     }
   });
 
-  it("exposes a query-only GraphQL status contract with operator evidence separated", () => {
-    expect(brainTypes).toContain("type CompanyBrainStatus");
-    expect(brainTypes).toContain("type CompanyBrainOperatorEvidence");
-    expect(brainTypes).toContain("type CompanyBrainMigrationStatus");
-    expect(brainTypes).toMatch(
-      /type CompanyBrainStatus[\s\S]*?evidence: CompanyBrainOperatorEvidence/,
-    );
-    expect(brainTypes).toContain("companyBrainStatus: CompanyBrainStatus!");
-    expect(brainTypes).not.toContain("mutation");
-  });
 });

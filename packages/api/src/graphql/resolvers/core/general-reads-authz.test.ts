@@ -129,7 +129,7 @@ describe("deploymentStatus authz", () => {
     expect(result).toHaveProperty("accountId");
     expect(result.managedApplications).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "cognee", enabled: false }),
+        expect.objectContaining({ key: "n8n", enabled: false }),
         expect.objectContaining({
           key: "twenty",
           status: "disabled",
@@ -317,11 +317,7 @@ describe("deploymentStatus authz", () => {
         },
       });
 
-    const first = await deploymentStatusMod.deploymentStatus(
-      null,
-      {},
-      service,
-    );
+    const first = await deploymentStatusMod.deploymentStatus(null, {}, service);
     const second = await deploymentStatusMod.deploymentStatus(
       null,
       {},
@@ -336,50 +332,6 @@ describe("deploymentStatus authz", () => {
       releaseManifestSha256: "e".repeat(64),
     });
     expect(mockS3Send).toHaveBeenCalledTimes(2);
-  });
-
-  it("derives Cognee enabled state from deployed Cognee details", async () => {
-    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
-
-    let result = await deploymentStatusMod.deploymentStatus(null, {}, service);
-    expect(result.cogneeEnabled).toBe(false);
-
-    vi.stubEnv("COGNEE", "dogfood|http://cognee.internal");
-    vi.stubEnv("STAGE", "dev");
-    vi.stubEnv("AWS_REGION", "us-east-1");
-    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
-    result = await deploymentStatusMod.deploymentStatus(null, {}, service);
-    expect(result.cogneeEnabled).toBe(true);
-    expect(result).toMatchObject({
-      cogneeEndpoint: "http://cognee.internal",
-      cogneeBackendMode: "dogfood",
-      cogneeLogGroupName: "/thinkwork/dev/cognee",
-      cogneeClusterArn:
-        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-brain-cluster",
-      cogneeServiceName: "thinkwork-dev-cognee",
-    });
-  });
-
-  it("keeps COGNEE_CLUSTER_ARN as an optional compatibility override", async () => {
-    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
-    vi.stubEnv("COGNEE", "dogfood|http://cognee.internal");
-    vi.stubEnv("STAGE", "dev");
-    vi.stubEnv("AWS_REGION", "us-east-1");
-    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
-    vi.stubEnv(
-      "COGNEE_CLUSTER_ARN",
-      "arn:aws:ecs:us-west-2:210987654321:cluster/custom-cognee-cluster",
-    );
-
-    const result = await deploymentStatusMod.deploymentStatus(
-      null,
-      {},
-      service,
-    );
-
-    expect(result.cogneeClusterArn).toBe(
-      "arn:aws:ecs:us-west-2:210987654321:cluster/custom-cognee-cluster",
-    );
   });
 
   it("serves Twenty managed app fields from DB state (plan 2026-06-12-001 U10)", async () => {

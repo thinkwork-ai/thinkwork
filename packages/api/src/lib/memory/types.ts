@@ -12,7 +12,7 @@
  * Defined per `.prds/memory-implementation-plan.md` §8–9.
  */
 
-export type MemoryEngineType = "hindsight" | "agentcore" | "cognee";
+export type MemoryEngineType = "hindsight" | "agentcore";
 
 export type MemoryOwnerRef = {
   tenantId: string;
@@ -48,11 +48,7 @@ export type MemoryBackendRef = {
 export type RecallDepth = "quick" | "deep";
 export type HindsightRecallBudget = "low" | "mid" | "high";
 export type HindsightRecallFactType = "world" | "experience" | "observation";
-export type HindsightTagsMatch =
-  | "any"
-  | "all"
-  | "any_strict"
-  | "all_strict";
+export type HindsightTagsMatch = "any" | "all" | "any_strict" | "all_strict";
 
 export type HindsightObservationScopes =
   | "combined"
@@ -78,10 +74,9 @@ export type HindsightTokenBudgetOptions = {
   maxTokens?: number;
 };
 
-export type HindsightSourceFactsIncludeOptions =
-  HindsightTokenBudgetOptions & {
-    maxTokensPerObservation?: number;
-  };
+export type HindsightSourceFactsIncludeOptions = HindsightTokenBudgetOptions & {
+  maxTokensPerObservation?: number;
+};
 
 export type HindsightToolCallsIncludeOptions = {
   output?: boolean;

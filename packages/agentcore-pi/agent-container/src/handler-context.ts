@@ -145,7 +145,7 @@ export interface RuntimeEnvSnapshot {
   awsRegion: string;
   agentCoreMemoryId: string;
   hindsightEndpoint: string;
-  memoryEngine: "managed" | "hindsight" | "cognee";
+  memoryEngine: "managed" | "hindsight";
   /**
    * Name of the API's `memory-retain` Lambda
    * (`thinkwork-${stage}-api-memory-retain`). Empty string disables
@@ -192,11 +192,9 @@ export function snapshotRuntimeEnv(
   const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
     memoryEngineRaw === "hindsight"
       ? "hindsight"
-      : memoryEngineRaw === "cognee"
-        ? "cognee"
-        : memoryEngineRaw === "managed" || memoryEngineRaw === "agentcore"
-          ? "managed"
-          : "hindsight";
+      : memoryEngineRaw === "managed" || memoryEngineRaw === "agentcore"
+        ? "managed"
+        : "hindsight";
 
   return {
     awsRegion: env.AWS_REGION || "us-east-1",
@@ -560,7 +558,10 @@ export function logStructured(
 }
 
 export type AgentCorePhaseStatus =
-  "started" | "completed" | "failed" | "skipped";
+  | "started"
+  | "completed"
+  | "failed"
+  | "skipped";
 
 export interface AgentCorePhaseLogFields {
   phase: string;

@@ -1,20 +1,12 @@
-import { getConfig } from "@thinkwork/runtime-config";
 import { and, desc, eq } from "drizzle-orm";
 import {
   managedApplicationDeploymentJobs,
   managedApplications as managedApplicationsTable,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../../utils.js";
-import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 
-export type ManagedApplicationKey = "cognee" | "n8n" | "twenty";
-type DbBackedManagedApplicationKey = Exclude<ManagedApplicationKey, "cognee">;
-
-export type CogneeStatus = {
-  enabled: boolean;
-  endpoint: string | null;
-  backendMode: string | null;
-};
+export type ManagedApplicationKey = "n8n" | "twenty";
+type DbBackedManagedApplicationKey = ManagedApplicationKey;
 
 export type TwentyStatus = {
   provisioned: boolean;
@@ -81,13 +73,6 @@ export function normalizeManagedApplicationKey(
 ): ManagedApplicationKey | null {
   if (typeof raw !== "string") return null;
   const key = raw.trim().toLowerCase();
-  if (
-    key === "cognee" ||
-    key === "knowledgegraph" ||
-    key === "knowledge-graph"
-  ) {
-    return "cognee";
-  }
   if (key === "twenty" || key === "crm" || key === "twenty-crm") {
     return "twenty";
   }
@@ -95,61 +80,6 @@ export function normalizeManagedApplicationKey(
     return "n8n";
   }
   return null;
-}
-
-export function readCogneeStatus(): CogneeStatus {
-  const legacyEndpoint = process.env.COGNEE_ENDPOINT || null;
-  const legacyBackendMode = process.env.COGNEE_BACKEND_MODE || null;
-  const raw = getConfig("COGNEE") || process.env.COGNEE_STATUS;
-
-  if (!raw) {
-    return {
-      enabled: Boolean(
-        legacyEndpoint ||
-        process.env.COGNEE_SERVICE_NAME ||
-        process.env.COGNEE_LOG_GROUP_NAME,
-      ),
-      endpoint: legacyEndpoint,
-      backendMode: legacyBackendMode,
-    };
-  }
-
-  const separatorIndex = raw.indexOf("|");
-  if (separatorIndex >= 0) {
-    const backend = raw.slice(0, separatorIndex).trim();
-    const endpoint = raw.slice(separatorIndex + 1).trim();
-    return {
-      enabled: true,
-      endpoint: endpoint || legacyEndpoint,
-      backendMode: backend || legacyBackendMode,
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      endpoint?: unknown;
-      backend?: unknown;
-    };
-    const endpoint =
-      typeof parsed.endpoint === "string" && parsed.endpoint.trim()
-        ? parsed.endpoint
-        : legacyEndpoint;
-    const backendMode =
-      typeof parsed.backend === "string" && parsed.backend.trim()
-        ? parsed.backend
-        : legacyBackendMode;
-    return {
-      enabled: true,
-      endpoint,
-      backendMode,
-    };
-  } catch {
-    return {
-      enabled: raw === "true" || Boolean(legacyEndpoint),
-      endpoint: legacyEndpoint,
-      backendMode: legacyBackendMode,
-    };
-  }
 }
 
 /**
@@ -288,7 +218,7 @@ const DISABLED_N8N_STATUS: N8nStatus = {
  * Twenty status served from Aurora (plan 2026-06-12-001 U10) — the
  * managed_applications row + its deployment-job history are the canonical
  * plugin-engine infrastructure state. The TWENTY env/SSM projection is
- * retired (Cognee's env-var path is intentionally UNCHANGED).
+ * retired.
  *
  * Applied reality = the LATEST SUCCEEDED deployment job's operation:
  * ENABLE/UPGRADE → running, PARK → parked, DESTROY (or no succeeded job /
@@ -377,7 +307,6 @@ export async function readManagedApplications(
   deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus[]> {
   return [
-    cogneeManagedApplication(),
     await n8nManagedApplication(tenantId, deps),
     await twentyManagedApplication(tenantId, deps),
   ];
@@ -388,59 +317,8 @@ export async function readManagedApplication(
   tenantId: string | null,
   deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus> {
-  if (key === "cognee") return cogneeManagedApplication();
   if (key === "n8n") return n8nManagedApplication(tenantId, deps);
   return twentyManagedApplication(tenantId, deps);
-}
-
-function cogneeManagedApplication(): ManagedApplicationStatus {
-  const stage = process.env.STAGE || "unknown";
-  const region = process.env.AWS_REGION || "us-east-1";
-  const accountId = process.env.AWS_ACCOUNT_ID || null;
-  const cognee = readCogneeStatus();
-  const serviceName =
-    process.env.COGNEE_SERVICE_NAME ||
-    (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
-  const cluster = resolveCogneeClusterIdentity({
-    enabled: cognee.enabled,
-    stage,
-    region,
-    accountId,
-  });
-  const logGroupName =
-    process.env.COGNEE_LOG_GROUP_NAME ||
-    (cognee.enabled ? `/thinkwork/${stage}/cognee` : null);
-
-  return {
-    key: "cognee",
-    displayName: "Cognee",
-    description: "Knowledge Graph service for ontology and graph retrieval.",
-    status: cognee.enabled ? "running" : "disabled",
-    enabled: cognee.enabled,
-    provisioned: cognee.enabled,
-    runtimeEnabled: cognee.enabled,
-    url: null,
-    endpoint: cognee.endpoint,
-    backendMode: cognee.backendMode,
-    logGroupName,
-    logGroupNames: logGroupName ? [logGroupName] : [],
-    clusterArn: cluster.clusterArn,
-    serviceName,
-    serviceNames: serviceName ? [serviceName] : [],
-    albArn: null,
-    targetGroupArn: null,
-    storageBucketName: null,
-    databaseName: null,
-    message: cognee.enabled
-      ? null
-      : "Cognee is not provisioned for this stage.",
-    managedMcpServerId: null,
-    managedMcpStatus: "not_applicable",
-    managedMcpInstalled: false,
-    managedMcpInstallAvailable: false,
-    managedMcpMessage: null,
-    ...nonWorkflowManagedApplicationProjection(),
-  };
 }
 
 async function twentyManagedApplication(

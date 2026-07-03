@@ -35,16 +35,6 @@ export const sharedPluginTermAllowlist = [
     reason: "historical database migration coverage",
   },
   {
-    path: "packages/api/src/lib/memory/adapters/cognee-adapter.ts",
-    reason:
-      "shared platform memory engine adapter selected by MEMORY_ENGINE; Cognee remains the Company Brain substrate implementation.",
-  },
-  {
-    path: "packages/api/src/lib/memory/adapters/cognee-adapter.test.ts",
-    reason:
-      "shared platform memory engine adapter coverage for MEMORY_ENGINE=cognee.",
-  },
-  {
     path: "packages/database-pg/src/schema/email-channel.ts",
     reason:
       "shared platform schema for existing email reply tokens; THNK-35 U2 expands it generically for channel state.",

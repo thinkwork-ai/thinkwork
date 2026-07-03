@@ -136,7 +136,6 @@ describe("startDeploymentReleaseUpdate", () => {
           },
           optionalApps: {
             hindsight: true,
-            cognee: true,
             twenty: false,
             n8n: true,
           },
@@ -195,11 +194,10 @@ describe("startDeploymentReleaseUpdate", () => {
             platformOperatorEmails: "ops@example.com",
             cognitoReplyToEmailAddress: "help@example.com",
             enableHindsight: true,
-            enableCognee: true,
             n8nProvisioned: true,
           }),
           features: expect.objectContaining({
-            optionalApps: expect.arrayContaining(["cognee", "n8n"]),
+            optionalApps: expect.arrayContaining(["n8n"]),
           }),
           customerDomain: "customer.example.com",
           cognitoFromEmailAddress: "ThinkWork <noreply@example.com>",

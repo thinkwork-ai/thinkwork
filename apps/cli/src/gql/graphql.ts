@@ -1096,85 +1096,6 @@ export type ClaimNextOpenEngineWorkItemInput = {
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
-export type CompanyBrainCapabilities = {
-  __typename?: 'CompanyBrainCapabilities';
-  launch: Array<CompanyBrainCapability>;
-  optional: Array<CompanyBrainCapability>;
-};
-
-export type CompanyBrainCapability = {
-  __typename?: 'CompanyBrainCapability';
-  key: Scalars['String']['output'];
-  message?: Maybe<Scalars['String']['output']>;
-  source?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-};
-
-export type CompanyBrainMigrationStatus = {
-  __typename?: 'CompanyBrainMigrationStatus';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  fromStorageTier?: Maybe<Scalars['String']['output']>;
-  id?: Maybe<Scalars['ID']['output']>;
-  phase: Scalars['String']['output'];
-  requestedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  rollbackWindowClosesAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  toStorageTier?: Maybe<Scalars['String']['output']>;
-  validationSummary?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
-export type CompanyBrainOperationalCounters = {
-  __typename?: 'CompanyBrainOperationalCounters';
-  failedIngestCount: Scalars['Int']['output'];
-  graphEdgeCount?: Maybe<Scalars['Int']['output']>;
-  graphEntityCount?: Maybe<Scalars['Int']['output']>;
-  ingestionQueueDepth: Scalars['Int']['output'];
-  latestIngestAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  latestProjectionAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  ontologyVersion?: Maybe<Scalars['String']['output']>;
-  sourceArtifactCount?: Maybe<Scalars['Int']['output']>;
-  vaultProjectionCount?: Maybe<Scalars['Int']['output']>;
-};
-
-export type CompanyBrainOperatorEvidence = {
-  __typename?: 'CompanyBrainOperatorEvidence';
-  backendMode?: Maybe<Scalars['String']['output']>;
-  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
-  cogneeVersion?: Maybe<Scalars['String']['output']>;
-  efsFileSystemId?: Maybe<Scalars['String']['output']>;
-  embeddingModel?: Maybe<Scalars['String']['output']>;
-  graphProvider?: Maybe<Scalars['String']['output']>;
-  latestDeploymentJobId?: Maybe<Scalars['ID']['output']>;
-  managedApplicationId?: Maybe<Scalars['ID']['output']>;
-  migrationEvidence?: Maybe<Scalars['AWSJSON']['output']>;
-  neptuneEndpoint?: Maybe<Scalars['String']['output']>;
-  neptuneGraphId?: Maybe<Scalars['String']['output']>;
-  operatorEvidence?: Maybe<Scalars['AWSJSON']['output']>;
-  productionPosture?: Maybe<Scalars['String']['output']>;
-  s3ArtifactRoot?: Maybe<Scalars['String']['output']>;
-  s3ManifestRoot?: Maybe<Scalars['String']['output']>;
-  s3VaultProjectionRoot?: Maybe<Scalars['String']['output']>;
-  vectorDimension?: Maybe<Scalars['Int']['output']>;
-  vectorProvider?: Maybe<Scalars['String']['output']>;
-};
-
-export type CompanyBrainStatus = {
-  __typename?: 'CompanyBrainStatus';
-  activeBackend: Scalars['String']['output'];
-  capabilities: CompanyBrainCapabilities;
-  counters: CompanyBrainOperationalCounters;
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  evidence?: Maybe<CompanyBrainOperatorEvidence>;
-  healthStatus: Scalars['String']['output'];
-  migration: CompanyBrainMigrationStatus;
-  status: Scalars['String']['output'];
-  storageTier: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-};
-
 export enum ComplianceActorType {
   Agent = 'AGENT',
   System = 'SYSTEM',
@@ -1892,12 +1813,6 @@ export type DeploymentStatus = {
   appsyncRealtimeUrl?: Maybe<Scalars['String']['output']>;
   appsyncUrl?: Maybe<Scalars['String']['output']>;
   bucketName?: Maybe<Scalars['String']['output']>;
-  cogneeBackendMode?: Maybe<Scalars['String']['output']>;
-  cogneeClusterArn?: Maybe<Scalars['String']['output']>;
-  cogneeEnabled: Scalars['Boolean']['output'];
-  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
-  cogneeLogGroupName?: Maybe<Scalars['String']['output']>;
-  cogneeServiceName?: Maybe<Scalars['String']['output']>;
   databaseEndpoint?: Maybe<Scalars['String']['output']>;
   deploymentControllerArn?: Maybe<Scalars['String']['output']>;
   deploymentEvidenceBucket?: Maybe<Scalars['String']['output']>;
@@ -2799,13 +2714,6 @@ export type KnowledgeGraphArtifactManifestSummary = {
   vectorDimension?: Maybe<Scalars['Int']['output']>;
 };
 
-export type KnowledgeGraphDeploymentChange = {
-  __typename?: 'KnowledgeGraphDeploymentChange';
-  desiredEnabled: Scalars['Boolean']['output'];
-  message: Scalars['String']['output'];
-  workflowUrl: Scalars['String']['output'];
-};
-
 export type KnowledgeGraphEntity = {
   __typename?: 'KnowledgeGraphEntity';
   aliases: Array<Scalars['String']['output']>;
@@ -2909,16 +2817,6 @@ export enum KnowledgeGraphGroundingStatus {
   Ungrounded = 'UNGROUNDED',
   Unknown = 'UNKNOWN'
 }
-
-export type KnowledgeGraphHealthCheck = {
-  __typename?: 'KnowledgeGraphHealthCheck';
-  checkedAt: Scalars['AWSDateTime']['output'];
-  endpoint?: Maybe<Scalars['String']['output']>;
-  healthy: Scalars['Boolean']['output'];
-  latencyMs: Scalars['Int']['output'];
-  message: Scalars['String']['output'];
-  statusCode?: Maybe<Scalars['Int']['output']>;
-};
 
 export type KnowledgeGraphIngestRun = {
   __typename?: 'KnowledgeGraphIngestRun';
@@ -3384,12 +3282,6 @@ export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
   /** Active long-term memory engine selected by MEMORY_ENGINE. */
   activeEngine: Scalars['String']['output'];
-  /**
-   * True when Cognee is explicitly selected as the active memory engine.
-   * This is a compatibility/diagnostic signal; Hindsight is the canonical
-   * user and Space memory engine for this pass.
-   */
-  cogneeMemoryEnabled: Scalars['Boolean']['output'];
   /**
    * ThinkWork Brain distillation is intentionally deferred from this memory
    * provider pivot.
@@ -3859,7 +3751,6 @@ export type Mutation = {
   renameTenantSlug: Tenant;
   reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
-  requestCompanyBrainProductionMigration: CompanyBrainMigrationStatus;
   requestRevision: InboxItem;
   resendMemberInvite: ResendMemberInviteResult;
   /**
@@ -3895,7 +3786,6 @@ export type Mutation = {
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
-  setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
@@ -3948,7 +3838,6 @@ export type Mutation = {
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
-  updateCompanyBrainMigration: CompanyBrainMigrationStatus;
   updateEmailReadinessCheck: EmailReadinessCheck;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
@@ -4934,11 +4823,6 @@ export type MutationReorderQuickActionsArgs = {
 };
 
 
-export type MutationRequestCompanyBrainProductionMigrationArgs = {
-  input: RequestCompanyBrainProductionMigrationInput;
-};
-
-
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -5074,11 +4958,6 @@ export type MutationSetAgentKnowledgeBasesArgs = {
 
 export type MutationSetDefaultEvalProfileArgs = {
   id: Scalars['ID']['input'];
-};
-
-
-export type MutationSetKnowledgeGraphDeploymentArgs = {
-  input: SetKnowledgeGraphDeploymentInput;
 };
 
 
@@ -5273,11 +5152,6 @@ export type MutationUpdateAgentProfileArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
-};
-
-
-export type MutationUpdateCompanyBrainMigrationArgs = {
-  input: UpdateCompanyBrainMigrationInput;
 };
 
 
@@ -6427,7 +6301,6 @@ export type Query = {
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   capabilityInspector: CapabilityInspection;
-  companyBrainStatus: CompanyBrainStatus;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
    * event_id see null (existence-oracle defense — SQL filter applies in the
@@ -6512,7 +6385,6 @@ export type Query = {
   knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
   knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
   knowledgeGraphGraph: KnowledgeGraphGraph;
-  knowledgeGraphHealthCheck: KnowledgeGraphHealthCheck;
   knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
   knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
   knowledgeGraphSearch: KnowledgeGraphSearchResult;
@@ -8060,15 +7932,6 @@ export type ReorderQuickActionsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type RequestCompanyBrainProductionMigrationInput = {
-  allowEmptySourceSet?: InputMaybe<Scalars['Boolean']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  emptySourceReason?: InputMaybe<Scalars['String']['input']>;
-  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  vectorDimension?: InputMaybe<Scalars['Int']['input']>;
-};
-
 export type RequestRevisionInput = {
   reviewNotes: Scalars['String']['input'];
 };
@@ -8592,11 +8455,6 @@ export type SendMessageMentionInput = {
   startOffset?: InputMaybe<Scalars['Int']['input']>;
   targetId: Scalars['ID']['input'];
   targetType: MessageMentionTargetType;
-};
-
-export type SetKnowledgeGraphDeploymentInput = {
-  enabled: Scalars['Boolean']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type SetManagedApplicationDeploymentInput = {
@@ -10066,17 +9924,6 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
-};
-
-export type UpdateCompanyBrainMigrationInput = {
-  errorMessage?: InputMaybe<Scalars['String']['input']>;
-  migrationId: Scalars['ID']['input'];
-  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
-  phase: Scalars['String']['input'];
-  rollbackWindowClosesAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  validationSummary?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateEmailReadinessCheckInput = {

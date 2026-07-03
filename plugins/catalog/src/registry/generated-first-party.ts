@@ -3,7 +3,6 @@
 //   pnpm --filter @thinkwork/plugin-catalog generate:plugins
 
 import { defineFirstPartyPluginPackage } from "../plugin-package";
-import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
 import { companyDataPluginPackage as rawCompanyDataPluginPackage } from "@thinkwork/plugin-company-data";
 import { companyEtlPluginPackage as rawCompanyEtlPluginPackage } from "@thinkwork/plugin-company-etl";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
@@ -13,9 +12,6 @@ import { sendgridPluginPackage as rawSendgridPluginPackage } from "@thinkwork/pl
 import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
 import { workosAuthPluginPackage as rawWorkosAuthPluginPackage } from "@thinkwork/plugin-workos-auth";
 
-export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
-  rawCompanyBrainPluginPackage,
-);
 export const companyDataPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyDataPluginPackage,
 );
@@ -41,7 +37,6 @@ export const workosAuthPluginPackage = defineFirstPartyPluginPackage(
   rawWorkosAuthPluginPackage,
 );
 
-export const companyBrainManifest = companyBrainPluginPackage.manifest;
 export const companyDataManifest = companyDataPluginPackage.manifest;
 export const companyEtlManifest = companyEtlPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
@@ -52,7 +47,6 @@ export const twentyManifest = twentyPluginPackage.manifest;
 export const workosAuthManifest = workosAuthPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
-  companyBrainPluginPackage,
   companyDataPluginPackage,
   companyEtlPluginPackage,
   emailChannelPluginPackage,

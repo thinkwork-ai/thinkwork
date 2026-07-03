@@ -427,16 +427,6 @@ export const SettingsRemediateReleaseRunnerMutation = graphql(`
   }
 `);
 
-export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
-  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
-    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {
-      desiredEnabled
-      workflowUrl
-      message
-    }
-  }
-`);
-
 export const SettingsSetManagedApplicationDeploymentMutation = graphql(`
   mutation SettingsSetManagedApplicationDeployment(
     $key: String!
@@ -639,19 +629,6 @@ export const SettingsRejectManagedApplicationDeploymentMutation = graphql(`
         payload
         createdAt
       }
-    }
-  }
-`);
-
-export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
-  query SettingsKnowledgeGraphHealthCheck {
-    knowledgeGraphHealthCheck {
-      healthy
-      statusCode
-      latencyMs
-      endpoint
-      checkedAt
-      message
     }
   }
 `);

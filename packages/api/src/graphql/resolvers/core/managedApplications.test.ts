@@ -40,10 +40,7 @@ function managedAppDeps(args: {
 
 describe("managed application status helpers", () => {
   it("normalizes known managed application aliases", () => {
-    expect(mod.normalizeManagedApplicationKey("cognee")).toBe("cognee");
-    expect(mod.normalizeManagedApplicationKey("knowledge-graph")).toBe(
-      "cognee",
-    );
+    expect(mod.normalizeManagedApplicationKey("knowledge-graph")).toBeNull();
     expect(mod.normalizeManagedApplicationKey("crm")).toBe("twenty");
     expect(mod.normalizeManagedApplicationKey("twenty-crm")).toBe("twenty");
     expect(mod.normalizeManagedApplicationKey("project-management")).toBeNull();
@@ -335,58 +332,6 @@ describe("Twenty status served from DB state (plan 2026-06-12-001 U10)", () => {
         "/thinkwork/dev/twenty/server",
         "/thinkwork/dev/twenty/worker",
       ],
-    });
-  });
-});
-
-describe("Cognee status stays on the env-var path (unchanged by U10)", () => {
-  it("reads the compact COGNEE env projection", async () => {
-    vi.stubEnv("COGNEE", "graphiti|https://cognee.internal.example.com");
-    vi.stubEnv("STAGE", "dev");
-    vi.stubEnv("AWS_REGION", "us-east-1");
-    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
-    mod = await import("./managedApplications.js");
-
-    const cognee = mod.readCogneeStatus();
-    expect(cognee).toEqual({
-      enabled: true,
-      endpoint: "https://cognee.internal.example.com",
-      backendMode: "graphiti",
-    });
-
-    const app = await mod.readManagedApplication("cognee", "tenant-1");
-    expect(app).toMatchObject({
-      key: "cognee",
-      status: "running",
-      enabled: true,
-      endpoint: "https://cognee.internal.example.com",
-      backendMode: "graphiti",
-      clusterArn:
-        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-brain-cluster",
-    });
-  });
-
-  it("uses COGNEE_CLUSTER_ARN exactly when present", async () => {
-    vi.stubEnv("COGNEE", "dogfood|https://cognee.internal.example.com");
-    vi.stubEnv(
-      "COGNEE_CLUSTER_ARN",
-      "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
-    );
-    mod = await import("./managedApplications.js");
-
-    const app = await mod.readManagedApplication("cognee", "tenant-1");
-    expect(app.clusterArn).toBe(
-      "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
-    );
-  });
-
-  it("reports Cognee disabled when no env projection exists", async () => {
-    const app = await mod.readManagedApplication("cognee", "tenant-1");
-    expect(app).toMatchObject({
-      key: "cognee",
-      status: "disabled",
-      enabled: false,
-      message: "Cognee is not provisioned for this stage.",
     });
   });
 });

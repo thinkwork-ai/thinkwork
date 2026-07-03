@@ -17,8 +17,8 @@ import {
 import type { EmitAuditEventInput } from "../compliance/emit.js";
 
 const PLUGIN: PremiumEntitlementCatalogEntry = {
-  pluginKey: "company-brain",
-  entitlementProductKey: "company-brain-premium",
+  pluginKey: "n8n",
+  entitlementProductKey: "n8n",
 };
 const ACTOR: PremiumEntitlementActor = {
   actorId: "user-operator",
@@ -448,7 +448,8 @@ function createMemoryPremiumStore(): MemoryPremiumStore {
     async revokeInstallKeyWithAudit(input) {
       const row = keys.find(
         (candidate) =>
-          candidate.id === input.keyId && candidate.tenant_id === input.tenantId,
+          candidate.id === input.keyId &&
+          candidate.tenant_id === input.tenantId,
       );
       if (!row) return null;
       row.status = "revoked";

@@ -13,7 +13,6 @@ import {
 describe("first-party plugin packages", () => {
   it("registers n8n from its root plugin package boundary", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
-      "company-brain",
       "company-data",
       "company-etl",
       "email-channel",
@@ -51,7 +50,6 @@ describe("first-party plugin packages", () => {
       "n8n",
       "email-channel",
       "sendgrid",
-      "company-brain",
       "company-data",
       "company-etl",
       "twenty",

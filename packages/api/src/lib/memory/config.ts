@@ -4,8 +4,7 @@
  * Resolves the active long-term memory engine and its feature flags from
  * process env. Exactly one engine is selected per deployment via
  * `MEMORY_ENGINE`; the selected engine's required env vars
- * (`HINDSIGHT_ENDPOINT`, `AGENTCORE_MEMORY_ID`, `COGNEE_ENDPOINT`, or the
- * compact `COGNEE` status document for Cognee) must be present or
+ * (`HINDSIGHT_ENDPOINT` or `AGENTCORE_MEMORY_ID`) must be present or
  * {@link loadMemoryConfig} throws.
  *
  * `sessionSource` is fixed to `"thread_db"` in v1: Aurora thread messages
@@ -40,7 +39,6 @@ export type MemoryConfig = {
   backends: {
     hindsightEndpoint: string | null;
     agentcoreMemoryId: string | null;
-    cogneeEndpoint: string | null;
     awsRegion: string;
   };
 };
@@ -57,11 +55,11 @@ export class MemoryConfigError extends Error {
 
 function parseEngine(raw: string | undefined): MemoryEngineType {
   const value = (raw || "hindsight").toLowerCase();
-  if (value === "hindsight" || value === "agentcore" || value === "cognee") {
+  if (value === "hindsight" || value === "agentcore") {
     return value;
   }
   throw new MemoryConfigError(
-    `MEMORY_ENGINE must be "hindsight", "agentcore", or "cognee", got "${raw}"`,
+    `MEMORY_ENGINE must be "hindsight" or "agentcore", got "${raw}"`,
   );
 }
 
@@ -79,31 +77,6 @@ function parseInt10(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export function resolveCogneeEndpoint(
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const explicit =
-    (env.COGNEE_ENDPOINT ?? getConfig("COGNEE_ENDPOINT"))?.trim() || null;
-  if (explicit) return explicit;
-
-  const raw = env.COGNEE ?? getConfig("COGNEE") ?? env.COGNEE_STATUS;
-  if (!raw) return null;
-
-  const separatorIndex = raw.indexOf("|");
-  if (separatorIndex >= 0) {
-    return raw.slice(separatorIndex + 1).trim() || null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { endpoint?: unknown };
-    return typeof parsed.endpoint === "string" && parsed.endpoint.trim()
-      ? parsed.endpoint.trim()
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export function loadMemoryConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): MemoryConfig {
@@ -117,7 +90,6 @@ export function loadMemoryConfig(
   const agentcoreMemoryId =
     (env.AGENTCORE_MEMORY_ID ?? getConfig("AGENTCORE_MEMORY_ID"))?.trim() ||
     null;
-  const cogneeEndpoint = resolveCogneeEndpoint(env);
   const awsRegion = env.AWS_REGION || "us-east-1";
 
   if (enabled) {
@@ -129,11 +101,6 @@ export function loadMemoryConfig(
     if (engine === "agentcore" && !agentcoreMemoryId) {
       throw new MemoryConfigError(
         'MEMORY_ENGINE="agentcore" requires AGENTCORE_MEMORY_ID to be set',
-      );
-    }
-    if (engine === "cognee" && !cogneeEndpoint) {
-      throw new MemoryConfigError(
-        'MEMORY_ENGINE="cognee" requires COGNEE_ENDPOINT to be set',
       );
     }
   }
@@ -151,18 +118,17 @@ export function loadMemoryConfig(
     retain: {
       autoRetainTurns: parseBool(
         env.MEMORY_AUTO_RETAIN_TURNS,
-        engine === "agentcore" || engine === "cognee",
+        engine === "agentcore",
       ),
       explicitRememberEnabled: parseBool(env.MEMORY_EXPLICIT_REMEMBER, true),
     },
     inspect: {
-      graphEnabled: engine === "hindsight" || engine === "cognee",
+      graphEnabled: engine === "hindsight",
       exportEnabled: parseBool(env.MEMORY_EXPORT_ENABLED, true),
     },
     backends: {
       hindsightEndpoint,
       agentcoreMemoryId,
-      cogneeEndpoint,
       awsRegion,
     },
   };

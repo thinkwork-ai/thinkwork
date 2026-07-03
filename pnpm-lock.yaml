@@ -851,9 +851,6 @@ importers:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../../plugins/catalog
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../../plugins/company-brain
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../../plugins/lastmile
@@ -1718,9 +1715,6 @@ importers:
 
   plugins/catalog:
     dependencies:
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../company-brain
       '@thinkwork/plugin-company-data':
         specifier: workspace:*
         version: link:../company-data

@@ -19,6 +19,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "thinkworkPlugin": {
+    "catalogPublication": "deferred"
+  },
   "dependencies": {
     "@thinkwork/database-pg": "workspace:*",
     "drizzle-orm": "^0.39.0",

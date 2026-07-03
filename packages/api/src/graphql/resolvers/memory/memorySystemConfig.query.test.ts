@@ -15,21 +15,19 @@ afterEach(() => {
 });
 
 describe("memorySystemConfig", () => {
-  it("reports Cognee as active user and space memory without enabling Hindsight", async () => {
+  it("reports unavailable when the memory engine is retired", async () => {
     vi.stubEnv("MEMORY_ENABLED", "true");
     vi.stubEnv("MEMORY_ENGINE", "cognee");
-    vi.stubEnv("COGNEE_ENDPOINT", "https://cognee.internal.example.com");
     vi.stubEnv("HINDSIGHT_ENDPOINT", "https://hindsight.legacy.example.com");
     resetMemory();
 
     await expect(memorySystemConfig()).resolves.toMatchObject({
-      activeEngine: "cognee",
-      managedMemoryEnabled: true,
+      activeEngine: "unavailable",
+      managedMemoryEnabled: false,
       hindsightEnabled: false,
-      cogneeMemoryEnabled: true,
-      userMemoryEnabled: true,
-      spaceMemoryEnabled: true,
-      legacyHindsightAvailable: true,
+      userMemoryEnabled: false,
+      spaceMemoryEnabled: false,
+      legacyHindsightAvailable: false,
       companyDistillationEnabled: false,
       wikiProjectionEnabled: false,
     });
@@ -44,7 +42,6 @@ describe("memorySystemConfig", () => {
     await expect(memorySystemConfig()).resolves.toMatchObject({
       activeEngine: "hindsight",
       hindsightEnabled: true,
-      cogneeMemoryEnabled: false,
       userMemoryEnabled: true,
       spaceMemoryEnabled: true,
       legacyHindsightAvailable: false,
@@ -60,7 +57,6 @@ describe("memorySystemConfig", () => {
     await expect(memorySystemConfig()).resolves.toMatchObject({
       activeEngine: "agentcore",
       hindsightEnabled: false,
-      cogneeMemoryEnabled: false,
       userMemoryEnabled: true,
       spaceMemoryEnabled: false,
       legacyHindsightAvailable: false,

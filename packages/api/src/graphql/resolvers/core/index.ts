@@ -8,7 +8,6 @@ import { updateTenant } from "./updateTenant.mutation.js";
 import { renameTenantSlug } from "./renameTenantSlug.mutation.js";
 import { updateTenantPolicy } from "./updateTenantPolicy.mutation.js";
 import { updateTenantSettings } from "./updateTenantSettings.mutation.js";
-import { setKnowledgeGraphDeployment } from "./setKnowledgeGraphDeployment.mutation.js";
 import { setManagedApplicationDeployment } from "./setManagedApplicationDeployment.mutation.js";
 import { installManagedApplicationMcpServer } from "./installManagedApplicationMcpServer.mutation.js";
 import { addTenantMember } from "./addTenantMember.mutation.js";
@@ -24,7 +23,6 @@ import { registerPushToken } from "./registerPushToken.mutation.js";
 import { unregisterPushToken } from "./unregisterPushToken.mutation.js";
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
 import { deploymentStatus } from "./deploymentStatus.query.js";
-import { knowledgeGraphHealthCheck } from "./knowledgeGraphHealthCheck.query.js";
 import { managedApplicationHealthCheck } from "./managedApplicationHealthCheck.query.js";
 import { adminRoleCheck } from "./adminRoleCheck.query.js";
 
@@ -35,7 +33,6 @@ export const coreQueries = {
   user,
   tenantMembers,
   deploymentStatus,
-  knowledgeGraphHealthCheck,
   managedApplicationHealthCheck,
   adminRoleCheck,
 };
@@ -46,7 +43,6 @@ export const coreMutations = {
   renameTenantSlug,
   updateTenantPolicy,
   updateTenantSettings,
-  setKnowledgeGraphDeployment,
   setManagedApplicationDeployment,
   installManagedApplicationMcpServer,
   addTenantMember,

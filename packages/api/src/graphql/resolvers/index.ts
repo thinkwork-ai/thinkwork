@@ -64,7 +64,6 @@ import {
   evalReplayAllowlistMutations,
 } from "./evaluations/replay-allowlist.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
-import { brainMutations, brainQueries } from "./brain/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
   skillCatalogMutations,
@@ -171,7 +170,6 @@ export const queryResolvers: Record<string, any> = {
   ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
-  ...brainQueries,
   ...skillRunsQueries,
   ...skillCatalogQueries,
   ...skillCreatorQueries,
@@ -225,7 +223,6 @@ export const mutationResolvers: Record<string, any> = {
   ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
   ...wikiMutations,
-  ...brainMutations,
   ...skillRunsMutations,
   ...skillCatalogMutations,
   ...skillCreatorMutations,

@@ -117,7 +117,7 @@ describe("managedApplicationHealthCheck", () => {
       statusCode: 503,
       latencyMs: 0,
       endpoint: "https://crm.example.com",
-      message: "Twenty CRM runtime is parked; CRM data is retained.",
+      message: "Twenty CRM runtime is parked; data is retained.",
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });

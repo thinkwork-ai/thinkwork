@@ -1,9 +1,7 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
-import { CogneeAdapter } from "../memory/adapters/cognee-adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
 import { buildRequesterThreadDigestRetainOptions } from "../memory/hindsight-retain-params.js";
-import { resolveCogneeEndpoint } from "../memory/config.js";
 import {
   maybeEnqueuePostTurnCompile,
   type PostTurnCompileResult,
@@ -129,11 +127,6 @@ function createDefaultMemoryDocumentAdapter(): Pick<
   if (engine === "hindsight") {
     const endpoint = getConfig("HINDSIGHT_ENDPOINT") || "";
     defaultAdapter = endpoint ? new HindsightAdapter({ endpoint }) : null;
-    return defaultAdapter;
-  }
-  if (engine === "cognee") {
-    const endpoint = resolveCogneeEndpoint() || "";
-    defaultAdapter = endpoint ? new CogneeAdapter({ endpoint }) : null;
     return defaultAdapter;
   }
   defaultAdapter = null;
