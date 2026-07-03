@@ -27,6 +27,7 @@ import {
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
 import { normalizeSkillCreatorCommandContent } from "@/lib/skill-creator-command";
+import { describeSendMessageError } from "@/lib/send-message-error";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
@@ -325,14 +326,14 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     pinnedSkills: string[] = [],
     requestedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
-  ) {
+  ): Promise<boolean> {
     const rawTrimmed =
       goalMode?.action === "start" && goalMode.objective
         ? goalMode.objective.trim()
         : prompt.trim();
     const skillCreatorCommand = normalizeSkillCreatorCommandContent(rawTrimmed);
     const trimmed = skillCreatorCommand.content;
-    if (!trimmed && files.length === 0) return;
+    if (!trimmed && files.length === 0) return false;
     const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
     if (!tenantId || (!computerId && !targetSpaceId)) {
       setError(
@@ -340,7 +341,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           ? "You need access to a workspace before starting work."
           : "Your selected workspace is not ready yet. Try again in a moment.",
       );
-      return;
+      return false;
     }
 
     setError(null);
@@ -369,12 +370,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       });
       if (created.error) {
         setError(created.error.message ?? "Failed to start work");
-        return;
+        return false;
       }
       const threadId = created.data?.createThread?.id;
       if (!threadId) {
         setError("Thread created but no id returned");
-        return;
+        return false;
       }
       let attachmentRefs: { attachmentId: string }[] = [];
       if (files.length > 0) {
@@ -382,7 +383,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         const token = await getIdToken();
         if (!apiUrl || !token) {
           surfaceError("Sign-in required to upload attachments");
-          return;
+          return false;
         }
         const uploadResult = await uploadThreadAttachments({
           endpoints: { apiUrl, token },
@@ -395,7 +396,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         ) {
           const first = uploadResult.failures[0]!;
           surfaceError(`Upload failed (${first.stage}): ${first.message}`);
-          return;
+          return false;
         }
         if (uploadResult.failures.length > 0) {
           toast.warning(
@@ -442,11 +443,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       });
       if (sent.error) {
         surfaceError(
-          attachmentRefs.length > 0
-            ? "Files uploaded, but the first message did not send. Try sending the message again."
-            : (sent.error.message ?? "Failed to send the first message"),
+          describeSendMessageError(sent.error, {
+            filesUploaded: attachmentRefs.length > 0,
+            firstMessage: true,
+          }),
         );
-        return;
+        return false;
       }
       if (trimmed) {
         setPendingThreadStart({
@@ -483,6 +485,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     } finally {
       setBusy(false);
     }
+    return routed;
   }
 
   return (

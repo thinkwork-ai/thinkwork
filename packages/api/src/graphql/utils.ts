@@ -6,6 +6,7 @@
  */
 
 import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
+import { GraphQLError } from "graphql";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import {
   eq,
@@ -748,7 +749,14 @@ export const VALID_TRANSITIONS: Record<string, string[]> = {
 export function assertTransition(from: string, to: string): void {
   const allowed = VALID_TRANSITIONS[from];
   if (!allowed || !allowed.includes(to)) {
-    throw new Error(`Invalid status transition: ${from} → ${to}`);
+    throw new GraphQLError(
+      `Invalid status transition: ${from} → ${to}${
+        allowed?.length
+          ? `. Allowed from ${from}: ${allowed.join(", ")}`
+          : ""
+      }`,
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
   }
 }
 
