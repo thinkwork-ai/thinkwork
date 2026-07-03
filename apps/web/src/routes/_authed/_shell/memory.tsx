@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_authed/_shell/memory")({
 
 export const MEMORY_TABS = [
   { to: "/memory/memories", label: "Memories" },
-  { to: "/memory/pages", label: "Pages" },
+  { to: "/memory/pages", label: "Wiki" },
   { to: "/memory/kbs", label: "Sources" },
 ] as const;
 
