@@ -246,11 +246,3 @@ export interface TaskQueueData {
   groups?: TaskQueueGroup[];
   items?: TaskQueueItem[];
 }
-
-export type GenUIData = unknown;
-
-export interface GenUIPart {
-  type: "data-genui";
-  id: string;
-  data: GenUIData;
-}

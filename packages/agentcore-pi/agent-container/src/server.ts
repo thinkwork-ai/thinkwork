@@ -46,7 +46,6 @@ import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
-  createAnalyticsDisplayExtension,
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createDelegationExtension,
@@ -1356,8 +1355,6 @@ export async function buildInvocationResources(
   if (args.payload.thread_json_render_ui_enabled === true) {
     tools.push(buildEmitJsonRenderUiTool());
   }
-
-  addExtension(createAnalyticsDisplayExtension());
 
   if (hasPiGoalMode(args.payload)) {
     extensionFactories.push(

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "pnpm --filter @thinkwork/analytics-display build && pnpm --filter @thinkwork/deployment-profile build && pnpm --filter @thinkwork/thread-json-render build",
+    "prebuild": "pnpm --filter @thinkwork/deployment-profile build && pnpm --filter @thinkwork/thread-json-render build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
     "build:json-render-smoke": "vite build --config vite.json-render-smoke.config.ts",
@@ -45,7 +45,6 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
-    "@thinkwork/analytics-display": "workspace:*",
     "@thinkwork/computer-stdlib": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-profile": "workspace:*",

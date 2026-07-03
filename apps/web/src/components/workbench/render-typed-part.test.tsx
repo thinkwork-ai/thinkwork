@@ -206,7 +206,10 @@ describe("renderTypedPart", () => {
     expect(screen.getByText("unknown.panel")).toBeTruthy();
   });
 
-  it("renders legacy data-genui parts as unsupported generated UI", () => {
+  it("degrades retired data-genui parts to an unsupported generated view without dumping raw JSON", () => {
+    // THINK-116 U11: the legacy analytics pipeline is gone. Persisted
+    // `data-genui` parts in old threads must degrade gracefully — a minimal
+    // "unsupported generated view" strip, never a crash or a raw payload dump.
     const part: AccumulatedPart = {
       type: "data-genui",
       id: "genui:bad",
@@ -223,18 +226,17 @@ describe("renderTypedPart", () => {
             },
           },
         },
-        mobileFallback: {
-          title: "Unsupported generated UI",
-          summary: "This panel is not in the catalog.",
-        },
       },
     };
 
-    render(<>{renderTypedPart(part, rk())}</>);
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
 
-    expect(screen.getByTestId("json-render-legacy-fallback")).toBeTruthy();
-    expect(screen.getByText("Legacy generated UI unsupported")).toBeTruthy();
-    expect(screen.getByText("unknown.panel")).toBeTruthy();
+    expect(screen.getByTestId("unsupported-generated-view")).toBeTruthy();
+    expect(screen.getByText("Unsupported generated view")).toBeTruthy();
+    expect(screen.getByText("data-genui")).toBeTruthy();
+    // The retired payload internals must never be rendered raw.
+    expect(container.textContent).not.toContain("thread-genui/v1");
+    expect(container.textContent).not.toContain("unknown.panel");
   });
 
   it("renders goal-run data parts with compact status evidence", () => {
