@@ -3124,6 +3124,23 @@ export async function handleInvocation(
             traceId: identity.traceId,
             partId: safetyNetPart.id,
           });
+        } else if (
+          conversion.diagnostics &&
+          conversion.diagnostics.length > 0
+        ) {
+          // Structured content WAS detected but the converted spec failed the
+          // strict validator, so it silently stayed as prose. This is the
+          // exact "silent fallback" case R6 makes observable. Log the
+          // diagnostic CODES only — never the assistant content.
+          logStructured({
+            level: "warn",
+            event: "json_render_safety_net_rejected",
+            tenantId: identity.tenantId,
+            threadId: identity.threadId,
+            threadTurnId,
+            traceId: identity.traceId,
+            diagnosticCodes: conversion.diagnostics.map((d) => d.code),
+          });
         }
       } catch (safetyNetErr) {
         // Best-effort: any failure leaves the prose untouched and the turn
