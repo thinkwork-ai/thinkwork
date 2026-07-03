@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createChartJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
   createResultListJsonRenderFixture,
   createTableJsonRenderFixture,
@@ -113,6 +114,17 @@ describe("ThreadJsonRenderRenderer", () => {
     expect(screen.getByText("Open work items")).toBeTruthy();
     expect(screen.getByText("Kickoff onboarding")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Owner/ })).toBeTruthy();
+  });
+
+  it("renders a chart component through the json-render registry", () => {
+    const fixture = createChartJsonRenderFixture("bar");
+
+    render(
+      <ThreadJsonRenderRenderer data={fixture.data} partId={fixture.id} />,
+    );
+
+    expect(screen.getByTestId("json-render-chart")).toBeTruthy();
+    expect(screen.getByText("Weekly throughput")).toBeTruthy();
   });
 
   it("keeps result.list item actions disabled while rendering live/read-only output", () => {
