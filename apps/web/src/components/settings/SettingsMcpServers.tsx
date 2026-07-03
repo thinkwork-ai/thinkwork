@@ -78,7 +78,8 @@ export function SettingsMcpServers() {
         setServers(
           tenantResult.servers.map((server) => ({
             ...server,
-            authStatus: userById.get(server.id)?.authStatus ?? server.authStatus,
+            authStatus:
+              userById.get(server.id)?.authStatus ?? server.authStatus,
           })),
         );
       })
@@ -147,8 +148,7 @@ export function SettingsMcpServers() {
         cell: ({ row }) => {
           const server = row.original;
           const requiresUserAuth =
-            server.authType === "oauth" ||
-            server.authType === "per_user_oauth";
+            server.authType === "oauth" || server.authType === "per_user_oauth";
           const authStatus =
             server.authStatus ??
             (requiresUserAuth ? "not_connected" : undefined);
@@ -208,7 +208,7 @@ export function SettingsMcpServers() {
     <>
       <SettingsTablePane
         title="MCP Servers"
-        description="Connect MCP tool servers and manage the tools they expose to agents."
+        description="The tenant MCP server registry — register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
         loading={!servers && !error}
         actions={
           <button

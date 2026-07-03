@@ -1920,11 +1920,6 @@ export type DetachCapabilityInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type DisableSkillInput = {
-  agentId: Scalars["ID"]["input"];
-  skillId: Scalars["String"]["input"];
-};
-
 export type DisableWorkflowInput = {
   agentId: Scalars["ID"]["input"];
   slug: Scalars["String"]["input"];
@@ -3767,7 +3762,6 @@ export type Mutation = {
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
   detachCapability: CapabilityMutationResult;
-  disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
   disconnectN8nWorkflow: DisconnectN8nWorkflowResult;
@@ -4424,10 +4418,6 @@ export type MutationDeleteWorkflowArgs = {
 
 export type MutationDetachCapabilityArgs = {
   input: DetachCapabilityInput;
-};
-
-export type MutationDisableSkillArgs = {
-  input: DisableSkillInput;
 };
 
 export type MutationDisableWorkflowArgs = {
@@ -14390,6 +14380,35 @@ export type SettingsPiExtensionsQuery = {
       };
     }
   >;
+};
+
+export type SettingsComposerPiExtensionsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsComposerPiExtensionsQuery = {
+  __typename?: "Query";
+  piExtensions: Array<{
+    __typename?: "PiExtension";
+    id: string;
+    sourceId: string;
+    displayName?: string | null;
+    repositoryName?: string | null;
+    repositoryOwner?: string | null;
+    sourceRef: string;
+    status: PiExtensionVersionStatus;
+    permissionClasses: Array<string>;
+    createdAt: any;
+    updatedAt: any;
+    assignments: Array<{
+      __typename?: "PiExtensionAssignment";
+      id: string;
+      versionId: string;
+      targetType: PiExtensionAssignmentTargetType;
+      agentProfileId?: string | null;
+      enabled: boolean;
+    }>;
+  }>;
 };
 
 export type SettingsImportPiExtensionFromGitHubMutationVariables = Exact<{
@@ -28261,6 +28280,101 @@ export const SettingsPiExtensionsDocument = {
 } as unknown as DocumentNode<
   SettingsPiExtensionsQuery,
   SettingsPiExtensionsQueryVariables
+>;
+export const SettingsComposerPiExtensionsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsComposerPiExtensions" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "piExtensions" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "sourceId" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "repositoryName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "repositoryOwner" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "sourceRef" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "permissionClasses" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "assignments" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "versionId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentProfileId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "enabled" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsComposerPiExtensionsQuery,
+  SettingsComposerPiExtensionsQueryVariables
 >;
 export const SettingsImportPiExtensionFromGitHubDocument = {
   kind: "Document",

@@ -444,7 +444,7 @@ export function SettingsMcpServerDetail() {
             description={
               managed
                 ? "Managed application lifecycle controls whether this connector is available."
-                : "Make this server's tools available to the agent."
+                : "Enable this server in the tenant registry. Assign it to the agent in the Composer."
             }
           >
             <Switch

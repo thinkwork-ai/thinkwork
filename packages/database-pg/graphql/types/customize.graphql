@@ -65,11 +65,6 @@ type WorkflowBinding {
   updatedAt: AWSDateTime!
 }
 
-input DisableSkillInput {
-  agentId: ID!
-  skillId: String!
-}
-
 input EnableWorkflowTemplateInput {
   agentId: ID!
   slug: String!
@@ -97,7 +92,6 @@ extend type Query {
 }
 
 extend type Mutation {
-  disableSkill(input: DisableSkillInput!): Boolean!
   enableWorkflowTemplate(
     input: EnableWorkflowTemplateInput!
   ): WorkflowTemplateBinding!

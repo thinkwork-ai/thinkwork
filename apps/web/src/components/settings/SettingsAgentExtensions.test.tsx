@@ -55,10 +55,16 @@ describe("SettingsAgentExtensions", () => {
     expect(source).not.toContain("manifestPath:");
   });
 
-  it("routes assignment writes through the unified capability mutations (plan U8)", () => {
-    expect(source).toContain("SettingsGrantCapabilityMutation");
-    expect(source).toContain("SettingsDetachCapabilityMutation");
-    expect(source).toContain("CapabilityGrantClass.PiExtension");
-    expect(source).not.toContain("SettingsUpdatePiExtensionAssignmentMutation");
+  it("is a registry surface only — no assignment writes (plan U8, R3/R11)", () => {
+    // Registry demotion: extension ASSIGNMENT moved to the Composer, which owns
+    // the unified grant/detach write path. This surface imports + reviews only.
+    expect(source).not.toContain("SettingsGrantCapabilityMutation");
+    expect(source).not.toContain("SettingsDetachCapabilityMutation");
+    expect(source).not.toContain("grantCapability");
+    expect(source).not.toContain("detachCapability");
+    expect(source).not.toContain("CapabilityGrantClass");
+    // But it still shows a read-only view of where a version is assigned.
+    expect(source).toContain("Assigned in the Composer");
+    expect(source).toContain("ReadOnlyAssignments");
   });
 });

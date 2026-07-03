@@ -73,6 +73,11 @@ import {
   DialogTitle,
   DialogTrigger,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -85,10 +90,16 @@ import {
   cn,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { CapabilityGrantClass, CapabilityGrantScope } from "@/gql/graphql";
+import {
+  CapabilityGrantClass,
+  CapabilityGrantScope,
+  PiExtensionAssignmentTargetType,
+  PiExtensionVersionStatus,
+} from "@/gql/graphql";
 import {
   SettingsAgentProfilesQuery,
   SettingsCapabilityInspectorQuery,
+  SettingsComposerPiExtensionsQuery,
   SettingsDetachCapabilityMutation,
   SettingsGrantCapabilityMutation,
   SettingsSpacesListQuery,
@@ -164,6 +175,47 @@ type Confirmation = {
   item: InspectorItem | null;
   syncPending: boolean;
 };
+
+type ExtensionAssignment = {
+  id: string;
+  versionId: string;
+  targetType: PiExtensionAssignmentTargetType;
+  agentProfileId?: string | null;
+  enabled: boolean;
+};
+
+type ExtensionRow = {
+  id: string;
+  sourceId: string;
+  displayName?: string | null;
+  repositoryName?: string | null;
+  repositoryOwner?: string | null;
+  sourceRef: string;
+  status: PiExtensionVersionStatus;
+  permissionClasses: readonly string[];
+  createdAt: string;
+  updatedAt: string;
+  assignments: readonly ExtensionAssignment[];
+};
+
+type ExtensionGroup = {
+  sourceId: string;
+  name: string;
+  versions: ExtensionRow[];
+};
+
+function extensionGroupName(version: ExtensionRow): string {
+  return (
+    version.displayName?.trim() ||
+    version.repositoryName?.trim() ||
+    version.sourceId
+  );
+}
+
+/** Short label for a specific extension version in the picker. */
+function extensionVersionLabel(version: ExtensionRow): string {
+  return `${version.sourceRef} · ${version.id.slice(0, 8)}`;
+}
 
 function rowKeyOf(
   item: Pick<InspectorItem, "capabilityClass" | "capabilityId">,
@@ -265,6 +317,11 @@ export function SettingsCapabilities() {
   // Tree context-menu targets (v1.1 item 4).
   const [addSkillOpen, setAddSkillOpen] = useState(false);
   const [addMcpOpen, setAddMcpOpen] = useState(false);
+  const [addExtensionOpen, setAddExtensionOpen] = useState(false);
+  // Per-extension-group version choice for the Add dialog (sourceId → versionId).
+  const [extensionVersionChoice, setExtensionVersionChoice] = useState<
+    Record<string, string>
+  >({});
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
   const [removingSkillSlug, setRemovingSkillSlug] = useState<string | null>(
     null,
@@ -283,6 +340,15 @@ export function SettingsCapabilities() {
   });
   const [membersResult] = useQuery({
     query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  // Pi-extension registry read (plan U8): version identity + current
+  // assignments for the pi_extension controls that folded in from the retired
+  // Agents → Extensions assignment surface. Version identity lives here, not in
+  // the inspector rows (KTD-5) — no schema change.
+  const [extensionsResult, refetchExtensions] = useQuery({
+    query: SettingsComposerPiExtensionsQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
@@ -486,6 +552,77 @@ export function SettingsCapabilities() {
     [items],
   );
 
+  // ── Pi-extension controls (plan U8) ──────────────────────────────────────
+  const extensionRows = useMemo<ExtensionRow[]>(
+    () => (extensionsResult.data?.piExtensions ?? []) as ExtensionRow[],
+    [extensionsResult.data?.piExtensions],
+  );
+
+  // Inspector pi_extension rows are keyed by assignmentId; the registry data
+  // maps that back to the version identity the grant/detach mutations need.
+  const versionIdByAssignmentId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const version of extensionRows) {
+      for (const assignment of version.assignments) {
+        map.set(assignment.id, assignment.versionId);
+      }
+    }
+    return map;
+  }, [extensionRows]);
+
+  // True when an assignment targets the CURRENT Composer scope (agent baseline
+  // vs the selected profile) and is enabled.
+  const assignmentMatchesScope = useMemo(
+    () =>
+      (assignment: ExtensionAssignment): boolean => {
+        if (!assignment.enabled) return false;
+        if (agentProfileId) {
+          return (
+            assignment.targetType ===
+              PiExtensionAssignmentTargetType.AgentProfile &&
+            assignment.agentProfileId === agentProfileId
+          );
+        }
+        return (
+          assignment.targetType === PiExtensionAssignmentTargetType.DefaultAgent
+        );
+      },
+    [agentProfileId],
+  );
+
+  // Approved versions grouped by extension identity (sourceId), latest first.
+  const extensionGroups = useMemo<ExtensionGroup[]>(() => {
+    const groups = new Map<string, ExtensionGroup>();
+    for (const version of extensionRows) {
+      if (version.status !== PiExtensionVersionStatus.Approved) continue;
+      const group = groups.get(version.sourceId) ?? {
+        sourceId: version.sourceId,
+        name: extensionGroupName(version),
+        versions: [],
+      };
+      group.versions.push(version);
+      groups.set(version.sourceId, group);
+    }
+    for (const group of groups.values()) {
+      group.versions.sort(
+        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+      );
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [extensionRows]);
+
+  // Groups with no enabled assignment at the current scope — the Add pool.
+  const attachableExtensionGroups = useMemo(
+    () =>
+      extensionGroups.filter(
+        (group) =>
+          !group.versions.some((version) =>
+            version.assignments.some(assignmentMatchesScope),
+          ),
+      ),
+    [extensionGroups, assignmentMatchesScope],
+  );
+
   // Sync-pending resolution: keep polling until the touched row reads active.
   useEffect(() => {
     if (!confirmation?.syncPending) return;
@@ -574,6 +711,84 @@ export function SettingsCapabilities() {
   }
 
   /**
+   * Pi-extension grant/detach (plan U8). Keyed by VERSION id (from the registry
+   * data), not the inspector's assignmentId — the version picker chooses which
+   * approved version to grant; detach targets the assigned version. Shares the
+   * unified grant/detach write path + scope with skills and MCP servers.
+   */
+  async function runExtensionMutation(input: {
+    action: "attach" | "detach";
+    versionId: string;
+    label: string;
+    grantedPermissions?: readonly string[];
+  }) {
+    if (!tenantId) return;
+    const rowKey = `pi_extension_version:${input.versionId}`;
+    setPendingRow(rowKey);
+    let errorMessage: string | undefined;
+    if (input.action === "attach") {
+      const response = await grantCapability({
+        input: {
+          tenantId,
+          capabilityClass: CapabilityGrantClass.PiExtension,
+          scope: grantScope,
+          agentId: null,
+          agentProfileId,
+          capabilityRef: input.versionId,
+          grantedPermissions: [...(input.grantedPermissions ?? [])],
+        },
+      });
+      errorMessage = response.error?.message;
+    } else {
+      const response = await detachCapability({
+        input: {
+          tenantId,
+          capabilityClass: CapabilityGrantClass.PiExtension,
+          scope: grantScope,
+          agentId: null,
+          agentProfileId,
+          capabilityRef: input.versionId,
+        },
+      });
+      errorMessage = response.error?.message;
+    }
+    setPendingRow(null);
+    if (errorMessage) {
+      toast.error(
+        input.action === "attach"
+          ? "Couldn't assign extension"
+          : "Couldn't detach extension",
+        { description: errorMessage },
+      );
+      return;
+    }
+    toast.success(
+      input.action === "attach"
+        ? `Assigned ${input.label}`
+        : `Detached ${input.label}`,
+    );
+    setPreviewRefreshToken((token) => token + 1);
+    refetchInspection({ requestPolicy: "network-only" });
+    refetchExtensions({ requestPolicy: "network-only" });
+  }
+
+  async function pickExtensionToAdd(group: ExtensionGroup) {
+    const versionId =
+      extensionVersionChoice[group.sourceId] ?? group.versions[0]?.id;
+    const version = group.versions.find(
+      (candidate) => candidate.id === versionId,
+    );
+    if (!version) return;
+    setAddExtensionOpen(false);
+    await runExtensionMutation({
+      action: "attach",
+      versionId: version.id,
+      label: group.name,
+      grantedPermissions: version.permissionClasses,
+    });
+  }
+
+  /**
    * In-page jump-to-cause landing (U2, KTD-5; v1.1 item 2): open the Side
    * Sheet, reset the State/Search filter tokens (keeping the Space/Profile/User
    * SELECTION tokens — they drive the query), switch to the target's class tab,
@@ -646,9 +861,78 @@ export function SettingsCapabilities() {
   }
 
   function rowActions(item: InspectorItem) {
-    if (!writeScope || !GRANT_CLASS[item.capabilityClass]) return null;
+    if (!writeScope) return null;
     const rowKey = rowKeyOf(item);
     const busy = pendingRow !== null;
+
+    // Pi-extension detach (plan U8). Inspector rows are keyed by assignmentId;
+    // the registry data resolves the version identity the mutation needs. When
+    // a granted version has left the registry, the control is disabled/error
+    // (there is no version to target) rather than silently absent.
+    if (item.capabilityClass === "pi_extension") {
+      if (!item.active) return null;
+      const versionId = versionIdByAssignmentId.get(item.capabilityId);
+      if (!versionId) {
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled
+            title="This extension version is no longer in the registry."
+            data-testid={`detach-pi_extension-missing:${item.capabilityId}`}
+          >
+            Detach
+          </Button>
+        );
+      }
+      return (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              data-testid={`detach-pi_extension:${item.capabilityId}`}
+            >
+              {pendingRow === `pi_extension_version:${versionId}`
+                ? "Detaching…"
+                : "Detach"}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Detach {item.displayName || item.capabilityId}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {agentProfileId
+                  ? "Removes this Pi extension from the selected agent profile."
+                  : "Removes this Pi extension from the Agent."}{" "}
+                The post-detach state is shown before you leave.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                onClick={() =>
+                  void runExtensionMutation({
+                    action: "detach",
+                    versionId,
+                    label: item.displayName || item.capabilityId,
+                  })
+                }
+                data-testid={`detach-confirm-pi_extension:${item.capabilityId}`}
+              >
+                Detach
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      );
+    }
+
+    if (!GRANT_CLASS[item.capabilityClass]) return null;
     if (!item.active && item.reason === "not_installed" && !agentProfileId) {
       return (
         <Button
@@ -735,7 +1019,8 @@ export function SettingsCapabilities() {
       (capabilityClass) =>
         present.includes(capabilityClass) ||
         capabilityClass === "skill" ||
-        capabilityClass === "mcp_server",
+        capabilityClass === "mcp_server" ||
+        capabilityClass === "pi_extension",
     );
     for (const capabilityClass of present) {
       if (!ordered.includes(capabilityClass)) ordered.push(capabilityClass);
@@ -1061,10 +1346,33 @@ export function SettingsCapabilities() {
                   </TabsList>
                 </Tabs>
 
+                {/* Pi-extension assignment folded in from the retired Agents →
+                    Extensions surface (plan U8): the version-picker + attach
+                    live in the Add dialog; per-row detach is in rowActions. */}
+                {activeTab === "pi_extension" && writeScope ? (
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {agentProfileId
+                        ? "Assign an approved Pi extension to this agent profile."
+                        : "Assign an approved Pi extension to the Agent."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddExtensionOpen(true)}
+                      data-testid="open-add-extension"
+                    >
+                      Add extension
+                    </Button>
+                  </div>
+                ) : null}
+
                 <SettingsSection>
                   {visibleItems.length === 0 ? (
                     <p className="px-4 py-6 text-sm text-muted-foreground">
-                      Nothing in this category for the current selection.
+                      {activeTab === "pi_extension"
+                        ? "No Pi extensions assigned for this selection."
+                        : "Nothing in this category for the current selection."}
                     </p>
                   ) : (
                     visibleItems.map((item) => (
@@ -1251,6 +1559,98 @@ export function SettingsCapabilities() {
               variant="ghost"
               size="sm"
               onClick={() => setAddMcpOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add-Pi-extension picker (plan U8): approved extensions not yet assigned
+          at the current scope, each with a version picker (default latest) —
+          the version identity comes from the registry data, not the schema. */}
+      <Dialog open={addExtensionOpen} onOpenChange={setAddExtensionOpen}>
+        <DialogContent data-testid="add-extension-dialog">
+          <DialogHeader>
+            <DialogTitle>Add a Pi extension</DialogTitle>
+            <DialogDescription>
+              Approved Pi extensions in this tenant. Pick the version to assign
+              — the latest approved version is selected by default.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            {attachableExtensionGroups.length === 0 ? (
+              <p className="px-1 py-6 text-sm text-muted-foreground">
+                {extensionGroups.length === 0
+                  ? "No approved Pi extensions. Import and approve one in the Skill Library → Extensions registry."
+                  : "Every approved Pi extension is already assigned for this selection."}
+              </p>
+            ) : (
+              attachableExtensionGroups.map((group) => {
+                const selectedVersionId =
+                  extensionVersionChoice[group.sourceId] ??
+                  group.versions[0]?.id ??
+                  "";
+                return (
+                  <div
+                    key={group.sourceId}
+                    className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                    data-testid={`add-extension-row-${group.sourceId}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {group.name}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {group.versions.length}{" "}
+                        {group.versions.length === 1 ? "version" : "versions"}{" "}
+                        approved
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Select
+                        value={selectedVersionId}
+                        onValueChange={(value) =>
+                          setExtensionVersionChoice((current) => ({
+                            ...current,
+                            [group.sourceId]: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-8 w-44"
+                          data-testid={`add-extension-version-${group.sourceId}`}
+                        >
+                          <SelectValue placeholder="Version" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {group.versions.map((version) => (
+                            <SelectItem key={version.id} value={version.id}>
+                              {extensionVersionLabel(version)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={pendingRow !== null}
+                        onClick={() => void pickExtensionToAdd(group)}
+                        data-testid={`add-extension-pick-${group.sourceId}`}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddExtensionOpen(false)}
             >
               Close
             </Button>

@@ -27,21 +27,16 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  Switch,
   Textarea,
   cn,
 } from "@thinkwork/ui";
 import {
-  CapabilityGrantClass,
-  CapabilityGrantScope,
   PiExtensionAssignmentTargetType,
   PiExtensionVersionStatus,
   type SettingsPiExtensionFieldsFragment,
 } from "@/gql/graphql";
 import {
   SettingsApprovePiExtensionVersionMutation,
-  SettingsDetachCapabilityMutation,
-  SettingsGrantCapabilityMutation,
   SettingsImportPiExtensionFromGitHubMutation,
   SettingsRejectPiExtensionVersionMutation,
 } from "@/lib/settings-queries";
@@ -88,18 +83,6 @@ export function SettingsAgentExtensions({
   const [rejectState, rejectExtension] = useMutation(
     SettingsRejectPiExtensionVersionMutation,
   );
-  // Assignment writes go through the unified capability mutations (plan U8,
-  // KTD-5) so this surface shares the matrix-conformant, audited write path
-  // with the Capabilities area — grant on enable, detach on disable.
-  const [grantState, grantCapability] = useMutation(
-    SettingsGrantCapabilityMutation,
-  );
-  const [detachState, detachCapability] = useMutation(
-    SettingsDetachCapabilityMutation,
-  );
-  const assignmentState = {
-    fetching: grantState.fetching || detachState.fetching,
-  };
 
   const rows = useMemo(
     () =>
@@ -264,72 +247,6 @@ export function SettingsAgentExtensions({
     onChanged();
   }
 
-  async function setAssignment(input: {
-    extension: PiExtensionRow;
-    targetType: PiExtensionAssignmentTargetType;
-    agentProfileId?: string | null;
-    enabled: boolean;
-  }) {
-    const scope =
-      input.targetType === PiExtensionAssignmentTargetType.DefaultAgent
-        ? CapabilityGrantScope.Agent
-        : CapabilityGrantScope.AgentProfile;
-    let payload:
-      | {
-          inspectionState: string;
-          item?: { active: boolean; reason?: string | null } | null;
-        }
-      | null
-      | undefined;
-    let errorMessage: string | undefined;
-    if (input.enabled) {
-      const result = await grantCapability({
-        input: {
-          tenantId,
-          capabilityClass: CapabilityGrantClass.PiExtension,
-          scope,
-          agentProfileId: input.agentProfileId ?? null,
-          capabilityRef: input.extension.id,
-          grantedPermissions: [...input.extension.permissionClasses],
-        },
-      });
-      errorMessage = result.error?.message;
-      payload = result.data?.grantCapability;
-    } else {
-      const result = await detachCapability({
-        input: {
-          tenantId,
-          capabilityClass: CapabilityGrantClass.PiExtension,
-          scope,
-          agentProfileId: input.agentProfileId ?? null,
-          capabilityRef: input.extension.id,
-        },
-      });
-      errorMessage = result.error?.message;
-      payload = result.data?.detachCapability;
-    }
-    if (errorMessage) {
-      toast.error("Could not update Pi extension assignment", {
-        description: errorMessage,
-      });
-      return;
-    }
-    // Confirmation ends on the item's fresh inspector state (R12), not a
-    // bare success — the returned row carries the true post-write gate.
-    const item = payload?.item;
-    toast.success(
-      input.enabled ? "Pi extension assigned" : "Pi extension detached",
-      {
-        description: item
-          ? `Inspector: ${item.active ? "active" : (item.reason ?? "inactive")}`
-          : input.enabled
-            ? `Inspector state: ${payload?.inspectionState ?? "ok"}`
-            : "No longer in the effective set.",
-      },
-    );
-    onChanged();
-  }
-
   return (
     <SettingsSection
       label="Extensions"
@@ -382,11 +299,9 @@ export function SettingsAgentExtensions({
         rejectReason={rejectReason}
         approving={approveState.fetching}
         rejecting={rejectState.fetching}
-        assigning={assignmentState.fetching}
         onRejectReasonChange={setRejectReason}
         onApprove={(extension) => void approve(extension)}
         onReject={(extension) => void reject(extension)}
-        onSetAssignment={(input) => void setAssignment(input)}
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}
@@ -472,11 +387,9 @@ function PiExtensionReviewSheet({
   rejectReason,
   approving,
   rejecting,
-  assigning,
   onRejectReasonChange,
   onApprove,
   onReject,
-  onSetAssignment,
   onOpenChange,
 }: {
   extension: PiExtensionRow | null;
@@ -484,30 +397,16 @@ function PiExtensionReviewSheet({
   rejectReason: string;
   approving: boolean;
   rejecting: boolean;
-  assigning: boolean;
   onRejectReasonChange: (value: string) => void;
   onApprove: (extension: PiExtensionRow) => void;
   onReject: (extension: PiExtensionRow) => void;
-  onSetAssignment: (input: {
-    extension: PiExtensionRow;
-    targetType: PiExtensionAssignmentTargetType;
-    agentProfileId?: string | null;
-    enabled: boolean;
-  }) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const report = jsonRecord(extension?.verificationReport);
   const manifest = jsonRecord(extension?.manifest);
-  const approved = extension?.status === PiExtensionVersionStatus.Approved;
   const reviewable =
     extension?.status === PiExtensionVersionStatus.Imported ||
     extension?.status === PiExtensionVersionStatus.NeedsReview;
-  const defaultAssignment = extension
-    ? findAssignment(extension, PiExtensionAssignmentTargetType.DefaultAgent)
-    : null;
-  const assignmentReason = extension
-    ? assignmentUnavailableReason(extension)
-    : null;
 
   return (
     <Sheet open={Boolean(extension)} onOpenChange={onOpenChange}>
@@ -626,58 +525,21 @@ function PiExtensionReviewSheet({
                 </div>
               </DetailBlock>
 
-              <DetailBlock title="Assignments">
-                {assignmentReason ? (
-                  <p className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                    {assignmentReason}
-                  </p>
-                ) : null}
-                <AssignmentRow
-                  label="Default Agent"
-                  description="Make this approved Pi extension available to the parent Agent."
-                  checked={defaultAssignment?.enabled === true}
-                  disabled={!approved || assigning}
-                  onCheckedChange={(enabled) =>
-                    onSetAssignment({
-                      extension,
-                      targetType: PiExtensionAssignmentTargetType.DefaultAgent,
-                      enabled,
-                    })
-                  }
+              {/* Registry demotion (Composer plan U8, R3/R11): this surface is
+                  the extension REGISTRY (import + trust review). Assignment of an
+                  approved extension to the Agent or a profile is done in the
+                  Composer, which owns the unified grant/detach write path. This
+                  block is a read-only view of where the version is assigned. */}
+              <DetailBlock title="Assigned in the Composer">
+                <p className="mb-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  Assign this approved Pi extension to the Agent or an Agent
+                  Profile in Settings → Composer (Pi extensions). This surface
+                  imports and reviews extensions; it no longer assigns them.
+                </p>
+                <ReadOnlyAssignments
+                  extension={extension}
+                  profiles={profiles}
                 />
-                <div className="divide-y divide-border rounded-md border border-border">
-                  {profiles.map((profile) => {
-                    const assignment = findAssignment(
-                      extension,
-                      PiExtensionAssignmentTargetType.AgentProfile,
-                      profile.id,
-                    );
-                    return (
-                      <AssignmentRow
-                        key={profile.id}
-                        label={profile.name}
-                        description={`Profile slug: ${profile.slug}`}
-                        checked={assignment?.enabled === true}
-                        disabled={!approved || assigning}
-                        nested
-                        onCheckedChange={(enabled) =>
-                          onSetAssignment({
-                            extension,
-                            targetType:
-                              PiExtensionAssignmentTargetType.AgentProfile,
-                            agentProfileId: profile.id,
-                            enabled,
-                          })
-                        }
-                      />
-                    );
-                  })}
-                  {profiles.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground">
-                      No Agent Profiles configured.
-                    </div>
-                  ) : null}
-                </div>
                 <GrantedPermissions extension={extension} />
               </DetailBlock>
             </div>
@@ -688,40 +550,52 @@ function PiExtensionReviewSheet({
   );
 }
 
-function AssignmentRow({
-  label,
-  description,
-  checked,
-  disabled,
-  nested,
-  onCheckedChange,
+/**
+ * Read-only view of where an approved extension version is currently assigned
+ * (Default Agent + Agent Profiles). Assignment itself is a Composer action
+ * (plan U8) — this only reflects the effective assignment set.
+ */
+function ReadOnlyAssignments({
+  extension,
+  profiles,
 }: {
-  label: string;
-  description: string;
-  checked: boolean;
-  disabled: boolean;
-  nested?: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  extension: PiExtensionRow;
+  profiles: readonly SettingsAgentExtensionProfile[];
 }) {
+  const defaultAssignment = findAssignment(
+    extension,
+    PiExtensionAssignmentTargetType.DefaultAgent,
+  );
+  const enabledProfiles = profiles.filter((profile) =>
+    Boolean(
+      findAssignment(
+        extension,
+        PiExtensionAssignmentTargetType.AgentProfile,
+        profile.id,
+      )?.enabled,
+    ),
+  );
+  const anyAssigned =
+    defaultAssignment?.enabled === true || enabledProfiles.length > 0;
+
   return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-4",
-        nested ? "px-3 py-3" : "mb-3 rounded-md border border-border px-3 py-3",
-      )}
-    >
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{label}</div>
-        <div className="truncate text-xs text-muted-foreground">
-          {description}
+    <div className="rounded-md border border-border px-3 py-3">
+      {anyAssigned ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {defaultAssignment?.enabled ? (
+            <Badge variant="outline">Default Agent</Badge>
+          ) : null}
+          {enabledProfiles.map((profile) => (
+            <Badge key={profile.id} variant="outline">
+              {profile.name}
+            </Badge>
+          ))}
         </div>
-      </div>
-      <Switch
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={onCheckedChange}
-        aria-label={`Assign ${label}`}
-      />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Not assigned to the Agent or any profile.
+        </p>
+      )}
     </div>
   );
 }
@@ -878,20 +752,6 @@ export function formatPiExtensionStatus(
       return "Needs review";
     case PiExtensionVersionStatus.Rejected:
       return "Rejected";
-  }
-}
-
-function assignmentUnavailableReason(extension: PiExtensionRow): string | null {
-  switch (extension.status) {
-    case PiExtensionVersionStatus.Approved:
-      return null;
-    case PiExtensionVersionStatus.FailedVerification:
-      return "Assignment unavailable: this Pi extension failed verification.";
-    case PiExtensionVersionStatus.Rejected:
-      return "Assignment unavailable: this Pi extension was rejected.";
-    case PiExtensionVersionStatus.Imported:
-    case PiExtensionVersionStatus.NeedsReview:
-      return "Assignment unavailable until an operator approves this Pi extension.";
   }
 }
 

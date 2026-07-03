@@ -9,7 +9,8 @@ import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-select
 
 // useSkillMutation (the former Customize→Skills tab) was removed in
 // Composer plan U3 — skill wiring lives in Settings→Composer now. The
-// `disableSkill` GraphQL mutation stays in the schema until the U8 sweep.
+// `disableSkill` GraphQL mutation was retired from the schema in Composer
+// plan U8 (no client referenced it).
 
 export interface UseToggleMutationResult {
   toggle: (key: string, nextConnected: boolean) => Promise<void>;

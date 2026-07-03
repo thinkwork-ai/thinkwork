@@ -1920,11 +1920,6 @@ export type DetachCapabilityInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type DisableSkillInput = {
-  agentId: Scalars["ID"]["input"];
-  skillId: Scalars["String"]["input"];
-};
-
 export type DisableWorkflowInput = {
   agentId: Scalars["ID"]["input"];
   slug: Scalars["String"]["input"];
@@ -3767,7 +3762,6 @@ export type Mutation = {
   deleteWorkItemView: Scalars["Boolean"]["output"];
   deleteWorkflow: Scalars["ID"]["output"];
   detachCapability: CapabilityMutationResult;
-  disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
   disconnectN8nWorkflow: DisconnectN8nWorkflowResult;
@@ -4424,10 +4418,6 @@ export type MutationDeleteWorkflowArgs = {
 
 export type MutationDetachCapabilityArgs = {
   input: DetachCapabilityInput;
-};
-
-export type MutationDisableSkillArgs = {
-  input: DisableSkillInput;
 };
 
 export type MutationDisableWorkflowArgs = {
