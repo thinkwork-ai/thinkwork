@@ -2,13 +2,23 @@
  * Composer workspace editor (Composer plan U2; v1.1 feedback items 1, 3, 4).
  *
  * v1.1 turns the Composer's result pane into a NORMAL editor shell — the same
- * left-tree + CodeMirror layout as Settings → Workspace — instead of the old
- * disclosure list with a small bottom viewer. It is backed by the read-only
- * `createComposerPreviewClient` adapter over `workspacePreview` /
- * `workspacePreviewFile`: `listFiles` (via `getManifest`) draws the tree,
- * `getFile` (via `getFilePayload`) loads content, and `putFile` rejects — the
- * rendered workspace is DERIVED, so file CONTENTS stay read-only (R2, amended
- * v1.1: the TREE now carries capability actions).
+ * anchored full-height left-tree + CodeMirror layout as Settings → Workspace —
+ * instead of the old disclosure list with a small bottom viewer. The TREE is
+ * drawn from the read-only `createComposerPreviewClient` adapter over
+ * `workspacePreview` (`listFiles` via `getManifest`).
+ *
+ * The editor pane is LIVE (v1.1 live-save):
+ *   - a NON-generated source file (agent/space/user-owned — `skills/**`,
+ *     `memory/**`, Space mounts, User files) is edited in place and saved
+ *     through the owning layer's existing workspace-files client (resolved from
+ *     the node's owner + path), then refetches the preview so the tree stays
+ *     truthful. Operator-gated, with the shared managed-section locked regions +
+ *     warn-on-save;
+ *   - a GENERATED file (AGENTS.md, CONTEXT.md, `generated:true`) stays READ-ONLY
+ *     in the rendered pane (loaded via the preview adapter's `getFilePayload`);
+ *     the U7 side-by-side single-file source editor is its editing affordance.
+ * The preview adapter itself is read-only (its `putFile` rejects) — edits ride
+ * the source client, never the derived preview.
  *
  * Three things layer on top of the plain shell:
  *
@@ -27,8 +37,9 @@
  *     those actions, not a new write path.
  *
  * The U7 split view is preserved: opening a GENERATED file shows the read-only
- * rendered pane beside the producing layer's editable source (`WorkspaceFileEditor`
- * on the real `putFile` path); saving refetches the preview.
+ * rendered pane beside a single-file editor for the producing layer's source
+ * (same chrome as the primary pane, no nested file tree) on the real `putFile`
+ * path; saving refetches the preview.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -53,9 +64,11 @@ import {
   Skeleton,
   cn,
 } from "@thinkwork/ui";
+import { toast } from "sonner";
 import {
+  DEFAULT_MANAGED_SECTION_HEADINGS,
   FileEditorPane,
-  WorkspaceFileEditor,
+  editTouchesManagedSection,
 } from "@thinkwork/workspace-editor";
 import {
   createComposerPreviewClient,
@@ -68,7 +81,6 @@ import {
   type WorkspaceFilesTarget,
 } from "@/lib/workspace-files-api";
 import { useTenant } from "@/context/TenantContext";
-import { LoadingShimmer } from "@/components/LoadingShimmer";
 
 /** Per-skill capability state (from the inspector) used to decorate folders. */
 export interface SkillNodeState {
@@ -201,35 +213,68 @@ export interface SourcePaneResolution {
   target: WorkspaceFilesTarget;
   targetKey: string;
   sourceFile: string;
-  layer: "agent" | "space";
+  layer: "agent" | "space" | "user";
 }
 
-export function resolveSourcePane(
+/**
+ * Resolve the editable SOURCE behind a preview node (v1.1 live-save): the owning
+ * layer's write target + the path relative to that layer's tree. Works for both
+ * generated files (whose editable source is the producing template — used by the
+ * U7 split) and plain source files (agent/space/user-owned — edited in place).
+ * Returns null when the node has no editable owning layer (thread files) or the
+ * owning id isn't resolvable.
+ */
+export function resolveSource(
   entry: ComposerPreviewEntry | null,
-  result: { agentId?: string | null; spaceId?: string | null } | null,
+  result: {
+    agentId?: string | null;
+    spaceId?: string | null;
+    perspectiveUserId?: string | null;
+  } | null,
   fallbackSpaceId: string | null,
 ): SourcePaneResolution | null {
-  if (!entry || !entry.generated) return null;
-  const cause = causeOf(entry);
-  if (!cause) return null;
-  if (cause.kind === "agent_source") {
+  if (!entry) return null;
+  const segments = entry.path.split("/");
+  const isSpace = entry.owner === "space" || segments[0] === "Spaces";
+  const isUser =
+    entry.owner === "user" || segments[0] === "User" || segments[0] === "Users";
+  if (isSpace) {
+    const spaceId = result?.spaceId ?? fallbackSpaceId;
+    const sourceFile =
+      segments[0] === "Spaces" && segments.length > 2
+        ? segments.slice(2).join("/")
+        : entry.path;
+    if (!spaceId || !sourceFile) return null;
+    return {
+      target: { spaceId },
+      targetKey: `composer-space:${spaceId}`,
+      sourceFile,
+      layer: "space",
+    };
+  }
+  if (isUser) {
+    const userId = result?.perspectiveUserId ?? null;
+    const sourceFile =
+      (segments[0] === "User" || segments[0] === "Users") && segments.length > 1
+        ? segments.slice(1).join("/")
+        : entry.path;
+    if (!userId || !sourceFile) return null;
+    return {
+      target: { userId },
+      targetKey: `composer-user:${userId}`,
+      sourceFile,
+      layer: "user",
+    };
+  }
+  // Agent-owned (AGENTS.md, skills/**, memory/**, CAPABILITIES.md, …).
+  if (entry.owner === "agent" || segments[0] === "skills") {
     const agentId = result?.agentId;
     if (!agentId) return null;
     return {
       target: { agentId },
       targetKey: `composer-agent:${agentId}`,
-      sourceFile: cause.file,
+      sourceFile: entry.path,
       layer: "agent",
-    };
-  }
-  if (cause.kind === "space") {
-    const spaceId = result?.spaceId ?? fallbackSpaceId;
-    if (!spaceId || !cause.file) return null;
-    return {
-      target: { spaceId },
-      targetKey: `composer-space:${spaceId}`,
-      sourceFile: cause.file,
-      layer: "space",
     };
   }
   return null;
@@ -281,6 +326,8 @@ export function ComposerWorkspaceEditor({
   onDetachSkill,
 }: ComposerWorkspaceEditorProps) {
   const navigate = useNavigate();
+  const { isOperator, roleResolved } = useTenant();
+  const canEditSource = isOperator && roleResolved;
   const urqlClient = useClient();
   // Keep the urql client in a ref so the adapter identity is stable across
   // renders (the app's client is stable, but urql's `useClient` isn't
@@ -365,20 +412,30 @@ export function ComposerWorkspaceEditor({
     [client],
   );
 
-  useEffect(() => {
-    if (!selectedPath) {
-      setFile({ loading: false, error: null, data: null });
-      return;
-    }
-    void loadFile(selectedPath);
-  }, [selectedPath, loadFile, refreshToken]);
-
   const result = manifest.data;
   const entries = useMemo(() => result?.entries ?? [], [result?.entries]);
   const entryByPath = useMemo(
     () => new Map(entries.map((entry) => [entry.path, entry])),
     [entries],
   );
+
+  // Only the READ-ONLY rendered pane (generated files, or non-generated files
+  // with no editable owning layer) needs the preview-file payload; editable
+  // source files load from their owning client instead — skip the wasted fetch.
+  useEffect(() => {
+    if (!selectedPath) {
+      setFile({ loading: false, error: null, data: null });
+      return;
+    }
+    const entry = entryByPath.get(selectedPath) ?? null;
+    const usesRenderedPane =
+      Boolean(entry?.generated) || !resolveSource(entry, result, spaceId);
+    if (!usesRenderedPane) {
+      setFile({ loading: false, error: null, data: null });
+      return;
+    }
+    void loadFile(selectedPath);
+  }, [selectedPath, loadFile, refreshToken, entryByPath, result, spaceId]);
 
   const pendingFolderPath = pendingSkillSlug
     ? `skills/${pendingSkillSlug}`
@@ -691,7 +748,7 @@ export function ComposerWorkspaceEditor({
 
   return (
     <div
-      className="flex h-full min-h-[28rem] overflow-hidden rounded-md border"
+      className="flex h-full w-full min-h-0 overflow-hidden rounded-md border"
       data-testid="composer-editor"
     >
       <div className="flex w-[20rem] min-w-0 shrink-0 flex-col border-r">
@@ -700,34 +757,65 @@ export function ComposerWorkspaceEditor({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {selectedPath ? (
           (() => {
-            const rendered = (
+            const source = resolveSource(selectedEntry, result, spaceId);
+            // Generated files stay READ-ONLY in the rendered pane; the U7 split
+            // provides the editing affordance on the producing layer's source.
+            if (selectedEntry?.generated) {
+              const rendered = (
+                <ComposerRenderedPane
+                  path={selectedPath}
+                  entry={selectedEntry}
+                  file={file}
+                  onClose={() => setSelectedPath(null)}
+                />
+              );
+              if (!source) return rendered;
+              return (
+                <div
+                  className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row xl:items-stretch"
+                  data-testid="composer-split-view"
+                >
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    {rendered}
+                  </div>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <ComposerEditablePane
+                      key={`${source.targetKey}:${source.sourceFile}`}
+                      source={source}
+                      entry={null}
+                      readOnly={!canEditSource}
+                      onSaved={() => {
+                        void loadManifest();
+                        if (selectedPath) void loadFile(selectedPath);
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            // Non-generated SOURCE files edit in place and save through the
+            // owning layer's client (v1.1 live-save); operator-gated.
+            if (source) {
+              return (
+                <ComposerEditablePane
+                  key={`${source.targetKey}:${source.sourceFile}`}
+                  source={source}
+                  entry={selectedEntry}
+                  readOnly={!canEditSource}
+                  onClose={() => setSelectedPath(null)}
+                  onSaved={() => void loadManifest()}
+                />
+              );
+            }
+            // No editable owning layer (thread files, unresolved ids) → the
+            // read-only rendered preview.
+            return (
               <ComposerRenderedPane
                 path={selectedPath}
                 entry={selectedEntry}
                 file={file}
                 onClose={() => setSelectedPath(null)}
               />
-            );
-            const source = resolveSourcePane(selectedEntry, result, spaceId);
-            if (!source) return rendered;
-            return (
-              <div
-                className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row xl:items-stretch"
-                data-testid="composer-split-view"
-              >
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  {rendered}
-                </div>
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <ComposerSourcePane
-                    source={source}
-                    onSourceSaved={() => {
-                      void loadManifest();
-                      if (selectedPath) void loadFile(selectedPath);
-                    }}
-                  />
-                </div>
-              </div>
             );
           })()
         ) : (
@@ -823,7 +911,7 @@ export function ComposerRenderedPane({
           {errorText}
         </p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="h-full min-h-0 flex-1 overflow-hidden">
           <FileEditorPane
             openFile={path}
             content={payload?.content ?? ""}
@@ -843,43 +931,98 @@ export function ComposerRenderedPane({
 }
 
 /**
- * Editable SOURCE pane of the split view (Composer plan U7). Renders the shared
- * `WorkspaceFileEditor` bound to the producing layer's source (agent or space).
- * Editing is operator-gated; saving goes through the existing `putFile` path
- * and refetches the preview so the rendered pane reflects the prose edit.
+ * Live-editable pane for a non-generated SOURCE file (v1.1). Loads and saves
+ * the underlying source through the existing workspace-files client resolved
+ * from the node's owner + path — exactly the write path the U7 split source
+ * pane uses — so editing a `skills/**`, `memory/**`, Space, or User file here
+ * writes the real source, then refetches the preview so the tree stays
+ * truthful. Reuses the shared `FileEditorPane` (house font/theme, line numbers,
+ * managed-section locked regions + warn-on-save). Read-only for non-operators.
  */
-export function ComposerSourcePane({
+export function ComposerEditablePane({
   source,
-  onSourceSaved,
+  entry,
+  readOnly,
+  onClose,
+  onSaved,
 }: {
   source: SourcePaneResolution;
-  onSourceSaved: () => void;
+  entry: ComposerPreviewEntry | null;
+  readOnly: boolean;
+  /** When omitted (e.g. the split-view source side) no close button renders. */
+  onClose?: () => void;
+  onSaved: () => void;
 }) {
-  const { isOperator, roleResolved } = useTenant();
+  const [content, setContent] = useState("");
+  const [value, setValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadReq = useRef(0);
 
-  const client = useMemo(() => {
-    const base = spacesWorkspaceFilesClient;
-    return {
-      ...base,
-      putFile: async (
-        target: WorkspaceFilesTarget,
-        path: string,
-        content: string,
-      ) => {
-        await base.putFile(target, path, content);
-        onSourceSaved();
-      },
-    };
-  }, [onSourceSaved]);
+  useEffect(() => {
+    const reqId = ++loadReq.current;
+    setLoading(true);
+    setError(null);
+    spacesWorkspaceFilesClient
+      .getFile(source.target, source.sourceFile)
+      .then((data) => {
+        if (loadReq.current !== reqId) return;
+        const text = data.content ?? "";
+        setContent(text);
+        setValue(text);
+      })
+      .catch((err: unknown) => {
+        if (loadReq.current !== reqId) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (loadReq.current === reqId) setLoading(false);
+      });
+  }, [source.target, source.sourceFile]);
+
+  async function handleSave() {
+    if (readOnly || saving) return;
+    const saved = value;
+    if (
+      editTouchesManagedSection(
+        content,
+        saved,
+        DEFAULT_MANAGED_SECTION_HEADINGS,
+      )
+    ) {
+      toast.warning(
+        "This edit falls inside a computed section — it is recomposed automatically and your change here will not survive the next update.",
+      );
+    }
+    setSaving(true);
+    try {
+      await spacesWorkspaceFilesClient.putFile(
+        source.target,
+        source.sourceFile,
+        saved,
+      );
+      setContent(saved);
+      // The rendered workspace derives from this source — refetch so the tree
+      // and any generated output stay truthful.
+      onSaved();
+    } catch (err) {
+      toast.error(
+        `Save failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border"
-      data-testid="composer-source-pane"
+      className="flex min-h-0 flex-1 flex-col"
+      data-testid="composer-editable-pane"
     >
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-muted/50 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3">
         <span className="min-w-0 truncate font-mono text-xs text-foreground">
-          {source.sourceFile}
+          {entry?.path ?? source.sourceFile}
         </span>
         <Badge
           variant="outline"
@@ -887,19 +1030,49 @@ export function ComposerSourcePane({
         >
           {source.layer} source
         </Badge>
+        {readOnly ? (
+          <Badge
+            variant="outline"
+            className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground"
+          >
+            read-only
+          </Badge>
+        ) : null}
+        {onClose ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-6 px-2 text-[11px] text-muted-foreground"
+            data-testid="composer-file-close"
+            onClick={onClose}
+          >
+            Close
+          </Button>
+        ) : null}
       </div>
-      <div className="min-h-0 flex-1">
-        <WorkspaceFileEditor
-          target={source.target}
-          targetKey={source.targetKey}
-          client={client}
-          defaultOpenFile={source.sourceFile}
-          readOnly={!(isOperator && roleResolved)}
-          bordered={false}
-          className="h-full"
-          loadingSlot={<LoadingShimmer />}
-        />
-      </div>
+      {error ? (
+        <p
+          className="p-3 text-xs text-destructive"
+          data-testid="composer-file-error"
+        >
+          Couldn&apos;t load this file: {error}
+        </p>
+      ) : (
+        <div className="h-full min-h-0 flex-1 overflow-hidden">
+          <FileEditorPane
+            openFile={source.sourceFile}
+            content={content}
+            value={value}
+            loading={loading}
+            saving={saving}
+            readOnly={readOnly}
+            managedHeadings={DEFAULT_MANAGED_SECTION_HEADINGS}
+            onChange={setValue}
+            onSave={() => void handleSave()}
+            onDiscard={() => setValue(content)}
+          />
+        </div>
+      )}
     </div>
   );
 }
