@@ -59,6 +59,74 @@ const GRAPH_SOURCE_KIND = "observations";
 /** Per-section cap on provenance rows — keeps heavy entities bounded. */
 const MAX_SECTION_SOURCES = 25;
 
+/**
+ * Evidence-threshold promotion (THINK-133 U5, R7/KTD-7). An entity earns a
+ * wiki page by crossing mechanical thresholds — never by ontology type. The
+ * single config point for tuning against dev data; no tenant surface in v1.
+ */
+export interface WikiPromotionThresholds {
+  minDistinctEvidence: number;
+  minRelationships: number;
+  minPromotedNeighborLinks: number;
+}
+
+export const WIKI_PROMOTION_THRESHOLDS: WikiPromotionThresholds = {
+  /**
+   * Distinct evidence mentions (distinct threads where evidence carries a
+   * thread_id; distinct observations otherwise).
+   */
+  minDistinctEvidence: 3,
+  /** OR: the entity participates in at least this many relationships. */
+  minRelationships: 2,
+  /**
+   * OR: the entity is referenced by an already-promoted entity's page via
+   * at least this many relationships (single propagation pass, no cascade).
+   */
+  minPromotedNeighborLinks: 1,
+};
+
+/**
+ * Pure promotion decision. Base pass: evidence or relationship thresholds.
+ * Second pass: entities linked to a base-promoted entity promote
+ * ("referenced by another page"), deliberately non-transitive so one hub
+ * entity cannot promote the whole graph.
+ */
+export function computePromotedEntityIds(args: {
+  entityIds: string[];
+  evidenceKeysByEntity: Map<string, Set<string>>;
+  adjacency: Map<string, string[]>;
+  thresholds?: WikiPromotionThresholds;
+}): Set<string> {
+  const thresholds = args.thresholds ?? WIKI_PROMOTION_THRESHOLDS;
+  const promoted = new Set<string>();
+
+  for (const entityId of args.entityIds) {
+    const evidenceCount = args.evidenceKeysByEntity.get(entityId)?.size ?? 0;
+    const relationshipCount = args.adjacency.get(entityId)?.length ?? 0;
+    if (
+      evidenceCount >= thresholds.minDistinctEvidence ||
+      relationshipCount >= thresholds.minRelationships
+    ) {
+      promoted.add(entityId);
+    }
+  }
+
+  // Frozen base set: second-pass promotions never seed further promotions,
+  // regardless of iteration order.
+  const basePromoted = new Set(promoted);
+  for (const entityId of args.entityIds) {
+    if (basePromoted.has(entityId)) continue;
+    const promotedNeighborLinks = (args.adjacency.get(entityId) ?? []).filter(
+      (neighborId) => basePromoted.has(neighborId),
+    ).length;
+    if (promotedNeighborLinks >= thresholds.minPromotedNeighborLinks) {
+      promoted.add(entityId);
+    }
+  }
+
+  return promoted;
+}
+
 export interface GraphMaterializeMetrics {
   entities_seen: number;
   relationships_seen: number;
@@ -96,6 +164,7 @@ interface MirrorEvidenceRow {
   entity_id: string | null;
   relationship_id: string | null;
   evidence_source_ref: string;
+  thread_id: string | null;
 }
 
 function rowsOf<T>(result: unknown): T[] {
@@ -128,6 +197,7 @@ export async function materializeTenantWikiFromGraph(
     relationships_seen: 0,
     pages_upserted: 0,
     pages_skipped: 0,
+    pages_below_threshold: 0,
     pages_archived: 0,
     links_written: 0,
   };
@@ -162,7 +232,7 @@ export async function materializeTenantWikiFromGraph(
 
   const evidenceRows = rowsOf<MirrorEvidenceRow>(
     await db.execute(sql`
-			SELECT entity_id, relationship_id, evidence_source_ref
+			SELECT entity_id, relationship_id, evidence_source_ref, thread_id
 			FROM knowledge_graph_evidence
 			WHERE tenant_id = ${args.tenantId}
 			  AND source_kind = ${GRAPH_SOURCE_KIND}
@@ -196,6 +266,36 @@ export async function materializeTenantWikiFromGraph(
     }
   }
 
+  // -- Evidence-threshold promotion gate (R7/R9, KTD-7) ---------------------
+  // Distinctness key: thread when the evidence row carries one, otherwise
+  // the backing observation — "mentioned across enough distinct places".
+  const evidenceKeysByEntity = new Map<string, Set<string>>();
+  for (const row of evidenceRows) {
+    if (!row.entity_id) continue;
+    const key = row.thread_id ?? row.evidence_source_ref;
+    const set = evidenceKeysByEntity.get(row.entity_id) ?? new Set<string>();
+    set.add(key);
+    evidenceKeysByEntity.set(row.entity_id, set);
+  }
+  const adjacency = new Map<string, string[]>();
+  for (const rel of relationshipRows) {
+    if (rel.source_entity_id !== rel.target_entity_id) {
+      adjacency.set(rel.source_entity_id, [
+        ...(adjacency.get(rel.source_entity_id) ?? []),
+        rel.target_entity_id,
+      ]);
+      adjacency.set(rel.target_entity_id, [
+        ...(adjacency.get(rel.target_entity_id) ?? []),
+        rel.source_entity_id,
+      ]);
+    }
+  }
+  const promotedEntityIds = computePromotedEntityIds({
+    entityIds: entityRows.map((entity) => entity.id),
+    evidenceKeysByEntity,
+    adjacency,
+  });
+
   // -- Page materialization (slug-keyed upserts, deterministic sections) ----
   // First entity per slug wins; later same-slug entities fold into the same
   // page row via the upsert, so we track the page id per slug for linking.
@@ -203,6 +303,15 @@ export async function materializeTenantWikiFromGraph(
   const pageIdByEntityId = new Map<string, string>();
 
   for (const entity of entityRows) {
+    // Promotion controls the wiki window, not agent visibility (R9):
+    // sub-threshold entities stay fully queryable in the KG; they simply
+    // emit no page. Demotion is handled by the reconciliation pass below —
+    // a previously-promoted entity that falls under threshold drops out of
+    // liveSlugs and its page archives (never deletes).
+    if (!promotedEntityIds.has(entity.id)) {
+      metrics.pages_below_threshold += 1;
+      continue;
+    }
     const slug = slugifyTitle(entity.label);
     if (!slug) {
       metrics.pages_skipped += 1;
