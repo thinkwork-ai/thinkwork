@@ -385,3 +385,38 @@ describe("sendMessage agent handling", () => {
     ).toBe(false);
   });
 });
+
+describe("sendMessage tri-state dispatch wiring (plan 2026-07-03-003 U4, R1/R4/R5)", () => {
+  it("exposes agentDispatch on SendMessageInput with the AgentDispatchRequest enum", () => {
+    expect(messagesGraphql).toContain("agentDispatch: AgentDispatchRequest");
+    expect(messagesGraphql).toContain("enum AgentDispatchRequest");
+  });
+
+  it("computes the dispatch Thread Mode post-commit with no extra ids — the transition message that @mentions a second human counts its own mention participants and does not auto-dispatch (R2/KTD2)", () => {
+    const postCommit = source.indexOf("const dispatchThreadMode =");
+    const transactionEnd = source.indexOf("const row = await db.transaction");
+    expect(postCommit).toBeGreaterThan(transactionEnd);
+    const block = source.slice(postCommit, source.indexOf("shouldDispatchDefaultAgentTurn", postCommit));
+    expect(block).toContain("resolveDispatchThreadMode");
+    expect(block).not.toContain("extraUserIds");
+  });
+
+  it("passes agentDispatch and threadMode into the default dispatch gate", () => {
+    const gateCall = source.slice(source.lastIndexOf("shouldDispatchDefaultAgentTurn({"));
+    expect(gateCall).toContain("agentDispatch: i.agentDispatch");
+    expect(gateCall).toContain("threadMode: dispatchThreadMode");
+  });
+
+  it("gates mention dispatch on explicit FORCE_OFF only (legacy boolean keeps mention-wins)", () => {
+    expect(source).toContain(
+      "!shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })",
+    );
+  });
+
+  it("predicts the pre-transaction goal-mode check by unioning sender and user mentions", () => {
+    const goalCheck = source.indexOf("Goal mode requires default agent dispatch");
+    const before = source.slice(0, goalCheck);
+    expect(before).toContain("extraUserIds");
+    expect(before).toContain('senderType === "user" ? senderId : null');
+  });
+});
