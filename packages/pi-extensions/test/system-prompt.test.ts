@@ -192,15 +192,25 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
 
     expect(prompt).toContain("### Generated Thread UI");
     expect(prompt).toContain("`emit_json_render_ui` tool is available");
-    expect(prompt).toContain("run a quick presentation pass");
+    // default-on trigger policy (U6/KTD6)
+    expect(prompt).toContain("Treat generated UI as the DEFAULT presentation");
+    expect(prompt).toContain("run a presentation pass");
+    expect(prompt).toContain("Prose is the fallback, not the default");
     expect(prompt).toContain("scan-friendly structured results");
-    expect(prompt).toContain("Prefer `result.list`");
+    // shape → component routing, now that table + chart exist
+    expect(prompt).toContain("tabular data → `table`");
+    expect(prompt).toContain("`area`, `bar`, `line`, or `pie`");
+    expect(prompt).toContain("→ `result.list`");
     expect(prompt).toContain("Work Items/Linear-like issues");
-    expect(prompt).toContain("agent-authored user-question collections");
+    expect(prompt).toContain(
+      "Do NOT return a markdown table or a bulleted list of records",
+    );
     expect(prompt).toContain("approval/review queues");
     expect(prompt).toContain("True blocking clarifications still use");
     expect(prompt).toContain("`ask_user_question` and end the turn");
-    expect(prompt).toContain("Keep tiny, narrative, unsupported");
+    expect(prompt).toContain(
+      "Fall back to plain prose only when the content is genuinely narrative",
+    );
     expect(prompt).toContain("one complete json-render spec object");
     expect(prompt).toContain("top-level `root` plus `elements`");
     expect(prompt).toContain(
