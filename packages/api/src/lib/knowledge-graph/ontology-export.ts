@@ -21,7 +21,7 @@ export interface OntologyRelationshipDefinition {
 }
 
 export interface KnowledgeGraphOntologyExport {
-  mechanism: "cognee_owl_ontology" | "custom_prompt";
+  mechanism: "approved_ontology" | "custom_prompt";
   entityTypes: OntologyEntityDefinition[];
   relationshipTypes: OntologyRelationshipDefinition[];
   customPrompt: string;
@@ -89,12 +89,12 @@ export async function loadApprovedOntologyExport(args: {
     entityTypes.length > 0 || relationshipTypes.length > 0;
 
   return {
-    mechanism: hasApprovedDefinitions ? "cognee_owl_ontology" : "custom_prompt",
+    mechanism: hasApprovedDefinitions ? "approved_ontology" : "custom_prompt",
     entityTypes,
     relationshipTypes,
     customPrompt: renderOntologyPrompt(entityTypes, relationshipTypes),
     ontologyKey: hasApprovedDefinitions
-      ? buildCogneeOntologyKey(args.tenantId, ontologyOwlXml)
+      ? buildApprovedOntologyKey(args.tenantId, ontologyOwlXml)
       : null,
     ontologyOwlXml: hasApprovedDefinitions ? ontologyOwlXml : null,
   };
@@ -131,7 +131,7 @@ export function renderOntologyPrompt(
 
   return [
     "Extract a read-only knowledge graph from this ThinkWork thread.",
-    "Use the attached Cognee ontology as the primary schema constraint when it is present.",
+    "Use the attached approved ontology as the primary schema constraint when it is present.",
     "Only extract facts whose entity types and relationship types appear in the approved ontology below.",
     "Ignore document chunks, documents, text summaries, node sets, pipeline metadata, and any unknown or unapproved types.",
     "Do not invent new entity types or relationship types.",
@@ -158,7 +158,7 @@ export function renderOntologyOwl(args: {
     '         xmlns:owl="http://www.w3.org/2002/07/owl#"',
     '         xmlns:skos="http://www.w3.org/2004/02/skos/core#">',
     `  <owl:Ontology rdf:about="${escapeXmlAttribute(baseIri)}">`,
-    "    <rdfs:comment>Approved ThinkWork business ontology exported for Cognee thread graph extraction.</rdfs:comment>",
+    "    <rdfs:comment>Approved ThinkWork business ontology exported for Bedrock graph extraction.</rdfs:comment>",
     "  </owl:Ontology>",
   ];
 
@@ -217,7 +217,7 @@ export function renderOntologyOwl(args: {
   return lines.join("\n");
 }
 
-export function buildCogneeOntologyKey(
+export function buildApprovedOntologyKey(
   tenantId: string,
   ontologyOwlXml: string,
 ): string {

@@ -11,7 +11,7 @@
 -- Hand-rolled (NOT registered in meta/_journal.json — the journal snapshot
 -- stopped at 0020; repo convention is psql-applied files gated by the
 -- db:migrate-manual drift reporter). Renumbered 0166 → 0168 after rebasing
--- onto main, which landed 0166/0167 (company-brain); the table was already
+-- onto main, which landed 0166/0167 (brain); the table was already
 -- applied to dev under the old name (rename is file-only, no DB change).
 --
 -- Semantics:

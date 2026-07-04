@@ -3,9 +3,9 @@
  *
  * Reads engine-synthesized Hindsight observations across the tenant's user
  * banks (U4 loader + layered promotion gate), ingests the promoted bundle
- * into the tenant's STABLE Cognee dataset, and refreshes the Aurora mirror
+ * into the tenant's STABLE source dataset, and refreshes the Aurora mirror
  * crash-safely: mirror replace, cursor advance, promotion audit, and run
- * completion all commit in ONE transaction. Cognee writes are at-least-once;
+ * completion all commit in ONE transaction. extractor writes are at-least-once;
  * the rendered document embeds each observation's Hindsight id
  * (`<!-- source_packet:<id> ... -->`), so a crash between cognify and
  * snapshot re-sends identical content on the re-read instead of duplicating.
@@ -23,7 +23,7 @@ import {
   redactedSourceRef,
   writeKnowledgeGraphIngestArtifacts,
 } from "../lib/knowledge-graph/artifacts.js";
-import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
+import { normalizeExtractedGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { loadObservationsKnowledgeGraphSource } from "../lib/knowledge-graph/observations-source.js";
 import {
@@ -48,12 +48,6 @@ export interface KnowledgeGraphObservationsIngestEvent {
   /** Scheduled drainer mode — enumerate all tenants and run each. */
   sweep?: boolean;
   fullRebuild?: boolean;
-  /**
-   * Nuclear clear of the ENTIRE Cognee store before re-ingest (all datasets +
-   * system graph), not just this tenant's observations dataset. Single-tenant
-   * /dev only — wipes other tenants' and thread graphs too. Implies fullRebuild.
-   */
-  cogneePruneAll?: boolean;
   trigger?: "manual" | "scheduled";
 }
 
@@ -80,7 +74,6 @@ interface KnowledgeGraphObservationsIngestDeps {
     trigger: "manual" | "scheduled";
   }) => Promise<void>;
 }
-
 
 /**
  * Per-run candidate cap. A 500-candidate backlog times out a 480 s Lambda
@@ -172,7 +165,6 @@ export async function processKnowledgeGraphObservationsIngest(
       tenantId: event.tenantId,
       runId: event.runId,
       fullRebuild: event.fullRebuild,
-      cogneePruneAll: event.cogneePruneAll,
       trigger: event.trigger ?? "manual",
     },
     deps,
@@ -185,7 +177,6 @@ async function processTenantObservationsIngest(
     tenantId: string;
     runId?: string;
     fullRebuild?: boolean;
-    cogneePruneAll?: boolean;
     trigger: "manual" | "scheduled";
   },
   deps: KnowledgeGraphObservationsIngestDeps,
@@ -236,12 +227,8 @@ async function processTenantObservationsIngest(
   }
 
   const runInput = run.input as Record<string, unknown> | null;
-  const cogneePruneAll =
-    args.cogneePruneAll === true || runInput?.cogneePruneAll === true;
   const fullRebuild =
-    cogneePruneAll ||
-    args.fullRebuild === true ||
-    runInput?.fullRebuild === true;
+    args.fullRebuild === true || runInput?.fullRebuild === true;
 
   try {
     await markKnowledgeGraphRunRunning({ db: database, runId: run.id });
@@ -350,12 +337,12 @@ async function processTenantObservationsIngest(
       };
     }
 
-    const normalizedSnapshot = normalizeCogneeGraph({
+    const normalizedSnapshot = normalizeExtractedGraph({
       graph: extraction.payload,
       transcript: source.bundle.evidence,
       ontology,
       // The extractor emits only this source's nodes, so no NodeSet scoping
-      // is needed (unlike Cognee's global-graph fetch).
+      // is needed (unlike the previous global-graph fetch).
     });
     const snapshot = applySourceDeclaredFallback({
       snapshot: normalizedSnapshot,

@@ -6,6 +6,10 @@ import {
   rotateTenantCredentialSecret,
 } from "../../../lib/tenant-credentials/secret-store.js";
 import {
+  validateGithubRepoConnection,
+  type GithubRepoCredentialPayload,
+} from "../../../lib/routines/repo-connection.js";
+import {
   credentialToGraphql,
   loadTenantCredentialForMutation,
 } from "./shared.js";
@@ -30,6 +34,13 @@ export async function rotateTenantCredential(
   );
 
   const secret = normalizeCredentialSecret(current.kind, args.input.secretJson);
+  // Rotations revalidate the connection like first save (R2) — the secret
+  // in Secrets Manager is only replaced by a working repo/token/branch.
+  if (current.kind === "github_repo") {
+    await validateGithubRepoConnection(
+      secret as unknown as GithubRepoCredentialPayload,
+    );
+  }
   await rotateTenantCredentialSecret({
     secretRef: current.secret_ref,
     payload: secret,

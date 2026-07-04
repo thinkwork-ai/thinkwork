@@ -400,9 +400,7 @@ describe("PluginDetail", () => {
 
     expect(screen.getByText("client-engagement")).toBeTruthy();
     expect(screen.getByText("UI surface")).toBeTruthy();
-    expect(screen.getAllByText("Provisioned").length).toBeGreaterThanOrEqual(
-      3,
-    );
+    expect(screen.getAllByText("Provisioned").length).toBeGreaterThanOrEqual(3);
     expect(
       screen.queryByRole("button", { name: /open client engagement/i }),
     ).toBeNull();
@@ -957,78 +955,6 @@ describe("PluginDetail", () => {
 
     expect(screen.getByLabelText("New Resend API key")).toBeTruthy();
     expect(screen.getByText("Save rotated key")).toBeTruthy();
-  });
-
-  it("opens an install-key dialog for unentitled ThinkWork Brain installs", async () => {
-    paramsState.pluginKey = "company-brain";
-    mockQueries({
-      install: null,
-      activations: [],
-      catalog: [companyBrainEntry],
-    });
-    mocks.install.mockResolvedValue({
-      data: {
-        installPlugin: {
-          id: "install-brain",
-          pluginKey: "company-brain",
-          state: "installing",
-        },
-      },
-    });
-    render(<PluginDetail />);
-
-    expect(screen.queryByText("Premium access")).toBeNull();
-    expect(screen.queryByText("Install key required")).toBeNull();
-    expect(
-      screen.getByText("private context substrate.", { exact: false }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /enter key/i }));
-
-    const input = screen.getByLabelText("Install key");
-    fireEvent.change(input, { target: { value: "twpi_valid" } });
-    fireEvent.click(
-      screen.getByRole("button", { name: /unlock and install/i }),
-    );
-
-    await waitFor(() => {
-      expect(mocks.install).toHaveBeenCalledWith({
-        input: expect.objectContaining({
-          pluginKey: "company-brain",
-          installKey: "twpi_valid",
-          idempotencyKey: expect.any(String),
-        }),
-      });
-    });
-    await waitFor(() => {
-      expect(refreshInstalls).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-      expect(refreshCatalog).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-    });
-  });
-
-  it("shows ThinkWork Brain context diagnostics and adoption evidence once entitled", () => {
-    paramsState.pluginKey = "company-brain";
-    mockQueries({
-      install: companyBrainInstall,
-      activations: [],
-      catalog: [{ ...companyBrainEntry, entitlement: companyBrainEntitlement }],
-    });
-    render(<PluginDetail />);
-
-    expect(screen.queryByText("Premium access")).toBeNull();
-    expect(screen.queryByText("Entitled")).toBeNull();
-    expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
-    const diagnostics = screen.getByRole("link", {
-      name: /open diagnostics/i,
-    });
-    expect(diagnostics.getAttribute("href")).toBe(
-      "/settings/context-diagnostics",
-    );
-    expect(screen.queryByText("Memory graph")).toBeNull();
-    expect(screen.queryByRole("link", { name: /open graph/i })).toBeNull();
   });
 
   it("renders n8n package settings only for installed operator plugins", () => {
@@ -1592,67 +1518,6 @@ const storedEmailChannelSummary = {
       providerMetadata: null,
       createdAt: "2026-06-17T12:00:00Z",
       updatedAt: "2026-06-17T12:00:00Z",
-    },
-  ],
-};
-
-const companyBrainEntitlement = {
-  __typename: "PluginEntitlement" as const,
-  id: "entitlement-brain",
-  status: "active",
-  source: "install_key",
-  grantedAt: "2026-06-13T12:00:00Z",
-};
-
-const companyBrainEntry = {
-  __typename: "PluginCatalogEntry" as const,
-  pluginKey: "company-brain",
-  displayName: "ThinkWork Brain",
-  description: "Premium private context substrate.",
-  latestVersion: "0.1.0",
-  updateAvailable: false,
-  premium: {
-    entitlementProductKey: "company-brain",
-    installKeyRequired: true,
-    installKeyPrompt:
-      "Enter the ThinkWork Brain install key provided by ThinkWork.",
-  },
-  entitlement: null,
-  versions: [
-    {
-      version: "0.1.0",
-      payloadSha256: "sha256:brain",
-      requiredOauthScopes: [],
-      components: [
-        {
-          key: "brain-substrate",
-          type: "infrastructure",
-          displayName: "Brain substrate",
-        },
-      ],
-    },
-  ],
-  install: null,
-};
-
-const companyBrainInstall = {
-  ...baseInstall,
-  id: "install-brain",
-  pluginKey: "company-brain",
-  state: "awaiting_approval",
-  components: [
-    {
-      __typename: "PluginComponent" as const,
-      id: "component-brain",
-      componentKey: "brain-substrate",
-      componentType: "infrastructure",
-      state: "pending",
-      handlerRef: {
-        managedAppKey: "cognee",
-        deploymentJobId: "job-brain",
-        adoptionRequiresNoChange: true,
-      },
-      lastError: null,
     },
   ],
 };

@@ -229,10 +229,17 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain("`workItemId`");
     expect(prompt).toContain("either `statusCategory` or `statusId`");
     expect(prompt).toContain("Display-only generated UI can omit");
-    expect(prompt).toContain("ThinkWork domain components:");
+    expect(prompt).toContain("ThinkWork domain components");
+    expect(prompt).toContain("prop schemas are strict");
     expect(prompt).toContain("task.review");
     expect(prompt).toContain("workflow.status");
-    expect(prompt).toContain("Upstream shadcn primitive components:");
+    // Per-component usage lines: description + a valid example the model can
+    // copy. Names alone caused live validator rejections (chart/table).
+    expect(prompt).toContain("Example props:");
+    expect(prompt).toContain('"colorKey":"chart-1"');
+    expect(prompt).toContain('"xKey":"week"');
+    expect(prompt).toContain('"columns":[');
+    expect(prompt).toContain("Upstream primitive components:");
     expect(prompt).toContain("Button");
     expect(prompt).toContain("Card");
     expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(

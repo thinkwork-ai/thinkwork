@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   markDefaultAgentTarget,
   resolveDefaultAgentIdForMentionTargets,
@@ -60,5 +61,29 @@ describe("thread mention target default-agent helpers", () => {
       isDefaultAgent: true,
       aliases: ["agent", "think", "Coordinator", "coord"],
     });
+  });
+});
+
+describe("Mention Invite target scoping (THINK-136 R2, fix for private-space mention rejection)", () => {
+  const source = readFileSync(
+    new URL("./thread-mention-targets.ts", import.meta.url),
+    "utf8",
+  );
+
+  it("offers every active tenant member as a user mention target regardless of space access mode — a mention is a thread-level invite, so private-space threads must not reject tenant members", () => {
+    // The pre-fix gate hid tenant members behind public-space access, which
+    // made validateExplicitMentions reject the invite that the composer
+    // legitimately offered (first send failed; retry silently dropped it).
+    expect(source).not.toContain('spaceAccessMode === "public"');
+    expect(source).toContain("Mention Invite");
+  });
+
+  it("keeps the tenant-member union active-members-only and user-principal-only", () => {
+    const block = source.slice(
+      source.indexOf("Mention Invite"),
+      source.indexOf("if (!input.spaceId) {"),
+    );
+    expect(block).toContain('eq(tenantMembers.principal_type, "user")');
+    expect(block).toContain('eq(tenantMembers.status, "active")');
   });
 });

@@ -94,12 +94,11 @@ describe("computer GraphQL queries", () => {
     expect(printed).toContain("strategy");
   });
 
-  it("memorySystemConfig query returns active Cognee user and space mode flags", () => {
+  it("memorySystemConfig query returns active user and space mode flags", () => {
     const printed = print(ComputerMemorySystemConfigQuery);
     expect(printed).toContain("memorySystemConfig");
     expect(printed).toContain("activeEngine");
     expect(printed).toContain("hindsightEnabled");
-    expect(printed).toContain("cogneeMemoryEnabled");
     expect(printed).toContain("userMemoryEnabled");
     expect(printed).toContain("spaceMemoryEnabled");
     expect(printed).toContain("legacyHindsightAvailable");

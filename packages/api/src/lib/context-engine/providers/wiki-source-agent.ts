@@ -127,7 +127,7 @@ export function createWikiSourceAgentContextProvider(
           "Dedupe pages and boost results whose title, aliases, summary, or body support the query.",
       },
     ],
-    toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
+    toolAllowlist: ["brain.pages.search", "brain.pages.read"],
     depthCap: 3,
     processModel:
       runtimeMode === "model"
@@ -289,47 +289,45 @@ async function runDeterministicWikiSourceAgent(args: {
         trace: args.fallbackFrom?.trace,
       },
     },
-    hits: rows.map(
-      ({ row, score, sourceStep }): ContextHit => ({
-        id: `wiki-agent:${row.page.id}`,
-        providerId: args.config.id,
-        family: "wiki",
-        title: row.page.title,
-        snippet: row.page.summary || row.page.title,
-        score,
-        scope: args.request.scope,
-        provenance: {
-          label: "ThinkWork Brain page agent",
-          sourceId: row.page.id,
-          uri: `thinkwork://wiki/${row.page.type.toLowerCase()}/${row.page.slug}`,
-          metadata: {
-            promptRef: args.config.promptRef,
-            toolAllowlist: args.config.toolAllowlist,
-            depthCap: args.config.depthCap,
-            retrievalStrategy: "agentic-hybrid-wiki-navigation",
-            matchedAlias: row.matchedAlias,
-            sourceQuery: sourceStep.query,
-            sourceQueryPurpose: sourceStep.purpose,
-          },
-        },
+    hits: rows.map(({ row, score, sourceStep }): ContextHit => ({
+      id: `wiki-agent:${row.page.id}`,
+      providerId: args.config.id,
+      family: "wiki",
+      title: row.page.title,
+      snippet: row.page.summary || row.page.title,
+      score,
+      scope: args.request.scope,
+      provenance: {
+        label: "ThinkWork Brain page agent",
+        sourceId: row.page.id,
+        uri: `thinkwork://wiki/${row.page.type.toLowerCase()}/${row.page.slug}`,
         metadata: {
-          page: row.page,
-          sourceAgent: {
-            id: args.config.id,
-            processModel: args.fallbackFrom
-              ? "lambda-bedrock-converse-with-deterministic-fallback"
-              : "deterministic-retrieval",
-            toolAllowlist: args.config.toolAllowlist,
-            retrievalStrategy: "agentic-hybrid-wiki-navigation",
-            plan,
-            inspectedPageCount,
-            fallback: !!args.fallbackFrom,
-            fallbackReason,
-            trace: args.fallbackFrom?.trace,
-          },
+          promptRef: args.config.promptRef,
+          toolAllowlist: args.config.toolAllowlist,
+          depthCap: args.config.depthCap,
+          retrievalStrategy: "agentic-hybrid-wiki-navigation",
+          matchedAlias: row.matchedAlias,
+          sourceQuery: sourceStep.query,
+          sourceQueryPurpose: sourceStep.purpose,
         },
-      }),
-    ),
+      },
+      metadata: {
+        page: row.page,
+        sourceAgent: {
+          id: args.config.id,
+          processModel: args.fallbackFrom
+            ? "lambda-bedrock-converse-with-deterministic-fallback"
+            : "deterministic-retrieval",
+          toolAllowlist: args.config.toolAllowlist,
+          retrievalStrategy: "agentic-hybrid-wiki-navigation",
+          plan,
+          inspectedPageCount,
+          fallback: !!args.fallbackFrom,
+          fallbackReason,
+          trace: args.fallbackFrom?.trace,
+        },
+      },
+    })),
   };
 }
 

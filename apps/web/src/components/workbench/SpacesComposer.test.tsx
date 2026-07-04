@@ -556,6 +556,57 @@ describe("SpacesComposer", () => {
     expect(composerText()).toBe("@Marco ");
   });
 
+  it("preserves mention state for retry when onSubmit reports failure", async () => {
+    // THINK-136 acceptance regression: a failed first send kept the draft
+    // text (parent-controlled) but the composer had already cleared its
+    // mentions array, so the retry rendered the chip yet sent no mentions.
+    const onSubmit = vi
+      .fn()
+      .mockResolvedValueOnce(false) // first send fails
+      .mockResolvedValueOnce(true); // retry succeeds
+    render(<ControlledComposer onSubmit={onSubmit} />);
+
+    setComposerText("@mar");
+    fireEvent.keyDown(screen.getByLabelText("Send message"), { key: "Enter" });
+    setComposerText(`${composerText()}please review`);
+
+    const expectedMention = {
+      targetType: "AGENT",
+      targetId: "a1",
+      displayName: "Marco",
+      rawText: "@Marco",
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual([expectedMention]);
+
+    // Failed send: the draft stayed on screen, so the retry must resend the
+    // same mention.
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1]?.[1]).toEqual([expectedMention]);
+  });
+
+  it("clears mention state after onSubmit succeeds", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    render(<ControlledComposer onSubmit={onSubmit} />);
+
+    setComposerText("@mar");
+    fireEvent.keyDown(screen.getByLabelText("Send message"), { key: "Enter" });
+    setComposerText(`${composerText()}please review`);
+
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[1]).toHaveLength(1);
+
+    // Success cleared the mention state — a resend of leftover text carries
+    // no stale mention entries.
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1]?.[1]).toEqual([]);
+  });
+
   it("opens mention suggestions for a bare @ trigger", () => {
     render(<ControlledComposer />);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCogneeGraph } from "./normalizer.js";
+import { normalizeExtractedGraph } from "./normalizer.js";
 
 const transcript = [
   {
@@ -15,7 +15,7 @@ const transcript = [
 ];
 
 const ontology = {
-  mechanism: "cognee_owl_ontology" as const,
+  mechanism: "approved_ontology" as const,
   entityTypes: [
     {
       id: "entity-type-company",
@@ -41,9 +41,9 @@ const ontology = {
   ontologyOwlXml: "<rdf:RDF></rdf:RDF>",
 };
 
-describe("normalizeCogneeGraph", () => {
-  it("keeps approved ontology entities and triples from Cognee graph output", () => {
-    const snapshot = normalizeCogneeGraph({
+describe("normalizeExtractedGraph", () => {
+  it("keeps approved ontology entities and triples from extracted graph output", () => {
+    const snapshot = normalizeExtractedGraph({
       transcript,
       ontology,
       graph: {
@@ -150,8 +150,8 @@ describe("normalizeCogneeGraph", () => {
     ]);
     expect(snapshot.evidence).toHaveLength(3);
     expect(snapshot.metrics).toEqual({
-      cogneeNodeCount: 5,
-      cogneeEdgeCount: 5,
+      extractedNodeCount: 5,
+      extractedEdgeCount: 5,
       droppedNodeCount: 2,
       droppedEdgeCount: 4,
       structuralNodeCount: 1,
@@ -227,9 +227,9 @@ describe("normalizeCogneeGraph", () => {
   });
 
   it("resolves entity type from an is_a EDGE to an EntityType node (not a property)", () => {
-    // Cognee real shape: generic Entity nodes + an EntityType node + an is_a
+    // Extractor payload shape: generic Entity nodes + an EntityType node + an is_a
     // edge linking them. No is_a property anywhere.
-    const snapshot = normalizeCogneeGraph({
+    const snapshot = normalizeExtractedGraph({
       transcript,
       ontology,
       graph: {
@@ -315,7 +315,7 @@ describe("normalizeCogneeGraph", () => {
       ],
     };
     // Scoped to observations: only the observation entity survives.
-    const scoped = normalizeCogneeGraph({
+    const scoped = normalizeExtractedGraph({
       transcript,
       ontology,
       graph,
@@ -324,7 +324,7 @@ describe("normalizeCogneeGraph", () => {
     expect(scoped.entities.map((e) => e.label)).toEqual(["Acme"]);
     expect(scoped.metrics.outOfScopeNodeCount).toBe(1);
     // No scope: both typed entities survive.
-    const unscoped = normalizeCogneeGraph({ transcript, ontology, graph });
+    const unscoped = normalizeExtractedGraph({ transcript, ontology, graph });
     expect(unscoped.entities.map((e) => e.label).sort()).toEqual([
       "Acme",
       "Beta",

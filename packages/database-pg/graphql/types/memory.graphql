@@ -153,12 +153,6 @@ type MemorySystemConfig {
   """
   hindsightEnabled: Boolean!
   """
-  True when Cognee is explicitly selected as the active memory engine.
-  This is a compatibility/diagnostic signal; Hindsight is the canonical
-  user and Space memory engine for this pass.
-  """
-  cogneeMemoryEnabled: Boolean!
-  """
   True when the active engine supports user-carried memory capture and recall.
   """
   userMemoryEnabled: Boolean!

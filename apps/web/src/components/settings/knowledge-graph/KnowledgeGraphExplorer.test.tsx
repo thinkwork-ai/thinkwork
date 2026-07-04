@@ -82,7 +82,6 @@ describe("KnowledgeGraphExplorer", () => {
     expect(settingsSource).toContain("Ontology");
     expect(settingsSource).toContain('mode="definitions"');
     expect(settingsSource).toContain("approved ontology terms");
-    expect(settingsSource).not.toContain("Cognee");
     expect(settingsSource).not.toContain("Data");
     expect(settingsSource).not.toContain("Definitions");
   });

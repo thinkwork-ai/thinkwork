@@ -110,7 +110,7 @@ Examples:
   $ thinkwork wiki rebuild --tenant acme --agent agt-xyz --include-brain --dry-run
 
 Note: when the server's wiki source is graph, rebuild semantics change —
-a full rebuild is a Cognee graph full-rebuild + rematerialize (operator
+a full rebuild is a graph full-rebuild + rematerialize (operator
 runbook), not a per-agent cursor reset.
 `,
     )

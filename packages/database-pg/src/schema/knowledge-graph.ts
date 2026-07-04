@@ -1,10 +1,9 @@
 /**
- * Cognee-derived Knowledge Graph tables.
+ * Knowledge Graph tables.
  *
- * Phase II keeps Cognee out of runtime retrieval and stores a normalized,
- * tenant-scoped graph snapshot in Aurora. Rows are scoped by source kind/ref
- * so thread transcripts, wiki pages, and Company Brain pages can share the
- * same ontology-gated normalization pipeline.
+ * Stores normalized, tenant-scoped graph snapshots in Aurora. Rows are scoped
+ * by source kind/ref so thread transcripts, wiki pages, and Brain pages can
+ * share the same ontology-gated normalization pipeline.
  */
 
 import {
@@ -71,7 +70,7 @@ export const KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS = [
   "brain_page",
   "brain_section",
   "hindsight_observation",
-  "cognee_payload",
+  "graph_payload",
   "normalizer",
 ] as const;
 export type KnowledgeGraphEvidenceSourceKind =
@@ -98,8 +97,8 @@ export const knowledgeGraphIngestRuns = pgTable(
     ),
     status: text("status").notNull().default("queued"),
     trigger: text("trigger").notNull().default("manual"),
-    cognee_dataset_name: text("cognee_dataset_name").notNull(),
-    cognee_dataset_id: text("cognee_dataset_id"),
+    source_dataset_name: text("source_dataset_name").notNull(),
+    source_dataset_id: text("source_dataset_id"),
     started_at: timestamp("started_at", { withTimezone: true }),
     finished_at: timestamp("finished_at", { withTimezone: true }),
     duration_ms: integer("duration_ms"),
@@ -181,7 +180,7 @@ export const knowledgeGraphEntities = pgTable(
     ingest_run_id: uuid("ingest_run_id")
       .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
-    cognee_node_id: text("cognee_node_id").notNull(),
+    graph_node_id: text("graph_node_id").notNull(),
     label: text("label").notNull(),
     normalized_label: text("normalized_label").notNull(),
     type_label: text("type_label"),
@@ -210,9 +209,9 @@ export const knowledgeGraphEntities = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("uq_kg_entities_run_cognee_node").on(
+    uniqueIndex("uq_kg_entities_run_graph_node").on(
       table.ingest_run_id,
-      table.cognee_node_id,
+      table.graph_node_id,
     ),
     index("idx_kg_entities_tenant_thread_label").on(
       table.tenant_id,
@@ -272,7 +271,7 @@ export const knowledgeGraphRelationships = pgTable(
     ingest_run_id: uuid("ingest_run_id")
       .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
-    cognee_edge_id: text("cognee_edge_id"),
+    graph_edge_id: text("graph_edge_id"),
     source_entity_id: uuid("source_entity_id")
       .references((): AnyPgColumn => knowledgeGraphEntities.id, {
         onDelete: "cascade",
@@ -303,9 +302,9 @@ export const knowledgeGraphRelationships = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("uq_kg_relationships_run_cognee_edge")
-      .on(table.ingest_run_id, table.cognee_edge_id)
-      .where(sql`${table.cognee_edge_id} IS NOT NULL`),
+    uniqueIndex("uq_kg_relationships_run_graph_edge")
+      .on(table.ingest_run_id, table.graph_edge_id)
+      .where(sql`${table.graph_edge_id} IS NOT NULL`),
     index("idx_kg_relationships_tenant_thread_source").on(
       table.tenant_id,
       table.thread_id,
@@ -413,7 +412,7 @@ export const knowledgeGraphEvidence = pgTable(
     ),
     check(
       "knowledge_graph_evidence_evidence_source_kind_allowed",
-      sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','cognee_payload','normalizer')`,
+      sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','graph_payload','normalizer')`,
     ),
     check(
       "knowledge_graph_evidence_subject_required",
@@ -543,7 +542,7 @@ export const knowledgeGraphEvidenceRelations = relations(
  * last_record_id)` pair mirrors the wiki compile-cursor tiebreaker so
  * same-timestamp rows are never missed or double-read. Cursors advance only
  * inside the same transaction that replaces the mirror snapshot and marks the
- * run succeeded (crash between Cognee write and snapshot leaves cursors put,
+ * run succeeded (crash between extraction and snapshot leaves cursors put,
  * and the idempotent per-observation dataset identity absorbs the re-read).
  */
 export const knowledgeGraphObservationCursors = pgTable(

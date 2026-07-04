@@ -298,8 +298,8 @@ beforeEach(() => {
     rawKey: "twpi_test_key",
     key: {
       id: "key-1",
-      plugin_key: "company-brain",
-      entitlement_product_key: "company-brain-premium",
+      plugin_key: "brain",
+      entitlement_product_key: "brain-premium",
       tenant_id: "tenant-1",
       expires_at: null,
       issued_at: new Date("2026-06-13T12:00:00.000Z"),
@@ -310,8 +310,8 @@ beforeEach(() => {
     entitlement: {
       id: "entitlement-1",
       tenant_id: "tenant-1",
-      plugin_key: "company-brain",
-      entitlement_product_key: "company-brain-premium",
+      plugin_key: "brain",
+      entitlement_product_key: "brain-premium",
       status: "active",
       source: "install_key",
       granted_at: new Date("2026-06-13T12:00:00.000Z"),
@@ -323,7 +323,7 @@ beforeEach(() => {
   mockRevokePremiumInstallKey.mockResolvedValue({
     key: {
       id: "key-1",
-      plugin_key: "company-brain",
+      plugin_key: "brain",
       status: "revoked",
       revoked_at: new Date("2026-06-13T12:00:00.000Z"),
     },
@@ -1054,7 +1054,7 @@ describe("premium entitlement key mutations (THNK-15 U3)", () => {
       null,
       {
         input: {
-          pluginKey: "company-brain",
+          pluginKey: "brain",
           tenantId: "tenant-1",
           expiresAt: null,
         },
@@ -1065,7 +1065,7 @@ describe("premium entitlement key mutations (THNK-15 U3)", () => {
     expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
     expect(mockIssuePremiumInstallKey).toHaveBeenCalledWith(
       {
-        pluginKey: "company-brain",
+        pluginKey: "brain",
         tenantId: "tenant-1",
         expiresAt: null,
         actor: { actorId: "user-1", actorType: "user" },
@@ -1088,7 +1088,7 @@ describe("premium entitlement key mutations (THNK-15 U3)", () => {
         null,
         {
           input: {
-            pluginKey: "company-brain",
+            pluginKey: "brain",
             tenantId: "tenant-1",
             expiresAt: null,
           },
@@ -1104,7 +1104,7 @@ describe("premium entitlement key mutations (THNK-15 U3)", () => {
       null,
       {
         input: {
-          pluginKey: "company-brain",
+          pluginKey: "brain",
           installKey: "twpi_test_key",
         },
       },
@@ -1115,7 +1115,7 @@ describe("premium entitlement key mutations (THNK-15 U3)", () => {
     expect(mockRedeemPremiumInstallKey).toHaveBeenCalledWith(
       {
         tenantId: "tenant-1",
-        pluginKey: "company-brain",
+        pluginKey: "brain",
         rawKey: "twpi_test_key",
         actor: { actorId: "user-1", actorType: "user" },
         request: { ip: null, userAgent: null },

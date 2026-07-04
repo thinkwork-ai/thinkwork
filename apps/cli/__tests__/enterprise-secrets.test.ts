@@ -50,16 +50,12 @@ describe("enterprise deployment secrets", () => {
     expect(results[0].message).toContain("2 GitHub Environment secret");
   });
 
-  it("does not require Cognee provider secrets while the enterprise template keeps Cognee disabled", () => {
+  it("only requires the platform bootstrap secrets for the enterprise template", () => {
     const secretNames: readonly string[] = ENTERPRISE_SECRET_NAMES;
 
     expect(secretNames).toEqual([
       "TF_VAR_DB_PASSWORD",
       "TF_VAR_API_AUTH_SECRET",
     ]);
-    expect(secretNames).not.toContain("TF_VAR_COGNEE_LLM_API_KEY_SECRET_ARN");
-    expect(secretNames).not.toContain(
-      "TF_VAR_COGNEE_EMBEDDING_API_KEY_SECRET_ARN",
-    );
   });
 });

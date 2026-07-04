@@ -130,7 +130,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
   db: Database;
   run: KnowledgeGraphIngestRunRow;
   snapshot: NormalizedKnowledgeGraphSnapshot;
-  cogneeDatasetId: string | null;
+  sourceDatasetId: string | null;
   startedAt: Date;
   ingestMode: string;
   ontologyMechanism: string;
@@ -184,7 +184,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
               source_kind: args.run.source_kind,
               source_ref: args.run.source_ref,
               ingest_run_id: args.run.id,
-              cognee_node_id: entity.cogneeNodeId,
+              graph_node_id: entity.graphNodeId,
               label: entity.label,
               normalized_label: entity.normalizedLabel,
               type_label: entity.typeLabel,
@@ -226,7 +226,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
               source_kind: args.run.source_kind,
               source_ref: args.run.source_ref,
               ingest_run_id: args.run.id,
-              cognee_edge_id: relationship.cogneeEdgeId,
+              graph_edge_id: relationship.graphEdgeId,
               source_entity_id: entityIdByTempId.get(
                 relationship.sourceTempId,
               )!,
@@ -291,7 +291,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       .update(knowledgeGraphIngestRuns)
       .set({
         status: "succeeded",
-        cognee_dataset_id: args.cogneeDatasetId,
+        source_dataset_id: args.sourceDatasetId,
         finished_at: finishedAt,
         duration_ms: finishedAt.getTime() - args.startedAt.getTime(),
         entity_count: args.snapshot.entities.length,
@@ -480,7 +480,7 @@ export async function mergeKnowledgeGraphSnapshot(args: {
         source_kind: run.source_kind,
         source_ref: run.source_ref,
         ingest_run_id: run.id,
-        cognee_node_id: entity.cogneeNodeId,
+        graph_node_id: entity.graphNodeId,
         label: entity.label,
         normalized_label: entity.normalizedLabel,
         type_label: entity.typeLabel,
@@ -560,12 +560,11 @@ export async function mergeKnowledgeGraphSnapshot(args: {
         source_kind: run.source_kind,
         source_ref: run.source_ref,
         ingest_run_id: run.id,
-        cognee_edge_id: relationship.cogneeEdgeId,
+        graph_edge_id: relationship.graphEdgeId,
         source_entity_id: sourceId,
         target_entity_id: targetId,
         label: relationship.label,
-        ontology_relationship_type_id:
-          relationship.ontologyRelationshipTypeId,
+        ontology_relationship_type_id: relationship.ontologyRelationshipTypeId,
         ontology_type_slug: relationship.ontologyTypeSlug,
         grounding_status: relationship.groundingStatus,
         provenance_status: relationship.provenanceStatus,
@@ -675,7 +674,7 @@ export async function mergeKnowledgeGraphSnapshot(args: {
       .update(knowledgeGraphIngestRuns)
       .set({
         status: "succeeded",
-        cognee_dataset_id: null,
+        source_dataset_id: null,
         finished_at: finishedAt,
         duration_ms: finishedAt.getTime() - args.startedAt.getTime(),
         entity_count: snapshot.entities.length,

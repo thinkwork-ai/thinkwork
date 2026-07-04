@@ -836,9 +836,6 @@ importers:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../../plugins/catalog
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../../plugins/company-brain
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../../plugins/lastmile
@@ -1114,9 +1111,6 @@ importers:
 
   packages/deployment-runner:
     dependencies:
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../../plugins/company-brain
       '@thinkwork/plugin-n8n':
         specifier: workspace:*
         version: link:../../plugins/n8n
@@ -1684,9 +1678,6 @@ importers:
 
   plugins/catalog:
     dependencies:
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../company-brain
       '@thinkwork/plugin-company-data':
         specifier: workspace:*
         version: link:../company-data
@@ -1718,31 +1709,6 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.0.0
-        version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
-
-  plugins/company-brain:
-    dependencies:
-      '@thinkwork/database-pg':
-        specifier: workspace:*
-        version: link:../../packages/database-pg
-      drizzle-orm:
-        specifier: ^0.39.0
-        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
-      graphql:
-        specifier: ^16.10.0
-        version: 16.13.2
-    devDependencies:
-      '@thinkwork/deployment-runner':
-        specifier: workspace:*
-        version: link:../../packages/deployment-runner
-      '@thinkwork/plugin-catalog':
-        specifier: workspace:*
-        version: link:../catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

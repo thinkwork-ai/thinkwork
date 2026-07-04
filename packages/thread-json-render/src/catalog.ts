@@ -1,7 +1,7 @@
 import { defineCatalog, defineSchema } from "@json-render/core";
 import { z } from "zod";
 
-import { threadJsonRenderPrimitiveComponentDefinitions } from "./primitive-catalog";
+import { threadJsonRenderPrimitiveComponentDefinitions } from "./primitive-catalog.js";
 
 const resultListMetaValueSchema = z.union([
   z.string(),

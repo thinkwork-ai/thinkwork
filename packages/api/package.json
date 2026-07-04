@@ -47,7 +47,6 @@
     "@thinkwork/namespace-registry": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/plugin-catalog": "workspace:*",
-    "@thinkwork/plugin-company-brain": "workspace:*",
     "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",
     "@thinkwork/plugin-twenty": "workspace:*",

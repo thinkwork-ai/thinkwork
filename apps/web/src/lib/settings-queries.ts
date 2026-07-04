@@ -60,12 +60,6 @@ export const SettingsDeploymentStatusQuery = graphql(`
       agentcoreStatus
       hindsightEnabled
       managedMemoryEnabled
-      cogneeEnabled
-      cogneeEndpoint
-      cogneeLogGroupName
-      cogneeBackendMode
-      cogneeClusterArn
-      cogneeServiceName
       twentyProvisioned
       twentyRuntimeEnabled
       twentyUrl
@@ -106,78 +100,6 @@ export const SettingsDeploymentStatusQuery = graphql(`
         workflowReadinessReasons
         workflowCapabilityFlags
       }
-    }
-  }
-`);
-
-export const SettingsCompanyBrainStatusQuery = graphql(`
-  query SettingsCompanyBrainStatus {
-    companyBrainStatus {
-      tenantId
-      storageTier
-      activeBackend
-      status
-      healthStatus
-      counters {
-        ingestionQueueDepth
-        failedIngestCount
-        graphEntityCount
-        graphEdgeCount
-        sourceArtifactCount
-        vaultProjectionCount
-        latestIngestAt
-        latestProjectionAt
-        ontologyVersion
-      }
-      capabilities {
-        launch {
-          key
-          status
-          message
-          source
-        }
-        optional {
-          key
-          status
-          message
-          source
-        }
-      }
-      migration {
-        id
-        phase
-        status
-        fromStorageTier
-        toStorageTier
-        requestedAt
-        startedAt
-        completedAt
-        rollbackWindowClosesAt
-        errorMessage
-        validationSummary
-      }
-      evidence {
-        managedApplicationId
-        latestDeploymentJobId
-        backendMode
-        graphProvider
-        vectorProvider
-        embeddingModel
-        vectorDimension
-        cogneeVersion
-        cogneeEndpoint
-        s3ArtifactRoot
-        s3ManifestRoot
-        s3VaultProjectionRoot
-        neptuneGraphId
-        neptuneEndpoint
-        efsFileSystemId
-        productionPosture
-        operatorEvidence
-        migrationEvidence
-      }
-      createdAt
-      updatedAt
     }
   }
 `);
@@ -357,46 +279,6 @@ export const SettingsRemoveEmailSpaceSenderAllowlistMutation = graphql(`
   }
 `);
 
-export const SettingsRequestCompanyBrainProductionMigrationMutation = graphql(`
-  mutation SettingsRequestCompanyBrainProductionMigration(
-    $input: RequestCompanyBrainProductionMigrationInput!
-  ) {
-    requestCompanyBrainProductionMigration(input: $input) {
-      id
-      phase
-      status
-      fromStorageTier
-      toStorageTier
-      requestedAt
-      startedAt
-      completedAt
-      rollbackWindowClosesAt
-      errorMessage
-      validationSummary
-    }
-  }
-`);
-
-export const SettingsUpdateCompanyBrainMigrationMutation = graphql(`
-  mutation SettingsUpdateCompanyBrainMigration(
-    $input: UpdateCompanyBrainMigrationInput!
-  ) {
-    updateCompanyBrainMigration(input: $input) {
-      id
-      phase
-      status
-      fromStorageTier
-      toStorageTier
-      requestedAt
-      startedAt
-      completedAt
-      rollbackWindowClosesAt
-      errorMessage
-      validationSummary
-    }
-  }
-`);
-
 export const SettingsDeploymentReleasesQuery = graphql(`
   query SettingsDeploymentReleases($limit: Int) {
     deploymentReleases(limit: $limit) {
@@ -541,16 +423,6 @@ export const SettingsRemediateReleaseRunnerMutation = graphql(`
         payload
         createdAt
       }
-    }
-  }
-`);
-
-export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
-  mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
-    setKnowledgeGraphDeployment(input: { enabled: $enabled }) {
-      desiredEnabled
-      workflowUrl
-      message
     }
   }
 `);
@@ -761,19 +633,6 @@ export const SettingsRejectManagedApplicationDeploymentMutation = graphql(`
   }
 `);
 
-export const SettingsKnowledgeGraphHealthCheckQuery = graphql(`
-  query SettingsKnowledgeGraphHealthCheck {
-    knowledgeGraphHealthCheck {
-      healthy
-      statusCode
-      latencyMs
-      endpoint
-      checkedAt
-      message
-    }
-  }
-`);
-
 export const SettingsManagedApplicationHealthCheckQuery = graphql(`
   query SettingsManagedApplicationHealthCheck($key: String!) {
     managedApplicationHealthCheck(key: $key) {
@@ -858,8 +717,6 @@ export const SettingsKnowledgeGraphIngestRunsQuery = graphql(`
       threadId
       status
       trigger
-      cogneeDatasetName
-      cogneeDatasetId
       entityCount
       relationshipCount
       evidenceCount

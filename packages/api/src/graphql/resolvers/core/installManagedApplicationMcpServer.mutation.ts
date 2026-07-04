@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
-import { requirePlatformOperator } from "./setKnowledgeGraphDeployment.mutation.js";
+import { requirePlatformOperator } from "./deploymentControl.js";
 import {
   normalizeManagedApplicationKey,
   readManagedApplication,

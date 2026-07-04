@@ -21,10 +21,6 @@ describe("verify-plugin-source-boundary", () => {
 
   it("accepts plugin-specific source inside the owning plugin package", async () => {
     await withFixture(async (dir) => {
-      await writeFixtureFile(
-        dir,
-        "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
-      );
       await writeFixtureFile(dir, "plugins/company-data/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/company-etl/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
@@ -152,37 +148,6 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.staleAllowlistEntries, []);
       assert.equal(result.allowlistMatchCount, 1);
       assert.equal(result.sharedAllowlistMatchCount, 0);
-    });
-  });
-
-  it("accepts historical and platform fixture entries through the shared allowlist", async () => {
-    await withFixture(async (dir) => {
-      await writeFixtureFile(
-        dir,
-        "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
-      );
-      await writeFixtureFile(
-        dir,
-        "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
-      );
-      const fixtureSharedAllowlist = sharedPluginTermAllowlist.filter(
-        (entry) =>
-          entry.path ===
-            "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts" ||
-          entry.path ===
-            "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
-      );
-
-      const result = await findPluginSourceBoundaryViolations({
-        repoRoot: dir,
-        allowlist: pluginSourceBoundaryAllowlist,
-        sharedAllowlist: fixtureSharedAllowlist,
-      });
-
-      assert.deepEqual(result.violations, []);
-      assert.deepEqual(result.staleAllowlistEntries, []);
-      assert.equal(result.allowlistMatchCount, 0);
-      assert.equal(result.sharedAllowlistMatchCount, 2);
     });
   });
 

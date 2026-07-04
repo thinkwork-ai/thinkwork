@@ -1,14 +1,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryDocs, useQueryMock, pluginInstallsHolder } = vi.hoisted(() => ({
+const { queryDocs, useQueryMock } = vi.hoisted(() => ({
   queryDocs: {
     SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
     SettingsManagedApplicationsQuery: Symbol("managedApplications"),
-    SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
   },
   useQueryMock: vi.fn(),
-  pluginInstallsHolder: { current: [] as Array<{ pluginKey: string }> },
 }));
 
 vi.mock("urql", () => ({
@@ -25,7 +23,6 @@ vi.mock("@/context/PageHeaderContext", () => ({
 import { ManagedApplicationsPage } from "./ManagedApplicationsPage";
 
 beforeEach(() => {
-  pluginInstallsHolder.current = [];
   useQueryMock.mockReset();
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsManagedApplicationsQuery) {
@@ -37,15 +34,6 @@ beforeEach(() => {
     if (query === queryDocs.SettingsDeploymentStatusQuery) {
       return [{ data: { deploymentStatus }, fetching: false }, vi.fn()];
     }
-    if (query === queryDocs.SettingsPluginInstallsQuery) {
-      return [
-        {
-          data: { pluginInstalls: pluginInstallsHolder.current },
-          fetching: false,
-        },
-        vi.fn(),
-      ];
-    }
     return [{ fetching: false }, vi.fn()];
   });
 });
@@ -53,19 +41,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ManagedApplicationsPage", () => {
-  it("renders each managed application as a card linking to its product home", () => {
+  it("renders only surviving managed applications as cards", () => {
     render(<ManagedApplicationsPage />);
 
-    expect(
-      screen
-        .getByRole("link", { name: /open thinkwork brain/i })
-        .getAttribute("href"),
-    ).toBe("/settings/plugins/company-brain");
     expect(
       screen
         .getByRole("link", { name: /open twenty crm/i })
         .getAttribute("href"),
     ).toBe("/settings/crm");
+    expect(
+      screen.getByRole("link", { name: /open n8n/i }).getAttribute("href"),
+    ).toBe("/settings/plugins/n8n");
   });
 
   it("does not render row-level lifecycle buttons", () => {
@@ -76,34 +62,7 @@ describe("ManagedApplicationsPage", () => {
     expect(screen.queryByRole("button", { name: /view plan/i })).toBeNull();
   });
 
-  it("hides the Twenty row once a twenty plugin install exists while ThinkWork Brain is unaffected", () => {
-    pluginInstallsHolder.current = [{ pluginKey: "twenty" }];
-    render(<ManagedApplicationsPage />);
-
-    expect(screen.queryByRole("link", { name: /open twenty crm/i })).toBeNull();
-    expect(
-      screen
-        .getByRole("link", { name: /open thinkwork brain/i })
-        .getAttribute("href"),
-    ).toBe("/settings/plugins/company-brain");
-  });
-
-  it("hides the ThinkWork Brain backing row once the company-brain plugin is installed", () => {
-    pluginInstallsHolder.current = [{ pluginKey: "company-brain" }];
-    render(<ManagedApplicationsPage />);
-
-    expect(
-      screen.queryByRole("link", { name: /open thinkwork brain/i }),
-    ).toBeNull();
-    expect(
-      screen
-        .getByRole("link", { name: /open twenty crm/i })
-        .getAttribute("href"),
-    ).toBe("/settings/crm");
-  });
-
-  it("keeps the Twenty row while only OTHER plugins are installed", () => {
-    pluginInstallsHolder.current = [{ pluginKey: "lastmile" }];
+  it("keeps surviving app rows independent of plugin installs", () => {
     render(<ManagedApplicationsPage />);
 
     expect(
@@ -117,9 +76,9 @@ describe("ManagedApplicationsPage", () => {
 const managedApps = [
   {
     __typename: "ManagedApplication",
-    id: "app-cognee",
-    key: "cognee",
-    displayName: "ThinkWork Brain substrate",
+    id: "app-n8n",
+    key: "n8n",
+    displayName: "n8n",
     desiredStatus: "disabled",
     currentStatus: "running",
     selectedReleaseVersion: "2026.06.06",
@@ -146,9 +105,9 @@ const deploymentStatus = {
   managedApplications: [
     {
       __typename: "ManagedApplicationDeployment",
-      key: "cognee",
-      displayName: "ThinkWork Brain substrate",
-      description: "Private context substrate.",
+      key: "n8n",
+      displayName: "n8n",
+      description: "Workflow automation runtime.",
       status: "running",
       enabled: true,
       provisioned: true,
@@ -165,7 +124,7 @@ const deploymentStatus = {
       targetGroupArn: null,
       storageBucketName: null,
       databaseName: null,
-      message: "ThinkWork Brain substrate is running.",
+      message: "n8n is running.",
       managedMcpServerId: null,
       managedMcpStatus: "missing",
       managedMcpInstalled: false,

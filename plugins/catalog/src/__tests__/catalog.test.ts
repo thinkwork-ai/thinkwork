@@ -13,7 +13,8 @@ import {
   verifyPluginCatalog,
   type SignedPluginCatalogDocument,
 } from "../catalog";
-import { companyBrainManifest, lastmileManifest } from "../registry";
+import type { PluginManifest } from "../contracts";
+import { lastmileManifest, n8nManifest } from "../registry";
 
 function keyPair() {
   const pair = generateKeyPairSync("ed25519");
@@ -95,23 +96,30 @@ describe("buildPluginCatalog", () => {
 
   it("sorts catalog plugins alphabetically by display name", () => {
     const catalog = buildPluginCatalog({
-      manifests: [lastmileManifest, companyBrainManifest],
+      manifests: [n8nManifest, lastmileManifest],
     });
 
     expect(catalog.plugins.map((plugin) => plugin.displayName)).toEqual([
       "LastMile",
-      "ThinkWork Brain",
+      "n8n",
     ]);
   });
 
   it("preserves premium metadata on catalog entries", () => {
-    const catalog = buildPluginCatalog({ manifests: [companyBrainManifest] });
-    expect(catalog.plugins[0].pluginKey).toBe("company-brain");
+    const premiumManifest: PluginManifest = {
+      ...lastmileManifest,
+      premium: {
+        entitlementProductKey: "lastmile-premium",
+        installKeyRequired: true,
+        installKeyPrompt: "Enter the install key.",
+      },
+    };
+    const catalog = buildPluginCatalog({ manifests: [premiumManifest] });
+    expect(catalog.plugins[0].pluginKey).toBe("lastmile");
     expect(catalog.plugins[0].premium).toEqual({
-      entitlementProductKey: "company-brain",
+      entitlementProductKey: "lastmile-premium",
       installKeyRequired: true,
-      installKeyPrompt:
-        "Enter the ThinkWork Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
+      installKeyPrompt: "Enter the install key.",
     });
   });
 

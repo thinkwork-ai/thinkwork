@@ -2,11 +2,9 @@ import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
 import {
-  readCogneeStatus,
   readManagedApplications,
   readTwentyStatus,
 } from "./managedApplications.js";
-import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 import { enrichManagedApplicationsWithMcpState } from "../../../lib/managed-mcp-applications.js";
 import {
@@ -15,8 +13,6 @@ import {
   resolveDeploymentProfileConfig,
   resolveDeploymentStatusPointerConfig,
 } from "../deployments/shared.js";
-
-export { readCogneeStatus };
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
@@ -52,7 +48,6 @@ export const deploymentStatus = async (
     ),
     configuredDeploymentProfile,
   );
-  const cognee = readCogneeStatus();
   // Twenty status is DB-served (managed_applications + deployment jobs);
   // the TWENTY env/SSM projection is retired (plan 2026-06-12-001 U10).
   const twenty = await readTwentyStatus(tenantId);
@@ -60,16 +55,6 @@ export const deploymentStatus = async (
     tenantId,
     await readManagedApplications(tenantId),
   );
-  const cogneeServiceName =
-    process.env.COGNEE_SERVICE_NAME ||
-    (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
-  const cogneeCluster = resolveCogneeClusterIdentity({
-    enabled: cognee.enabled,
-    stage,
-    region,
-    accountId,
-  });
-
   return {
     stage,
     source: "AWS",
@@ -96,14 +81,6 @@ export const deploymentStatus = async (
       : "not deployed",
     hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
     managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
-    cogneeEnabled: cognee.enabled,
-    cogneeEndpoint: cognee.endpoint,
-    cogneeLogGroupName:
-      process.env.COGNEE_LOG_GROUP_NAME ||
-      (cognee.enabled ? `/thinkwork/${stage}/cognee` : null),
-    cogneeBackendMode: cognee.backendMode,
-    cogneeClusterArn: cogneeCluster.clusterArn,
-    cogneeServiceName,
     twentyProvisioned: twenty.provisioned,
     twentyRuntimeEnabled: twenty.runtimeEnabled,
     twentyUrl: twenty.url,

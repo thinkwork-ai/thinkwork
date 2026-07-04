@@ -3,18 +3,22 @@ import {
   normalizeGoalSpec,
   normalizeJudgeSpec,
   normalizeLoopPolicy,
+  normalizeRoutineActionsSpec,
   normalizeTriggerSpec,
   normalizeWorkerSpec,
   type EvidencePolicy,
+  type RoutineActionsSpec,
 } from "@thinkwork/agent-loops-core";
 import { and, desc, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
+import { inArray } from "drizzle-orm";
 import {
   agents,
   agentLoopVersions,
   agentLoops,
   db,
   generateSlug,
+  routines,
   spaces,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
@@ -47,6 +51,7 @@ type SaveAgentLoopInput = {
   judgeSpec: unknown;
   loopPolicy?: unknown;
   evidencePolicy?: unknown;
+  routineActionsSpec?: unknown;
   sourceMetadata?: unknown;
 };
 
@@ -106,6 +111,7 @@ async function createAgentLoop(
       judge_spec: normalized.judgeSpec,
       loop_policy: normalized.loopPolicy,
       evidence_policy: normalized.evidencePolicy,
+      routine_actions_spec: normalized.routineActionsSpec,
       source_metadata: normalized.sourceMetadata,
       created_by_actor_type: actorId ? "user" : "system",
       created_by_actor_id: actorId,
@@ -181,6 +187,7 @@ async function updateAgentLoop(
         judge_spec: normalized.judgeSpec,
         loop_policy: normalized.loopPolicy,
         evidence_policy: normalized.evidencePolicy,
+        routine_actions_spec: normalized.routineActionsSpec,
         source_metadata: normalized.sourceMetadata,
         created_by_actor_type: actorId ? "user" : "system",
         created_by_actor_id: actorId,
@@ -301,6 +308,7 @@ interface NormalizedAgentLoopSpecs {
   judgeSpec: ReturnType<typeof normalizeJudgeSpec>;
   loopPolicy: ReturnType<typeof normalizeLoopPolicy>;
   evidencePolicy: EvidencePolicy;
+  routineActionsSpec: RoutineActionsSpec | null;
   sourceMetadata: Record<string, unknown>;
 }
 
@@ -326,6 +334,13 @@ async function normalizeSpecs(
     defaultWorker,
   });
 
+  const routineActionsSpec = normalizeRoutineActionsSpec(
+    input.routineActionsSpec,
+  );
+  if (routineActionsSpec) {
+    await assertRoutineActionsValid(input.tenantId, routineActionsSpec);
+  }
+
   return {
     triggerSpec: normalizeTriggerSpec(triggerSpec),
     goalSpec: normalizeGoalSpec(draft.goalSpec),
@@ -335,8 +350,53 @@ async function normalizeSpecs(
       ? normalizeLoopPolicy(parseAwsJsonObject(input.loopPolicy))
       : DEFAULT_LOOP_POLICY,
     evidencePolicy: normalizeEvidencePolicy(input.evidencePolicy),
+    routineActionsSpec,
     sourceMetadata: draft.sourceMetadata,
   };
+}
+
+/** Reject dangling / ineligible routine refs at save time (U5): every
+ * action must point at an enabled git_python routine in this tenant that
+ * is usable — validated SHA already recorded, or fixtures declared so the
+ * first run can gate it (R9). */
+async function assertRoutineActionsValid(
+  tenantId: string,
+  spec: RoutineActionsSpec,
+): Promise<void> {
+  const ids = [...new Set(spec.actions.map((action) => action.routineId))];
+  const rows = await db
+    .select({
+      id: routines.id,
+      tenant_id: routines.tenant_id,
+      engine: routines.engine,
+      status: routines.status,
+      validated_sha: routines.validated_sha,
+      fixture_paths: routines.fixture_paths,
+    })
+    .from(routines)
+    .where(inArray(routines.id, ids));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const id of ids) {
+    const row = byId.get(id);
+    if (!row || row.tenant_id !== tenantId) {
+      throw new Error(`Routine ${id} was not found in this tenant`);
+    }
+    if (row.engine !== "git_python") {
+      throw new Error(
+        `Routine ${id} is a ${row.engine} routine; routine actions require git_python`,
+      );
+    }
+    if (row.status !== "active") {
+      throw new Error(`Routine ${id} is ${row.status}, not active`);
+    }
+    const hasFixtures =
+      Array.isArray(row.fixture_paths) && row.fixture_paths.length > 0;
+    if (!row.validated_sha && !hasFixtures) {
+      throw new Error(
+        `Routine ${id} has no validated SHA and no fixtures — it cannot be attached to an Automation yet (R9)`,
+      );
+    }
+  }
 }
 
 async function loadDefaultAutomationWorker(
@@ -408,6 +468,7 @@ function versionSpecsEqual(
     judge_spec: unknown;
     loop_policy: unknown;
     evidence_policy: unknown;
+    routine_actions_spec?: unknown;
     source_metadata: unknown;
   },
   normalized: NormalizedAgentLoopSpecs,
@@ -420,6 +481,8 @@ function versionSpecsEqual(
     stableJson(version.loop_policy) === stableJson(normalized.loopPolicy) &&
     stableJson(version.evidence_policy) ===
       stableJson(normalized.evidencePolicy) &&
+    stableJson(version.routine_actions_spec ?? null) ===
+      stableJson(normalized.routineActionsSpec) &&
     stableJson(version.source_metadata) ===
       stableJson(normalized.sourceMetadata)
   );

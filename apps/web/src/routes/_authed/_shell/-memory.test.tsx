@@ -100,11 +100,11 @@ describe("apps/web Memory in-page tab strip", () => {
     expect(screen.queryByRole("tab", { name: "Brain" })).toBeNull();
   });
 
-  it("renders Memories | Wiki | Sources in that order", () => {
+  it("renders Memories | Pages | Sources in that order", () => {
     render(<MemoriesPage />);
     const tabs = screen.getAllByRole("tab");
     const labels = tabs.map((el) => el.textContent ?? "");
-    expect(labels).toEqual(["Memories", "Wiki", "Sources"]);
+    expect(labels).toEqual(["Memories", "Pages", "Sources"]);
   });
 
   it("highlights the Sources tab when the pathname is a /memory/kbs/$kbId child", () => {

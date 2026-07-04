@@ -10,7 +10,6 @@ describe("SettingsMemory", () => {
   it("leaves engine mode fields in the GraphQL contract without rendering them", () => {
     expect(source).not.toContain("ComputerMemorySystemConfigQuery");
     expect(queries).toContain("activeEngine");
-    expect(queries).toContain("cogneeMemoryEnabled");
     expect(queries).toContain("userMemoryEnabled");
     expect(queries).toContain("spaceMemoryEnabled");
     expect(queries).toContain("legacyHindsightAvailable");
@@ -51,6 +50,5 @@ describe("SettingsMemory", () => {
     expect(source).not.toContain("Company distillation");
     expect(source).not.toContain("Wiki projection");
     expect(source).not.toContain("deferred");
-    expect(source).not.toContain("using Cognee");
   });
 });

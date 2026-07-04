@@ -43,7 +43,7 @@ describe("Knowledge Graph schema", () => {
     expect(columns.requested_by_user_id.notNull).toBe(false);
     expect(columns.status.default).toBe("queued");
     expect(columns.trigger.default).toBe("manual");
-    expect(columns.cognee_dataset_name.notNull).toBe(true);
+    expect(columns.source_dataset_name.notNull).toBe(true);
     expect(columns.entity_count.default).toBe(0);
     expect(columns.relationship_count.default).toBe(0);
     expect(columns.evidence_count.default).toBe(0);
@@ -76,7 +76,7 @@ describe("Knowledge Graph schema", () => {
     expect(entityColumns.thread_id.notNull).toBe(false);
     expect(entityColumns.source_kind.default).toBe("thread");
     expect(entityColumns.source_ref.notNull).toBe(true);
-    expect(entityColumns.cognee_node_id.notNull).toBe(true);
+    expect(entityColumns.graph_node_id.notNull).toBe(true);
     expect(entityColumns.normalized_label.notNull).toBe(true);
     expect(entityColumns.aliases.notNull).toBe(true);
     expect(entityColumns.grounding_status.default).toBe("unknown");
@@ -128,7 +128,7 @@ describe("Knowledge Graph schema", () => {
       "brain_page",
       "brain_section",
       "hindsight_observation",
-      "cognee_payload",
+      "graph_payload",
       "normalizer",
     ]);
   });
@@ -200,7 +200,7 @@ describe("Knowledge Graph schema", () => {
     expect(migration0146).toContain("ALTER COLUMN thread_id DROP NOT NULL");
     expect(migration0146).toContain("source_kind IN ('thread','wiki','brain')");
     expect(migration0146).toContain(
-      "evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','cognee_payload','normalizer')",
+      "evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','graph_payload','normalizer')",
     );
   });
 
@@ -253,7 +253,7 @@ describe("Knowledge Graph schema", () => {
       /knowledge_graph_relationships_provenance_allowed[\s\S]*'strong'[\s\S]*'weak'[\s\S]*'missing'/,
     );
     expect(migration0145).toMatch(
-      /knowledge_graph_evidence_source_kind_allowed[\s\S]*'thread_message'[\s\S]*'cognee_payload'[\s\S]*'normalizer'/,
+      /knowledge_graph_evidence_source_kind_allowed[\s\S]*'thread_message'[\s\S]*'graph_payload'[\s\S]*'normalizer'/,
     );
     expect(migration0145).toContain(
       "CHECK (entity_id IS NOT NULL OR relationship_id IS NOT NULL)",

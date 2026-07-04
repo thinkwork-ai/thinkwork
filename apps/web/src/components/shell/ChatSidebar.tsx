@@ -119,7 +119,9 @@ import {
   formatCompactCount,
   formatTinyRelativeDate,
   isThreadAwaitingUser,
+  isThreadLocallyRead,
   isThreadUnread,
+  type LocallyReadThreadAt,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
   threadActivityAt,
@@ -222,9 +224,9 @@ export function ChatSidebar() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
   );
-  const [locallyReadThreadIds, setLocallyReadThreadIds] = useState<Set<string>>(
-    () => new Set(routeThreadId ? [routeThreadId] : []),
-  );
+  const [locallyReadThreadAt, setLocallyReadThreadAt] = useState<
+    Map<string, number>
+  >(() => new Map(routeThreadId ? [[routeThreadId, Date.now()]] : []));
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const pendingThreadDeletes = usePendingThreadDeletes();
@@ -417,10 +419,9 @@ export function ChatSidebar() {
   );
 
   const markThreadRead = useCallback((threadId: string) => {
-    setLocallyReadThreadIds((current) => {
-      if (current.has(threadId)) return current;
-      const next = new Set(current);
-      next.add(threadId);
+    setLocallyReadThreadAt((current) => {
+      const next = new Map(current);
+      next.set(threadId, Date.now());
       return next;
     });
   }, []);
@@ -433,17 +434,18 @@ export function ChatSidebar() {
   const markSectionThreadsRead = useCallback(
     (threadIds: string[]) => {
       if (threadIds.length === 0) return;
-      setLocallyReadThreadIds((current) => {
-        const next = new Set(current);
-        for (const id of threadIds) next.add(id);
+      setLocallyReadThreadAt((current) => {
+        const next = new Map(current);
+        const now = Date.now();
+        for (const id of threadIds) next.set(id, now);
         return next;
       });
       void executeMarkThreadsRead({
         input: { threadIds, read: true },
       }).then((result) => {
         if (result.error) {
-          setLocallyReadThreadIds((current) => {
-            const next = new Set(current);
+          setLocallyReadThreadAt((current) => {
+            const next = new Map(current);
             for (const id of threadIds) {
               // Keep any id a concurrent thread-open already persisted as read
               // (activateThread → persistThreadRead seeds persistedReadThreadIdsRef),
@@ -586,14 +588,25 @@ export function ChatSidebar() {
   // until the list query re-executes — the urql document cache doesn't
   // auto-invalidate on a live event. Both a window-focus return and an
   // onThreadUpdated event trigger a coalesced network-only refetch.
+  //
+  // Space sections own their scoped SpaceThreadsQuery inside
+  // SpaceThreadSection, so the refresh must reach them too — the epoch bump
+  // below is their signal. Without it a new message in a Space thread never
+  // updated the row's unread dot or timestamp until remount (found live
+  // during THINK-136 acceptance). SpacesQuery re-runs for the same reason:
+  // the Space-label unread badge is server-computed.
+  const [spaceSectionRefreshEpoch, setSpaceSectionRefreshEpoch] = useState(0);
   const refreshThreadLists = useCallback(() => {
     reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
     reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
     reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteSpacesQuery({ requestPolicy: "network-only" });
+    setSpaceSectionRefreshEpoch((epoch) => epoch + 1);
   }, [
     reexecutePinnedThreadsQuery,
     reexecuteRecentThreadsQuery,
     reexecuteSearchThreadsQuery,
+    reexecuteSpacesQuery,
   ]);
 
   const threadListRefreshTimerRef = useRef<number | null>(null);
@@ -978,7 +991,7 @@ export function ChatSidebar() {
               <PinnedThreadListSection
                 threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 onActivate={activateThread}
                 onUnpin={unpinThread}
                 onReorder={reorderPinnedThreads}
@@ -989,7 +1002,7 @@ export function ChatSidebar() {
                 threads={genericThreads}
                 selectedThreadId={selectedThreadId}
                 defaultOpen
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 scopeSpaceId={defaultSpaceId}
                 // No scopeSpaceName for the default space: its Thread list
                 // header should read just "Thread List", not "Chats · Threads".
@@ -1002,6 +1015,7 @@ export function ChatSidebar() {
                 spaces={contextualSpaces}
                 spacesFetching={spacesFetching}
                 hasLoadedSpaces={spaces.length > 0}
+                refreshEpoch={spaceSectionRefreshEpoch}
                 spaceThreadsById={spaceThreadsById}
                 tenantId={tenantId}
                 pinnedThreadIdSet={pinnedThreadIdSet}
@@ -1009,7 +1023,7 @@ export function ChatSidebar() {
                 selectedThreadId={selectedThreadId}
                 activeSpaceId={routeSpaceId}
                 openSpaceIds={openSpaceIds}
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 onSpaceOpenChange={setSpaceOpen}
                 onExpandAll={expandAllSpaces}
                 onCollapseAll={collapseAllSpaces}
@@ -1030,7 +1044,7 @@ export function ChatSidebar() {
         threads={searchThreads}
         pinnedThreadIds={pinnedThreadIdSet}
         defaultSpaceIds={defaultSpaceIds}
-        locallyReadThreadIds={locallyReadThreadIds}
+        locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
         isLoading={searchFetching && !searchData}
         error={searchError?.message ?? null}
@@ -1058,7 +1072,7 @@ function ThreadSearchDialog({
   threads,
   pinnedThreadIds,
   defaultSpaceIds,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onSelectThread,
   isLoading,
   error,
@@ -1070,7 +1084,7 @@ function ThreadSearchDialog({
   threads: ChatThreadSummary[];
   pinnedThreadIds: ReadonlySet<string>;
   defaultSpaceIds: ReadonlySet<string>;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: ChatThreadSummary) => void;
   isLoading: boolean;
   error: string | null;
@@ -1130,7 +1144,7 @@ function ThreadSearchDialog({
                           className={cn(
                             "size-1.5 shrink-0 rounded-full",
                             isThreadUnread(thread) &&
-                              !locallyReadThreadIds.has(thread.id)
+                              !isThreadLocallyRead(thread, locallyReadThreadAt)
                               ? "bg-blue-500"
                               : "bg-transparent",
                           )}
@@ -1345,7 +1359,7 @@ function ThreadListSection({
   threads,
   selectedThreadId,
   defaultOpen = true,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   scopeSpaceId,
   scopeSpaceName,
   onActivate,
@@ -1357,7 +1371,7 @@ function ThreadListSection({
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   defaultOpen?: boolean;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   scopeSpaceId?: string;
   scopeSpaceName?: string;
   onActivate: (threadId: string) => void;
@@ -1374,12 +1388,12 @@ function ThreadListSection({
 
   // Unread set drives the badge, the mark-all target, and the filter — one
   // source so the badge reaches zero after a mark-all (KTD-2).
-  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadAt);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
   // The displayed list additionally retains the selected thread so opening one
   // while filtered doesn't make it vanish (it stays until selection moves).
   const displayedThreads = filterOn
-    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    ? displayedUnreadThreads(threads, locallyReadThreadAt, selectedThreadId)
     : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
@@ -1440,7 +1454,7 @@ function ThreadListSection({
                   key={thread.id}
                   thread={thread}
                   active={selectedThreadId === thread.id}
-                  locallyRead={locallyReadThreadIds.has(thread.id)}
+                  locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                   onActivate={() => onActivate(thread.id)}
                   onPin={onPin ? () => onPin(thread.id) : undefined}
                 />
@@ -1472,14 +1486,14 @@ function ThreadListSection({
 function PinnedThreadListSection({
   threads,
   selectedThreadId,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onActivate,
   onUnpin,
   onReorder,
 }: {
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onActivate: (threadId: string) => void;
   onUnpin?: (threadId: string) => void;
   onReorder?: (threadIds: string[]) => void;
@@ -1574,7 +1588,7 @@ function PinnedThreadListSection({
                     key={thread.id}
                     thread={thread}
                     active={selectedThreadId === thread.id}
-                    locallyRead={locallyReadThreadIds.has(thread.id)}
+                    locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                     onActivate={() => onActivate(thread.id)}
                     onUnpin={onUnpin ? () => onUnpin(thread.id) : undefined}
                   />
@@ -1689,6 +1703,7 @@ function SpacesListSection({
   spaces,
   spacesFetching,
   hasLoadedSpaces,
+  refreshEpoch,
   spaceThreadsById,
   tenantId,
   pinnedThreadIdSet,
@@ -1696,7 +1711,7 @@ function SpacesListSection({
   selectedThreadId,
   activeSpaceId,
   openSpaceIds,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onSpaceOpenChange,
   onExpandAll,
   onCollapseAll,
@@ -1707,6 +1722,7 @@ function SpacesListSection({
   spaces: SpaceNavSummary[];
   spacesFetching: boolean;
   hasLoadedSpaces: boolean;
+  refreshEpoch: number;
   spaceThreadsById: ReadonlyMap<string, ChatThreadSummary[]>;
   tenantId?: string | null;
   pinnedThreadIdSet: ReadonlySet<string>;
@@ -1714,7 +1730,7 @@ function SpacesListSection({
   selectedThreadId?: string;
   activeSpaceId?: string;
   openSpaceIds: ReadonlySet<string>;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onSpaceOpenChange: (spaceId: string, open: boolean) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
@@ -1752,12 +1768,13 @@ function SpacesListSection({
             open={openSpaceIds.has(space.id)}
             onOpenChange={(open) => onSpaceOpenChange(space.id, open)}
             seedThreads={spaceThreadsById.get(space.id) ?? []}
+            refreshEpoch={refreshEpoch}
             tenantId={tenantId}
             pinnedThreadIdSet={pinnedThreadIdSet}
             pendingThreadDeletes={pendingThreadDeletes}
             selectedThreadId={selectedThreadId}
             activeSpaceId={activeSpaceId}
-            locallyReadThreadIds={locallyReadThreadIds}
+            locallyReadThreadAt={locallyReadThreadAt}
             onActivate={onActivate}
             onPin={onPin}
             onMarkSectionRead={onMarkSectionRead}
@@ -1817,12 +1834,13 @@ function SpaceThreadSection({
   open,
   onOpenChange,
   seedThreads,
+  refreshEpoch,
   tenantId,
   pinnedThreadIdSet,
   pendingThreadDeletes,
   selectedThreadId,
   activeSpaceId,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onActivate,
   onPin,
   onMarkSectionRead,
@@ -1831,12 +1849,13 @@ function SpaceThreadSection({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   seedThreads: ChatThreadSummary[];
+  refreshEpoch: number;
   tenantId?: string | null;
   pinnedThreadIdSet: ReadonlySet<string>;
   pendingThreadDeletes: ReadonlySet<string>;
   selectedThreadId?: string;
   activeSpaceId?: string;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
@@ -1852,17 +1871,28 @@ function SpaceThreadSection({
   // section showed far fewer threads than the detail page listed. The bucketed
   // `seedThreads` still seed the list so a brand-new/optimistic thread appears
   // before this query refetches.
-  const [{ data: scopedData }] = useQuery<ThreadsPagedResult>({
-    query: SpaceThreadsQuery,
-    variables: {
-      tenantId: tenantId ?? "",
-      spaceId: space.id,
-      limit: SPACE_SECTION_FETCH_LIMIT,
-      offset: 0,
-    },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
+  const [{ data: scopedData }, reexecuteScopedQuery] =
+    useQuery<ThreadsPagedResult>({
+      query: SpaceThreadsQuery,
+      variables: {
+        tenantId: tenantId ?? "",
+        spaceId: space.id,
+        limit: SPACE_SECTION_FETCH_LIMIT,
+        offset: 0,
+      },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
+  // The sidebar-wide refresh (window focus + onThreadUpdated events) bumps
+  // refreshEpoch; without this refetch a new message in a Space thread never
+  // updates the row's unread dot or timestamp until remount.
+  const lastRefreshEpochRef = useRef(refreshEpoch);
+  useEffect(() => {
+    if (refreshEpoch === lastRefreshEpochRef.current) return;
+    lastRefreshEpochRef.current = refreshEpoch;
+    if (!tenantId) return;
+    reexecuteScopedQuery({ requestPolicy: "network-only" });
+  }, [refreshEpoch, reexecuteScopedQuery, tenantId]);
   const threads = useMemo(() => {
     const byId = new Map<string, ChatThreadSummary>();
     for (const thread of scopedData?.threadsPaged?.items ?? []) {
@@ -1893,10 +1923,10 @@ function SpaceThreadSection({
   // the server's true total (`unreadThreadCount`, which may exceed the loaded
   // window) minus an optimistic decrement for loaded threads we just marked
   // read locally, so it drops on mark-all and reconciles on refetch (KTD-5).
-  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadAt);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
   const optimisticallyRead = threads.filter(
-    (thread) => isThreadUnread(thread) && locallyReadThreadIds.has(thread.id),
+    (thread) => isThreadUnread(thread) && isThreadLocallyRead(thread, locallyReadThreadAt),
   ).length;
   const badgeCount = Math.max(
     0,
@@ -1905,7 +1935,7 @@ function SpaceThreadSection({
   // Retain the selected thread while filtered so opening one doesn't drop it
   // from the section the same frame it's marked read (see displayedUnreadThreads).
   const displayedThreads = filterOn
-    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    ? displayedUnreadThreads(threads, locallyReadThreadAt, selectedThreadId)
     : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
@@ -1998,7 +2028,7 @@ function SpaceThreadSection({
                   thread={thread}
                   active={selectedThreadId === thread.id}
                   spaceRouteId={space.id}
-                  locallyRead={locallyReadThreadIds.has(thread.id)}
+                  locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                   onActivate={() => onActivate(thread.id)}
                   onPin={onPin ? () => onPin(thread.id) : undefined}
                 />

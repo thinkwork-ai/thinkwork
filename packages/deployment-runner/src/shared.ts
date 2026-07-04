@@ -105,12 +105,8 @@ export function parseRunnerInput(value: unknown): DeploymentRunnerInput {
   if (input.phase !== "plan" && input.phase !== "apply") {
     throw new Error("phase must be plan or apply");
   }
-  if (
-    input.appKey !== "cognee" &&
-    input.appKey !== "n8n" &&
-    input.appKey !== "twenty"
-  ) {
-    throw new Error("appKey must be cognee, n8n, or twenty");
+  if (input.appKey !== "n8n" && input.appKey !== "twenty") {
+    throw new Error("appKey must be n8n or twenty");
   }
   if (
     !["ENABLE", "PARK", "DESTROY", "UPGRADE"].includes(String(input.operation))

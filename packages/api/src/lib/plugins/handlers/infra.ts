@@ -15,11 +15,8 @@
  *   - Approval stays on the existing approve/reject deployment mutations;
  *     plugin-created jobs are shape-identical, so no new approval surface.
  *   - ADOPTION: when a `managed_applications` row for (tenant,
- *     managedAppKey) already exists, most plugins can attach to the running
- *     app without a job. Company Brain's Cognee substrate is stricter: first
- *     adoption creates an UPGRADE plan against the existing row, preserving
- *     desired_config, so Terraform evidence can prove a no-change adoption
- *     before the component becomes provisioned.
+ *     managedAppKey) already exists, plugins can attach to the running app
+ *     without a job.
  *   - `teardown` creates a DESTROY plan job behind the same approval gate;
  *     the engine holds the install at `uninstalling` until reconciliation
  *     sees the destroy job succeed.
@@ -46,7 +43,6 @@ import {
   readDeploymentJobSnapshot,
   type PluginDeploymentJobSnapshot,
 } from "../deployment-job-read.js";
-import { readCogneeStatus } from "../../../graphql/resolvers/core/managedApplications.js";
 
 type DbLike = typeof defaultDb;
 
@@ -87,11 +83,6 @@ export interface InfraHandlerRef extends Record<string, unknown> {
   componentHash: string;
   /** True when provision attached to a pre-existing managed_applications row. */
   adoptedExisting: boolean;
-  /**
-   * True for Company Brain's first Cognee adoption job. The job uses UPGRADE
-   * machinery but semantically exists to prove safe/no-change adoption before
-   * plugin ownership becomes active.
-   */
   adoptionRequiresNoChange?: boolean;
   /**
    * True when provision adopted an ALREADY-running managed app without a
@@ -155,18 +146,6 @@ export function createDefaultInfraHandlerDeps(
         )
         .limit(1);
       if (!row) {
-        if (key === "cognee") {
-          const cognee = readCogneeStatus();
-          if (cognee.enabled) {
-            return {
-              id: null,
-              desiredConfig: {},
-              currentStatus: "enabled",
-              selectedReleaseVersion: null,
-              selectedManifestDigest: null,
-            };
-          }
-        }
         return null;
       }
       return {
@@ -274,21 +253,8 @@ function requiresPlanBackedAdoption(args: {
   pluginKey: string;
   appKey: ManagedAppKey;
 }): boolean {
-  return args.pluginKey === "company-brain" && args.appKey === "cognee";
-}
-
-function isCompanyBrainSubstrate(args: {
-  pluginKey: string;
-  appKey: ManagedAppKey;
-}): boolean {
-  return args.pluginKey === "company-brain" && args.appKey === "cognee";
-}
-
-function tenantScopedBrainInstanceKey(tenantId: string): string {
-  return `tenant-${createHash("sha256")
-    .update(tenantId)
-    .digest("hex")
-    .slice(0, 12)}`;
+  void args;
+  return false;
 }
 
 function compactRecord(
@@ -385,16 +351,7 @@ function desiredConfigForPlanJob(args: {
     }
     return desiredConfig;
   }
-  if (args.existing || !isCompanyBrainSubstrate(args)) {
-    return existingConfig;
-  }
-  return {
-    ...existingConfig,
-    brainTenantId: args.tenantId,
-    brainInstanceKey: tenantScopedBrainInstanceKey(args.tenantId),
-    brainStorageTier: "default",
-    privateSubstrateMode: true,
-  };
+  return existingConfig;
 }
 
 function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
@@ -506,12 +463,8 @@ export async function provisionPluginInfraComponent(args: {
   // create a deploy plan job or sit at awaiting_approval. Plugin "installed"
   // means the plugin's components are WIRED UP, not that infra is healthy
   // right now — runtime health stays visible via the deployment-details view.
-  // Genuine upgrades (contentChanged), Company Brain/Cognee plan-backed
-  // adoption with a real release pin, and net-new provisioning (no existing
-  // row) still take the plan-job path below. Existing Cognee rows from older
-  // deployments may be running with "unresolved" release metadata; those are
-  // adopted directly because fabricating an UPGRADE job would fail before it
-  // can produce useful no-change evidence.
+  // Genuine upgrades (contentChanged) and net-new provisioning (no existing
+  // row) still take the plan-job path below.
   if (
     existing &&
     isRunningManagedApplication(existing) &&
@@ -571,9 +524,8 @@ export async function provisionPluginInfraComponent(args: {
       attempt,
     }),
     // Adoption preserves the existing row's desired_config so no-change
-    // evidence stays meaningful. Net-new Company Brain installs seed
-    // tenant-scoped Brain identity in desiredConfig for the runner/Terraform
-    // contract; generic managed apps continue to start from adapter defaults.
+    // evidence stays meaningful. Generic managed apps continue to start from
+    // adapter defaults.
     desiredConfig: desiredConfigForPlanJob({
       tenantId: args.tenantId,
       pluginKey: args.pluginKey,

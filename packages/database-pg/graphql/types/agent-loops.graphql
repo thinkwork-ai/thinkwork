@@ -116,6 +116,10 @@ type AgentLoopVersion {
   judgeSpec: AWSJSON!
   loopPolicy: AWSJSON!
   evidencePolicy: AWSJSON!
+  # Deterministic routine actions (plan 2026-07-03-004 U5, R7). Null when
+  # the version has none; {actions: [{routineId, input?, label?}],
+  # agentTurn} otherwise — agentTurn=false is a routine-only Automation.
+  routineActionsSpec: AWSJSON
   sourceMetadata: AWSJSON!
   createdByActorType: String
   createdByActorId: ID
@@ -231,6 +235,9 @@ input SaveAgentLoopInput {
   judgeSpec: AWSJSON!
   loopPolicy: AWSJSON
   evidencePolicy: AWSJSON
+  # Optional routine actions. Validated at save: every routineId must be
+  # an enabled git_python routine in this tenant.
+  routineActionsSpec: AWSJSON
   sourceMetadata: AWSJSON
 }
 

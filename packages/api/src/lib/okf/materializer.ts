@@ -357,7 +357,7 @@ function pageProfileFor(args: {
     title: args.page.title,
     description: args.page.summary ?? null,
     resource: `thinkwork://wiki/pages/${args.page.id}`,
-    tags: [...new Set(["company-brain", kind, ...(args.page.tags ?? [])])],
+    tags: [...new Set(["brain", kind, ...(args.page.tags ?? [])])],
     timestamp: iso(
       args.page.lastCompiledAt ?? args.page.updatedAt ?? args.generatedAt,
     ),
@@ -400,7 +400,7 @@ function sourcePageProfileFor(args: {
       title: `${args.sourceRef.sourceKind} source ${id}`,
       description: "Redacted source reference used by generated wiki pages.",
       resource: `thinkwork://sources/${args.sourceRef.sourceKind}/${id}`,
-      tags: ["company-brain", "source", args.sourceRef.sourceKind],
+      tags: ["brain", "source", args.sourceRef.sourceKind],
       timestamp: args.generatedAt.toISOString(),
       "x-thinkwork": {
         version: 1,

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCogneeOntologyKey,
+  buildApprovedOntologyKey,
   renderOntologyOwl,
 } from "./ontology-export.js";
 
 describe("knowledge graph ontology export", () => {
-  it("renders approved ontology definitions as a deterministic Cognee OWL file", () => {
+  it("renders approved ontology definitions as a deterministic approved ontology file", () => {
     const owl = renderOntologyOwl({
       tenantId: "tenant-1",
       entityTypes: [
@@ -45,11 +45,11 @@ describe("knowledge graph ontology export", () => {
       '<rdfs:range rdf:resource="https://thinkwork.ai/ontology/tenant-1/#company"/>',
     );
 
-    expect(buildCogneeOntologyKey("tenant-1", owl)).toMatch(
+    expect(buildApprovedOntologyKey("tenant-1", owl)).toMatch(
       /^thinkwork_tenant_1_[a-f0-9]{16}$/,
     );
-    expect(buildCogneeOntologyKey("tenant-1", owl)).toBe(
-      buildCogneeOntologyKey("tenant-1", owl),
+    expect(buildApprovedOntologyKey("tenant-1", owl)).toBe(
+      buildApprovedOntologyKey("tenant-1", owl),
     );
   });
 });

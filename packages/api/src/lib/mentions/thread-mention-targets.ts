@@ -5,7 +5,6 @@ import {
   agentProfiles,
   agents,
   spaceMembers,
-  spaces,
   tenantMembers,
   threadParticipants,
   threads,
@@ -148,9 +147,6 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         return (a.participantId ?? "").localeCompare(b.participantId ?? "");
       })[0]?.agentId;
 
-    const spaceAccessMode = input.spaceId
-      ? await this.loadSpaceAccessMode(input.tenantId, input.spaceId)
-      : null;
     let platformAgentId: string | null = null;
 
     if (input.spaceId) {
@@ -216,36 +212,43 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       }
     }
 
-    if (!input.spaceId || spaceAccessMode === "public") {
-      const tenantMemberRows = await this.db
-        .select({
-          role: tenantMembers.role,
-          userId: users.id,
-          userName: users.name,
-          userEmail: users.email,
-          userImage: users.image,
-        })
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.principal_id))
-        .where(
-          and(
-            eq(tenantMembers.tenant_id, input.tenantId),
-            eq(tenantMembers.principal_type, "user"),
-            eq(tenantMembers.status, "active"),
-          ),
-        );
-      for (const row of tenantMemberRows) {
-        addTarget(byKey, {
-          id: `user:${row.userId}`,
-          targetType: "user",
-          targetId: row.userId,
-          displayName: row.userName ?? row.userEmail ?? "User",
-          aliases: [row.userName, row.userEmail].filter(isString),
-          avatarUrl: row.userImage,
-          email: row.userEmail,
-          role: row.role,
-        });
-      }
+    // Mention Invite (THINK-136 R2): a mention is a thread-level invite, so
+    // every active tenant member is a valid user mention target in EVERY
+    // thread — including threads in private Spaces the member doesn't belong
+    // to. The thread-visibility predicate and the mention-participant insert
+    // already honor the invite; gating targets on public-space access made
+    // validateExplicitMentions reject the very mention the composer offered
+    // (first send hard-failed; the retry silently dropped the invite).
+    // Space members added above keep their richer role info (addTarget keeps
+    // the first entry per key).
+    const tenantMemberRows = await this.db
+      .select({
+        role: tenantMembers.role,
+        userId: users.id,
+        userName: users.name,
+        userEmail: users.email,
+        userImage: users.image,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.principal_id))
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, input.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+    for (const row of tenantMemberRows) {
+      addTarget(byKey, {
+        id: `user:${row.userId}`,
+        targetType: "user",
+        targetId: row.userId,
+        displayName: row.userName ?? row.userEmail ?? "User",
+        aliases: [row.userName, row.userEmail].filter(isString),
+        avatarUrl: row.userImage,
+        email: row.userEmail,
+        role: row.role,
+      });
     }
 
     if (!input.spaceId) {
@@ -474,16 +477,6 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     });
   }
 
-  private async loadSpaceAccessMode(
-    tenantId: string,
-    spaceId: string,
-  ): Promise<string | null> {
-    const [space] = await this.db
-      .select({ accessMode: spaces.access_mode })
-      .from(spaces)
-      .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)));
-    return space?.accessMode ?? null;
-  }
 }
 
 function targetFromRow(row: {

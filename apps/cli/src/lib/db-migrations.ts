@@ -274,8 +274,8 @@ export interface SqlRunner {
 
 /**
  * psql-backed runner (harness cycle 7): a node `pg` dependency re-keys
- * drizzle-orm's peer resolution across the workspace (broke company-brain's
- * typecheck), and psql natively speaks everything the migration files use —
+ * drizzle-orm's peer resolution across the workspace, and psql natively
+ * speaks everything the migration files use —
  * CONCURRENTLY autocommit, dollar quoting, COMMIT-ing procedures. `init`
  * auto-installs it alongside the AWS CLI and Terraform.
  */
@@ -427,7 +427,7 @@ export async function applyMigrations(options: {
     const errors = new Map<string, string>();
     while (pending.length > 0) {
       let progressed = false;
-      for (let i = 0; i < pending.length; ) {
+      for (let i = 0; i < pending.length;) {
         const { file, hash, sql } = pending[i];
         try {
           // psql executes statements in autocommit; wrap files that neither

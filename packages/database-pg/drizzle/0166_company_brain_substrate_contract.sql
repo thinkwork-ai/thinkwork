@@ -1,9 +1,9 @@
 -- Purpose: add the Company Brain substrate contract tables used to report
 --   storage tier, backend posture, migration state, operational counters, and
 --   replayable artifact manifests.
--- Plan: docs/plans/2026-06-13-003-feat-company-brain-physical-substrate-plan.md U1
+-- Plan: docs/plans/2026-06-13-003-feat-brain-physical-substrate-plan.md U1
 -- Apply manually (no CI migration runner):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0166_company_brain_substrate_contract.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0166_brain_substrate_contract.sql
 -- Pre-flight:
 --   SELECT to_regclass('brain.substrate_states');
 --   SELECT to_regclass('public.managed_applications');
@@ -76,7 +76,7 @@
 SET lock_timeout = '5s';
 SET statement_timeout = '15min';
 
-SELECT pg_advisory_lock(hashtext('migration:0166_company_brain_substrate_contract'));
+SELECT pg_advisory_lock(hashtext('migration:0166_brain_substrate_contract'));
 
 CREATE SCHEMA IF NOT EXISTS brain;
 
@@ -383,4 +383,4 @@ CREATE INDEX IF NOT EXISTS brain_artifact_manifests_migration_idx
 CREATE INDEX IF NOT EXISTS brain_artifact_manifests_source_idx
   ON brain.artifact_manifests (tenant_id, source_family, source_id_hash);
 
-SELECT pg_advisory_unlock(hashtext('migration:0166_company_brain_substrate_contract'));
+SELECT pg_advisory_unlock(hashtext('migration:0166_brain_substrate_contract'));

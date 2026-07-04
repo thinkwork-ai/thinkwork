@@ -13,9 +13,20 @@ import type {
 } from "./agent-loop-types";
 
 const pageHeaderMock = vi.hoisted(() => ({
-  actions: null as
-    | { title?: string; action?: import("react").ReactNode }
-    | null,
+  actions: null as {
+    title?: string;
+    action?: import("react").ReactNode;
+  } | null,
+}));
+
+// The routine-action picker queries git routines via urql; the form tests
+// render without a urql Provider, so stub the picker (it has its own
+// behavior surface and is exercised through draftToPayload/draftFromVersion
+// unit tests).
+vi.mock("./AutomationRoutineActionsPicker", () => ({
+  AutomationRoutineActionsPicker: () => (
+    <div data-testid="routine-actions-picker" />
+  ),
 }));
 
 vi.mock("@/components/schedule-picker/SchedulePicker", () => ({

@@ -514,7 +514,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
   it("no-auth plugin servers are tenant-owned and dispatch after install", async () => {
     mockJoinRows.mockReturnValue([
       pluginRow("brain", {
-        slug: "company-brain--brain",
+        slug: "brain--brain",
         name: "ThinkWork Brain",
         url: "http://internal-cognee.example.local/mcp-server/http",
         auth_type: "none",
@@ -531,7 +531,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
 
     expect(configs).toEqual([
       {
-        name: "company-brain--brain",
+        name: "brain--brain",
         url: "http://internal-cognee.example.local/mcp-server/http",
         transport: "streamable-http",
         trustedInternal: true,

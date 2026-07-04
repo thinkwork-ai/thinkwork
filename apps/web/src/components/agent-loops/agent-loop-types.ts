@@ -1,5 +1,8 @@
 export type AgentLoopLifecycleStatus =
-  "draft" | "active" | "paused" | "archived";
+  | "draft"
+  | "active"
+  | "paused"
+  | "archived";
 
 export type AgentLoopTriggerFamily = "manual" | "schedule";
 export type AgentLoopJudgeMode = "self_check" | "human_approval";
@@ -65,6 +68,7 @@ export interface AgentLoopVersionSummary {
   judgeSpec: unknown;
   loopPolicy: unknown;
   evidencePolicy: unknown;
+  routineActionsSpec?: unknown;
   sourceMetadata?: unknown;
   publishedAt?: string | null;
   createdAt?: string | null;
@@ -249,6 +253,10 @@ export interface AgentLoopDraft {
   builderThreadId?: string | null;
   builderThreadTitle?: string | null;
   builderSetupPrompt?: string | null;
+  /** Deterministic routine actions (plan 2026-07-03-004 U5). */
+  routineActionRoutineIds: string[];
+  /** false = routine-only Automation (no agent turn / wakeup). */
+  routineAgentTurn: boolean;
 }
 
 export interface SaveAgentLoopPayload {
@@ -265,5 +273,9 @@ export interface SaveAgentLoopPayload {
   judgeSpec: AgentLoopJudgeSpec;
   loopPolicy: AgentLoopPolicy;
   evidencePolicy: AgentLoopEvidencePolicy;
+  routineActionsSpec?: {
+    actions: { routineId: string }[];
+    agentTurn: boolean;
+  } | null;
   sourceMetadata: JsonRecord;
 }

@@ -38,19 +38,21 @@ describe("deployment runner contract", () => {
         phase: "apply",
         tenantId: "tenant-1",
         jobId: "job-1",
-        appKey: "cognee",
+        appKey: "twenty",
         operation: "ENABLE",
         releaseVersion: "1.2.3",
         manifestDigest: digest,
         desiredConfigVersion: "v1",
         planDigest,
         desiredConfig: {
-          imageUri: `123456789012.dkr.ecr.us-east-1.amazonaws.com/cognee@sha256:${"1".repeat(64)}`,
-          dbPasswordSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-          bedrockModelResourceArns: [
-            "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-          ],
+          imageUri: `public.ecr.aws/thinkwork/twenty@sha256:${"1".repeat(64)}`,
+          dbUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-db",
+          encryptionKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:twenty-key",
+          publicUrl: "https://crm.example.com",
+          certificateArn:
+            "arn:aws:acm:us-east-1:123456789012:certificate/example",
         },
       },
     });
@@ -68,7 +70,7 @@ describe("deployment runner contract", () => {
           phase: "apply",
           tenantId: "tenant-1",
           jobId: "job-1",
-          appKey: "cognee",
+          appKey: "twenty",
           operation: "ENABLE",
           releaseVersion: "1.2.3",
           manifestDigest: digest,

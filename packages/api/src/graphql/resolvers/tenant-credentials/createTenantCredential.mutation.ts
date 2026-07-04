@@ -11,6 +11,10 @@ import {
   tenantCredentialSecretName,
 } from "../../../lib/tenant-credentials/secret-store.js";
 import {
+  validateGithubRepoConnection,
+  type GithubRepoCredentialPayload,
+} from "../../../lib/routines/repo-connection.js";
+import {
   assertKnownKind,
   assertSlugAvailable,
   credentialToGraphql,
@@ -56,6 +60,14 @@ export async function createTenantCredential(
     credentialId,
   });
   const secret = normalizeCredentialSecret(input.kind, input.secretJson);
+  // Routine-repo credentials are validated end to end (repo reachable with
+  // the token, branch exists) before anything is stored (R2) — a rejected
+  // save writes neither the secret nor the row.
+  if (input.kind === "github_repo") {
+    await validateGithubRepoConnection(
+      secret as unknown as GithubRepoCredentialPayload,
+    );
+  }
   const secretRef = await putTenantCredentialSecret({
     secretName,
     payload: secret,

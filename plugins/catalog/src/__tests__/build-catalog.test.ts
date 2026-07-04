@@ -37,7 +37,6 @@ describe("buildSignedCatalogJson", () => {
       "n8n",
       "email-channel",
       "sendgrid",
-      "company-brain",
       "company-data",
       "company-etl",
       "twenty",

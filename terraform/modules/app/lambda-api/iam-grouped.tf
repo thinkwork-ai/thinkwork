@@ -25,7 +25,7 @@
 # standalone managed-policy attachment. (Managed-policy attachments have a
 # default quota of 10 per role; the steady state here is
 # AWSLambdaBasicExecutionRole + these four, plus the conditional AWS-managed
-# VPC-access policy when Cognee workers are enabled.)
+# VPC-access policy when OKF EFS wiring is enabled.)
 #
 # Each managed policy document caps at 6,144 characters (JSON minus
 # whitespace) — check rendered size before adding large statements, and
@@ -216,6 +216,31 @@ locals {
           "s3:PutObject",
         ]
         Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/*"
+      },
+      # routine-exec-git SHA code cache (plan 2026-07-03-004 U3, KTD-7):
+      # read-through cache under routine-code-cache/<tenant>/<routine>/<sha>/.
+      # GetObject for cache reads; ListBucket so a cache miss surfaces as
+      # NoSuchKey (404) instead of AccessDenied — without it the executor
+      # cannot distinguish "not cached yet" from a real permission error
+      # and the fixture gate fails closed (caught live in the U9 sweep).
+      {
+        Sid    = "RoutineExecGitCodeCacheRead"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+        ]
+        Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output/routine-code-cache/*"
+      },
+      {
+        Sid      = "RoutineExecGitCodeCacheList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = "arn:aws:s3:::thinkwork-${var.stage}-routine-output"
+        Condition = {
+          StringLike = {
+            "s3:prefix" = "routine-code-cache/*"
+          }
+        }
       },
       # (was standalone managed policy "lambda_model_catalog_import_read")
       # Settings -> Model Catalog imports call Bedrock's foundation-model
@@ -511,6 +536,16 @@ locals {
           # invokes this with RequestResponse so SkillSpector completion is a
           # server-side publish gate, not just an operator UI affordance.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-skill-trust-runner",
+          # routine-exec-git (plan 2026-07-03-004 U5/U6): job-trigger
+          # RequestResponse-invokes it for Automation routine actions, and
+          # admin-ops-mcp invokes it for agent fixture runs + the
+          # synchronous repair gate. Caught live in the U9 sweep.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-exec-git",
+          # job-trigger self-target (plan 2026-07-03-004 U5, KTD-3): the
+          # manual GraphQL trigger Event-invokes job-trigger with the
+          # agent_loop_continue_dispatch event so routine actions never run
+          # inline in graphql-http.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger",
         ]
       },
       # (was standalone managed policy "workspace_renderer_invoke")
@@ -814,11 +849,9 @@ locals {
         "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:*",
       ]
     },
-    # (was standalone managed policy "lambda_cognee_health_read")
-    # graphql-http's Knowledge Graph health check validates the private
-    # Cognee service from outside the VPC by reading ECS service steadiness
-    # and ALB target health. ELBv2 Describe* actions do not support useful
-    # resource scoping.
+    # Managed-application and runtime health checks read ECS service
+    # steadiness and ALB target health. ELBv2 Describe* actions do not
+    # support useful resource scoping.
     {
       Effect = "Allow"
       Action = [
@@ -921,9 +954,4 @@ moved {
 moved {
   from = aws_iam_role_policy_attachment.lambda_bedrock_knowledge_base
   to   = aws_iam_role_policy_attachment.api_ai
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.lambda_cognee_health_read
-  to   = aws_iam_role_policy_attachment.api_observability
 }

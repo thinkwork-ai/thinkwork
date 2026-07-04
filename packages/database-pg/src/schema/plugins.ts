@@ -190,7 +190,7 @@ export const pluginEntitlements = pgTable(
     tenant_id: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
-    /** Plugin key from the signed catalog (e.g. "company-brain"). */
+    /** Plugin key from the signed catalog (e.g. "brain"). */
     plugin_key: text("plugin_key").notNull(),
     /** Premium product key from manifest premium.entitlementProductKey. */
     entitlement_product_key: text("entitlement_product_key").notNull(),
@@ -244,7 +244,7 @@ export const pluginInstallKeys = pgTable(
     id: uuid("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    /** Plugin key from the signed catalog (e.g. "company-brain"). */
+    /** Plugin key from the signed catalog (e.g. "brain"). */
     plugin_key: text("plugin_key").notNull(),
     /** Premium product key the key grants when redeemed. */
     entitlement_product_key: text("entitlement_product_key").notNull(),
@@ -576,9 +576,7 @@ export const workosAuthBridges = pgTable(
     tenant_id: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
-    tenant_auth_provider_reference_id: uuid(
-      "tenant_auth_provider_reference_id",
-    )
+    tenant_auth_provider_reference_id: uuid("tenant_auth_provider_reference_id")
       .notNull()
       .references(() => tenantAuthProviderReferences.id, {
         onDelete: "cascade",
@@ -644,9 +642,7 @@ export const workosAuthSessions = pgTable(
     user_id: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    tenant_auth_provider_reference_id: uuid(
-      "tenant_auth_provider_reference_id",
-    )
+    tenant_auth_provider_reference_id: uuid("tenant_auth_provider_reference_id")
       .notNull()
       .references(() => tenantAuthProviderReferences.id, {
         onDelete: "cascade",

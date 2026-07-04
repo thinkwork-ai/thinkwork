@@ -9,7 +9,6 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { GraphQLError } from "graphql";
-import { getConfig, getSecret } from "@thinkwork/runtime-config";
 import { and, eq } from "drizzle-orm";
 import {
   pluginEntitlements,
@@ -458,7 +457,9 @@ async function resolvePremiumPluginFromCatalog(
 ): Promise<PremiumEntitlementCatalogEntry | null> {
   const { getPluginCatalog } = await import("./catalog-source.js");
   const catalog = await getPluginCatalog();
-  const entry = catalog.plugins.find((plugin) => plugin.pluginKey === pluginKey);
+  const entry = catalog.plugins.find(
+    (plugin) => plugin.pluginKey === pluginKey,
+  );
   if (!entry?.premium) return null;
   return {
     pluginKey: entry.pluginKey,
@@ -469,20 +470,8 @@ async function resolvePremiumPluginFromCatalog(
 export async function getConfiguredBackdoorKey(
   pluginKey: string,
 ): Promise<string | null> {
-  if (pluginKey !== "company-brain") return null;
-  const stage = getConfig("STAGE") ?? process.env.STAGE ?? "";
-  const allowedStages = (getConfig("COMPANY_BRAIN_BACKDOOR_INSTALL_KEY_STAGES") ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (!stage || !allowedStages.includes(stage)) return null;
-
-  const raw = getConfig("COMPANY_BRAIN_BACKDOOR_INSTALL_KEY");
-  if (raw) return raw;
-
-  const secretArn = getConfig("COMPANY_BRAIN_BACKDOOR_INSTALL_KEY_SECRET_ARN");
-  if (!secretArn) return null;
-  return (await getSecret(secretArn)).trim() || null;
+  void pluginKey;
+  return null;
 }
 
 export function createDrizzlePremiumEntitlementStore(

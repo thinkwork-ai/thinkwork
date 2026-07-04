@@ -99,7 +99,11 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
           JSON.stringify({
             level: "warn",
             event: "json_render_emit_rejected",
-            diagnosticCodes: (result.diagnostics ?? []).map((d) => d.code),
+            // Codes + PATHS only (never values) — code-only proved
+            // undiagnosable live; the path pinpoints the offending prop.
+            diagnostics: (result.diagnostics ?? []).map(
+              (d) => `${d.code}@${d.path ?? ""}`,
+            ),
           }),
         );
         return {
@@ -160,9 +164,20 @@ export function normalizeRuntimeThreadJsonRenderInput(
     };
   }
 
+  // Tool-shaped input ({spec, mobileFallback, ...}) always fails the
+  // part-shape validation above with artifact diagnostics ("unknown key:
+  // spec", "part type invalid", ...). Surfacing those FIRST poisoned the
+  // model's repair loop — diagnosticSummary showed the artifacts and the
+  // real zod spec errors never reached the model (observed live,
+  // THINK-116). Only include part-shape diagnostics when the input
+  // actually claimed to be a part.
+  const lookedLikePart =
+    record?.type === THREAD_JSON_RENDER_PART_TYPE || record?.data !== undefined;
   return {
     ok: false,
-    diagnostics: [...partResult.diagnostics, ...dataResult.diagnostics],
+    diagnostics: lookedLikePart
+      ? [...partResult.diagnostics, ...dataResult.diagnostics]
+      : dataResult.diagnostics,
   };
 }
 

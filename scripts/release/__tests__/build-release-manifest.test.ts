@@ -89,14 +89,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
         architecture: "amd64",
       },
       {
-        name: "cognee",
-        repository: "ghcr.io/thinkwork-ai/thinkwork-cognee",
-        tag: "v1.2.3-cognee-amd64",
-        digest:
-          "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-        architecture: "amd64",
-      },
-      {
         name: "n8n-runtime",
         repository: "ghcr.io/thinkwork-ai/thinkwork-n8n",
         tag: "v1.2.3-n8n-amd64",
@@ -157,7 +149,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     [
       "agentcore-pi-amd64",
       "agentcore-pi-arm64",
-      "cognee",
       "n8n-runtime",
       "twenty",
     ],
@@ -173,14 +164,13 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "n8n", "twenty"],
+    ["n8n", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
       manifest.managedApps.map((app) => [app.id, app.requiredImages]),
     ),
     {
-      cognee: ["cognee"],
       n8n: ["n8n-runtime"],
       twenty: ["twenty"],
     },
@@ -356,7 +346,7 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "n8n", "twenty"],
+    ["n8n", "twenty"],
   );
   assert.deepEqual(
     manifest.managedApps
@@ -461,7 +451,7 @@ test("buildReleaseManifest rejects missing managed app runtime images", async ()
           },
         ],
       }),
-    /requiredImages references unknown runtime image cognee/,
+    /requiredImages references unknown runtime image n8n-runtime/,
   );
 });
 

@@ -10,14 +10,9 @@ locals {
   use_local_zips        = var.lambda_zips_dir != ""
   eval_fanout_queue_url = local.deploy_lambda_handlers ? aws_sqs_queue.eval_fanout[0].url : ""
   runtime               = "nodejs20.x"
-  cognee_env = var.cognee_enabled ? {
-    # graphql-http is close to Lambda's 4 KB environment ceiling. Keep Cognee
-    # status in one compact value; stable names are derived in the resolver.
-    COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
-  } : {}
   # Twenty managed-app status is DB-served (managed_applications +
   # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
-  # retired. Cognee's env-var status projection above is unchanged.
+  # retired.
   optional_integration_handler_names = concat(
     var.deployment_control_plane_enabled ? [] : [
       # Host-only onboarding/deployment API. Customer foundations disable the
@@ -72,6 +67,12 @@ locals {
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT            = var.appsync_api_url
     THINKWORK_API_URL           = local.api_base_url
+    # Deterministic routines v1 (plan 2026-07-03-004 U6): activates the
+    # git-backed routine lifecycle tool suite on the admin-ops MCP server
+    # (routine_repo_list/read/commit, routine_run_fixtures, routine_runs).
+    # Read via getConfig() in admin-ops-mcp.ts; without this the tools are
+    # listed but every call returns not_yet_enabled.
+    ROUTINES_AGENT_TOOLS_ENABLED = "true"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
@@ -139,7 +140,6 @@ locals {
       # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
       STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
     } : {},
-    local.cognee_env,
   )
 
   # graphql-http-only config that also belongs in the runtime-config
@@ -152,13 +152,6 @@ locals {
     # Settings > General starts release updates from the GraphQL API.
     DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
     DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
-    # Cognee user + Space memory captures use explicit add+cognify so accepted
-    # documents enter the scoped graph. GraphQL has a 30s Lambda ceiling, so
-    # indexing wait is intentionally short/best-effort; callers poll search for
-    # eventual retrieval instead of pinning the capture request.
-    COGNEE_INGEST_MODE      = "add_cognify"
-    COGNEE_INDEX_TIMEOUT_MS = "8000"
-    COGNEE_INDEX_POLL_MS    = "2000"
     # THNK-37 — the GraphQL API is the runtime trust boundary for the
     # GitHub-hosted signed plugin catalog. Browsers keep reading through
     # GraphQL; API verifies the release asset with the trusted public key
@@ -304,16 +297,10 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
-    # Observations → Knowledge Graph worker (plan 2026-06-09-004 U5).
-    # add_cognify pins the incremental ingest path into the stable
-    # per-tenant dataset; the promotion-gate classifier reads
-    # OBSERVATION_CLASSIFIER_MODEL_ID (Bedrock IAM via the shared
-    # lambda_bedrock invoke policy).
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
-    # structured-output call inside this Lambda (plan 2026-07-03-005); Cognee
-    # is retired, so no COGNEE_* env. KG_EXTRACTION_MODEL_ID pins the gpt-oss
-    # extraction model (Bedrock IAM via the shared lambda_bedrock invoke
-    # policy, same as the promotion-gate classifier).
+    # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
+    # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
+    # invoke policy, same as the promotion-gate classifier).
     "knowledge-graph-observations-ingest" = {
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
@@ -332,6 +319,14 @@ locals {
       SANDBOX_INTERPRETER_ID       = var.agentcore_code_interpreter_id
       ROUTINE_OUTPUT_BUCKET        = "thinkwork-${var.stage}-routine-output"
       ROUTINE_PYTHON_ENV_ALLOWLIST = "TENANT_ID,ROUTINE_ID,EXECUTION_ID"
+    }
+    # routine-exec-git (plan 2026-07-03-004 U3, KTD-10): configuration on
+    # the executor's own env, never new graphql-http env vars (4KB ceiling).
+    # The S3 SHA code cache rides the existing routine-output bucket under
+    # the routine-code-cache/ prefix.
+    "routine-exec-git" = {
+      SANDBOX_INTERPRETER_ID = var.agentcore_code_interpreter_id
+      ROUTINE_OUTPUT_BUCKET  = "thinkwork-${var.stage}-routine-output"
     }
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B
@@ -583,6 +578,13 @@ resource "aws_lambda_function" "handler" {
     # (Start/Invoke/Stop CodeInterpreterSession) + S3 PutObject IAM —
     # see main.tf.
     "routine-task-python",
+    # routine-exec-git: deterministic git-backed routine executor (plan
+    # 2026-07-03-004 U3). SDK-invoked (job-trigger / dispatcher / manual
+    # async job). Pulls the tenant routine repo at branch HEAD,
+    # fixture-gates new SHAs, executes run(input) in the AgentCore code
+    # interpreter, and writes routine_executions rows directly. Shares the
+    # role-wide bedrock-agentcore + S3 + Secrets Manager grants.
+    "routine-exec-git",
     # routine-resume: SDK-invoked by routine-approval-bridge (Phase B
     # U8) after a HITL decision. Calls SendTaskSuccess/SendTaskFailure;
     # idempotent on already-consumed tokens. Needs states:SendTaskSuccess
@@ -716,7 +718,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -743,19 +745,11 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "vpc_config" {
-    for_each = (
-      (
-        # No knowledge-graph handler needs the Cognee VPC any more:
-        # observations ingest now extracts via Bedrock (no VPC) and
-        # thread ingest is retired. Only legacy graphql-http on the
-        # cognee memory engine remains.
-        (each.key == "graphql-http" && var.memory_engine == "cognee")
-      ) && local.cognee_worker_vpc_enabled
-    ) ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
+    for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 
     content {
-      subnet_ids         = each.key == "okf-efs-refresh" ? var.okf_efs_subnet_ids : var.cognee_worker_subnet_ids
-      security_group_ids = each.key == "okf-efs-refresh" ? var.okf_efs_security_group_ids : var.cognee_worker_security_group_ids
+      subnet_ids         = var.okf_efs_subnet_ids
+      security_group_ids = var.okf_efs_security_group_ids
     }
   }
 
@@ -1886,9 +1880,9 @@ resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
   name                = "thinkwork-${var.stage}-knowledge-graph-observations-ingest"
   group_name          = "default"
   schedule_expression = "rate(30 minutes)"
-  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the Bedrock extractor
-  # replaces Cognee, and the schedule enables on dev only after a manual
-  # golden-set-validated run. Driven by the GHA WIKI_KG_INGEST_ENABLED var.
+  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the schedule enables on dev
+  # only after a manual golden-set-validated run. Driven by the GHA
+  # WIKI_KG_INGEST_ENABLED var.
   state = var.knowledge_graph_observations_ingest_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {

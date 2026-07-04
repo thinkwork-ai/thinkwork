@@ -786,12 +786,14 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
     await mkdir(workspaceDir, { recursive: true });
     return;
   } catch (err) {
-    if (!(
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "ENOENT"
-    )) {
+    if (
+      !(
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "ENOENT"
+      )
+    ) {
       throw err;
     }
   }
@@ -1634,8 +1636,8 @@ export async function buildInvocationResources(
   // The hosted Brain path is Hindsight-native: a Hindsight-backed
   // MemoryProvider wrapped by `createMemoryExtension`, loaded via the resource
   // loader's `extensionFactories` instead of hand-assembled recall/reflect
-  // AgentTools. Managed AgentCore memory and Cognee stay explicit compatibility
-  // modes; they are not the default user/Space Brain substrate.
+  // AgentTools. Managed AgentCore memory stays as the explicit compatibility
+  // mode; it is not the default user/Space Brain substrate.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -1728,13 +1730,6 @@ export async function buildInvocationResources(
         threadId: args.identity.threadId,
       });
     }
-  } else {
-    logStructured({
-      level: "info",
-      event: "memory_cognee_plugin_mcp_mode",
-      tenantId: args.identity.tenantId,
-      threadId: args.identity.threadId,
-    });
   }
 
   // Workspace skills — the prompt lists installed skills, while the extension
@@ -1918,7 +1913,10 @@ export interface SkillRunContext {
 }
 
 export type CompletionStatus =
-  "complete" | "failed" | "cancelled" | "cost_bounded_error";
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;

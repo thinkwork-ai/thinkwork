@@ -1,7 +1,7 @@
 -- Brain v0 operational snapshot cache for tenant entities.
 --
 -- Plan:
---   docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md
+--   docs/plans/2026-04-29-004-feat-brain-v0-plan.md
 --
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0052_brain_v0_external_refs.sql
@@ -36,6 +36,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_entity_external_refs_source
 CREATE INDEX IF NOT EXISTS idx_tenant_entity_external_refs_tenant_source
   ON public.tenant_entity_external_refs (tenant_id, source_kind);
 
-COMMENT ON TABLE public.tenant_entity_external_refs IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_external_refs IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
 
 COMMIT;

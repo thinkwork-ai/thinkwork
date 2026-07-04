@@ -51,10 +51,9 @@ describe("SettingsMemoryHome", () => {
     expect(source).not.toContain("TabsList");
   });
 
-  it("keeps Ontology as definitions-only memory tab without Cognee gating", () => {
+  it("keeps Ontology as definitions-only memory tab", () => {
     expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
     expect(source).toContain('activeTab === "ontology"');
-    expect(source).not.toContain("legacyCogneeEnabled");
     expect(source).not.toContain("ontologyEnabled");
     expect(source).not.toContain("SettingsPluginCatalogQuery");
     expect(source).not.toContain("SettingsDeploymentStatusQuery");

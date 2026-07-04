@@ -73,6 +73,26 @@ export const routines = pgTable(
     // user-authored routines that don't map to a catalog row.
     // Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md (U6-1).
     catalog_slug: text("catalog_slug"),
+    // ---- git_python engine columns (deterministic routines v1) ----
+    // Null on legacy_python / step_functions rows. Code lives only in the
+    // tenant-configured GitHub repo (R1); these columns store identity and
+    // pointers, never code. Plan: 2026-07-03-004 (U1, KTD-1/KTD-7/KTD-11).
+    // Path of the Python module inside the tenant repo,
+    // e.g. routines/<slug>/main.py.
+    module_path: text("module_path"),
+    // Repo paths of the routine's recorded fixture files (jsonb string[]).
+    fixture_paths: jsonb("fixture_paths"),
+    // Named tenant-credential ids this routine declares (jsonb string[]).
+    // The executor resolves ONLY these at invoke time and injects them into
+    // the sandbox session — no shared credential pool (R19).
+    credential_refs: jsonb("credential_refs"),
+    // Denormalized fast-path pointer to the last fixture-validated commit
+    // SHA. routine_code_cache is authoritative; written only by the
+    // fixture gate (KTD-7).
+    validated_sha: text("validated_sha"),
+    // Human-readable reason when the repair budget circuit-breaker (or an
+    // operator) disabled the routine. Null while enabled.
+    disabled_reason: text("disabled_reason"),
     last_run_at: timestamp("last_run_at", { withTimezone: true }),
     next_run_at: timestamp("next_run_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
@@ -88,7 +108,7 @@ export const routines = pgTable(
     index("idx_routines_engine").on(table.engine),
     check(
       "routines_engine_enum",
-      sql`${table.engine} IN ('legacy_python', 'step_functions')`,
+      sql`${table.engine} IN ('legacy_python', 'step_functions', 'git_python')`,
     ),
     check(
       "routines_visibility_enum",

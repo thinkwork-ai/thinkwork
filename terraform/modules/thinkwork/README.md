@@ -57,7 +57,6 @@ feature flags:
 | `customer_domain_delegated`      | `false` | Phase-two gate — flip once NS delegation resolves.                 |
 | `customer_domain_legacy_retired` | `false` | Retirement gate — removes legacy Cognito callbacks after cutover.  |
 | `enable_hindsight`               | `true`  | Provisions Hindsight canonical user and Space memory.              |
-| `enable_cognee`                  | `false` | Provisions optional Cognee Brain ontology/graph infrastructure.    |
 | `www_domain`                     | `""`    | Public website apex domain. Empty = CloudFront URL only.           |
 
 ## Outputs

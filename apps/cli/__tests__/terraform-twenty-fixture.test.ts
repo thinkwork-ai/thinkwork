@@ -438,9 +438,6 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(handlers).not.toMatch(/twenty_env/);
     expect(handlers).not.toMatch(/TWENTY\s*=/);
     expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
-    // Cognee's compact status projection is intentionally unchanged.
-    expect(handlers).toMatch(/cognee_env = var\.cognee_enabled \? {/);
-    expect(handlers).toMatch(/local\.cognee_env,\s*\)/);
     const runtimeConfig = read(
       resolve(REPO_ROOT, "terraform/modules/app/lambda-api/runtime-config.tf"),
     );

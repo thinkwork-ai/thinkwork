@@ -1,10 +1,8 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "urql";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button, cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
-import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
 import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
@@ -35,21 +33,6 @@ export function SettingsSidebar({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isDesktop = isDesktopBuild();
   const showDesktopChrome = isDesktop && !forceWebChrome;
-  const showOperator = roleResolved && isOperator;
-  const [deploymentResult] = useQuery({
-    query: SettingsDeploymentStatusQuery,
-    pause: !showOperator,
-  });
-  const deployment = deploymentResult.data?.deploymentStatus;
-  // Cognee-only since the U10 Twenty plugin migration — Twenty no longer
-  // has a managed-app-gated nav entry (it lives under Plugins).
-  const managedApplications = {
-    cognee:
-      deployment?.managedApplications.find((app) => app.key === "cognee")
-        ?.runtimeEnabled ??
-      deployment?.cogneeEnabled ??
-      false,
-  };
 
   // Hide operator items until the role is known, to avoid a flash of operator
   // content for members.
@@ -57,7 +40,6 @@ export function SettingsSidebar({
     isOperator,
     roleResolved,
     isDesktop,
-    managedApplications,
   });
 
   return (

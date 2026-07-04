@@ -28,12 +28,11 @@ import {
 } from "../core/resolve-auth-user.js";
 
 const MANAGED_APP_METADATA = [
-  ...managedAppRegistry
-    .map((adapter) => ({
-      key: adapter.appKey,
-      displayName: adapter.displayName,
-      catalogVisible: adapter.catalogVisible,
-    })),
+  ...managedAppRegistry.map((adapter) => ({
+    key: adapter.appKey,
+    displayName: adapter.displayName,
+    catalogVisible: adapter.catalogVisible,
+  })),
 ] as const;
 
 export const MANAGED_APP_CATALOG = MANAGED_APP_METADATA.filter(
@@ -101,7 +100,6 @@ export async function requireDeploymentTenantAdmin(
 
 export function normalizeManagedAppKey(value: unknown): ManagedAppKey {
   const key = typeof value === "string" ? value.toLowerCase() : "";
-  if (key === "knowledge-graph" || key === "knowledge_graph") return "cognee";
   const app = MANAGED_APP_METADATA.find((candidate) => candidate.key === key);
   if (!app) {
     throw new GraphQLError("Unknown managed application key", {
@@ -578,8 +576,7 @@ export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
         process.env.VITE_DEPLOYMENT_RUNNER_PROJECT_NAME,
     ),
     customerDomain: stringEnv(
-      process.env.THINKWORK_CUSTOMER_DOMAIN ||
-        process.env.VITE_CUSTOMER_DOMAIN,
+      process.env.THINKWORK_CUSTOMER_DOMAIN || process.env.VITE_CUSTOMER_DOMAIN,
     ),
     customerDomainDelegated: booleanEnv(
       process.env.THINKWORK_CUSTOMER_DOMAIN_DELEGATED ||
@@ -851,7 +848,6 @@ export function buildManagedAppControllerPayload(args: {
     },
     features: {
       baseInstall: {
-        cognee: false,
         slack: false,
         stripe: false,
         twenty: false,

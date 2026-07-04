@@ -506,9 +506,6 @@ function catalogListDescription(entry: {
   pluginKey: string;
   description: string;
 }): string {
-  if (entry.pluginKey === "company-brain") {
-    return entry.description.replace(/^Premium\s+/i, "");
-  }
   return entry.description;
 }
 

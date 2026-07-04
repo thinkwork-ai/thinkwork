@@ -22,15 +22,14 @@ import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
 import { Route as AuthedSettingsWikiRouteImport } from "./routes/_authed/settings.wiki";
 import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
+import { Route as AuthedSettingsRoutineRepoRouteImport } from "./routes/_authed/settings.routine-repo";
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
 import { Route as AuthedSettingsManagedApplicationsRouteImport } from "./routes/_authed/settings.managed-applications";
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
-import { Route as AuthedSettingsContextDiagnosticsRouteImport } from "./routes/_authed/settings.context-diagnostics";
 import { Route as AuthedSettingsCapabilitiesRouteImport } from "./routes/_authed/settings.capabilities";
-import { Route as AuthedSettingsBrainOperationsRouteImport } from "./routes/_authed/settings.brain-operations";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
@@ -84,7 +83,6 @@ import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
-import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsAgentLoopsAgentLoopIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
@@ -184,6 +182,12 @@ const AuthedSettingsToolsRoute = AuthedSettingsToolsRouteImport.update({
   path: "/tools",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsRoutineRepoRoute =
+  AuthedSettingsRoutineRepoRouteImport.update({
+    id: "/routine-repo",
+    path: "/routine-repo",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsModelCatalogRoute =
   AuthedSettingsModelCatalogRouteImport.update({
     id: "/model-catalog",
@@ -217,22 +221,10 @@ const AuthedSettingsCrmRoute = AuthedSettingsCrmRouteImport.update({
   path: "/crm",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
-const AuthedSettingsContextDiagnosticsRoute =
-  AuthedSettingsContextDiagnosticsRouteImport.update({
-    id: "/context-diagnostics",
-    path: "/context-diagnostics",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsCapabilitiesRoute =
   AuthedSettingsCapabilitiesRouteImport.update({
     id: "/capabilities",
     path: "/capabilities",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
-const AuthedSettingsBrainOperationsRoute =
-  AuthedSettingsBrainOperationsRouteImport.update({
-    id: "/brain-operations",
-    path: "/brain-operations",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsBillingRoute = AuthedSettingsBillingRouteImport.update({
@@ -540,12 +532,6 @@ const AuthedSettingsArtifactsIdRoute =
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
   } as any);
-const AuthedSettingsApplicationsCogneeRoute =
-  AuthedSettingsApplicationsCogneeRouteImport.update({
-    id: "/applications/cognee",
-    path: "/applications/cognee",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsAgentsProfileIdRoute =
   AuthedSettingsAgentsProfileIdRouteImport.update({
     id: "/agents/$profileId",
@@ -770,15 +756,14 @@ export interface FileRoutesByFullPath {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
-  "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
@@ -799,7 +784,6 @@ export interface FileRoutesByFullPath {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
-  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -876,15 +860,14 @@ export interface FileRoutesByTo {
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
-  "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
   "/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
@@ -905,7 +888,6 @@ export interface FileRoutesByTo {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
-  "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -990,15 +972,14 @@ export interface FileRoutesById {
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
-  "/_authed/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/_authed/settings/context-diagnostics": typeof AuthedSettingsContextDiagnosticsRoute;
   "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/_authed/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
+  "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
   "/_authed/settings/wiki": typeof AuthedSettingsWikiRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
@@ -1019,7 +1000,6 @@ export interface FileRoutesById {
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
-  "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -1103,15 +1083,14 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/artifacts"
     | "/settings/billing"
-    | "/settings/brain-operations"
     | "/settings/capabilities"
-    | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
+    | "/settings/routine-repo"
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings/"
@@ -1132,7 +1111,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
-    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -1209,15 +1187,14 @@ export interface FileRouteTypes {
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/billing"
-    | "/settings/brain-operations"
     | "/settings/capabilities"
-    | "/settings/context-diagnostics"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
+    | "/settings/routine-repo"
     | "/settings/tools"
     | "/settings/wiki"
     | "/settings"
@@ -1238,7 +1215,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
-    | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -1322,15 +1298,14 @@ export interface FileRouteTypes {
     | "/_authed/settings/analytics"
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
-    | "/_authed/settings/brain-operations"
     | "/_authed/settings/capabilities"
-    | "/_authed/settings/context-diagnostics"
     | "/_authed/settings/crm"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
     | "/_authed/settings/managed-applications"
     | "/_authed/settings/memory"
     | "/_authed/settings/model-catalog"
+    | "/_authed/settings/routine-repo"
     | "/_authed/settings/tools"
     | "/_authed/settings/wiki"
     | "/_authed/settings/"
@@ -1351,7 +1326,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agent-loops/$agentLoopId"
     | "/_authed/settings/agents/$profileId"
-    | "/_authed/settings/applications/cognee"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
@@ -1520,6 +1494,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsToolsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/routine-repo": {
+      id: "/_authed/settings/routine-repo";
+      path: "/routine-repo";
+      fullPath: "/settings/routine-repo";
+      preLoaderRoute: typeof AuthedSettingsRoutineRepoRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/model-catalog": {
       id: "/_authed/settings/model-catalog";
       path: "/model-catalog";
@@ -1562,25 +1543,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsCrmRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/context-diagnostics": {
-      id: "/_authed/settings/context-diagnostics";
-      path: "/context-diagnostics";
-      fullPath: "/settings/context-diagnostics";
-      preLoaderRoute: typeof AuthedSettingsContextDiagnosticsRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/capabilities": {
       id: "/_authed/settings/capabilities";
       path: "/capabilities";
       fullPath: "/settings/capabilities";
       preLoaderRoute: typeof AuthedSettingsCapabilitiesRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/brain-operations": {
-      id: "/_authed/settings/brain-operations";
-      path: "/brain-operations";
-      fullPath: "/settings/brain-operations";
-      preLoaderRoute: typeof AuthedSettingsBrainOperationsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/billing": {
@@ -1953,13 +1920,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/artifacts/$id";
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
-    };
-    "/_authed/settings/applications/cognee": {
-      id: "/_authed/settings/applications/cognee";
-      path: "/applications/cognee";
-      fullPath: "/settings/applications/cognee";
-      preLoaderRoute: typeof AuthedSettingsApplicationsCogneeRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/agents/$profileId": {
       id: "/_authed/settings/agents/$profileId";
@@ -2436,22 +2396,20 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
-  AuthedSettingsBrainOperationsRoute: typeof AuthedSettingsBrainOperationsRoute;
   AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
-  AuthedSettingsContextDiagnosticsRoute: typeof AuthedSettingsContextDiagnosticsRoute;
   AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
   AuthedSettingsManagedApplicationsRoute: typeof AuthedSettingsManagedApplicationsRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
+  AuthedSettingsRoutineRepoRoute: typeof AuthedSettingsRoutineRepoRoute;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentLoopsAgentLoopIdRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
-  AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsEvaluationsCompareRoute: typeof AuthedSettingsEvaluationsCompareRoute;
@@ -2498,9 +2456,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
-  AuthedSettingsBrainOperationsRoute: AuthedSettingsBrainOperationsRoute,
   AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
-  AuthedSettingsContextDiagnosticsRoute: AuthedSettingsContextDiagnosticsRoute,
   AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,
@@ -2508,6 +2464,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsManagedApplicationsRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
   AuthedSettingsModelCatalogRoute: AuthedSettingsModelCatalogRoute,
+  AuthedSettingsRoutineRepoRoute: AuthedSettingsRoutineRepoRoute,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
@@ -2515,7 +2472,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentLoopsAgentLoopIdRoute:
     AuthedSettingsAgentLoopsAgentLoopIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
-  AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,

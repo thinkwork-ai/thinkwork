@@ -12,35 +12,32 @@ This kit fills the gap.
 
 ## Files
 
-| File                                                                 | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `_env.sh`                                                            | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                                                                                                                                                                                                                                                                                                                                    |
-| `chat-smoke.sh`                                                      | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                                                                                                                                                                                                                                                                                                                                  |
-| `catalog-smoke.sh`                                                   | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `scheduled-smoke.sh`                                                 | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                                                                                                                                                                                                                                                                                                                                  |
-| `run-all.sh`                                                         | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                                                                                                                                                                                                                                                                                                                                          |
-| `webhook-secret-put.sh`                                              | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                                                                                                                                                                                                                                                                                                                                |
-| `webhook-smoke.sh`                                                   | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `CHECKS.md`                                                          | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `fixtures/sales-prep-chat.json`                                      | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                                                                                                                                                                                                                                                                                                                             |
-| `fixtures/sales-prep-catalog.json`                                   | Inputs for `catalog-smoke.sh`.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `fixtures/crm-opportunity-won.json`                                  | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                                                                                                                                                                                                                                                   |
-| `fixtures/task-completed.json`                                       | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `fixtures/task-completed-no-trigger.json`                            | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `fixtures/task-event-status-changed.json`                            | Normalized Twenty `thread-event-source.v1` status change fixture for THNK-33 server-contract smoke.                                                                                                                                                                                                                                                                                                                                                                            |
-| `fixtures/task-event-comment-added.json`                             | Normalized Twenty comment fixture for THNK-33 server-contract smoke and duplicate replay checks.                                                                                                                                                                                                                                                                                                                                                                               |
-| `fixtures/task-event-status-unknown.json`                            | Normalized Twenty unknown-task fixture; expected to authenticate and record an ignored diagnostic without appending or waking.                                                                                                                                                                                                                                                                                                                                                 |
-| `spaces-runbook-smoke.mjs`                                           | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback.                                                                                                                                                                                                                                    |
-| `foundation-bootstrap-smoke.mjs`                                     | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                                                                                                                                                                                                                                                   |
-| `deployment-profile-binding-smoke.mjs`                               | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                                                                                                                                                                                                                                                              |
-| `deployment-evidence.mjs`                                            | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                                                                                                                                                                                                                                                          |
-| `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`                  | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                                                                                                                                                                                                                                                       |
-| `managed-app-controller-readiness-smoke.mjs`                         | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for managed apps without starting any managed-app job.                                                                                                                                                                                                                                                                          |
-| `deployment-teardown-readiness-smoke.mjs`                            | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                                                                                                                                                                       |
-| `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`                   | LastMile plugin smoke. Dry-run by default. Phase 1: live OAuth discovery drift guard + `installPlugin` + prints the `activatePlugin` authorize URL; a manual browser OAuth consent sits in between; phase 2 (`--post-activation`): per-user activation status plus MCP tool-surface inclusion/exclusion via `/api/mcp/tools/list`. After catalog-version bumps, first verify the signed GitHub-backed catalog refreshed through Settings -> Plugins or `refreshPluginCatalog`. |
-| `plugins/company-brain/smoke/company-brain-plugin-smoke.mjs`         | Company Brain premium plugin smoke. Dry-run by default. Live mode proves catalog visibility, premium key-gating, optional generated/backdoor key redemption through `installPlugin`, persistent entitlement state, Brain substrate deployment evidence, and the plugin detail / Brain operations / Ontology route contract.                                                                                                                                                    |
-| `plugins/company-brain/smoke/company-brain-operations-smoke.mjs`     | Company Brain operations GraphQL smoke. Dry-run by default. Live mode reads `companyBrainStatus`, checks tier/backend/health/capability/migration posture, optionally verifies member redaction, and only requests production migration when an explicit mutation flag is set.                                                                                                                                                                                                 |
-| `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` | Read-only Company Brain Context Engine smoke. Dry-run by default. Live mode calls `/mcp/context-engine` with service auth, checks `query_brain_context` provider status/provenance/source-boundary/read-posture metadata, and compares the named workflow with `query_memory_context`.                                                                                                                                                                                         |
+| File                                                | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `_env.sh`                                           | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`.                                                                                                                                                                                                                                                                                                                                    |
+| `chat-smoke.sh`                                     | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`.                                                                                                                                                                                                                                                                                                                                                                  |
+| `catalog-smoke.sh`                                  | POST `/api/skills/start` with `invocationSource=catalog`; same assertion.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `scheduled-smoke.sh`                                | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB).                                                                                                                                                                                                                                                                                                                                                  |
+| `run-all.sh`                                        | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path.                                                                                                                                                                                                                                                                                                                                                                          |
+| `webhook-secret-put.sh`                             | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `webhook-smoke.sh`                                  | HMAC-sign + POST a payload to the deployed webhook Lambda.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `CHECKS.md`                                         | Definition-of-passing + the full runbook per path. Read this first if a smoke fails.                                                                                                                                                                                                                                                                                                                                                                                           |
+| `fixtures/sales-prep-chat.json`                     | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog).                                                                                                                                                                                                                                                                                                                                                                                             |
+| `fixtures/sales-prep-catalog.json`                  | Inputs for `catalog-smoke.sh`.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `fixtures/crm-opportunity-won.json`                 | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                                                                                                                                                                                                                                                   |
+| `fixtures/task-completed.json`                      | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `fixtures/task-completed-no-trigger.json`           | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `fixtures/task-event-status-changed.json`           | Normalized Twenty `thread-event-source.v1` status change fixture for THNK-33 server-contract smoke.                                                                                                                                                                                                                                                                                                                                                                            |
+| `fixtures/task-event-comment-added.json`            | Normalized Twenty comment fixture for THNK-33 server-contract smoke and duplicate replay checks.                                                                                                                                                                                                                                                                                                                                                                               |
+| `fixtures/task-event-status-unknown.json`           | Normalized Twenty unknown-task fixture; expected to authenticate and record an ignored diagnostic without appending or waking.                                                                                                                                                                                                                                                                                                                                                 |
+| `spaces-runbook-smoke.mjs`                          | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback.                                                                                                                                                                                                                                    |
+| `foundation-bootstrap-smoke.mjs`                    | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                                                                                                                                                                                                                                                   |
+| `deployment-profile-binding-smoke.mjs`              | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                                                                                                                                                                                                                                                              |
+| `deployment-evidence.mjs`                           | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                                                                                                                                                                                                                                                          |
+| `plugins/twenty/smoke/twenty-managed-app-smoke.mjs` | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                                                                                                                                                                                                                                                       |
+| `managed-app-controller-readiness-smoke.mjs`        | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for managed apps without starting any managed-app job.                                                                                                                                                                                                                                                                          |
+| `deployment-teardown-readiness-smoke.mjs`           | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                                                                                                                                                                       |
+| `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`  | LastMile plugin smoke. Dry-run by default. Phase 1: live OAuth discovery drift guard + `installPlugin` + prints the `activatePlugin` authorize URL; a manual browser OAuth consent sits in between; phase 2 (`--post-activation`): per-user activation status plus MCP tool-surface inclusion/exclusion via `/api/mcp/tools/list`. After catalog-version bumps, first verify the signed GitHub-backed catalog refreshed through Settings -> Plugins or `refreshPluginCatalog`. |
 
 ## Quick start — run the full smoke suite
 
@@ -108,119 +105,6 @@ Passing live mode means:
 - parked Twenty stages skip with an explicit retained-runtime message;
 - running Twenty stages expose an HTTPS URL;
 - the public `https://.../healthz` endpoint returns a successful response.
-
-## Company Brain premium plugin smoke
-
-The Company Brain plugin smoke is dry-run by default and never starts a live
-install unless `SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1` is set:
-
-```sh
-node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
-
-SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  SMOKE_COMPANY_BRAIN_INSTALL_KEY=<issued-or-dev-backdoor-key> \
-  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
-```
-
-To mint a one-time key during the smoke instead of passing an existing key,
-use a ThinkWork platform-operator principal:
-
-```sh
-SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  SMOKE_COMPANY_BRAIN_ISSUE_KEY=1 \
-  SMOKE_PLATFORM_OPERATOR_USER_ID=<platform-operator-user-id> \
-  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
-```
-
-Live mode requires deployed GraphQL credentials from `apps/web/.env` or
-equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
-`API_AUTH_SECRET`/`THINKWORK_API_SECRET`. Passing live mode means:
-
-- Company Brain appears in `pluginCatalog` with premium/key-gated metadata.
-- unentitled installs without a key and with an invalid key fail closed without
-  creating an install or entitlement.
-- a generated, issued, or configured dev/test backdoor key grants the same
-  persistent entitlement path used by normal install.
-- the Brain substrate infrastructure component exposes managed-app deployment
-  evidence; existing-Cognee adoption reports the no-change marker when that path
-  is active.
-- Company Brain plugin detail remains `/settings/plugins/company-brain`,
-  Brain operations is `/settings/brain-operations`, and Memory / Ontology
-  remains `/settings/memory/knowledge-graph`.
-
-## Company Brain operations smoke
-
-The Company Brain operations smoke is read-only and dry-run by default:
-
-```sh
-node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
-
-SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  SMOKE_MEMBER_USER_ID=<tenant-member-user-id> \
-  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
-```
-
-Live read-only mode requires deployed GraphQL credentials from `apps/web/.env`
-or equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
-`API_AUTH_SECRET`/`THINKWORK_API_SECRET`. Passing live mode means:
-
-- `companyBrainStatus` exposes storage tier, active backend, health,
-  operational counters, launch/optional capabilities, and migration posture.
-- default and production tier posture is visible without exposing raw substrate
-  controls to tenant callers.
-- optional `SMOKE_MEMBER_USER_ID` verifies that non-operator reads redact
-  Cognee endpoints, S3 roots, Neptune ids/endpoints, and EFS ids.
-- optional `SMOKE_EXPECT_OPERATOR_EVIDENCE=1` requires operator evidence to be
-  present for stages where backend evidence must already exist.
-
-The smoke never requests a production migration unless explicitly enabled:
-
-```sh
-SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
-  SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
-```
-
-The mutation path only sends `requestCompanyBrainProductionMigration` when the
-tenant is ready on the default tier and has no active migration. It does not
-record failure or rollback; use the Brain operations UI for those operator
-actions.
-
-## Company Brain Context Engine smoke
-
-The Company Brain Context Engine smoke is read-only and dry-run by default:
-
-```sh
-node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
-
-SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  SMOKE_USER_ID=<tenant-user-id> \
-  SMOKE_COMPANY_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
-  SMOKE_COMPANY_BRAIN_EXPECTED_TERM="procurement" \
-  node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
-```
-
-Live mode requires `/mcp/context-engine` service credentials from `apps/web/.env`
-or equivalent `CONTEXT_ENGINE_MCP_URL` plus `API_AUTH_SECRET`/`THINKWORK_API_SECRET`.
-Passing live mode means:
-
-- `query_brain_context` returns Company Brain hits through Context Engine.
-- Brain provider status exposes active read route, shadow migration, vault
-  provenance, and provider-local retrieval posture.
-- Brain hits carry untrusted source-data boundary metadata.
-- the named workflow is better than memory-only by hit count or an expected-term
-  match in the Brain response.
-- `query_memory_context` remains separate Hindsight retrieval, not a hidden
-  fallback for Brain-only calls.
 
 ## GitHub-free foundation smoke
 
@@ -329,7 +213,7 @@ SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
 
 Live mode reads the selected release manifest URL/digest from the customer
 deployment SSM prefix, downloads the manifest, verifies its SHA-256, and checks
-the Cognee, Twenty, and n8n managed-app descriptors by default. It verifies
+the Twenty and n8n managed-app descriptors by default. It verifies
 module source/version, smoke command paths, and required runtime images without
 starting a plan or approval job. Use `SMOKE_MANAGED_APP_KEYS` to narrow the
 check when validating a release that intentionally omits one of the default

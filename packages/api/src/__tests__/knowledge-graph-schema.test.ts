@@ -83,7 +83,7 @@ describe("Knowledge Graph GraphQL contract", () => {
         "threadId",
         "requestedByUserId",
         "status",
-        "cogneeDatasetName",
+        "sourceDatasetName",
         "entityCount",
         "relationshipCount",
         "evidenceCount",

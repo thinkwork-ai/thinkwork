@@ -35,140 +35,6 @@ function n8nDesiredConfig(extra: Record<string, unknown> = {}) {
 }
 
 describe("managed app deployment adapters", () => {
-  it("maps Cognee deploy config into Terraform variables and smoke evidence", () => {
-    const summary = buildPlanSummary({
-      evidenceBucket: "evidence-bucket",
-      input: {
-        phase: "plan",
-        tenantId: "tenant-1",
-        jobId: "job-1",
-        appKey: "cognee",
-        operation: "ENABLE",
-        releaseVersion: "1.2.3",
-        manifestDigest: digest,
-        desiredConfigVersion: "v1",
-        desiredConfig: {
-          imageUri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
-          dbPasswordSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-          dbName: "thinkwork_cognee",
-          brainTenantId: "tenant-1",
-          brainInstanceKey: "tenant-abc123",
-          bedrockModelResourceArns: [
-            "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-          ],
-        },
-      },
-    });
-
-    expect(summary.displayName).toBe("Cognee");
-    expect(summary.terraformVariables).toEqual(
-      expect.objectContaining({
-        enable_cognee: true,
-        cognee_image_uri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
-        cognee_db_password_secret_arn:
-          "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-        cognee_db_name: "thinkwork_cognee",
-        cognee_backend_mode: "dogfood",
-        cognee_brain_tenant_id: "tenant-1",
-        cognee_brain_instance_key: "tenant-abc123",
-        cognee_brain_storage_tier: "default",
-        cognee_private_substrate_mode: true,
-        cognee_vector_db_provider: "lancedb",
-        cognee_graph_database_provider: "kuzu",
-      }),
-    );
-    expect(summary.smokeContracts).toContainEqual(
-      expect.objectContaining({
-        command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
-      }),
-    );
-    expect(summary.statusOutputs).toContain("cognee_endpoint");
-    expect(summary.statusOutputs).toContain("cognee_brain_storage_tier");
-  });
-
-  it("maps production Brain tier config to Neptune Analytics providers", () => {
-    const plan = buildManagedAppPlan({
-      appKey: "cognee",
-      operation: "ENABLE",
-      desiredConfig: {
-        imageUri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
-        dbPasswordSecretArn:
-          "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-        brainTenantId: "tenant-1",
-        brainInstanceKey: "tenant-prod",
-        brainStorageTier: "production",
-        brainS3ArtifactRoot: "s3://brain/tenants/tenant-1/artifacts/",
-        brainS3ManifestRoot: "s3://brain/tenants/tenant-1/manifests/",
-        brainS3VaultProjectionRoot:
-          "s3://brain/tenants/tenant-1/vault-projections/",
-        brainArtifactsBucketArn: "arn:aws:s3:::brain",
-        brainArtifactsPrefixes: ["tenants/tenant-1/artifacts"],
-        neptuneGraphId: "g-123",
-        neptuneGraphArn:
-          "arn:aws:neptune-graph:us-east-1:123456789012:graph/g-123",
-        neptuneEndpoint: "https://g-123.neptune-graph.us-east-1.amazonaws.com",
-        bedrockModelResourceArns: [
-          "arn:aws:bedrock:us-east-1:123456789012:foundation-model/amazon.titan-embed-text-v2:0",
-        ],
-      },
-    });
-
-    expect(plan.terraformVariables).toEqual(
-      expect.objectContaining({
-        cognee_backend_mode: "remote",
-        cognee_brain_storage_tier: "production",
-        cognee_vector_db_provider: "neptune_analytics",
-        cognee_graph_database_provider: "neptune_analytics",
-        cognee_vector_db_url:
-          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
-        cognee_graph_database_url:
-          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
-        cognee_neptune_graph_id: "g-123",
-        cognee_neptune_graph_arn:
-          "arn:aws:neptune-graph:us-east-1:123456789012:graph/g-123",
-        cognee_neptune_endpoint:
-          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
-        cognee_brain_artifacts_bucket_arn: "arn:aws:s3:::brain",
-        cognee_brain_artifacts_prefixes: ["tenants/tenant-1/artifacts"],
-      }),
-    );
-    expect(plan.dataImpact.resources.join("\n")).toMatch(
-      /Canonical Company Brain S3 artifacts/,
-    );
-    expect(plan.dataImpact.resources.join("\n")).toMatch(
-      /Production tier uses Cognee-supported Neptune Analytics/,
-    );
-  });
-
-  it("rejects unsupported Brain storage tiers before Terraform runs", () => {
-    expect(() =>
-      buildManagedAppPlan({
-        appKey: "cognee",
-        operation: "ENABLE",
-        desiredConfig: {
-          imageUri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
-          dbPasswordSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-          brainStorageTier: "opensearch",
-          bedrockModelResourceArns: [
-            "arn:aws:bedrock:us-east-1:123456789012:foundation-model/amazon.titan-embed-text-v2:0",
-          ],
-        },
-      }),
-    ).toThrow(/brainStorageTier must be default or production/);
-  });
-
-  it("fails Cognee enable plans without required image and secrets", () => {
-    expect(() =>
-      buildManagedAppPlan({
-        appKey: "cognee",
-        operation: "ENABLE",
-        desiredConfig: {},
-      }),
-    ).toThrow(/bedrockModelResourceArns|imageUri|dbPasswordSecretArn/);
-  });
-
   it("maps n8n deploy config into Terraform variables and smoke evidence", () => {
     const packageConfig = normalizeN8nPackageConfig([
       "luxon@3.7.2",
@@ -306,7 +172,7 @@ describe("managed app deployment adapters", () => {
       contract: "thinkwork.deployment.controller.v1",
       tenantId: "tenant-1",
       jobId: "job-1",
-      appKey: "cognee" as const,
+      appKey: "n8n" as const,
       operation: "ENABLE" as const,
       release: {
         version: "1.2.3",
@@ -317,16 +183,10 @@ describe("managed app deployment adapters", () => {
       releaseVersion: "1.2.3",
       manifestDigest: digest,
       desiredConfigVersion: "v1",
-      desiredConfig: {
-        dbPasswordSecretArn:
-          "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
-        bedrockModelResourceArns: [
-          "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-        ],
-      },
+      desiredConfig: n8nDesiredConfig({ imageUri: "" }),
       evidence: {
         bucket: "evidence-bucket",
-        prefix: "managed-apps/cognee/job-1/plan",
+        prefix: "managed-apps/n8n/job-1/plan",
       },
     };
 
@@ -335,7 +195,7 @@ describe("managed app deployment adapters", () => {
       input: {
         ...baseInput,
         manifestImages: {
-          cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+          n8n: `public.ecr.aws/thinkwork/n8n@sha256:${"1".repeat(64)}`,
         },
       },
     });
@@ -344,19 +204,19 @@ describe("managed app deployment adapters", () => {
       input: {
         ...baseInput,
         manifestImages: {
-          cognee: `public.ecr.aws/thinkwork/cognee@sha256:${"2".repeat(64)}`,
+          n8n: `public.ecr.aws/thinkwork/n8n@sha256:${"2".repeat(64)}`,
         },
       },
     });
 
     expect(first.evidence).toEqual({
       bucket: "evidence-bucket",
-      prefix: "managed-apps/cognee/job-1/plan",
+      prefix: "managed-apps/n8n/job-1/plan",
     });
     expect(first.releaseManifestUrl).toBe(baseInput.release.manifestUrl);
     expect(first.terraformVariables).toEqual(
       expect.objectContaining({
-        cognee_image_uri: `public.ecr.aws/thinkwork/cognee@sha256:${"1".repeat(64)}`,
+        n8n_image_uri: `public.ecr.aws/thinkwork/n8n@sha256:${"1".repeat(64)}`,
       }),
     );
     expect(first.planDigest).not.toBe(second.planDigest);
@@ -657,37 +517,6 @@ describe("managed app deployment adapters", () => {
         runtimeEnabled: false,
         endpoint: "https://crm.example.com",
         status: "parked",
-      }),
-    );
-    expect(
-      getManagedAppAdapter("cognee").extractStatus({
-        cognee_enabled: { value: true },
-        cognee_endpoint: { value: "http://internal-alb" },
-        cognee_brain_instance_key: { value: "tenant-abc123" },
-        cognee_brain_storage_tier: { value: "production" },
-        cognee_vector_db_provider: { value: "neptune_analytics" },
-        cognee_graph_database_provider: { value: "neptune_analytics" },
-        cognee_neptune_graph_id: { value: "g-123" },
-        cognee_s3_artifact_root: {
-          value: "s3://brain/tenants/tenant-1/artifacts/",
-        },
-        cognee_private_substrate_mode: { value: true },
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        provisioned: true,
-        runtimeEnabled: true,
-        endpoint: "http://internal-alb",
-        status: "running",
-        evidence: expect.objectContaining({
-          brainInstanceKey: "tenant-abc123",
-          storageTier: "production",
-          vectorProvider: "neptune_analytics",
-          graphProvider: "neptune_analytics",
-          neptuneGraphId: "g-123",
-          s3ArtifactRoot: "s3://brain/tenants/tenant-1/artifacts/",
-          privateSubstrateMode: true,
-        }),
       }),
     );
   });

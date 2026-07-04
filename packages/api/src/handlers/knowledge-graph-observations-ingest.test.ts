@@ -76,7 +76,7 @@ const run = {
   source_kind: "observations",
   source_ref: `tenant:${TENANT_ID}:observations`,
   source_label: "Hindsight observations",
-  cognee_dataset_name: `thinkwork:${TENANT_ID}:observations`,
+  source_dataset_name: `thinkwork:${TENANT_ID}:observations`,
   input: { source: "observations", fullRebuild: false },
   metadata: {},
 };
@@ -252,7 +252,7 @@ describe("knowledge-graph-observations-ingest handler", () => {
       createKnowledgeGraphObservationsIngestRunMock.mock
         .invocationCallOrder[0]!,
     );
-    // Extraction runs over the promoted packets (no Cognee round-trip).
+    // Extraction runs over the promoted packets (no external graph round-trip).
     expect(extractorMock).toHaveBeenCalledTimes(1);
     expect(extractorMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -422,7 +422,9 @@ describe("knowledge-graph-observations-ingest handler", () => {
       }),
     );
     // Purge before the source read (which drives extraction).
-    expect(purgeKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!).toBeLessThan(
+    expect(
+      purgeKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!,
+    ).toBeLessThan(
       loadObservationsKnowledgeGraphSourceMock.mock.invocationCallOrder[0]!,
     );
     expect(mergeKnowledgeGraphSnapshotMock).toHaveBeenCalledWith(
@@ -430,10 +432,10 @@ describe("knowledge-graph-observations-ingest handler", () => {
     );
   });
 
-  it("cogneePruneAll is treated as a full rebuild (purge + cursor reset)", async () => {
+  it("fullRebuild purges the mirror and resets cursors", async () => {
     const { db, cursorDelete } = makeDb();
     const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID, cogneePruneAll: true },
+      { tenantId: TENANT_ID, fullRebuild: true },
       { db },
     );
     expect(result.status).toBe("succeeded");

@@ -58,7 +58,10 @@ describe("chat-sidebar-types", () => {
       { id: "selected", lastActivityAt: "2026-05-19T11:00:00Z" },
       { id: "unread-b", lastActivityAt: "2026-05-19T10:00:00Z" },
     ];
-    const locallyRead = new Set(["selected"]);
+    // Locally read AFTER its latest activity, so it counts as read.
+    const locallyRead = new Map([
+      ["selected", new Date("2026-05-19T11:30:00Z").getTime()],
+    ]);
 
     // The pure unread set (badge / mark-all target) excludes the read thread.
     expect(filterUnreadThreads(threads, locallyRead).map((t) => t.id)).toEqual([
@@ -76,5 +79,26 @@ describe("chat-sidebar-types", () => {
     expect(
       displayedUnreadThreads(threads, locallyRead, undefined).map((t) => t.id),
     ).toEqual(["unread-a", "unread-b"]);
+  });
+
+  it("re-lights the unread state when activity lands after a local read", () => {
+    // THINK-136 acceptance regression: a plain read-ids set suppressed the
+    // unread dot forever once a thread was opened this session — a new
+    // message could only surface the dot after a full browser reload.
+    const readAt = new Date("2026-05-19T11:00:00Z").getTime();
+    const locallyRead = new Map([["thread-1", readAt]]);
+
+    const beforeNewMessage = [
+      { id: "thread-1", lastActivityAt: "2026-05-19T10:00:00Z" },
+    ];
+    expect(filterUnreadThreads(beforeNewMessage, locallyRead)).toEqual([]);
+
+    // A refetch brings activity NEWER than the local read → unread again.
+    const afterNewMessage = [
+      { id: "thread-1", lastActivityAt: "2026-05-19T12:00:00Z" },
+    ];
+    expect(
+      filterUnreadThreads(afterNewMessage, locallyRead).map((t) => t.id),
+    ).toEqual(["thread-1"]);
   });
 });

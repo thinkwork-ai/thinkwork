@@ -9,6 +9,7 @@ import {
   routineAslVersion,
   routineExecution,
   routineExecutions,
+  routineRepairEvents_,
   routineStepEvents_,
 } from "./routineExecutions.query.js";
 import { tenantToolInventory } from "./tenantToolInventory.query.js";
@@ -20,6 +21,7 @@ export const routineQueries = {
   routineExecution,
   routineExecutions,
   routineStepEvents: routineStepEvents_,
+  routineRepairEvents: routineRepairEvents_,
   routineAslVersion,
   routineDefinition,
   routineRecipeCatalog,

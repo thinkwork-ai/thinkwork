@@ -50,7 +50,7 @@ enum KnowledgeGraphEvidenceSourceKind {
   BRAIN_PAGE
   BRAIN_SECTION
   HINDSIGHT_OBSERVATION
-  COGNEE_PAYLOAD
+  GRAPH_PAYLOAD
   NORMALIZER
 }
 
@@ -64,8 +64,8 @@ type KnowledgeGraphIngestRun {
   requestedByUserId: ID
   status: KnowledgeGraphIngestStatus!
   trigger: String!
-  cogneeDatasetName: String!
-  cogneeDatasetId: String
+  sourceDatasetName: String!
+  sourceDatasetId: String
   startedAt: AWSDateTime
   finishedAt: AWSDateTime
   durationMs: Int
@@ -111,7 +111,7 @@ type KnowledgeGraphEntity {
   sourceKind: KnowledgeGraphSourceKind!
   sourceRef: String!
   ingestRunId: ID!
-  cogneeNodeId: String!
+  graphNodeId: String!
   label: String!
   normalizedLabel: String!
   typeLabel: String
@@ -139,7 +139,7 @@ type KnowledgeGraphRelationship {
   sourceKind: KnowledgeGraphSourceKind!
   sourceRef: String!
   ingestRunId: ID!
-  cogneeEdgeId: String
+  graphEdgeId: String
   sourceEntityId: ID!
   targetEntityId: ID!
   label: String!

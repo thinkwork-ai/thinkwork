@@ -96,18 +96,39 @@ export function isThreadUnread(thread: ChatThreadSummary): boolean {
 }
 
 /**
+ * Optimistic client-side reads: thread id -> epoch-ms of when the caller
+ * locally read it (opened the thread / mark-all-as-read). A TIMESTAMP, not a
+ * set membership, on purpose: a plain "read ids" set suppressed the unread
+ * dot forever once a thread had been opened this session — new server
+ * activity could never re-light it until a full reload cleared the set
+ * (THINK-136 acceptance finding). With a timestamp, activity newer than the
+ * local read wins automatically.
+ */
+export type LocallyReadThreadAt = ReadonlyMap<string, number>;
+
+export function isThreadLocallyRead(
+  thread: ChatThreadSummary,
+  locallyReadThreadAt: LocallyReadThreadAt,
+): boolean {
+  const readAt = locallyReadThreadAt.get(thread.id);
+  if (readAt === undefined) return false;
+  return activityTime(thread) <= readAt;
+}
+
+/**
  * The threads in a section the caller hasn't read yet, honoring optimistic
- * client-side reads (`locallyReadThreadIds`). The single source of truth for a
+ * client-side reads (`locallyReadThreadAt`). The single source of truth for a
  * section's unread badge count, its unread filter, and the id set "Mark all as
  * read" targets — keeping all three consistent so the badge reaches zero after
  * a mark-all (see plan KTD-2).
  */
 export function filterUnreadThreads(
   threads: ChatThreadSummary[],
-  locallyReadThreadIds: ReadonlySet<string>,
+  locallyReadThreadAt: LocallyReadThreadAt,
 ): ChatThreadSummary[] {
   return threads.filter(
-    (thread) => isThreadUnread(thread) && !locallyReadThreadIds.has(thread.id),
+    (thread) =>
+      isThreadUnread(thread) && !isThreadLocallyRead(thread, locallyReadThreadAt),
   );
 }
 
@@ -122,13 +143,14 @@ export function filterUnreadThreads(
  */
 export function displayedUnreadThreads(
   threads: ChatThreadSummary[],
-  locallyReadThreadIds: ReadonlySet<string>,
+  locallyReadThreadAt: LocallyReadThreadAt,
   selectedThreadId: string | undefined,
 ): ChatThreadSummary[] {
   return threads.filter(
     (thread) =>
       thread.id === selectedThreadId ||
-      (isThreadUnread(thread) && !locallyReadThreadIds.has(thread.id)),
+      (isThreadUnread(thread) &&
+        !isThreadLocallyRead(thread, locallyReadThreadAt)),
   );
 }
 
