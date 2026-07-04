@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[Subject] — Report</title>
+<style>
+:root{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+    --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+    --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+    --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+    --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+  --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+  --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+  --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+  --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+}
+:root[data-theme="light"]{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:32px 24px 64px}
+p,li,dd{max-width:72ch}
+h1{font-size:1.7em;line-height:1.25;margin:.2em 0 .3em}
+h2{font-size:1.25em;margin:2.2em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.05em;margin:1.4em 0 .4em}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+.eyebrow{font-size:.72em;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.meta{color:var(--muted);font-size:.9em;margin:.2em 0 1.2em}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
+.stat .n{font-size:1.35em;font-weight:700}
+.stat .l{font-size:.78em;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .q{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card .a{font-weight:700;margin:.25em 0 .35em}
+.card p{font-size:.92em;margin:0;color:var(--muted)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.75em;font-weight:600}
+.pill.acc{background:var(--accent-soft);color:var(--accent-text)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+.pill.info{background:var(--info-soft);color:var(--info-text)}
+.pill.bad{background:var(--bad-soft);color:var(--bad-text)}
+article.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+article.item h3{margin:.1em 0 .5em}
+article.item .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+dl.fields{margin:0}
+dl.fields dt{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.8em}
+dl.fields dd{margin:.15em 0 0}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent-text);font-size:.85em}
+figure{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+figcaption{font-size:.85em;color:var(--muted);margin-top:8px}
+footer.composition-signal{margin-top:48px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.82em}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+@media print{
+  body{background:#fff;color:#111}
+  main{max-width:none;padding:0}
+  article.item,.card,.stat,figure,table{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<main>
+
+<div class="eyebrow">REPORT · [PERIOD]</div>
+<h1>[Subject] — Report</h1>
+<p class="meta"><strong>date</strong> [YYYY-MM-DD] &nbsp;·&nbsp; <strong>coverage</strong> [what this reports on]</p>
+
+<div class="stats">
+  <div class="stat"><div class="n">[42]</div><div class="l">[primary metric]</div></div>
+  <div class="stat"><div class="n">[+18%]</div><div class="l">[change vs prior]</div></div>
+  <div class="stat"><div class="n">[3]</div><div class="l">[items needing action]</div></div>
+</div>
+
+<h2 id="summary">Summary</h2>
+<p>[The report's answer in 2-3 sentences: what is true, what changed, what needs attention. Lead with the conclusion.]</p>
+
+<h2 id="findings">Findings</h2>
+<article class="item" id="f1">
+<h3>F1. [Finding title — the fact, not the topic]</h3>
+<div class="chips"><span class="pill acc">[area]</span><span class="pill warn">needs attention</span></div>
+<dl class="fields">
+<dt>Evidence</dt><dd>[The data or observation behind the finding.]</dd>
+<dt>Implication</dt><dd>[What it means for the reader.]</dd>
+</dl>
+</article>
+
+<figure>
+<svg viewBox="0 0 720 250" role="img" aria-label="Column chart: [metric] by quarter, rising from 12 in Q1 to 35 in Q4">
+<!-- Chart anatomy (see authoring-rules.md): recessive hairline gridlines with
+     clean-number ticks; a solid baseline; single-hue columns (one series = one
+     color, no legend) capped at 24px wide with 4px rounded data-ends and square
+     baselines; text wears text tokens, never the series color; only the extreme
+     is direct-labeled — the axis carries the rest. -->
+<text x="12" y="18" font-size="12" font-weight="600" fill="var(--ink)">[Metric] by quarter</text>
+<text x="12" y="33" font-size="10.5" fill="var(--muted)">[Unit or qualifier — what one column measures]</text>
+<!-- gridlines + clean y ticks (0-40 in steps of 10) -->
+<g stroke="var(--line)" stroke-width="1">
+<line x1="48" y1="60" x2="708" y2="60"/>
+<line x1="48" y1="100" x2="708" y2="100"/>
+<line x1="48" y1="140" x2="708" y2="140"/>
+<line x1="48" y1="180" x2="708" y2="180"/>
+</g>
+<g font-size="10" fill="var(--muted)" text-anchor="end">
+<text x="42" y="63">40</text>
+<text x="42" y="103">30</text>
+<text x="42" y="143">20</text>
+<text x="42" y="183">10</text>
+<text x="42" y="223">0</text>
+</g>
+<!-- columns: value v maps to height v*4; top y = 220 - v*4 -->
+<g fill="var(--accent)">
+<path d="M126,220 v-44 q0,-4 4,-4 h16 q4,0 4,4 v44 z"/>
+<path d="M291,220 v-68 q0,-4 4,-4 h16 q4,0 4,4 v68 z"/>
+<path d="M456,220 v-104 q0,-4 4,-4 h16 q4,0 4,4 v104 z"/>
+<path d="M621,220 v-136 q0,-4 4,-4 h16 q4,0 4,4 v136 z"/>
+</g>
+<!-- baseline -->
+<line x1="48" y1="220" x2="708" y2="220" stroke="var(--muted)" stroke-width="1"/>
+<!-- direct label on the extreme only; the axis carries the rest -->
+<text x="633" y="72" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="middle">[35]</text>
+<!-- x category labels -->
+<g font-size="10.5" fill="var(--muted)" text-anchor="middle">
+<text x="138" y="238">[Q1]</text>
+<text x="303" y="238">[Q2]</text>
+<text x="468" y="238">[Q3]</text>
+<text x="633" y="238">[Q4]</text>
+</g>
+</svg>
+<figcaption>[One sentence stating the takeaway the chart shows — an interpretation, not a description.]</figcaption>
+</figure>
+
+<details>
+<summary>Chart data</summary>
+<table>
+<tr><th>Quarter</th><th>[Metric]</th></tr>
+<tr><td>[Q1]</td><td>[12]</td></tr>
+<tr><td>[Q2]</td><td>[18]</td></tr>
+<tr><td>[Q3]</td><td>[27]</td></tr>
+<tr><td>[Q4]</td><td>[35]</td></tr>
+</table>
+</details>
+
+<h2 id="details">Details</h2>
+<table>
+<tr><th>Item</th><th>Value</th><th>Change</th><th>Note</th></tr>
+<tr><td>[row]</td><td>[value]</td><td>[+/-]</td><td>[context]</td></tr>
+<tr><td>[row]</td><td>[value]</td><td>[+/-]</td><td>[context]</td></tr>
+</table>
+
+<h2 id="recommendations">Recommendations</h2>
+<p>[Numbered, concrete next actions tied to the findings.]</p>
+
+<footer class="composition-signal">Composed [date] by [agent] from [source context — thread/topic in one line].</footer>
+</main>
+</body>
+</html>

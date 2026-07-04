@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: HTML Document Artifacts — Compound-Engineering-Style Documents as a ThinkWork Skill</title>
+<style>
+:root{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6;
+  --card:#ffffff; --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037;
+    --card:#1d2025; --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+    --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+    --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+    --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:32px 24px 64px}
+p,li,dd{max-width:72ch}
+h1{font-size:1.7em;line-height:1.25;margin:.2em 0 .3em}
+h2{font-size:1.25em;margin:2.2em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.05em;margin:1.4em 0 .4em}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);color:inherit;padding:1px 5px;border-radius:4px}
+.eyebrow{font-size:.72em;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.meta{color:var(--muted);font-size:.9em;margin:.2em 0 1.2em}
+.meta code{background:transparent;padding:0}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
+.stat .n{font-size:1.35em;font-weight:700}
+.stat .l{font-size:.78em;color:var(--muted)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.75em;font-weight:600}
+.pill.acc{background:var(--accent-soft);color:var(--accent-text)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+.pill.info{background:var(--info-soft);color:var(--info-text)}
+.pill.bad{background:var(--bad-soft);color:var(--bad-text)}
+article.idea{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+article.idea h3{margin:.1em 0 .5em}
+article.idea .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+dl.fields{margin:0}
+dl.fields dt{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.8em}
+dl.fields dd{margin:.15em 0 0}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent-text);font-size:.85em}
+ul.jump{columns:2;font-size:.92em;margin:.4em 0 1em;padding-left:1.2em}
+.callout{border-radius:10px;padding:12px 16px;margin:14px 0;background:var(--warn-soft)}
+.callout .eyebrow{color:var(--warn-text)}
+figure{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+figcaption{font-size:.85em;color:var(--muted);margin-top:8px}
+footer.composition-signal{margin-top:48px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.82em}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+@media(max-width:640px){ul.jump{columns:1}}
+</style>
+</head>
+<body>
+<main>
+
+<div class="eyebrow">Ideation · repo-grounded</div>
+<h1>HTML Document Artifacts: Compound-Engineering-Style Documents as a ThinkWork Skill</h1>
+<p class="meta"><strong>date</strong> 2026-07-04 &nbsp;·&nbsp; <strong>topic</strong> <code>html-document-artifacts</code> &nbsp;·&nbsp; <strong>mode</strong> repo-grounded<br>
+<strong>focus</strong> How ThinkWork agents could compose beautiful, agent-consumable, single-file HTML documents (plans, ideation, reports) as first-class artifacts in the product — modeled on the compound-engineering plugin's HTML renderings; outcome feeds a Linear feature-request issue.</p>
+
+<div class="stats">
+  <div class="stat"><div class="n">38</div><div class="l">raw ideas · 5 frames</div></div>
+  <div class="stat"><div class="n">7</div><div class="l">survivors</div></div>
+  <div class="stat"><div class="n">5</div><div class="l">axes, all covered</div></div>
+  <div class="stat"><div class="n">12</div><div class="l">repo spot-checks, 0 refuted</div></div>
+</div>
+
+<div class="callout">
+<div class="eyebrow">The run's sharpest finding</div>
+<p>The exemplar documents this feature is modeled on <strong>fail their own target environment</strong>: <code>docs/ideation/2026-07-04-think-145-artifacts-as-canvas-ideation.html:7</code> loads Inter from <code>fonts.googleapis.com</code>, which the deployed sandbox CSP (<code>font-src 'self' data:</code>, <code>connect-src 'none'</code> — <code>terraform/modules/thinkwork/main.tf:1870</code>) silently blocks. "Self-contained" must be an enforced gate (Idea 4), not a style preference — this very document uses system fonts for that reason.</p>
+</div>
+
+<h2 id="grounding-context">Grounding Context</h2>
+<h3>Codebase Context</h3>
+<p>ThinkWork is an AWS-native TypeScript monorepo (pnpm ≥9, Node ≥22): React 19 web, Expo mobile, CLI; Bedrock AgentCore hosts the Pi runtime; one shared platform agent per tenant; "Filesystem IS the agent." Skills are workspace <code>skills/&lt;slug&gt;/SKILL.md</code> folders distributed via tenant S3 catalogs with SkillSpector publish gating; no existing skill authors rich single-file HTML documents. The artifacts table is markdown-first (<code>artifactContentKey</code> hardcodes <code>.md</code> keys), with a dead kind-string access gate and no share/permalink/export UI. The just-decided THINK-145 Living Artifacts plan (implementation-ready, unbuilt) supplies the substrate this feature should ride: space-homed artifacts, living head + content-addressed pinned versions (two-key rule), born-as-artifact first-emission upsert, deferred "published embed." GenUI (THINK-116, shipped) is a strict-validated json-render catalog — a deliberately separate rendering class from raw HTML. The shipped McpAppFrame renders agent-authored HTML via srcDoc into an opaque-origin sandboxed iframe behind a Terraform-pinned CSP whose <code>connect-src 'none'</code> is the load-bearing exfiltration defense. Agents consume documents through bounded navigator tools (<code>wiki_ls/rg/read/links</code>, 128KB caps, untrusted-source posture); artifacts today are write-only for agents (decoupled lineage, silent 512KB truncation).</p>
+<h3>External Context</h3>
+<p>Strong convergence: the compound-engineering plugin renders human-facing decision docs as single-file HTML while keeping agent-facing memory markdown; Anthropic's Claude Code lead argues "HTML is the new markdown" with the same constraint set (single file, inline style, inline SVG, system fonts, zero network calls) — while conceding HTML costs <strong>2–4× the output tokens</strong> of markdown, material on per-token Bedrock billing. Anthropic ships an official <code>web-artifacts-builder</code> Agent Skill (heavyweight React/bundler variant). Gamma.app defines enterprise table-stakes for AI deliverables: governed permalinks, access control, viewer analytics, PDF export. Security prior art: Open WebUI's injected-<code>&lt;meta&gt;</code> per-iframe CSP; real exfiltration incidents where the channel was outbound fetches from generated documents — the no-external-request constraint doubles as the mitigation. Cross-domain: PDF/A's archival contract re-derived for the web ("the PDF of the agent era"); email-HTML craft proves inline-CSS no-JS documents are a teachable, durable discipline.</p>
+
+<h2 id="topic-axes">Topic Axes</h2>
+<ul>
+<li><strong>authoring-skill</strong> — the SKILL.md content: rendering guidance, genres, templates, catalog distribution, publish gating</li>
+<li><strong>emission-and-storage</strong> — the Pi tool + artifact kind: how composed documents are emitted, saved, versioned</li>
+<li><strong>rendering-and-security</strong> — the viewer surface: sandbox, CSP, serving origin, dark mode, mobile</li>
+<li><strong>sharing-and-lifecycle</strong> — spaces homing, permalinks, export, supersession, external reads</li>
+<li><strong>agent-consumption</strong> — agents re-reading documents as structured input; downstream chaining; token cost</li>
+</ul>
+
+<h2 id="ranked-ideas">Ranked Ideas</h2>
+<ul class="jump">
+<li><a href="#i1">1. Dual-Body Documents</a></li>
+<li><a href="#i2">2. The Document Skill: Pattern Book + Compositor</a></li>
+<li><a href="#i3">3. <code>emit_document</code> — the THINK-145 Tracer Bullet</a></li>
+<li><a href="#i4">4. DocSpector Preflight</a></li>
+<li><a href="#i5">5. Scriptless Document Tier + Full-Page Reader</a></li>
+<li><a href="#i6">6. Governed Sharing: the File Is the Export</a></li>
+<li><a href="#i7">7. The Compounding Loop</a></li>
+</ul>
+
+<article class="idea" id="i1">
+<h3>1. Dual-Body Documents — markdown is the record, HTML is the render</h3>
+<div class="chips"><span class="pill acc">emission-and-storage</span><span class="pill info">Confidence 90%</span><span class="pill acc">Complexity Low–Med</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>Every document artifact carries two bodies under the existing two-key S3 scheme: a canonical markdown/structured source the agent authors and later re-reads, and a compiled single-file HTML render for humans. Agents, mobile (text fallback), Brain/wiki ingestion, and diffing all consume the markdown body; the HTML is a derived projection, never the source of truth.</dd>
+<dt>Basis</dt><dd><code>direct:</code> <code>packages/api/src/lib/artifacts/payload-storage.ts:53</code> — <code>…/content/${revision}.md</code> — the storage layer already hardcodes markdown-typed content keys, so markdown-canonical is the path of least resistance (verified this run). <code>external:</code> the compound-engineering plugin itself splits human-facing HTML from agent-facing markdown; HTML costs 2–4× output tokens vs markdown on per-token Bedrock billing.</dd>
+<dt>Rationale</dt><dd>Four of five ideation frames converged on this independently — the run's strongest signal. It resolves token cost (agent emits ~⅓ the tokens), agent re-consumption (a 45KB HTML blob wastes half of the 128KB navigator cap on CSS chrome), meaningful version diffs, and the mobile text-fallback rule, all with one schema decision.</dd>
+<dt>Downsides</dt><dd>Two bodies can drift if the render isn't regenerated on every source change — the compile step must be atomic with the write; a "source + render per revision" contract must land in THINK-145's <code>artifact_versions</code> design before U1 ships or history needs recompiling.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 170" role="img" aria-label="One markdown source body projects to an HTML render for humans while agents, mobile, and Brain read the source">
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.3">
+<rect x="20" y="60" width="170" height="50" rx="8" stroke="var(--accent)"/>
+<rect x="330" y="14" width="180" height="44" rx="8"/>
+<rect x="330" y="118" width="180" height="44" rx="8"/>
+<rect x="590" y="14" width="150" height="44" rx="8"/>
+<rect x="590" y="118" width="150" height="44" rx="8"/>
+<line x1="190" y1="72" x2="328" y2="38" marker-end="url(#a1)"/>
+<line x1="190" y1="98" x2="328" y2="138" marker-end="url(#a1)"/>
+<line x1="510" y1="36" x2="588" y2="36" marker-end="url(#a1)"/>
+<line x1="510" y1="140" x2="588" y2="140" marker-end="url(#a1)"/>
+</g>
+<g font-size="12" fill="var(--ink)">
+<text x="105" y="81" text-anchor="middle" fill="var(--accent-text)">markdown source</text>
+<text x="105" y="97" text-anchor="middle" font-size="10" fill="var(--muted)">canonical · content/${rev}.md</text>
+<text x="420" y="33" text-anchor="middle">compile (deterministic)</text>
+<text x="420" y="48" text-anchor="middle" font-size="10" fill="var(--muted)">skill script / Lambda</text>
+<text x="420" y="137" text-anchor="middle">read directly</text>
+<text x="420" y="152" text-anchor="middle" font-size="10" fill="var(--muted)">⅓ the tokens of HTML</text>
+<text x="665" y="33" text-anchor="middle">humans</text>
+<text x="665" y="48" text-anchor="middle" font-size="10" fill="var(--muted)">single-file HTML render</text>
+<text x="665" y="137" text-anchor="middle">agents · mobile · Brain</text>
+<text x="665" y="152" text-anchor="middle" font-size="10" fill="var(--muted)">navigator tools · KG</text>
+</g>
+</svg>
+<figcaption>One source of truth, two projections — the fork every other idea inherits: is the HTML the artifact, or a projection of it?</figcaption>
+</figure>
+</article>
+
+<article class="idea" id="i2">
+<h3>2. The Document Skill — genre pattern book + deterministic compositor + tenant theming</h3>
+<div class="chips"><span class="pill acc">authoring-skill</span><span class="pill info">Confidence 85%</span><span class="pill warn">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>Ship the authoring capability as a workspace skill whose real payload is bundled resources, not prose: <code>assets/</code> carries one complete exemplar "plate" per genre (ideation, plan, report, brief — distilled from the four proven <code>docs/ideation/*.html</code> files); <code>scripts/</code> carries a deterministic typesetter that expands the agent's compact markdown-with-frontmatter source into the full house-style HTML (the ~4KB CSS system is emitted by code, never by the model); tenant shadcn theme tokens — already regex-guarded by <code>parseShadcnThemeCss</code> — inject at compile so every document is on-brand in both themes with zero agent effort. Skill publishes through the existing SkillSpector trust pipeline, gated by with/without-skill pixel evals in light and dark ("pixels gate UI claims"). Ownership hybrid: skill-script compilation now; a platform <code>doc-compile</code> Lambda later can render server-side for zero agent tokens and retroactively beautify historical reports.</dd>
+<dt>Basis</dt><dd><code>direct:</code> <code>packages/workspace-defaults/files/skills/skill-creator/SKILL.md</code> reserves exactly these slots — "scripts/ — Executable code for deterministic/repetitive tasks", "assets/ — Files used in output (templates, icons, fonts)" — and the CRM-dashboard remediation (plan 2026-05-13-007) documents that style prose without enforcement drifts to "a vertical stack of full-width metric cards." <code>external:</code> MJML/email-HTML compilation and the template-plus-data pattern as the established answer to HTML's token tax.</dd>
+<dt>Rationale</dt><dd>This decides whether document quality is a prompt problem (perpetual drift, per-tenant variance, ~10–15K output tokens per doc) or a build problem (one compiler, guaranteed output, ~3–4K tokens). The repo's own history answers it: guidance-only skills failed; validated, exemplar-anchored ones held. Per-tenant brand governance — a property Gamma charges for — falls out of catalog forking plus the token pipeline that already passed security review.</dd>
+<dt>Downsides</dt><dd>Templated output trades away some of the bespoke per-document design that makes the exemplars charming — the compositor's plate library must be rich enough that documents don't all look stamped; script execution must ride the existing sandbox rules; genre plates need an owner as the house style evolves.</dd>
+</dl>
+</article>
+
+<article class="idea" id="i3">
+<h3>3. <code>emit_document</code> — pointer-event emission that doubles as the THINK-145 tracer bullet</h3>
+<div class="chips"><span class="pill acc">emission-and-storage</span><span class="pill info">Confidence 85%</span><span class="pill warn">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>A new Pi extension tool persists source + render to S3, upserts a born-as-artifact draft row (the THINK-145 U4 first-emission seam, widened beyond <code>emit_json_render_ui</code>), and emits only a small card event — title, genre chip, abstract, TOC — into <code>thread_turn_events</code>. Document bytes never ride the event pipeline. Re-saves auto-pin the prior head as a content-addressed version (KTD3 two-key rule). Because documents have no data bindings, no refresh Lambda, and no per-user OAuth staleness, they are the strictly simplest artifact kind — shipping them first proves the THINK-145 substrate (head/pin, space-homing, born-as-artifact) live before the harder canvas work depends on it.</dd>
+<dt>Basis</dt><dd><code>direct:</code> <code>packages/api/src/lib/thread-turn-events.ts:7</code> — <code>DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024</code> — while the four exemplar documents measure 31–45KB (verified this run): today's exemplars already sit at 50–70% of the per-part cap, so any richer document hard-fails the pipeline. The emission dossier confirms the U4 upsert seam is designed but unbuilt.</dd>
+<dt>Rationale</dt><dd>Without this the feature dies on its first real document — an invisible failure until an agent produces a doc 20KB past the cap. And it inverts the build order for leverage: instead of documents waiting on THINK-145, documents become the tracer bullet that de-risks it, matching the repo's own ship-inert and don't-cutover-before-proven learnings.</dd>
+<dt>Downsides</dt><dd>Widening U4's scope needs coordination with the THINK-145 owner so the seam isn't built twice; the extension tool must land in the activation allowlist (omitted tools silently never reach the model) and ride <code>createLambdaCallbackFetch</code> for container→API calls.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 150" role="img" aria-label="Document bytes go to S3; only a small pointer card event enters the thread event pipeline">
+<defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.3">
+<rect x="14" y="52" width="150" height="46" rx="8"/>
+<rect x="250" y="10" width="200" height="44" rx="8" stroke="var(--accent)"/>
+<rect x="250" y="96" width="200" height="44" rx="8"/>
+<rect x="560" y="10" width="180" height="44" rx="8"/>
+<rect x="560" y="96" width="180" height="44" rx="8"/>
+<line x1="164" y1="64" x2="248" y2="32" marker-end="url(#a3)"/>
+<line x1="164" y1="86" x2="248" y2="118" marker-end="url(#a3)"/>
+<line x1="450" y1="32" x2="558" y2="32" marker-end="url(#a3)" stroke="var(--accent)"/>
+<line x1="450" y1="118" x2="558" y2="118" marker-end="url(#a3)"/>
+</g>
+<g font-size="12" fill="var(--ink)">
+<text x="89" y="71" text-anchor="middle">emit_document</text><text x="89" y="86" text-anchor="middle" font-size="10" fill="var(--muted)">Pi extension tool</text>
+<text x="350" y="27" text-anchor="middle" fill="var(--accent-text)">S3: source + render</text><text x="350" y="42" text-anchor="middle" font-size="10" fill="var(--muted)">head key + pinned revisions</text>
+<text x="350" y="113" text-anchor="middle">card event ≤10KB</text><text x="350" y="128" text-anchor="middle" font-size="10" fill="var(--muted)">64KB/part guard never tested</text>
+<text x="650" y="27" text-anchor="middle">artifact row (draft)</text><text x="650" y="42" text-anchor="middle" font-size="10" fill="var(--muted)">born-as-artifact · U4 seam</text>
+<text x="650" y="113" text-anchor="middle">thread → AppSync</text><text x="650" y="128" text-anchor="middle" font-size="10" fill="var(--muted)">card links to reader</text>
+</g>
+</svg>
+<figcaption>The exemplars already fill 50–70% of the per-part event cap — full documents must never transit the pipeline they'd break.</figcaption>
+</figure>
+</article>
+
+<article class="idea" id="i4">
+<h3>4. DocSpector Preflight — self-containment as an enforced gate, not a style preference</h3>
+<div class="chips"><span class="pill acc">rendering-and-security</span><span class="pill info">Confidence 90%</span><span class="pill acc">Complexity Low–Med</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>A deterministic validator in the emission path rejects documents before an artifact row exists: no external <code>src</code>/<code>href</code>/<code>url()</code>/<code>@import</code> references (data: URIs only), no <code>javascript:</code>, no <code>&lt;script&gt;</code> at the document tier, size ceiling, required skeleton (title, anchors, composition footer), dark-mode support present. Rejections return model-actionable diagnostics so the agent self-corrects in the same turn; the skill bundles a self-check wrapper over the same module so most rejections never happen.</dd>
+<dt>Basis</dt><dd><code>direct:</code> verified this run — the flagship exemplar <code>2026-07-04-think-145-artifacts-as-canvas-ideation.html:7</code> loads Google Fonts, which the deployed sandbox CSP (<code>font-src 'self' data:</code>, <code>terraform/modules/thinkwork/main.tf:1870</code>) silently blocks: the model this feature imitates fails its own target environment today. <code>direct:</code> <code>apps/web/src/applets/theme-tokens.ts</code> <code>UNSAFE_TOKEN_VALUE</code> regex is in-repo prior art for CSS-level linting; THINK-116's recorded learning: model-actionable reject diagnostics work.</dd>
+<dt>Rationale</dt><dd>CSP failing closed doesn't produce a security incident here — it produces silent visual degradation (broken fonts, missing images) that erodes exactly the polish motivating the feature, and it looks like "the product is broken." Preflight converts the CSP from a tripwire into a design-system enforcer, and it is what makes the scriptless render tier (Idea 5) and external sharing (Idea 6) safe by construction.</dd>
+<dt>Downsides</dt><dd>Gate placement (skill script vs publish mutation vs both) needs one decision; overly strict rules could reject legitimate embedded data URIs — the ceiling needs tuning against real documents.</dd>
+</dl>
+</article>
+
+<article class="idea" id="i5">
+<h3>5. Scriptless Document Tier — the existing sandbox minus <code>allow-scripts</code>, plus a real reader</h3>
+<div class="chips"><span class="pill acc">rendering-and-security</span><span class="pill info">Confidence 85%</span><span class="pill acc">Complexity Low</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>Documents render through the already-hardened path — srcDoc into an opaque-origin sandboxed iframe behind the Terraform-pinned <code>connect-src 'none'</code> CSP — but at a tighter containment tier: <code>allow-scripts</code> stripped entirely (the exemplars are verified script-free; CSS-only interactivity via <code>&lt;details&gt;</code> and anchors), no postMessage bridge, no channelId nonce machinery. Serve it in a dedicated full-height <code>/artifacts/:id</code> reader route with theme pass-through and print stylesheet, instead of McpAppFrame's fixed 560px chat letterbox.</dd>
+<dt>Basis</dt><dd><code>direct:</code> <code>apps/web/src/components/workbench/McpAppFrame.tsx:59-68</code> — <code>sandbox="allow-scripts allow-forms allow-popups…"</code> with <code>className="block h-[560px] w-full"</code> — app-grade containment and a chat-sized viewport, both verified; zero <code>&lt;script&gt;</code> tags found in any exemplar. <code>reasoned:</code> containment matched to content class (BSL levels, enclosure ratings) buys both safety and cheaper review for the low-hazard class — a scriptless frame has categorically less attack surface.</dd>
+<dt>Rationale</dt><dd>It makes the security review for the whole feature short: the scariest question — "agent-authored HTML running script in our web app" — is answered "it doesn't, at this tier." Near-zero net-new security surface; the Linear issue cites an existing, reviewed trust model instead of proposing a new one.</dd>
+<dt>Downsides</dt><dd>No JS means no interactive documents at this tier — future interactive docs must graduate deliberately to the app tier; the reader route is a new surface that needs pixel verification in both themes.</dd>
+</dl>
+</article>
+
+<article class="idea" id="i6">
+<h3>6. Governed Sharing — pull the published permalink forward; the file is the export</h3>
+<div class="chips"><span class="pill acc">sharing-and-lifecycle</span><span class="pill info">Confidence 70%</span><span class="pill bad">Complexity Med–Large</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>Amend one deferred THINK-145 scope item for the document kind only: publishing pins a content-addressed, write-once version and mints a revocable tokened permalink serving those exact immutable bytes; the head keeps evolving privately. arXiv semantics complete the lifecycle: when a newer version is pinned, the rendering shell injects a "superseded" banner around the untouched payload. Because a preflighted document is self-contained and no-egress by construction, export needs no converter pipeline — downloading, emailing (per-tenant SES identities), or attaching the literal file IS the export, and print CSS makes browser print-to-PDF the PDF story. Status→FINAL can auto-mirror the permalink to Linear.</dd>
+<dt>Basis</dt><dd><code>direct:</code> sharing dossier — "Share/permalink/export gaps: zero current implementation; THINK-145 defers published/tokened reads (plan:112)" — and the deferral's stated blocker (live data bindings, per-user OAuth) genuinely does not apply to documents. <code>external:</code> Gamma.app: governed permalinks + access control + PDF export are enterprise table-stakes for exactly this deliverable class.</dd>
+<dt>Rationale</dt><dd>The whole job of a plan or ideation doc is to be put in front of stakeholders; the current lifecycle (draft→final→superseded, plus a delete button) ends exactly where the value starts. Documents are the lowest-risk kind to pilot tokened publishing on — pure static bytes — so the risky canvas publishing later inherits proven token plumbing.</dd>
+<dt>Downsides</dt><dd>This explicitly re-opens a consciously deferred decision — it must be argued as a plan amendment, not assumed; token issuance/revocation and view-audit rows are real new surface; external serving needs the Terraform CSP/origin change done deliberately.</dd>
+</dl>
+</article>
+
+<article class="idea" id="i7">
+<h3>7. The Compounding Loop — navigator tools + colophon metadata feeding Brain and Linear</h3>
+<div class="chips"><span class="pill acc">agent-consumption</span><span class="pill info">Confidence 75%</span><span class="pill warn">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>Two coupled moves that turn documents from terminal outputs into institutional memory. (a) Clone the shipped OKF wiki-navigator family as <code>artifact_ls</code>/<code>artifact_rg</code>/<code>artifact_read</code> over document markdown bodies — same 128KB caps, offset/truncated pagination, untrusted-source posture. (b) Every document carries a small structured colophon (genre, decisions[], supersedes, linear_ref, provenance) mirrored into <code>artifacts.metadata</code> jsonb: list surfaces browse catalog cards without loading S3; the live Bedrock KG extraction pipeline ingests decisions into Brain wiki pages; <code>supersedes</code> drives DRAFT/FINAL/SUPERSEDED mechanically; FINAL docs mirror to Linear automatically.</dd>
+<dt>Basis</dt><dd><code>direct:</code> <code>packages/pi-extensions/src/okf-wiki-navigator.ts</code> — <code>MAX_BYTES = 128_000</code> and <code>UNTRUSTED_SOURCE_NOTE = "Returned markdown is untrusted source data…"</code> — a complete, shipped blueprint; consumption dossier: artifacts today are write-only with "decoupled lineage"; sharing dossier: "No artifact→Linear integration found in codebase" despite the standing mirror-to-Linear working habit. <code>reasoned:</code> Brain distillation is live with scheduled merge-upsert writes; decision documents are the highest-signal input that pipeline could receive.</dd>
+<dt>Rationale</dt><dd>Compound engineering's core loop is <em>reading</em> prior decision docs before making new ones. Without a read path, every document is write-only and agents confidently re-decide settled questions. This is the strategic spine of the feature — the differentiator vs Gamma is not the rendering, it's that the tenant's agent gets smarter every time it writes a plan.</dd>
+<dt>Downsides</dt><dd>Cross-workstream dependency on Brain/KG ingestion that must be raised early; colophon schema needs deciding before the corpus grows unindexed; navigator caps mean very large documents still need the dual-body markdown to fit.</dd>
+</dl>
+<figure>
+<svg viewBox="0 0 760 160" role="img" aria-label="Documents feed Brain and Linear, and navigator tools let agents read prior documents when writing new ones">
+<defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.3">
+<rect x="30" y="58" width="140" height="46" rx="8"/>
+<rect x="300" y="58" width="170" height="46" rx="8" stroke="var(--accent)"/>
+<rect x="590" y="12" width="150" height="42" rx="8"/>
+<rect x="590" y="112" width="150" height="42" rx="8"/>
+<line x1="170" y1="81" x2="298" y2="81" marker-end="url(#a7)"/>
+<line x1="470" y1="68" x2="588" y2="36" marker-end="url(#a7)"/>
+<line x1="470" y1="94" x2="588" y2="128" marker-end="url(#a7)"/>
+<path d="M375 58 C 340 6, 120 6, 96 54" stroke="var(--accent)" marker-end="url(#a7)" fill="none"/>
+</g>
+<g font-size="12" fill="var(--ink)">
+<text x="100" y="77" text-anchor="middle">agent writes</text><text x="100" y="92" text-anchor="middle" font-size="10" fill="var(--muted)">new plan / report</text>
+<text x="385" y="77" text-anchor="middle" fill="var(--accent-text)">document + colophon</text><text x="385" y="92" text-anchor="middle" font-size="10" fill="var(--muted)">genre · decisions · supersedes</text>
+<text x="665" y="29" text-anchor="middle">Brain / wiki KG</text><text x="665" y="44" text-anchor="middle" font-size="10" fill="var(--muted)">decision pages</text>
+<text x="665" y="129" text-anchor="middle">Linear mirror</text><text x="665" y="144" text-anchor="middle" font-size="10" fill="var(--muted)">on FINAL</text>
+<text x="238" y="22" text-anchor="middle" fill="var(--accent-text)" font-size="11">artifact_ls / rg / read</text><text x="238" y="36" text-anchor="middle" font-size="10" fill="var(--muted)">prior decisions inform the next doc</text>
+</g>
+</svg>
+<figcaption>The loop, not the CSS, is the differentiator: each document written makes the next one better-informed.</figcaption>
+</figure>
+</article>
+
+<h2 id="rejection-summary">Rejection Summary</h2>
+<table>
+<tr><th>#</th><th>Idea</th><th>Reason Rejected</th></tr>
+<tr><td>1</td><td>Genotype data island (markdown source embedded inside the HTML file)</td><td>Verifier-confirmed conflict: with dual-body storage (Idea 1) the embedded copy is a hidden drift-prone duplicate of the canonical body — the exact single-source-of-truth violation the rendering philosophy forbids. Kept only as a download-portability footnote.</td></tr>
+<tr><td>2</td><td>Workspace-native birth (compose as workspace file, publish copies to artifact store)</td><td>Re-opens the decided born-as-artifact emission path and recreates the decoupled-lineage problem in reverse (two homes, sync question).</td></tr>
+<tr><td>3</td><td>Section-addressed documents (doc_read_section / doc_patch_section)</td><td>Verifier rated weak: the STATE_DELTA basis is name-borrowing (canvas event-wire vocabulary, not document CRUD); underlying truncation pain is real but the move is premature for v1.</td></tr>
+<tr><td>4</td><td>Data-bound spans inside documents (headless Lambda patches values into HTML)</td><td>Writes into unvalidated HTML bytes with no validator equivalent — skirts the strict-validation posture; canvas work in a document costume; the "decide before U5" urgency was overstated.</td></tr>
+<tr><td>5</td><td>Pixel-gated skill evals as a standalone direction</td><td>Sound but not a direction — folded into Idea 2 as its acceptance gate.</td></tr>
+<tr><td>6</td><td>doc-compile Lambda on FINAL flip (platform-side rendering + backfill)</td><td>Sound but merged into Idea 2 as the platform-side ownership variant of the compositor; its templated-vs-bespoke quality trade carried into Idea 2's downsides.</td></tr>
+<tr><td>7</td><td>Tenant theming as a standalone idea</td><td>Verifier rated thin standalone — a branding rider, not a direction; merged into Idea 2.</td></tr>
+<tr><td>8</td><td>arXiv versioning as a standalone idea</td><td>Sound but inseparable from the publish/permalink lifecycle; merged into Idea 6.</td></tr>
+</table>
+
+<footer class="composition-signal">Composed 2026-07-04 by ce-ideate (repo-grounded run a7c3e912; 5 ideation frames, 5 evidence dossiers, fresh-context basis verification — 13 sound / 5 weak / 0 refuted) from the user prompt: compound-engineering-style rich HTML document artifacts as a ThinkWork skill, feeding a Linear feature request.</footer>
+</main>
+</body>
+</html>

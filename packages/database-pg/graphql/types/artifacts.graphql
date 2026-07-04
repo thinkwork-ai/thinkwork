@@ -25,6 +25,11 @@ type Artifact {
   versions: [ArtifactVersion!]!
   # Per-widget data-source bindings — the saved tool call behind each widget.
   bindings: [ArtifactDataBinding!]!
+  # HTML Document Artifacts (THINK-147): the single-file HTML render body for
+  # document-kind artifacts (metadata.kind == "document"), served only through
+  # this access-gated resolver — never via presigned URLs. Null for all other
+  # artifact kinds. The markdown digest remains the canonical `content` body.
+  renderHtml: String
 }
 
 # A content-addressed, write-once pinned revision of a canvas artifact.
@@ -183,6 +188,9 @@ enum ArtifactType {
   PLAN
   DRAFT
   DIGEST
+  # HTML Document Artifacts (THINK-147): document genres beyond REPORT/PLAN.
+  IDEATION
+  BRIEF
 }
 
 enum ArtifactStatus {

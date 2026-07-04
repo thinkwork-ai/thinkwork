@@ -55,6 +55,24 @@ export function artifactContentKey({
   return `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/content.md`;
 }
 
+/**
+ * HTML Document Artifacts (THINK-147, KTD4): the render-body sibling of
+ * `artifactContentKey`. The markdown digest keeps the `content` keys; the
+ * single-file HTML render lives beside it under the same two-key rule —
+ * `render.html` is the overwrite-in-place head, `render/<revision>.html` the
+ * content-addressed, write-once pin.
+ */
+export function artifactRenderKey({
+  tenantId,
+  artifactId,
+  revision,
+}: ArtifactPayloadKeyInput): string {
+  if (revision) {
+    return `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/render/${revision}.html`;
+  }
+  return `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/render.html`;
+}
+
 export function messageArtifactContentKey({
   tenantId,
   messageArtifactId,
@@ -90,6 +108,12 @@ export function assertArtifactPayloadS3Key(
       key,
     ) ||
     /^tenants\/[^/]+\/artifact-payloads\/artifacts\/[^/]+\/content\/[^/]+\.md$/.test(
+      key,
+    ) ||
+    /^tenants\/[^/]+\/artifact-payloads\/artifacts\/[^/]+\/render\.html$/.test(
+      key,
+    ) ||
+    /^tenants\/[^/]+\/artifact-payloads\/artifacts\/[^/]+\/render\/[^/]+\.html$/.test(
       key,
     ) ||
     /^tenants\/[^/]+\/artifact-payloads\/message-artifacts\/[^/]+\/content$/.test(

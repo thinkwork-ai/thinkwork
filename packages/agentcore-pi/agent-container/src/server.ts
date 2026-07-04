@@ -49,6 +49,7 @@ import {
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createDelegationExtension,
+  createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createKnowledgeGraphExtension,
   createSkillsExtension,
@@ -1476,6 +1477,34 @@ export async function buildInvocationResources(
           ),
         },
         host: args.fetchWorkspaceSourceHost,
+      }),
+    );
+  }
+
+  // emit_document — HTML Document Artifacts (THINK-147 U4). Registration is
+  // unconditional (no dispatch-payload flag; R6 satisfied a fortiori) gated
+  // only on the standard wiring fields and never in eval mode. The tool posts
+  // the dual-body document to the activity endpoint's document.emit branch
+  // over the callback fetch (no HTTP egress). `addExtension` folds the tool
+  // name into the allowlist — omit that and it never reaches the model.
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret) &&
+    asString(args.payload.thread_turn_id)
+  ) {
+    addExtension(
+      createDocumentComposerExtension({
+        documentComposerConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+          agentId: args.identity.agentId ?? undefined,
+        },
       }),
     );
   }
