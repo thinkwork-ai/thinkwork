@@ -1146,6 +1146,19 @@ def state_terraform_data_input(state, name):
     return {}
 
 
+def state_root_resource_attributes(state, rtype, name):
+    for resource in state.get("resources", []) or []:
+        if resource.get("module"):
+            continue
+        if resource.get("type") != rtype or resource.get("name") != name:
+            continue
+        for instance in resource.get("instances", []) or []:
+            attributes = instance.get("attributes")
+            if isinstance(attributes, dict):
+                return attributes
+    return {}
+
+
 def state_cloudflare_zone_id(state):
     for resource in state.get("resources", []) or []:
         if resource.get("type") != "cloudflare_record":
@@ -1935,6 +1948,35 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "n8n_dns_enabled": False,
         "n8n_dns_name": "",
     }
+
+    # Foundation updates must not tear down n8n's managed certificate/DNS:
+    # the guardrail records the managed cert's own ARN, which (combined with
+    # a blank n8n_domain) flips n8n_managed_certificate_enabled off and
+    # plans a destroy of a cert still attached to the n8n ALB (observed:
+    # McPherson update to v0.1.0-canary.314). When state shows the root
+    # managed cert, reproduce the install-time inputs instead.
+    managed_n8n_cert = state_root_resource_attributes(
+        current_state, "aws_acm_certificate", "n8n"
+    )
+    if managed_n8n_cert:
+        overrides["n8n_domain"] = (
+            managed_n8n_cert.get("domain_name")
+            or url_hostname(overrides["n8n_public_url"])
+            or ""
+        )
+        overrides["n8n_certificate_arn"] = ""
+    foundation_n8n_dns_name = overrides["n8n_domain"] or url_hostname(
+        overrides["n8n_public_url"]
+    )
+    if overrides["n8n_provisioned"] and foundation_n8n_dns_name:
+        # State-derived zone lookup goes blank once the cloudflare_record
+        # resources are absent (e.g. a prior partial destroy) — fall back
+        # to the Cloudflare API resolver the n8n install path uses.
+        overrides["cloudflare_zone_id"] = overrides[
+            "cloudflare_zone_id"
+        ] or cloudflare_zone_id_for_hostname(stage, foundation_n8n_dns_name)
+        overrides["n8n_dns_name"] = foundation_n8n_dns_name
+        overrides["n8n_dns_enabled"] = bool(overrides["cloudflare_zone_id"])
 
     if app_key == "n8n":
         provisioned = operation != "DESTROY"
