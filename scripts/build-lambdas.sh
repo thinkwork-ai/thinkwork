@@ -119,12 +119,8 @@ echo ""
 # runs in a source-only checkout, so emit those production exports before
 # esbuild resolves package entry points.
 echo "Preparing workspace package exports"
-pnpm --dir "$REPO_ROOT" --filter @thinkwork/analytics-display build >/dev/null
-pnpm --dir "$REPO_ROOT" --filter @thinkwork/genui build >/dev/null
 pnpm --dir "$REPO_ROOT" --filter @thinkwork/thread-json-render build >/dev/null
 pnpm --dir "$REPO_ROOT" --filter @thinkwork/pi-runtime-core build >/dev/null
-echo "  ✓ analytics-display"
-echo "  ✓ genui"
 echo "  ✓ thread-json-render"
 echo "  ✓ pi-runtime-core"
 echo ""
