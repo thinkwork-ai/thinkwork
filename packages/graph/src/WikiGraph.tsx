@@ -192,6 +192,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const [singleResult, singleReexecute] = useQuery({
       query: WikiGraphQuery,
       variables: { tenantId, userId: effectiveUserId ?? null },
+      requestPolicy: "cache-and-network",
       pause:
         isMultiAgent || (!effectiveUserId && !useRequesterScope) || !tenantId,
     });
@@ -214,7 +215,13 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           effectiveUserIds.map(async (id) => {
             try {
               const res = await client
-                .query(WikiGraphQuery, { tenantId, userId: id })
+                .query(
+                  WikiGraphQuery,
+                  { tenantId, userId: id },
+                  {
+                    requestPolicy: "network-only",
+                  },
+                )
                 .toPromise();
               if (res.error) {
                 console.warn(
