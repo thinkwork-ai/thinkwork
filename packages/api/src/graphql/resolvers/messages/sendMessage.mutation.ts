@@ -253,6 +253,9 @@ export const sendMessage = async (
   const hasAgentMentions = parsedMentions.some(
     (mention) => mention.targetType === "agent",
   );
+  const hasAgentProfileMentions = parsedMentions.some(
+    (mention) => mention.targetType === "agent_profile",
+  );
   if (
     resolvedGoalMode &&
     !shouldDispatchDefaultAgentTurn({
@@ -262,6 +265,7 @@ export const sendMessage = async (
       agentDispatch: i.agentDispatch,
       dispatchMode: i.dispatchMode,
       hasAgentMentions,
+      hasAgentProfileMentions,
       hasComputerThread: Boolean(thread.computer_id),
       customerOnboardingHandled: false,
       // Pre-transaction check: predict the post-commit mode by unioning the
@@ -558,7 +562,8 @@ export const sendMessage = async (
     isUserMessage &&
     senderType === "user" &&
     resolvedDispatchRequest === "AUTO" &&
-    !hasAgentMentions
+    !hasAgentMentions &&
+    !hasAgentProfileMentions
       ? await resolveDispatchThreadMode({
           tenantId: thread.tenant_id,
           threadId: i.threadId,
@@ -573,6 +578,7 @@ export const sendMessage = async (
       agentDispatch: i.agentDispatch,
       dispatchMode: i.dispatchMode,
       hasAgentMentions,
+      hasAgentProfileMentions,
       hasComputerThread: Boolean(thread.computer_id),
       customerOnboardingHandled,
       threadMode: dispatchThreadMode,

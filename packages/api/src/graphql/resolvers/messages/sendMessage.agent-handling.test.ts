@@ -76,6 +76,33 @@ describe("shouldDispatchDefaultAgentTurn (U4 precedence)", () => {
     ).toBe(true);
   });
 
+  it("a #profile mention dispatches even in Multiplayer (explicit engagement)", () => {
+    // Live regression: "#Analyst … @user" in one message derived Multiplayer
+    // and the agent silently never engaged — profile mentions ride the
+    // default route (requestedProfileSlug), not the mention-dispatch route.
+    expect(
+      shouldDispatchDefaultAgentTurn(
+        gateInput({
+          agentDispatch: "AUTO",
+          threadMode: "multiplayer",
+          hasAgentProfileMentions: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("FORCE_OFF still suppresses a #profile mention (explicit-off-wins)", () => {
+    expect(
+      shouldDispatchDefaultAgentTurn(
+        gateInput({
+          agentDispatch: "FORCE_OFF",
+          threadMode: "agent",
+          hasAgentProfileMentions: true,
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("FORCE_OFF suppresses even in Agent mode", () => {
     expect(
       shouldDispatchDefaultAgentTurn(

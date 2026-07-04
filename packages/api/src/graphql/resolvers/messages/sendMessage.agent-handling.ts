@@ -21,6 +21,13 @@ export interface SendMessageAgentHandlingInput {
 export interface DefaultAgentDispatchInput extends SendMessageAgentHandlingInput {
   hasComputerThread: boolean;
   customerOnboardingHandled: boolean;
+  // A #profile mention (targetType agent_profile). Profile mentions engage
+  // the agent through THIS default route (as requestedProfileSlug) — they are
+  // not agent mentions for the mention-dispatch route — so the gate must
+  // treat them as an explicit engagement that bypasses the AUTO Thread Mode
+  // check. Found live: "#Analyst … @user" in one message derived Multiplayer
+  // and silently never dispatched the agent.
+  hasAgentProfileMentions?: boolean;
   // Server-derived Thread Mode (U3): override, else human participant count.
   // Consulted only when the resolved request is AUTO. Callers that cannot
   // derive it (legacy fixtures) may omit it; absent mode is treated as
@@ -99,6 +106,10 @@ export function shouldDispatchDefaultAgentTurn(
   }
   const request = resolveAgentDispatchRequest(input);
   if (request === "FORCE_ON") return true;
+  // A #profile mention is an explicit agent engagement (this route carries
+  // requestedProfileSlug), so like an @agent mention it dispatches regardless
+  // of Thread Mode. FORCE_OFF still wins via canRequestAgentHandling above.
+  if (input.hasAgentProfileMentions) return true;
   // AUTO: the server-derived Thread Mode decides (R1/R4). Absent mode (legacy
   // callers/fixtures) preserves pre-Thread-Mode auto-dispatch.
   return (input.threadMode ?? "agent") === "agent";
