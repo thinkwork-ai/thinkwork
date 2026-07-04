@@ -6569,6 +6569,7 @@ export type Query = {
   me?: Maybe<User>;
   memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
+  memoryRecordsByIds: Array<MemoryRecord>;
   memoryRetainAttempts: Array<MemoryRetainAttempt>;
   memorySearch: MemorySearchResult;
   memorySystemConfig: MemorySystemConfig;
@@ -7261,6 +7262,12 @@ export type QueryMemoryRecordsArgs = {
   scope?: InputMaybe<MemoryRecordScope>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemoryRecordsByIdsArgs = {
+  ids: Array<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
