@@ -302,7 +302,12 @@ export function draftToPayload(input: {
   const triggerSpec: AgentLoopTriggerSpec = {
     family: draft.triggerFamily,
     enabled: draft.enabled,
-    source: draft.triggerFamily === "schedule" ? "settings" : "webhook",
+    source:
+      draft.triggerFamily === "schedule"
+        ? "settings"
+        : draft.triggerFamily === "webhook"
+          ? "webhook"
+          : "manual",
     config:
       draft.triggerFamily === "schedule"
         ? {
@@ -425,3 +430,189 @@ export const AGENT_LOOP_TARGET_KINDS: AgentLoopTargetKind[] = [
   "routine",
   "workflow",
 ];
+
+// ---------------------------------------------------------------------------
+// Schedule presets (THINK-137 U7 — compact dialog "Schedule" row popover)
+//
+// The Schedule row opens a small popover: preset select
+// (Manual | Hourly | Daily | Weekdays | Weekly | Custom), a 15-minute-increment
+// time control for the timed presets, a day-of-week select for Weekly, and a
+// raw-expression input for Custom. Everything serializes to the same
+// `{ triggerFamily, scheduleType, scheduleExpression, timezone }` draft shape
+// job-schedule-manager already consumes (EventBridge rate()/cron()
+// expressions; draftToPayload wraps them into triggerSpec.config).
+// ---------------------------------------------------------------------------
+
+export type SchedulePresetId =
+  | "manual"
+  | "hourly"
+  | "daily"
+  | "weekdays"
+  | "weekly"
+  | "custom";
+
+export const SCHEDULE_PRESET_OPTIONS: {
+  id: SchedulePresetId;
+  label: string;
+}[] = [
+  { id: "manual", label: "Manual" },
+  { id: "hourly", label: "Hourly" },
+  { id: "daily", label: "Daily" },
+  { id: "weekdays", label: "Weekdays" },
+  { id: "weekly", label: "Weekly" },
+  { id: "custom", label: "Custom" },
+];
+
+export const WEEKDAY_OPTIONS: { id: string; label: string }[] = [
+  { id: "MON", label: "Monday" },
+  { id: "TUE", label: "Tuesday" },
+  { id: "WED", label: "Wednesday" },
+  { id: "THU", label: "Thursday" },
+  { id: "FRI", label: "Friday" },
+  { id: "SAT", label: "Saturday" },
+  { id: "SUN", label: "Sunday" },
+];
+
+/** Minutes-of-day options in 15-minute increments (12:00 AM … 11:45 PM). */
+export const TIME_OPTIONS_MINUTES: number[] = Array.from(
+  { length: 96 },
+  (_, index) => index * 15,
+);
+
+const DEFAULT_TIME_MINUTES = 9 * 60; // 9:00 AM
+
+/** 540 → "9:00 AM". */
+export function formatTimeOfDay(minutesOfDay: number): string {
+  const hours24 = Math.floor(minutesOfDay / 60) % 24;
+  const minutes = minutesOfDay % 60;
+  const amPm = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+  return `${hours12}:${String(minutes).padStart(2, "0")} ${amPm}`;
+}
+
+export interface ParsedSchedule {
+  preset: SchedulePresetId;
+  /** Minutes since midnight for the timed presets (falls back to 9:00 AM). */
+  minutesOfDay: number;
+  /** EventBridge day-of-week token for the weekly preset (falls back to MON). */
+  weekday: string;
+  expression: string;
+}
+
+// cron(minutes hours day-of-month month day-of-week year)
+const CRON_PATTERN =
+  /^cron\((\d{1,2})\s+(\d{1,2})\s+(\S+)\s+\*\s+(\S+)\s+\*\)$/;
+
+/** Reads the draft's trigger back into the popover's preset model. Legacy
+ * `rate(7 days)` rows read as Weekly; unrecognized expressions read as
+ * Custom. */
+export function parseScheduleFromDraft(draft: AgentLoopDraft): ParsedSchedule {
+  const expression = draft.scheduleExpression.trim();
+  const fallback = {
+    minutesOfDay: DEFAULT_TIME_MINUTES,
+    weekday: "MON",
+    expression,
+  };
+  if (draft.triggerFamily === "manual") {
+    return { preset: "manual", ...fallback, expression: "" };
+  }
+  if (expression === "rate(1 hour)") return { preset: "hourly", ...fallback };
+  if (expression === "rate(7 days)") return { preset: "weekly", ...fallback };
+  const cron = CRON_PATTERN.exec(expression);
+  if (cron) {
+    const minutesOfDay = parseInt(cron[2], 10) * 60 + parseInt(cron[1], 10);
+    const dayOfMonth = cron[3];
+    const dayOfWeek = cron[4];
+    if (dayOfMonth === "*" && dayOfWeek === "?") {
+      return { ...fallback, preset: "daily", minutesOfDay };
+    }
+    if (dayOfMonth === "?" && dayOfWeek === "MON-FRI") {
+      return { ...fallback, preset: "weekdays", minutesOfDay };
+    }
+    if (
+      dayOfMonth === "?" &&
+      WEEKDAY_OPTIONS.some((option) => option.id === dayOfWeek)
+    ) {
+      return { preset: "weekly", minutesOfDay, weekday: dayOfWeek, expression };
+    }
+  }
+  return { preset: "custom", ...fallback };
+}
+
+/** The draft patch a non-custom preset selection (or time/day change)
+ * applies. */
+export function schedulePatch(input: {
+  preset: Exclude<SchedulePresetId, "custom">;
+  minutesOfDay?: number;
+  weekday?: string;
+  timezone?: string;
+}): Partial<AgentLoopDraft> {
+  if (input.preset === "manual") {
+    return {
+      triggerFamily: "manual",
+      scheduleType: "",
+      scheduleExpression: "",
+    };
+  }
+  const timezone = input.timezone || "UTC";
+  if (input.preset === "hourly") {
+    return {
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(1 hour)",
+      timezone,
+    };
+  }
+  const minutesOfDay = input.minutesOfDay ?? DEFAULT_TIME_MINUTES;
+  const minutes = minutesOfDay % 60;
+  const hours = Math.floor(minutesOfDay / 60) % 24;
+  const dayField =
+    input.preset === "daily"
+      ? "* * ?"
+      : input.preset === "weekdays"
+        ? "? * MON-FRI"
+        : `? * ${input.weekday ?? "MON"}`;
+  return {
+    triggerFamily: "schedule",
+    scheduleType: "cron",
+    scheduleExpression: `cron(${minutes} ${hours} ${dayField} *)`,
+    timezone,
+  };
+}
+
+/** Custom expressions pass through raw; the type is derived from the prefix
+ * the same way the legacy SchedulePicker did. */
+export function customSchedulePatch(
+  expression: string,
+): Partial<AgentLoopDraft> {
+  const trimmed = expression.trim();
+  return {
+    triggerFamily: "schedule",
+    scheduleType: trimmed.startsWith("rate(") ? "rate" : "cron",
+    scheduleExpression: expression,
+  };
+}
+
+/** The closed Schedule row's value text, e.g. "Weekdays at 9:00 AM". */
+export function scheduleValueLabel(draft: AgentLoopDraft): string {
+  const parsed = parseScheduleFromDraft(draft);
+  switch (parsed.preset) {
+    case "manual":
+      return "Manual";
+    case "hourly":
+      return "Hourly";
+    case "daily":
+      return `Daily at ${formatTimeOfDay(parsed.minutesOfDay)}`;
+    case "weekdays":
+      return `Weekdays at ${formatTimeOfDay(parsed.minutesOfDay)}`;
+    case "weekly": {
+      if (parsed.expression === "rate(7 days)") return "Weekly";
+      const day =
+        WEEKDAY_OPTIONS.find((option) => option.id === parsed.weekday)?.label ??
+        "Monday";
+      return `Weekly on ${day} at ${formatTimeOfDay(parsed.minutesOfDay)}`;
+    }
+    default:
+      return "Custom";
+  }
+}

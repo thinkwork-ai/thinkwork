@@ -17,25 +17,9 @@ import type {
   AgentLoopWorkerOption,
 } from "./agent-loop-types";
 
-vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: () => {},
-}));
-
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) =>
     values.filter(Boolean).join(" "),
-}));
-
-vi.mock("@/components/schedule-picker/SchedulePicker", () => ({
-  SchedulePicker: ({
-    value,
-  }: {
-    value: { scheduleExpression: string; timezone: string };
-  }) => (
-    <div data-testid="schedule-picker">
-      {value.scheduleExpression} {value.timezone}
-    </div>
-  ),
 }));
 
 vi.mock("@thinkwork/ui", () => {
@@ -62,26 +46,39 @@ vi.mock("@thinkwork/ui", () => {
       variant?: string;
       size?: string;
     }) => <button {...props}>{children}</button>,
-    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-      <input {...props} />
-    ),
     Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
       <textarea {...props} />
     ),
-    Switch: ({
-      checked,
-      onCheckedChange,
-      ...props
+    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+      <input {...props} />
+    ),
+    Dialog: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    Popover: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    PopoverContent: ({
+      children,
     }: {
-      checked?: boolean;
-      onCheckedChange?: (checked: boolean) => void;
-    }) => (
-      <input
-        {...props}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onCheckedChange?.(event.target.checked)}
-      />
+      children: React.ReactNode;
+      className?: string;
+      align?: string;
+    }) => <div>{children}</div>,
+    DialogContent: ({
+      children,
+    }: {
+      children: React.ReactNode;
+      className?: string;
+    }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children: React.ReactNode }) => (
+      <h2>{children}</h2>
+    ),
+    DialogFooter: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
     ),
     Select: ({
       value,
@@ -152,7 +149,7 @@ function baseProps() {
 
 afterEach(() => cleanup());
 
-describe("AgentLoopForm", () => {
+describe("AgentLoopForm (compact dialog)", () => {
   it("creates a schedule → routine automation with the correct targetSpec and no Space", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(
@@ -164,7 +161,13 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Routine" }));
+    // Borderless title + prompt live in the dialog body.
+    expect(screen.getByLabelText("Automation name")).toBeTruthy();
+    expect(screen.getByLabelText("Agent instructions")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Target"), {
+      target: { value: "routine" },
+    });
     fireEvent.change(screen.getByLabelText("Routine"), {
       target: { value: ROUTINE_ID },
     });
@@ -185,7 +188,7 @@ describe("AgentLoopForm", () => {
     );
   });
 
-  it("requires a Space for webhook → agent_thread and shows the pre-save webhook placeholder", async () => {
+  it("requires a Space for webhook → agent_thread and shows the pre-save webhook placeholder", () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(
       <AgentLoopForm
@@ -196,17 +199,19 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Webhook" }));
+    fireEvent.change(screen.getByLabelText("Trigger"), {
+      target: { value: "webhook" },
+    });
     expect(screen.getByTestId("webhook-panel")).toBeTruthy();
     expect(
       screen.getByText("URL and token generate after you save."),
     ).toBeTruthy();
-    // Inline (not submit-only) space requirement for agent_thread.
+    // Inline (not submit-only) space requirement, rendered in the Space row.
     expect(
       screen.getByText("A Space is required for agent-thread automations."),
     ).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Automation instruction"), {
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
       target: { value: "Handle the webhook payload." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
@@ -230,12 +235,16 @@ describe("AgentLoopForm", () => {
       (screen.getByLabelText("Automation name") as HTMLInputElement).value,
     ).toBe("Linear dispatcher");
     expect(
-      (screen.getByLabelText("Automation instruction") as HTMLTextAreaElement)
+      (screen.getByLabelText("Agent instructions") as HTMLTextAreaElement)
         .value,
     ).toBe("Dispatch issues to the right worker.");
-    expect(screen.getByRole("button", { name: "Webhook" })).toBeTruthy();
+    // Webhook trigger → the Trigger row reads "webhook" and the panel renders.
+    expect((screen.getByLabelText("Trigger") as HTMLSelectElement).value).toBe(
+      "webhook",
+    );
+    expect(screen.getByTestId("webhook-panel")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Automation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
@@ -255,9 +264,115 @@ describe("AgentLoopForm", () => {
       }),
     );
   });
+
+  it("serializes schedule popover presets to EventBridge cron config and renders the row value", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentLoopForm mode="create" {...baseProps()} onSubmit={onSubmit} />,
+    );
+
+    // Default seed (rate(7 days)) reads as Weekly on the closed row.
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekly");
+
+    fireEvent.change(screen.getByLabelText("Schedule preset"), {
+      target: { value: "weekdays" },
+    });
+    // Row value text reflects the preset + time.
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekdays at 9:00 AM");
+    // 15-minute increment time control.
+    fireEvent.change(screen.getByLabelText("Time"), {
+      target: { value: String(17 * 60 + 45) },
+    });
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekdays at 5:45 PM");
+
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Review my open Linear issues." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerSpec: expect.objectContaining({
+          family: "schedule",
+          config: expect.objectContaining({
+            scheduleType: "cron",
+            scheduleExpression: "cron(45 17 ? * MON-FRI *)",
+            timezone: "UTC",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("passes a custom schedule expression through raw", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AgentLoopForm mode="create" {...baseProps()} onSubmit={onSubmit} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Schedule preset"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(screen.getByLabelText("Custom schedule expression"), {
+      target: { value: "rate(30 minutes)" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Custom");
+
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Poll the queue." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerSpec: expect.objectContaining({
+          family: "schedule",
+          config: expect.objectContaining({
+            scheduleType: "rate",
+            scheduleExpression: "rate(30 minutes)",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("renders the minted webhook endpoint in edit mode after save", () => {
+    render(
+      <AgentLoopForm
+        mode="edit"
+        {...baseProps()}
+        initialLoop={editLoop({
+          webhookEndpoint: {
+            webhookId: "wh-1",
+            token: "supersecrettoken",
+            path: "/webhooks/supersecrettoken",
+            enabled: true,
+          },
+        })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("/webhooks/supersecrettoken")).toBeTruthy();
+    expect(screen.getByLabelText("Copy token")).toBeTruthy();
+    // The pre-save placeholder is gone once an endpoint exists.
+    expect(
+      screen.queryByText("URL and token generate after you save."),
+    ).toBeNull();
+  });
 });
 
-function editLoop(): AgentLoopRow {
+function editLoop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
   return {
     id: "loop-1",
     tenantId: "tenant-1",
@@ -300,5 +415,6 @@ function editLoop(): AgentLoopRow {
     totalCostUsdCents: 0,
     createdAt: "2026-06-22T12:00:00.000Z",
     updatedAt: "2026-06-22T12:00:00.000Z",
+    ...overrides,
   };
 }

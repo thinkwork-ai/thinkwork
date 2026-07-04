@@ -334,9 +334,9 @@ export function AgentLoopDetail({
     );
   }
 
-  if (editing && tenantId) {
-    return (
-      <SettingsPane className="max-w-none">
+  return (
+    <>
+      {editing && tenantId ? (
         <AgentLoopForm
           mode="edit"
           tenantId={tenantId}
@@ -351,30 +351,27 @@ export function AgentLoopDetail({
           onSubmit={saveLoop}
           onCancel={() => setEditing(false)}
         />
-      </SettingsPane>
-    );
-  }
-
-  return (
-    <AgentLoopDetailContent
-      loop={loop}
-      pendingAction={pendingAction}
-      actionError={actionError}
-      spaceOptions={spaceOptions}
-      memberOptions={memberOptions}
-      onRun={() => void runNow(loop)}
-      onToggle={() => void toggleActive(loop, workerOptions)}
-      onOpenRun={(run) =>
-        routeScope === "settings"
-          ? navigate({
-              to: "/settings/agent-loops/$agentLoopId/runs/$runId",
-              params: { agentLoopId: loop.id, runId: run.id },
-            })
-          : run.threadId
-            ? navigate({ to: "/threads/$id", params: { id: run.threadId } })
-            : undefined
-      }
-    />
+      ) : null}
+      <AgentLoopDetailContent
+        loop={loop}
+        pendingAction={pendingAction}
+        actionError={actionError}
+        spaceOptions={spaceOptions}
+        memberOptions={memberOptions}
+        onRun={() => void runNow(loop)}
+        onToggle={() => void toggleActive(loop, workerOptions)}
+        onOpenRun={(run) =>
+          routeScope === "settings"
+            ? navigate({
+                to: "/settings/agent-loops/$agentLoopId/runs/$runId",
+                params: { agentLoopId: loop.id, runId: run.id },
+              })
+            : run.threadId
+              ? navigate({ to: "/threads/$id", params: { id: run.threadId } })
+              : undefined
+        }
+      />
+    </>
   );
 }
 

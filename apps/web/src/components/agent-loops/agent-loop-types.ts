@@ -8,7 +8,9 @@ export type AgentLoopLifecycleStatus =
 // `manual` stays valid as a run source / "no automatic trigger" family and is
 // read from pre-U3 rows, but the form only offers schedule | webhook.
 export type AgentLoopTriggerFamily = "manual" | "schedule" | "webhook";
-export type AgentLoopFormTriggerFamily = "schedule" | "webhook";
+// THINK-137 U7: the compact dialog's Repeats row offers Manual as well, so the
+// form family now spans all three. Manual writes an empty trigger config.
+export type AgentLoopFormTriggerFamily = "manual" | "schedule" | "webhook";
 
 // THINK-137 U3 (R3): the authoritative target kinds.
 export type AgentLoopTargetKind = "agent_thread" | "routine" | "workflow";
@@ -134,8 +136,8 @@ export interface AgentLoopRow {
   totalCostUsdCents: number;
   costPerAcceptedRunUsdCents?: number | null;
   runs?: AgentLoopRunSummary[];
-  // THINK-137 U8 (R8): bound inbound webhook endpoint + metadata-only delivery
-  // history, present only for webhook-trigger automations.
+  // THINK-137 U6/U8: the minted inbound webhook endpoint + metadata-only
+  // delivery history, present only for webhook-trigger automations.
   webhookEndpoint?: AgentLoopWebhookEndpoint | null;
   webhookDeliveries?: AutomationWebhookDelivery[];
   createdAt: string;

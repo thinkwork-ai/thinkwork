@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  customSchedulePatch,
   defaultAgentLoopDraft,
   draftFromVersion,
   draftToPayload,
+  parseScheduleFromDraft,
   readTargetSpec,
+  schedulePatch,
+  scheduleValueLabel,
   spaceFieldError,
   validateDraft,
 } from "./agent-loop-utils";
@@ -194,5 +198,111 @@ describe("agent-loop-utils", () => {
       kind: "routine",
       routine: { routineId: ROUTINE_ID },
     });
+  });
+});
+
+describe("schedule popover helpers", () => {
+  const draft = defaultAgentLoopDraft(workers, spaces, "space-1", "user-1");
+
+  it("serializes each preset to the EventBridge config shape", () => {
+    expect(schedulePatch({ preset: "manual" })).toEqual({
+      triggerFamily: "manual",
+      scheduleType: "",
+      scheduleExpression: "",
+    });
+    expect(schedulePatch({ preset: "hourly" })).toMatchObject({
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(1 hour)",
+      timezone: "UTC",
+    });
+    expect(
+      schedulePatch({ preset: "daily", minutesOfDay: 9 * 60 }),
+    ).toMatchObject({
+      scheduleType: "cron",
+      scheduleExpression: "cron(0 9 * * ? *)",
+    });
+    expect(
+      schedulePatch({ preset: "weekdays", minutesOfDay: 17 * 60 + 45 }),
+    ).toMatchObject({
+      scheduleExpression: "cron(45 17 ? * MON-FRI *)",
+    });
+    expect(
+      schedulePatch({ preset: "weekly", minutesOfDay: 9 * 60, weekday: "THU" }),
+    ).toMatchObject({
+      scheduleExpression: "cron(0 9 ? * THU *)",
+    });
+  });
+
+  it("passes custom expressions through raw with the type derived from the prefix", () => {
+    expect(customSchedulePatch("rate(30 minutes)")).toEqual({
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(30 minutes)",
+    });
+    expect(customSchedulePatch("cron(15 6 1 * ? *)")).toEqual({
+      triggerFamily: "schedule",
+      scheduleType: "cron",
+      scheduleExpression: "cron(15 6 1 * ? *)",
+    });
+  });
+
+  it("parses drafts back into the preset model (legacy rate(7 days) → Weekly)", () => {
+    expect(parseScheduleFromDraft(draft).preset).toBe("weekly");
+    expect(
+      parseScheduleFromDraft({
+        ...draft,
+        scheduleExpression: "cron(30 14 ? * FRI *)",
+      }),
+    ).toMatchObject({
+      preset: "weekly",
+      minutesOfDay: 14 * 60 + 30,
+      weekday: "FRI",
+    });
+    expect(
+      parseScheduleFromDraft({ ...draft, scheduleExpression: "rate(1 hour)" })
+        .preset,
+    ).toBe("hourly");
+    expect(
+      parseScheduleFromDraft({
+        ...draft,
+        scheduleExpression: "rate(30 minutes)",
+      }).preset,
+    ).toBe("custom");
+    expect(
+      parseScheduleFromDraft({ ...draft, triggerFamily: "manual" as const })
+        .preset,
+    ).toBe("manual");
+  });
+
+  it("renders the closed Schedule row value text", () => {
+    expect(scheduleValueLabel(draft)).toBe("Weekly");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "cron(0 9 ? * MON-FRI *)",
+      }),
+    ).toBe("Weekdays at 9:00 AM");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "cron(30 14 ? * FRI *)",
+      }),
+    ).toBe("Weekly on Friday at 2:30 PM");
+    expect(
+      scheduleValueLabel({ ...draft, scheduleExpression: "cron(0 9 * * ? *)" }),
+    ).toBe("Daily at 9:00 AM");
+    expect(
+      scheduleValueLabel({ ...draft, scheduleExpression: "rate(1 hour)" }),
+    ).toBe("Hourly");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "rate(30 minutes)",
+      }),
+    ).toBe("Custom");
+    expect(
+      scheduleValueLabel({ ...draft, triggerFamily: "manual" as const }),
+    ).toBe("Manual");
   });
 });

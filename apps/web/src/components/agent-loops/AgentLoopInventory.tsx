@@ -1,16 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plus, Search, X } from "lucide-react";
+import { Pencil, Plus, Search, X } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { LoadingShimmer } from "@/components/LoadingShimmer";
-import {
-  SettingsPane,
-  SettingsTablePane,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -79,6 +75,7 @@ export function AgentLoopInventory({
   const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [editingLoop, setEditingLoop] = useState<AgentLoopRow | null>(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
@@ -238,6 +235,25 @@ export function AgentLoopInventory({
           </span>
         ),
       },
+      {
+        id: "actions",
+        header: "",
+        size: 56,
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Edit automation"
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditingLoop(row.original);
+            }}
+          >
+            <Pencil className="size-4" />
+          </Button>
+        ),
+      },
     ],
     [],
   );
@@ -267,25 +283,27 @@ export function AgentLoopInventory({
     if (id) openLoop(id);
   }
 
-  if (creating) {
-    if (
-      !tenantId ||
-      (agentResult.fetching && workerOptions.length === 0) ||
-      (spacesResult.fetching && spaceOptions.length === 0)
-    ) {
-      return (
-        <SettingsPane>
-          <div className="flex items-center justify-center py-24">
-            <LoadingShimmer />
-          </div>
-        </SettingsPane>
-      );
-    }
-    return (
-      <SettingsPane className="max-w-none">
+  async function updateLoop(payload: SaveAgentLoopPayload) {
+    const result = await saveAgentLoop({ input: payload });
+    if (result.error) throw result.error;
+    toast.success("Automation updated");
+    setEditingLoop(null);
+    refetchLoops({ requestPolicy: "network-only" });
+  }
+
+  const dialogOpen = (creating || editingLoop !== null) && Boolean(tenantId);
+  const closeDialog = () => {
+    setCreating(false);
+    setEditingLoop(null);
+  };
+
+  return (
+    <>
+      {dialogOpen ? (
         <AgentLoopForm
-          mode="create"
-          tenantId={tenantId}
+          mode={editingLoop ? "edit" : "create"}
+          tenantId={tenantId ?? ""}
+          initialLoop={editingLoop}
           workerOptions={workerOptions}
           spaceOptions={spaceOptions}
           routineOptions={routineOptions}
@@ -293,103 +311,97 @@ export function AgentLoopInventory({
           memberOptions={memberOptions}
           defaultSpaceId={defaultSpaceId}
           currentUserId={userId}
-          automationsHref={
-            routeScope === "main" ? "/automations" : "/settings/automations"
-          }
-          onSubmit={createLoop}
-          onCancel={() => setCreating(false)}
+          onSubmit={editingLoop ? updateLoop : createLoop}
+          onCancel={closeDialog}
         />
-      </SettingsPane>
-    );
-  }
-
-  return (
-    <SettingsTablePane
-      title="Automations"
-      description="Create, run, and inspect recurring or webhook automations."
-      loading={loopsResult.fetching && !loopsResult.data}
-      actions={
-        <Button type="button" size="sm" onClick={() => setCreating(true)}>
-          <Plus className="mr-2 size-4" />
-          New Automation
-        </Button>
-      }
-      toolbar={
-        <div className="flex w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setStatusTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-                  statusTab === tab.id
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab.label}
-                <span className="text-xs text-muted-foreground">
-                  {counts[tab.id]}
-                </span>
-              </button>
-            ))}
-          </div>
-          {searchOpen ? (
+      ) : null}
+      <SettingsTablePane
+        title="Automations"
+        description="Create, run, and inspect recurring or webhook automations."
+        loading={loopsResult.fetching && !loopsResult.data}
+        actions={
+          <Button type="button" size="sm" onClick={() => setCreating(true)}>
+            <Plus className="mr-2 size-4" />
+            New Automation
+          </Button>
+        }
+        toolbar={
+          <div className="flex w-full items-center justify-between gap-2">
             <div className="flex items-center gap-1">
-              <Input
-                autoFocus
-                className="h-9 w-56"
-                placeholder="Search automations..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+              {STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStatusTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                    statusTab === tab.id
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {tab.label}
+                  <span className="text-xs text-muted-foreground">
+                    {counts[tab.id]}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {searchOpen ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  className="h-9 w-56"
+                  placeholder="Search automations..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Close search"
+                  onClick={() => {
+                    setSearch("");
+                    setSearchOpen(false);
+                  }}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            ) : (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Close search"
-                onClick={() => {
-                  setSearch("");
-                  setSearchOpen(false);
-                }}
+                aria-label="Search"
+                onClick={() => setSearchOpen(true)}
               >
-                <X className="size-4" />
+                <Search className="size-4" />
               </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Search"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Search className="size-4" />
-            </Button>
-          )}
-        </div>
-      }
-    >
-      {loopsResult.error ? (
-        <div className="rounded-md border border-destructive/30 p-4 text-sm text-destructive">
-          {loopsResult.error.message}
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filteredRows}
-          scrollable
-          emptyState={
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              No automations found.
-            </div>
-          }
-          onRowClick={(row) => openLoop(row.id)}
-        />
-      )}
-    </SettingsTablePane>
+            )}
+          </div>
+        }
+      >
+        {loopsResult.error ? (
+          <div className="rounded-md border border-destructive/30 p-4 text-sm text-destructive">
+            {loopsResult.error.message}
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredRows}
+            scrollable
+            emptyState={
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                No automations found.
+              </div>
+            }
+            onRowClick={(row) => openLoop(row.id)}
+          />
+        )}
+      </SettingsTablePane>
+    </>
   );
 }
 

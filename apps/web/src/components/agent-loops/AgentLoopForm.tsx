@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Clock, Copy } from "lucide-react";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
   Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   Textarea,
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { SchedulePicker } from "@/components/schedule-picker/SchedulePicker";
 import type {
   AgentLoopDraft,
   AgentLoopMemberOption,
@@ -20,15 +25,25 @@ import type {
   AgentLoopRow,
   AgentLoopSpaceOption,
   AgentLoopTargetKind,
+  AgentLoopWebhookEndpoint,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
 import {
+  customSchedulePatch,
   defaultAgentLoopDraft,
   draftFromVersion,
   draftToPayload,
+  formatTimeOfDay,
+  parseScheduleFromDraft,
+  SCHEDULE_PRESET_OPTIONS,
+  schedulePatch,
+  scheduleValueLabel,
   spaceFieldError,
+  TIME_OPTIONS_MINUTES,
   validateDraft,
+  WEEKDAY_OPTIONS,
+  type SchedulePresetId,
 } from "./agent-loop-utils";
 
 const TARGET_KINDS: { id: AgentLoopTargetKind; label: string }[] = [
@@ -36,6 +51,8 @@ const TARGET_KINDS: { id: AgentLoopTargetKind; label: string }[] = [
   { id: "routine", label: "Routine" },
   { id: "workflow", label: "Workflow" },
 ];
+
+const NO_SPACE = "__none__";
 
 export function AgentLoopForm({
   mode,
@@ -50,7 +67,6 @@ export function AgentLoopForm({
   currentUserId,
   onSubmit,
   onCancel,
-  automationsHref = "/settings/automations",
 }: {
   mode: "create" | "edit";
   tenantId: string;
@@ -64,7 +80,6 @@ export function AgentLoopForm({
   currentUserId?: string | null;
   onSubmit: (input: SaveAgentLoopPayload) => Promise<void>;
   onCancel: () => void;
-  automationsHref?: string;
 }) {
   const seededDraft = useMemo(
     () =>
@@ -87,20 +102,11 @@ export function AgentLoopForm({
   const [draft, setDraft] = useState<AgentLoopDraft>(seededDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const title = mode === "edit" ? "Edit Automation" : "New Automation";
 
   useEffect(() => {
     setDraft(seededDraft);
     setError(null);
   }, [seededDraft]);
-
-  usePageHeaderActions({
-    title,
-    breadcrumbs: [
-      { label: "Automations", href: automationsHref },
-      { label: title },
-    ],
-  });
 
   const routineLabel = useMemo(() => {
     if (draft.targetKind === "routine") {
@@ -121,6 +127,11 @@ export function AgentLoopForm({
   ]);
 
   const inlineSpaceError = spaceFieldError(draft);
+  // The Trigger row is Schedule | Webhook. "Manual" lives inside the Schedule
+  // row (it maps to the manual trigger family), so schedule + manual both read
+  // as the "schedule" trigger mode here.
+  const triggerMode =
+    draft.triggerFamily === "webhook" ? "webhook" : "schedule";
 
   function patch(next: Partial<AgentLoopDraft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -151,285 +162,428 @@ export function AgentLoopForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 pb-10">
-      {/* Name + description */}
-      <section className="space-y-4">
-        <Field label="Name" htmlFor="automation-name">
-          <Input
-            id="automation-name"
-            aria-label="Automation name"
-            value={draft.name}
-            onChange={(e) => patch({ name: e.target.value })}
-            placeholder="Auto-derived from the target when left blank"
-          />
-        </Field>
-        <Field label="Description" htmlFor="automation-description" optional>
-          <Textarea
-            id="automation-description"
-            aria-label="Automation description"
-            value={draft.description}
-            onChange={(e) => patch({ description: e.target.value })}
-            placeholder="Optional summary of what this automation does"
-            className="min-h-16"
-          />
-        </Field>
-      </section>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onCancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogTitle className="sr-only">
+          {mode === "edit" ? "Edit automation" : "New automation"}
+        </DialogTitle>
 
-      {/* Trigger */}
-      <section className="space-y-4">
-        <SectionHeading
-          title="Trigger"
-          description="How this automation starts a run"
+        {/* Borderless title */}
+        <input
+          aria-label="Automation name"
+          value={draft.name}
+          onChange={(e) => patch({ name: e.target.value })}
+          placeholder="Automation name"
+          className="w-full bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
         />
-        <ToggleRow
-          ariaGroup="Trigger family"
-          value={draft.triggerFamily}
-          options={[
-            { id: "schedule", label: "Schedule" },
-            { id: "webhook", label: "Webhook" },
-          ]}
-          onChange={(id) =>
-            patch({ triggerFamily: id as "schedule" | "webhook" })
-          }
-        />
-        {draft.triggerFamily === "schedule" ? (
-          <SchedulePicker
-            value={{
-              scheduleType: draft.scheduleType,
-              scheduleExpression: draft.scheduleExpression,
-              timezone: draft.timezone,
-            }}
-            onChange={(value) =>
-              patch({
-                scheduleType: value.scheduleType,
-                scheduleExpression: value.scheduleExpression,
-                timezone: value.timezone,
-              })
-            }
+
+        {/* Trigger + Target sit above the target-shaped body */}
+        <div>
+          <DetailRow label="Trigger">
+            <GhostSelect
+              ariaLabel="Trigger"
+              value={triggerMode}
+              onValueChange={(value) => {
+                if (value === "webhook") {
+                  patch({ triggerFamily: "webhook" });
+                } else if (draft.triggerFamily === "webhook") {
+                  patch(
+                    draft.scheduleExpression.trim()
+                      ? { triggerFamily: "schedule" }
+                      : schedulePatch({
+                          preset: "daily",
+                          timezone: draft.timezone,
+                        }),
+                  );
+                }
+              }}
+              placeholder="Schedule"
+            >
+              <SelectItem value="schedule">Schedule</SelectItem>
+              <SelectItem value="webhook">Webhook</SelectItem>
+            </GhostSelect>
+          </DetailRow>
+
+          <DetailRow label="Target">
+            <GhostSelect
+              ariaLabel="Target"
+              value={draft.targetKind}
+              onValueChange={(value) =>
+                patch({ targetKind: value as AgentLoopTargetKind })
+              }
+              placeholder="Agent thread"
+            >
+              {TARGET_KINDS.map((kind) => (
+                <SelectItem key={kind.id} value={kind.id}>
+                  {kind.label}
+                </SelectItem>
+              ))}
+            </GhostSelect>
+          </DetailRow>
+        </div>
+
+        {/* Target-shaped body */}
+        {draft.targetKind === "agent_thread" ? (
+          <div>
+            <label
+              htmlFor="automation-instructions"
+              className="mb-2 block text-sm text-muted-foreground"
+            >
+              Agent instructions
+            </label>
+            <Textarea
+              id="automation-instructions"
+              value={draft.instructions}
+              onChange={(e) => patch({ instructions: e.target.value })}
+              placeholder="What should the agent do? e.g. Review my open Linear issues every morning…"
+              className="min-h-28"
+            />
+          </div>
+        ) : draft.targetKind === "routine" ? (
+          <TargetPicker
+            ariaLabel="Routine"
+            placeholder="Choose a routine…"
+            options={routineOptions}
+            value={draft.routineId}
+            onChange={(value) => patch({ routineId: value })}
+            emptyLabel="No routines available yet."
           />
         ) : (
-          <WebhookPanel automationExists={mode === "edit"} />
+          <TargetPicker
+            ariaLabel="Workflow"
+            placeholder="Choose a workflow…"
+            options={workflowOptions}
+            value={draft.workflowId}
+            onChange={(value) => patch({ workflowId: value })}
+            emptyLabel="No workflows available yet."
+          />
         )}
-      </section>
 
-      {/* Target */}
-      <section className="space-y-4">
-        <SectionHeading title="Target" description="What a run does" />
-        <ToggleRow
-          ariaGroup="Target kind"
-          value={draft.targetKind}
-          options={TARGET_KINDS}
-          onChange={(id) => patch({ targetKind: id as AgentLoopTargetKind })}
-        />
+        {/* Remaining details */}
+        <div>
+          {triggerMode === "schedule" ? (
+            <DetailRow label="Schedule">
+              <SchedulePopover draft={draft} patch={patch} />
+            </DetailRow>
+          ) : (
+            <div className="py-1.5">
+              <WebhookPanel endpoint={initialLoop?.webhookEndpoint} />
+            </div>
+          )}
 
-        {draft.targetKind === "agent_thread" ? (
-          <div className="space-y-4">
-            <Field label="Instructions" htmlFor="automation-instructions">
-              <Textarea
-                id="automation-instructions"
-                aria-label="Automation instruction"
-                value={draft.instructions}
-                onChange={(e) => patch({ instructions: e.target.value })}
-                placeholder="What should the agent do each run?"
-                className="min-h-28"
-              />
-            </Field>
-            <Field label="Worker" htmlFor="automation-worker">
-              <Select
-                value={draft.workerId}
-                onValueChange={(value) => patch({ workerId: value })}
-              >
-                <SelectTrigger id="automation-worker" aria-label="Worker">
-                  <SelectValue placeholder="Choose a worker" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workerOptions.map((worker) => (
-                    <SelectItem key={worker.id} value={worker.id}>
-                      {worker.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Thread" htmlFor="automation-thread-mode">
-              <Select
-                value={draft.threadMode}
-                onValueChange={(value) =>
-                  patch({ threadMode: value as AgentLoopDraft["threadMode"] })
-                }
-              >
-                <SelectTrigger
-                  id="automation-thread-mode"
-                  aria-label="Thread mode"
-                >
-                  <SelectValue placeholder="New thread per run" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new_per_run">
-                    New thread per run
-                  </SelectItem>
-                  <SelectItem value="fixed">Reuse a fixed thread</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            {draft.threadMode === "fixed" ? (
-              <Field label="Fixed thread id" htmlFor="automation-fixed-thread">
-                <Input
-                  id="automation-fixed-thread"
-                  aria-label="Fixed thread id"
-                  value={draft.fixedThreadId}
-                  onChange={(e) => patch({ fixedThreadId: e.target.value })}
-                  placeholder="thread id"
-                />
-              </Field>
-            ) : null}
-          </div>
-        ) : null}
-
-        {draft.targetKind === "routine" ? (
-          <Field label="Routine" htmlFor="automation-routine">
-            <RoutineSelect
-              id="automation-routine"
-              ariaLabel="Routine"
-              options={routineOptions}
-              value={draft.routineId}
-              onChange={(value) => patch({ routineId: value })}
-              emptyLabel="No routines available yet."
-            />
-          </Field>
-        ) : null}
-
-        {draft.targetKind === "workflow" ? (
-          <Field label="Workflow" htmlFor="automation-workflow">
-            <RoutineSelect
-              id="automation-workflow"
-              ariaLabel="Workflow"
-              options={workflowOptions}
-              value={draft.workflowId}
-              onChange={(value) => patch({ workflowId: value })}
-              emptyLabel="No workflows available yet."
-            />
-          </Field>
-        ) : null}
-      </section>
-
-      {/* Run identity + Space */}
-      <section className="space-y-4">
-        <SectionHeading
-          title="Run as & Space"
-          description="Which identity a run acts as, and where it runs"
-        />
-        <Field label="Run as" htmlFor="automation-run-as">
-          <Select
-            value={draft.runAsUserId}
-            onValueChange={(value) => patch({ runAsUserId: value })}
-          >
-            <SelectTrigger id="automation-run-as" aria-label="Run as user">
-              <SelectValue placeholder="You (default)" />
-            </SelectTrigger>
-            <SelectContent>
+          <DetailRow label="Run as">
+            <GhostSelect
+              ariaLabel="Run as user"
+              value={draft.runAsUserId}
+              onValueChange={(value) => patch({ runAsUserId: value })}
+              placeholder="You"
+            >
               {memberOptions.map((member) => (
                 <SelectItem key={member.id} value={member.id}>
                   {member.label}
                   {member.id === currentUserId ? " (you)" : ""}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field
-          label="Space"
-          htmlFor="automation-space"
-          optional={draft.targetKind !== "agent_thread"}
-          error={inlineSpaceError}
-        >
-          <Select
-            value={draft.spaceId}
-            onValueChange={(value) => patch({ spaceId: value })}
-          >
-            <SelectTrigger id="automation-space" aria-label="Space">
-              <SelectValue placeholder="Choose a Space" />
-            </SelectTrigger>
-            <SelectContent>
+            </GhostSelect>
+          </DetailRow>
+
+          <DetailRow label="Space" error={inlineSpaceError}>
+            <GhostSelect
+              ariaLabel="Space"
+              value={draft.spaceId || NO_SPACE}
+              onValueChange={(value) =>
+                patch({ spaceId: value === NO_SPACE ? "" : value })
+              }
+              placeholder="None"
+            >
+              <SelectItem value={NO_SPACE}>None</SelectItem>
               {spaceOptions.map((space) => (
                 <SelectItem key={space.id} value={space.id}>
                   {space.name}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </section>
+            </GhostSelect>
+          </DetailRow>
 
-      {/* Active toggle */}
-      <section className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-4 py-3">
-        <div>
-          <p className="text-sm font-medium">Active</p>
-          <p className="text-xs text-muted-foreground">
-            Paused automations keep their config but stop firing.
-          </p>
+          {draft.targetKind === "agent_thread" ? (
+            <>
+              <DetailRow label="Worker">
+                <GhostSelect
+                  ariaLabel="Worker"
+                  value={draft.workerId}
+                  onValueChange={(value) => patch({ workerId: value })}
+                  placeholder="Choose a worker"
+                >
+                  {workerOptions.map((worker) => (
+                    <SelectItem key={worker.id} value={worker.id}>
+                      {worker.label}
+                    </SelectItem>
+                  ))}
+                </GhostSelect>
+              </DetailRow>
+
+              <DetailRow label="Thread">
+                <GhostSelect
+                  ariaLabel="Thread mode"
+                  value={draft.threadMode}
+                  onValueChange={(value) =>
+                    patch({
+                      threadMode: value as AgentLoopDraft["threadMode"],
+                    })
+                  }
+                  placeholder="New thread per run"
+                >
+                  <SelectItem value="new_per_run">
+                    New thread per run
+                  </SelectItem>
+                  <SelectItem value="fixed">Reuse a fixed thread</SelectItem>
+                </GhostSelect>
+              </DetailRow>
+
+              {draft.threadMode === "fixed" ? (
+                <DetailRow label="Fixed thread id">
+                  <input
+                    aria-label="Fixed thread id"
+                    value={draft.fixedThreadId}
+                    onChange={(e) => patch({ fixedThreadId: e.target.value })}
+                    placeholder="thread id"
+                    className="w-40 bg-transparent px-3 py-2 text-right text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+                  />
+                </DetailRow>
+              ) : null}
+            </>
+          ) : null}
         </div>
-        <Switch
-          aria-label="Active"
-          checked={draft.enabled && draft.lifecycleStatus === "active"}
-          onCheckedChange={(checked) =>
-            patch({
-              enabled: checked,
-              lifecycleStatus: checked ? "active" : "paused",
-            })
-          }
-        />
-      </section>
 
-      <div className="flex items-center gap-3 pt-2">
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <div className="ml-auto flex items-center gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
           <Button type="button" onClick={() => void save()} disabled={saving}>
             {saving
-              ? "Saving..."
+              ? "Saving…"
               : mode === "edit"
-                ? "Save Automation"
+                ? "Save changes"
                 : "Create automation"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function WebhookPanel({ automationExists }: { automationExists: boolean }) {
-  // TODO(THINK-137 U6): once the webhook mint wiring lands, render the live
-  // token + URL that the saved automation row exposes here (read from the
-  // automation's webhook binding). Until then, and until the automation is
-  // saved, keep the disabled placeholder — nothing exposes a webhook yet.
+/** The Schedule row's value control: a popover with a preset select, a
+ * 15-minute-increment time control for the timed presets, a day-of-week select
+ * for Weekly, and a raw EventBridge expression input for Custom. */
+function SchedulePopover({
+  draft,
+  patch,
+}: {
+  draft: AgentLoopDraft;
+  patch: (next: Partial<AgentLoopDraft>) => void;
+}) {
+  const parsed = parseScheduleFromDraft(draft);
+  const [open, setOpen] = useState(false);
+  // Local preset state so choosing "Custom" sticks while the user types an
+  // expression that would otherwise parse back to a named preset.
+  const [preset, setPreset] = useState<SchedulePresetId>(parsed.preset);
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) setPreset(parseScheduleFromDraft(draft).preset);
+  }
+
+  function handlePreset(value: string) {
+    const next = value as SchedulePresetId;
+    setPreset(next);
+    if (next === "custom") {
+      patch(customSchedulePatch(draft.scheduleExpression));
+      return;
+    }
+    patch(
+      schedulePatch({
+        preset: next,
+        minutesOfDay: parsed.minutesOfDay,
+        weekday: parsed.weekday,
+        timezone: draft.timezone,
+      }),
+    );
+  }
+
+  const timedPreset =
+    preset === "daily" || preset === "weekdays" || preset === "weekly";
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Schedule"
+          className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {scheduleValueLabel(draft)}
+          <ChevronDown className="size-4 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 gap-3 p-3">
+        <p className="text-xs font-medium text-muted-foreground">Schedule</p>
+        <Select value={preset} onValueChange={handlePreset}>
+          <SelectTrigger aria-label="Schedule preset" className="w-full">
+            <SelectValue placeholder="Manual" />
+          </SelectTrigger>
+          <SelectContent>
+            {SCHEDULE_PRESET_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {timedPreset ? (
+          <Select
+            value={String(parsed.minutesOfDay)}
+            onValueChange={(value) =>
+              patch(
+                schedulePatch({
+                  preset: preset as "daily" | "weekdays" | "weekly",
+                  minutesOfDay: Number(value),
+                  weekday: parsed.weekday,
+                  timezone: draft.timezone,
+                }),
+              )
+            }
+          >
+            <SelectTrigger aria-label="Time" className="w-full">
+              <Clock className="size-4 text-muted-foreground" />
+              <SelectValue placeholder="9:00 AM">
+                {formatTimeOfDay(parsed.minutesOfDay)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {TIME_OPTIONS_MINUTES.map((minutes) => (
+                <SelectItem key={minutes} value={String(minutes)}>
+                  {formatTimeOfDay(minutes)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {preset === "weekly" ? (
+          <Select
+            value={parsed.weekday}
+            onValueChange={(value) =>
+              patch(
+                schedulePatch({
+                  preset: "weekly",
+                  minutesOfDay: parsed.minutesOfDay,
+                  weekday: value,
+                  timezone: draft.timezone,
+                }),
+              )
+            }
+          >
+            <SelectTrigger aria-label="Day of week" className="w-full">
+              <SelectValue placeholder="Monday" />
+            </SelectTrigger>
+            <SelectContent>
+              {WEEKDAY_OPTIONS.map((day) => (
+                <SelectItem key={day.id} value={day.id}>
+                  {day.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {preset === "custom" ? (
+          <Input
+            aria-label="Custom schedule expression"
+            value={draft.scheduleExpression}
+            onChange={(event) => patch(customSchedulePatch(event.target.value))}
+            placeholder="cron(0 9 ? * MON-FRI *)"
+            className="font-mono text-xs"
+          />
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function WebhookPanel({
+  endpoint,
+}: {
+  endpoint?: AgentLoopWebhookEndpoint | null;
+}) {
+  if (!endpoint) {
+    // Pre-save (create) or a saved automation whose webhook row is not yet
+    // minted: nothing to show until the endpoint exists.
+    return (
+      <div
+        data-testid="webhook-panel"
+        className="rounded-md border border-dashed border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground"
+      >
+        URL and token generate after you save.
+      </div>
+    );
+  }
   return (
     <div
       data-testid="webhook-panel"
-      className="rounded-md border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground"
+      className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3 text-xs"
     >
-      <p className="font-medium text-foreground">Webhook</p>
-      <p className="mt-1">
-        {automationExists
-          ? "URL and token will appear here once webhook delivery is enabled."
-          : "URL and token generate after you save."}
-      </p>
+      <CopyField label="URL" value={endpoint.path} />
+      <CopyField label="Token" value={endpoint.token} secret />
     </div>
   );
 }
 
-function RoutineSelect({
-  id,
+function CopyField({
+  label,
+  value,
+  secret,
+}: {
+  label: string;
+  value: string;
+  secret?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 shrink-0 text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 truncate font-mono text-foreground">
+        {secret ? "•".repeat(Math.min(value.length, 24)) : value}
+      </code>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Copy ${label.toLowerCase()}`}
+        onClick={() => void navigator.clipboard?.writeText(value)}
+      >
+        <Copy className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+function TargetPicker({
   ariaLabel,
+  placeholder,
   options,
   value,
   onChange,
   emptyLabel,
 }: {
-  id: string;
   ariaLabel: string;
+  placeholder: string;
   options: AgentLoopRoutineOption[];
   value: string;
   onChange: (value: string) => void;
@@ -440,8 +594,8 @@ function RoutineSelect({
   }
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id} aria-label={ariaLabel}>
-        <SelectValue placeholder="Choose one" />
+      <SelectTrigger aria-label={ariaLabel} className="w-full">
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
@@ -459,76 +613,54 @@ function RoutineSelect({
   );
 }
 
-function SectionHeading({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div>
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="text-xs text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function Field({
+function DetailRow({
   label,
-  htmlFor,
-  optional,
   error,
   children,
 }: {
   label: string;
-  htmlFor: string;
-  optional?: boolean;
   error?: string | null;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium">
-        {label}
-        {optional ? (
-          <span className="ml-1 text-xs font-normal text-muted-foreground">
-            (optional)
-          </span>
+    <div className="flex min-h-11 items-center gap-3 py-0.5">
+      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+      <div className="ml-auto flex min-w-0 flex-col items-end gap-0.5">
+        {children}
+        {error ? (
+          <span className="pr-3 text-xs text-destructive">{error}</span>
         ) : null}
-      </label>
-      {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
     </div>
   );
 }
 
-function ToggleRow<T extends string>({
-  ariaGroup,
+function GhostSelect({
+  ariaLabel,
   value,
-  options,
-  onChange,
+  onValueChange,
+  placeholder,
+  children,
 }: {
-  ariaGroup: string;
-  value: T;
-  options: { id: T; label: string }[];
-  onChange: (id: T) => void;
+  ariaLabel: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div role="group" aria-label={ariaGroup} className="flex flex-wrap gap-2">
-      {options.map((option) => (
-        <Button
-          key={option.id}
-          type="button"
-          variant={value === option.id ? "default" : "outline"}
-          size="sm"
-          aria-pressed={value === option.id}
-          className={cn(value === option.id && "pointer-events-none")}
-          onClick={() => onChange(option.id)}
-        >
-          {option.label}
-        </Button>
-      ))}
-    </div>
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className={cn(
+          "h-auto min-h-0 w-auto justify-end gap-1.5 rounded-md border-0 bg-transparent px-3 py-2",
+          "text-sm font-medium text-foreground shadow-none hover:bg-muted/50",
+          "focus:ring-0 focus-visible:ring-0 [&>svg]:opacity-60",
+        )}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
   );
 }

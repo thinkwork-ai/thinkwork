@@ -542,6 +542,12 @@ export const SettingsAgentLoopsQuery = gql`
         publishedAt
         createdAt
       }
+      webhookEndpoint {
+        webhookId
+        token
+        path
+        enabled
+      }
       runs(limit: 1) {
         id
         status
@@ -626,6 +632,12 @@ export const SettingsAgentLoopQuery = gql`
         sourceMetadata
         publishedAt
         createdAt
+      }
+      webhookEndpoint {
+        webhookId
+        token
+        path
+        enabled
       }
       runs(limit: $runLimit) {
         id
