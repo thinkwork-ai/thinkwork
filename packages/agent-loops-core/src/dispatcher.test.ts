@@ -177,6 +177,7 @@ describe("dispatchAgentLoop", () => {
 
   it("carries webhook delivery metadata + run-as actor into the wakeup payload for webhook triggers (R16, KTD4)", async () => {
     const ledger = fakeLedger();
+    ledger.loadUserTenantId = async () => "tenant-1";
 
     await dispatchAgentLoop(
       baseInput({
@@ -184,7 +185,8 @@ describe("dispatchAgentLoop", () => {
           family: "webhook",
           source: "webhook:lastmile",
           actorType: "user",
-          actorId: "run-as-user-1",
+          actorId: "operator-9",
+          runAsUserId: "run-as-user-1",
           idempotencyKey: "webhook:evt-1",
           webhookDelivery: {
             source: "lastmile",
