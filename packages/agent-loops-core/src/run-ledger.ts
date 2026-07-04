@@ -1,7 +1,6 @@
 import type {
   AgentLoopTargetKind,
   GoalSpec,
-  JudgeSpec,
   LoopPolicy,
   RoutineActionResult,
   RoutineActionSpec,
@@ -62,7 +61,6 @@ export interface DispatchableAgentLoopVersion {
   versionStatus: string;
   goalSpec: GoalSpec;
   workerSpec: WorkerSpec;
-  judgeSpec: JudgeSpec;
   loopPolicy: LoopPolicy;
   /** Deterministic routine actions (plan 2026-07-03-004 U5). Null on
    * versions without routine actions. */
@@ -255,7 +253,6 @@ export interface AgentLoopWakeupPayload {
      */
     runAsUserId?: string | null;
     completionCriteria: string[];
-    judgeMode: string;
     loopPolicy: LoopPolicy;
     /** Outcomes of routine actions executed before this agent turn (mixed
      * Automations). Present on the initial AND resume payloads so the
@@ -471,7 +468,6 @@ export function buildAgentLoopWakeupPayload(input: {
       scheduledJobId: input.trigger.scheduledJobId ?? null,
       runAsUserId: input.runAsUserId ?? null,
       completionCriteria: input.version.goalSpec.completionCriteria,
-      judgeMode: input.version.judgeSpec.mode,
       loopPolicy: input.version.loopPolicy,
       routineActionResults: input.routineActionResults ?? null,
       webhookDelivery: input.trigger.webhookDelivery ?? null,
@@ -493,7 +489,6 @@ export interface RawAgentLoopVersionRow {
   version_status: string;
   goal_spec: unknown;
   worker_spec: unknown;
-  judge_spec: unknown;
   loop_policy: unknown;
   routine_actions_spec?: unknown;
   target_spec?: unknown;
@@ -511,9 +506,9 @@ export interface RawAgentLoopVersionRow {
  * token-free `agentTurn:false` routineActionsSpec so it dispatches exactly
  * like today's routine-only path; an `agent_thread` target reconstructs the
  * goal/worker shapes so it dispatches exactly like today's goal/worker wakeup
- * path. Judge + loop-policy always come from the (still-written) legacy
- * columns — they are off the product surface (R11) and not carried by
- * target_spec.
+ * path. Loop-policy always comes from the (still-written) legacy column — it is
+ * off the product surface (R11) and not carried by target_spec. The judge /
+ * evidence / ROI feature was removed in THINK-137 U10.
  */
 export function resolveDispatchableVersion(
   row: RawAgentLoopVersionRow,
@@ -582,7 +577,6 @@ export function resolveDispatchableVersion(
     versionStatus: row.version_status,
     goalSpec,
     workerSpec,
-    judgeSpec: row.judge_spec as JudgeSpec,
     loopPolicy: row.loop_policy as LoopPolicy,
     routineActionsSpec,
     targetKind: targetSpec.kind,

@@ -521,11 +521,6 @@ export const SettingsAgentLoopsQuery = gql`
       lastRunStatus
       lastRunAt
       lastRunSummary
-      acceptedRunCount
-      rejectedRunCount
-      escalatedRunCount
-      totalCostUsdCents
-      costPerAcceptedRunUsdCents
       currentVersion {
         id
         versionNumber
@@ -533,9 +528,7 @@ export const SettingsAgentLoopsQuery = gql`
         triggerSpec
         goalSpec
         workerSpec
-        judgeSpec
         loopPolicy
-        evidencePolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -590,11 +583,6 @@ export const SettingsAgentLoopQuery = gql`
       lastRunStatus
       lastRunAt
       lastRunSummary
-      acceptedRunCount
-      rejectedRunCount
-      escalatedRunCount
-      totalCostUsdCents
-      costPerAcceptedRunUsdCents
       webhookEndpoint {
         webhookId
         token
@@ -624,9 +612,7 @@ export const SettingsAgentLoopQuery = gql`
         triggerSpec
         goalSpec
         workerSpec
-        judgeSpec
         loopPolicy
-        evidencePolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -681,9 +667,7 @@ export const SettingsAgentLoopRunQuery = gql`
         triggerSpec
         goalSpec
         workerSpec
-        judgeSpec
         loopPolicy
-        evidencePolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -722,55 +706,8 @@ export const SettingsAgentLoopRunQuery = gql`
         errorCode
         errorMessage
         totalCostUsdCents
-        judgments {
-          id
-          judgeMode
-          outcome
-          confidence
-          rationale
-          terminalReason
-          structuredOutput
-          createdAt
-        }
-        evidence {
-          id
-          evidenceType
-          sourceSystem
-          sourceId
-          uri
-          summary
-          redactionState
-          sensitivity
-          retentionExpiresAt
-          createdAt
-        }
         createdAt
         updatedAt
-      }
-      judgments {
-        id
-        agentLoopIterationId
-        judgeMode
-        outcome
-        confidence
-        rationale
-        terminalReason
-        structuredOutput
-        createdAt
-      }
-      evidence {
-        id
-        agentLoopIterationId
-        agentLoopJudgmentId
-        evidenceType
-        sourceSystem
-        sourceId
-        uri
-        summary
-        redactionState
-        sensitivity
-        retentionExpiresAt
-        createdAt
       }
       createdAt
       updatedAt
@@ -816,9 +753,7 @@ export const SettingsSaveAgentLoopMutation = gql`
         triggerSpec
         goalSpec
         workerSpec
-        judgeSpec
         loopPolicy
-        evidencePolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -867,9 +802,7 @@ export const SettingsConfirmAutomationDraftMutation = gql`
         triggerSpec
         goalSpec
         workerSpec
-        judgeSpec
         loopPolicy
-        evidencePolicy
         routineActionsSpec
         targetSpec
         sourceMetadata

@@ -32,11 +32,6 @@ const baseInput = (
       toolHints: [],
       config: {},
     },
-    judgeSpec: {
-      mode: "self_check",
-      criteria: ["Useful enough to send."],
-      config: {},
-    },
     loopPolicy: {
       maxIterations: 2,
       maxTokens: 12_000,
@@ -143,7 +138,6 @@ describe("dispatchAgentLoop", () => {
           iterationId: "iteration-1",
           versionId: "version-1",
           completionCriteria: ["A useful brief exists."],
-          judgeMode: "self_check",
         },
       },
     });
@@ -490,7 +484,6 @@ function headlessRoutineVersion() {
     version_status: "active",
     goal_spec: { objective: "", completionCriteria: [] },
     worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-    judge_spec: { mode: "self_check", criteria: [], config: {} },
     loop_policy: {
       maxIterations: 1,
       failBehavior: "return_blocker",
@@ -680,7 +673,6 @@ describe("resolveDispatchableVersion", () => {
         completionCriteria: ["done"],
       },
       worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      judge_spec: { mode: "self_check", criteria: [], config: {} },
       loop_policy: {
         maxIterations: 1,
         failBehavior: "return_blocker",
@@ -708,7 +700,6 @@ describe("resolveDispatchableVersion", () => {
         toolHints: [],
         config: {},
       },
-      judge_spec: { mode: "self_check", criteria: [], config: {} },
       loop_policy: {
         maxIterations: 1,
         failBehavior: "return_blocker",
@@ -734,7 +725,6 @@ describe("resolveDispatchableVersion", () => {
       version_status: "active",
       goal_spec: { objective: "", completionCriteria: [] },
       worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      judge_spec: { mode: "self_check", criteria: [], config: {} },
       loop_policy: {
         maxIterations: 1,
         failBehavior: "return_blocker",
@@ -765,7 +755,6 @@ describe("dispatchAgentLoop via resolved routine-kind target", () => {
       version_status: "active",
       goal_spec: { objective: "", completionCriteria: [] },
       worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      judge_spec: { mode: "self_check", criteria: [], config: {} },
       loop_policy: {
         maxIterations: 1,
         failBehavior: "return_blocker",
@@ -798,7 +787,6 @@ describe("dispatchAgentLoop via resolved routine-kind target", () => {
       version_status: "active",
       goal_spec: { objective: "", completionCriteria: [] },
       worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      judge_spec: { mode: "self_check", criteria: [], config: {} },
       loop_policy: {
         maxIterations: 1,
         failBehavior: "return_blocker",

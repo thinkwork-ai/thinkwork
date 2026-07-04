@@ -8,7 +8,6 @@ import type {
   AgentLoopSpaceOption,
 } from "./agent-loop-types";
 import {
-  formatCost,
   formatDateTime,
   jsonRecord,
   readTargetSpec,
@@ -85,7 +84,6 @@ export function AutomationStatusRail({
             label="Last result"
             value={lastRunStatus ? titleize(lastRunStatus) : "-"}
           />
-          <RailRow label="Cost" value={formatCost(loop.totalCostUsdCents)} />
           <RailRow
             label="Last thread"
             value={

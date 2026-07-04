@@ -71,9 +71,7 @@ function run(
       triggerSpec: {},
       goalSpec: {},
       workerSpec: {},
-      judgeSpec: {},
       loopPolicy: {},
-      evidencePolicy: {},
     },
     status: "waiting_for_human",
     triggerFamily: "manual",
@@ -109,37 +107,8 @@ function run(
         errorCode: null,
         errorMessage: null,
         totalCostUsdCents: 42,
-        judgments: [],
-        evidence: [],
         createdAt: "2026-06-22T12:00:00.000Z",
         updatedAt: "2026-06-22T12:01:00.000Z",
-      },
-    ],
-    judgments: [
-      {
-        id: "judgment-1",
-        agentLoopIterationId: "iteration-1",
-        judgeMode: "human_approval",
-        outcome: "needs_human_approval",
-        confidence: 80,
-        rationale: "Needs operator approval.",
-        terminalReason: "human_approval_required",
-        structuredOutput: { needsApproval: true },
-        createdAt: "2026-06-22T12:01:00.000Z",
-      },
-    ],
-    evidence: [
-      {
-        id: "evidence-1",
-        evidenceType: "thread_turn",
-        sourceSystem: "thinkwork",
-        sourceId: "thread-turn-1",
-        uri: null,
-        summary: { title: "Turn summary" },
-        redactionState: "summary_only",
-        sensitivity: null,
-        retentionExpiresAt: null,
-        createdAt: "2026-06-22T12:01:00.000Z",
       },
     ],
     createdAt: "2026-06-22T12:00:00.000Z",
@@ -164,9 +133,6 @@ describe("AgentLoopRunDetail", () => {
     render(<AgentLoopRunDetail agentLoopId="loop-1" runId="run-1" />);
 
     expect(screen.getByText("Waiting for human approval")).toBeTruthy();
-    expect(screen.getByText("Human Approval")).toBeTruthy();
-    expect(screen.getByText("Needs Human Approval")).toBeTruthy();
-    expect(screen.getByText("Evidence")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Approve/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Reject/i })).toBeNull();
   });

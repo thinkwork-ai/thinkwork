@@ -75,9 +75,7 @@ export interface AgentLoopVersionSummary {
   triggerSpec: unknown;
   goalSpec: unknown;
   workerSpec: unknown;
-  judgeSpec: unknown;
   loopPolicy: unknown;
-  evidencePolicy: unknown;
   routineActionsSpec?: unknown;
   // THINK-137 U3 (R3): authoritative target spec; null on pre-U3 rows.
   targetSpec?: unknown;
@@ -130,11 +128,6 @@ export interface AgentLoopRow {
   lastRunStatus?: string | null;
   lastRunAt?: string | null;
   lastRunSummary?: unknown;
-  acceptedRunCount: number;
-  rejectedRunCount: number;
-  escalatedRunCount: number;
-  totalCostUsdCents: number;
-  costPerAcceptedRunUsdCents?: number | null;
   runs?: AgentLoopRunSummary[];
   // THINK-137 U6/U8: the minted inbound webhook endpoint + metadata-only
   // delivery history, present only for webhook-trigger automations.
@@ -168,33 +161,6 @@ export interface AutomationWebhookDelivery {
   errorMessage?: string | null;
 }
 
-export interface AgentLoopEvidenceItem {
-  id: string;
-  agentLoopIterationId?: string | null;
-  agentLoopJudgmentId?: string | null;
-  evidenceType: string;
-  sourceSystem: string;
-  sourceId?: string | null;
-  uri?: string | null;
-  summary: unknown;
-  redactionState: string;
-  sensitivity?: string | null;
-  retentionExpiresAt?: string | null;
-  createdAt: string;
-}
-
-export interface AgentLoopJudgment {
-  id: string;
-  agentLoopIterationId?: string | null;
-  judgeMode: string;
-  outcome: string;
-  confidence?: number | null;
-  rationale?: string | null;
-  terminalReason?: string | null;
-  structuredOutput: unknown;
-  createdAt: string;
-}
-
 export interface AgentLoopIteration {
   id: string;
   iterationNumber: number;
@@ -210,8 +176,6 @@ export interface AgentLoopIteration {
   errorCode?: string | null;
   errorMessage?: string | null;
   totalCostUsdCents?: number | null;
-  judgments: AgentLoopJudgment[];
-  evidence: AgentLoopEvidenceItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -244,8 +208,6 @@ export interface AgentLoopRunDetail {
   errorMessage?: string | null;
   totalCostUsdCents?: number | null;
   iterations: AgentLoopIteration[];
-  judgments: AgentLoopJudgment[];
-  evidence: AgentLoopEvidenceItem[];
   createdAt: string;
   updatedAt: string;
 }

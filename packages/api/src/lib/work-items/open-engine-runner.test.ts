@@ -37,11 +37,6 @@ const baseVersion: DispatchableAgentLoopVersion = {
     toolHints: [],
     config: {},
   },
-  judgeSpec: {
-    mode: "self_check",
-    criteria: ["The Work Item has a receipt."],
-    config: {},
-  },
   loopPolicy: {
     maxIterations: 1,
     maxTokens: 12_000,

@@ -1,8 +1,4 @@
-import type {
-  JudgeSpec,
-  JudgmentResult,
-  LoopPolicy,
-} from "@thinkwork/agent-loops-core";
+import type { LoopPolicy } from "@thinkwork/agent-loops-core";
 import type { FinalizeGoalRunProjection } from "../chat-finalize/types.js";
 
 export type AgentLoopFinalRunStatus =
@@ -19,19 +15,32 @@ export type AgentLoopFinalIterationStatus =
   | "budget_stopped"
   | "waiting_for_human";
 
-export interface AgentLoopJudgmentDecision {
-  judgment: JudgmentResult;
+export type AgentLoopCompletionOutcome =
+  | "complete"
+  | "continue"
+  | "failed"
+  | "budget_stopped"
+  | "escalated";
+
+/**
+ * The run-status projection decision (THINK-137 U10). This is NOT a judge — the
+ * worker's own goal-run signal drives completion. It advances run/iteration
+ * status and decides whether the loop enqueues another iteration. The judge /
+ * evidence / ROI feature was removed; there is no judge verdict anymore.
+ */
+export interface AgentLoopCompletionDecision {
+  outcome: AgentLoopCompletionOutcome;
   runStatus: AgentLoopFinalRunStatus;
   iterationStatus: AgentLoopFinalIterationStatus;
   terminal: boolean;
   enqueueNextIteration: boolean;
-  evidenceSummary: Record<string, unknown>;
+  terminalReason?: string | null;
+  outputSummary: Record<string, unknown>;
   errorCode?: string;
   errorMessage?: string;
 }
 
-export interface JudgeAgentLoopIterationInput {
-  judgeSpec: JudgeSpec;
+export interface DecideAgentLoopCompletionInput {
   loopPolicy: LoopPolicy;
   iterationNumber: number;
   goalRun: FinalizeGoalRunProjection | null;
@@ -43,13 +52,12 @@ export interface JudgeAgentLoopIterationInput {
 const RESPONSE_PREVIEW_LIMIT = 500;
 const RATIONALE_LIMIT = 1000;
 
-export function judgeAgentLoopIteration(
-  input: JudgeAgentLoopIterationInput,
-): AgentLoopJudgmentDecision {
+export function decideAgentLoopCompletion(
+  input: DecideAgentLoopCompletionInput,
+): AgentLoopCompletionDecision {
   if (input.turnStatus === "failed") {
     return terminalDecision({
       outcome: "failed",
-      reason: bounded(input.errorMessage || "Worker turn failed."),
       terminalReason: "worker_turn_failed",
       runStatus: failedRunStatus(input.loopPolicy),
       iterationStatus: "failed",
@@ -60,46 +68,10 @@ export function judgeAgentLoopIteration(
     });
   }
 
-  if (input.judgeSpec.mode === "model_judge") {
-    return terminalDecision({
-      outcome: "failed",
-      reason: "AgentLoop model_judge is reserved for Phase 2.",
-      terminalReason: "model_judge_unsupported_phase1",
-      runStatus: failedRunStatus(input.loopPolicy),
-      iterationStatus: "failed",
-      goalRun: input.goalRun,
-      responseText: input.responseText,
-      errorCode: "model_judge_unsupported_phase1",
-      errorMessage: "AgentLoop model_judge is reserved for Phase 2.",
-    });
-  }
-
-  if (input.judgeSpec.mode === "human_approval") {
-    return {
-      judgment: judgmentResult({
-        outcome: "needs_human_approval",
-        reason:
-          "Human approval is required before this AgentLoop can continue.",
-        shouldContinue: false,
-        terminalReason: "human_approval_required",
-        goalRun: input.goalRun,
-        responseText: input.responseText,
-      }),
-      runStatus: "waiting_for_human",
-      iterationStatus: "waiting_for_human",
-      terminal: true,
-      enqueueNextIteration: false,
-      evidenceSummary: evidenceSummary(input.goalRun, input.responseText, {
-        terminalReason: "human_approval_required",
-      }),
-    };
-  }
-
   const goalRun = input.goalRun;
   if (!goalRun) {
     return terminalDecision({
       outcome: "failed",
-      reason: "AgentLoop worker did not return goal-run evidence.",
       terminalReason: "goal_run_missing",
       runStatus: failedRunStatus(input.loopPolicy),
       iterationStatus: "failed",
@@ -113,7 +85,6 @@ export function judgeAgentLoopIteration(
   if (goalRun.debug?.error === "malformed_goal_run") {
     return terminalDecision({
       outcome: "failed",
-      reason: "AgentLoop worker returned malformed goal-run evidence.",
       terminalReason: "malformed_goal_run",
       runStatus: failedRunStatus(input.loopPolicy),
       iterationStatus: "failed",
@@ -128,7 +99,6 @@ export function judgeAgentLoopIteration(
   if (budgetReason) {
     return terminalDecision({
       outcome: "budget_stopped",
-      reason: budgetReason,
       terminalReason: "budget_stopped",
       runStatus: "budget_stopped",
       iterationStatus: "budget_stopped",
@@ -146,10 +116,6 @@ export function judgeAgentLoopIteration(
   ) {
     return terminalDecision({
       outcome: "complete",
-      reason:
-        goalRun.completion_summary ||
-        goalRun.summary ||
-        "AgentLoop goal completed.",
       terminalReason: "goal_completed",
       runStatus: "completed",
       iterationStatus: "completed",
@@ -161,7 +127,6 @@ export function judgeAgentLoopIteration(
   if (goalRun.status === "cancelled") {
     return terminalDecision({
       outcome: "failed",
-      reason: "AgentLoop goal was cancelled by the worker runtime.",
       terminalReason: "goal_cancelled",
       runStatus: failedRunStatus(input.loopPolicy),
       iterationStatus: "failed",
@@ -175,7 +140,6 @@ export function judgeAgentLoopIteration(
   if (input.iterationNumber >= input.loopPolicy.maxIterations) {
     return terminalDecision({
       outcome: input.loopPolicy.escalateOnFailure ? "escalated" : "failed",
-      reason: "AgentLoop reached its maximum iteration count.",
       terminalReason: "max_iterations_reached",
       runStatus: failedRunStatus(input.loopPolicy),
       iterationStatus: "failed",
@@ -187,21 +151,13 @@ export function judgeAgentLoopIteration(
   }
 
   return {
-    judgment: judgmentResult({
-      outcome: "continue",
-      reason:
-        goalRun.summary ||
-        goalRun.completion_notes ||
-        "AgentLoop goal remains active.",
-      shouldContinue: true,
-      goalRun,
-      responseText: input.responseText,
-    }),
+    outcome: "continue",
     runStatus: "running",
     iterationStatus: "completed",
     terminal: false,
     enqueueNextIteration: true,
-    evidenceSummary: evidenceSummary(goalRun, input.responseText, {
+    terminalReason: null,
+    outputSummary: evidenceSummary(goalRun, input.responseText, {
       terminalReason: null,
       nextIteration: input.iterationNumber + 1,
     }),
@@ -209,8 +165,7 @@ export function judgeAgentLoopIteration(
 }
 
 function terminalDecision(input: {
-  outcome: JudgmentResult["outcome"];
-  reason: string;
+  outcome: AgentLoopCompletionOutcome;
   terminalReason: string;
   runStatus: AgentLoopFinalRunStatus;
   iterationStatus: AgentLoopFinalIterationStatus;
@@ -218,44 +173,19 @@ function terminalDecision(input: {
   responseText: string;
   errorCode?: string;
   errorMessage?: string;
-}): AgentLoopJudgmentDecision {
+}): AgentLoopCompletionDecision {
   return {
-    judgment: judgmentResult({
-      outcome: input.outcome,
-      reason: input.reason,
-      shouldContinue: false,
-      terminalReason: input.terminalReason,
-      goalRun: input.goalRun,
-      responseText: input.responseText,
-    }),
+    outcome: input.outcome,
     runStatus: input.runStatus,
     iterationStatus: input.iterationStatus,
     terminal: true,
     enqueueNextIteration: false,
-    evidenceSummary: evidenceSummary(input.goalRun, input.responseText, {
+    terminalReason: input.terminalReason,
+    outputSummary: evidenceSummary(input.goalRun, input.responseText, {
       terminalReason: input.terminalReason,
     }),
     errorCode: input.errorCode,
     errorMessage: input.errorMessage,
-  };
-}
-
-function judgmentResult(input: {
-  outcome: JudgmentResult["outcome"];
-  reason: string;
-  shouldContinue: boolean;
-  terminalReason?: string;
-  goalRun: FinalizeGoalRunProjection | null;
-  responseText: string;
-}): JudgmentResult {
-  return {
-    outcome: input.outcome,
-    reason: bounded(input.reason),
-    shouldContinue: input.shouldContinue,
-    terminalReason: input.terminalReason,
-    structuredOutput: evidenceSummary(input.goalRun, input.responseText, {
-      terminalReason: input.terminalReason ?? null,
-    }),
   };
 }
 

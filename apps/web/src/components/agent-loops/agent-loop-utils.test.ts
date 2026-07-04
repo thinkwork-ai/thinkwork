@@ -130,9 +130,7 @@ describe("agent-loop-utils", () => {
           },
           goalSpec: {},
           workerSpec: {},
-          judgeSpec: {},
           loopPolicy: {},
-          evidencePolicy: {},
           targetSpec: {
             kind: "agent_thread",
             agentThread: {
@@ -169,9 +167,7 @@ describe("agent-loop-utils", () => {
       triggerSpec: {},
       goalSpec: { objective: "Legacy objective" },
       workerSpec: { type: "agent", id: "agent-1" },
-      judgeSpec: {},
       loopPolicy: {},
-      evidencePolicy: {},
     });
     expect(target).toMatchObject({
       kind: "agent_thread",
@@ -186,9 +182,7 @@ describe("agent-loop-utils", () => {
       triggerSpec: {},
       goalSpec: {},
       workerSpec: {},
-      judgeSpec: {},
       loopPolicy: {},
-      evidencePolicy: {},
       routineActionsSpec: {
         actions: [{ routineId: ROUTINE_ID }],
         agentTurn: false,
