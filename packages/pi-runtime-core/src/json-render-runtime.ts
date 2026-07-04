@@ -47,6 +47,153 @@ export interface ThreadJsonRenderActivityPayload {
   binding?: ThreadJsonRenderDataBindingDescriptor;
 }
 
+/**
+ * A completed, non-errored MCP tool invocation in the current turn whose result
+ * carries a re-invokable server/tool identity — i.e. a call whose data an
+ * emitted canvas part *could* be bound to for headless refresh.
+ */
+export interface McpBindingCandidate {
+  id: string;
+  server: string;
+  tool: string;
+}
+
+/**
+ * Enumerate the turn's completed MCP invocations that a canvas emit could bind
+ * to (the model-actionable candidate list for the emit feedback loop, R6). An
+ * invocation qualifies only when it completed without error AND its result
+ * carries the MCP identity stamp (`details.mcp_server` / `details.mcp_tool_name`)
+ * — the same seam {@link buildCanvasDataBinding} validates against, so a listed
+ * candidate is always a legal `sourceToolCallId`. The emit tool's own running
+ * record (and any non-MCP tool) is naturally excluded (no MCP stamp).
+ */
+export function listMcpBindingCandidates(
+  toolInvocations: readonly CanvasBindingSourceInvocation[],
+): McpBindingCandidate[] {
+  const candidates: McpBindingCandidate[] = [];
+  for (const invocation of toolInvocations) {
+    if (invocation.is_error === true || invocation.status === "error") continue;
+    const details = recordDetails(invocation.result);
+    const server =
+      typeof details?.mcp_server === "string" ? details.mcp_server : null;
+    const tool =
+      typeof details?.mcp_tool_name === "string" ? details.mcp_tool_name : null;
+    if (!server || !tool) continue;
+    candidates.push({ id: invocation.id, server, tool });
+  }
+  return candidates;
+}
+
+export interface EmitBindingFeedback {
+  /** True when a valid, refreshable binding was recorded for this emit. */
+  bound: boolean;
+  /** Count of bindable MCP invocations present in the turn so far. */
+  candidateCount: number;
+  /** Model-facing feedback line to append to the emit result, or null when
+   *  there is nothing actionable to say (unbound with no MCP candidates). */
+  text: string | null;
+  /** The recorded binding when bound; null otherwise. */
+  binding: ThreadJsonRenderDataBindingDescriptor | null;
+}
+
+/**
+ * Compute the model-facing binding feedback for one `emit_json_render_ui` call
+ * (Living Artifacts U5 follow-up, THINK-145 — the model-actionable-diagnostics
+ * lesson applied to the *silent* unbound path observed live).
+ *
+ * - Bound (valid `sourceToolCallId` → refreshable MCP source): confirm it so
+ *   the model knows the widget is now refreshable.
+ * - Unbound but ≥1 completed MCP invocation exists this turn: hand the model the
+ *   real candidate ids and tell it to re-emit with the SAME part id plus
+ *   `sourceToolCallId`. Re-emission with a stable id merges idempotently, so the
+ *   correction costs a single tool call.
+ * - Unbound with no MCP invocations: nothing is bindable → no nudge.
+ *
+ * The candidate ids are pi's actual tool-call ids (shape
+ * `functions.mcp_<server>_<tool>:<n>`), which the model does not reliably recall
+ * verbatim — handing them back is the robust fix, not prompt wording alone.
+ */
+export function buildEmitBindingFeedback(input: {
+  partId: string;
+  sourceToolCallId: unknown;
+  toolInvocations: readonly CanvasBindingSourceInvocation[];
+}): EmitBindingFeedback {
+  const { partId, sourceToolCallId, toolInvocations } = input;
+  const binding = buildCanvasDataBinding({
+    partId,
+    sourceToolCallId,
+    toolInvocations,
+  });
+  if (binding) {
+    return {
+      bound: true,
+      candidateCount: 0,
+      binding,
+      text: `Data-source binding recorded: ${binding.serverName}/${binding.toolName}.`,
+    };
+  }
+
+  const candidates = listMcpBindingCandidates(toolInvocations);
+  if (candidates.length === 0) {
+    return { bound: false, candidateCount: 0, binding: null, text: null };
+  }
+
+  const candidateLines = candidates
+    .map(
+      (candidate) => `${candidate.id} — ${candidate.server}/${candidate.tool}`,
+    )
+    .join("\n");
+  return {
+    bound: false,
+    candidateCount: candidates.length,
+    binding: null,
+    text:
+      "No data-source binding was recorded. If this UI presents data returned " +
+      "by one of these tool calls, immediately re-emit with the SAME id plus " +
+      `sourceToolCallId:\n${candidateLines}`,
+  };
+}
+
+/**
+ * Wire an already-built `emit_json_render_ui` tool with a live view of the
+ * turn's recorded tool invocations so its *result content* carries the binding
+ * feedback loop (see {@link buildEmitBindingFeedback}). This is the chosen
+ * injection seam: the tool is constructed context-free (in the Pi server), and
+ * the agent loop — the only holder of the live `toolInvocations` registry —
+ * wraps it at wiring time, passing a getter. The wrapper only augments a
+ * successful emit's content; rejected emits pass through untouched so the strict
+ * validator's repair loop is not polluted.
+ */
+export function wrapEmitToolWithBindingFeedback(
+  tool: AgentTool<any>,
+  getTurnInvocations: () => readonly CanvasBindingSourceInvocation[],
+): AgentTool<any> {
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const result = await tool.execute(toolCallId, params, signal, onUpdate);
+      const part = extractEmitJsonRenderToolPart(result);
+      // Only a successful emit produces a part; a rejected emit returns its
+      // validator diagnostics untouched.
+      if (!part) return result;
+      const feedback = buildEmitBindingFeedback({
+        partId: part.id,
+        sourceToolCallId: recordValue(params)?.sourceToolCallId,
+        toolInvocations: getTurnInvocations(),
+      });
+      if (!feedback.text) return result;
+      const resultRecord = recordValue(result) ?? {};
+      const existingContent = Array.isArray(resultRecord.content)
+        ? resultRecord.content
+        : [];
+      return {
+        ...resultRecord,
+        content: [...existingContent, { type: "text", text: feedback.text }],
+      } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+    },
+  } as AgentTool<any>;
+}
+
 export function buildEmitJsonRenderUiTool(): AgentTool<any> {
   return {
     name: EMIT_JSON_RENDER_UI_TOOL_NAME,
@@ -83,8 +230,12 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
           description:
             "Optional. The id of the tool call in this turn whose result this UI " +
             "presents (e.g. the MCP tool that returned the rows/metrics being " +
-            "charted). Pass it so the widget records a refreshable data-source " +
-            "binding. Omit when the UI is not derived from a single tool result.",
+            "charted). Use the tool call's real id, shaped like " +
+            "`functions.mcp_<server>_<tool>:<n>`. Pass it so the widget records a " +
+            "refreshable data-source binding. If you omit it while such a tool " +
+            "call exists this turn, the emit result lists the candidate ids so " +
+            "you can re-emit with the SAME part id plus sourceToolCallId. Omit " +
+            "when the UI is not derived from a single tool result.",
         },
         spec: {
           type: "object",

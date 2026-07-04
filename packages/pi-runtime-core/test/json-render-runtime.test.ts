@@ -11,11 +11,15 @@ import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
   THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
+  buildEmitBindingFeedback,
   buildEmitJsonRenderUiTool,
   extractEmitJsonRenderToolPart,
+  listMcpBindingCandidates,
   normalizeRuntimeThreadJsonRenderInput,
   threadJsonRenderActivityEvent,
   threadJsonRenderStateSnapshotActivityEvent,
+  wrapEmitToolWithBindingFeedback,
+  type CanvasBindingSourceInvocation,
 } from "../src/json-render-runtime.js";
 
 describe("runtime Thread json-render helper", () => {
@@ -265,6 +269,174 @@ describe("runtime Thread json-render helper", () => {
         specHash: fixture.data.specHash,
       },
     });
+  });
+});
+
+describe("emit binding feedback loop (THINK-145)", () => {
+  const mcpInvocation = (
+    id: string,
+    server: string,
+    tool: string,
+    overrides: Partial<CanvasBindingSourceInvocation> = {},
+  ): CanvasBindingSourceInvocation => ({
+    id,
+    status: "ok",
+    is_error: false,
+    args: { some: "arg" },
+    result: {
+      details: { mcp_server: server, mcp_tool_name: tool, raw: { rows: [] } },
+    },
+    ...overrides,
+  });
+
+  it("lists only completed MCP invocations as bindable candidates", () => {
+    const candidates = listMcpBindingCandidates([
+      mcpInvocation(
+        "functions.mcp_twenty--crm_execute_tool:15",
+        "twenty-crm",
+        "execute_tool",
+      ),
+      // errored MCP call → excluded
+      mcpInvocation(
+        "functions.mcp_twenty--crm_execute_tool:16",
+        "twenty-crm",
+        "execute_tool",
+        {
+          is_error: true,
+          status: "error",
+        },
+      ),
+      // non-MCP tool result → excluded
+      { id: "functions.bash:1", status: "ok", result: { details: {} } },
+    ]);
+    expect(candidates).toEqual([
+      {
+        id: "functions.mcp_twenty--crm_execute_tool:15",
+        server: "twenty-crm",
+        tool: "execute_tool",
+      },
+    ]);
+  });
+
+  it("confirms the binding when a valid sourceToolCallId is passed", () => {
+    const feedback = buildEmitBindingFeedback({
+      partId: "json-render:p1",
+      sourceToolCallId: "functions.mcp_twenty--crm_execute_tool:15",
+      toolInvocations: [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+    });
+    expect(feedback.bound).toBe(true);
+    expect(feedback.text).toBe(
+      "Data-source binding recorded: twenty-crm/execute_tool.",
+    );
+    expect(feedback.binding).not.toBeNull();
+  });
+
+  it("hands back the exact candidate ids when unbound with MCP candidates", () => {
+    const feedback = buildEmitBindingFeedback({
+      partId: "json-render:p1",
+      sourceToolCallId: undefined,
+      toolInvocations: [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+        mcpInvocation("functions.mcp_github_search:3", "github", "search"),
+      ],
+    });
+    expect(feedback.bound).toBe(false);
+    expect(feedback.candidateCount).toBe(2);
+    expect(feedback.text).toContain("No data-source binding was recorded.");
+    expect(feedback.text).toContain("re-emit with the SAME id");
+    expect(feedback.text).toContain(
+      "functions.mcp_twenty--crm_execute_tool:15 — twenty-crm/execute_tool",
+    );
+    expect(feedback.text).toContain(
+      "functions.mcp_github_search:3 — github/search",
+    );
+  });
+
+  it("emits no nudge when no MCP invocations exist", () => {
+    const feedback = buildEmitBindingFeedback({
+      partId: "json-render:p1",
+      sourceToolCallId: undefined,
+      toolInvocations: [{ id: "functions.bash:1", status: "ok", result: {} }],
+    });
+    expect(feedback.bound).toBe(false);
+    expect(feedback.candidateCount).toBe(0);
+    expect(feedback.text).toBeNull();
+  });
+
+  it("re-emit with the source id produces a binding (two executes through the registry)", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    // The live per-turn registry the loop would own; shared across executes.
+    const registry: CanvasBindingSourceInvocation[] = [
+      mcpInvocation(
+        "functions.mcp_twenty--crm_execute_tool:15",
+        "twenty-crm",
+        "execute_tool",
+      ),
+    ];
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => registry,
+    );
+
+    // First emit: model forgot sourceToolCallId → result nudges with candidate.
+    const first = await tool.execute("call-1", {
+      id: "json-render:stable",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    });
+    const firstText = (first as { content: { text: string }[] }).content
+      .map((c) => c.text)
+      .join("\n");
+    expect(firstText).toContain("No data-source binding was recorded.");
+    expect(firstText).toContain("functions.mcp_twenty--crm_execute_tool:15");
+
+    // Second emit: re-emit SAME part id WITH the source id → confirmed binding.
+    const second = await tool.execute("call-2", {
+      id: "json-render:stable",
+      sourceToolCallId: "functions.mcp_twenty--crm_execute_tool:15",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    });
+    const secondText = (second as { content: { text: string }[] }).content
+      .map((c) => c.text)
+      .join("\n");
+    expect(secondText).toContain(
+      "Data-source binding recorded: twenty-crm/execute_tool.",
+    );
+  });
+
+  it("passes a rejected emit through untouched (no feedback pollution)", async () => {
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+    );
+    const result = await tool.execute("call-x", {
+      spec: { not: "a valid spec" },
+      mobileFallback: { title: "t", summary: "s" },
+    });
+    const text = (result as { content: { text: string }[] }).content
+      .map((c) => c.text)
+      .join("\n");
+    expect(text).toContain("rejected by the ThinkWork json-render validator");
+    expect(text).not.toContain("No data-source binding was recorded.");
   });
 });
 
