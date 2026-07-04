@@ -42,7 +42,14 @@ interface CanvasCalls {
   contextCount: number;
 }
 
-function makeFakeCanvas(context: CanvasThreadContext) {
+type RefreshBindings = Awaited<
+  ReturnType<CanvasProvider["refresh"]>
+>["bindings"];
+
+function makeFakeCanvas(
+  context: CanvasThreadContext,
+  refreshBindings?: RefreshBindings,
+) {
   const calls: CanvasCalls = {
     save: [],
     checkout: [],
@@ -73,7 +80,7 @@ function makeFakeCanvas(context: CanvasThreadContext) {
         artifactId,
         dispatched: true,
         errorMessage: null,
-        bindings: [
+        bindings: refreshBindings ?? [
           {
             bindingId: "b1",
             partId: "p1",
@@ -81,6 +88,8 @@ function makeFakeCanvas(context: CanvasThreadContext) {
             outcome: "REFRESHED",
             quality: "GOOD",
             reason: null,
+            serverName: "twenty--crm",
+            toolName: "execute_tool",
           },
         ],
       };
@@ -100,6 +109,7 @@ function summary(
     updatedAt: "2026-07-04T00:00:00.000Z",
     headVersion: 0,
     status: "final",
+    stablePartId: `json-render:${artifactId}`,
     ...extra,
   };
 }
@@ -120,9 +130,12 @@ function baseContext(
   };
 }
 
-function loadTools(context: CanvasThreadContext) {
+function loadTools(
+  context: CanvasThreadContext,
+  refreshBindings?: RefreshBindings,
+) {
   const { api, tools } = makeFakeApi();
-  const { provider, calls } = makeFakeCanvas(context);
+  const { provider, calls } = makeFakeCanvas(context, refreshBindings);
   const extension = createArtifactsExtension();
   const providers: ProviderBundle = { canvas: provider };
   toExtensionFactory(extension, providers)(api);
@@ -298,6 +311,86 @@ describe("createArtifactsExtension", () => {
     expect(calls.refresh).toEqual([
       { artifactId: "art-current", partId: undefined },
     ]);
+  });
+
+  it("load_canvas success carries the stable part id + same-id re-emit instruction", async () => {
+    const { byName } = loadTools(baseContext());
+    const result = await run(byName.get("load_canvas")!, {
+      name: "cost dashboard",
+    });
+    const text = textOf(result as never);
+    expect(text).toContain('SAME id "json-render:art-cost"');
+    expect(text).toContain("do NOT use a new part id");
+    expect(result.details.stablePartId).toBe("json-render:art-cost");
+  });
+
+  it("load_canvas omits the re-emit instruction for a legacy canvas without a stable part id", async () => {
+    const context = baseContext({
+      savedCanvases: [
+        summary("art-cost", "Cost Dashboard", { stablePartId: null }),
+      ],
+    });
+    const { byName } = loadTools(context);
+    const result = await run(byName.get("load_canvas")!, {
+      name: "cost dashboard",
+    });
+    expect(textOf(result as never)).not.toContain("SAME id");
+    expect(result.details.stablePartId).toBeNull();
+  });
+
+  it("save_canvas accepts the target's stable part id as canvasPartId", async () => {
+    const { byName, calls } = loadTools(baseContext());
+    const result = await run(byName.get("save_canvas")!, {
+      title: "My Costs",
+      canvasPartId: "json-render:art-current",
+    });
+    expect(result.details.ok).toBe(true);
+    expect(calls.save).toEqual([
+      { artifactId: "art-current", title: "My Costs", spaceId: "space-1" },
+    ]);
+  });
+
+  it("refresh_canvas_data NEEDS_USER instructs an in-turn re-run + same-id re-emit", async () => {
+    const { byName } = loadTools(baseContext(), [
+      {
+        bindingId: "b1",
+        partId: "p1",
+        elementId: "e1",
+        outcome: "NEEDS_USER",
+        quality: "STALE",
+        reason: "Refresh needs the credential owner (per-user OAuth).",
+        serverName: "twenty--crm",
+        toolName: "execute_tool",
+      },
+    ]);
+    const result = await run(byName.get("refresh_canvas_data")!, {});
+    const text = textOf(result as never);
+    expect(text).toContain("YOU can, in this turn");
+    expect(text).toContain("execute_tool on twenty--crm");
+    expect(text).toContain('SAME part id "json-render:art-current"');
+    expect(text).toContain("sourceToolCallId");
+    expect(text).not.toContain("the owner must refresh them");
+  });
+
+  it("refresh_canvas_data NEEDS_USER detection falls back to the legacy reason text", async () => {
+    // Deploy skew: an older Lambda emits no serverName/toolName and the
+    // pre-outcome reason phrasing. The instruction must still fire.
+    const { byName } = loadTools(baseContext(), [
+      {
+        bindingId: "b1",
+        partId: "p1",
+        elementId: "e1",
+        outcome: "SKIPPED",
+        quality: "STALE",
+        reason: "refresh needs you",
+        serverName: "",
+        toolName: "",
+      },
+    ]);
+    const result = await run(byName.get("refresh_canvas_data")!, {});
+    const text = textOf(result as never);
+    expect(text).toContain("YOU can, in this turn");
+    expect(text).not.toContain("()");
   });
 
   it("refresh_canvas_data resolves a named canvas", async () => {

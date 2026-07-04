@@ -1030,6 +1030,8 @@ export type CanvasRefreshBindingResult = {
   partId: Scalars["String"]["output"];
   quality: ArtifactBindingQuality;
   reason?: Maybe<Scalars["String"]["output"]>;
+  serverName?: Maybe<Scalars["String"]["output"]>;
+  toolName?: Maybe<Scalars["String"]["output"]>;
 };
 
 export enum CanvasRefreshOutcome {
@@ -1059,6 +1061,7 @@ export type CanvasSummary = {
   __typename?: "CanvasSummary";
   artifactId: Scalars["ID"]["output"];
   headVersion: Scalars["Int"]["output"];
+  stablePartId?: Maybe<Scalars["String"]["output"]>;
   status: Scalars["String"]["output"];
   title: Scalars["String"]["output"];
   updatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;

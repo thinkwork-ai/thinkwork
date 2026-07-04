@@ -307,9 +307,15 @@ function buildSaveCanvasTool(
             "then save it.",
         );
       }
-      if (canvasPartId && target.artifactId !== canvasPartId) {
+      if (
+        canvasPartId &&
+        target.artifactId !== canvasPartId &&
+        target.stablePartId !== canvasPartId
+      ) {
         // v1 saves the thread's current canvas; a mismatched explicit id is a
-        // model error worth surfacing rather than silently saving the wrong one.
+        // model error worth surfacing rather than silently saving the wrong
+        // one. Accept either the artifact id or the stable part id — the
+        // load/refresh tool results surface both.
         return errorResult(
           "save_canvas",
           `No canvas with part id "${canvasPartId}" is active in this thread. ` +
@@ -439,14 +445,26 @@ function buildLoadCanvasTool(
           resolution.item.artifactId,
           signal,
         );
+        // Editing contract: updates MUST re-emit under the canvas's ORIGINAL
+        // stable part id — a new id mints a stray draft the save/refresh flow
+        // then mistargets. Stating the exact id here is what makes the model
+        // comply; enforcement lives in the emit-binding gate.
+        const partId = resolution.item.stablePartId;
+        const editInstruction = partId
+          ? ` To edit it, re-emit the json-render part with the SAME id ` +
+            `"${partId}" — do NOT use a new part id, or your edit will create ` +
+            `a stray duplicate instead of updating this canvas.`
+          : "";
         return {
           content: [
             {
               type: "text" as const,
-              text: `Opened canvas "${result.title || displayTitle(resolution.item)}" in this thread.`,
+              text:
+                `Opened canvas "${result.title || displayTitle(resolution.item)}" in this thread.` +
+                editInstruction,
             },
           ],
-          details: { ok: true, ...result },
+          details: { ok: true, stablePartId: partId, ...result },
         };
       } catch (error) {
         onError?.(error, { phase: "load_canvas.checkout" });
@@ -500,6 +518,7 @@ function buildRefreshCanvasDataTool(
 
       let artifactId: string;
       let label: string;
+      let stablePartId: string | null;
       if (!name || name.toLowerCase() === "current") {
         if (!context.currentCanvas) {
           return errorResult(
@@ -510,6 +529,7 @@ function buildRefreshCanvasDataTool(
         }
         artifactId = context.currentCanvas.artifactId;
         label = displayTitle(context.currentCanvas);
+        stablePartId = context.currentCanvas.stablePartId;
       } else {
         const resolution = resolveCanvasByName(context.savedCanvases, name);
         if (resolution.kind === "ambiguous") {
@@ -553,6 +573,7 @@ function buildRefreshCanvasDataTool(
         }
         artifactId = resolution.item.artifactId;
         label = displayTitle(resolution.item);
+        stablePartId = resolution.item.stablePartId;
       }
 
       try {
@@ -561,10 +582,10 @@ function buildRefreshCanvasDataTool(
           content: [
             {
               type: "text" as const,
-              text: formatRefreshSummary(label, result),
+              text: formatRefreshSummary(label, stablePartId, result),
             },
           ],
-          details: { ok: result.dispatched, ...result },
+          details: { ok: result.dispatched, stablePartId, ...result },
         };
       } catch (error) {
         onError?.(error, { phase: "refresh_canvas_data.refresh" });
@@ -634,6 +655,7 @@ function buildListCanvasesTool(
 
 function formatRefreshSummary(
   label: string,
+  stablePartId: string | null,
   result: {
     dispatched: boolean;
     errorMessage: string | null;
@@ -641,6 +663,8 @@ function formatRefreshSummary(
       quality: string;
       outcome: string;
       reason: string | null;
+      serverName: string;
+      toolName: string;
     }>;
   },
 ): string {
@@ -653,8 +677,12 @@ function formatRefreshSummary(
   const good = result.bindings.filter(
     (b) => b.quality.toUpperCase() === "GOOD",
   ).length;
-  const needsUser = result.bindings.filter((b) =>
-    (b.reason ?? "").toLowerCase().includes("needs you"),
+  // Match by outcome (the typed contract), keeping the legacy reason-substring
+  // check only as a deploy-skew fallback for older Lambda payloads.
+  const needsUser = result.bindings.filter(
+    (b) =>
+      b.outcome.toUpperCase() === "NEEDS_USER" ||
+      (b.reason ?? "").toLowerCase().includes("needs you"),
   );
   const bad = result.bindings.filter(
     (b) => b.quality.toUpperCase() === "BAD",
@@ -663,9 +691,31 @@ function formatRefreshSummary(
     `Refreshed "${label}": ${good}/${result.bindings.length} widget(s) updated.`,
   ];
   if (needsUser.length > 0) {
+    // The headless refresher cannot use a per-user connector — but THIS turn
+    // runs as the acting user, so the agent can complete the refresh itself
+    // right now. Spell out the exact steps (source tools + the same-id re-emit
+    // contract); vague "the owner must refresh" phrasing left models stopping
+    // at a dead-end report.
+    const sources = [
+      ...new Set(
+        needsUser
+          .filter((b) => b.toolName)
+          .map((b) =>
+            b.serverName ? `${b.toolName} on ${b.serverName}` : b.toolName,
+          ),
+      ),
+    ];
+    const sourceList = sources.length > 0 ? ` (${sources.join("; ")})` : "";
+    const reEmitTarget = stablePartId
+      ? `the SAME part id "${stablePartId}"`
+      : "the SAME part id the canvas already uses";
     lines.push(
-      `${needsUser.length} widget(s) use a per-user connector and could not ` +
-        "refresh unattended — the owner must refresh them.",
+      `${needsUser.length} widget(s) use a per-user connector the headless ` +
+        `refresher cannot call — but YOU can, in this turn, acting for the ` +
+        `user. Finish the refresh now: re-run the saved source tool ` +
+        `call(s)${sourceList}, then re-emit the canvas json-render part with ` +
+        `${reEmitTarget}, setting sourceToolCallId to the new tool call's id. ` +
+        `Do not stop at reporting that the data is stale.`,
     );
   }
   if (bad > 0) {

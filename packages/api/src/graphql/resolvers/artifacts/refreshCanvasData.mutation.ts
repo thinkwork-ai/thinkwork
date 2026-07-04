@@ -34,6 +34,9 @@ interface LambdaBindingResult {
   outcome: string;
   quality: string;
   reason: string | null;
+  // Optional for deploy skew: a not-yet-updated Lambda omits them.
+  serverName?: string | null;
+  toolName?: string | null;
 }
 
 interface LambdaResultPayload {
@@ -54,6 +57,8 @@ interface RefreshResult {
     outcome: string;
     quality: string;
     reason: string | null;
+    serverName: string | null;
+    toolName: string | null;
   }>;
 }
 
@@ -151,6 +156,8 @@ export const refreshCanvasData = async (
       outcome: b.outcome.toUpperCase(),
       quality: b.quality.toUpperCase(),
       reason: b.reason,
+      serverName: b.serverName ?? null,
+      toolName: b.toolName ?? null,
     })),
   };
 };

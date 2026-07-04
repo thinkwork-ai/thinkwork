@@ -63,6 +63,14 @@ export interface CanvasRefreshBindingResult {
   reason: string | null;
   /** True when the model must be asked to re-emit the spec (R7 escalation). */
   escalate: boolean;
+  /**
+   * The saved source tool call behind the binding. Carried on every outcome so
+   * a NEEDS_USER result is actionable in-turn: the agent (acting for the
+   * credential owner) can re-run `toolName` on `serverName` and re-emit the
+   * part instead of just reporting "needs the owner".
+   */
+  serverName: string;
+  toolName: string;
 }
 
 /** Result of resolving a tenant MCP server target for headless execution. */
@@ -140,6 +148,8 @@ export async function refreshBinding(
     bindingId: binding.id,
     partId: binding.partId,
     elementId: binding.elementId,
+    serverName: binding.serverName,
+    toolName: binding.toolName,
   };
 
   // R9 / AE1: per-user OAuth bindings are excluded from unattended refresh.

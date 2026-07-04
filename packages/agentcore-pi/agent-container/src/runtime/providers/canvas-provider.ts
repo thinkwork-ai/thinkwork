@@ -39,6 +39,7 @@ const CANVAS_SUMMARY_FIELDS = /* GraphQL */ `
   updatedAt
   headVersion
   status
+  stablePartId
 `;
 
 const CONTEXT_QUERY = /* GraphQL */ `
@@ -86,6 +87,8 @@ const REFRESH_MUTATION = /* GraphQL */ `
         outcome
         quality
         reason
+        serverName
+        toolName
       }
     }
   }
@@ -151,6 +154,10 @@ function toSummary(raw: unknown): CanvasSummaryItem | null {
     headVersion:
       typeof record.headVersion === "number" ? record.headVersion : 0,
     status: asString(record.status) || "final",
+    stablePartId:
+      typeof record.stablePartId === "string" && record.stablePartId
+        ? record.stablePartId
+        : null,
   };
 }
 
@@ -343,6 +350,8 @@ export function createApiCanvasProvider(
                   outcome: asString(b.outcome),
                   quality: asString(b.quality),
                   reason: typeof b.reason === "string" ? b.reason : null,
+                  serverName: asString(b.serverName),
+                  toolName: asString(b.toolName),
                 };
               })
               .filter(
