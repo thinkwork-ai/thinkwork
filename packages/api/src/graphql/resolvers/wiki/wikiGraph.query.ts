@@ -10,9 +10,8 @@
  * `wiki_page_links` rows filtered to active-page endpoints.
  *
  * Archived pages and links that dangle into archived pages are excluded.
- * Isolated active pages are also excluded: the graph is an ontology-style
- * relationship view, so every rendered node must participate in at least
- * one visible active-to-active relationship.
+ * Isolated active pages are included so the graph view matches the table's
+ * "compiled pages exist" signal even before explicit page links exist.
  */
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -107,7 +106,6 @@ export const wikiGraph = async (
 			FROM wiki.page_links l
 			JOIN scope_pages sp1 ON sp1.id = l.from_page_id
 			JOIN scope_pages sp2 ON sp2.id = l.to_page_id
-			WHERE l.kind NOT IN ('reference', 'parent_of', 'child_of')
 		),
 		endpoints AS (
 			SELECT from_page_id AS page_id FROM scope_links
@@ -118,18 +116,16 @@ export const wikiGraph = async (
 			sp.id, sp.type, sp.entity_subtype, sp.slug, sp.title,
 			COALESCE(ep.edge_count, 0)::int AS edge_count
 		FROM scope_pages sp
-		JOIN (
+		LEFT JOIN (
 			SELECT page_id, COUNT(*)::int AS edge_count
 			FROM endpoints
 			GROUP BY page_id
 		) ep ON ep.page_id = sp.id
-		WHERE ep.edge_count > 0
 		ORDER BY edge_count DESC, sp.title ASC
 	`);
 
   const pageRows = ((pageResult as unknown as { rows?: WikiGraphNodeRow[] })
     .rows ?? []) as WikiGraphNodeRow[];
-  const connectedPageRows = pageRows.filter((r) => Number(r.edge_count) > 0);
 
   const edgeResult = await db.execute(sql`
 		SELECT DISTINCT l.from_page_id AS source, l.to_page_id AS target, l.kind
@@ -142,13 +138,12 @@ export const wikiGraph = async (
 		  AND p2.tenant_id = ${args.tenantId}
 		  AND ${ownerPredicate("p2", userId)}
 		  AND p2.status = 'active'
-		  AND l.kind NOT IN ('reference', 'parent_of', 'child_of')
 	`);
 
   const edgeRows = ((edgeResult as unknown as { rows?: WikiGraphEdgeRow[] })
     .rows ?? []) as WikiGraphEdgeRow[];
 
-  const nodes: GraphQLWikiGraphNode[] = connectedPageRows.map((r) => ({
+  const nodes: GraphQLWikiGraphNode[] = pageRows.map((r) => ({
     id: r.id,
     label: r.title,
     type: "page",

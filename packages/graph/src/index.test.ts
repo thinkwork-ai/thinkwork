@@ -52,7 +52,7 @@ describe("@thinkwork/graph public API", () => {
     expect(pageTypeLabel(undefined)).toBe("Page");
   });
 
-  it("builds wiki graph data from connected triples only", () => {
+  it("builds wiki graph data while preserving isolated pages", () => {
     const nodes = [
       {
         id: "u1:a",
@@ -98,7 +98,7 @@ describe("@thinkwork/graph public API", () => {
       ],
     ]);
 
-    expect(graph.nodes.map((n) => n.id)).toEqual(["u1:a", "u1:b"]);
+    expect(graph.nodes.map((n) => n.id)).toEqual(["u1:a", "u1:b", "u1:orphan"]);
     expect(graph.links).toEqual([
       { source: "u1:a", target: "u1:b", label: "has task", weight: 0.7 },
     ]);
