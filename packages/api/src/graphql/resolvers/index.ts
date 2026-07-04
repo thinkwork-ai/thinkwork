@@ -15,7 +15,11 @@ import { inboxQueries } from "./inbox/index.js";
 import { triggerQueries } from "./triggers/index.js";
 import { costQueries } from "./costs/index.js";
 import { knowledgeQueries } from "./knowledge/index.js";
-import { artifactQueries, artifactTypeResolvers } from "./artifacts/index.js";
+import {
+  artifactQueries,
+  artifactTypeResolvers,
+  artifactVersionTypeResolvers,
+} from "./artifacts/index.js";
 import { appletQueries, appletMutations } from "./applets/index.js";
 import { orchestrationQueries } from "./orchestration/index.js";
 import { messageQueries } from "./messages/index.js";
@@ -260,6 +264,7 @@ import { tenantTypeResolvers } from "./core/types.js";
 export const typeResolvers: Record<string, Record<string, any>> = {
   Tenant: tenantTypeResolvers,
   Artifact: artifactTypeResolvers,
+  ArtifactVersion: artifactVersionTypeResolvers,
   Agent: agentTypeResolvers,
   AgentProfile: agentProfileTypeResolvers,
   AgentProfileSpaceAssignment: agentProfileSpaceAssignmentTypeResolvers,

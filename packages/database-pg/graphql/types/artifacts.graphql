@@ -37,6 +37,11 @@ type ArtifactVersion {
   contentHash: String!
   createdBy: ID
   createdAt: AWSDateTime!
+  # Living Artifacts (THINK-145 U10): the pinned revision's canvas payload,
+  # lazily hydrated from S3. Only fetched when selected — the version list
+  # queries without it. Read access is gated by the parent Artifact resolver
+  # (space membership / thread visibility, R15).
+  content: String
 }
 
 # Refresh identity of a data binding.
@@ -268,6 +273,10 @@ extend type Query {
     # canvases. Set true to also return draft-status canvases (unsaved GenUI
     # emissions). Non-canvas artifacts are always returned regardless.
     includeDrafts: Boolean
+    # Living Artifacts (THINK-145 U10/R15): scope the list to one space's
+    # canvases (the space entry point). Combined with the existing membership
+    # visibility gate — a caller still only sees canvases they may access.
+    spaceId: ID
     limit: Int
     cursor: String
   ): [Artifact!]!
@@ -320,6 +329,8 @@ extend type Mutation {
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
   promoteDraftApplet(input: PromoteDraftAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
-  adminUpdateAppletSource(input: AdminUpdateAppletSourceInput!): SaveAppletPayload!
+  adminUpdateAppletSource(
+    input: AdminUpdateAppletSourceInput!
+  ): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

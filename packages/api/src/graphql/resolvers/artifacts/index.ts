@@ -9,9 +9,12 @@ import { refreshCanvasData } from "./refreshCanvasData.mutation.js";
 import { createCanvasRefreshSchedule } from "./createCanvasRefreshSchedule.mutation.js";
 import { updateArtifact } from "./updateArtifact.mutation.js";
 import { deleteArtifact } from "./deleteArtifact.mutation.js";
-import { artifactTypeResolvers } from "./types.js";
+import {
+  artifactTypeResolvers,
+  artifactVersionTypeResolvers,
+} from "./types.js";
 
-export { artifactTypeResolvers };
+export { artifactTypeResolvers, artifactVersionTypeResolvers };
 export const artifactQueries = { artifacts, artifact };
 export const artifactMutations = {
   createArtifact,

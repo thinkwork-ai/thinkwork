@@ -26,6 +26,10 @@ export const artifacts_ = async (
   const conditions = [eq(artifacts.tenant_id, args.tenantId)];
   if (args.threadId) conditions.push(eq(artifacts.thread_id, args.threadId));
   if (args.agentId) conditions.push(eq(artifacts.agent_id, args.agentId));
+  // R15 space entry point: scope to one space's canvases. The membership
+  // visibility predicate below still applies, so this only narrows the set the
+  // caller may already see.
+  if (args.spaceId) conditions.push(eq(artifacts.space_id, args.spaceId));
   if (args.type) conditions.push(eq(artifacts.type, args.type.toLowerCase()));
   if (args.status)
     conditions.push(eq(artifacts.status, args.status.toLowerCase()));

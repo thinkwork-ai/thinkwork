@@ -12,15 +12,18 @@ import { useTenant } from "@/context/TenantContext";
 import { AdminAppletsQuery } from "@/lib/applet-admin-queries";
 import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
-import { AppletsQuery } from "@/lib/graphql-queries";
+import { AppletsQuery, TenantCanvasesQuery } from "@/lib/graphql-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
+  canvasToArtifactItem,
   DEFAULT_SORT_BY,
   filterArtifactItems,
+  isLivingCanvasNode,
   sortArtifactItems,
   toArtifactItem,
   type ArtifactItem,
+  type CanvasListNode,
 } from "./artifacts-filtering";
 
 interface AppletsResult {
@@ -131,6 +134,8 @@ function LiveArtifactsListBody({
   const operatorReady = roleResolved && isOperator;
 
   const [userIdFilter, setUserIdFilter] = useState("");
+  // R14: canvas rows default to saved-only; the toggle flips includeDrafts.
+  const [includeDrafts, setIncludeDrafts] = useState(false);
   // Debounce the value that drives the query so a typed user ID issues ONE
   // admin request, not one per keystroke. The input itself stays instant.
   const trimmedUserId = useDebouncedValue(userIdFilter.trim(), 250);
@@ -153,18 +158,30 @@ function LiveArtifactsListBody({
     pause: !filterActive,
   });
 
+  // Living canvases join the list via the artifacts query. Suppressed while the
+  // operator user-ID filter is active (that view is applet-scoped by user).
+  const [canvasResult] = useQuery<{ artifacts?: CanvasListNode[] | null }>({
+    query: TenantCanvasesQuery,
+    variables: { tenantId: tenantId ?? "", includeDrafts },
+    requestPolicy: "cache-and-network",
+    pause: !tenantId || filterActive,
+  });
+
   const source = filterActive ? adminResult : defaultResult;
   const rawNodes = filterActive
     ? adminResult.data?.adminApplets?.nodes
     : defaultResult.data?.applets?.nodes;
 
-  const items: ArtifactItem[] = useMemo(
-    () =>
-      (rawNodes ?? []).map((node) =>
-        toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
-      ),
-    [rawNodes],
-  );
+  const items: ArtifactItem[] = useMemo(() => {
+    const appletItems = (rawNodes ?? []).map((node) =>
+      toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
+    );
+    if (filterActive) return appletItems;
+    const canvasItems = (canvasResult.data?.artifacts ?? [])
+      .filter(isLivingCanvasNode)
+      .map(canvasToArtifactItem);
+    return [...appletItems, ...canvasItems];
+  }, [rawNodes, filterActive, canvasResult.data?.artifacts]);
 
   return (
     <ArtifactsListBodyView
@@ -175,6 +192,8 @@ function LiveArtifactsListBody({
       userIdFilter={userIdFilter}
       onUserIdFilterChange={setUserIdFilter}
       filterActive={filterActive}
+      includeDrafts={includeDrafts}
+      onIncludeDraftsChange={setIncludeDrafts}
       detailPathFor={detailPathFor}
       headerSlot={headerSlot}
     />
@@ -189,6 +208,8 @@ function ArtifactsListBodyView({
   userIdFilter,
   onUserIdFilterChange,
   filterActive,
+  includeDrafts,
+  onIncludeDraftsChange,
   detailPathFor,
   headerSlot,
 }: {
@@ -199,6 +220,8 @@ function ArtifactsListBodyView({
   userIdFilter: string;
   onUserIdFilterChange: (value: string) => void;
   filterActive: boolean;
+  includeDrafts?: boolean;
+  onIncludeDraftsChange?: (value: boolean) => void;
   detailPathFor: (id: string) => string;
   headerSlot?: ReactNode;
 }) {
@@ -244,6 +267,8 @@ function ArtifactsListBodyView({
         showUserFilter={showUserFilter}
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}
+        includeDrafts={includeDrafts}
+        onIncludeDraftsChange={onIncludeDraftsChange}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4">
         {showLoadingShell ? (

@@ -24,6 +24,10 @@ import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
+import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
+import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionHistory";
+import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
+import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
@@ -55,6 +59,8 @@ interface ArtifactRouteNode {
   id: string;
   tenantId: string;
   threadId?: string | null;
+  spaceId?: string | null;
+  headVersion?: number | null;
   title: string;
   type: string;
   status: string;
@@ -65,6 +71,8 @@ interface ArtifactRouteNode {
   favoritedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  bindings?: CanvasBinding[] | null;
+  versions?: CanvasVersion[] | null;
 }
 
 function AppArtifactPage() {
@@ -90,6 +98,7 @@ export function AppletRouteContent({
 }) {
   const [
     { data: artifactData, fetching: artifactFetching, error: artifactError },
+    reexecuteArtifactQuery,
   ] = useQuery<ArtifactDetailResult>({
     query: ArtifactDetailForRouteQuery,
     variables: { id: appId },
@@ -216,6 +225,9 @@ export function AppletRouteContent({
         artifact={artifact}
         backHref={backHref}
         breadcrumbRoot={breadcrumbRoot}
+        onChanged={() =>
+          reexecuteArtifactQuery({ requestPolicy: "network-only" })
+        }
       />
     );
   }
@@ -347,11 +359,14 @@ function DataViewArtifactContent({
   artifact,
   backHref,
   breadcrumbRoot,
+  onChanged,
 }: {
   artifact: ArtifactRouteNode;
   backHref: string;
   breadcrumbRoot?: { label: string; href: string };
+  onChanged: () => void;
 }) {
+  const isCanvas = isLivingCanvasMetadata(artifact.metadata);
   const snapshot = parseJsonRenderSnapshot(artifact.content);
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
@@ -384,6 +399,28 @@ function DataViewArtifactContent({
     titleTrailing,
     actionKey: `artifact-actions:${artifact.id}:${artifact.favoritedAt ?? "_"}`,
   });
+
+  // Living Artifacts (THINK-145 U10): living canvases get the full canvas
+  // surface (freshness chrome, save/pin, version history). Legacy promote-copy
+  // snapshots keep the read-only render path below.
+  if (isCanvas) {
+    return (
+      <CanvasArtifactView
+        artifact={{
+          id: artifact.id,
+          title: artifact.title,
+          status: artifact.status,
+          spaceId: artifact.spaceId ?? null,
+          headVersion: artifact.headVersion ?? 0,
+          content: artifact.content ?? null,
+          summary: artifact.summary ?? null,
+          bindings: artifact.bindings ?? [],
+          versions: artifact.versions ?? [],
+        }}
+        onChanged={onChanged}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto grid w-full max-w-5xl gap-4 p-4 sm:p-6">

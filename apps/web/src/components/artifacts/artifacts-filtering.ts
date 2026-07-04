@@ -36,6 +36,61 @@ export function toArtifactItem(preview: AppArtifactPreview): ArtifactItem {
   };
 }
 
+/** Raw canvas row from the `artifacts(type: DATA_VIEW)` list query. */
+export interface CanvasListNode {
+  id: string;
+  title?: string | null;
+  status?: string | null;
+  updatedAt?: string | null;
+  headVersion?: number | null;
+  metadata?: unknown;
+}
+
+/** True when a DATA_VIEW artifact row is a living GenUI canvas. */
+export function isLivingCanvasNode(node: CanvasListNode): boolean {
+  const meta = node.metadata;
+  const record =
+    typeof meta === "string"
+      ? safeParse(meta)
+      : meta && typeof meta === "object" && !Array.isArray(meta)
+        ? (meta as Record<string, unknown>)
+        : null;
+  return record?.kind === "json_render_canvas";
+}
+
+function safeParse(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Project a living-canvas artifact row into an `ArtifactItem` so it renders in
+ * the shared Artifacts table alongside applets. `id === artifactId` (the row
+ * navigates straight to `/artifacts/$id`); `version` shows the head version.
+ */
+export function canvasToArtifactItem(node: CanvasListNode): ArtifactItem {
+  return {
+    id: node.id,
+    artifactId: node.id,
+    title: node.title?.trim() || "Canvas",
+    userName: null,
+    modelId: null,
+    stdlibVersion: null,
+    generatedAt: node.updatedAt ?? "",
+    favoritedAt: null,
+    version:
+      typeof node.headVersion === "number" && node.headVersion > 0
+        ? node.headVersion
+        : null,
+  };
+}
+
 export interface FilterArtifactItemsInput {
   items: ArtifactItem[];
   search: string;
