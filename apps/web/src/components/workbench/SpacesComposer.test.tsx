@@ -78,6 +78,18 @@ const approvedModels = [
   },
 ];
 
+// Mirrors packages/react-native-sdk/src/composer-capabilities.ts. This is a
+// hand-kept sync guard; apps/web intentionally does not import the RN SDK.
+const mirroredComposerCapabilities = [
+  "attach",
+  "agentToggle",
+  "goalMode",
+  "spaceSelector",
+  "modelPicker",
+  "voice",
+  "mentions",
+] as const;
+
 describe("SpacesComposer focus styling", () => {
   // Plan U2: the empty-thread composer must not show a darker "well" or
   // ring when its textarea is focused. We assert on the className the
@@ -105,6 +117,43 @@ describe("SpacesComposer focus styling", () => {
 });
 
 describe("SpacesComposer", () => {
+  it("renders controls matching the shared composer capability contract", () => {
+    render(
+      <SpacesComposer
+        value=""
+        onChange={() => {}}
+        onSubmit={() => {}}
+        mentionTargets={mentionTargets}
+        spaces={[
+          { id: "space-default", name: "Default" },
+          { id: "space-analysis", name: "Analysis" },
+        ]}
+        selectedSpaceId="space-default"
+        selectedSpaceIsDefault
+        onSelectedSpaceChange={() => {}}
+        approvedModels={approvedModels}
+        selectedModelId="anthropic.claude-sonnet"
+        onSelectedModelChange={() => {}}
+      />,
+    );
+
+    const input = screen.getByLabelText("Send message");
+    const renderedControls = [
+      screen.queryByRole("button", { name: "Attach file" }) && "attach",
+      screen.queryByRole("button", { name: "Send to agent" }) && "agentToggle",
+      screen.queryByRole("button", { name: "Goal mode" }) && "goalMode",
+      screen.queryByLabelText("Select Space") && "spaceSelector",
+      screen.queryByLabelText("Select model") && "modelPicker",
+      screen.queryByRole("button", { name: "Voice input" }) && "voice",
+      input.getAttribute("data-placeholder")?.includes("mention") &&
+        "mentions",
+    ].filter(Boolean);
+
+    expect(renderedControls.sort()).toEqual(
+      [...mirroredComposerCapabilities].sort(),
+    );
+  });
+
   it("renders a tabler planet glyph for the space picker", () => {
     const { container } = renderComposerWithSpaces();
 

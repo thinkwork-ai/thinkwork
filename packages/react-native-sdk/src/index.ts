@@ -19,8 +19,13 @@ export {
 export {
   useMessages,
   useSendMessage,
+  type SendMessageGoalMode,
   type SendMessageOptions,
 } from "./hooks/use-messages";
+export {
+  ComposerCapabilities,
+  type ComposerCapability,
+} from "./composer-capabilities";
 export {
   useNewMessageSubscription,
   useThreadTurnSubscription,
