@@ -16,9 +16,7 @@ export function visibleApprovalItems<T extends ApprovalItemLike>(
   return visibleMobileInboxItems(items);
 }
 
-export function parseApprovalConfig(
-  config: unknown,
-): Record<string, unknown> {
+export function parseApprovalConfig(config: unknown): Record<string, unknown> {
   if (!config) return {};
   if (typeof config === "string") {
     try {

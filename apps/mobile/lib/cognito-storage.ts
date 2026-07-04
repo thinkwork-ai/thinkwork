@@ -155,8 +155,8 @@ export const CognitoSecureStorage = {
       return value;
     }
     memoryCache.set(key, value);
-    SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS).catch((e) =>
-      console.warn("[CognitoStorage] setItem error:", e),
+    SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS).catch(
+      (e) => console.warn("[CognitoStorage] setItem error:", e),
     );
     updateManifest();
     return value;

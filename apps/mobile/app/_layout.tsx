@@ -342,79 +342,79 @@ function RootLayoutNav() {
           <LiveStatusProvider>
             <ThemeProvider value={NAV_THEME.dark}>
               <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen
-                name="sign-in"
-                options={{ animationTypeForReplace: "pop" }}
-              />
-              <Stack.Screen name="forgot-password" />
-              <Stack.Screen name="sign-up" />
-              <Stack.Screen name="verify" />
-              <Stack.Screen name="onboarding/verify-email" />
-              <Stack.Screen name="onboarding/verify-code" />
-              <Stack.Screen name="onboarding/payment" />
-              <Stack.Screen name="onboarding/complete" />
-              <Stack.Screen
-                name="auth/callback"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="deployment-profile"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="demo" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="thread/[threadId]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="chat/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="threads" />
-              <Stack.Screen name="routines/[id]/index" />
-              <Stack.Screen
-                name="settings/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="settings/account" />
-              <Stack.Screen name="settings/profile" />
-              <Stack.Screen name="settings/credentials" />
-              <Stack.Screen name="settings/integration-detail" />
-              <Stack.Screen name="settings/usage" />
-              <Stack.Screen
-                name="settings/billing"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="invite/[token]" />
-              <Stack.Screen name="agents/[id]/files" />
-              <Stack.Screen name="agents/[id]/file-view" />
-              <Stack.Screen name="agents/[id]/model" />
-              <Stack.Screen
-                name="artifacts/[id]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/list"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/[file]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/edit-file"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="heartbeats/new" />
-              <Stack.Screen name="heartbeats/[id]" />
-              <Stack.Screen name="routines/new" />
-              <Stack.Screen name="routines/builder" />
-              <Stack.Screen name="routines/builder-chat" />
+                <Stack.Screen
+                  name="sign-in"
+                  options={{ animationTypeForReplace: "pop" }}
+                />
+                <Stack.Screen name="forgot-password" />
+                <Stack.Screen name="sign-up" />
+                <Stack.Screen name="verify" />
+                <Stack.Screen name="onboarding/verify-email" />
+                <Stack.Screen name="onboarding/verify-code" />
+                <Stack.Screen name="onboarding/payment" />
+                <Stack.Screen name="onboarding/complete" />
+                <Stack.Screen
+                  name="auth/callback"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="deployment-profile"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="demo" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="thread/[threadId]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="chat/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="threads" />
+                <Stack.Screen name="routines/[id]/index" />
+                <Stack.Screen
+                  name="settings/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="settings/account" />
+                <Stack.Screen name="settings/profile" />
+                <Stack.Screen name="settings/credentials" />
+                <Stack.Screen name="settings/integration-detail" />
+                <Stack.Screen name="settings/usage" />
+                <Stack.Screen
+                  name="settings/billing"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="invite/[token]" />
+                <Stack.Screen name="agents/[id]/files" />
+                <Stack.Screen name="agents/[id]/file-view" />
+                <Stack.Screen name="agents/[id]/model" />
+                <Stack.Screen
+                  name="artifacts/[id]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/list"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/[file]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/edit-file"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="heartbeats/new" />
+                <Stack.Screen name="heartbeats/[id]" />
+                <Stack.Screen name="routines/new" />
+                <Stack.Screen name="routines/builder" />
+                <Stack.Screen name="routines/builder-chat" />
                 <Stack.Screen name="fleet/[id]/inbox" />
               </Stack>
 

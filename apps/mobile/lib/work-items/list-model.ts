@@ -1,7 +1,4 @@
-import {
-  WorkItemPriority,
-  WorkItemStatusCategory,
-} from "@/lib/gql/graphql";
+import { WorkItemPriority, WorkItemStatusCategory } from "@/lib/gql/graphql";
 
 export interface WorkItemListModelItem {
   dueAt?: string | null;

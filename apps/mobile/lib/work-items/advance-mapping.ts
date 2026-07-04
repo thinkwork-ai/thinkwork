@@ -20,7 +20,9 @@ export function firstActiveStatusInCategory(
 ): WorkItemStatusLookup | null {
   return (
     statuses
-      .filter((status) => status.isActive !== false && status.category === category)
+      .filter(
+        (status) => status.isActive !== false && status.category === category,
+      )
       .sort(
         (a, b) =>
           (a.displayOrder ?? Number.MAX_SAFE_INTEGER) -

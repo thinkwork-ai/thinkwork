@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  WorkItemPriority,
-  WorkItemStatusCategory,
-} from "@/lib/gql/graphql";
+import { WorkItemPriority, WorkItemStatusCategory } from "@/lib/gql/graphql";
 import { compareWorkItems, shouldShowWorkItemByCategory } from "./list-model";
 
 describe("work item list model", () => {

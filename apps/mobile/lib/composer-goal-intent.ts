@@ -67,7 +67,9 @@ export function clearGoalIntent(): GoalIntentState {
   };
 }
 
-export function completeGoalIntentSend(state: GoalIntentState): GoalIntentState {
+export function completeGoalIntentSend(
+  state: GoalIntentState,
+): GoalIntentState {
   return state.activeGoalMode ? clearGoalIntent() : state;
 }
 

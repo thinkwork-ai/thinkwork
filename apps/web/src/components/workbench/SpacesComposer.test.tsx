@@ -145,8 +145,7 @@ describe("SpacesComposer", () => {
       screen.queryByLabelText("Select Space") && "spaceSelector",
       screen.queryByLabelText("Select model") && "modelPicker",
       screen.queryByRole("button", { name: "Voice input" }) && "voice",
-      input.getAttribute("data-placeholder")?.includes("mention") &&
-        "mentions",
+      input.getAttribute("data-placeholder")?.includes("mention") && "mentions",
     ].filter(Boolean);
 
     expect(renderedControls.sort()).toEqual(

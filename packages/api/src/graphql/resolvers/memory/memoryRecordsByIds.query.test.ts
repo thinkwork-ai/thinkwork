@@ -118,11 +118,9 @@ describe("memoryRecordsByIds", () => {
     );
 
     await expect(
-      memoryRecordsByIds(
-        null,
-        { tenantId: "tenant-2", ids: ["owned-older"] },
-        { auth: {} } as any,
-      ),
+      memoryRecordsByIds(null, { tenantId: "tenant-2", ids: ["owned-older"] }, {
+        auth: {},
+      } as any),
     ).resolves.toEqual([]);
     expect(getMemoryServicesMock).not.toHaveBeenCalled();
     expect(inspectMock).not.toHaveBeenCalled();

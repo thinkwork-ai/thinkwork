@@ -1,11 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -175,7 +169,9 @@ export default function WorkItemDetailScreen() {
                   <Text className="text-sm font-semibold">
                     {item.status?.name ?? "No status"}
                   </Text>
-                  <Muted className="text-xs">{item.status?.category ?? ""}</Muted>
+                  <Muted className="text-xs">
+                    {item.status?.category ?? ""}
+                  </Muted>
                 </View>
                 <ChevronRight size={18} color={colors.mutedForeground} />
               </Pressable>
@@ -260,9 +256,7 @@ export default function WorkItemDetailScreen() {
                 <MessageSquarePlus
                   size={19}
                   color={
-                    commentText.trim()
-                      ? "#ffffff"
-                      : colors.mutedForeground
+                    commentText.trim() ? "#ffffff" : colors.mutedForeground
                   }
                 />
               </Pressable>
@@ -309,7 +303,9 @@ export default function WorkItemDetailScreen() {
                       <Text className="text-sm font-medium">{status.name}</Text>
                       <Muted className="text-xs">{status.category}</Muted>
                     </View>
-                    {selected ? <Check size={18} color={colors.primary} /> : null}
+                    {selected ? (
+                      <Check size={18} color={colors.primary} />
+                    ) : null}
                   </Pressable>
                 );
               })}

@@ -92,7 +92,9 @@ export function WorkItemList({
   >([]);
   const [statusesBySpaceId, setStatusesBySpaceId] = useState(statusCache);
   const [refreshing, setRefreshing] = useState(false);
-  const [blockingItem, setBlockingItem] = useState<WorkItemRowItem | null>(null);
+  const [blockingItem, setBlockingItem] = useState<WorkItemRowItem | null>(
+    null,
+  );
   const [blockingClose, setBlockingClose] = useState<(() => void) | null>(null);
   const [blockOtherText, setBlockOtherText] = useState("");
   const [reassignItem, setReassignItem] = useState<WorkItemRowItem | null>(
@@ -166,9 +168,8 @@ export function WorkItemList({
         .query(WorkItemStatusesQuery, { tenantId, spaceId })
         .toPromise()
         .then((result) => {
-          const statuses =
-            ((result.data as WorkItemStatusesResult | undefined)
-              ?.workItemStatuses ?? []) as WorkItemStatusLookup[];
+          const statuses = ((result.data as WorkItemStatusesResult | undefined)
+            ?.workItemStatuses ?? []) as WorkItemStatusLookup[];
           statusCache.set(cacheKey, statuses);
           setStatusesBySpaceId(new Map(statusCache));
         })
@@ -186,7 +187,9 @@ export function WorkItemList({
 
   const statusCategoryByIdForItem = useCallback(
     (item: WorkItemRowItem) =>
-      new Map(statusesForItem(item).map((status) => [status.id, status.category])),
+      new Map(
+        statusesForItem(item).map((status) => [status.id, status.category]),
+      ),
     [statusesForItem],
   );
 
@@ -234,7 +237,10 @@ export function WorkItemList({
         statusCategoryByIdForItem(item),
       );
       if (!targetCategory) return;
-      const targetStatus = firstActiveStatusInCategory(statuses, targetCategory);
+      const targetStatus = firstActiveStatusInCategory(
+        statuses,
+        targetCategory,
+      );
       if (!targetStatus) {
         Alert.alert("No target status", "This space has no matching status.");
         return;
@@ -329,7 +335,8 @@ export function WorkItemList({
 
   const reassignMembers = useMemo(() => {
     if (!reassignItem) return [];
-    const spaces = (spacesData as SpacesWithMembersResult | undefined)?.spaces ?? [];
+    const spaces =
+      (spacesData as SpacesWithMembersResult | undefined)?.spaces ?? [];
     return (
       spaces
         .find((space) => space.id === reassignItem.spaceId)
@@ -383,53 +390,51 @@ export function WorkItemList({
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {filtersOpen ? (
-      <View
-        className="border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950"
-      >
-        <FlatList
-          horizontal
-          data={CATEGORY_OPTIONS}
-          keyExtractor={(item) => item.value}
-          showsHorizontalScrollIndicator={false}
-          renderItem={({ item }) => {
-            const selected = selectedCategories.includes(item.value);
-            return (
-              <Pressable
-                onPress={() =>
-                  setSelectedCategories((prev) =>
-                    prev.includes(item.value)
-                      ? prev.filter((value) => value !== item.value)
-                      : [...prev, item.value],
-                  )
-                }
-                className="mr-2 flex-row items-center rounded-full border px-3"
-                style={{
-                  minHeight: 32,
-                  paddingVertical: 6,
-                  borderColor: selected ? colors.primary : colors.border,
-                  backgroundColor: selected
-                    ? isDark
-                      ? "#1e3a5f"
-                      : "#e0f2fe"
-                    : "transparent",
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                hitSlop={6}
-              >
-                <Text
-                  className="text-sm font-medium"
+        <View className="border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+          <FlatList
+            horizontal
+            data={CATEGORY_OPTIONS}
+            keyExtractor={(item) => item.value}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const selected = selectedCategories.includes(item.value);
+              return (
+                <Pressable
+                  onPress={() =>
+                    setSelectedCategories((prev) =>
+                      prev.includes(item.value)
+                        ? prev.filter((value) => value !== item.value)
+                        : [...prev, item.value],
+                    )
+                  }
+                  className="mr-2 flex-row items-center rounded-full border px-3"
                   style={{
-                    color: selected ? colors.primary : colors.foreground,
+                    minHeight: 32,
+                    paddingVertical: 6,
+                    borderColor: selected ? colors.primary : colors.border,
+                    backgroundColor: selected
+                      ? isDark
+                        ? "#1e3a5f"
+                        : "#e0f2fe"
+                      : "transparent",
                   }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  hitSlop={6}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
-      </View>
+                  <Text
+                    className="text-sm font-medium"
+                    style={{
+                      color: selected ? colors.primary : colors.foreground,
+                    }}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
       ) : null}
 
       {error ? (
@@ -504,7 +509,10 @@ export function WorkItemList({
         }}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 16 }}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: insets.bottom + 16,
+          }}
         >
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-base font-semibold">Block reason</Text>
@@ -567,7 +575,10 @@ export function WorkItemList({
         }}
       >
         <BottomSheetScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 16 }}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: insets.bottom + 16,
+          }}
         >
           <Text className="mb-3 text-base font-semibold">Reassign</Text>
           {reassignMembers.map((member) => (

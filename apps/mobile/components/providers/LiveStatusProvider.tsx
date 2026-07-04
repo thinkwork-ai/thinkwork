@@ -265,7 +265,10 @@ function notifyThreadRegistrations(
   threadId: string | null,
 ) {
   for (const registration of registrations) {
-    if (threadId === null || shouldRefetchForEntity(registration.ids, threadId)) {
+    if (
+      threadId === null ||
+      shouldRefetchForEntity(registration.ids, threadId)
+    ) {
       registration.callback();
     }
   }

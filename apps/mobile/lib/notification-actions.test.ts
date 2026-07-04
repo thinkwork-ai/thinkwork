@@ -44,7 +44,10 @@ import {
   resetHandledNotificationActionsForTests,
 } from "./notification-actions";
 
-function response(requestId: string, actionIdentifier = APPROVE_NOTIFICATION_ACTION) {
+function response(
+  requestId: string,
+  actionIdentifier = APPROVE_NOTIFICATION_ACTION,
+) {
   return {
     actionIdentifier,
     notification: {
@@ -62,7 +65,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetHandledNotificationActionsForTests();
   mockGetIdToken.mockResolvedValue("id-token");
-  mockGetPlatformConfig.mockReturnValue({ graphqlUrl: "https://api.test/graphql" });
+  mockGetPlatformConfig.mockReturnValue({
+    graphqlUrl: "https://api.test/graphql",
+  });
 });
 
 describe("handleComputerApprovalActionResponse", () => {

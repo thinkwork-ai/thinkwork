@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@thinkwork/react-native-sdk", async () => {
-  return await import(
-    "../../../../packages/react-native-sdk/src/send-message-options"
-  );
+  return await import("../../../../packages/react-native-sdk/src/send-message-options");
 });
 
 import {

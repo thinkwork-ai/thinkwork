@@ -188,7 +188,7 @@ export default function FleetApprovalsScreen() {
                   <Muted className="text-xs">
                     {expired
                       ? "This approval expired"
-                      : expiry ?? "Pending approval"}
+                      : (expiry ?? "Pending approval")}
                   </Muted>
                 </View>
 
@@ -196,9 +196,7 @@ export default function FleetApprovalsScreen() {
                   {approvalQuestion(item)}
                 </Text>
                 {approvalReason(item) ? (
-                  <Muted className="mt-2 text-sm">
-                    {approvalReason(item)}
-                  </Muted>
+                  <Muted className="mt-2 text-sm">{approvalReason(item)}</Muted>
                 ) : null}
 
                 {itemAlreadyResolved ? (

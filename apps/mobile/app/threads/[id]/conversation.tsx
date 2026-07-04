@@ -1,4 +1,10 @@
-import React, { useRef, useMemo, useState, useEffect, useCallback } from "react";
+import React, {
+  useRef,
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import {
   Alert,
   View,
@@ -33,9 +39,7 @@ import {
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
-import {
-  mentionCandidatesForTargets,
-} from "@/lib/thread-mentions";
+import { mentionCandidatesForTargets } from "@/lib/thread-mentions";
 import { buildThreadConversationSendVariables } from "@/lib/thread-conversation-send";
 import {
   applyGoalIntent,
@@ -130,16 +134,15 @@ export default function ThreadConversationScreen() {
     [mentionTargetsData?.threadMentionTargets],
   );
   const [messageText, setMessageText] = useState("");
-  const [pendingMentions, setPendingMentions] = useState<
-    MessageInputMention[]
-  >([]);
+  const [pendingMentions, setPendingMentions] = useState<MessageInputMention[]>(
+    [],
+  );
   const [attachedImage, setAttachedImage] = useState<ImagePart | null>(null);
   const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<PickedDocument | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [goalDraft, setGoalDraft] = useState<GoalIntentDraft>(
-    emptyGoalIntentDraft,
-  );
+  const [goalDraft, setGoalDraft] =
+    useState<GoalIntentDraft>(emptyGoalIntentDraft);
   const [activeGoalMode, setActiveGoalMode] =
     useState<SendMessageGoalMode | null>(null);
   const [showSystemMessages, setShowSystemMessages] = useState(false);

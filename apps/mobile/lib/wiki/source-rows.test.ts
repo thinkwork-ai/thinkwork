@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
-import {
-  resolveSourceRows,
-  shouldShowSourcesAffordance,
-} from "./source-rows";
+import { resolveSourceRows, shouldShowSourcesAffordance } from "./source-rows";
 
 describe("wiki source rows", () => {
   it("keeps one row per source id and marks missing records unavailable", () => {
     expect(
-      resolveSourceRows(["mem-1", "purged", "mem-2"], [
-        {
-          memoryRecordId: "mem-2",
-          content: { text: "Second source" },
-          createdAt: "2026-07-04T12:00:00.000Z",
-        },
-        {
-          memoryRecordId: "mem-1",
-          content: { text: "First source" },
-          createdAt: "2026-07-04T11:00:00.000Z",
-        },
-      ]),
+      resolveSourceRows(
+        ["mem-1", "purged", "mem-2"],
+        [
+          {
+            memoryRecordId: "mem-2",
+            content: { text: "Second source" },
+            createdAt: "2026-07-04T12:00:00.000Z",
+          },
+          {
+            memoryRecordId: "mem-1",
+            content: { text: "First source" },
+            createdAt: "2026-07-04T11:00:00.000Z",
+          },
+        ],
+      ),
     ).toEqual([
       {
         kind: "resolved",

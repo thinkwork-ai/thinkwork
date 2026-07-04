@@ -665,113 +665,12 @@ export const MessageInputFooter = forwardRef<
 
         {/* Action buttons row */}
         <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
-            <View className="flex-row items-center gap-4">
-              {onAttach && (
-                <Pressable
-                  onPress={disabled ? undefined : onAttach}
-                  disabled={disabled}
-                  accessibilityLabel="Attach image"
-                  className="p-1 active:opacity-70"
-                  hitSlop={8}
-                  style={{
-                    minWidth: 44,
-                    minHeight: 44,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: disabled ? 0.35 : 1,
-                  }}
-                >
-                  <Paperclip size={24} color={colors.mutedForeground} />
-                </Pressable>
-              )}
-              {(onSpacePress || onSpaceSelect) && (
-                <View ref={spaceAnchorRef}>
-                  <Pressable
-                    onPress={handleSpacePress}
-                    disabled={disabled}
-                    // Borderless/transparent to match the desktop composer's space picker —
-                    // it sits inline with the other toolbar icons, no filled pill.
-                    className="flex-row items-center gap-1.5 active:opacity-70"
-                    style={{
-                      minHeight: 32,
-                      paddingTop: 2,
-                      opacity: disabled ? 0.35 : 1,
-                    }}
-                  >
-                    <IconPlanet size={24} color={colors.mutedForeground} />
-                    <Text
-                      style={{
-                        color: colors.mutedForeground,
-                        fontSize: 18,
-                        maxWidth: 140,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {selectedSpace?.name ?? "Default"}
-                    </Text>
-                    <ChevronDown size={20} color={colors.mutedForeground} />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-            <View className="flex-row items-center gap-4">
-              {onToggleAgent && (
-                <Pressable
-                  onPress={disabled ? undefined : onToggleAgent}
-                  disabled={disabled}
-                  accessibilityLabel="Send to agent"
-                  accessibilityState={{ selected: agentEnabled }}
-                  className="p-1 active:opacity-70"
-                  hitSlop={8}
-                  style={{
-                    minWidth: 44,
-                    minHeight: 44,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: disabled ? 0.35 : 1,
-                  }}
-                >
-                  <Bot
-                    size={24}
-                    color={agentEnabled ? "#54a9ff" : colors.mutedForeground}
-                  />
-                </Pressable>
-              )}
-              {goalDraft && onGoalDraftChange ? (
-                <Pressable
-                  onPress={handleGoalPress}
-                  disabled={disabled}
-                  accessibilityLabel="Goal"
-                  accessibilityState={{ selected: goalActive }}
-                  className="p-1 active:opacity-70"
-                  hitSlop={8}
-                  style={{
-                    minWidth: 44,
-                    minHeight: 44,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: disabled ? 0.35 : 1,
-                  }}
-                >
-                  <Target
-                    size={24}
-                    color={goalActive ? "#54a9ff" : colors.mutedForeground}
-                  />
-                </Pressable>
-              ) : null}
-              <ComposerModelPicker
-                ref={modelAnchorRef}
-                models={modelOptions}
-                value={selectedModelId}
-                disabled={disabled}
-                colors={colors}
-                onPress={handleModelPress}
-              />
+          <View className="flex-row items-center gap-4">
+            {onAttach && (
               <Pressable
-                onPressIn={handleVoicePressIn}
-                onPressOut={handleVoicePressOut}
+                onPress={disabled ? undefined : onAttach}
                 disabled={disabled}
-                accessibilityLabel="Hold to talk"
+                accessibilityLabel="Attach image"
                 className="p-1 active:opacity-70"
                 hitSlop={8}
                 style={{
@@ -782,36 +681,137 @@ export const MessageInputFooter = forwardRef<
                   opacity: disabled ? 0.35 : 1,
                 }}
               >
-                {isDictating ? (
-                  <WaveformBars isDark={isDark} />
-                ) : (
-                  <Mic size={24} color={colors.mutedForeground} />
-                )}
+                <Paperclip size={24} color={colors.mutedForeground} />
               </Pressable>
+            )}
+            {(onSpacePress || onSpaceSelect) && (
+              <View ref={spaceAnchorRef}>
+                <Pressable
+                  onPress={handleSpacePress}
+                  disabled={disabled}
+                  // Borderless/transparent to match the desktop composer's space picker —
+                  // it sits inline with the other toolbar icons, no filled pill.
+                  className="flex-row items-center gap-1.5 active:opacity-70"
+                  style={{
+                    minHeight: 32,
+                    paddingTop: 2,
+                    opacity: disabled ? 0.35 : 1,
+                  }}
+                >
+                  <IconPlanet size={24} color={colors.mutedForeground} />
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      fontSize: 18,
+                      maxWidth: 140,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {selectedSpace?.name ?? "Default"}
+                  </Text>
+                  <ChevronDown size={20} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+            )}
+          </View>
+          <View className="flex-row items-center gap-4">
+            {onToggleAgent && (
               <Pressable
-                onPress={handleSubmit}
-                disabled={!canSubmit}
+                onPress={disabled ? undefined : onToggleAgent}
+                disabled={disabled}
+                accessibilityLabel="Send to agent"
+                accessibilityState={{ selected: agentEnabled }}
+                className="p-1 active:opacity-70"
+                hitSlop={8}
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
+                  minWidth: 44,
+                  minHeight: 44,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: canSubmit
-                    ? colors.primary
-                    : isDark
-                      ? "#404040"
-                      : "#d4d4d4",
+                  opacity: disabled ? 0.35 : 1,
                 }}
               >
-                <ArrowUp
-                  size={20}
-                  strokeWidth={2.5}
-                  color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+                <Bot
+                  size={24}
+                  color={agentEnabled ? "#54a9ff" : colors.mutedForeground}
                 />
               </Pressable>
-            </View>
+            )}
+            {goalDraft && onGoalDraftChange ? (
+              <Pressable
+                onPress={handleGoalPress}
+                disabled={disabled}
+                accessibilityLabel="Goal"
+                accessibilityState={{ selected: goalActive }}
+                className="p-1 active:opacity-70"
+                hitSlop={8}
+                style={{
+                  minWidth: 44,
+                  minHeight: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: disabled ? 0.35 : 1,
+                }}
+              >
+                <Target
+                  size={24}
+                  color={goalActive ? "#54a9ff" : colors.mutedForeground}
+                />
+              </Pressable>
+            ) : null}
+            <ComposerModelPicker
+              ref={modelAnchorRef}
+              models={modelOptions}
+              value={selectedModelId}
+              disabled={disabled}
+              colors={colors}
+              onPress={handleModelPress}
+            />
+            <Pressable
+              onPressIn={handleVoicePressIn}
+              onPressOut={handleVoicePressOut}
+              disabled={disabled}
+              accessibilityLabel="Hold to talk"
+              className="p-1 active:opacity-70"
+              hitSlop={8}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: disabled ? 0.35 : 1,
+              }}
+            >
+              {isDictating ? (
+                <WaveformBars isDark={isDark} />
+              ) : (
+                <Mic size={24} color={colors.mutedForeground} />
+              )}
+            </Pressable>
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: canSubmit
+                  ? colors.primary
+                  : isDark
+                    ? "#404040"
+                    : "#d4d4d4",
+              }}
+            >
+              <ArrowUp
+                size={20}
+                strokeWidth={2.5}
+                color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+              />
+            </Pressable>
           </View>
+        </View>
       </View>
 
       {pickerOpen ? (

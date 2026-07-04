@@ -111,9 +111,7 @@ export function WikiSegment({ tenantId, userId }: WikiSegmentProps) {
               <IconTopologyStar3
                 size={20}
                 color={
-                  viewMode === "graph"
-                    ? colors.primary
-                    : colors.mutedForeground
+                  viewMode === "graph" ? colors.primary : colors.mutedForeground
                 }
                 strokeWidth={2}
               />

@@ -51,7 +51,11 @@ interface ChatViewProps {
   messages: ChatMessage[];
   send: (
     text: string,
-    mentions?: Array<{ id: string; name: string; type: "member" | "assistant" }>,
+    mentions?: Array<{
+      id: string;
+      name: string;
+      type: "member" | "assistant";
+    }>,
   ) => void;
   connectionStatus: "connecting" | "connected" | "disconnected" | "error";
   isStreaming: boolean;
@@ -177,9 +181,9 @@ function ChatView({
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const insets = useSafeAreaInsets();
   const [messageText, setMessageText] = useState("");
-  const [pendingMentions, setPendingMentions] = useState<
-    MessageInputMention[]
-  >([]);
+  const [pendingMentions, setPendingMentions] = useState<MessageInputMention[]>(
+    [],
+  );
   const { colorScheme } = useColorScheme();
   const { isWide } = useMediaQuery();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;

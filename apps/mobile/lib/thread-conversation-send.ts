@@ -60,8 +60,8 @@ export function isSendableMention(
 } {
   return Boolean(
     mention.targetType &&
-      mention.targetId &&
-      mention.displayName &&
-      mention.rawText,
+    mention.targetId &&
+    mention.displayName &&
+    mention.rawText,
   );
 }

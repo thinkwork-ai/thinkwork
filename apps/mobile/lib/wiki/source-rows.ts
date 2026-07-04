@@ -28,7 +28,9 @@ export function resolveSourceRows(
   sourceMemoryIds: readonly string[],
   records: readonly WikiSourceRecord[],
 ): WikiSourceRow[] {
-  const byId = new Map(records.map((record) => [record.memoryRecordId, record]));
+  const byId = new Map(
+    records.map((record) => [record.memoryRecordId, record]),
+  );
   return sourceMemoryIds.map((id) => {
     const record = byId.get(id);
     return record

@@ -1025,7 +1025,10 @@ async function loadAuthorizedWorkItem(
   return item;
 }
 
-function callerCanListWorkItemPredicate(tenantId: string, callerUserId: string) {
+function callerCanListWorkItemPredicate(
+  tenantId: string,
+  callerUserId: string,
+) {
   return or(
     visibleSpaceExistsPredicate(tenantId, callerUserId),
     eq(workItems.owner_user_id, callerUserId),

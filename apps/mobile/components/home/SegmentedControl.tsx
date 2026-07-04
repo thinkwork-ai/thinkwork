@@ -93,7 +93,10 @@ export function PersistentSegmentPanels<TSegment extends SegmentOption>({
   return (
     <>
       {segments.map((segment) => (
-        <View key={segment.key} style={segmentPanelStyle(segment.key, activeKey)}>
+        <View
+          key={segment.key}
+          style={segmentPanelStyle(segment.key, activeKey)}
+        >
           {renderSegment(segment)}
         </View>
       ))}

@@ -1002,12 +1002,14 @@ export default function ThreadsScreen() {
                         : colors.foreground
                     }
                   />
-                  {activeSegment === "threads" && filtersOpen && hasActiveFilters && (
-                    <View
-                      className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: colors.primary }}
-                    />
-                  )}
+                  {activeSegment === "threads" &&
+                    filtersOpen &&
+                    hasActiveFilters && (
+                      <View
+                        className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                        style={{ backgroundColor: colors.primary }}
+                      />
+                    )}
                 </Pressable>
               ) : null}
               <HeaderContextMenu
@@ -1213,10 +1215,7 @@ export default function ThreadsScreen() {
                       scrollEnabled={filteredThreads.length > 0}
                       ListEmptyComponent={
                         <View className="items-center gap-2">
-                          <ListTodo
-                            size={32}
-                            color={colors.mutedForeground}
-                          />
+                          <ListTodo size={32} color={colors.mutedForeground} />
                           <Muted>
                             {noAssignedComputer
                               ? "Ask an operator to assign a Computer"

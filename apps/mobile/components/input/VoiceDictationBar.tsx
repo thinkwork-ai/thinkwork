@@ -225,7 +225,10 @@ export const VoiceDictationBar = forwardRef<
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (isListening && (nextState === "background" || nextState === "inactive")) {
+      if (
+        isListening &&
+        (nextState === "background" || nextState === "inactive")
+      ) {
         stop();
       }
     });

@@ -417,7 +417,9 @@ export default function WikiPageScreen() {
                     paddingHorizontal: 8,
                     paddingVertical: 3,
                     borderRadius: 999,
-                    backgroundColor: pressed ? colors.primary : colors.secondary,
+                    backgroundColor: pressed
+                      ? colors.primary
+                      : colors.secondary,
                     alignSelf: "flex-start",
                     marginTop: 4,
                   })}
@@ -771,11 +773,7 @@ function SourceRecordRow({
   );
 }
 
-function UnavailableSourceRow({
-  colors,
-}: {
-  colors: (typeof COLORS)["dark"];
-}) {
+function UnavailableSourceRow({ colors }: { colors: (typeof COLORS)["dark"] }) {
   return (
     <View
       style={{

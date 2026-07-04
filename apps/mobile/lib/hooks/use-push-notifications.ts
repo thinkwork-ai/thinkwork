@@ -127,8 +127,7 @@ export function usePushNotifications(isAuthenticated: boolean) {
       response: Notifications.NotificationResponse,
     ) => {
       if (
-        response.actionIdentifier !==
-          Notifications.DEFAULT_ACTION_IDENTIFIER &&
+        response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER &&
         isComputerApprovalAction(response.actionIdentifier)
       ) {
         void handleComputerApprovalActionResponse(response, {

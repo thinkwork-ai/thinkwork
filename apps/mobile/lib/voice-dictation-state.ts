@@ -53,7 +53,9 @@ export function releaseVoiceHold(
   };
 }
 
-export function interruptVoiceHold(state: VoiceDictationState): VoiceDictationState {
+export function interruptVoiceHold(
+  state: VoiceDictationState,
+): VoiceDictationState {
   return {
     ...state,
     recording: false,
