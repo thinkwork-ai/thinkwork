@@ -53,6 +53,11 @@ function makeCtx(): GraphQLContext {
   } as unknown as GraphQLContext;
 }
 
+function renderSql(input: unknown): string {
+  if (Array.isArray(input)) return input.map(renderSql).join("");
+  return String(input);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockAssertReadScope.mockResolvedValue({
@@ -160,6 +165,11 @@ describe("wikiGraph", () => {
         weight: 0.5,
       },
     ]);
+    const pageQuery = renderSql(mockExecute.mock.calls[0]?.[0]);
+    const edgeQuery = renderSql(mockExecute.mock.calls[1]?.[0]);
+    expect(pageQuery).toContain("LEFT JOIN");
+    expect(pageQuery).not.toContain("kind NOT IN");
+    expect(edgeQuery).not.toContain("kind NOT IN");
   });
 
   it("returns empty graph when scope has no pages", async () => {
@@ -176,7 +186,7 @@ describe("wikiGraph", () => {
     expect(graph).toEqual({ nodes: [], edges: [] });
   });
 
-  it("omits pages with zero visible links", async () => {
+  it("returns isolated pages with zero visible links", async () => {
     mockExecute
       .mockResolvedValueOnce({
         rows: [
@@ -198,11 +208,18 @@ describe("wikiGraph", () => {
       makeCtx(),
     );
 
-    expect(graph.nodes).toEqual([]);
+    expect(graph.nodes).toEqual([
+      expect.objectContaining({
+        id: "p-solo",
+        label: "Solo page",
+        entityType: "TOPIC",
+        edgeCount: 0,
+      }),
+    ]);
     expect(graph.edges).toEqual([]);
   });
 
-  it("omits rows with nullish edge_count defensively", async () => {
+  it("keeps rows with nullish edge_count defensively as zero-degree nodes", async () => {
     mockExecute
       .mockResolvedValueOnce({
         rows: [
@@ -224,7 +241,13 @@ describe("wikiGraph", () => {
       makeCtx(),
     );
 
-    expect(graph.nodes).toEqual([]);
+    expect(graph.nodes).toEqual([
+      expect.objectContaining({
+        id: "p1",
+        label: "X",
+        edgeCount: 0,
+      }),
+    ]);
   });
 
   it("propagates WikiAuthError from resolveWikiUnionReadScope", async () => {

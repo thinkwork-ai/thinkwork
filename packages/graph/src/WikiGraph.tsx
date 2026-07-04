@@ -130,7 +130,6 @@ export function buildConnectedWikiGraphData(
 ): { nodes: WikiGraphNode[]; links: WikiGraphLink[] } {
   const nodeIds = new Set(allNodes.map((n) => n.id));
   const links: WikiGraphLink[] = [];
-  const connectedIds = new Set<string>();
 
   for (const [prefix, graph] of sourceGraphs) {
     if (!graph) continue;
@@ -145,13 +144,11 @@ export function buildConnectedWikiGraphData(
         label: e.label ?? "references",
         weight: e.weight ?? 0.5,
       });
-      connectedIds.add(source);
-      connectedIds.add(target);
     }
   }
 
   return {
-    nodes: allNodes.filter((n) => connectedIds.has(n.id)),
+    nodes: allNodes,
     links,
   };
 }
@@ -354,9 +351,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }, [allNodes, typeFilter, searchQuery, hasFilter]);
 
     // graphData rebuilds only when the raw source changes — NOT on filter.
-    // Filter mute is in-place material opacity (see effect below). Only
-    // pages that participate in visible links are rendered; an ontology
-    // graph is a set of triples, not a bag of isolated pages.
+    // Filter mute is in-place material opacity (see effect below). Isolated
+    // compiled pages stay visible so the graph and table agree on whether
+    // wiki data exists.
     const graphData = useMemo(() => {
       if (isMultiAgent) {
         return buildConnectedWikiGraphData(
