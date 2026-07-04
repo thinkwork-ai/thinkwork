@@ -73,7 +73,7 @@ describe("loadWikiKnowledgeGraphSource", () => {
       sourceLabel: "Wiki smoke",
       pageIds: ["page-1"],
       ontology: {
-        mechanism: "cognee_owl_ontology",
+        mechanism: "approved_ontology",
         entityTypes: [
           {
             id: "type-1",

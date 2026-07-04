@@ -16,11 +16,7 @@ export type BrainArtifactManifestKind =
   | "okf_current_manifest";
 
 export type BrainArtifactSourceKind =
-  | "thread"
-  | "wiki"
-  | "brain"
-  | "observations"
-  | "okf";
+  "thread" | "wiki" | "brain" | "observations" | "okf";
 
 type BrainArtifactS3Client = Pick<S3Client, "send">;
 
@@ -120,7 +116,7 @@ export async function writeKnowledgeGraphIngestArtifacts(
     });
 
     const manifestPayload = {
-      schemaVersion: "thinkwork.company_brain.artifact_manifest.v1",
+      schemaVersion: "thinkwork.brain.artifact_manifest.v1",
       createdAt: new Date().toISOString(),
       tenantId: args.run.tenant_id,
       ingestRunId: args.run.id,
@@ -137,8 +133,8 @@ export async function writeKnowledgeGraphIngestArtifacts(
         key: args.ontology.ontologyKey,
       },
       embedding: embeddingConfig(),
-      cognee: {
-        datasetName: args.run.cognee_dataset_name,
+      graph: {
+        datasetName: args.run.source_dataset_name,
         datasetId: args.ingest?.datasetId ?? null,
         pipelineRunId: args.ingest?.pipelineRunId ?? null,
         ingestMode: args.ingest?.mode ?? null,
@@ -460,12 +456,8 @@ function embeddingConfig(): {
   model: string | null;
   vectorDimension: number | null;
 } {
-  const model =
-    process.env.BRAIN_EMBEDDING_MODEL ??
-    process.env.COGNEE_EMBEDDING_MODEL ??
-    null;
-  const rawDimension =
-    process.env.BRAIN_VECTOR_DIMENSION ?? process.env.COGNEE_VECTOR_DIMENSION;
+  const model = process.env.BRAIN_EMBEDDING_MODEL ?? null;
+  const rawDimension = process.env.BRAIN_VECTOR_DIMENSION;
   const vectorDimension = rawDimension
     ? Number.parseInt(rawDimension, 10)
     : NaN;

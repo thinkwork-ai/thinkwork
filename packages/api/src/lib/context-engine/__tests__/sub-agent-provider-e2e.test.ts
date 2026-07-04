@@ -178,10 +178,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
             retrievalStrategy: "agentic-hybrid-wiki-navigation",
             sourceQuery: "favorite restaurant in Paris",
             sourceQueryPurpose: "repaired",
-            toolAllowlist: [
-              "company-brain.pages.search",
-              "company-brain.pages.read",
-            ],
+            toolAllowlist: ["brain.pages.search", "brain.pages.read"],
           }),
         }),
         metadata: expect.objectContaining({
@@ -215,7 +212,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
       seamState: "live",
       processModel: "deterministic-retrieval",
       promptRef: "brain/provider/wiki-source-agent",
-      toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
+      toolAllowlist: ["brain.pages.search", "brain.pages.read"],
     });
   });
 
@@ -226,7 +223,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
         tool_calls: [
           {
             id: "search-1",
-            tool: "company-brain.pages.search",
+            tool: "brain.pages.search",
             input: { query: "favorite restaurant in Paris", limit: 5 },
           },
         ],
@@ -343,7 +340,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
               expect.objectContaining({
                 type: "tool",
                 status: "ok",
-                tool: "company-brain.pages.search",
+                tool: "brain.pages.search",
               }),
               expect.objectContaining({ type: "final", status: "ok" }),
             ]),
@@ -355,7 +352,7 @@ describe("Context Engine sub-agent provider E2E seam", () => {
       seamState: "live",
       processModel: "lambda-bedrock-converse",
       promptRef: "brain/provider/wiki-source-agent",
-      toolAllowlist: ["company-brain.pages.search", "company-brain.pages.read"],
+      toolAllowlist: ["brain.pages.search", "brain.pages.read"],
     });
   });
 });

@@ -217,8 +217,8 @@ export async function collectTenantObservationCandidates(args: {
 
 /**
  * Build the ingest source bundle for a tenant's promoted observations.
- * Packets carry no pre-declared entity types — extraction happens in Cognee
- * under the approved-ontology constraint; the normalizer gates the result.
+ * Packets carry no pre-declared entity types — extraction happens under the
+ * approved-ontology constraint; the normalizer gates the result.
  */
 export async function loadObservationsKnowledgeGraphSource(args: {
   db: Database;

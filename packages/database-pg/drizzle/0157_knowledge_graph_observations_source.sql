@@ -56,7 +56,7 @@ ALTER TABLE public.knowledge_graph_evidence
   DROP CONSTRAINT IF EXISTS knowledge_graph_evidence_evidence_source_kind_allowed;
 ALTER TABLE public.knowledge_graph_evidence
   ADD CONSTRAINT knowledge_graph_evidence_evidence_source_kind_allowed
-  CHECK (evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','cognee_payload','normalizer'));
+  CHECK (evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','graph_payload','normalizer'));
 
 -- Per-(tenant, bank) cursors for the observations fan-in. The
 -- (last_record_updated_at, last_record_id) pair mirrors the wiki compile

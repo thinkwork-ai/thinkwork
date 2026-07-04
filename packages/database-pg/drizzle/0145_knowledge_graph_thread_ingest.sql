@@ -1,4 +1,4 @@
--- Purpose: add Cognee thread ingest run ledger and normalized graph snapshot tables.
+-- Purpose: add Knowledge Graph thread ingest run ledger and normalized graph snapshot tables.
 -- Plan: docs/plans/2026-06-04-003-feat-cognee-thread-ingest-explorer-plan.md (U1)
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0145_knowledge_graph_thread_ingest.sql
 -- creates: public.knowledge_graph_ingest_runs
@@ -9,12 +9,12 @@
 -- creates: public.idx_kg_ingest_runs_tenant_status
 -- creates: public.idx_kg_ingest_runs_requested_by
 -- creates: public.uq_kg_ingest_runs_active_thread
--- creates: public.uq_kg_entities_run_cognee_node
+-- creates: public.uq_kg_entities_run_graph_node
 -- creates: public.idx_kg_entities_tenant_thread_label
 -- creates: public.idx_kg_entities_tenant_thread_type
 -- creates: public.idx_kg_entities_tenant_thread_trust
 -- creates: public.idx_kg_entities_label_trgm
--- creates: public.uq_kg_relationships_run_cognee_edge
+-- creates: public.uq_kg_relationships_run_graph_edge
 -- creates: public.idx_kg_relationships_tenant_thread_source
 -- creates: public.idx_kg_relationships_tenant_thread_target
 -- creates: public.idx_kg_relationships_tenant_thread_type
@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_ingest_runs (
   requested_by_user_id uuid,
   status text NOT NULL DEFAULT 'queued',
   trigger text NOT NULL DEFAULT 'manual',
-  cognee_dataset_name text NOT NULL,
-  cognee_dataset_id text,
+  source_dataset_name text NOT NULL,
+  source_dataset_id text,
   started_at timestamptz,
   finished_at timestamptz,
   duration_ms integer,
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_entities (
   tenant_id uuid NOT NULL,
   thread_id uuid NOT NULL,
   ingest_run_id uuid NOT NULL,
-  cognee_node_id text NOT NULL,
+  graph_node_id text NOT NULL,
   label text NOT NULL,
   normalized_label text NOT NULL,
   type_label text,
@@ -163,8 +163,8 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_entities (
     CHECK (provenance_status IN ('strong', 'weak', 'missing'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_kg_entities_run_cognee_node
-  ON public.knowledge_graph_entities (ingest_run_id, cognee_node_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kg_entities_run_graph_node
+  ON public.knowledge_graph_entities (ingest_run_id, graph_node_id);
 
 CREATE INDEX IF NOT EXISTS idx_kg_entities_tenant_thread_label
   ON public.knowledge_graph_entities (tenant_id, thread_id, normalized_label);
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_relationships (
   tenant_id uuid NOT NULL,
   thread_id uuid NOT NULL,
   ingest_run_id uuid NOT NULL,
-  cognee_edge_id text,
+  graph_edge_id text,
   source_entity_id uuid NOT NULL,
   target_entity_id uuid NOT NULL,
   label text NOT NULL,
@@ -233,9 +233,9 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_relationships (
     CHECK (provenance_status IN ('strong', 'weak', 'missing'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_kg_relationships_run_cognee_edge
-  ON public.knowledge_graph_relationships (ingest_run_id, cognee_edge_id)
-  WHERE cognee_edge_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kg_relationships_run_graph_edge
+  ON public.knowledge_graph_relationships (ingest_run_id, graph_edge_id)
+  WHERE graph_edge_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_kg_relationships_tenant_thread_source
   ON public.knowledge_graph_relationships (tenant_id, thread_id, source_entity_id);
@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_graph_evidence (
     REFERENCES public.messages(id)
     ON DELETE SET NULL,
   CONSTRAINT knowledge_graph_evidence_source_kind_allowed
-    CHECK (source_kind IN ('thread_message', 'cognee_payload', 'normalizer')),
+    CHECK (source_kind IN ('thread_message', 'graph_payload', 'normalizer')),
   CONSTRAINT knowledge_graph_evidence_subject_required
     CHECK (entity_id IS NOT NULL OR relationship_id IS NOT NULL)
 );

@@ -15,8 +15,8 @@ const run = {
   requested_by_user_id: "user-1",
   status: "running",
   trigger: "manual",
-  cognee_dataset_name: "thinkwork:tenant-1:thread:thread-1",
-  cognee_dataset_id: null,
+  source_dataset_name: "thinkwork:tenant-1:thread:thread-1",
+  source_dataset_id: null,
   started_at: null,
   finished_at: null,
   duration_ms: null,
@@ -58,7 +58,7 @@ const source = {
 };
 
 const ontology = {
-  mechanism: "cognee_owl_ontology" as const,
+  mechanism: "approved_ontology" as const,
   entityTypes: [],
   relationshipTypes: [],
   customPrompt: "Extract",
@@ -140,7 +140,7 @@ describe("Company Brain artifact helpers", () => {
         embedding_model: "amazon.titan-embed-text-v2:0",
         vector_dimension: 1024,
         ontology_version: "ontology-key-v1",
-        ontology_mechanism: "cognee_owl_ontology",
+        ontology_mechanism: "approved_ontology",
       }),
     );
     expect(records[1]).toEqual(

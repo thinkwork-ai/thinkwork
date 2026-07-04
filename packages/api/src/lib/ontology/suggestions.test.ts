@@ -352,10 +352,10 @@ describe("ontology suggestions", () => {
         }),
       ]),
     );
-    // Structural Cognee plumbing nodes are not ontology signal.
+    // Structural extractor plumbing nodes are not ontology signal.
     expect(
       runObservations.some(
-        (observation) => observation.metadata?.cogneeNodeId === "node-3",
+        (observation) => observation.metadata?.graphNodeId === "node-3",
       ),
     ).toBe(false);
 

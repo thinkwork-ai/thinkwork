@@ -22,7 +22,7 @@ export function createWikiSourceAgentTools(args: {
   const searches: Array<{ query: string; rows: UserWikiSearchResult[] }> = [];
 
   const searchTool: SourceAgentTool = {
-    name: "company-brain.pages.search",
+    name: "brain.pages.search",
     description:
       "Search active compiled ThinkWork Brain pages with lexical, prefix, alias, and typo-tolerant matching.",
     async execute(input, context) {
@@ -61,9 +61,9 @@ export function createWikiSourceAgentTools(args: {
   };
 
   const readTool: SourceAgentTool = {
-    name: "company-brain.pages.read",
+    name: "brain.pages.read",
     description:
-      "Read one compiled ThinkWork Brain page that was already returned by company-brain.pages.search.",
+      "Read one compiled ThinkWork Brain page that was already returned by brain.pages.search.",
     async execute(input, context) {
       const pageId =
         stringInput(input.page_id) ??

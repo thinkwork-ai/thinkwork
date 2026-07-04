@@ -19,8 +19,8 @@ export interface KnowledgeGraphIngestRunRow {
   requested_by_user_id: string | null;
   status: KnowledgeGraphIngestStatus | string;
   trigger: string;
-  cognee_dataset_name: string;
-  cognee_dataset_id: string | null;
+  source_dataset_name: string;
+  source_dataset_id: string | null;
   started_at: Dateish;
   finished_at: Dateish;
   duration_ms: number | null;
@@ -69,7 +69,7 @@ export interface KnowledgeGraphEntityRow {
   source_kind: KnowledgeGraphSourceKind | string;
   source_ref: string;
   ingest_run_id: string;
-  cognee_node_id: string;
+  graph_node_id: string;
   label: string;
   normalized_label: string;
   type_label: string | null;
@@ -95,7 +95,7 @@ export interface KnowledgeGraphRelationshipRow {
   source_kind: KnowledgeGraphSourceKind | string;
   source_ref: string;
   ingest_run_id: string;
-  cognee_edge_id: string | null;
+  graph_edge_id: string | null;
   source_entity_id: string;
   target_entity_id: string;
   label: string;
@@ -149,8 +149,8 @@ export function serializeIngestRun(
     requestedByUserId: row.requested_by_user_id,
     status: toGraphqlEnum(row.status),
     trigger: row.trigger,
-    cogneeDatasetName: row.cognee_dataset_name,
-    cogneeDatasetId: row.cognee_dataset_id,
+    sourceDatasetName: row.source_dataset_name,
+    sourceDatasetId: row.source_dataset_id,
     startedAt: toIso(row.started_at),
     finishedAt: toIso(row.finished_at),
     durationMs: row.duration_ms,
@@ -213,7 +213,7 @@ export function serializeEntity(
     sourceKind: toGraphqlEnum(row.source_kind),
     sourceRef: row.source_ref,
     ingestRunId: row.ingest_run_id,
-    cogneeNodeId: row.cognee_node_id,
+    graphNodeId: row.graph_node_id,
     label: row.label,
     normalizedLabel: row.normalized_label,
     typeLabel: row.type_label,
@@ -246,7 +246,7 @@ export function serializeRelationship(
     sourceKind: toGraphqlEnum(row.source_kind),
     sourceRef: row.source_ref,
     ingestRunId: row.ingest_run_id,
-    cogneeEdgeId: row.cognee_edge_id,
+    graphEdgeId: row.graph_edge_id,
     sourceEntityId: row.source_entity_id,
     targetEntityId: row.target_entity_id,
     label: row.label,

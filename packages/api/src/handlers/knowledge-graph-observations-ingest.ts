@@ -3,9 +3,9 @@
  *
  * Reads engine-synthesized Hindsight observations across the tenant's user
  * banks (U4 loader + layered promotion gate), ingests the promoted bundle
- * into the tenant's STABLE Cognee dataset, and refreshes the Aurora mirror
+ * into the tenant's STABLE source dataset, and refreshes the Aurora mirror
  * crash-safely: mirror replace, cursor advance, promotion audit, and run
- * completion all commit in ONE transaction. Cognee writes are at-least-once;
+ * completion all commit in ONE transaction. extractor writes are at-least-once;
  * the rendered document embeds each observation's Hindsight id
  * (`<!-- source_packet:<id> ... -->`), so a crash between cognify and
  * snapshot re-sends identical content on the re-read instead of duplicating.
@@ -23,7 +23,7 @@ import {
   redactedSourceRef,
   writeKnowledgeGraphIngestArtifacts,
 } from "../lib/knowledge-graph/artifacts.js";
-import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
+import { normalizeExtractedGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { loadObservationsKnowledgeGraphSource } from "../lib/knowledge-graph/observations-source.js";
 import {
@@ -337,12 +337,12 @@ async function processTenantObservationsIngest(
       };
     }
 
-    const normalizedSnapshot = normalizeCogneeGraph({
+    const normalizedSnapshot = normalizeExtractedGraph({
       graph: extraction.payload,
       transcript: source.bundle.evidence,
       ontology,
       // The extractor emits only this source's nodes, so no NodeSet scoping
-      // is needed (unlike Cognee's global-graph fetch).
+      // is needed (unlike the previous global-graph fetch).
     });
     const snapshot = applySourceDeclaredFallback({
       snapshot: normalizedSnapshot,

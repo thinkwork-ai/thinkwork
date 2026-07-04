@@ -3,7 +3,7 @@
  *
  * Turns promoted observation packets into the normalizer's graph payload
  * with one batched structured-JSON model call per batch — the drop-in
- * replacement for the retired Cognee extraction service. Mirrors the
+ * replacement for the retired previous extraction service. Mirrors the
  * `classifyWithBedrock` mechanics from observation-promotion-gate.ts
  * (pinned OSS model, batching, strict per-item validation, default-drop)
  * with two extraction-specific hardenings (KTD-4): a raised token budget

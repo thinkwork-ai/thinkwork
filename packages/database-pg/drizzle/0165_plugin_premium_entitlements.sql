@@ -2,7 +2,7 @@
 --   storage for Company Brain and future premium plugins. Entitlements are
 --   persistent tenant/plugin grants independent of install state; install keys
 --   store digests only and can be redeemed once into an entitlement.
--- Plan: docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md U2
+-- Plan: docs/plans/2026-06-13-002-feat-brain-premium-plugin-plan.md U2
 -- Apply manually (no CI migration runner):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0165_plugin_premium_entitlements.sql
 -- Pre-flight:

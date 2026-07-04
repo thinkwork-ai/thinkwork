@@ -135,7 +135,7 @@ export async function createKnowledgeGraphObservationsIngestRun(
       requested_by_user_id: args.requestedByUserId,
       status: "queued",
       trigger: args.trigger ?? "manual",
-      cognee_dataset_name: buildObservationsDatasetName(args.tenantId),
+      source_dataset_name: buildObservationsDatasetName(args.tenantId),
       message_count: 0,
       input: {
         source: "observations",
@@ -214,7 +214,7 @@ export async function createKnowledgeGraphIngestRun(
       requested_by_user_id: args.requestedByUserId,
       status: "queued",
       trigger: "manual",
-      cognee_dataset_name: buildCogneeDatasetName(
+      source_dataset_name: buildGraphDatasetName(
         args.tenantId,
         source.sourceKind,
         source.sourceRef,
@@ -303,7 +303,7 @@ export async function markKnowledgeGraphRunInvokeFailed(args: {
   return (row as KnowledgeGraphIngestRunRow | undefined) ?? null;
 }
 
-export function buildCogneeDatasetName(
+export function buildGraphDatasetName(
   tenantId: string,
   sourceKind: KnowledgeGraphSourceKind,
   sourceRef: string,

@@ -3,7 +3,7 @@
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
 //   - WikiGraph — compiled wiki-page graph (used by Pages).
-//   - KnowledgeGraph — Cognee thread graph with trust/provenance styling.
+//   - KnowledgeGraph — Bedrock thread graph with trust/provenance styling.
 //
 // The Memory/Wiki components were ported out of the app layer to keep graph
 // rendering behavior reusable and versioned in one package.

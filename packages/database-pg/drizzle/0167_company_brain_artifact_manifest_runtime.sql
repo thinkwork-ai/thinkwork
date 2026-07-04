@@ -1,8 +1,8 @@
 -- Purpose: extend brain.artifact_manifests with runtime provenance needed for
 --   replayable Company Brain source artifacts and Knowledge Graph ingest links.
--- Plan: docs/plans/2026-06-14-001-feat-company-brain-artifact-manifests-plan.md U2
+-- Plan: docs/plans/2026-06-14-001-feat-brain-artifact-manifests-plan.md U2
 -- Apply manually (no CI migration runner):
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0167_company_brain_artifact_manifest_runtime.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0167_brain_artifact_manifest_runtime.sql
 -- Pre-flight:
 --   SELECT to_regclass('brain.artifact_manifests');
 --   SELECT to_regclass('public.knowledge_graph_ingest_runs');
@@ -27,7 +27,7 @@
 SET lock_timeout = '5s';
 SET statement_timeout = '15min';
 
-SELECT pg_advisory_lock(hashtext('migration:0167_company_brain_artifact_manifest_runtime'));
+SELECT pg_advisory_lock(hashtext('migration:0167_brain_artifact_manifest_runtime'));
 
 ALTER TABLE brain.artifact_manifests
   ADD COLUMN IF NOT EXISTS ingest_run_id uuid,
@@ -82,4 +82,4 @@ CREATE INDEX IF NOT EXISTS brain_artifact_manifests_ingest_run_idx
 CREATE INDEX IF NOT EXISTS brain_artifact_manifests_source_kind_idx
   ON brain.artifact_manifests (tenant_id, source_kind, source_id_hash);
 
-SELECT pg_advisory_unlock(hashtext('migration:0167_company_brain_artifact_manifest_runtime'));
+SELECT pg_advisory_unlock(hashtext('migration:0167_brain_artifact_manifest_runtime'));

@@ -7,8 +7,8 @@ const emptySnapshot: NormalizedKnowledgeGraphSnapshot = {
   relationships: [],
   evidence: [],
   metrics: {
-    cogneeNodeCount: 4,
-    cogneeEdgeCount: 3,
+    extractedNodeCount: 4,
+    extractedEdgeCount: 3,
     droppedNodeCount: 4,
     droppedEdgeCount: 3,
     structuralNodeCount: 4,
@@ -28,7 +28,7 @@ describe("applySourceDeclaredFallback", () => {
     const snapshot = applySourceDeclaredFallback({
       snapshot: emptySnapshot,
       ontology: {
-        mechanism: "cognee_owl_ontology",
+        mechanism: "approved_ontology",
         customPrompt: "Extract",
         ontologyKey: null,
         ontologyOwlXml: null,
