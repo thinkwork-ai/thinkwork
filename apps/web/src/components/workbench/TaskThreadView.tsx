@@ -562,6 +562,21 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
+  // Document cards (THINK-147) render inside the agent's reply message, next
+  // to the byline — not as a floating block under the turn header. While the
+  // reply hasn't landed yet (turn still streaming), the card anchors to the
+  // triggering user message's segment so the emit is visible immediately.
+  const documentCardsByMessageId = new Map<string, DocumentCardData[]>();
+  transcriptMessages.forEach((message, index) => {
+    const turn = turnByUserMessageId.get(message.id);
+    if (!turn) return;
+    const cards = documentCardsForTurn(turn);
+    if (cards.length === 0) return;
+    const reply = transcriptMessages
+      .slice(index + 1)
+      .find((candidate) => candidate.role.toUpperCase() !== "USER");
+    documentCardsByMessageId.set(reply?.id ?? message.id, cards);
+  });
   const selectedArtifact =
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
@@ -614,6 +629,7 @@ export function TaskThreadView({
                       key={message.id}
                       message={message}
                       turn={turn}
+                      documentCards={documentCardsByMessageId.get(message.id)}
                       threadId={thread.id}
                       latestProjection={latestProjection}
                       isLatestUser={index === latestUserIndex}
@@ -1826,6 +1842,7 @@ function skillDraftStatusFromMessage(
 function TranscriptSegment({
   message,
   turn,
+  documentCards,
   threadId,
   latestProjection,
   isLatestUser,
@@ -1846,6 +1863,7 @@ function TranscriptSegment({
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
+  documentCards?: DocumentCardData[];
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
   isLatestUser: boolean;
@@ -1883,6 +1901,7 @@ function TranscriptSegment({
     <>
       <TranscriptMessage
         message={message}
+        documentCards={documentCards}
         threadId={threadId}
         onOpenArtifact={onOpenArtifact}
         onSendFollowUp={onSendFollowUp}
@@ -1910,6 +1929,13 @@ function TranscriptSegment({
           onSendFollowUp={onSendFollowUp}
         />
       ) : null}
+      {/* Emitted-document fallback: the reply message hasn't landed yet, so
+          the card anchors here until it can move into the reply block. */}
+      {message.role.toUpperCase() === "USER" && documentCards?.length
+        ? documentCards.map((card) => (
+            <DocumentCard key={`turn-doc-${card.artifactId}`} card={card} />
+          ))
+        : null}
       <DispatchIndicator
         message={message}
         turn={turn}
@@ -2092,7 +2118,6 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
-  const documentCards = documentCardsForTurn(turn);
   const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
@@ -2108,7 +2133,6 @@ function ThreadTurnActivity({
     header !== null &&
     (RENDERED_TURN_STATUSES.has(status) ||
       rows.length > 0 ||
-      documentCards.length > 0 ||
       Boolean(turn.error));
   if (!shouldRender) return null;
 
@@ -2175,9 +2199,6 @@ function ThreadTurnActivity({
             <ActionRow title="Run failed" detail={failureDetail} kind="tool" />
           ) : null}
         </ThinkingRow>
-        {documentCards.map((card) => (
-          <DocumentCard key={`${turn.id}-doc-${card.artifactId}`} card={card} />
-        ))}
       </div>
       {canFlag ? (
         <Button
@@ -2562,6 +2583,7 @@ function CollapsibleUserMessageBody({
 
 function TranscriptMessage({
   message,
+  documentCards,
   threadId,
   onOpenArtifact,
   onSendFollowUp,
@@ -2574,6 +2596,7 @@ function TranscriptMessage({
   onJsonRenderActionSuccess,
 }: {
   message: TaskThreadMessage;
+  documentCards?: DocumentCardData[];
   threadId?: string;
   onOpenArtifact?: (artifactId: string) => void;
   onSendFollowUp?: (
@@ -2709,13 +2732,27 @@ function TranscriptMessage({
                   (No message content)
                 </p>
               )}
+              {documentCards?.length ? (
+                <div className="mt-3 grid gap-2">
+                  {documentCards.map((card) => (
+                    <DocumentCard
+                      key={`msg-doc-${card.artifactId}`}
+                      card={card}
+                    />
+                  ))}
+                </div>
+              ) : null}
               {attachments.length > 0 ? (
                 <MessageAttachmentList
                   attachments={attachments}
                   onDownloadAttachment={onDownloadAttachment}
                 />
               ) : null}
-              {!isUser && message.durableArtifact ? (
+              {/* Documents render their own DocumentCard above — the generic
+                  artifact card here would be pure duplication. */}
+              {!isUser &&
+              message.durableArtifact &&
+              message.durableArtifact.metadata?.kind !== "document" ? (
                 <GeneratedArtifactCard
                   artifact={message.durableArtifact}
                   onOpenArtifact={onOpenArtifact}
