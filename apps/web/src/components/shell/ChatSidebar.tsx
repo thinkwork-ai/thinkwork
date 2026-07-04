@@ -119,7 +119,9 @@ import {
   formatCompactCount,
   formatTinyRelativeDate,
   isThreadAwaitingUser,
+  isThreadLocallyRead,
   isThreadUnread,
+  type LocallyReadThreadAt,
   selectNextThreadBelowDeleted,
   sortThreadsByActivityDesc,
   threadActivityAt,
@@ -222,9 +224,9 @@ export function ChatSidebar() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
   );
-  const [locallyReadThreadIds, setLocallyReadThreadIds] = useState<Set<string>>(
-    () => new Set(routeThreadId ? [routeThreadId] : []),
-  );
+  const [locallyReadThreadAt, setLocallyReadThreadAt] = useState<
+    Map<string, number>
+  >(() => new Map(routeThreadId ? [[routeThreadId, Date.now()]] : []));
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const pendingThreadDeletes = usePendingThreadDeletes();
@@ -417,10 +419,9 @@ export function ChatSidebar() {
   );
 
   const markThreadRead = useCallback((threadId: string) => {
-    setLocallyReadThreadIds((current) => {
-      if (current.has(threadId)) return current;
-      const next = new Set(current);
-      next.add(threadId);
+    setLocallyReadThreadAt((current) => {
+      const next = new Map(current);
+      next.set(threadId, Date.now());
       return next;
     });
   }, []);
@@ -433,17 +434,18 @@ export function ChatSidebar() {
   const markSectionThreadsRead = useCallback(
     (threadIds: string[]) => {
       if (threadIds.length === 0) return;
-      setLocallyReadThreadIds((current) => {
-        const next = new Set(current);
-        for (const id of threadIds) next.add(id);
+      setLocallyReadThreadAt((current) => {
+        const next = new Map(current);
+        const now = Date.now();
+        for (const id of threadIds) next.set(id, now);
         return next;
       });
       void executeMarkThreadsRead({
         input: { threadIds, read: true },
       }).then((result) => {
         if (result.error) {
-          setLocallyReadThreadIds((current) => {
-            const next = new Set(current);
+          setLocallyReadThreadAt((current) => {
+            const next = new Map(current);
             for (const id of threadIds) {
               // Keep any id a concurrent thread-open already persisted as read
               // (activateThread → persistThreadRead seeds persistedReadThreadIdsRef),
@@ -989,7 +991,7 @@ export function ChatSidebar() {
               <PinnedThreadListSection
                 threads={pinnedThreads}
                 selectedThreadId={selectedThreadId}
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 onActivate={activateThread}
                 onUnpin={unpinThread}
                 onReorder={reorderPinnedThreads}
@@ -1000,7 +1002,7 @@ export function ChatSidebar() {
                 threads={genericThreads}
                 selectedThreadId={selectedThreadId}
                 defaultOpen
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 scopeSpaceId={defaultSpaceId}
                 // No scopeSpaceName for the default space: its Thread list
                 // header should read just "Thread List", not "Chats · Threads".
@@ -1021,7 +1023,7 @@ export function ChatSidebar() {
                 selectedThreadId={selectedThreadId}
                 activeSpaceId={routeSpaceId}
                 openSpaceIds={openSpaceIds}
-                locallyReadThreadIds={locallyReadThreadIds}
+                locallyReadThreadAt={locallyReadThreadAt}
                 onSpaceOpenChange={setSpaceOpen}
                 onExpandAll={expandAllSpaces}
                 onCollapseAll={collapseAllSpaces}
@@ -1042,7 +1044,7 @@ export function ChatSidebar() {
         threads={searchThreads}
         pinnedThreadIds={pinnedThreadIdSet}
         defaultSpaceIds={defaultSpaceIds}
-        locallyReadThreadIds={locallyReadThreadIds}
+        locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
         isLoading={searchFetching && !searchData}
         error={searchError?.message ?? null}
@@ -1070,7 +1072,7 @@ function ThreadSearchDialog({
   threads,
   pinnedThreadIds,
   defaultSpaceIds,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onSelectThread,
   isLoading,
   error,
@@ -1082,7 +1084,7 @@ function ThreadSearchDialog({
   threads: ChatThreadSummary[];
   pinnedThreadIds: ReadonlySet<string>;
   defaultSpaceIds: ReadonlySet<string>;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: ChatThreadSummary) => void;
   isLoading: boolean;
   error: string | null;
@@ -1142,7 +1144,7 @@ function ThreadSearchDialog({
                           className={cn(
                             "size-1.5 shrink-0 rounded-full",
                             isThreadUnread(thread) &&
-                              !locallyReadThreadIds.has(thread.id)
+                              !isThreadLocallyRead(thread, locallyReadThreadAt)
                               ? "bg-blue-500"
                               : "bg-transparent",
                           )}
@@ -1357,7 +1359,7 @@ function ThreadListSection({
   threads,
   selectedThreadId,
   defaultOpen = true,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   scopeSpaceId,
   scopeSpaceName,
   onActivate,
@@ -1369,7 +1371,7 @@ function ThreadListSection({
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
   defaultOpen?: boolean;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   scopeSpaceId?: string;
   scopeSpaceName?: string;
   onActivate: (threadId: string) => void;
@@ -1386,12 +1388,12 @@ function ThreadListSection({
 
   // Unread set drives the badge, the mark-all target, and the filter — one
   // source so the badge reaches zero after a mark-all (KTD-2).
-  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadAt);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
   // The displayed list additionally retains the selected thread so opening one
   // while filtered doesn't make it vanish (it stays until selection moves).
   const displayedThreads = filterOn
-    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    ? displayedUnreadThreads(threads, locallyReadThreadAt, selectedThreadId)
     : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
@@ -1452,7 +1454,7 @@ function ThreadListSection({
                   key={thread.id}
                   thread={thread}
                   active={selectedThreadId === thread.id}
-                  locallyRead={locallyReadThreadIds.has(thread.id)}
+                  locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                   onActivate={() => onActivate(thread.id)}
                   onPin={onPin ? () => onPin(thread.id) : undefined}
                 />
@@ -1484,14 +1486,14 @@ function ThreadListSection({
 function PinnedThreadListSection({
   threads,
   selectedThreadId,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onActivate,
   onUnpin,
   onReorder,
 }: {
   threads: ChatThreadSummary[];
   selectedThreadId?: string;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onActivate: (threadId: string) => void;
   onUnpin?: (threadId: string) => void;
   onReorder?: (threadIds: string[]) => void;
@@ -1586,7 +1588,7 @@ function PinnedThreadListSection({
                     key={thread.id}
                     thread={thread}
                     active={selectedThreadId === thread.id}
-                    locallyRead={locallyReadThreadIds.has(thread.id)}
+                    locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                     onActivate={() => onActivate(thread.id)}
                     onUnpin={onUnpin ? () => onUnpin(thread.id) : undefined}
                   />
@@ -1709,7 +1711,7 @@ function SpacesListSection({
   selectedThreadId,
   activeSpaceId,
   openSpaceIds,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onSpaceOpenChange,
   onExpandAll,
   onCollapseAll,
@@ -1728,7 +1730,7 @@ function SpacesListSection({
   selectedThreadId?: string;
   activeSpaceId?: string;
   openSpaceIds: ReadonlySet<string>;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onSpaceOpenChange: (spaceId: string, open: boolean) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
@@ -1772,7 +1774,7 @@ function SpacesListSection({
             pendingThreadDeletes={pendingThreadDeletes}
             selectedThreadId={selectedThreadId}
             activeSpaceId={activeSpaceId}
-            locallyReadThreadIds={locallyReadThreadIds}
+            locallyReadThreadAt={locallyReadThreadAt}
             onActivate={onActivate}
             onPin={onPin}
             onMarkSectionRead={onMarkSectionRead}
@@ -1838,7 +1840,7 @@ function SpaceThreadSection({
   pendingThreadDeletes,
   selectedThreadId,
   activeSpaceId,
-  locallyReadThreadIds,
+  locallyReadThreadAt,
   onActivate,
   onPin,
   onMarkSectionRead,
@@ -1853,7 +1855,7 @@ function SpaceThreadSection({
   pendingThreadDeletes: ReadonlySet<string>;
   selectedThreadId?: string;
   activeSpaceId?: string;
-  locallyReadThreadIds: ReadonlySet<string>;
+  locallyReadThreadAt: LocallyReadThreadAt;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
@@ -1921,10 +1923,10 @@ function SpaceThreadSection({
   // the server's true total (`unreadThreadCount`, which may exceed the loaded
   // window) minus an optimistic decrement for loaded threads we just marked
   // read locally, so it drops on mark-all and reconciles on refetch (KTD-5).
-  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadIds);
+  const unreadThreads = filterUnreadThreads(threads, locallyReadThreadAt);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
   const optimisticallyRead = threads.filter(
-    (thread) => isThreadUnread(thread) && locallyReadThreadIds.has(thread.id),
+    (thread) => isThreadUnread(thread) && isThreadLocallyRead(thread, locallyReadThreadAt),
   ).length;
   const badgeCount = Math.max(
     0,
@@ -1933,7 +1935,7 @@ function SpaceThreadSection({
   // Retain the selected thread while filtered so opening one doesn't drop it
   // from the section the same frame it's marked read (see displayedUnreadThreads).
   const displayedThreads = filterOn
-    ? displayedUnreadThreads(threads, locallyReadThreadIds, selectedThreadId)
+    ? displayedUnreadThreads(threads, locallyReadThreadAt, selectedThreadId)
     : threads;
   const visibleThreads = displayedThreads.slice(0, visibleCount);
   const hiddenCount = displayedThreads.length - visibleThreads.length;
@@ -2026,7 +2028,7 @@ function SpaceThreadSection({
                   thread={thread}
                   active={selectedThreadId === thread.id}
                   spaceRouteId={space.id}
-                  locallyRead={locallyReadThreadIds.has(thread.id)}
+                  locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
                   onActivate={() => onActivate(thread.id)}
                   onPin={onPin ? () => onPin(thread.id) : undefined}
                 />
