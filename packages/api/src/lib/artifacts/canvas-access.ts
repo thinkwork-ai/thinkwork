@@ -64,10 +64,23 @@ export const CANVAS_SNAPSHOT_KIND = "json_render_snapshot";
  */
 export const CANVAS_LIVING_KIND = "json_render_canvas";
 
-/** Every metadata kind that carries living-canvas access semantics in v1. */
+/**
+ * HTML Document Artifacts (THINK-147 U5): the kind the document.emit writer
+ * persists (`document-emission.ts` — kept in sync by document-access.test.ts,
+ * the gate-fires test the dead-gate lesson demands). Documents share the exact
+ * R15 access semantics: saved (space-homed) → space read / member-or-above
+ * write; draft → originating-thread visibility.
+ */
+export const DOCUMENT_GATED_KIND = "document";
+
+/**
+ * Every metadata kind that carries space/thread-scoped access semantics in v1
+ * (living canvases, legacy snapshots, and dual-body documents).
+ */
 const CANVAS_METADATA_KINDS: ReadonlySet<string> = new Set([
   CANVAS_SNAPSHOT_KIND,
   CANVAS_LIVING_KIND,
+  DOCUMENT_GATED_KIND,
 ]);
 
 export type CanvasAccessMode = "read" | "write";
@@ -214,7 +227,8 @@ export function canvasListVisibilityPredicate(
 ) {
   return sql`(
     (${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}
-     AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND})
+     AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND}
+     AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${DOCUMENT_GATED_KIND})
     OR (
       ${artifacts.space_id} IS NOT NULL
       AND EXISTS (
@@ -259,8 +273,9 @@ export function canvasListVisibilityPredicate(
   )`;
 }
 
-/** SQL predicate that excludes ALL canvas-kind artifacts (fail-closed). */
+/** SQL predicate that excludes ALL gated-kind artifacts (fail-closed). */
 export function excludeCanvasArtifactsPredicate() {
   return sql`(${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}
-    AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND})`;
+    AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND}
+    AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${DOCUMENT_GATED_KIND})`;
 }
