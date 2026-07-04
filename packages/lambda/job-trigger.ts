@@ -16,8 +16,8 @@ import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
   continueAgentLoopDispatch,
+  dispatchNeedsThread,
   isRepairableHalfBuiltStart,
-  normalizeRoutineActionsSpec,
   resolveDispatchableVersion,
   type RoutineActionResult,
   dispatchAgentLoop,
@@ -712,14 +712,6 @@ async function handleAgentLoopContinueDispatch(input: {
   );
 }
 
-/** A version is routine-only when it carries routine actions AND does not
- * run an agent turn — such runs complete without a wakeup, so no execution
- * thread should be created (plan 2026-07-03-004 U5). */
-export function isRoutineOnlyVersion(routineActionsSpec: unknown): boolean {
-  const spec = normalizeRoutineActionsSpec(routineActionsSpec);
-  return Boolean(spec && spec.actions.length > 0 && spec.agentTurn === false);
-}
-
 function scheduledAgentLoopIdempotencyKey(event: JobTriggerEvent): string {
   const fireId =
     event.fireId ||
@@ -856,21 +848,26 @@ async function handleAgentLoopSchedule(input: {
     : job.space_id
       ? await loadActiveSpaceId(db, tenantId, job.space_id)
       : null;
+  // R4: only agent_thread targets inherit the worker's default Space when no
+  // explicit Space is configured — they need a home. A routine/workflow
+  // target with no explicit Space is HEADLESS and must NOT get a default-space
+  // fallback (which would spawn a thread it never uses).
+  const isAgentThreadTarget = dispatchVersion?.targetKind === "agent_thread";
   const executionSpaceId =
     configuredSpaceId ??
-    (workerId ? await loadAgentDefaultSpaceId(db, tenantId, workerId) : null);
-  // Routine-only Automations (plan 2026-07-03-004 U5) run their actions
-  // token-free and complete with no agent turn — creating an execution
-  // thread here leaves an empty "Working…" thread hung forever. A repair
-  // reuses the existing run/iteration, so it needs no new thread either.
-  const routineOnly = isRoutineOnlyVersion(
-    dispatchVersion?.routineActionsSpec ?? null,
-  );
+    (isAgentThreadTarget && workerId
+      ? await loadAgentDefaultSpaceId(db, tenantId, workerId)
+      : null);
+  // No Space ⇒ no thread, on every dispatch path (THINK-137 U4, R4). The
+  // shared dispatchNeedsThread seam replaces the routine-only special-case:
+  // a thread is created ONLY for an agent_thread target with a resolved
+  // Space. Routine/workflow targets never open a thread; a repair reuses the
+  // existing run/iteration and needs no new thread either.
   const executionThread =
     !willRepairExisting &&
+    dispatchNeedsThread(dispatchVersion, executionSpaceId) &&
     workerId &&
-    loop.lifecycle_status === "active" &&
-    !routineOnly
+    loop.lifecycle_status === "active"
       ? await ensureThreadForWork({
           tenantId,
           agentId: workerId,

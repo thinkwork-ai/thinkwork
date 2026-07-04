@@ -41,6 +41,7 @@ const loadedContext = (
       failBehavior: "return_blocker",
       escalateOnFailure: false,
     },
+    targetKind: "agent_thread",
   },
   run: {
     id: "run-1",

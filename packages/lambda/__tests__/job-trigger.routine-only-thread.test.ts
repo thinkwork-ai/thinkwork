@@ -1,49 +1,77 @@
 /**
- * Routine-only Automations must not create an execution thread (plan
- * 2026-07-03-004 U5): they complete their token-free routine actions with
- * no agent turn, so a created thread would hang at "Working…" forever.
- * isRoutineOnlyVersion gates thread creation in both the scheduled
- * (job-trigger) and manual (triggerAgentLoopRun) paths.
+ * No Space ⇒ no thread, on every dispatch path (THINK-137 U4, R4). The
+ * job-trigger and triggerAgentLoopRun call sites both gate execution-thread
+ * creation on the shared `dispatchNeedsThread` seam over the resolved
+ * TargetSpec: an agent_thread target with a resolved Space needs a thread;
+ * routine/workflow targets are headless and never do. This replaces the
+ * retired `isRoutineOnlyVersion` special-case (#3302).
  */
 
 import { describe, expect, it } from "vitest";
-import { isRoutineOnlyVersion } from "../job-trigger.js";
+import {
+  dispatchNeedsThread,
+  resolveDispatchableVersion,
+} from "@thinkwork/agent-loops-core";
 
 const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
 
-describe("isRoutineOnlyVersion", () => {
-  it("is true when routine actions run with no agent turn", () => {
-    expect(
-      isRoutineOnlyVersion({
-        actions: [{ routineId: ROUTINE_ID }],
-        agentTurn: false,
-      }),
-    ).toBe(true);
+const baseRow = {
+  id: "version-1",
+  version_status: "active",
+  goal_spec: { objective: "Do it", completionCriteria: ["done"] },
+  worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+  judge_spec: { mode: "self_check", criteria: [], config: {} },
+  loop_policy: {
+    maxIterations: 1,
+    failBehavior: "return_blocker",
+    escalateOnFailure: false,
+  },
+};
+
+describe("dispatchNeedsThread gating over the resolved target", () => {
+  it("a routine target is headless — no thread, with or without a Space", () => {
+    const version = resolveDispatchableVersion({
+      ...baseRow,
+      target_spec: {
+        kind: "routine",
+        routine: { routineId: ROUTINE_ID, label: "Nightly" },
+      },
+    });
+    expect(version.targetKind).toBe("routine");
+    expect(dispatchNeedsThread(version, "space-1")).toBe(false);
+    expect(dispatchNeedsThread(version, null)).toBe(false);
   });
 
-  it("accepts the AWSJSON string form", () => {
-    expect(
-      isRoutineOnlyVersion(
-        JSON.stringify({
-          actions: [{ routineId: ROUTINE_ID }],
-          agentTurn: false,
-        }),
-      ),
-    ).toBe(true);
+  it("an agent_thread target creates a thread only when a Space is resolved", () => {
+    const version = resolveDispatchableVersion({
+      ...baseRow,
+      target_spec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Do it",
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
+    });
+    expect(version.targetKind).toBe("agent_thread");
+    expect(dispatchNeedsThread(version, "space-1")).toBe(true);
+    expect(dispatchNeedsThread(version, null)).toBe(false);
   });
 
-  it("is false for a mixed Automation (agent turn runs)", () => {
-    expect(
-      isRoutineOnlyVersion({
-        actions: [{ routineId: ROUTINE_ID }],
-        agentTurn: true,
-      }),
-    ).toBe(false);
-  });
-
-  it("is false when there are no routine actions", () => {
-    expect(isRoutineOnlyVersion({ actions: [], agentTurn: false })).toBe(false);
-    expect(isRoutineOnlyVersion(null)).toBe(false);
-    expect(isRoutineOnlyVersion(undefined)).toBe(false);
+  it("carries R11 guards from target_spec onto the dispatchable version", () => {
+    const version = resolveDispatchableVersion({
+      ...baseRow,
+      target_spec: {
+        kind: "routine",
+        routine: { routineId: ROUTINE_ID },
+        guards: { maxConcurrentRuns: 2, monthlyCostCapUsd: 10 },
+      },
+    });
+    expect(version.guards).toEqual({
+      maxConcurrentRuns: 2,
+      monthlyCostCapUsd: 10,
+    });
   });
 });

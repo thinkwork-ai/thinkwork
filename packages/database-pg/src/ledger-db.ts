@@ -17,7 +17,7 @@
  * their existing @thinkwork/database-pg imports.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import type {
   AgentLoopDispatchLedger,
   AgentLoopRunRepairState,
@@ -30,8 +30,25 @@ import {
   agentLoops,
   agentWakeupRequests,
   agents,
+  inboxItems,
   spaces,
 } from "./schema/index";
+
+/** Non-terminal run statuses that count against the R11 concurrency cap
+ * (THINK-137 U4). Terminal statuses (completed/failed/budget_stopped/
+ * escalated/canceled/skipped) do not. */
+const ACTIVE_RUN_STATUSES = [
+  "queued",
+  "running",
+  "waiting_for_human",
+] as const;
+
+/** Inbox-item type + open status for headless-run failures (R10). One OPEN
+ * (pending) item per automation; resolving it (any non-pending status) lets a
+ * later failure raise a fresh item. Mirrors routine-exec-git's
+ * `routine_infra_failure` dedup pattern. */
+const HEADLESS_FAILURE_INBOX_TYPE = "automation_headless_failure";
+const INBOX_OPEN_STATUS = "pending";
 
 /**
  * Call-site-specific hooks the shared ledger cannot own. `runRoutineAction`
@@ -250,6 +267,101 @@ export function createDbAgentLoopLedger(
           updated_at: input.now,
         })
         .where(eq(agentLoopRuns.id, input.runId));
+    },
+
+    async countActiveRuns(input) {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(agentLoopRuns)
+        .where(
+          and(
+            eq(agentLoopRuns.tenant_id, input.tenantId),
+            eq(agentLoopRuns.agent_loop_id, input.agentLoopId),
+            inArray(agentLoopRuns.status, [...ACTIVE_RUN_STATUSES]),
+          ),
+        );
+      return Number(row?.count ?? 0);
+    },
+
+    async sumMonthlyCostCents(input) {
+      // WIRED-BUT-INERT: total_cost_usd_cents is never written yet, so this
+      // COALESCEs to 0 today. The query is correct for when cost accounting
+      // lands (THINK-137 U4).
+      const [row] = await db
+        .select({
+          total: sql<number>`coalesce(sum(${agentLoopRuns.total_cost_usd_cents}), 0)::bigint`,
+        })
+        .from(agentLoopRuns)
+        .where(
+          and(
+            eq(agentLoopRuns.tenant_id, input.tenantId),
+            eq(agentLoopRuns.agent_loop_id, input.agentLoopId),
+            gte(agentLoopRuns.created_at, input.monthStart),
+          ),
+        );
+      return Number(row?.total ?? 0);
+    },
+
+    async raiseHeadlessFailureItem(input) {
+      // One OPEN item per automation. A repeat failure UPDATES the existing
+      // pending item (failureCount++, lastFailureAt) rather than spamming the
+      // inbox; a new item is raised only after the prior one is resolved
+      // (status left pending here, moved off by the inbox decide/cancel flow).
+      const [pending] = await db
+        .select({ id: inboxItems.id, config: inboxItems.config })
+        .from(inboxItems)
+        .where(
+          and(
+            eq(inboxItems.tenant_id, input.tenantId),
+            eq(inboxItems.type, HEADLESS_FAILURE_INBOX_TYPE),
+            eq(inboxItems.entity_id, input.agentLoopId),
+            eq(inboxItems.status, INBOX_OPEN_STATUS),
+          ),
+        )
+        .limit(1);
+      const description = `${input.errorCode}: ${input.errorMessage}`.slice(
+        0,
+        2000,
+      );
+      if (pending) {
+        const prevConfig =
+          pending.config && typeof pending.config === "object"
+            ? (pending.config as Record<string, unknown>)
+            : {};
+        const prevCount = Number(prevConfig.failureCount ?? 1);
+        await db
+          .update(inboxItems)
+          .set({
+            description,
+            config: {
+              ...prevConfig,
+              runId: input.runId,
+              errorCode: input.errorCode,
+              errorMessage: input.errorMessage,
+              failureCount: prevCount + 1,
+              lastFailureAt: input.now.toISOString(),
+            },
+            updated_at: input.now,
+          })
+          .where(eq(inboxItems.id, pending.id));
+        return;
+      }
+      await db.insert(inboxItems).values({
+        tenant_id: input.tenantId,
+        type: HEADLESS_FAILURE_INBOX_TYPE,
+        status: INBOX_OPEN_STATUS,
+        title: `Automation failed: ${input.loopName ?? input.agentLoopId}`,
+        description,
+        entity_type: "agent_loop",
+        entity_id: input.agentLoopId,
+        config: {
+          runId: input.runId,
+          errorCode: input.errorCode,
+          errorMessage: input.errorMessage,
+          failureCount: 1,
+          lastFailureAt: input.now.toISOString(),
+        },
+      });
     },
   };
 

@@ -1,10 +1,12 @@
 import type {
+  AgentLoopTargetKind,
   GoalSpec,
   JudgeSpec,
   LoopPolicy,
   RoutineActionResult,
   RoutineActionSpec,
   RoutineActionsSpec,
+  TargetGuards,
   WorkerSpec,
 } from "./contracts";
 import {
@@ -65,6 +67,13 @@ export interface DispatchableAgentLoopVersion {
   /** Deterministic routine actions (plan 2026-07-03-004 U5). Null on
    * versions without routine actions. */
   routineActionsSpec?: RoutineActionsSpec | null;
+  /** Resolved target kind (THINK-137 U3/U4). Drives the "does this dispatch
+   * need a Thread?" decision (agent_thread does; routine/workflow never) and
+   * whether a failure is headless (routine/workflow). */
+  targetKind: AgentLoopTargetKind;
+  /** R11 run guards carried on target_spec — max concurrent runs + monthly
+   * cost cap. Enforced at the dispatcher start-gate (THINK-137 U4). */
+  guards?: TargetGuards | null;
 }
 
 /**
@@ -294,6 +303,44 @@ export interface AgentLoopDispatchLedger {
     results: RoutineActionResult[];
     now: Date;
   }): Promise<void>;
+  /**
+   * Counts the loop's non-terminal (queued/running/waiting_for_human) runs,
+   * for the R11 `maxConcurrentRuns` guard (THINK-137 U4). Optional: the gate
+   * only enforces concurrency when the ledger provides this AND the target
+   * carries the guard. The run about to be created is NOT counted.
+   */
+  countActiveRuns?(input: {
+    tenantId: string;
+    agentLoopId: string;
+  }): Promise<number>;
+  /**
+   * Sums `agent_loop_runs.total_cost_usd_cents` for the loop in the current
+   * calendar month, for the R11 `monthlyCostCapUsd` guard (THINK-137 U4).
+   * Optional + WIRED-BUT-INERT: runs record no cost yet, so this returns 0
+   * in practice and the cap never trips until cost accounting lands.
+   */
+  sumMonthlyCostCents?(input: {
+    tenantId: string;
+    agentLoopId: string;
+    monthStart: Date;
+  }): Promise<number>;
+  /**
+   * Raises (or updates) a deduplicated inbox item for a headless-run failure
+   * (THINK-137 U4, R10). Dedup scope is one OPEN item per automation: repeat
+   * failures update the existing pending item (incrementing failureCount +
+   * lastFailureAt); a new item is raised only after the prior one is
+   * resolved/acknowledged. Optional in the interface, always implemented by
+   * the shared DB ledger so both dispatch call sites get it.
+   */
+  raiseHeadlessFailureItem?(input: {
+    tenantId: string;
+    agentLoopId: string;
+    loopName?: string | null;
+    runId: string;
+    errorCode: string;
+    errorMessage: string;
+    now: Date;
+  }): Promise<void>;
 }
 
 export type AgentLoopDispatchResult =
@@ -481,5 +528,43 @@ export function resolveDispatchableVersion(
     judgeSpec: row.judge_spec as JudgeSpec,
     loopPolicy: row.loop_policy as LoopPolicy,
     routineActionsSpec,
+    targetKind: targetSpec.kind,
+    guards: targetSpec.guards ?? null,
   };
+}
+
+/**
+ * Shared thread-decision seam (THINK-137 U4, R4). A dispatch creates an
+ * execution Thread ONLY when the target is an `agent_thread` AND a Space has
+ * been resolved for it. routine/workflow targets are headless — they run
+ * deterministically with no wakeup and no thread. Both dispatch call sites
+ * (job-trigger's handleAgentLoopSchedule and the triggerAgentLoopRun mutation)
+ * consume this one predicate so the "no Space ⇒ no thread" rule can never
+ * drift between them.
+ *
+ * The caller is responsible for resolving `spaceId` with the correct fallback:
+ * agent_thread targets inherit the worker's default Space when no explicit
+ * Space is set (they need a home); routine/workflow targets must NOT — a
+ * routine/workflow automation with no explicit Space is headless.
+ */
+export function dispatchNeedsThread(
+  version: DispatchableAgentLoopVersion | null | undefined,
+  spaceId: string | null | undefined,
+): boolean {
+  if (!version) return false;
+  if (version.targetKind !== "agent_thread") return false;
+  return spaceId != null;
+}
+
+/**
+ * A headless target (routine/workflow) never opens a Thread, so its failures
+ * are invisible unless surfaced elsewhere — they become a deduplicated inbox
+ * item (THINK-137 U4, R10).
+ */
+export function isHeadlessTarget(
+  version: DispatchableAgentLoopVersion | null | undefined,
+): boolean {
+  return (
+    version?.targetKind === "routine" || version?.targetKind === "workflow"
+  );
 }

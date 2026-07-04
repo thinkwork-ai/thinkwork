@@ -43,6 +43,7 @@ const baseInput = (
       failBehavior: "return_blocker",
       escalateOnFailure: false,
     },
+    targetKind: "agent_thread",
   },
   trigger: {
     family: "manual",
@@ -472,6 +473,184 @@ describe("dispatchAgentLoop routine actions", () => {
     const result = await dispatchAgentLoop(baseInput(), ledger);
     expect(result.status).toBe("queued");
     expect(ledger.wakeups[0].payload.agentLoop.routineActionResults).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R11 run guards + headless-failure inbox (THINK-137 U4)
+// ---------------------------------------------------------------------------
+
+import { dispatchNeedsThread, isHeadlessTarget } from "./run-ledger";
+
+function headlessRoutineVersion() {
+  return resolveDispatchableVersion({
+    id: "version-1",
+    version_status: "active",
+    goal_spec: { objective: "", completionCriteria: [] },
+    worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+    judge_spec: { mode: "self_check", criteria: [], config: {} },
+    loop_policy: {
+      maxIterations: 1,
+      failBehavior: "return_blocker",
+      escalateOnFailure: false,
+    },
+    target_spec: {
+      kind: "routine",
+      routine: { routineId: ROUTINE_ID, label: "LastMile check" },
+    },
+  });
+}
+
+describe("dispatchNeedsThread (shared no-Space ⇒ no-thread seam)", () => {
+  const agentThread = baseInput().version!;
+  const routine = headlessRoutineVersion();
+
+  it("agent_thread WITH a resolved Space needs a thread", () => {
+    expect(dispatchNeedsThread(agentThread, "space-1")).toBe(true);
+  });
+  it("agent_thread WITHOUT a resolved Space does not (headless)", () => {
+    expect(dispatchNeedsThread(agentThread, null)).toBe(false);
+  });
+  it("routine/workflow target never needs a thread, even with a Space", () => {
+    expect(dispatchNeedsThread(routine, "space-1")).toBe(false);
+    expect(dispatchNeedsThread(routine, null)).toBe(false);
+  });
+  it("isHeadlessTarget is true only for routine/workflow", () => {
+    expect(isHeadlessTarget(routine)).toBe(true);
+    expect(isHeadlessTarget(agentThread)).toBe(false);
+  });
+});
+
+describe("R11 run guards at the start gate", () => {
+  it("skips with max_concurrent_runs when the active-run count is at the cap", async () => {
+    const ledger = fakeLedger();
+    const countActiveRuns = vi.fn(async () => 3);
+    Object.assign(ledger, { countActiveRuns });
+    const version = { ...baseInput().version!, guards: { maxConcurrentRuns: 3 } };
+
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+
+    expect(result).toMatchObject({ status: "skipped" });
+    expect(ledger.runs[0]).toMatchObject({
+      status: "skipped",
+      errorCode: "max_concurrent_runs",
+    });
+    expect(ledger.iterations[0]).toMatchObject({
+      status: "skipped",
+      errorCode: "max_concurrent_runs",
+    });
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+    expect(ledger.updateLoopAfterDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "skipped" }),
+    );
+  });
+
+  it("dispatches normally when the active-run count is under the cap", async () => {
+    const ledger = fakeLedger();
+    const countActiveRuns = vi.fn(async () => 1);
+    Object.assign(ledger, { countActiveRuns });
+    const version = { ...baseInput().version!, guards: { maxConcurrentRuns: 3 } };
+
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+
+    expect(result.status).toBe("queued");
+  });
+
+  it("skips with monthly_cost_cap when the month sum is at or over the cap", async () => {
+    const ledger = fakeLedger();
+    // Cap $10 → 1000 cents; ledger reports 1200 cents already spent.
+    const sumMonthlyCostCents = vi.fn(async () => 1200);
+    Object.assign(ledger, { sumMonthlyCostCents });
+    const version = {
+      ...baseInput().version!,
+      guards: { monthlyCostCapUsd: 10 },
+    };
+
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+
+    expect(result).toMatchObject({ status: "skipped" });
+    expect(ledger.runs[0]).toMatchObject({ errorCode: "monthly_cost_cap" });
+    expect(sumMonthlyCostCents).toHaveBeenCalledWith(
+      expect.objectContaining({ agentLoopId: "loop-1" }),
+    );
+  });
+
+  it("is inert when guards are absent or the ledger lacks the reads", async () => {
+    const ledger = fakeLedger();
+    // No countActiveRuns/sumMonthlyCostCents on the ledger, but guards present.
+    const version = {
+      ...baseInput().version!,
+      guards: { maxConcurrentRuns: 1, monthlyCostCapUsd: 1 },
+    };
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+    expect(result.status).toBe("queued");
+  });
+});
+
+describe("headless-run failure raises a deduplicated inbox item (R10)", () => {
+  it("raises the item when a routine-only headless run fails", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => ({
+      ...okRoutineResult(),
+      status: "failed" as const,
+      errorClass: "code_run_failed",
+      errorMessage: "boom",
+    }));
+    const completeRoutineOnlyRun = vi.fn();
+    const raiseHeadlessFailureItem = vi.fn();
+    Object.assign(ledger, {
+      runRoutineAction,
+      completeRoutineOnlyRun,
+      raiseHeadlessFailureItem,
+    });
+
+    const result = await dispatchAgentLoop(
+      baseInput({ version: headlessRoutineVersion() }),
+      ledger,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(raiseHeadlessFailureItem).toHaveBeenCalledTimes(1);
+    expect(raiseHeadlessFailureItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentLoopId: "loop-1",
+        runId: "run-1",
+        errorCode: "routine_action_failed",
+      }),
+    );
+  });
+
+  it("does NOT raise an inbox item when the headless run succeeds", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    const completeRoutineOnlyRun = vi.fn();
+    const raiseHeadlessFailureItem = vi.fn();
+    Object.assign(ledger, {
+      runRoutineAction,
+      completeRoutineOnlyRun,
+      raiseHeadlessFailureItem,
+    });
+
+    await dispatchAgentLoop(
+      baseInput({ version: headlessRoutineVersion() }),
+      ledger,
+    );
+
+    expect(raiseHeadlessFailureItem).not.toHaveBeenCalled();
+  });
+
+  it("does NOT raise an inbox item for an agent_thread (non-headless) failure", async () => {
+    const ledger = fakeLedger();
+    const raiseHeadlessFailureItem = vi.fn();
+    Object.assign(ledger, { raiseHeadlessFailureItem });
+    // Mixed agent_thread version with actions but no runner → fails, but it is
+    // NOT headless (it has a thread/Space), so no inbox item.
+    vi.mocked(ledger.enqueueWakeup).mockRejectedValueOnce(new Error("boom"));
+
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    expect(result.status).toBe("failed");
+    expect(raiseHeadlessFailureItem).not.toHaveBeenCalled();
   });
 });
 

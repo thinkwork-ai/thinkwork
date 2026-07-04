@@ -361,4 +361,95 @@ describe("saveAgentLoop", () => {
       }),
     );
   });
+
+  // R4 (THINK-137 U4): an agent_thread target needs a Space.
+  it("rejects an agent_thread targetSpec with no Space at save time", async () => {
+    await expect(
+      saveAgentLoop(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            name: "Spaceless agent thread",
+            // spaceId omitted → headless is not allowed for agent_thread.
+            lifecycleStatus: "active",
+            enabled: true,
+            triggerSpec: { family: "manual", enabled: true, config: {} },
+            goalSpec: { objective: "Do the thing", completionCriteria: ["ok"] },
+            workerSpec: {
+              type: "agent",
+              id: "agent-9",
+              toolHints: [],
+              config: {},
+            },
+            targetSpec: {
+              kind: "agent_thread",
+              agentThread: {
+                instructions: "Do the thing",
+                workerId: "agent-9",
+                workerType: "agent",
+                threadMode: "new_per_run",
+              },
+            },
+          },
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow(/Agent-thread automations need a Space/);
+    expect(mocks.insertValues).not.toHaveBeenCalled();
+  });
+
+  it("saves a routine target with no Space (headless is allowed)", async () => {
+    mocks.selectRows.mockImplementation(async () => [
+      {
+        id: "loop-1",
+        tenant_id: "tenant-1",
+        name: "Nightly routine",
+        slug: "nightly-routine",
+        lifecycle_status: "active",
+        enabled: true,
+        primary_trigger_family: "schedule",
+        current_version_id: "version-1",
+        current_version_number: 1,
+        created_at: new Date("2026-06-23T00:00:00Z"),
+        updated_at: new Date("2026-06-23T00:00:00Z"),
+      },
+    ]);
+
+    await saveAgentLoop(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          name: "Nightly routine",
+          // no spaceId — headless routine target
+          lifecycleStatus: "active",
+          enabled: true,
+          triggerSpec: {
+            family: "schedule",
+            enabled: true,
+            config: { expression: "rate(1 day)" },
+          },
+          goalSpec: { objective: "n/a", completionCriteria: ["done"] },
+          workerSpec: { type: "agent", id: "agent-9", toolHints: [], config: {} },
+          targetSpec: {
+            kind: "routine",
+            routine: {
+              routineId: "33333333-3333-4333-8333-333333333333",
+              label: "Nightly",
+            },
+          },
+        },
+      },
+      ctx(),
+    );
+
+    expect(mocks.insertValues).toHaveBeenNthCalledWith(
+      2,
+      2,
+      expect.objectContaining({
+        target_spec: expect.objectContaining({ kind: "routine" }),
+      }),
+    );
+  });
 });

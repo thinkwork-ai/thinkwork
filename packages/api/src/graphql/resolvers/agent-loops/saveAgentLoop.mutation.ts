@@ -97,6 +97,10 @@ async function createAgentLoop(
   actorId: string | null,
   spaceId: string | null,
 ): Promise<unknown> {
+  // R4: an agent_thread automation needs a home Space. Routine/workflow
+  // targets save fine without one (they run headless).
+  assertAgentThreadTargetHasSpace(normalized.targetSpec, spaceId);
+
   const [loop] = await db
     .insert(agentLoops)
     .values({
@@ -179,6 +183,11 @@ async function updateAgentLoop(
   if (existing.tenant_id !== input.tenantId) {
     throw new Error("AgentLoop does not belong to this tenant");
   }
+
+  // R4: validate against the EFFECTIVE Space — an unchanged (undefined)
+  // spaceId keeps the existing loop's Space.
+  const effectiveSpaceId = spaceId === undefined ? existing.space_id : spaceId;
+  assertAgentThreadTargetHasSpace(normalized.targetSpec, effectiveSpaceId);
 
   const currentVersion = existing.current_version_id
     ? await loadVersion(existing.current_version_id)
@@ -277,6 +286,21 @@ async function loadAgentLoop(id: string): Promise<unknown> {
     .limit(1);
   if (!row) throw new Error(`AgentLoop ${id} not found after save`);
   return agentLoopRowToGraphql(row);
+}
+
+/**
+ * R4 save-time guard (THINK-137 U4): an `agent_thread` target must have a
+ * Space to run in. Routine/workflow targets are headless and save without one.
+ */
+function assertAgentThreadTargetHasSpace(
+  targetSpec: TargetSpec,
+  spaceId: string | null | undefined,
+): void {
+  if (targetSpec.kind === "agent_thread" && !spaceId) {
+    throw new Error(
+      "Agent-thread automations need a Space — pick one or switch to a routine/workflow target.",
+    );
+  }
 }
 
 async function resolveAgentLoopSpaceId(
