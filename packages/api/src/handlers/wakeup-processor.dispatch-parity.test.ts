@@ -394,6 +394,26 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     );
   });
 
+  // THINK-137 U5/R5: Per-Sender Context Injection. The run-as identity rides
+  // the wakeup's requested_by_actor_* columns, which wakeup-processor maps to
+  // `invokerUserId` → the AgentCore envelope's `user_id` (scope.user_id). That
+  // ONE variable must feed BOTH the initial turn payload AND the turn-loop
+  // resume re-invoke, or a resumed automation turn resolves a different (or no)
+  // user's workspace projection + memory bank mid-run — the same first-turn-
+  // only masking that bit the platform three times.
+  it("both wakeup builders inject the run-as identity as user_id (initial turn AND resume)", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    // Exactly two envelope builders stamp the invoker as user_id: the initial
+    // agentCorePayload and the turn-loop re-invoke.
+    expect(wakeupSource.match(/user_id: invokerUserId,/g)).toHaveLength(2);
+    // invokerUserId is derived ONLY from a real user actor on the wakeup row
+    // (run-as lands there as requested_by_actor_type='user'); system/agent
+    // actors get no injected identity.
+    expect(wakeupSource).toContain(
+      'wakeup.requested_by_actor_type === "user" && wakeup.requested_by_actor_id',
+    );
+  });
+
   it("passes model routing policy and approved model ids through unchanged", () => {
     const routes = [
       {

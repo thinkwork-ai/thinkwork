@@ -32,6 +32,7 @@ import {
   agents,
   inboxItems,
   spaces,
+  users,
 } from "./schema/index";
 
 /** Non-terminal run statuses that count against the R11 concurrency cap
@@ -87,6 +88,19 @@ export function createDbAgentLoopLedger(
 
     async loadRunRepairState(input) {
       return loadAgentLoopRunRepairState(db, input.tenantId, input.runId);
+    },
+
+    async loadUserTenantId(input) {
+      // R5 run-as cross-check (THINK-137 U5). Same shape as
+      // startSkillRunService's invoker lookup (KTD3): return the user's tenant
+      // so the dispatcher can reject a cross-tenant run-as identity. Null when
+      // the user does not exist.
+      const [row] = await db
+        .select({ tenantId: users.tenant_id })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .limit(1);
+      return row?.tenantId ?? null;
     },
 
     async createRun(input) {

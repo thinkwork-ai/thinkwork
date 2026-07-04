@@ -444,3 +444,22 @@ describe("raiseHeadlessFailureItem dedup (R10)", () => {
     });
   });
 });
+
+describe("loadUserTenantId — run-as tenant cross-check (THINK-137 U5, R5)", () => {
+  it("returns the user's tenant id", async () => {
+    const { db, calls } = mockDb([[{ tenantId: "tenant-1" }]]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    const tenantId = await ledger.loadUserTenantId!({ userId: "user-1" });
+
+    expect(tenantId).toBe("tenant-1");
+    expect(calls.some((c) => c.op === "select")).toBe(true);
+  });
+
+  it("returns null when the run-as user does not exist (hard-reject upstream)", async () => {
+    const { db } = mockDb([[]]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    expect(await ledger.loadUserTenantId!({ userId: "ghost" })).toBeNull();
+  });
+});

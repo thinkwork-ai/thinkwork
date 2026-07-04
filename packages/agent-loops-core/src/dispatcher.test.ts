@@ -814,6 +814,145 @@ describe("dispatchAgentLoop via resolved routine-kind target", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Per-Sender Context Injection — run-as identity (THINK-137 U5, R5)
+// ---------------------------------------------------------------------------
+
+import { buildAgentLoopWakeupPayload } from "./run-ledger";
+
+describe("run-as identity (Per-Sender Context Injection, R5)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("carries run-as into the wakeup as a user actor AND onto the payload, keeping the trigger actor on the run row", async () => {
+    const ledger = fakeLedger();
+    // A scheduled dispatch whose TRIGGER actor is the system, but whose
+    // automation runs AS a specific user.
+    const input = baseInput({
+      trigger: {
+        family: "schedule",
+        source: "agent_loop_schedule",
+        actorType: "system",
+        actorId: null,
+        runAsUserId: "run-as-user",
+        scheduledJobId: "job-1",
+      },
+    });
+    Object.assign(ledger, {
+      loadUserTenantId: vi.fn(async () => "tenant-1"),
+    });
+
+    const result = await dispatchAgentLoop(input, ledger);
+
+    expect(result.status).toBe("queued");
+    // Trigger actor stays on the run row (audit) — NOT the run-as identity.
+    expect(ledger.runs[0]).toMatchObject({
+      actorType: "system",
+      actorId: null,
+    });
+    // Run-as identity drives the wakeup's requested_by_actor_* (→ envelope
+    // scope.user_id in wakeup-processor) and the payload copy.
+    expect(ledger.wakeups[0]).toMatchObject({
+      requestedByActorType: "user",
+      requestedByActorId: "run-as-user",
+    });
+    expect(ledger.wakeups[0].payload.agentLoop.runAsUserId).toBe("run-as-user");
+  });
+
+  it("absent run-as ⇒ system actor, no identity injection (payload field null)", async () => {
+    const ledger = fakeLedger();
+    // baseInput has no runAsUserId.
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    expect(result.status).toBe("queued");
+    expect(ledger.wakeups[0]).toMatchObject({
+      requestedByActorType: "system",
+      requestedByActorId: null,
+    });
+    expect(ledger.wakeups[0].payload.agentLoop.runAsUserId).toBeNull();
+  });
+
+  it("HARD-REJECTS a run-as user from a different tenant — skipped run with run_as_tenant_mismatch, NO wakeup, NO silent system downgrade", async () => {
+    const ledger = fakeLedger();
+    Object.assign(ledger, {
+      loadUserTenantId: vi.fn(async () => "OTHER-tenant"),
+    });
+    const input = baseInput({
+      trigger: {
+        ...baseInput().trigger,
+        runAsUserId: "cross-tenant-user",
+      },
+    });
+
+    const result = await dispatchAgentLoop(input, ledger);
+
+    expect(result).toMatchObject({ status: "skipped" });
+    expect(ledger.runs[0]).toMatchObject({
+      status: "skipped",
+      errorCode: "run_as_tenant_mismatch",
+    });
+    expect(ledger.iterations[0]).toMatchObject({
+      status: "skipped",
+      errorCode: "run_as_tenant_mismatch",
+    });
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+  });
+
+  it("HARD-REJECTS a run-as user that does not exist (run_as_tenant_mismatch)", async () => {
+    const ledger = fakeLedger();
+    Object.assign(ledger, { loadUserTenantId: vi.fn(async () => null) });
+    const input = baseInput({
+      trigger: { ...baseInput().trigger, runAsUserId: "ghost-user" },
+    });
+
+    const result = await dispatchAgentLoop(input, ledger);
+
+    expect(result).toMatchObject({ status: "skipped" });
+    expect(ledger.runs[0]).toMatchObject({
+      errorCode: "run_as_tenant_mismatch",
+    });
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+  });
+
+  it("is inert (run-as still injected) when the ledger cannot cross-check membership", async () => {
+    const ledger = fakeLedger();
+    // No loadUserTenantId on the ledger, but run-as present.
+    const input = baseInput({
+      trigger: { ...baseInput().trigger, runAsUserId: "run-as-user" },
+    });
+
+    const result = await dispatchAgentLoop(input, ledger);
+
+    expect(result.status).toBe("queued");
+    expect(ledger.wakeups[0]).toMatchObject({
+      requestedByActorType: "user",
+      requestedByActorId: "run-as-user",
+    });
+  });
+
+  it("resume-turn payload carries the SAME run-as identity as the initial turn", () => {
+    const version = baseInput().version!;
+    const common = {
+      loop: baseInput().loop,
+      version,
+      trigger: baseInput().trigger,
+      runId: "run-1",
+      iterationId: "iter-1",
+      runAsUserId: "run-as-user",
+    };
+    const start = buildAgentLoopWakeupPayload({
+      ...common,
+      goalModeAction: "start",
+    });
+    const resume = buildAgentLoopWakeupPayload({
+      ...common,
+      goalModeAction: "resume",
+    });
+
+    expect(start.agentLoop.runAsUserId).toBe("run-as-user");
+    expect(resume.agentLoop.runAsUserId).toBe(start.agentLoop.runAsUserId);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Recoverable idempotency repair (THINK-137 U2)
 // ---------------------------------------------------------------------------
 

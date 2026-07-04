@@ -76,7 +76,14 @@ export async function dispatchAgentLoop(
   // iteration created with status skipped + code/reason, summarized on the
   // loop) so the UI shows why.
   const guardSkip = baseGate.ok ? await evaluateGuardGate(input, ledger, now) : null;
-  const startGate: StartGateResult = guardSkip ?? baseGate;
+  // R5 run-as tenant cross-check (THINK-137 U5). A run-as user that does not
+  // belong to the automation's tenant HARD-REJECTS the run (recorded as a
+  // skip with code run_as_tenant_mismatch) — it is NEVER silently downgraded
+  // to a system actor. Sits after the base + guard gates: only a run that
+  // would otherwise dispatch is checked. Mirrors startSkillRunService (KTD3).
+  const runAsSkip =
+    baseGate.ok && !guardSkip ? await evaluateRunAsGate(input, ledger) : null;
+  const startGate: StartGateResult = guardSkip ?? runAsSkip ?? baseGate;
   const run = await ledger.createRun(
     buildRunInput({
       input,
@@ -331,6 +338,14 @@ export async function continueAgentLoopDispatch(
   }
 
   try {
+    // R5 Per-Sender Context Injection (THINK-137 U5). The run-as identity —
+    // NOT the trigger actor — is what the agent turn resolves its workspace
+    // projection + memory bank from, so it lands on the wakeup's
+    // requested_by_actor_* (which wakeup-processor maps to invokerUserId →
+    // envelope scope.user_id). The trigger actor stays on the run row's
+    // actor_type/actor_id (buildRunInput) — the two are kept distinct. When
+    // no run-as identity exists the wakeup is a system actor: no injection.
+    const runAsUserId = input.trigger.runAsUserId ?? null;
     const payload = buildAgentLoopWakeupPayload({
       loop: input.loop,
       version: input.version,
@@ -338,6 +353,7 @@ export async function continueAgentLoopDispatch(
       runId: refs.runId,
       iterationId: refs.iterationId,
       routineActionResults: routineResults,
+      runAsUserId,
     });
     const wakeup = await ledger.enqueueWakeup({
       tenantId: input.tenantId,
@@ -347,8 +363,8 @@ export async function continueAgentLoopDispatch(
       reason: input.version.goalSpec.objective,
       payload,
       idempotencyKey: `agent-loop:${refs.runId}:iteration:1`,
-      requestedByActorType: input.trigger.actorType ?? null,
-      requestedByActorId: input.trigger.actorId ?? null,
+      requestedByActorType: runAsUserId ? "user" : "system",
+      requestedByActorId: runAsUserId,
       now,
     });
     await ledger.markIterationWakeup({
@@ -510,6 +526,42 @@ async function evaluateGuardGate(
 
 function startOfMonthUtc(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+/**
+ * R5 run-as tenant-membership gate (THINK-137 U5). When the automation carries
+ * a `run_as_user_id` (trigger.runAsUserId), the run-as user MUST belong to the
+ * automation's tenant. A mismatch (or a missing user) HARD-REJECTS the run —
+ * returned as a skip with code `run_as_tenant_mismatch`, recorded as the run's
+ * skip reason exactly like any other pre-dispatch rejection. It is NEVER
+ * silently downgraded to a system-actor run. Follows startSkillRunService's
+ * `invoker.tenant_id !== tenantId` rejection (KTD3), not resolveCaller
+ * widening. Inert only when the ledger cannot look up the user (no
+ * loadUserTenantId), which the shared DB ledger always provides.
+ */
+async function evaluateRunAsGate(
+  input: AgentLoopDispatchInput,
+  ledger: AgentLoopDispatchLedger,
+): Promise<{ ok: false; code: string; reason: string } | null> {
+  const runAsUserId = input.trigger.runAsUserId ?? null;
+  if (!runAsUserId) return null;
+  if (!ledger.loadUserTenantId) return null;
+  const userTenantId = await ledger.loadUserTenantId({ userId: runAsUserId });
+  if (userTenantId == null) {
+    return {
+      ok: false,
+      code: "run_as_tenant_mismatch",
+      reason: `Run-as user ${runAsUserId} was not found; cannot inject its identity for tenant ${input.tenantId}.`,
+    };
+  }
+  if (userTenantId !== input.tenantId) {
+    return {
+      ok: false,
+      code: "run_as_tenant_mismatch",
+      reason: `Run-as user ${runAsUserId} belongs to a different tenant than this automation (${input.tenantId}); dispatch refused.`,
+    };
+  }
+  return null;
 }
 
 function evaluateStartGate(input: AgentLoopDispatchInput): StartGateResult {
