@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[Topic] — Ideation</title>
+<style>
+:root{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+    --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+    --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+    --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+    --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+  --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+  --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+  --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+  --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+}
+:root[data-theme="light"]{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:32px 24px 64px}
+p,li,dd{max-width:72ch}
+h1{font-size:1.7em;line-height:1.25;margin:.2em 0 .3em}
+h2{font-size:1.25em;margin:2.2em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.05em;margin:1.4em 0 .4em}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+.eyebrow{font-size:.72em;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.meta{color:var(--muted);font-size:.9em;margin:.2em 0 1.2em}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
+.stat .n{font-size:1.35em;font-weight:700}
+.stat .l{font-size:.78em;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .q{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card .a{font-weight:700;margin:.25em 0 .35em}
+.card p{font-size:.92em;margin:0;color:var(--muted)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.75em;font-weight:600}
+.pill.acc{background:var(--accent-soft);color:var(--accent-text)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+.pill.info{background:var(--info-soft);color:var(--info-text)}
+.pill.bad{background:var(--bad-soft);color:var(--bad-text)}
+article.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+article.item h3{margin:.1em 0 .5em}
+article.item .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+dl.fields{margin:0}
+dl.fields dt{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.8em}
+dl.fields dd{margin:.15em 0 0}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent-text);font-size:.85em}
+figure{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+figcaption{font-size:.85em;color:var(--muted);margin-top:8px}
+footer.composition-signal{margin-top:48px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.82em}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+@media print{
+  body{background:#fff;color:#111}
+  main{max-width:none;padding:0}
+  article.item,.card,.stat,figure,table{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<main>
+
+<div class="eyebrow">IDEATION · [GROUNDING]</div>
+<h1>[Topic] — Ideation</h1>
+<p class="meta"><strong>date</strong> [YYYY-MM-DD] &nbsp;·&nbsp; <strong>topic</strong> <code>[kebab-topic]</code></p>
+
+<div class="stats">
+  <div class="stat"><div class="n">12</div><div class="l">raw ideas</div></div>
+  <div class="stat"><div class="n">4</div><div class="l">survivors</div></div>
+  <div class="stat"><div class="n">3</div><div class="l">axes covered</div></div>
+</div>
+
+<h2 id="summary">Summary</h2>
+<p>One paragraph: what was explored, what survived, and the single strongest direction. A reader who stops here knows the answer.</p>
+
+<h2 id="ranked-ideas">Ranked Ideas</h2>
+<article class="item" id="i1">
+<h3>1. [Idea title — the direction in plain words]</h3>
+<div class="chips"><span class="pill acc">[category]</span><span class="pill info">Confidence 80%</span><span class="pill warn">Complexity Medium</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>[Concrete explanation of the idea — what would exist that doesn't today.]</dd>
+<dt>Basis</dt><dd>[The evidence: a quoted fact, named prior art, or a written-out argument. Ideas without a basis don't survive.]</dd>
+<dt>Rationale</dt><dd>[Why the basis makes this significant.]</dd>
+<dt>Downsides</dt><dd>[Real tradeoffs and costs.]</dd>
+</dl>
+</article>
+<figure>
+<svg viewBox="0 0 720 120" role="img" aria-label="Example flow diagram: input through decision to two outcomes">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.3">
+<rect x="12" y="40" width="140" height="42" rx="8"/>
+<path d="M230 61 L280 40 L360 40 L310 82 L230 82 Z" stroke="var(--warn)"/>
+<rect x="440" y="10" width="150" height="42" rx="8" stroke="var(--accent)"/>
+<rect x="440" y="72" width="150" height="42" rx="8" stroke="var(--bad)"/>
+<line x1="152" y1="61" x2="228" y2="61" marker-end="url(#arr)"/>
+<line x1="352" y1="48" x2="438" y2="32" marker-end="url(#arr)" stroke="var(--accent)"/>
+<line x1="340" y1="76" x2="438" y2="92" marker-end="url(#arr)" stroke="var(--bad)"/>
+</g>
+<g font-size="12" fill="var(--ink)">
+<text x="82" y="58" text-anchor="middle">input</text><text x="82" y="73" text-anchor="middle" font-size="10" fill="var(--muted)">what arrives</text>
+<text x="297" y="58" text-anchor="middle" fill="var(--warn-text)">check</text><text x="297" y="72" text-anchor="middle" font-size="9" fill="var(--muted)">the gate</text>
+<text x="515" y="28" text-anchor="middle" fill="var(--accent-text)">accepted path</text><text x="515" y="43" text-anchor="middle" font-size="10" fill="var(--muted)">what happens</text>
+<text x="515" y="90" text-anchor="middle" fill="var(--bad-text)">rejected path</text><text x="515" y="105" text-anchor="middle" font-size="10" fill="var(--muted)">and its fallback</text>
+</g>
+</svg>
+<figcaption>Diagrams are hand-authored inline SVG using the theme variables — replace this example with the real structure the content has.</figcaption>
+</figure>
+<article class="item" id="i2">
+<h3>2. [Second idea]</h3>
+<div class="chips"><span class="pill acc">[category]</span><span class="pill info">Confidence 65%</span><span class="pill acc">Complexity Low</span></div>
+<dl class="fields">
+<dt>Description</dt><dd>[...]</dd>
+<dt>Basis</dt><dd>[...]</dd>
+<dt>Rationale</dt><dd>[...]</dd>
+<dt>Downsides</dt><dd>[...]</dd>
+</dl>
+</article>
+
+<h2 id="rejection-summary">Rejection Summary</h2>
+<table>
+<tr><th>#</th><th>Idea</th><th>Reason rejected</th></tr>
+<tr><td>1</td><td>[Cut idea]</td><td>[One-line reason — the rejection record is what makes the ranking trustworthy.]</td></tr>
+<tr><td>2</td><td>[Cut idea]</td><td>[Reason.]</td></tr>
+</table>
+
+<footer class="composition-signal">Composed [date] by [agent] from [source context — thread/topic in one line].</footer>
+</main>
+</body>
+</html>
