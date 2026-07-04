@@ -40,7 +40,10 @@ interface RecordedCall {
  * call order; each terminal `.limit()` / `.returning()` / update `.where()`
  * pops the next canned result.
  */
-function mockDb(selectResults: unknown[][] = [], insertResults: unknown[][] = []) {
+function mockDb(
+  selectResults: unknown[][] = [],
+  insertResults: unknown[][] = [],
+) {
   const calls: RecordedCall[] = [];
   const selectQueue = [...selectResults];
   const insertQueue = [...insertResults];
@@ -181,7 +184,6 @@ const wakeupInput = (
       triggerFamily: "schedule",
       triggerSource: "agent_loop_schedule",
       completionCriteria: ["A useful brief exists."],
-      judgeMode: "self_check",
       loopPolicy: {
         maxIterations: 2,
         maxTokens: 12_000,

@@ -49,31 +49,6 @@ enum AgentLoopIterationStatus {
   canceled
 }
 
-enum AgentLoopJudgeMode {
-  self_check
-  human_approval
-  model_judge
-  reviewer_agent
-  eval_threshold
-  external_callback
-}
-
-enum AgentLoopJudgmentOutcome {
-  complete
-  continue
-  failed
-  budget_stopped
-  needs_human_approval
-  escalated
-}
-
-enum AgentLoopEvidenceRedactionState {
-  summary_only
-  redacted
-  offloaded
-  raw_allowed
-}
-
 type AgentLoop {
   id: ID!
   tenantId: ID!
@@ -95,11 +70,6 @@ type AgentLoop {
   lastRunStatus: AgentLoopRunStatus
   lastRunAt: AWSDateTime
   lastRunSummary: AWSJSON!
-  acceptedRunCount: Int!
-  rejectedRunCount: Int!
-  escalatedRunCount: Int!
-  totalCostUsdCents: Int!
-  costPerAcceptedRunUsdCents: Int
   versions: [AgentLoopVersion!]!
   runs(limit: Int, cursor: String, status: AgentLoopRunStatus): [AgentLoopRun!]!
   # THINK-137 U6 (R6): the inbound webhook endpoint minted for a webhook-trigger
@@ -160,9 +130,7 @@ type AgentLoopVersion {
   triggerSpec: AWSJSON!
   goalSpec: AWSJSON!
   workerSpec: AWSJSON!
-  judgeSpec: AWSJSON!
   loopPolicy: AWSJSON!
-  evidencePolicy: AWSJSON!
   # Deterministic routine actions (plan 2026-07-03-004 U5, R7). Null when
   # the version has none; {actions: [{routineId, input?, label?}],
   # agentTurn} otherwise — agentTurn=false is a routine-only Automation.
@@ -208,8 +176,6 @@ type AgentLoopRun {
   errorMessage: String
   totalCostUsdCents: Int
   iterations: [AgentLoopIteration!]!
-  judgments: [AgentLoopJudgment!]!
-  evidence: [AgentLoopEvidence!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -232,43 +198,8 @@ type AgentLoopIteration {
   errorCode: String
   errorMessage: String
   totalCostUsdCents: Int
-  judgments: [AgentLoopJudgment!]!
-  evidence: [AgentLoopEvidence!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
-}
-
-type AgentLoopJudgment {
-  id: ID!
-  tenantId: ID!
-  agentLoopRunId: ID!
-  agentLoopRun: AgentLoopRun
-  agentLoopIterationId: ID
-  judgeMode: AgentLoopJudgeMode!
-  outcome: AgentLoopJudgmentOutcome!
-  confidence: Int
-  rationale: String
-  terminalReason: String
-  structuredOutput: AWSJSON!
-  createdAt: AWSDateTime!
-}
-
-type AgentLoopEvidence {
-  id: ID!
-  tenantId: ID!
-  agentLoopId: ID!
-  agentLoopRunId: ID
-  agentLoopIterationId: ID
-  agentLoopJudgmentId: ID
-  evidenceType: String!
-  sourceSystem: String!
-  sourceId: String
-  uri: String
-  summary: AWSJSON!
-  redactionState: AgentLoopEvidenceRedactionState!
-  sensitivity: String
-  retentionExpiresAt: AWSDateTime
-  createdAt: AWSDateTime!
 }
 
 input SaveAgentLoopInput {
@@ -291,12 +222,10 @@ input SaveAgentLoopInput {
   # validated + written; when absent, target_spec is derived from the legacy
   # goal/worker/routineActions inputs so no version row is written NULL.
   targetSpec: AWSJSON
-  # THINK-137 U3 (R11): judge / loop-policy / evidence are off the product
-  # surface. Still accepted (and ignored) for back-compat; the columns are
-  # written with defaults.
-  judgeSpec: AWSJSON
+  # THINK-137 U3 (R11): loop-policy is off the product surface. Still accepted
+  # (and ignored) for back-compat; the column is written with a default. The
+  # judge / evidence inputs were removed in THINK-137 U10.
   loopPolicy: AWSJSON
-  evidencePolicy: AWSJSON
   # Optional routine actions. Validated at save: every routineId must be
   # an enabled git_python routine in this tenant.
   routineActionsSpec: AWSJSON

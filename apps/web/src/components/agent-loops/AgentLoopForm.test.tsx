@@ -392,9 +392,7 @@ function editLoop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
       triggerSpec: { family: "webhook", enabled: true, config: {} },
       goalSpec: {},
       workerSpec: {},
-      judgeSpec: {},
       loopPolicy: {},
-      evidencePolicy: {},
       targetSpec: {
         kind: "agent_thread",
         agentThread: {
@@ -409,10 +407,6 @@ function editLoop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
     lastRunStatus: null,
     lastRunAt: null,
     lastRunSummary: {},
-    acceptedRunCount: 0,
-    rejectedRunCount: 0,
-    escalatedRunCount: 0,
-    totalCostUsdCents: 0,
     createdAt: "2026-06-22T12:00:00.000Z",
     updatedAt: "2026-06-22T12:00:00.000Z",
     ...overrides,

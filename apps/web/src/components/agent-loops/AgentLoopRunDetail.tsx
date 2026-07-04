@@ -11,10 +11,8 @@ import {
   JsonPreview,
 } from "@/components/workflows/workflow-ui";
 import { SettingsAgentLoopRunQuery } from "@/lib/graphql-queries";
-import { AgentLoopEvidencePanel } from "./AgentLoopEvidencePanel";
 import type {
   AgentLoopIteration,
-  AgentLoopJudgment,
   AgentLoopRunDetail as AgentLoopRunDetailData,
 } from "./agent-loop-types";
 import {
@@ -103,11 +101,7 @@ export function AgentLoopRunDetail({
     );
   }
 
-  const waitingForHuman =
-    run.status === "waiting_for_human" ||
-    run.judgments.some(
-      (judgment) => judgment.outcome === "needs_human_approval",
-    );
+  const waitingForHuman = run.status === "waiting_for_human";
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto p-6">
@@ -195,22 +189,6 @@ export function AgentLoopRunDetail({
         )}
       </InfoCard>
 
-      <InfoCard title="Judgments">
-        {run.judgments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No judgments have been recorded yet.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {run.judgments.map((judgment) => (
-              <JudgmentCard key={judgment.id} judgment={judgment} />
-            ))}
-          </div>
-        )}
-      </InfoCard>
-
-      <AgentLoopEvidencePanel evidence={run.evidence} />
-
       <div className="grid gap-4 xl:grid-cols-2">
         <InfoCard title="Input">
           <JsonPreview value={run.inputSummary} />
@@ -286,53 +264,6 @@ function IterationCard({ iteration }: { iteration: AgentLoopIteration }) {
           ) : null}
         </div>
       </div>
-      {iteration.judgments.length ? (
-        <div className="mt-3 space-y-2">
-          {iteration.judgments.map((judgment) => (
-            <JudgmentCard key={judgment.id} judgment={judgment} compact />
-          ))}
-        </div>
-      ) : null}
     </li>
-  );
-}
-
-function JudgmentCard({
-  judgment,
-  compact,
-}: {
-  judgment: AgentLoopJudgment;
-  compact?: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-border/70 p-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="text-xs">
-          {titleize(judgment.judgeMode)}
-        </Badge>
-        <Badge variant="outline" className="text-xs">
-          {titleize(judgment.outcome)}
-        </Badge>
-        {judgment.confidence != null ? (
-          <span className="text-xs text-muted-foreground">
-            {judgment.confidence}% confidence
-          </span>
-        ) : null}
-        <span className="text-xs text-muted-foreground">
-          {formatDateTime(judgment.createdAt)}
-        </span>
-      </div>
-      {judgment.rationale ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {judgment.rationale}
-        </p>
-      ) : null}
-      {judgment.terminalReason ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          Terminal reason: {judgment.terminalReason}
-        </p>
-      ) : null}
-      {compact ? null : <JsonPreview value={judgment.structuredOutput} />}
-    </div>
   );
 }

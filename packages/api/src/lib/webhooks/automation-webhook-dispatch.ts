@@ -402,7 +402,6 @@ async function loadAutomationContext(
             version_status: agentLoopVersions.version_status,
             goal_spec: agentLoopVersions.goal_spec,
             worker_spec: agentLoopVersions.worker_spec,
-            judge_spec: agentLoopVersions.judge_spec,
             loop_policy: agentLoopVersions.loop_policy,
             routine_actions_spec: agentLoopVersions.routine_actions_spec,
             target_spec: agentLoopVersions.target_spec,

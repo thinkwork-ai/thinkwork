@@ -23,7 +23,6 @@ export const agentLoopMutations = {
 
 export {
   agentLoopIterationTypeResolvers,
-  agentLoopJudgmentTypeResolvers,
   agentLoopRunTypeResolvers,
   agentLoopTypeResolvers,
   agentLoopVersionTypeResolvers,

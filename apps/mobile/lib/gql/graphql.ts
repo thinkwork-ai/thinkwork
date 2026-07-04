@@ -283,15 +283,12 @@ export type AgentKnowledgeBaseInput = {
 
 export type AgentLoop = {
   __typename?: 'AgentLoop';
-  acceptedRunCount: Scalars['Int']['output'];
-  costPerAcceptedRunUsdCents?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   currentVersion?: Maybe<AgentLoopVersion>;
   currentVersionId?: Maybe<Scalars['ID']['output']>;
   currentVersionNumber?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
   enabled: Scalars['Boolean']['output'];
-  escalatedRunCount: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastRunId?: Maybe<Scalars['ID']['output']>;
@@ -302,13 +299,11 @@ export type AgentLoop = {
   ownerAgentId?: Maybe<Scalars['ID']['output']>;
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   primaryTriggerFamily: AgentLoopTriggerFamily;
-  rejectedRunCount: Scalars['Int']['output'];
   runAsUserId?: Maybe<Scalars['ID']['output']>;
   runs: Array<AgentLoopRun>;
   slug: Scalars['String']['output'];
   spaceId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
-  totalCostUsdCents: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<AgentLoopVersion>;
   webhookDeliveries: Array<AutomationWebhookDelivery>;
@@ -327,32 +322,6 @@ export type AgentLoopWebhookDeliveriesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
-export type AgentLoopEvidence = {
-  __typename?: 'AgentLoopEvidence';
-  agentLoopId: Scalars['ID']['output'];
-  agentLoopIterationId?: Maybe<Scalars['ID']['output']>;
-  agentLoopJudgmentId?: Maybe<Scalars['ID']['output']>;
-  agentLoopRunId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  evidenceType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  redactionState: AgentLoopEvidenceRedactionState;
-  retentionExpiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  sensitivity?: Maybe<Scalars['String']['output']>;
-  sourceId?: Maybe<Scalars['String']['output']>;
-  sourceSystem: Scalars['String']['output'];
-  summary: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  uri?: Maybe<Scalars['String']['output']>;
-};
-
-export enum AgentLoopEvidenceRedactionState {
-  Offloaded = 'offloaded',
-  RawAllowed = 'raw_allowed',
-  Redacted = 'redacted',
-  SummaryOnly = 'summary_only'
-}
-
 export type AgentLoopIteration = {
   __typename?: 'AgentLoopIteration';
   agentLoopRun?: Maybe<AgentLoopRun>;
@@ -361,13 +330,11 @@ export type AgentLoopIteration = {
   createdAt: Scalars['AWSDateTime']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
-  evidence: Array<AgentLoopEvidence>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   goalModeAction?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   inputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   iterationNumber: Scalars['Int']['output'];
-  judgments: Array<AgentLoopJudgment>;
   outputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: AgentLoopIterationStatus;
@@ -386,40 +353,6 @@ export enum AgentLoopIterationStatus {
   Queued = 'queued',
   Running = 'running',
   WaitingForHuman = 'waiting_for_human'
-}
-
-export enum AgentLoopJudgeMode {
-  EvalThreshold = 'eval_threshold',
-  ExternalCallback = 'external_callback',
-  HumanApproval = 'human_approval',
-  ModelJudge = 'model_judge',
-  ReviewerAgent = 'reviewer_agent',
-  SelfCheck = 'self_check'
-}
-
-export type AgentLoopJudgment = {
-  __typename?: 'AgentLoopJudgment';
-  agentLoopIterationId?: Maybe<Scalars['ID']['output']>;
-  agentLoopRun?: Maybe<AgentLoopRun>;
-  agentLoopRunId: Scalars['ID']['output'];
-  confidence?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  judgeMode: AgentLoopJudgeMode;
-  outcome: AgentLoopJudgmentOutcome;
-  rationale?: Maybe<Scalars['String']['output']>;
-  structuredOutput: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  terminalReason?: Maybe<Scalars['String']['output']>;
-};
-
-export enum AgentLoopJudgmentOutcome {
-  BudgetStopped = 'budget_stopped',
-  Complete = 'complete',
-  Continue = 'continue',
-  Escalated = 'escalated',
-  Failed = 'failed',
-  NeedsHumanApproval = 'needs_human_approval'
 }
 
 export enum AgentLoopLifecycleStatus {
@@ -442,13 +375,11 @@ export type AgentLoopRun = {
   currentIteration: Scalars['Int']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
-  evidence: Array<AgentLoopEvidence>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   idempotencyKey?: Maybe<Scalars['String']['output']>;
   inputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   iterations: Array<AgentLoopIteration>;
-  judgments: Array<AgentLoopJudgment>;
   lastEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
   outputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   policySnapshot: Scalars['AWSJSON']['output'];
@@ -489,10 +420,8 @@ export type AgentLoopVersion = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdByActorId?: Maybe<Scalars['ID']['output']>;
   createdByActorType?: Maybe<Scalars['String']['output']>;
-  evidencePolicy: Scalars['AWSJSON']['output'];
   goalSpec: Scalars['AWSJSON']['output'];
   id: Scalars['ID']['output'];
-  judgeSpec: Scalars['AWSJSON']['output'];
   loopPolicy: Scalars['AWSJSON']['output'];
   publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   routineActionsSpec?: Maybe<Scalars['AWSJSON']['output']>;
@@ -8501,10 +8430,8 @@ export type RuntimeManifest = {
 export type SaveAgentLoopInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  evidencePolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   goalSpec: Scalars['AWSJSON']['input'];
   id?: InputMaybe<Scalars['ID']['input']>;
-  judgeSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   lifecycleStatus?: InputMaybe<AgentLoopLifecycleStatus>;
   loopPolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];

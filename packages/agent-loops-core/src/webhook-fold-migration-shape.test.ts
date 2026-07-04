@@ -31,7 +31,6 @@ function agentTargetVersionRow() {
       toolHints: [],
       config: {},
     },
-    judge_spec: { mode: "self_check", criteria: [], config: {} },
     loop_policy: {
       maxIterations: 1,
       failBehavior: "return_blocker",
@@ -64,7 +63,6 @@ function routineTargetVersionRow() {
       toolHints: [],
       config: {},
     },
-    judge_spec: { mode: "self_check", criteria: [], config: {} },
     loop_policy: {
       maxIterations: 1,
       failBehavior: "return_blocker",

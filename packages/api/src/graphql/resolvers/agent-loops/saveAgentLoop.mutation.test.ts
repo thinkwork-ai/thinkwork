@@ -209,7 +209,6 @@ describe("saveAgentLoop", () => {
             completionCriteria: [],
           },
           workerSpec: { type: "agent", id: "", toolHints: [], config: {} },
-          judgeSpec: { mode: "self_check", criteria: [], config: {} },
           sourceMetadata: {
             createdFrom: "settings.automations.easy",
             creationMode: "easy",
@@ -262,8 +261,6 @@ describe("saveAgentLoop", () => {
             threadMode: "new_per_run",
           },
         },
-        // R11: judge is off the product surface — written as a fixed default.
-        judge_spec: { mode: "self_check", criteria: [], config: {} },
         source_metadata: expect.objectContaining({
           createdFrom: "settings.automations.easy",
           goalInference: "runtime_inferred",
@@ -363,7 +360,6 @@ describe("saveAgentLoop", () => {
             threadMode: "new_per_run",
           },
         },
-        judge_spec: { mode: "self_check", criteria: [], config: {} },
       }),
     );
   });

@@ -31,11 +31,6 @@ const loadedContext = (
       toolHints: [],
       config: {},
     },
-    judgeSpec: {
-      mode: "self_check",
-      criteria: ["Useful enough for operator review."],
-      config: {},
-    },
     loopPolicy: {
       maxIterations: 2,
       failBehavior: "return_blocker",
@@ -51,6 +46,7 @@ const loadedContext = (
   iteration: {
     id: "iteration-1",
     iterationNumber: 1,
+    status: "running",
   },
   ...overrides,
 });
@@ -58,8 +54,6 @@ const loadedContext = (
 function fakeLedger(
   loaded: AgentLoopFinalizeLoadedContext | null = loadedContext(),
 ): AgentLoopFinalizeLedger & {
-  judgments: unknown[];
-  evidence: unknown[];
   iterationUpdates: unknown[];
   runUpdates: unknown[];
   nextIterations: unknown[];
@@ -67,21 +61,12 @@ function fakeLedger(
   projectionFailures: unknown[];
 } {
   const ledger = {
-    judgments: [] as unknown[],
-    evidence: [] as unknown[],
     iterationUpdates: [] as unknown[],
     runUpdates: [] as unknown[],
     nextIterations: [] as unknown[],
     wakeups: [] as unknown[],
     projectionFailures: [] as unknown[],
     loadContext: vi.fn().mockResolvedValue(loaded),
-    recordJudgment: vi.fn(async (input: unknown) => {
-      ledger.judgments.push(input);
-      return { id: 42 };
-    }),
-    recordEvidence: vi.fn(async (input: unknown) => {
-      ledger.evidence.push(input);
-    }),
     updateIteration: vi.fn(async (input: unknown) => {
       ledger.iterationUpdates.push(input);
     }),
@@ -136,7 +121,7 @@ describe("agentLoopContextFromSnapshot", () => {
 });
 
 describe("projectAgentLoopFinalize", () => {
-  it("records completed judgment, evidence, iteration, and run updates", async () => {
+  it("completes the iteration and run when the goal is done", async () => {
     const ledger = fakeLedger();
 
     const result = await projectAgentLoopFinalize(baseInput(), ledger);
@@ -146,23 +131,6 @@ describe("projectAgentLoopFinalize", () => {
       outcome: "complete",
       runStatus: "completed",
     });
-    expect(ledger.recordJudgment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        judgeMode: "self_check",
-        runId: "run-1",
-        iterationId: "iteration-1",
-      }),
-    );
-    expect(ledger.recordEvidence).toHaveBeenCalledWith(
-      expect.objectContaining({
-        judgmentId: 42,
-        threadTurnId: "turn-1",
-        summary: expect.objectContaining({
-          completionSummary: "Done.",
-          responsePreview: "The check-in is ready.",
-        }),
-      }),
-    );
     expect(ledger.updateIteration).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: expect.objectContaining({ iterationStatus: "completed" }),
@@ -172,11 +140,16 @@ describe("projectAgentLoopFinalize", () => {
       expect.objectContaining({
         decision: expect.objectContaining({ runStatus: "completed" }),
         currentIteration: 1,
+        outputSummary: expect.objectContaining({
+          completionSummary: "Done.",
+          responsePreview: "The check-in is ready.",
+        }),
       }),
     );
+    expect(ledger.createNextIteration).not.toHaveBeenCalled();
   });
 
-  it("creates and enqueues the next iteration when the judgment says continue", async () => {
+  it("creates and enqueues the next iteration when the goal is still active", async () => {
     const ledger = fakeLedger(
       loadedContext({
         version: {
@@ -230,33 +203,39 @@ describe("projectAgentLoopFinalize", () => {
     );
   });
 
-  it("records human approval as waiting without enqueueing another iteration", async () => {
-    const ledger = fakeLedger(
-      loadedContext({
-        version: {
-          ...loadedContext().version,
-          judgeSpec: {
-            mode: "human_approval",
-            criteria: [],
-            config: {},
-          },
-        },
-      }),
-    );
+  it("fails the run without another iteration when the worker turn failed", async () => {
+    const ledger = fakeLedger();
 
-    const result = await projectAgentLoopFinalize(baseInput(), ledger);
+    const result = await projectAgentLoopFinalize(
+      {
+        ...baseInput(),
+        goalRun: null,
+        responseText: "Something broke.",
+        turnStatus: "failed",
+        errorMessage: "boom",
+      },
+      ledger,
+    );
 
     expect(result).toMatchObject({
       status: "projected",
-      outcome: "needs_human_approval",
-      runStatus: "waiting_for_human",
+      outcome: "failed",
+      runStatus: "failed",
     });
     expect(ledger.createNextIteration).not.toHaveBeenCalled();
     expect(ledger.enqueueNextWakeup).not.toHaveBeenCalled();
   });
 
-  it("is idempotent when the iteration already has a judgment", async () => {
-    const ledger = fakeLedger(loadedContext({ existingJudgmentId: 99 }));
+  it("is idempotent when the iteration already reached a terminal status", async () => {
+    const ledger = fakeLedger(
+      loadedContext({
+        iteration: {
+          id: "iteration-1",
+          iterationNumber: 1,
+          status: "completed",
+        },
+      }),
+    );
 
     await expect(
       projectAgentLoopFinalize(baseInput(), ledger),
@@ -265,7 +244,8 @@ describe("projectAgentLoopFinalize", () => {
       runId: "run-1",
       iterationId: "iteration-1",
     });
-    expect(ledger.recordJudgment).not.toHaveBeenCalled();
+    expect(ledger.updateIteration).not.toHaveBeenCalled();
+    expect(ledger.updateRun).not.toHaveBeenCalled();
   });
 
   it("skips non-AgentLoop turns", async () => {

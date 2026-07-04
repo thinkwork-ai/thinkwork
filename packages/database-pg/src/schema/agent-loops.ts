@@ -224,11 +224,13 @@ export const agentLoopVersions = pgTable(
     trigger_spec: jsonb("trigger_spec").$type<TriggerSpec>().notNull(),
     goal_spec: jsonb("goal_spec").$type<GoalSpec>().notNull(),
     worker_spec: jsonb("worker_spec").$type<WorkerSpec>().notNull(),
-    judge_spec: jsonb("judge_spec").$type<JudgeSpec>().notNull(),
+    // THINK-137 U10: judge / evidence are off the product surface and no longer
+    // written. Made nullable so the follow-up PR can DROP these columns; the
+    // judge/evidence/ROI feature was removed here (code) and drops in PR B.
+    judge_spec: jsonb("judge_spec").$type<JudgeSpec>(),
     loop_policy: jsonb("loop_policy").$type<LoopPolicy>().notNull(),
     evidence_policy: jsonb("evidence_policy")
       .$type<EvidencePolicy>()
-      .notNull()
       .default(
         sql`'{"redactionState":"summary_only","retainRawEvidence":false}'::jsonb`,
       ),

@@ -92,7 +92,7 @@ describe("agent loop schema", () => {
     expect(versionColumns.trigger_spec.notNull).toBe(true);
     expect(versionColumns.goal_spec.notNull).toBe(true);
     expect(versionColumns.worker_spec.notNull).toBe(true);
-    expect(versionColumns.judge_spec.notNull).toBe(true);
+    expect(versionColumns.judge_spec.notNull).toBe(false);
     expect(versionColumns.loop_policy.notNull).toBe(true);
     expect(indexNames(agentLoopVersions)).toEqual(
       expect.arrayContaining([

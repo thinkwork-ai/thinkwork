@@ -96,7 +96,6 @@ describe("confirmAutomationDraft", () => {
             triggerSpec: {},
             goalSpec: {},
             workerSpec: {},
-            judgeSpec: {},
             sourceMetadata: { prompt: "Route Linear issues." },
           },
         },

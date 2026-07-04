@@ -7,8 +7,6 @@ import {
   normalizeTriggerSpec,
   normalizeWorkerSpec,
   targetSpecFromLegacy,
-  type EvidencePolicy,
-  type JudgeSpec,
   type RoutineActionsSpec,
   type TargetSpec,
 } from "@thinkwork/agent-loops-core";
@@ -54,21 +52,11 @@ type SaveAgentLoopInput = {
   goalSpec: unknown;
   workerSpec: unknown;
   targetSpec?: unknown;
-  // Judge / loop-policy / evidence are off the product surface (R11) —
-  // accepted and ignored.
-  judgeSpec?: unknown;
+  // Loop-policy is off the product surface (R11) — accepted and ignored. The
+  // judge / evidence inputs were removed in THINK-137 U10.
   loopPolicy?: unknown;
-  evidencePolicy?: unknown;
   routineActionsSpec?: unknown;
   sourceMetadata?: unknown;
-};
-
-// R11: judge mode is off the product surface. The judge_spec column is still
-// NOT NULL, so every version is written with this fixed default.
-const DEFAULT_JUDGE_SPEC: JudgeSpec = {
-  mode: "self_check",
-  criteria: [],
-  config: {},
 };
 
 export async function saveAgentLoop(
@@ -130,9 +118,7 @@ async function createAgentLoop(
       goal_spec: normalized.goalSpec,
       worker_spec: normalized.workerSpec,
       target_spec: normalized.targetSpec,
-      judge_spec: normalized.judgeSpec,
       loop_policy: normalized.loopPolicy,
-      evidence_policy: normalized.evidencePolicy,
       routine_actions_spec: normalized.routineActionsSpec,
       source_metadata: normalized.sourceMetadata,
       created_by_actor_type: actorId ? "user" : "system",
@@ -222,9 +208,7 @@ async function updateAgentLoop(
         goal_spec: normalized.goalSpec,
         worker_spec: normalized.workerSpec,
         target_spec: normalized.targetSpec,
-        judge_spec: normalized.judgeSpec,
         loop_policy: normalized.loopPolicy,
-        evidence_policy: normalized.evidencePolicy,
         routine_actions_spec: normalized.routineActionsSpec,
         source_metadata: normalized.sourceMetadata,
         created_by_actor_type: actorId ? "user" : "system",
@@ -372,9 +356,7 @@ interface NormalizedAgentLoopSpecs {
   goalSpec: ReturnType<typeof normalizeGoalSpec>;
   workerSpec: ReturnType<typeof normalizeWorkerSpec>;
   targetSpec: TargetSpec;
-  judgeSpec: JudgeSpec;
   loopPolicy: ReturnType<typeof normalizeLoopPolicy>;
-  evidencePolicy: EvidencePolicy;
   routineActionsSpec: RoutineActionsSpec | null;
   sourceMetadata: Record<string, unknown>;
 }
@@ -429,11 +411,9 @@ async function normalizeSpecs(
     goalSpec: normalizedGoal,
     workerSpec: normalizedWorker,
     targetSpec,
-    judgeSpec: DEFAULT_JUDGE_SPEC,
     loopPolicy: input.loopPolicy
       ? normalizeLoopPolicy(parseAwsJsonObject(input.loopPolicy))
       : DEFAULT_LOOP_POLICY,
-    evidencePolicy: normalizeEvidencePolicy(input.evidencePolicy),
     routineActionsSpec,
     sourceMetadata: draft.sourceMetadata,
   };
@@ -521,38 +501,13 @@ async function loadDefaultAutomationWorker(
     : null;
 }
 
-function normalizeEvidencePolicy(value: unknown): EvidencePolicy {
-  const source = parseAwsJsonObject(value);
-  const redactionState =
-    typeof source.redactionState === "string"
-      ? source.redactionState
-      : "summary_only";
-  if (
-    !["summary_only", "redacted", "offloaded", "raw_allowed"].includes(
-      redactionState,
-    )
-  ) {
-    throw new Error(`Unsupported evidence redaction state '${redactionState}'`);
-  }
-  return {
-    redactionState: redactionState as EvidencePolicy["redactionState"],
-    retainRawEvidence: source.retainRawEvidence === true,
-    retentionDays:
-      typeof source.retentionDays === "number"
-        ? source.retentionDays
-        : undefined,
-  };
-}
-
 function versionSpecsEqual(
   version: {
     trigger_spec: unknown;
     goal_spec: unknown;
     worker_spec: unknown;
     target_spec?: unknown;
-    judge_spec: unknown;
     loop_policy: unknown;
-    evidence_policy: unknown;
     routine_actions_spec?: unknown;
     source_metadata: unknown;
   },
@@ -564,10 +519,7 @@ function versionSpecsEqual(
     stableJson(version.worker_spec) === stableJson(normalized.workerSpec) &&
     stableJson(version.target_spec ?? null) ===
       stableJson(normalized.targetSpec) &&
-    stableJson(version.judge_spec) === stableJson(normalized.judgeSpec) &&
     stableJson(version.loop_policy) === stableJson(normalized.loopPolicy) &&
-    stableJson(version.evidence_policy) ===
-      stableJson(normalized.evidencePolicy) &&
     stableJson(version.routine_actions_spec ?? null) ===
       stableJson(normalized.routineActionsSpec) &&
     stableJson(version.source_metadata) ===

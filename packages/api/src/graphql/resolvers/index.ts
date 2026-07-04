@@ -129,7 +129,6 @@ import {
 } from "./work-items/index.js";
 import {
   agentLoopIterationTypeResolvers,
-  agentLoopJudgmentTypeResolvers,
   agentLoopMutations,
   agentLoopQueries,
   agentLoopRunTypeResolvers,
@@ -295,5 +294,4 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   AgentLoopVersion: agentLoopVersionTypeResolvers,
   AgentLoopRun: agentLoopRunTypeResolvers,
   AgentLoopIteration: agentLoopIterationTypeResolvers,
-  AgentLoopJudgment: agentLoopJudgmentTypeResolvers,
 };

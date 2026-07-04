@@ -144,8 +144,6 @@ import {
   agentLoopVersions,
   agentLoopRuns,
   agentLoopIterations,
-  agentLoopJudgments,
-  agentLoopEvidence,
   piExtensionSources,
   piExtensionVersions,
   piExtensionAssignments,
@@ -267,8 +265,6 @@ export {
   agentLoopVersions,
   agentLoopRuns,
   agentLoopIterations,
-  agentLoopJudgments,
-  agentLoopEvidence,
   piExtensionSources,
   piExtensionVersions,
   piExtensionAssignments,
@@ -755,9 +751,7 @@ export function assertTransition(from: string, to: string): void {
   if (!allowed || !allowed.includes(to)) {
     throw new GraphQLError(
       `Invalid status transition: ${from} → ${to}${
-        allowed?.length
-          ? `. Allowed from ${from}: ${allowed.join(", ")}`
-          : ""
+        allowed?.length ? `. Allowed from ${from}: ${allowed.join(", ")}` : ""
       }`,
       { extensions: { code: "BAD_USER_INPUT" } },
     );

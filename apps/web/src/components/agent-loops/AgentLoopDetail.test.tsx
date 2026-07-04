@@ -155,9 +155,7 @@ function loopFixture(): AgentLoopRow {
       },
       goalSpec: {},
       workerSpec: {},
-      judgeSpec: {},
       loopPolicy: {},
-      evidencePolicy: {},
       targetSpec: {
         kind: "agent_thread",
         agentThread: {
@@ -174,10 +172,6 @@ function loopFixture(): AgentLoopRow {
     lastRunStatus: "completed",
     lastRunAt: "2026-06-23T13:00:00.000Z",
     lastRunSummary: {},
-    acceptedRunCount: 1,
-    rejectedRunCount: 0,
-    escalatedRunCount: 0,
-    totalCostUsdCents: 12,
     runs: [
       {
         id: "run-1",
