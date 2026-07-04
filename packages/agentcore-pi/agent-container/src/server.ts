@@ -1469,15 +1469,32 @@ export async function buildInvocationResources(
     asString(args.payload.thinkwork_api_url) &&
     asString(args.payload.thinkwork_api_secret)
   ) {
-    addExtension(createArtifactsExtension(), {
-      canvas: createApiCanvasProvider({
-        apiUrl: asString(args.payload.thinkwork_api_url),
-        apiSecret: asString(args.payload.thinkwork_api_secret),
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-        actingUserId: args.identity.userId,
+    addExtension(
+      createArtifactsExtension({
+        // Surface the real ApiCanvasProviderError (with the GraphQL error text)
+        // to CloudWatch. Without this the underlying failure was swallowed and
+        // only the friendly tool message reached the transcript — the reason
+        // the KTD8 "Tenant membership required" root cause was invisible.
+        onError: (error, { phase }) =>
+          logStructured({
+            level: "warn",
+            event: "canvas_tool_error",
+            phase,
+            tenantId: args.identity.tenantId,
+            threadId: args.identity.threadId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
       }),
-    });
+      {
+        canvas: createApiCanvasProvider({
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          actingUserId: args.identity.userId,
+        }),
+      },
+    );
   }
 
   // fetch_workspace_source — mid-turn read-only workspace navigation (plan

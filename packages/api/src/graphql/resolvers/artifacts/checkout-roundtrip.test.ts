@@ -53,9 +53,9 @@ const h = vi.hoisted(() => {
     }
     if (cond.sql !== undefined) {
       const s: string = cond.sql;
-      const strVal = cond.values.find(
-        (v: unknown) => typeof v === "string",
-      ) as string | undefined;
+      const strVal = cond.values.find((v: unknown) => typeof v === "string") as
+        | string
+        | undefined;
       if (s.includes("stablePartId")) {
         return (row.metadata as any)?.stablePartId === strVal;
       }
@@ -243,6 +243,7 @@ vi.mock("../../../lib/artifacts/canvas-materialize.js", () => ({
 
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: vi.fn(() => Promise.resolve("member")),
+  requireActingTenantMember: vi.fn(() => Promise.resolve("member")),
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerFromAuth: vi.fn(() =>
@@ -265,7 +266,10 @@ import { upsertDraftCanvasFromActivityEvent } from "../../../lib/artifacts/born-
 const ctx = { auth: { authType: "cognito" } } as never;
 
 /** A valid re-emitted part (same stable id, different content). */
-function editedPart(base: ThreadJsonRenderPart, summary: string): ThreadJsonRenderPart {
+function editedPart(
+  base: ThreadJsonRenderPart,
+  summary: string,
+): ThreadJsonRenderPart {
   return {
     ...base,
     data: {
@@ -319,12 +323,16 @@ describe("checkout → re-emit → re-save round-trip (AE3)", () => {
     seedThread(THREAD_2);
 
     // 1) Check out A into T2 (same space).
-    await checkoutCanvas({}, { artifactId: ARTIFACT_A, threadId: THREAD_2 }, ctx);
+    await checkoutCanvas(
+      {},
+      { artifactId: ARTIFACT_A, threadId: THREAD_2 },
+      ctx,
+    );
     // Linkage recorded, no new artifact.
     expect(store.artifacts.size).toBe(1);
-    expect((store.artifacts.get(ARTIFACT_A)!.metadata as any).checkouts).toEqual([
-      expect.objectContaining({ threadId: THREAD_2 }),
-    ]);
+    expect(
+      (store.artifacts.get(ARTIFACT_A)!.metadata as any).checkouts,
+    ).toEqual([expect.objectContaining({ threadId: THREAD_2 })]);
 
     // 2) Agent edits the canvas — re-emits the part in T2.
     const edited = editedPart(base, "edited numbers");
@@ -381,8 +389,16 @@ describe("checkout → re-emit → re-save round-trip (AE3)", () => {
     seedThread(THREAD_2);
     seedThread(THREAD_3);
 
-    await checkoutCanvas({}, { artifactId: ARTIFACT_A, threadId: THREAD_2 }, ctx);
-    await checkoutCanvas({}, { artifactId: ARTIFACT_A, threadId: THREAD_3 }, ctx);
+    await checkoutCanvas(
+      {},
+      { artifactId: ARTIFACT_A, threadId: THREAD_2 },
+      ctx,
+    );
+    await checkoutCanvas(
+      {},
+      { artifactId: ARTIFACT_A, threadId: THREAD_3 },
+      ctx,
+    );
     // Both checkouts recorded on the one artifact.
     expect(store.artifacts.size).toBe(1);
     expect(
@@ -394,7 +410,9 @@ describe("checkout → re-emit → re-save round-trip (AE3)", () => {
       tenantId: TENANT_ID,
       threadId: THREAD_2,
       agentId: null,
-      payload: threadJsonRenderStateSnapshotPayload(editedPart(base, "from T2")),
+      payload: threadJsonRenderStateSnapshotPayload(
+        editedPart(base, "from T2"),
+      ),
     });
     await saveCanvas(
       {},
@@ -408,7 +426,9 @@ describe("checkout → re-emit → re-save round-trip (AE3)", () => {
       tenantId: TENANT_ID,
       threadId: THREAD_3,
       agentId: null,
-      payload: threadJsonRenderStateSnapshotPayload(editedPart(base, "from T3")),
+      payload: threadJsonRenderStateSnapshotPayload(
+        editedPart(base, "from T3"),
+      ),
     });
     await saveCanvas(
       {},

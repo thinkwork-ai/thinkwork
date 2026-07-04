@@ -7,7 +7,7 @@ const USER_ID = "55555555-5555-5555-5555-555555555555";
 
 const mocks = vi.hoisted(() => ({
   resolveCallerFromAuth: vi.fn(),
-  requireTenantMember: vi.fn(),
+  requireActingTenantMember: vi.fn(),
   canAccessSpace: vi.fn(),
   resolveThreadSpace: vi.fn(),
   listSavedCanvasesInSpace: vi.fn(),
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../core/authz.js", () => ({
-  requireTenantMember: mocks.requireTenantMember,
+  requireActingTenantMember: mocks.requireActingTenantMember,
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerFromAuth: mocks.resolveCallerFromAuth,
@@ -48,7 +48,7 @@ function ctxFor(auth: Record<string, unknown>) {
 describe("threadCanvasContext (U9 / KTD8 identity seam)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireTenantMember.mockResolvedValue(undefined);
+    mocks.requireActingTenantMember.mockResolvedValue("member");
     mocks.resolveThreadSpace.mockResolvedValue({
       tenantId: TENANT_ID,
       spaceId: SPACE_ID,

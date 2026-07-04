@@ -12,7 +12,10 @@ import {
   threads,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
-import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import {
+  resolveCallerFromAuth,
+  resolveCallerUserId,
+} from "../core/resolve-auth-user.js";
 
 const SPACE_ENUM_FIELDS = new Set([
   "status",
@@ -117,15 +120,65 @@ export async function canAccessSpace(
   spaceId: string,
 ): Promise<boolean> {
   if (await hasMemberOrPublicSpaceAccess(ctx, tenantId, spaceId)) return true;
+
   // Mention Invite (THINK-136): a mention is a thread-level invite, so a
   // caller who participates in a thread that lives in this Space can read
   // the Space shell — otherwise the invited thread has no navigable home.
   // Which threads they see inside it stays governed per-thread by
   // callerVisibleThreadPredicate.
-  if (ctx.auth.authType !== "cognito") return false;
-  const callerUserId = await resolveCallerUserId(ctx);
-  if (!callerUserId) return false;
-  return callerHasParticipantThreadInSpace(tenantId, spaceId, callerUserId);
+  if (ctx.auth.authType === "cognito") {
+    const callerUserId = await resolveCallerUserId(ctx);
+    if (!callerUserId) return false;
+    return callerHasParticipantThreadInSpace(tenantId, spaceId, callerUserId);
+  }
+
+  // KTD8 acting-user seam: an apikey/service caller holding the shared service
+  // secret that NAMES an acting user via x-principal-id (e.g. the Pi runtime's
+  // canvas provider) must be gated on THAT user's real space access — actual
+  // membership, a public space, or a participant thread — never on the bare
+  // secret. This runs only after `hasMemberOrPublicSpaceAccess` already denied,
+  // so the admin-skill route (which returns true there) is unaffected and this
+  // branch can only GRANT the acting user access they'd have as a cognito user.
+  // A bare `service` caller (no principal) resolves to a null user here and is
+  // denied, so trusted infra cannot read a private space without naming the
+  // user it acts for.
+  const acting = await resolveCallerFromAuth(ctx.auth);
+  if (!acting.userId || acting.tenantId !== tenantId) return false;
+  return actingUserHasSpaceAccess(tenantId, spaceId, acting.userId);
+}
+
+/**
+ * True when `userId` can access the space directly — an active public space, an
+ * actual membership row, or a participant thread in the space. This mirrors the
+ * cognito `hasMemberOrPublicSpaceAccess` + Mention-Invite logic but keyed on an
+ * explicit user id (the KTD8 acting user), so it is safe to call for
+ * service-secret callers whose `resolveCallerUserId` would otherwise be null.
+ */
+async function actingUserHasSpaceAccess(
+  tenantId: string,
+  spaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const [space] = await db
+    .select({ access_mode: spaces.access_mode, status: spaces.status })
+    .from(spaces)
+    .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)));
+  if (!space || space.status !== "active") return false;
+  if (space.access_mode === "public") return true;
+
+  const [member] = await db
+    .select({ id: spaceMembers.id })
+    .from(spaceMembers)
+    .where(
+      and(
+        eq(spaceMembers.tenant_id, tenantId),
+        eq(spaceMembers.space_id, spaceId),
+        eq(spaceMembers.user_id, userId),
+      ),
+    );
+  if (member) return true;
+
+  return callerHasParticipantThreadInSpace(tenantId, spaceId, userId);
 }
 
 async function hasMemberOrPublicSpaceAccess(

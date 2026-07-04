@@ -38,6 +38,7 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 
 // eslint-disable-next-line import/first
 import {
+  requireActingTenantMember,
   requireTenantAdmin,
   requireTenantMember,
 } from "../graphql/resolvers/core/authz.js";
@@ -217,5 +218,93 @@ describe("requireTenantMember", () => {
     const role = await requireTenantMember(cognitoCtx(), "tenant-1", tx);
     expect(role).toBe("member");
     expect(customSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("requireActingTenantMember (KTD8 acting-user seam)", () => {
+  beforeEach(() => {
+    mockMemberRows.mockReset();
+    mockResolveCallerUserId.mockReset();
+  });
+
+  function apikeyCtx(principalId: string | null): any {
+    return {
+      auth: {
+        authType: "apikey",
+        principalId,
+        tenantId: "tenant-1",
+        email: null,
+      },
+    };
+  }
+
+  function serviceCtx(principalId: string | null): any {
+    return {
+      auth: {
+        authType: "service",
+        principalId,
+        tenantId: "tenant-1",
+        email: null,
+      },
+    };
+  }
+
+  it("delegates to requireTenantMember for a cognito caller (member)", async () => {
+    mockResolveCallerUserId.mockResolvedValue("user-1");
+    mockMemberRows.mockReturnValue([{ role: "member" }]);
+    const role = await requireActingTenantMember(cognitoCtx(), "tenant-1");
+    expect(role).toBe("member");
+    // The cognito delegate resolves the caller identity via resolveCallerUserId
+    // (proving it went through requireTenantMember, not the apikey branch).
+    expect(mockResolveCallerUserId).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the acting user's role for an apikey caller with a membership row", async () => {
+    mockMemberRows.mockReturnValue([{ role: "member" }]);
+    const role = await requireActingTenantMember(
+      apikeyCtx("acting-1"),
+      "tenant-1",
+    );
+    expect(role).toBe("member");
+    // The apikey branch never resolves the caller via resolveCallerUserId — it
+    // trusts the asserted x-principal-id directly.
+    expect(mockResolveCallerUserId).not.toHaveBeenCalled();
+  });
+
+  it("returns 'owner' for an apikey acting user who owns the tenant", async () => {
+    mockMemberRows.mockReturnValue([{ role: "owner" }]);
+    const role = await requireActingTenantMember(
+      apikeyCtx("acting-1"),
+      "tenant-1",
+    );
+    expect(role).toBe("owner");
+  });
+
+  it("throws FORBIDDEN for an apikey acting user with NO membership row", async () => {
+    mockMemberRows.mockReturnValue([]);
+    await expect(
+      requireActingTenantMember(apikeyCtx("acting-1"), "tenant-1"),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+  });
+
+  it("throws FORBIDDEN for an apikey caller with NO asserted principal", async () => {
+    await expect(
+      requireActingTenantMember(apikeyCtx(null), "tenant-1"),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+  });
+
+  it("returns the acting user's role for a service caller with a principal", async () => {
+    mockMemberRows.mockReturnValue([{ role: "member" }]);
+    const role = await requireActingTenantMember(
+      serviceCtx("acting-1"),
+      "tenant-1",
+    );
+    expect(role).toBe("member");
+  });
+
+  it("throws FORBIDDEN for a bare service caller with NO principal", async () => {
+    await expect(
+      requireActingTenantMember(serviceCtx(null), "tenant-1"),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
   });
 });

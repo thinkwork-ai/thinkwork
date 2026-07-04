@@ -142,6 +142,68 @@ export async function requireTenantMember(
 }
 
 /**
+ * Acting-user-aware variant of {@link requireTenantMember} — the KTD8
+ * identity seam.
+ *
+ * The Pi runtime's canvas provider calls the GraphQL API with the shared
+ * service secret (`authorization: Bearer <API_AUTH_SECRET>`) AND the acting
+ * user asserted via `x-principal-id` / `x-tenant-id` (which resolves to
+ * `authType === "apikey"`). `requireTenantMember` hard-rejects any non-cognito
+ * caller, so the service+principal path can NEVER pass it — that is why all four
+ * agent canvas tools were dead on production. This helper gates the SAME
+ * member-or-above check on the ACTING user named by the assertion, so the agent
+ * acts with exactly the tenant reach of the human it acts for.
+ *
+ * Acceptance branches:
+ *   1. `cognito` — delegate to {@link requireTenantMember} (byte-identical
+ *      behavior for web / CLI / mobile callers).
+ *   2. `apikey` or `service` WITH a non-empty `ctx.auth.principalId` — the
+ *      shared service secret is the documented trust boundary for the
+ *      assertion (see `resolveCallerFromAuth`, which already returns the
+ *      asserted principal for these auth types). Look up `tenant_members` for
+ *      `(tenantId, principal_id = that principal)` and return the role if the
+ *      acting user is a member (owner/admin/member), else the same forbidden.
+ *   3. service/apikey with NO principal, or any other authType — forbidden.
+ *      Bare infrastructure cannot act on a tenant surface without naming the
+ *      user it acts for.
+ *
+ * This is deliberately SEPARATE from {@link requireTenantMember}: that helper
+ * has many other call sites (inbox, threads, workflows, knowledge, slack, …)
+ * whose strict cognito-only posture must NOT be loosened. Only the canvas
+ * resolvers the agent provider hits swap to this variant.
+ */
+export async function requireActingTenantMember(
+  ctx: GraphQLContext,
+  tenantId: string,
+  dbOrTx: DbOrTx = defaultDb,
+): Promise<TenantMemberRole> {
+  if (ctx.auth.authType === "cognito") {
+    return requireTenantMember(ctx, tenantId, dbOrTx);
+  }
+  if (ctx.auth.authType === "apikey" || ctx.auth.authType === "service") {
+    const actingPrincipalId = ctx.auth.principalId;
+    if (!actingPrincipalId) {
+      throw forbidden("Tenant membership required");
+    }
+    const [member] = await dbOrTx
+      .select({ role: tenantMembers.role })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, tenantId),
+          eq(tenantMembers.principal_id, actingPrincipalId),
+        ),
+      );
+    const role = member?.role;
+    if (role === "owner" || role === "admin" || role === "member") {
+      return role;
+    }
+    throw forbidden("Tenant membership required");
+  }
+  throw forbidden("Tenant membership required");
+}
+
+/**
  * Verify that the calling agent (asserted via `x-agent-id`) has the given
  * operation listed in its `agent_skills.permissions.operations` jsonb
  * array for `skill_id='thinkwork-admin'`. Refuses if:

@@ -16,7 +16,7 @@
 
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { requireTenantMember } from "../core/authz.js";
+import { requireActingTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { canAccessSpace } from "../spaces/shared.js";
 import {
@@ -51,7 +51,7 @@ export const threadCanvasContext = async (
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantMember(ctx, thread.tenantId);
+  await requireActingTenantMember(ctx, thread.tenantId);
   if (thread.tenantId !== caller.tenantId) {
     throw new GraphQLError("Thread belongs to a different tenant", {
       extensions: { code: "FORBIDDEN" },

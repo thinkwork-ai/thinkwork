@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   s3Reads: [] as string[],
   resolveCallerFromAuth: vi.fn(),
   requireTenantMember: vi.fn(),
+  requireActingTenantMember: vi.fn(),
   canAccessSpace: vi.fn(),
   artifactToCamelWithPayload: vi.fn((row: Record<string, unknown>) => ({
     id: row.id,
@@ -66,6 +67,7 @@ vi.mock("../../utils.js", () => {
 
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mocks.requireTenantMember,
+  requireActingTenantMember: mocks.requireActingTenantMember,
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerFromAuth: mocks.resolveCallerFromAuth,
@@ -82,7 +84,15 @@ vi.mock("./payload.js", () => ({
   artifactToCamelWithPayload: mocks.artifactToCamelWithPayload,
 }));
 vi.mock("../../../lib/artifacts/payload-storage.js", () => ({
-  artifactContentKey: ({ tenantId, artifactId, revision }: { tenantId: string; artifactId: string; revision?: string }) =>
+  artifactContentKey: ({
+    tenantId,
+    artifactId,
+    revision,
+  }: {
+    tenantId: string;
+    artifactId: string;
+    revision?: string;
+  }) =>
     revision
       ? `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/content/${revision}.md`
       : `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/content.md`,
@@ -130,6 +140,7 @@ beforeEach(() => {
     tenantId: TENANT_ID,
   });
   mocks.requireTenantMember.mockResolvedValue("member");
+  mocks.requireActingTenantMember.mockResolvedValue("member");
   mocks.canAccessSpace.mockResolvedValue(true);
 });
 
@@ -232,11 +243,21 @@ describe("saveCanvas", () => {
 describe("pinArtifact", () => {
   it("pins the head at version N -> immutable version row + head_version bump", async () => {
     mocks.selectQueue.push([
-      canvasRow({ status: "final", head_version: 2, head_write_seq: 3, space_id: SPACE_ID }),
+      canvasRow({
+        status: "final",
+        head_version: 2,
+        head_write_seq: 3,
+        space_id: SPACE_ID,
+      }),
     ]);
     mocks.s3Reads.push('{"canvas":"content"}');
     mocks.updateResults.push([
-      canvasRow({ status: "final", head_version: 3, head_write_seq: 4, space_id: SPACE_ID }),
+      canvasRow({
+        status: "final",
+        head_version: 3,
+        head_write_seq: 4,
+        space_id: SPACE_ID,
+      }),
     ]);
 
     const result = await pinArtifact({}, { artifactId: ARTIFACT_ID }, ctx);
