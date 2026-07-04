@@ -42,6 +42,7 @@ import {
   upsertDraftCanvasFromActivityEvent,
 } from "../lib/artifacts/born-artifact.js";
 import { upsertBindingFromActivityEvent } from "../lib/artifacts/binding-capture.js";
+import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 
 const db = getDb();
 
@@ -66,6 +67,13 @@ interface ActivityPayload {
   thread_id: string;
   agent_id?: string;
   events: ActivityEventInput[];
+  /**
+   * HTML Document Artifacts (THINK-147 U3): when present, this request is a
+   * `document.emit` — the emit_document tool's dual-body payload — and takes
+   * the document branch instead of the events pipeline (payload-shape
+   * discrimination; document bodies never ride thread_turn_events).
+   */
+  document?: unknown;
 }
 
 function json(
@@ -141,6 +149,58 @@ export async function handler(
   if (payload.thread_id !== pathThreadId) {
     return badRequest("Body thread_id does not match path threadId");
   }
+
+  // ---- document.emit branch (THINK-147 U3) ------------------------------
+  // Discriminated by payload shape: a `document` field routes to the dual-body
+  // document emission flow (preflight → S3 heads → born-as-artifact upsert →
+  // optional pin → compact card event). The events pipeline below is untouched.
+  if (payload.document !== undefined) {
+    const [docTurn] = await db
+      .select({
+        id: threadTurns.id,
+        tenant_id: threadTurns.tenant_id,
+        thread_id: threadTurns.thread_id,
+        agent_id: threadTurns.agent_id,
+        triggering_message_id: threadTurns.triggering_message_id,
+      })
+      .from(threadTurns)
+      .where(eq(threadTurns.id, payload.thread_turn_id))
+      .limit(1);
+    if (!docTurn) {
+      return json(404, {
+        ok: false,
+        error: "thread_turn_id not found",
+        code: "TURN_NOT_FOUND",
+      });
+    }
+    if (
+      docTurn.tenant_id !== payload.tenant_id ||
+      (docTurn.thread_id !== null && docTurn.thread_id !== payload.thread_id)
+    ) {
+      return badRequest(
+        "thread_turn_id is not in the tenant/thread named in the body",
+      );
+    }
+    try {
+      const result = await handleDocumentEmission({
+        tenantId: payload.tenant_id,
+        threadId: payload.thread_id,
+        agentId: payload.agent_id ?? docTurn.agent_id ?? null,
+        turnId: payload.thread_turn_id,
+        triggeringMessageId: docTurn.triggering_message_id ?? null,
+        raw: payload.document,
+      });
+      return json(result.statusCode, result.body);
+    } catch (err) {
+      console.error(`[chat-agent-activity] document emission failed:`, err);
+      return json(500, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        code: "INTERNAL",
+      });
+    }
+  }
+
   if (!Array.isArray(payload.events) || payload.events.length === 0) {
     return badRequest("Missing or empty events array");
   }
