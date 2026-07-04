@@ -3596,6 +3596,7 @@ export type Mutation = {
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   captureSpaceMemory: MemoryRecord;
+  checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
   /**
@@ -4134,6 +4135,12 @@ export type MutationCaptureSpaceMemoryArgs = {
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   spaceId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationCheckoutCanvasArgs = {
+  artifactId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 
