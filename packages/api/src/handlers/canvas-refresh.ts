@@ -247,15 +247,22 @@ async function publishHeadSnapshot(input: {
 }): Promise<void> {
   const raw = await loadCanvasHeadContent(input.artifactRow);
   if (!raw) return;
-  let doc: unknown;
+  let doc: Record<string, unknown>;
   try {
-    doc = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    doc = parsed as Record<string, unknown>;
   } catch {
     return;
   }
-  // The head document may carry the additive `boundData` sidecar; the snapshot
-  // event carries only the validated {type,id,data} part.
-  const validation = validateThreadJsonRenderPart(doc);
+  // The head document may carry the additive `boundData` sidecar, which is NOT
+  // a valid json-render part key (the strict validator rejects unknown keys).
+  // The snapshot event carries only the {type,id,data} part.
+  const validation = validateThreadJsonRenderPart({
+    type: doc.type,
+    id: doc.id,
+    data: doc.data,
+  });
   if (!validation.ok) return;
   const payload = threadJsonRenderStateSnapshotPayload(validation.part);
 
