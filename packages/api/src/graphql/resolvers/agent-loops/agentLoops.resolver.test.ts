@@ -87,7 +87,6 @@ vi.mock("../../utils.js", () => ({
     version_status: "agent_loop_versions.version_status",
     goal_spec: "agent_loop_versions.goal_spec",
     worker_spec: "agent_loop_versions.worker_spec",
-    judge_spec: "agent_loop_versions.judge_spec",
     loop_policy: "agent_loop_versions.loop_policy",
   },
   agentLoopRuns: {
@@ -207,11 +206,6 @@ describe("AgentLoop resolvers", () => {
               type: "agent",
               id: "agent-1",
               toolHints: [],
-              config: {},
-            },
-            judge_spec: {
-              mode: "self_check",
-              criteria: [],
               config: {},
             },
             loop_policy: { maxIterations: 1 },
