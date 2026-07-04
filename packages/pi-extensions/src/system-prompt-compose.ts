@@ -153,6 +153,7 @@ function buildRuntimeToolPolicy(
         "- If approval, review, form, or result-list UI uses a component action reference such as `task.review.primaryActionId`, `form.action.submitActionId`, or `result.list` item action ids, include a matching `durableActions` descriptor with the same id.",
         '- For Work Item approval actions, use durable action params `target: "work_item_status"`, `workItemId`, and either `statusCategory` or `statusId`; the button label/kind does not decide the status by itself.',
         "- Display-only generated UI can omit `durableActions`; do not add action descriptors unless a user click should perform a bounded ThinkWork action.",
+        '- When the generated UI presents the data from ONE earlier tool call in this turn (e.g. charting rows an MCP tool returned), pass that call\'s id as `sourceToolCallId` so the canvas records a refreshable data-source binding. Example call shape: `{ "sourceToolCallId": "call_abc123", "spec": { … }, "mobileFallback": { … } }`. Omit `sourceToolCallId` for UI not derived from a single tool result.',
         "- If the generated UI would need unsupported components or open-ended custom behavior, answer in normal prose instead of emitting UI.",
         `- ThinkWork domain components (match each example's prop shape exactly — prop schemas are strict and unknown keys are rejected):`,
         ...jsonRenderDomainComponentUsage,

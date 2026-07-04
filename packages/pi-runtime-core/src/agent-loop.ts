@@ -22,6 +22,7 @@ import {
 } from "./durable-session-manager.js";
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
+  buildCanvasDataBinding,
   extractEmitJsonRenderToolPart,
   threadJsonRenderActivityEvent,
   threadJsonRenderStateSnapshotActivityEvent,
@@ -936,17 +937,35 @@ export async function runAgentLoop(
           uiMessageParts = mergeFinalUiMessageParts(uiMessageParts, [
             jsonRenderPart,
           ]);
+          // Data-source binding capture (Living Artifacts U5, KTD4/R4): the
+          // model declares which tool call produced this UI's data via the
+          // emit's `sourceToolCallId` param (recorded in `existing.args`).
+          // Validate it against this turn's recorded invocations and derive the
+          // refresh identity; an invalid/absent reference leaves the widget
+          // unbound (null) — never an error. The descriptor rides the activity
+          // payload additively so the API persists it with no runtime→API call.
+          const sourceToolCallId = recordValue(
+            existing?.args,
+          )?.sourceToolCallId;
+          const binding = buildCanvasDataBinding({
+            partId: jsonRenderPart.id,
+            sourceToolCallId,
+            toolInvocations,
+          });
           // Additive AG-UI emission (Living Artifacts U3, KTD1/R1): keep the
           // legacy ui_message_chunk event flowing untouched AND emit a
           // per-part STATE_SNAPSHOT event. The web fold handles both kinds and
           // merges by part id, so the snapshot round-trips to the same render.
           emitActivitySafely(
             deps,
-            threadJsonRenderActivityEvent(jsonRenderPart),
+            threadJsonRenderActivityEvent(jsonRenderPart, binding ?? undefined),
           );
           emitActivitySafely(
             deps,
-            threadJsonRenderStateSnapshotActivityEvent(jsonRenderPart),
+            threadJsonRenderStateSnapshotActivityEvent(
+              jsonRenderPart,
+              binding ?? undefined,
+            ),
           );
         }
         if (!event.isError) {

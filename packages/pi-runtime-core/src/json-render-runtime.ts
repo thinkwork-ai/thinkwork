@@ -5,9 +5,11 @@ import {
   THREAD_JSON_RENDER_SCHEMA_VERSION,
   THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
   createThreadJsonRenderSpecHash,
+  resultShapeHash,
   threadJsonRenderComponentDefinitions,
   threadJsonRenderPartToStateSnapshot,
   type ThreadJsonRenderData,
+  type ThreadJsonRenderDataBindingDescriptor,
   type ThreadJsonRenderDiagnostic,
   type ThreadJsonRenderPart,
   type ThreadJsonRenderSpec,
@@ -40,6 +42,9 @@ export interface ThreadJsonRenderRuntimePartResult {
 export interface ThreadJsonRenderActivityPayload {
   kind: typeof THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND;
   chunk: ThreadJsonRenderPart;
+  /** Additive data-source binding (Living Artifacts U5, KTD4). Present only
+   *  when the emit declared a valid `sourceToolCallId`. */
+  binding?: ThreadJsonRenderDataBindingDescriptor;
 }
 
 export function buildEmitJsonRenderUiTool(): AgentTool<any> {
@@ -59,7 +64,10 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
       "such as task.review.primaryActionId or form.action.submitActionId with " +
       "matching durableActions descriptors; result.list item action ids must " +
       "also reference matching durableActions descriptors. Work Item approval actions should " +
-      'use params target "work_item_status", workItemId, and statusCategory or statusId.',
+      'use params target "work_item_status", workItemId, and statusCategory or statusId. ' +
+      "When this UI charts or tabulates the data returned by an earlier tool call " +
+      "in THIS turn, pass that call's id as sourceToolCallId so the canvas can be " +
+      "refreshed later without re-running the whole turn.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -69,6 +77,14 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
           type: "string",
           description:
             "Optional stable part id. Omit unless updating the same generated UI.",
+        },
+        sourceToolCallId: {
+          type: "string",
+          description:
+            "Optional. The id of the tool call in this turn whose result this UI " +
+            "presents (e.g. the MCP tool that returned the rows/metrics being " +
+            "charted). Pass it so the widget records a refreshable data-source " +
+            "binding. Omit when the UI is not derived from a single tool result.",
         },
         spec: {
           type: "object",
@@ -202,6 +218,7 @@ export function extractEmitJsonRenderToolPart(
 
 export function threadJsonRenderActivityEvent(
   part: ThreadJsonRenderPart,
+  binding?: ThreadJsonRenderDataBindingDescriptor,
 ): ActivityEmitEvent {
   return {
     eventType: THREAD_JSON_RENDER_ACTIVITY_EVENT_TYPE,
@@ -210,7 +227,89 @@ export function threadJsonRenderActivityEvent(
     payload: {
       kind: THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
       chunk: part,
+      ...(binding ? { binding } : {}),
     } satisfies ThreadJsonRenderActivityPayload,
+  };
+}
+
+/**
+ * Minimal read-shape of a recorded tool invocation the binding join needs. A
+ * structural subset of pi-runtime-core's `ToolInvocationRecord`, declared here
+ * so {@link buildCanvasDataBinding} stays a pure, independently-testable
+ * function with no dependency on the loop's live state.
+ */
+export interface CanvasBindingSourceInvocation {
+  id: string;
+  args?: unknown;
+  result?: unknown;
+  is_error?: boolean;
+  status?: string;
+}
+
+function recordDetails(result: unknown): Record<string, unknown> | null {
+  const record = recordValue(result);
+  return recordValue(record?.details);
+}
+
+/**
+ * Build a data-source binding descriptor for an emitted canvas part (KTD4/R4).
+ *
+ * The model declares which tool call produced the part's data via the
+ * `emit_json_render_ui` `sourceToolCallId` param; this validates that reference
+ * against the turn's recorded invocations and derives the refresh identity from
+ * the invocation's own result metadata (MCP tool wrappers stamp
+ * `details.mcp_server` / `details.mcp_tool_name` — a reliable seam, unlike
+ * parsing the sanitized `mcp_<server>_<tool>` exposed name).
+ *
+ * Returns null (widget stays UNBOUND — legal, not an error) when:
+ *  - no/blank `sourceToolCallId`,
+ *  - the id matches no recorded invocation,
+ *  - the referenced call errored or never completed,
+ *  - the source is not an MCP tool (no `mcp_server` / `mcp_tool_name`), so it
+ *    has no headless-refreshable server.
+ *
+ * Auth-context classification (tenant vs per-user OAuth) is intentionally NOT
+ * done here — the runtime knows the server NAME but not its auth model; the
+ * persistence side classifies against `tenant_mcp_servers`.
+ *
+ * v1 binds the whole part to one primary source, so `elementId` is always "".
+ */
+export function buildCanvasDataBinding(input: {
+  partId: string;
+  sourceToolCallId: unknown;
+  toolInvocations: readonly CanvasBindingSourceInvocation[];
+}): ThreadJsonRenderDataBindingDescriptor | null {
+  const { partId, sourceToolCallId, toolInvocations } = input;
+  if (typeof sourceToolCallId !== "string" || !sourceToolCallId.trim()) {
+    return null;
+  }
+  const id = sourceToolCallId.trim();
+  const source = toolInvocations.find((invocation) => invocation.id === id);
+  if (!source) return null;
+  if (source.is_error === true || source.status === "error") return null;
+
+  const details = recordDetails(source.result);
+  const serverName =
+    typeof details?.mcp_server === "string" ? details.mcp_server : null;
+  const toolName =
+    typeof details?.mcp_tool_name === "string" ? details.mcp_tool_name : null;
+  // Non-MCP tool results have no re-invokable server → cannot be bound for
+  // headless refresh. Leave the widget unbound.
+  if (!serverName || !toolName) return null;
+
+  const frozenArgs = recordValue(source.args) ?? {};
+  // Hash the raw MCP response shape when present (what U6's re-invoke returns),
+  // else the recorded result — either way the sorted KEY STRUCTURE, not values.
+  const shapeSource = details && "raw" in details ? details.raw : source.result;
+
+  return {
+    partId,
+    elementId: "",
+    serverRef: serverName,
+    serverName,
+    toolName,
+    frozenArgs,
+    resultShapeHash: resultShapeHash(shapeSource),
   };
 }
 
@@ -227,6 +326,7 @@ export function threadJsonRenderActivityEvent(
  */
 export function threadJsonRenderStateSnapshotActivityEvent(
   part: ThreadJsonRenderPart,
+  binding?: ThreadJsonRenderDataBindingDescriptor,
 ): ActivityEmitEvent {
   return {
     eventType: THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
@@ -235,6 +335,7 @@ export function threadJsonRenderStateSnapshotActivityEvent(
     payload: {
       kind: THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
       event: threadJsonRenderPartToStateSnapshot(part),
+      ...(binding ? { binding } : {}),
     } satisfies ThreadJsonRenderStateSnapshotPayload,
   };
 }

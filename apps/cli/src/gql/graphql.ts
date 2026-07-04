@@ -874,7 +874,6 @@ export type ArtifactDataBinding = {
   authContext: ArtifactBindingAuthContext;
   createdAt: Scalars['AWSDateTime']['output'];
   elementId: Scalars['String']['output'];
-  frozenArgs: Scalars['AWSJSON']['output'];
   id: Scalars['ID']['output'];
   lastFetchedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastGoodAt?: Maybe<Scalars['AWSDateTime']['output']>;
@@ -882,6 +881,7 @@ export type ArtifactDataBinding = {
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   partId: Scalars['String']['output'];
   quality: ArtifactBindingQuality;
+  redactedArgs: Scalars['AWSJSON']['output'];
   resultShapeHash: Scalars['String']['output'];
   serverName: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
