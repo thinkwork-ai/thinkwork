@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dispatchAgentLoop } from "./dispatcher";
+import { dispatchAgentLoop, isRepairableHalfBuiltStart } from "./dispatcher";
 import type {
   AgentLoopCreateIterationInput,
   AgentLoopCreateRunInput,
@@ -425,5 +425,237 @@ describe("dispatchAgentLoop routine actions", () => {
     const result = await dispatchAgentLoop(baseInput(), ledger);
     expect(result.status).toBe("queued");
     expect(ledger.wakeups[0].payload.agentLoop.routineActionResults).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recoverable idempotency repair (THINK-137 U2)
+// ---------------------------------------------------------------------------
+
+describe("isRepairableHalfBuiltStart", () => {
+  const version = baseInput().version!;
+
+  it("repairs a queued agent-turn start whose iteration has no wakeup", () => {
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "queued", iterationId: "iter-1", hasWakeup: false },
+        version,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not repair once the iteration recorded a wakeup (reused)", () => {
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "queued", iterationId: "iter-1", hasWakeup: true },
+        version,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not repair a terminal run", () => {
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "completed", iterationId: "iter-1", hasWakeup: false },
+        version,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not repair a routine-only version — a queued+no-wakeup routine-only run is ambiguous, not half-built", () => {
+    const routineOnly = {
+      ...version,
+      routineActionsSpec: {
+        actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+        agentTurn: false,
+      },
+    };
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "queued", iterationId: "iter-1", hasWakeup: false },
+        routineOnly,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not repair a mixed (actions + agentTurn:true) version — routine actions are not idempotent to re-run", () => {
+    const mixed = {
+      ...version,
+      routineActionsSpec: {
+        actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+        agentTurn: true,
+      },
+    };
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "queued", iterationId: "iter-1", hasWakeup: false },
+        mixed,
+      ),
+    ).toBe(false);
+  });
+
+  it("never repairs a null repair-state or a state missing its iterationId", () => {
+    expect(isRepairableHalfBuiltStart(null, version)).toBe(false);
+    expect(
+      isRepairableHalfBuiltStart(
+        { status: "queued", iterationId: null, hasWakeup: false },
+        version,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("dispatchAgentLoop idempotency repair", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns the existing run as reused when its wakeup was already recorded (scenario 2)", async () => {
+    const ledger = fakeLedger();
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+    const loadRunRepairState = vi.fn().mockResolvedValue({
+      status: "queued",
+      iterationId: "iter-existing",
+      hasWakeup: true,
+    });
+    Object.assign(ledger, { loadRunRepairState });
+
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    expect(result).toEqual({
+      status: "reused",
+      runId: "run-existing",
+      runStatus: "queued",
+    });
+    expect(ledger.createRun).not.toHaveBeenCalled();
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+  });
+
+  it("repairs a half-built start on retry instead of reusing it (scenario 3)", async () => {
+    const ledger = fakeLedger();
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+    const loadRunRepairState = vi.fn().mockResolvedValue({
+      status: "queued",
+      iterationId: "iter-existing",
+      hasWakeup: false,
+    });
+    Object.assign(ledger, { loadRunRepairState });
+
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    // Re-enters the continuation on the EXISTING run/iteration — no new run.
+    expect(ledger.createRun).not.toHaveBeenCalled();
+    expect(ledger.createIteration).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: "queued",
+      runId: "run-existing",
+      iterationId: "iter-existing",
+      wakeupId: "wakeup-1",
+    });
+    expect(ledger.enqueueWakeup).toHaveBeenCalledTimes(1);
+    expect(ledger.enqueueWakeup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: "agent-loop:run-existing:iteration:1",
+      }),
+    );
+    expect(ledger.markIterationWakeup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        iterationId: "iter-existing",
+        wakeupId: "wakeup-1",
+      }),
+    );
+  });
+
+  it("records the pre-existing wakeup on the iteration without a second enqueue when the ledger returns it (scenario 4)", async () => {
+    // The ledger's enqueueWakeup does lookup-or-insert on the per-run key, so
+    // on repair it returns the ALREADY-inserted wakeup row. The dispatcher
+    // still records it on the iteration — exactly one enqueue call, no double
+    // dispatch.
+    const ledger = fakeLedger();
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+    Object.assign(ledger, {
+      loadRunRepairState: vi.fn().mockResolvedValue({
+        status: "queued",
+        iterationId: "iter-existing",
+        hasWakeup: false,
+      }),
+      // Simulate lookup-or-insert returning the pre-existing wakeup row.
+      enqueueWakeup: vi.fn(async () => ({ id: "wakeup-preexisting" })),
+    });
+
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    expect(result).toMatchObject({
+      status: "queued",
+      wakeupId: "wakeup-preexisting",
+    });
+    expect(ledger.enqueueWakeup).toHaveBeenCalledTimes(1);
+    expect(ledger.markIterationWakeup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        iterationId: "iter-existing",
+        wakeupId: "wakeup-preexisting",
+      }),
+    );
+  });
+
+  it("reuses (no repair) a half-built MIXED start — never re-runs non-idempotent routine actions or re-enqueues", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    Object.assign(ledger, { runRoutineAction });
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+    Object.assign(ledger, {
+      loadRunRepairState: vi.fn().mockResolvedValue({
+        status: "queued",
+        iterationId: "iter-existing",
+        hasWakeup: false,
+      }),
+    });
+    const mixedInput = baseInput({
+      version: {
+        ...baseInput().version!,
+        routineActionsSpec: {
+          actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+          agentTurn: true,
+        },
+      },
+    });
+
+    const result = await dispatchAgentLoop(mixedInput, ledger);
+
+    expect(result).toEqual({
+      status: "reused",
+      runId: "run-existing",
+      runStatus: "queued",
+    });
+    expect(runRoutineAction).not.toHaveBeenCalled();
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+    expect(ledger.createRun).not.toHaveBeenCalled();
+  });
+
+  it("still reuses (no repair) when the ledger lacks loadRunRepairState — legacy fake ledgers unaffected", async () => {
+    const ledger = fakeLedger();
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+
+    const result = await dispatchAgentLoop(baseInput(), ledger);
+
+    expect(result).toEqual({
+      status: "reused",
+      runId: "run-existing",
+      runStatus: "queued",
+    });
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
   });
 });

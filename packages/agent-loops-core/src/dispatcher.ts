@@ -3,7 +3,9 @@ import {
   type AgentLoopDispatchInput,
   type AgentLoopDispatchLedger,
   type AgentLoopDispatchResult,
+  type AgentLoopRunRepairState,
   type AgentLoopRunStatus,
+  type DispatchableAgentLoopVersion,
   buildAgentLoopWakeupPayload,
   workerAgentId,
 } from "./run-ledger";
@@ -33,6 +35,31 @@ export async function dispatchAgentLoop(
       idempotencyKey,
     });
     if (existing) {
+      // Recoverable idempotency repair (THINK-137 U2): a matching run whose
+      // side-effect set is incomplete — a half-built agent-turn start whose
+      // wakeup was never recorded — re-enters the continuation instead of
+      // being returned as final. enqueueWakeup does a lookup-or-insert on the
+      // per-run idempotency key, so a repair after a crash between the wakeup
+      // insert and markIterationWakeup finds the existing wakeup row rather
+      // than double-dispatching.
+      const repairState = ledger.loadRunRepairState
+        ? await ledger.loadRunRepairState({
+            tenantId: input.tenantId,
+            runId: existing.id,
+          })
+        : null;
+      if (isRepairableHalfBuiltStart(repairState, input.version)) {
+        return continueAgentLoopDispatch(
+          input,
+          {
+            runId: existing.id,
+            iterationId: repairState!.iterationId!,
+            workerAgentId:
+              workerAgentId(input.version?.workerSpec) ?? undefined,
+          },
+          ledger,
+        );
+      }
       return {
         status: "reused",
         runId: existing.id,
@@ -342,6 +369,42 @@ export async function continueAgentLoopDispatch(
       error: message,
     };
   }
+}
+
+/**
+ * Reuse-vs-repair predicate (THINK-137 U2). A run found by idempotency key
+ * is REPAIRED (its continuation re-entered) rather than reused only when it
+ * is a half-built PURE agent-turn start:
+ *
+ *   - the run is still `queued` (terminal/skipped runs are final), and
+ *   - its first iteration never recorded a wakeup id, and
+ *   - the version has ZERO routine actions (pure agent-turn dispatch).
+ *
+ * Re-entering the continuation re-executes every routine action via
+ * `ledger.runRoutineAction`, a non-idempotent Lambda invoke. A crash between
+ * an action's execution and the wakeup insert would double-run the actions on
+ * retry, so any version with routine actions (routine-only OR mixed) is NEVER
+ * auto-repaired here — a half-built such start is reused as final instead. The
+ * only side effect a pure agent-turn repair re-runs is `enqueueWakeup`, which
+ * does a lookup-or-insert on the per-run idempotency key and is therefore safe.
+ *
+ * Routine-only versions (`agentTurn: false`) additionally legitimately complete
+ * without a wakeup, so a `queued` + no-wakeup routine-only run is ambiguous, not
+ * half-built. Absence of routine actions => `agentTurn !== false` => agent turn.
+ */
+export function isRepairableHalfBuiltStart(
+  repairState: AgentLoopRunRepairState | null,
+  version: DispatchableAgentLoopVersion | null,
+): boolean {
+  if (!version) return false;
+  if (!repairState || !repairState.iterationId) return false;
+  if (repairState.status !== "queued") return false;
+  if (repairState.hasWakeup) return false;
+  // Only pure agent-turn dispatches (no routine actions) are idempotent to
+  // re-enter; routine actions are non-idempotent Lambda invokes.
+  if ((version.routineActionsSpec?.actions ?? []).length > 0) return false;
+  const agentTurn = version.routineActionsSpec?.agentTurn !== false;
+  return agentTurn;
 }
 
 function evaluateStartGate(
