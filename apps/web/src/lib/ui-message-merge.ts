@@ -48,11 +48,6 @@ export type AccumulatedPart =
         | "output-error";
     }
   | {
-      type: "data-genui";
-      id: string;
-      data: unknown;
-    }
-  | {
       type: `data-${string}`;
       id?: string;
       data: unknown;

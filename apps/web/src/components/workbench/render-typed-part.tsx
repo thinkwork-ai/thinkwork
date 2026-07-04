@@ -38,7 +38,6 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
-import { ThreadJsonRenderFallback } from "@/components/workbench/json-render/ThreadJsonRenderFallback";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import type { JsonRenderActionSuccessHandler } from "@/components/workbench/json-render/use-json-render-action";
 import { McpAppFrame } from "@/components/workbench/McpAppFrame";
@@ -216,16 +215,6 @@ export function renderTypedPart(
         />
       );
     }
-    if (part.type === "data-genui") {
-      return (
-        <ThreadJsonRenderFallback
-          key={key}
-          component={legacyGenUIRootComponent(part.data)}
-          fallback={legacyGenUIFallback(part.data)}
-          legacy
-        />
-      );
-    }
     if (part.type === "data-goal-run") {
       const goalRun = normalizeGoalRunEvidence(part.data);
       return goalRun ? <GoalRunCard key={key} goalRun={goalRun} /> : null;
@@ -246,14 +235,20 @@ export function renderTypedPart(
       // Rendering it here duplicates the same task list in the transcript.
       return null;
     }
-    // Forward-compat: render as a small debug strip so unknown
-    // data-${name} parts surface in the UI without crashing.
+    // Forward-compat + graceful degrade: render unknown `data-${name}`
+    // parts — including retired `data-genui` payloads persisted in old
+    // threads (THINK-116 U11) — as a minimal "unsupported generated view"
+    // strip. Never dump the raw payload JSON or crash the transcript.
     return (
       <div
         key={key}
-        className="rounded border border-border/50 bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
+        className="flex items-center gap-2 rounded border border-dashed border-border/60 bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
+        data-testid="unsupported-generated-view"
       >
-        {part.type}
+        <span>Unsupported generated view</span>
+        <span className="rounded border border-border bg-background px-1 py-0.5 font-mono text-[10px]">
+          {part.type}
+        </span>
       </div>
     );
   }
@@ -265,34 +260,6 @@ function recordData(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function legacyGenUIFallback(value: unknown) {
-  const data = recordData(value);
-  const fallback = recordData(data.mobileFallback);
-  const title = typeof fallback.title === "string" ? fallback.title : undefined;
-  const summary =
-    typeof fallback.summary === "string" ? fallback.summary : undefined;
-  const lines = Array.isArray(fallback.lines)
-    ? fallback.lines.filter((line): line is string => typeof line === "string")
-    : undefined;
-
-  return title && summary
-    ? {
-        title,
-        summary,
-        lines,
-      }
-    : undefined;
-}
-
-function legacyGenUIRootComponent(value: unknown): string | undefined {
-  const data = recordData(value);
-  const spec = recordData(data.spec);
-  const root = typeof spec.root === "string" ? spec.root : undefined;
-  const elements = recordData(spec.elements);
-  const element = root ? recordData(elements[root]) : {};
-  return typeof element.component === "string" ? element.component : undefined;
 }
 
 /**

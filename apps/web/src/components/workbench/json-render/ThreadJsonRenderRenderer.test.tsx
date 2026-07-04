@@ -14,7 +14,6 @@ import {
   createTableJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
 } from "./fixtures";
-import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
 import { ThreadJsonRenderRenderer } from "./ThreadJsonRenderRenderer";
 
 const mocks = vi.hoisted(() => ({
@@ -272,22 +271,5 @@ describe("ThreadJsonRenderRenderer", () => {
 
     expect(screen.getByTestId("json-render-fallback")).toBeTruthy();
     expect(screen.getByText("Generated UI unavailable")).toBeTruthy();
-  });
-
-  it("renders the legacy generated UI fallback state", () => {
-    render(
-      <ThreadJsonRenderFallback
-        component="task.review"
-        fallback={{
-          title: "Legacy task review",
-          summary: "Old generated UI shape.",
-        }}
-        legacy
-      />,
-    );
-
-    expect(screen.getByTestId("json-render-legacy-fallback")).toBeTruthy();
-    expect(screen.getByText("Legacy generated UI unsupported")).toBeTruthy();
-    expect(screen.getByText("task.review")).toBeTruthy();
   });
 });

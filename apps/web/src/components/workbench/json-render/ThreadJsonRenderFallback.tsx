@@ -10,7 +10,6 @@ export interface ThreadJsonRenderFallbackProps {
   fallback?: ThreadJsonRenderMobileFallback;
   diagnostics?: ThreadJsonRenderDiagnostic[];
   rejectedUpdate?: boolean;
-  legacy?: boolean;
 }
 
 export function ThreadJsonRenderFallback({
@@ -18,33 +17,24 @@ export function ThreadJsonRenderFallback({
   fallback,
   diagnostics = [],
   rejectedUpdate = false,
-  legacy = false,
 }: ThreadJsonRenderFallbackProps) {
   const primaryDiagnostic = diagnostics.find(
     (diagnostic) => diagnostic.severity === "error",
   );
-  const title = legacy
-    ? "Legacy generated UI unsupported"
-    : rejectedUpdate
-      ? "Update rejected"
-      : (fallback?.title ?? "Generated UI unavailable");
+  const title = rejectedUpdate
+    ? "Update rejected"
+    : (fallback?.title ?? "Generated UI unavailable");
   const summary =
     fallback?.summary ??
     primaryDiagnostic?.message ??
-    (legacy
-      ? "This data-genui payload uses the retired generated UI contract."
-      : "This generated UI cannot be rendered inline.");
+    "This generated UI cannot be rendered inline.";
 
   return (
     <section
       aria-label={title}
       className="grid gap-2 rounded-md border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground"
       data-testid={
-        rejectedUpdate
-          ? "json-render-rejected-update"
-          : legacy
-            ? "json-render-legacy-fallback"
-            : "json-render-fallback"
+        rejectedUpdate ? "json-render-rejected-update" : "json-render-fallback"
       }
     >
       <div className="flex min-w-0 items-center gap-2">

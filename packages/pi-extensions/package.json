@@ -19,8 +19,6 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.76.0",
-    "@thinkwork/analytics-display": "workspace:*",
-    "@thinkwork/genui": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*",
     "typebox": "^1.1.38",

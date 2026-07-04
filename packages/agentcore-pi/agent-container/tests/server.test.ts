@@ -2975,7 +2975,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     // Other safe built-in extensions may also be present, so assert the
     // tool-name surface rather than a brittle factory count.
     expect(bundle.extensionToolNames).toEqual(
-      expect.arrayContaining(["show_analytics_display", "recall", "reflect"]),
+      expect.arrayContaining(["recall", "reflect"]),
     );
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("recall");
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("reflect");
@@ -3232,7 +3232,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.extensionToolNames).toEqual(["show_analytics_display"]);
+    expect(bundle.extensionToolNames).toEqual([]);
     expect(bundle.extensionToolNames).not.toContain("recall");
     expect(bundle.extensionToolNames).not.toContain("reflect");
   });
