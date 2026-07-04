@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
-const USER_ID = "55555555-5555-5555-5555-555555555555";
 
 const mocks = vi.hoisted(() => ({
   tables: {
@@ -10,15 +9,10 @@ const mocks = vi.hoisted(() => ({
       id: { name: "artifacts.id" },
       tenant_id: { name: "artifacts.tenant_id" },
     },
-    threads: {
-      id: { name: "threads.id" },
-      tenant_id: { name: "threads.tenant_id" },
-    },
   },
   selectQueue: [] as Array<Array<Record<string, unknown>>>,
   requireTenantMember: vi.fn(),
-  resolveCallerFromAuth: vi.fn(),
-  visiblePredicate: vi.fn(() => ({ visible: true })),
+  assertCanvasAccess: vi.fn(),
   artifactToCamelWithPayload: vi.fn((row: Record<string, unknown>) => ({
     id: row.id,
     title: row.title,
@@ -28,8 +22,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../utils.js", () => ({
-  and: (...conditions: unknown[]) => ({ and: conditions }),
-  artifacts: mocks.tables.artifacts,
   db: {
     select: () => ({
       from: () => ({
@@ -38,19 +30,15 @@ vi.mock("../../utils.js", () => ({
     }),
   },
   eq: (field: unknown, value: unknown) => ({ eq: [field, value] }),
-  threads: mocks.tables.threads,
+  artifacts: mocks.tables.artifacts,
 }));
 
 vi.mock("../core/authz.js", () => ({
   requireTenantMember: mocks.requireTenantMember,
 }));
 
-vi.mock("../core/resolve-auth-user.js", () => ({
-  resolveCallerFromAuth: mocks.resolveCallerFromAuth,
-}));
-
-vi.mock("../threads/access.js", () => ({
-  callerVisibleThreadPredicate: mocks.visiblePredicate,
+vi.mock("../../../lib/artifacts/canvas-access.js", () => ({
+  assertCanvasAccess: mocks.assertCanvasAccess,
 }));
 
 vi.mock("./payload.js", () => ({
@@ -65,62 +53,77 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.selectQueue = [];
   mocks.requireTenantMember.mockResolvedValue("member");
-  mocks.resolveCallerFromAuth.mockResolvedValue({
-    userId: USER_ID,
-    tenantId: TENANT_ID,
-  });
+  mocks.assertCanvasAccess.mockResolvedValue(undefined);
 });
 
-describe("artifact query GenUI snapshot access", () => {
-  it("hydrates a GenUI snapshot only when the source thread is visible", async () => {
-    mocks.selectQueue.push([genUISnapshotArtifact()]);
-    mocks.selectQueue.push([{ id: THREAD_ID }]);
+describe("artifact query access", () => {
+  it("gates every read through requireTenantMember + assertCanvasAccess(read)", async () => {
+    const row = canvasArtifact();
+    mocks.selectQueue.push([row]);
 
     const result = await artifact({}, { id: "artifact-1" }, ctx);
 
+    expect(mocks.requireTenantMember).toHaveBeenCalledWith(ctx, TENANT_ID);
+    expect(mocks.assertCanvasAccess).toHaveBeenCalledWith(ctx, row, "read");
     expect(result).toMatchObject({ id: "artifact-1", type: "data_view" });
-    expect(mocks.artifactToCamelWithPayload).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects GenUI snapshot artifact reads when the source thread is hidden", async () => {
-    mocks.selectQueue.push([genUISnapshotArtifact()]);
-    mocks.selectQueue.push([]);
+  it("propagates a FORBIDDEN from the canvas gate and does not hydrate", async () => {
+    mocks.selectQueue.push([canvasArtifact()]);
+    mocks.assertCanvasAccess.mockRejectedValueOnce(
+      Object.assign(new Error("no access"), {
+        extensions: { code: "FORBIDDEN" },
+      }),
+    );
 
     await expect(artifact({}, { id: "artifact-1" }, ctx)).rejects.toMatchObject(
-      {
-        extensions: { code: "FORBIDDEN" },
-      },
+      { extensions: { code: "FORBIDDEN" } },
     );
     expect(mocks.artifactToCamelWithPayload).not.toHaveBeenCalled();
   });
 
-  it("keeps non-GenUI artifacts on the existing tenant-member read path", async () => {
-    mocks.selectQueue.push([
-      {
-        id: "artifact-2",
-        tenant_id: TENANT_ID,
-        thread_id: THREAD_ID,
-        title: "Report",
-        type: "report",
-        metadata: { kind: "report" },
-      },
-    ]);
+  it("returns null for a missing artifact without touching the gate", async () => {
+    mocks.selectQueue.push([]);
 
-    const result = await artifact({}, { id: "artifact-2" }, ctx);
+    const result = await artifact({}, { id: "missing" }, ctx);
 
-    expect(result).toMatchObject({ id: "artifact-2", type: "report" });
-    expect(mocks.resolveCallerFromAuth).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+    expect(mocks.requireTenantMember).not.toHaveBeenCalled();
+    expect(mocks.assertCanvasAccess).not.toHaveBeenCalled();
+  });
+
+  it("regression: the old 'genui_snapshot' kind string is not a canvas — the dead inline gate is gone (assertCanvasAccess owns kind detection now)", async () => {
+    // Historic bug: artifact.query.ts gated on metadata.kind === 'genui_snapshot'
+    // while the writer persists 'json_render_snapshot', so the gate never fired.
+    // The resolver no longer inspects the kind at all; assertCanvasAccess does,
+    // and a legacy 'genui_snapshot' row is a no-op there (proven in
+    // canvas-access.test.ts). Here we only assert the resolver delegates.
+    const legacy = {
+      id: "artifact-legacy",
+      tenant_id: TENANT_ID,
+      thread_id: THREAD_ID,
+      title: "Legacy",
+      type: "data_view",
+      metadata: { kind: "genui_snapshot" },
+      content: "{}",
+    };
+    mocks.selectQueue.push([legacy]);
+
+    const result = await artifact({}, { id: "artifact-legacy" }, ctx);
+
+    expect(mocks.assertCanvasAccess).toHaveBeenCalledWith(ctx, legacy, "read");
+    expect(result).toMatchObject({ id: "artifact-legacy" });
   });
 });
 
-function genUISnapshotArtifact() {
+function canvasArtifact() {
   return {
     id: "artifact-1",
     tenant_id: TENANT_ID,
     thread_id: THREAD_ID,
     title: "Snapshot",
     type: "data_view",
-    metadata: { kind: "genui_snapshot" },
+    metadata: { kind: "json_render_snapshot" },
     content: "{}",
   };
 }

@@ -9,6 +9,12 @@ import {
   artifacts,
   artifactToCamel,
 } from "../../utils.js";
+import { hasServiceSecret } from "../core/authz.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
+import {
+  canvasListVisibilityPredicate,
+  excludeCanvasArtifactsPredicate,
+} from "../../../lib/artifacts/canvas-access.js";
 
 export const artifacts_ = async (
   _parent: any,
@@ -26,6 +32,25 @@ export const artifacts_ = async (
   }
   if (args.cursor)
     conditions.push(lt(artifacts.created_at, new Date(args.cursor)));
+
+  // Canvas visibility (R15): a canvas-kind artifact appears in the list only
+  // when the caller may see it — saved canvases through an accessible space,
+  // drafts through their own thread. Non-canvas rows are unaffected. Service-
+  // secret callers (trusted infra) bypass. NOTE: this unit does not yet apply
+  // the R14 saved-only default (there is no draft/saved filter arg on this
+  // query — that filter seam lands with U4/U10); it only enforces access.
+  if (!hasServiceSecret(ctx)) {
+    const caller = await resolveCallerFromAuth(ctx.auth);
+    if (caller.userId) {
+      conditions.push(
+        canvasListVisibilityPredicate(args.tenantId, caller.userId),
+      );
+    } else {
+      // Cognito caller we cannot resolve to a user: fail closed on canvases.
+      conditions.push(excludeCanvasArtifactsPredicate());
+    }
+  }
+
   const limit = Math.min(args.limit || 50, 200);
   // favoritedOnly callers (apps/web sidebar Favorites section) want
   // most-recently-favorited first, not most-recently-created. Other
