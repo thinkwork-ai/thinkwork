@@ -7,14 +7,10 @@ marketplace, sideload path, or licensing mechanism.
 
 - Requirements: `docs/brainstorms/2026-06-12-application-plugins-requirements.md`
 - Manifest contract: `packages/plugin-catalog/src/contracts.ts`
-- Premium precedent:
-  `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`
-- Premium manifest example:
-  `plugins/company-brain/src/manifest.ts`
 - Infrastructure plugin example:
   `plugins/twenty/src/manifest.ts`
 - Plugin package descriptor examples:
-  `plugins/twenty/src/index.ts`, `plugins/lastmile/src/index.ts`
+  `plugins/twenty/src/index.ts`, `plugins/n8n/src/index.ts`
 
 ## Identity
 
