@@ -23,8 +23,6 @@ import { useAuth } from "@/lib/auth-context";
 import {
   useAgents,
   useCreateThread,
-  useThreadTurnUpdatedSubscription,
-  useThreadUpdatedSubscription,
   useUpdateThread,
 } from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
@@ -97,6 +95,7 @@ import { IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
+import { useLiveStatus } from "@/components/providers/LiveStatusProvider";
 import {
   MessageInputFooter,
   type MessageInputMention,
@@ -354,6 +353,11 @@ export default function ThreadsScreen() {
     variables: queryVars,
     pause: !tenantId || computersFetching,
   });
+  const threadIds = useMemo(
+    () => ((threadsData?.threads ?? []) as any[]).map((thread) => thread.id),
+    [threadsData?.threads],
+  );
+  const { registerThreadListRefetch } = useLiveStatus();
   const [{ data: spacesData }] = useQuery({
     query: SpacesQuery,
     variables: { tenantId: tenantId! },
@@ -467,20 +471,12 @@ export default function ThreadsScreen() {
     }
   }, [refreshCounter, reexecute, reexecuteReviews]);
 
-  // Real-time: re-fetch on any thread update via AppSync subscription
-  const [{ data: threadEvent }] = useThreadUpdatedSubscription(tenantId);
-  const lastThreadEvent = useRef<string | null>(null);
   useEffect(() => {
-    const evt = threadEvent?.onThreadUpdated;
-    if (!evt) return;
-    // Build a unique key from the event to detect changes
-    const key = `${evt.threadId}-${evt.status}-${evt.updatedAt}`;
-    if (key !== lastThreadEvent.current) {
-      lastThreadEvent.current = key;
+    return registerThreadListRefetch(threadIds, () => {
       reexecute({ requestPolicy: "network-only" });
       reexecuteReviews({ requestPolicy: "network-only" });
-    }
-  }, [threadEvent, reexecute, reexecuteReviews]);
+    });
+  }, [registerThreadListRefetch, threadIds, reexecute, reexecuteReviews]);
 
   // Re-fetch when a turn completes (succeeded/failed)
   useEffect(() => {

@@ -33,13 +33,11 @@ import { useAgents } from "@/lib/hooks/use-agents";
 import { usePushNotifications } from "@/lib/hooks/use-push-notifications";
 import { useMe } from "@/lib/hooks/use-users";
 import { TurnCompletionProvider } from "@/lib/hooks/use-turn-completion";
-import {
-  useThreadTurnUpdatedSubscription,
-  useWorkspaceAccessRevokedSubscription,
-} from "@thinkwork/react-native-sdk";
+import { useWorkspaceAccessRevokedSubscription } from "@thinkwork/react-native-sdk";
 import { handleWorkspaceAccessRevoked } from "@/lib/agent/workspace-revocation";
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { BiometricLockScreen } from "@/components/BiometricLockScreen";
+import { LiveStatusProvider } from "@/components/providers/LiveStatusProvider";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
@@ -88,9 +86,6 @@ function RootLayoutNav() {
 
   const tenantId = user?.tenantId;
   const hasTenant = !!tenantId;
-
-  // Register turn subscription early at root level so it's active before home tab mounts
-  useThreadTurnUpdatedSubscription(tenantId);
 
   const [{ data: meData }] = useMe();
   const currentUserId = meData?.me?.id ?? null;
@@ -344,8 +339,9 @@ function RootLayoutNav() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <TurnCompletionProvider tenantId={tenantId}>
-          <ThemeProvider value={NAV_THEME.dark}>
-            <Stack screenOptions={{ headerShown: false }}>
+          <LiveStatusProvider>
+            <ThemeProvider value={NAV_THEME.dark}>
+              <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen
                 name="sign-in"
                 options={{ animationTypeForReplace: "pop" }}
@@ -419,17 +415,19 @@ function RootLayoutNav() {
               <Stack.Screen name="routines/new" />
               <Stack.Screen name="routines/builder" />
               <Stack.Screen name="routines/builder-chat" />
-            </Stack>
+                <Stack.Screen name="fleet/[id]/inbox" />
+              </Stack>
 
-            {needsBiometricUnlock && (
-              <BiometricLockScreen
-                onUnlock={handleBiometricUnlock}
-                onLoginScreen={handleLoginScreen}
-                onStartAuth={handleStartAuth}
-                onEndAuth={handleEndAuth}
-              />
-            )}
-          </ThemeProvider>
+              {needsBiometricUnlock && (
+                <BiometricLockScreen
+                  onUnlock={handleBiometricUnlock}
+                  onLoginScreen={handleLoginScreen}
+                  onStartAuth={handleStartAuth}
+                  onEndAuth={handleEndAuth}
+                />
+              )}
+            </ThemeProvider>
+          </LiveStatusProvider>
         </TurnCompletionProvider>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
