@@ -38,6 +38,8 @@ const {
   recentReexecuteMock,
   searchReexecuteMock,
   pinnedReexecuteMock,
+  spacesReexecuteMock,
+  spaceThreadsReexecuteMock,
   subscriptionResultMock,
 } = vi.hoisted(() => ({
   tenantMock: vi.fn(),
@@ -98,6 +100,8 @@ const {
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
   pinnedReexecuteMock: vi.fn(),
+  spacesReexecuteMock: vi.fn(),
+  spaceThreadsReexecuteMock: vi.fn(),
   subscriptionResultMock: { data: undefined as unknown },
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
@@ -213,7 +217,7 @@ vi.mock("urql", () => ({
           fetching: false,
           data: { spaces: spacesMock },
         },
-        vi.fn(),
+        spacesReexecuteMock,
       ];
     }
     if (query === queryDocs.WorkItemsQuery) {
@@ -291,7 +295,7 @@ vi.mock("urql", () => ({
           fetching: false,
           data: { threadsPaged: { totalCount: items.length, items } },
         },
-        vi.fn(),
+        spaceThreadsReexecuteMock,
       ];
     }
     if (query === queryDocs.PinnedThreadsQuery) {
@@ -592,6 +596,8 @@ afterEach(() => {
   recentReexecuteMock.mockReset();
   searchReexecuteMock.mockReset();
   pinnedReexecuteMock.mockReset();
+  spacesReexecuteMock.mockReset();
+  spaceThreadsReexecuteMock.mockReset();
   subscriptionResultMock.data = undefined;
   recentThreadItemsMock.length = 0;
   searchThreadItemsMock.length = 0;
@@ -1005,6 +1011,43 @@ describe("ChatSidebar", () => {
         requestPolicy: "network-only",
       }),
     );
+  });
+
+  it("refetches Space sections and the Space badges on an onThreadUpdated event", async () => {
+    // THINK-136 acceptance regression: Space sections own their scoped
+    // SpaceThreadsQuery, so a new message in a Space thread never updated the
+    // row's unread dot or timestamp until remount — only the generic Threads
+    // section refreshed.
+    spacesMock.push({
+      id: "space-fin",
+      name: "Finance",
+      slug: "finance",
+      unreadThreadCount: 1,
+      lastActivityAt: "2026-07-03T20:00:00Z",
+    });
+    recentThreadItemsMock.push({
+      id: "thread-fin",
+      title: "Finance review",
+      spaceId: "space-fin",
+      lastActivityAt: "2026-07-03T20:00:00Z",
+      lastReadAt: "2026-07-03T20:30:00Z",
+    });
+    subscriptionResultMock.data = {
+      onThreadUpdated: { threadId: "thread-fin" },
+    };
+    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    render(<ChatSidebar />);
+
+    await waitFor(() =>
+      expect(spaceThreadsReexecuteMock).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      }),
+    );
+    expect(spacesReexecuteMock).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
   });
 
   it("imports missing localStorage pins once without making localStorage authoritative", async () => {
