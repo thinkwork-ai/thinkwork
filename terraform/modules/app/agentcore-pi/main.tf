@@ -27,15 +27,11 @@ locals {
   manifest_log_fn_name        = "thinkwork-${var.stage}-api-manifest-log"
   manifest_log_fn_arn         = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.manifest_log_fn_name}"
   pi_image_uri                = "${var.ecr_repository_url}:pi-latest"
-  cognee_vpc_enabled          = length(var.cognee_subnet_ids) > 0 && length(var.cognee_security_group_ids) > 0
   okf_efs_vpc_enabled         = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
-  private_vpc_enabled         = local.cognee_vpc_enabled || local.okf_efs_vpc_enabled
-  private_subnet_ids          = distinct(concat(var.cognee_subnet_ids, var.okf_efs_subnet_ids))
-  private_security_group_ids = distinct(concat(
-    var.cognee_security_group_ids,
-    var.okf_efs_security_group_ids,
-  ))
-  okf_efs_mount_enabled = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
+  private_vpc_enabled         = local.okf_efs_vpc_enabled
+  private_subnet_ids          = var.okf_efs_subnet_ids
+  private_security_group_ids  = var.okf_efs_security_group_ids
+  okf_efs_mount_enabled       = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
   okf_efs_iam_statements = local.okf_efs_mount_enabled ? [
     {
       Sid      = "OkfWikiEfsReadOnlyMount"

@@ -69,12 +69,12 @@ variable "api_auth_secret" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine ('hindsight', 'agentcore', or 'cognee'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
+  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
   type        = string
   default     = "hindsight"
   validation {
-    condition     = contains(["hindsight", "agentcore", "cognee"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight', 'agentcore', or 'cognee'."
+    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
   }
 }
 
@@ -94,18 +94,6 @@ variable "db_secret_arn" {
   description = "Secrets Manager ARN for the Aurora cluster credentials. Injected as DB_SECRET_ARN so AuroraSessionStore can authenticate against the cluster via the RDS Data API. Matches the secret graphql-http already consumes — single source of truth."
   type        = string
   default     = ""
-}
-
-variable "cognee_subnet_ids" {
-  description = "Subnet IDs for Pi's private-network attachment when Company Brain/Cognee direct MCP access is enabled."
-  type        = list(string)
-  default     = []
-}
-
-variable "cognee_security_group_ids" {
-  description = "Security group IDs for Pi's private-network attachment when Company Brain/Cognee direct MCP access is enabled."
-  type        = list(string)
-  default     = []
 }
 
 variable "okf_efs_enabled" {

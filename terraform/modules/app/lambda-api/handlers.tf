@@ -10,14 +10,9 @@ locals {
   use_local_zips        = var.lambda_zips_dir != ""
   eval_fanout_queue_url = local.deploy_lambda_handlers ? aws_sqs_queue.eval_fanout[0].url : ""
   runtime               = "nodejs20.x"
-  cognee_env = var.cognee_enabled ? {
-    # graphql-http is close to Lambda's 4 KB environment ceiling. Keep Cognee
-    # status in one compact value; stable names are derived in the resolver.
-    COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
-  } : {}
   # Twenty managed-app status is DB-served (managed_applications +
   # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
-  # retired. Cognee's env-var status projection above is unchanged.
+  # retired.
   optional_integration_handler_names = concat(
     var.deployment_control_plane_enabled ? [] : [
       # Host-only onboarding/deployment API. Customer foundations disable the
@@ -145,7 +140,6 @@ locals {
       # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
       STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
     } : {},
-    local.cognee_env,
   )
 
   # graphql-http-only config that also belongs in the runtime-config
@@ -158,13 +152,6 @@ locals {
     # Settings > General starts release updates from the GraphQL API.
     DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
     DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
-    # Cognee user + Space memory captures use explicit add+cognify so accepted
-    # documents enter the scoped graph. GraphQL has a 30s Lambda ceiling, so
-    # indexing wait is intentionally short/best-effort; callers poll search for
-    # eventual retrieval instead of pinning the capture request.
-    COGNEE_INGEST_MODE      = "add_cognify"
-    COGNEE_INDEX_TIMEOUT_MS = "8000"
-    COGNEE_INDEX_POLL_MS    = "2000"
     # THNK-37 — the GraphQL API is the runtime trust boundary for the
     # GitHub-hosted signed plugin catalog. Browsers keep reading through
     # GraphQL; API verifies the release asset with the trusted public key
@@ -310,16 +297,10 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
-    # Observations → Knowledge Graph worker (plan 2026-06-09-004 U5).
-    # add_cognify pins the incremental ingest path into the stable
-    # per-tenant dataset; the promotion-gate classifier reads
-    # OBSERVATION_CLASSIFIER_MODEL_ID (Bedrock IAM via the shared
-    # lambda_bedrock invoke policy).
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
-    # structured-output call inside this Lambda (plan 2026-07-03-005); Cognee
-    # is retired, so no COGNEE_* env. KG_EXTRACTION_MODEL_ID pins the gpt-oss
-    # extraction model (Bedrock IAM via the shared lambda_bedrock invoke
-    # policy, same as the promotion-gate classifier).
+    # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
+    # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
+    # invoke policy, same as the promotion-gate classifier).
     "knowledge-graph-observations-ingest" = {
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
@@ -764,19 +745,11 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "vpc_config" {
-    for_each = (
-      (
-        # No knowledge-graph handler needs the Cognee VPC any more:
-        # observations ingest now extracts via Bedrock (no VPC) and
-        # thread ingest is retired. Only legacy graphql-http on the
-        # cognee memory engine remains.
-        (each.key == "graphql-http" && var.memory_engine == "cognee")
-      ) && local.cognee_worker_vpc_enabled
-    ) ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
+    for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 
     content {
-      subnet_ids         = each.key == "okf-efs-refresh" ? var.okf_efs_subnet_ids : var.cognee_worker_subnet_ids
-      security_group_ids = each.key == "okf-efs-refresh" ? var.okf_efs_security_group_ids : var.cognee_worker_security_group_ids
+      subnet_ids         = var.okf_efs_subnet_ids
+      security_group_ids = var.okf_efs_security_group_ids
     }
   }
 
@@ -1907,9 +1880,9 @@ resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
   name                = "thinkwork-${var.stage}-knowledge-graph-observations-ingest"
   group_name          = "default"
   schedule_expression = "rate(30 minutes)"
-  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the Bedrock extractor
-  # replaces Cognee, and the schedule enables on dev only after a manual
-  # golden-set-validated run. Driven by the GHA WIKI_KG_INGEST_ENABLED var.
+  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the schedule enables on dev
+  # only after a manual golden-set-validated run. Driven by the GHA
+  # WIKI_KG_INGEST_ENABLED var.
   state = var.knowledge_graph_observations_ingest_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {
