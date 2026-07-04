@@ -854,6 +854,73 @@ describe("runAgentLoop", () => {
     );
   });
 
+  it("warns json_render_unbound_emit when an emit records no binding but MCP candidates exist (THINK-145)", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        // A completed MCP call earlier in the turn → a bindable candidate.
+        {
+          type: "tool_execution_start",
+          toolCallId: "functions.mcp_twenty--crm_execute_tool:15",
+          toolName: "mcp_twenty--crm_execute_tool",
+          args: { objectName: "opportunities" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "functions.mcp_twenty--crm_execute_tool:15",
+          toolName: "mcp_twenty--crm_execute_tool",
+          result: {
+            content: [{ type: "text", text: "rows" }],
+            details: {
+              mcp_server: "twenty-crm",
+              mcp_tool_name: "execute_tool",
+              raw: { rows: [] },
+            },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+        // Emit WITHOUT sourceToolCallId → unbound while a candidate exists.
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: EMIT_JSON_RENDER_UI_TOOL_NAME,
+          args: {},
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: EMIT_JSON_RENDER_UI_TOOL_NAME,
+          result: {
+            content: [{ type: "text", text: "review ready" }],
+            details: { thread_json_render_part: fixture },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const logs: Array<{
+      level: string;
+      event: string;
+      [key: string]: unknown;
+    }> = [];
+
+    await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      log: (entry) => logs.push(entry),
+    });
+
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        event: "json_render_unbound_emit",
+        threadId: "thread-1",
+        partId: fixture.id,
+        candidateCount: 1,
+      }),
+    );
+  });
+
   it("emits result.list json-render parts from the explicit emit tool", async () => {
     const fixture = createResultListJsonRenderFixture();
     const session = makeFakeSession({
