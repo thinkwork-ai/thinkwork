@@ -108,6 +108,18 @@ Two ways to bring the agent into a multiplayer thread:
 
 **Mention picker.** Type `@` to open the people/agent picker. Arrow keys move the highlight; **Tab or Enter** commits the highlighted name; **Escape** closes the picker without selecting.
 
+**Agent Profile mentions.** Type `#` to address a specific Agent Profile (e.g. `#Analyst`). A profile mention always dispatches an agent turn with that profile — even in a multiplayer thread where the agent toggle defaults to off. Explicitly turning the toggle off for a message still wins.
+
+### Mentions are invites
+
+A mention is a thread-level invite. When you `@`-mention someone into a thread — including a thread in a private Space they aren't a member of — they become a participant of **that thread**: it appears in their sidebar under its Space, and they can read and reply to it. Thread participation doesn't grant Space membership; starting *new* threads in the Space still requires being a member.
+
+### Notifications and muting
+
+When another person posts in a thread you participate in, the thread's unread dot lights up live in your sidebar, and the desktop app raises an OS notification. Notifications are suppressed for your own messages and for the thread you're actively viewing.
+
+Per-thread control: **right-click a thread in the sidebar → Mute**. A muted thread shows a bell-off icon and raises no OS notifications — but a direct `@`-mention of you always punches through the mute, so you can silence a busy thread without missing messages addressed to you. Unmute the same way.
+
 ## Reopen, don't recreate
 
 This is the single most important invariant in the thread model.
