@@ -11,6 +11,7 @@ import {
   db,
   snakeToCamel,
   threadTurns,
+  webhooks,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
@@ -145,6 +146,32 @@ export const agentLoopTypeResolvers = {
       .limit(clampAgentLoopQueryLimit(args.limit));
     return rows.map(agentLoopRowToGraphql);
   },
+
+  // R6 UI seam: the bound inbound webhook endpoint (webhook-trigger automations).
+  webhookEndpoint: async (loop: AgentLoopParent) => {
+    if (!loop.id) return null;
+    const [row] = await db
+      .select({
+        id: webhooks.id,
+        token: webhooks.token,
+        enabled: webhooks.enabled,
+      })
+      .from(webhooks)
+      .where(
+        and(
+          eq(webhooks.agent_loop_id, loop.id),
+          eq(webhooks.target_type, "automation"),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    return {
+      webhookId: row.id,
+      token: row.token,
+      path: `/webhooks/${row.token}`,
+      enabled: row.enabled,
+    };
+  },
 };
 
 export const agentLoopVersionTypeResolvers = {
@@ -260,7 +287,9 @@ export const agentLoopIterationTypeResolvers = {
   },
 };
 
-async function resolveAgentLoopRunThreadId(runId: string): Promise<string | null> {
+async function resolveAgentLoopRunThreadId(
+  runId: string,
+): Promise<string | null> {
   const [iteration] = await db
     .select({
       tenantId: agentLoopIterations.tenant_id,
@@ -282,7 +311,8 @@ async function resolveAgentLoopIterationThreadId(input: {
 }): Promise<string | null> {
   if (input.threadTurnId) {
     const conditions = [eq(threadTurns.id, input.threadTurnId)];
-    if (input.tenantId) conditions.push(eq(threadTurns.tenant_id, input.tenantId));
+    if (input.tenantId)
+      conditions.push(eq(threadTurns.tenant_id, input.tenantId));
     const [turn] = await db
       .select({ threadId: threadTurns.thread_id })
       .from(threadTurns)

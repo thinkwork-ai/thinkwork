@@ -528,7 +528,10 @@ describe("R11 run guards at the start gate", () => {
     const ledger = fakeLedger();
     const countActiveRuns = vi.fn(async () => 3);
     Object.assign(ledger, { countActiveRuns });
-    const version = { ...baseInput().version!, guards: { maxConcurrentRuns: 3 } };
+    const version = {
+      ...baseInput().version!,
+      guards: { maxConcurrentRuns: 3 },
+    };
 
     const result = await dispatchAgentLoop(baseInput({ version }), ledger);
 
@@ -551,7 +554,10 @@ describe("R11 run guards at the start gate", () => {
     const ledger = fakeLedger();
     const countActiveRuns = vi.fn(async () => 1);
     Object.assign(ledger, { countActiveRuns });
-    const version = { ...baseInput().version!, guards: { maxConcurrentRuns: 3 } };
+    const version = {
+      ...baseInput().version!,
+      guards: { maxConcurrentRuns: 3 },
+    };
 
     const result = await dispatchAgentLoop(baseInput({ version }), ledger);
 
@@ -1183,5 +1189,93 @@ describe("dispatchAgentLoop idempotency repair", () => {
       runStatus: "queued",
     });
     expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Webhook payload mapping (THINK-137 U6, R7)
+// ---------------------------------------------------------------------------
+
+import {
+  fenceWebhookPayload,
+  WEBHOOK_PAYLOAD_FENCE_CLOSE,
+  WEBHOOK_PAYLOAD_FENCE_OPEN,
+} from "./contracts";
+
+describe("dispatchAgentLoop webhook payload mapping", () => {
+  it("merges routineInputOverride into each routine action input without mutating the stored spec", async () => {
+    const ledger = fakeLedger();
+    const captured: Array<Record<string, unknown> | null | undefined> = [];
+    const runRoutineAction = vi.fn(
+      async (input: { action: { input?: Record<string, unknown> | null } }) => {
+        captured.push(input.action.input);
+        return okRoutineResult();
+      },
+    );
+    Object.assign(ledger, { runRoutineAction });
+
+    // Stored action carries a saved input; the override wins on collisions.
+    const version = routineVersion({
+      agentTurn: false,
+      actions: [
+        {
+          routineId: "33333333-3333-4333-8333-333333333333",
+          label: "LastMile check",
+          input: { saved: "keep", event: "old" },
+        },
+      ],
+    });
+
+    const result = await dispatchAgentLoop(
+      baseInput({
+        version,
+        trigger: {
+          family: "webhook",
+          source: "webhook:hook-1",
+          routineInputOverride: { event: "opportunity.created", id: "opp-9" },
+        },
+      }),
+      ledger,
+    );
+
+    expect(result.status).toBe("completed_routine_only");
+    expect(captured[0]).toEqual({
+      saved: "keep",
+      event: "opportunity.created",
+      id: "opp-9",
+    });
+    // The stored target spec is untouched.
+    expect(
+      (version.routineActionsSpec.actions[0] as { input?: unknown }).input,
+    ).toEqual({
+      saved: "keep",
+      event: "old",
+    });
+  });
+
+  it("appends the fenced webhook payload to the agent-turn message (agent_thread, R7)", async () => {
+    const ledger = fakeLedger();
+    const fenced = fenceWebhookPayload('{"event":"ping"}');
+
+    const result = await dispatchAgentLoop(
+      baseInput({
+        trigger: {
+          family: "webhook",
+          source: "webhook:hook-1",
+          appendedInstructions: fenced,
+        },
+      }),
+      ledger,
+    );
+
+    expect(result.status).toBe("queued");
+    const message = ledger.wakeups[0].payload.message;
+    expect(message).toContain(WEBHOOK_PAYLOAD_FENCE_OPEN);
+    expect(message).toContain(WEBHOOK_PAYLOAD_FENCE_CLOSE);
+    expect(message).toContain('{"event":"ping"}');
+    // The objective stays clean of the untrusted block.
+    expect(ledger.wakeups[0].payload.goalMode.objective).toBe(
+      "Prepare the daily research brief.",
+    );
   });
 });

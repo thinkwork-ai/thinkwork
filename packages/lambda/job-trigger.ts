@@ -182,6 +182,18 @@ interface JobTriggerEvent {
   iterationId?: string;
   actorId?: string | null;
   threadId?: string | null;
+  // Webhook-triggered continuation (THINK-137 U6). The inbound webhooks handler
+  // defers routine-bearing automations here and carries the trigger provenance
+  // so the continuation dispatches with the right family/source/delivery and
+  // the webhook body as the routine input. Absent ⇒ manual continuation.
+  triggerFamily?: string | null;
+  triggerSource?: string | null;
+  webhookDelivery?: {
+    source: string;
+    eventId?: string | null;
+    payloadPointer?: string | null;
+  } | null;
+  routineInputOverride?: Record<string, unknown> | null;
 }
 
 export const AGENT_LOOP_CONTINUE_DISPATCH_TRIGGER_TYPE =
@@ -686,6 +698,10 @@ async function handleAgentLoopContinueDispatch(input: {
     );
     return;
   }
+  // Webhook-triggered continuation (THINK-137 U6) carries its own family /
+  // source / delivery provenance + the webhook body as the routine input
+  // override. Absent fields fall back to the manual-trigger continuation.
+  const isWebhookContinuation = event.triggerFamily === "webhook";
   const result = await continueAgentLoopDispatch(
     {
       tenantId,
@@ -698,8 +714,8 @@ async function handleAgentLoopContinueDispatch(input: {
       },
       version: resolveDispatchableVersion(version),
       trigger: {
-        family: "manual",
-        source: "manual_run",
+        family: isWebhookContinuation ? "webhook" : "manual",
+        source: event.triggerSource ?? "manual_run",
         actorType: event.actorId ? "user" : "system",
         actorId: event.actorId ?? null,
         // R5 (THINK-137 U5): the deferred continuation enqueues the wakeup, so
@@ -708,6 +724,10 @@ async function handleAgentLoopContinueDispatch(input: {
         runAsUserId: loop.run_as_user_id ?? null,
         threadId: event.threadId ?? null,
         spaceId: event.spaceId ?? null,
+        webhookDelivery: event.webhookDelivery ?? null,
+        // R7: the inbound body is merged into each routine action's input at
+        // dispatch (dispatcher builds fresh action objects; target_spec unchanged).
+        routineInputOverride: event.routineInputOverride ?? null,
       },
     },
     { runId, iterationId },

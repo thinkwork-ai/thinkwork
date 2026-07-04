@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   requireAgentLoopAdmin: vi.fn(),
   resolveCallerUserId: vi.fn(),
   syncAgentLoopScheduleBinding: vi.fn(),
+  syncAgentLoopWebhookBinding: vi.fn(),
 }));
 
 let selectCall = 0;
@@ -117,6 +118,10 @@ vi.mock("../../../lib/agent-loops/schedule-binding.js", () => ({
   syncAgentLoopScheduleBinding: mocks.syncAgentLoopScheduleBinding,
 }));
 
+vi.mock("../../../lib/agent-loops/webhook-binding.js", () => ({
+  syncAgentLoopWebhookBinding: mocks.syncAgentLoopWebhookBinding,
+}));
+
 vi.mock("./types.js", () => ({
   agentLoopRowToGraphql: (row: unknown) => row,
   parseAwsJsonObject: (value: unknown) =>
@@ -147,6 +152,7 @@ beforeEach(() => {
   mocks.requireAgentLoopAdmin.mockReset().mockResolvedValue(undefined);
   mocks.resolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mocks.syncAgentLoopScheduleBinding.mockReset().mockResolvedValue(undefined);
+  mocks.syncAgentLoopWebhookBinding.mockReset().mockResolvedValue(undefined);
 });
 
 describe("saveAgentLoop", () => {
@@ -431,7 +437,12 @@ describe("saveAgentLoop", () => {
             config: { expression: "rate(1 day)" },
           },
           goalSpec: { objective: "n/a", completionCriteria: ["done"] },
-          workerSpec: { type: "agent", id: "agent-9", toolHints: [], config: {} },
+          workerSpec: {
+            type: "agent",
+            id: "agent-9",
+            toolHints: [],
+            config: {},
+          },
           targetSpec: {
             kind: "routine",
             routine: {

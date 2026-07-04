@@ -118,6 +118,22 @@ export interface AgentLoopTriggerContext {
    * flows through buildAgentLoopWakeupPayload — the only seam that carries it
    * onto the wire. U6 populates it; inert (undefined/null) otherwise. */
   webhookDelivery?: AgentLoopWebhookDelivery | null;
+  /**
+   * Untrusted-data fence block appended to an agent_thread automation's turn
+   * instructions (THINK-137 U6, R7). Built by `fenceWebhookPayload` from the
+   * raw webhook body; `buildAgentLoopWakeupPayload` appends it to `message`.
+   * The body is NEVER interpolated anywhere else. Null for non-webhook
+   * triggers and for routine/workflow targets (they take `routineInputOverride`
+   * instead).
+   */
+  appendedInstructions?: string | null;
+  /**
+   * Per-dispatch routine input override (THINK-137 U6, R7): the raw inbound
+   * webhook body wired as the routine/workflow run input. `continueAgentLoopDispatch`
+   * merges it into each routine action's `input` WITHOUT mutating the stored
+   * target_spec. Null for non-webhook triggers and agent_thread targets.
+   */
+  routineInputOverride?: Record<string, unknown> | null;
 }
 
 export interface AgentLoopScheduleGate {
@@ -424,8 +440,14 @@ export function buildAgentLoopWakeupPayload(input: {
 }): AgentLoopWakeupPayload {
   const tokenBudget =
     input.version.loopPolicy.maxTokens ?? DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET;
+  // Untrusted webhook payload (agent_thread targets, R7) is appended to the
+  // turn instructions inside the fence. The objective in `goalMode.objective`
+  // stays clean — only the message the agent reads carries the fenced block.
+  const message = input.trigger.appendedInstructions
+    ? `${input.version.goalSpec.objective}\n\n${input.trigger.appendedInstructions}`
+    : input.version.goalSpec.objective;
   return {
-    message: input.version.goalSpec.objective,
+    message,
     threadId: input.trigger.threadId ?? null,
     spaceId: input.trigger.spaceId ?? null,
     inputSummary: input.trigger.inputSummary ?? null,

@@ -311,6 +311,7 @@ export type AgentLoop = {
   totalCostUsdCents: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<AgentLoopVersion>;
+  webhookEndpoint?: Maybe<AgentLoopWebhookEndpoint>;
 };
 
 
@@ -504,6 +505,14 @@ export enum AgentLoopVersionStatus {
   Draft = 'draft',
   Superseded = 'superseded'
 }
+
+export type AgentLoopWebhookEndpoint = {
+  __typename?: 'AgentLoopWebhookEndpoint';
+  enabled: Scalars['Boolean']['output'];
+  path: Scalars['String']['output'];
+  token: Scalars['String']['output'];
+  webhookId: Scalars['ID']['output'];
+};
 
 export type AgentPerformance = {
   __typename?: 'AgentPerformance';
