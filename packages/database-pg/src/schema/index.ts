@@ -40,6 +40,8 @@ export * from "./work-items";
 export * from "./crm-work-links";
 export * from "./retry-queue";
 export * from "./artifacts";
+export * from "./artifact-versions";
+export * from "./artifact-data-bindings";
 export * from "./webhooks";
 export * from "./webhook-deliveries";
 export * from "./recipes";
