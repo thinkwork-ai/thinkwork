@@ -374,16 +374,23 @@ export async function continueAgentLoopDispatch(
 /**
  * Reuse-vs-repair predicate (THINK-137 U2). A run found by idempotency key
  * is REPAIRED (its continuation re-entered) rather than reused only when it
- * is a half-built agent-turn start:
+ * is a half-built PURE agent-turn start:
  *
  *   - the run is still `queued` (terminal/skipped runs are final), and
  *   - its first iteration never recorded a wakeup id, and
- *   - the version resolves to an agent-turn dispatch.
+ *   - the version has ZERO routine actions (pure agent-turn dispatch).
  *
- * Routine-only versions (`agentTurn: false`) legitimately complete without a
- * wakeup, so a `queued` + no-wakeup routine-only run is ambiguous, not
- * half-built — those are never auto-repaired here (the executor owns their
- * repair). Absence of routine actions => `agentTurn !== false` => agent turn.
+ * Re-entering the continuation re-executes every routine action via
+ * `ledger.runRoutineAction`, a non-idempotent Lambda invoke. A crash between
+ * an action's execution and the wakeup insert would double-run the actions on
+ * retry, so any version with routine actions (routine-only OR mixed) is NEVER
+ * auto-repaired here — a half-built such start is reused as final instead. The
+ * only side effect a pure agent-turn repair re-runs is `enqueueWakeup`, which
+ * does a lookup-or-insert on the per-run idempotency key and is therefore safe.
+ *
+ * Routine-only versions (`agentTurn: false`) additionally legitimately complete
+ * without a wakeup, so a `queued` + no-wakeup routine-only run is ambiguous, not
+ * half-built. Absence of routine actions => `agentTurn !== false` => agent turn.
  */
 export function isRepairableHalfBuiltStart(
   repairState: AgentLoopRunRepairState | null,
@@ -393,6 +400,9 @@ export function isRepairableHalfBuiltStart(
   if (!repairState || !repairState.iterationId) return false;
   if (repairState.status !== "queued") return false;
   if (repairState.hasWakeup) return false;
+  // Only pure agent-turn dispatches (no routine actions) are idempotent to
+  // re-enter; routine actions are non-idempotent Lambda invokes.
+  if ((version.routineActionsSpec?.actions ?? []).length > 0) return false;
   const agentTurn = version.routineActionsSpec?.agentTurn !== false;
   return agentTurn;
 }

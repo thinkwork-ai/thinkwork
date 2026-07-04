@@ -478,7 +478,7 @@ describe("isRepairableHalfBuiltStart", () => {
     ).toBe(false);
   });
 
-  it("repairs a mixed (agentTurn:true) version and a null repair-state is never repaired", () => {
+  it("does not repair a mixed (actions + agentTurn:true) version — routine actions are not idempotent to re-run", () => {
     const mixed = {
       ...version,
       routineActionsSpec: {
@@ -491,7 +491,10 @@ describe("isRepairableHalfBuiltStart", () => {
         { status: "queued", iterationId: "iter-1", hasWakeup: false },
         mixed,
       ),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("never repairs a null repair-state or a state missing its iterationId", () => {
     expect(isRepairableHalfBuiltStart(null, version)).toBe(false);
     expect(
       isRepairableHalfBuiltStart(
@@ -600,6 +603,43 @@ describe("dispatchAgentLoop idempotency repair", () => {
         wakeupId: "wakeup-preexisting",
       }),
     );
+  });
+
+  it("reuses (no repair) a half-built MIXED start — never re-runs non-idempotent routine actions or re-enqueues", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    Object.assign(ledger, { runRoutineAction });
+    vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({
+      id: "run-existing",
+      status: "queued",
+    });
+    Object.assign(ledger, {
+      loadRunRepairState: vi.fn().mockResolvedValue({
+        status: "queued",
+        iterationId: "iter-existing",
+        hasWakeup: false,
+      }),
+    });
+    const mixedInput = baseInput({
+      version: {
+        ...baseInput().version!,
+        routineActionsSpec: {
+          actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+          agentTurn: true,
+        },
+      },
+    });
+
+    const result = await dispatchAgentLoop(mixedInput, ledger);
+
+    expect(result).toEqual({
+      status: "reused",
+      runId: "run-existing",
+      runStatus: "queued",
+    });
+    expect(runRoutineAction).not.toHaveBeenCalled();
+    expect(ledger.enqueueWakeup).not.toHaveBeenCalled();
+    expect(ledger.createRun).not.toHaveBeenCalled();
   });
 
   it("still reuses (no repair) when the ledger lacks loadRunRepairState — legacy fake ledgers unaffected", async () => {
