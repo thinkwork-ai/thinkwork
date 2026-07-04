@@ -57,9 +57,11 @@ describe("visibleSettingsNavItems", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Billing")).toBe(false);
   });
 
-  it("does not list Artifacts in navigation while the surface is being rethought", () => {
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === ARTIFACTS)).toBe(false);
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Artifacts")).toBe(false);
+  it("lists Artifacts for operators (Living Artifacts, THINK-145)", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === ARTIFACTS);
+    expect(item).toBeDefined();
+    expect(item?.label).toBe("Artifacts");
+    expect(item?.operatorOnly).toBe(true);
   });
 
   it("labels the agent home Agents on /settings/agents; Composer entry retired (U7)", () => {
