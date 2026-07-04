@@ -221,6 +221,10 @@ import {
   rescueLeakedAskUserQuestion,
   turnAlreadyAskedUserQuestion,
 } from "./ask-user-question-rescue.js";
+import {
+  EMPTY_RESPONSE_CONTINUATION_PROMPT,
+  applyEmptyResponseBackstop,
+} from "./empty-response-backstop.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -3140,6 +3144,41 @@ export async function handleInvocation(
         },
       );
     }
+    // Silent empty-turn backstop (THINK-145). A completed turn that produced no
+    // user-visible output (no assistant text, no UI part, no question/document
+    // card) is the "dead silence" bug observed live. Force ONE continuation to
+    // coax a final answer; if still empty, fail loudly so the platform marks the
+    // turn failed rather than recording a bare empty success. Runs BEFORE the
+    // safety-net/finalize so a recovered reply flows through the same sinks.
+    runResult = await applyEmptyResponseBackstop({
+      runResult,
+      threadId: identity.threadId,
+      threadTurnId,
+      log: (entry) => logStructured(entry),
+      retry: () =>
+        runLoop(
+          {
+            message: EMPTY_RESPONSE_CONTINUATION_PROMPT,
+            history: parentHistory,
+            tools: bundle.tools,
+            extensionFactories: bundle.extensionFactories,
+            extensionToolNames: bundle.extensionToolNames,
+            modelId: args.payload.model,
+            threadId: identity.threadId,
+            gitSha: env.gitSha,
+            identity,
+            cwd: env.workspaceDir,
+            agentDir: env.piAgentDir,
+            builtinToolNames: bundle.builtinToolNames,
+            sessionStore,
+            sessionDir: "/tmp/pi-sessions",
+          },
+          {
+            log: (entry) => logStructured(entry),
+            emitActivity: activityEmitter.emit,
+          },
+        ),
+    });
     // Deterministic GenUI safety-net backstop (THINK-116 U7, KTD5). Catches
     // structured content the model returned as *markdown* (a GFM table or a
     // clean list of records) and, if it converts + validates through the SAME
