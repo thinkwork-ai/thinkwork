@@ -211,6 +211,14 @@ build_handler "chat-agent-finalize" \
 build_handler "chat-agent-activity" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-activity.ts"
 
+# canvas-refresh (Living Artifacts THINK-145 U6): headless data-refresh. Re-runs
+# the saved MCP tool call behind each bound widget and writes the fresh payload
+# into the canvas head under the KTD6 guard. Uses the plain MCP client seam
+# (mcp-client-call + mcp-configs) — no Bedrock/AgentCore SDK, so the default
+# externalized-@aws-sdk flags apply (NOT in the bundled-SDK list, like mcp-proxy).
+build_handler "canvas-refresh" \
+  "$REPO_ROOT/packages/api/src/handlers/canvas-refresh.ts"
+
 build_handler "wakeup-processor" \
   "$REPO_ROOT/packages/api/src/handlers/wakeup-processor.ts"
 

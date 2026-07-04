@@ -1058,6 +1058,39 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars['Float']['output'];
 };
 
+export type CanvasRefreshBindingResult = {
+  __typename?: 'CanvasRefreshBindingResult';
+  bindingId: Scalars['ID']['output'];
+  elementId: Scalars['String']['output'];
+  outcome: CanvasRefreshOutcome;
+  partId: Scalars['String']['output'];
+  quality: ArtifactBindingQuality;
+  reason?: Maybe<Scalars['String']['output']>;
+};
+
+export enum CanvasRefreshOutcome {
+  Failed = 'FAILED',
+  NeedsUser = 'NEEDS_USER',
+  Refreshed = 'REFRESHED',
+  SchemaStale = 'SCHEMA_STALE',
+  ServerMissing = 'SERVER_MISSING',
+  Skipped = 'SKIPPED'
+}
+
+export type CanvasRefreshResult = {
+  __typename?: 'CanvasRefreshResult';
+  artifactId: Scalars['ID']['output'];
+  bindings: Array<CanvasRefreshBindingResult>;
+  dispatched: Scalars['Boolean']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+};
+
+export type CanvasRefreshSchedule = {
+  __typename?: 'CanvasRefreshSchedule';
+  scheduleExpression: Scalars['String']['output'];
+  scheduledJobId: Scalars['ID']['output'];
+};
+
 export type CapabilityDivergence = {
   __typename?: 'CapabilityDivergence';
   deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
@@ -3626,6 +3659,7 @@ export type Mutation = {
   connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
+  createCanvasRefreshSchedule: CanvasRefreshSchedule;
   /**
    * Queue an async export of audit events matching the filter. Validates:
    *   - 90-day cap on (until - since)
@@ -3770,7 +3804,7 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
-  refreshGenUI?: Maybe<Message>;
+  refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
    * bypassing the API freshness TTL while preserving signature/digest checks
@@ -4192,6 +4226,13 @@ export type MutationCreateAgentProfileArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateCanvasRefreshScheduleArgs = {
+  artifactId: Scalars['ID']['input'];
+  intervalMinutes: Scalars['Int']['input'];
+  partId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -4766,9 +4807,9 @@ export type MutationRedeemPremiumPluginInstallKeyArgs = {
 };
 
 
-export type MutationRefreshGenUiArgs = {
-  messageId: Scalars['ID']['input'];
-  toolIndex: Scalars['Int']['input'];
+export type MutationRefreshCanvasDataArgs = {
+  artifactId: Scalars['ID']['input'];
+  partId?: InputMaybe<Scalars['String']['input']>;
 };
 
 

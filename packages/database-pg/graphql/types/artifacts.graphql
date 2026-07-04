@@ -53,6 +53,47 @@ enum ArtifactBindingQuality {
   SCHEMA_STALE
 }
 
+# Result of createCanvasRefreshSchedule (THINK-145 U7).
+type CanvasRefreshSchedule {
+  scheduledJobId: ID!
+  scheduleExpression: String!
+}
+
+# Per-binding outcome of a headless canvas data-refresh (THINK-145 U6).
+enum CanvasRefreshOutcome {
+  # Fresh data applied to the head; quality flipped to GOOD.
+  REFRESHED
+  # Result shape changed — head untouched, an agent re-emit is required (R7).
+  SCHEMA_STALE
+  # Per-user-OAuth binding excluded from unattended refresh (R9).
+  NEEDS_USER
+  # Transient tool / transport failure; last-good retained, quality BAD (R8).
+  FAILED
+  # Referenced MCP server no longer resolves; terminal quality BAD (R8).
+  SERVER_MISSING
+  # Head write raced a concurrent spec change; not applied (KTD6).
+  SKIPPED
+}
+
+# One binding's result inside a CanvasRefreshResult.
+type CanvasRefreshBindingResult {
+  bindingId: ID!
+  partId: String!
+  elementId: String!
+  outcome: CanvasRefreshOutcome!
+  quality: ArtifactBindingQuality!
+  reason: String
+}
+
+# Result of a refreshCanvasData mutation. `dispatched` is false when the refresh
+# Lambda could not be invoked or returned no result; `errorMessage` carries why.
+type CanvasRefreshResult {
+  artifactId: ID!
+  dispatched: Boolean!
+  errorMessage: String
+  bindings: [CanvasRefreshBindingResult!]!
+}
+
 # The saved tool call behind a bound widget (KTD2). Frozen args are stored
 # unredacted server-side; provenance display passes the redaction gate.
 type ArtifactDataBinding {
@@ -260,6 +301,20 @@ extend type Mutation {
   # id; a later re-emission + re-save appends a version to the SAME artifact.
   # Cross-space check-out is rejected.
   checkoutCanvas(artifactId: ID!, threadId: ID!): Artifact!
+  # Living Artifacts (THINK-145 U6): headless data-refresh (R6). Re-executes the
+  # saved tool calls behind a canvas's bound widgets and updates their freshness
+  # WITHOUT an agent turn. Any space member may trigger it (read-side freshness
+  # action); the per-user-OAuth exclusion (R9) is enforced server-side. Pass
+  # `partId` to refresh only that part's bindings.
+  refreshCanvasData(artifactId: ID!, partId: String): CanvasRefreshResult!
+  # Living Artifacts (THINK-145 U7): create a recurring headless refresh schedule
+  # for a canvas (R6 schedule leg). Write-side (member-or-above) — standing up
+  # background infra. `intervalMinutes` is floored at 15; per-tenant capped.
+  createCanvasRefreshSchedule(
+    artifactId: ID!
+    intervalMinutes: Int!
+    partId: String
+  ): CanvasRefreshSchedule!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!

@@ -9,8 +9,6 @@ import {
   View,
   Pressable,
   FlatList,
-  Animated,
-  Easing,
   RefreshControl,
 } from "react-native";
 import { useColorScheme } from "nativewind";
@@ -36,7 +34,7 @@ import {
   ClipboardList,
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
@@ -46,10 +44,7 @@ import {
   getGenUIComponent,
   type MobileJsonRenderFallback,
 } from "@/lib/genui-registry";
-import {
-  RefreshGenUIMutation,
-  ThreadTurnEventsQuery,
-} from "@/lib/graphql-queries";
+import { ThreadTurnEventsQuery } from "@/lib/graphql-queries";
 import { TurnExecutionTimeline } from "@/components/threads/TurnExecutionTimeline";
 import { resolveHumanMessageDisplay } from "@/lib/thread-message-display";
 import {
@@ -65,30 +60,6 @@ const RESPONSE_COLOR = "#06b6d4";
 // Spinning refresh icon
 // ---------------------------------------------------------------------------
 
-function SpinningRefresh({ size, color }: { size: number; color: string }) {
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 1500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [spin]);
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  return (
-    <Animated.View style={{ transform: [{ rotate }] }}>
-      <RefreshCw size={size} color={color} />
-    </Animated.View>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -957,39 +928,17 @@ function GenUIContent({
   currentUserId?: string;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [liveData, setLiveData] = useState<Record<string, unknown> | null>(
-    null,
-  );
-  const [, executeRefresh] = useMutation(RefreshGenUIMutation);
 
   const typeStr = String(toolResult._type || "");
   const label =
     GENUI_LABELS[typeStr] ||
     typeStr.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  const displayData = liveData || toolResult;
+  const displayData = toolResult;
   const summary = genuiSummary(displayData);
   const refreshedAt = displayData._refreshedAt as string | undefined;
 
   const Comp = getGenUIComponent(String(toolResult._type));
   if (!Comp) return null;
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const result = await executeRefresh({ messageId: message.id, toolIndex });
-      if (result.data?.refreshGenUI?.toolResults) {
-        const results =
-          typeof result.data.refreshGenUI.toolResults === "string"
-            ? JSON.parse(result.data.refreshGenUI.toolResults)
-            : result.data.refreshGenUI.toolResults;
-        if (Array.isArray(results) && results[toolIndex]) {
-          setLiveData(results[toolIndex]);
-        }
-      }
-    } catch {}
-    setRefreshing(false);
-  };
 
   const handleSaveRecipe = () => {
     console.log(
@@ -1054,33 +1003,22 @@ function GenUIContent({
       {expanded && (
         <View style={{ position: "relative" }}>
           {/* ... menu trigger — aligned with card header row */}
-          <View style={{ position: "absolute", top: 6, right: 8, zIndex: 10 }}>
-            {refreshing ? (
-              <SpinningRefresh size={20} color={colors.mutedForeground} />
-            ) : (
+          {hasToolInfo && (
+            <View style={{ position: "absolute", top: 6, right: 8, zIndex: 10 }}>
               <HeaderContextMenu
                 trigger={
                   <MoreHorizontal size={22} color={colors.mutedForeground} />
                 }
                 items={[
                   {
-                    label: "Refresh Data",
-                    icon: RefreshCw,
-                    onPress: handleRefresh,
+                    label: "Save as Recipe",
+                    icon: Bookmark,
+                    onPress: handleSaveRecipe,
                   },
-                  ...(hasToolInfo
-                    ? [
-                        {
-                          label: "Save as Recipe",
-                          icon: Bookmark,
-                          onPress: handleSaveRecipe,
-                        },
-                      ]
-                    : []),
                 ]}
               />
-            )}
-          </View>
+            </View>
+          )}
           <React.Suspense
             fallback={
               <Text className="text-sm text-neutral-400">Loading...</Text>

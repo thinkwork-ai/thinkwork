@@ -36,6 +36,7 @@ import {
 } from "@thinkwork/database-pg";
 import {
   agents,
+  artifacts,
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
@@ -1494,6 +1495,106 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       console.log(
         `[job-trigger] skill_run ${triggerId} started run ${runRow.id} for skill ${skillId}`,
       );
+    } else if (triggerType === "canvas_refresh") {
+      // Scheduled Living Artifacts data-refresh (THINK-145 U7). The job config
+      // carries the artifact (+ optional part) to refresh. Fire path invokes
+      // the canvas-refresh Lambda RequestResponse with the scheduled payload
+      // {tenantId, artifactId}. rate() is creation-time + interval (NOT
+      // wall-clock) — the schedule fires every N minutes from creation.
+      //
+      // Orphan handling mirrors the skill_run pause-on-orphan precedent above:
+      // a DELETED artifact, or one REVERTED to draft (unsaved), pauses the
+      // schedule (enabled=false) with a surfaced reason stamped on the config —
+      // it stops firing against a canvas that can no longer be refreshed. A
+      // paused job is still admin-visible and the disabled-job guard at the top
+      // of this handler keeps it from firing again.
+      const cfg = (job?.config ?? {}) as {
+        artifactId?: string;
+        partId?: string;
+      };
+      const artifactId = cfg.artifactId;
+      if (!artifactId) {
+        console.error(
+          `[job-trigger] canvas_refresh ${triggerId} missing artifactId in config`,
+        );
+        return;
+      }
+
+      const [artifact] = await db
+        .select({ id: artifacts.id, status: artifacts.status })
+        .from(artifacts)
+        .where(
+          and(
+            eq(artifacts.id, artifactId),
+            eq(artifacts.tenant_id, tenantId),
+          ),
+        );
+
+      if (!artifact || artifact.status === "draft") {
+        const reason = !artifact
+          ? "artifact no longer exists"
+          : "artifact reverted to draft (unsaved)";
+        await db
+          .update(scheduledJobs)
+          .set({
+            enabled: false,
+            updated_at: new Date(),
+            config: {
+              ...cfg,
+              lastCanvasRefreshPause: {
+                reason,
+                at: new Date().toISOString(),
+              },
+            },
+          })
+          .where(eq(scheduledJobs.id, triggerId));
+        console.warn(
+          `[job-trigger] canvas_refresh ${triggerId} paused: ${reason} (artifact ${artifactId})`,
+        );
+        return;
+      }
+
+      const stage = process.env.STAGE || "dev";
+      const fnName =
+        process.env.CANVAS_REFRESH_FN_ARN ||
+        `thinkwork-${stage}-api-canvas-refresh`;
+      try {
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
+        const lambda = new LambdaClient({});
+        const res = await lambda.send(
+          new InvokeCommand({
+            FunctionName: fnName,
+            InvocationType: "RequestResponse",
+            Payload: new TextEncoder().encode(
+              JSON.stringify({
+                tenantId,
+                artifactId,
+                partId: cfg.partId,
+                trigger: "schedule",
+              }),
+            ),
+          }),
+        );
+        if (res.FunctionError) {
+          const detail = res.Payload
+            ? new TextDecoder().decode(res.Payload).slice(0, 500)
+            : res.FunctionError;
+          console.error(
+            `[job-trigger] canvas_refresh ${triggerId} Lambda error: ${detail}`,
+          );
+        } else {
+          console.log(
+            `[job-trigger] canvas_refresh ${triggerId} refreshed artifact ${artifactId}`,
+          );
+        }
+      } catch (invokeErr) {
+        console.error(
+          `[job-trigger] canvas_refresh ${triggerId} invoke failed:`,
+          invokeErr,
+        );
+      }
     } else if (routineId) {
       // Routine jobs (Phase B U7 cutover):
       //   - step_functions engine → SFN.StartExecution against the alias
