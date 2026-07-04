@@ -303,8 +303,10 @@ locals {
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
       KG_EXTRACTION_MODEL_ID          = var.kg_extraction_model_id
-      # Per-run candidate cap bounds classifier + extraction cost; truncated
-      # runs self-invoke (Event) to drain the backlog across successive runs.
+      # Per-run candidate cap bounds classifier + extraction cost; a
+      # truncated backlog drains via an in-process loop inside one
+      # invocation (never Lambda self-invoke — AWS recursive-loop
+      # detection terminates worker-to-self Event chains).
       KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
@@ -1891,6 +1893,14 @@ resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
     arn      = aws_lambda_function.handler["knowledge-graph-observations-ingest"].arn
     role_arn = aws_iam_role.scheduler.arn
     input    = jsonencode({ sweep = true, trigger = "scheduled" })
+
+    # Periodic idempotent worker: the next 30-minute tick IS the retry.
+    # Scheduler-level retries stack extra invocations onto a cadence that
+    # already self-corrects (cursor-guarded), compounding the invocation
+    # volume that helped trip Lambda recursive-loop detection.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 

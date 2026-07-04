@@ -225,6 +225,7 @@ beforeEach(() => {
     .mockResolvedValue(makeSourceResult());
   extractorMock.mockReset().mockResolvedValue(makeExtraction());
   delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
+  delete process.env.KG_OBS_DRAIN_BUDGET_MS;
   delete process.env.BRAIN_ARTIFACTS_BUCKET;
 });
 
@@ -536,48 +537,66 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
     );
   });
 
-  it("self-invokes (fire-and-forget) after a truncated run that made progress", async () => {
+  it("drains a truncated backlog in-process within the same invocation", async () => {
     const { db } = makeDb();
-    const selfInvoke = vi.fn().mockResolvedValue(undefined);
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
       makeSourceResult({ truncated: true }),
     );
 
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID, trigger: "scheduled" },
-      { db, selfInvoke },
+      { db },
     );
 
     expect(result.status).toBe("succeeded");
-    expect(selfInvoke).toHaveBeenCalledTimes(1);
-    expect(selfInvoke).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      trigger: "scheduled",
-    });
+    // Sweep 1 (truncated, progressed) chains straight into sweep 2
+    // (default mock: not truncated) — two full runs, one invocation, no
+    // Lambda self-invoke.
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(2);
+    expect(
+      createKnowledgeGraphObservationsIngestRunMock,
+    ).toHaveBeenCalledTimes(2);
     expect(result.metrics).toEqual(
-      expect.objectContaining({ selfInvoked: true }),
+      expect.objectContaining({ drainSweeps: 2 }),
     );
   });
 
-  it("does not self-invoke when the run was not truncated", async () => {
+  it("runs a single sweep when the backlog was not truncated", async () => {
     const { db } = makeDb();
-    const selfInvoke = vi.fn();
 
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID },
-      { db, selfInvoke },
+      { db },
     );
 
     expect(result.status).toBe("succeeded");
-    expect(selfInvoke).not.toHaveBeenCalled();
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
     expect(result.metrics).toEqual(
-      expect.objectContaining({ selfInvoked: false }),
+      expect.objectContaining({ drainSweeps: 1 }),
     );
   });
 
-  it("loop guard: does not self-invoke on a truncated run with zero progress", async () => {
+  it("stops draining once the budget is exhausted (scheduled sweep is the backstop)", async () => {
+    process.env.KG_OBS_DRAIN_BUDGET_MS = "0";
     const { db } = makeDb();
-    const selfInvoke = vi.fn();
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValue(
+      makeSourceResult({ truncated: true }),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
+    expect(result.metrics).toEqual(
+      expect.objectContaining({ drainSweeps: 1, drainBudgetExhausted: true }),
+    );
+  });
+
+  it("loop guard: a truncated sweep with zero progress does not chain", async () => {
+    const { db } = makeDb();
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce({
       ...makeSourceResult({ truncated: true }),
       nextCursors: new Map(),
@@ -585,37 +604,32 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
 
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID },
-      { db, selfInvoke },
+      { db },
     );
 
     expect(result.status).toBe("succeeded");
-    expect(selfInvoke).not.toHaveBeenCalled();
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
   });
 
-  it("a failed self-invoke never fails the run (sweep remains the backstop)", async () => {
+  it("fullRebuild purges only on the first drain sweep", async () => {
     const { db } = makeDb();
-    const selfInvoke = vi.fn().mockRejectedValue(new Error("denied"));
     loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
       makeSourceResult({ truncated: true }),
     );
 
     const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db, selfInvoke },
+      { tenantId: TENANT_ID, fullRebuild: true },
+      { db },
     );
 
-    expect(result.ok).toBe(true);
     expect(result.status).toBe("succeeded");
-    expect(result.metrics).toEqual(
-      expect.objectContaining({ selfInvoked: false }),
-    );
-    expect(markKnowledgeGraphRunFailedMock).not.toHaveBeenCalled();
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(2);
+    expect(purgeKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not self-invoke when the run fails", async () => {
+  it("does not chain when a sweep fails", async () => {
     const { db } = makeDb();
-    const selfInvoke = vi.fn();
-    loadObservationsKnowledgeGraphSourceMock.mockResolvedValueOnce(
+    loadObservationsKnowledgeGraphSourceMock.mockResolvedValue(
       makeSourceResult({ truncated: true }),
     );
     mergeKnowledgeGraphSnapshotMock.mockRejectedValueOnce(
@@ -624,10 +638,10 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
 
     const result = await processKnowledgeGraphObservationsIngest(
       { tenantId: TENANT_ID },
-      { db, selfInvoke },
+      { db },
     );
 
     expect(result.status).toBe("failed");
-    expect(selfInvoke).not.toHaveBeenCalled();
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
   });
 });

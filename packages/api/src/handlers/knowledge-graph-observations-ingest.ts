@@ -39,7 +39,6 @@ import {
   createKnowledgeGraphObservationsIngestRun,
   reapStaleObservationIngestRuns,
 } from "../lib/knowledge-graph/runs.js";
-import { resolveObservationsWorkerFunctionName } from "../lib/knowledge-graph/invoke-worker.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
 
 export interface KnowledgeGraphObservationsIngestEvent {
@@ -59,6 +58,10 @@ export interface KnowledgeGraphObservationsIngestResult {
   metrics?: Record<string, unknown>;
   error?: string;
   results?: KnowledgeGraphObservationsIngestResult[];
+  /** Internal drain signal: this sweep hit the per-run candidate cap AND
+   * made forward progress, so more candidates are waiting. Consumed by the
+   * in-process drain loop — never by cross-invocation recursion. */
+  continueDrain?: boolean;
 }
 
 interface KnowledgeGraphObservationsIngestDeps {
@@ -66,19 +69,14 @@ interface KnowledgeGraphObservationsIngestDeps {
   /** Bedrock graph extractor; injectable for tests. Defaults to the real
    * `extractGraphFromPackets`. */
   extractor?: typeof extractGraphFromPackets;
-  /** Fire-and-forget self re-invoke used to drain a truncated backlog.
-   * Injectable for tests; the default issues an async Event invoke of this
-   * same worker with the tenantId. */
-  selfInvoke?: (args: {
-    tenantId: string;
-    trigger: "manual" | "scheduled";
-  }) => Promise<void>;
+  /** Clock for the drain-loop budget; injectable for tests. */
+  now?: () => number;
 }
 
 /**
  * Per-run candidate cap. A 500-candidate backlog times out a 480 s Lambda
  * (classifier batches dominate); 100 keeps one run comfortably inside the
- * budget and the truncated→self-invoke chain drains the rest. Env read
+ * budget and the in-process drain loop works through the rest. Env read
  * inside the function (Lambda env + vitest env-timing rule).
  */
 const DEFAULT_MAX_CANDIDATES_PER_RUN = 100;
@@ -92,34 +90,21 @@ function maxCandidatesPerRun(): number {
 }
 
 /**
- * Default self-invoke: async (Event) re-invoke of this worker for the same
- * tenant so a truncated backlog drains across successive runs instead of
- * waiting for the 30-minute sweep. Event (not RequestResponse) is correct
- * here — this is a worker-to-itself continuation, not a user-initiated
- * create/update. Errors are the caller's to swallow (best-effort).
+ * In-process drain budget. The Lambda timeout is 480 s; the loop starts a
+ * new sweep only while elapsed time is under this budget, leaving headroom
+ * for the final sweep to finish. NEVER replace this loop with a Lambda
+ * self-invoke: Lambda's recursive-loop detection terminates worker-to-self
+ * Event chains after 16 hops (AWS Health flagged exactly that on dev,
+ * 2026-07-03) — the scheduled sweep is the only cross-invocation cadence.
  */
-async function selfInvokeObservationsIngest(args: {
-  tenantId: string;
-  trigger: "manual" | "scheduled";
-}): Promise<void> {
-  const functionName = resolveObservationsWorkerFunctionName();
-  if (!functionName) {
-    throw new Error(
-      "observations ingest worker function name is not configured (STAGE or KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME)",
-    );
-  }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
-  const lambda = new LambdaClient({});
-  await lambda.send(
-    new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: "Event",
-      Payload: new TextEncoder().encode(
-        JSON.stringify({ tenantId: args.tenantId, trigger: args.trigger }),
-      ),
-    }),
-  );
+const DEFAULT_DRAIN_BUDGET_MS = 360_000;
+
+function drainBudgetMs(): number {
+  const raw = process.env.KG_OBS_DRAIN_BUDGET_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_DRAIN_BUDGET_MS;
 }
 
 export async function handler(
@@ -139,7 +124,7 @@ export async function processKnowledgeGraphObservationsIngest(
     const results: KnowledgeGraphObservationsIngestResult[] = [];
     for (const tenant of tenantRows) {
       results.push(
-        await processTenantObservationsIngest(
+        await drainTenantObservationsIngest(
           {
             tenantId: tenant.id,
             fullRebuild: event.fullRebuild,
@@ -160,7 +145,7 @@ export async function processKnowledgeGraphObservationsIngest(
   if (!event.tenantId) {
     throw new Error("tenantId is required unless sweep is set");
   }
-  return processTenantObservationsIngest(
+  return drainTenantObservationsIngest(
     {
       tenantId: event.tenantId,
       runId: event.runId,
@@ -170,6 +155,59 @@ export async function processKnowledgeGraphObservationsIngest(
     deps,
     database,
   );
+}
+
+/**
+ * Drains a tenant's observation backlog with repeated sweeps INSIDE this
+ * invocation, bounded by the drain budget. Replaces the retired Lambda
+ * self-invoke chain (AWS recursive-loop detection dropped those chains at
+ * 16 hops and flagged the account — see drainBudgetMs). The scheduled
+ * 30-minute sweep remains the cross-invocation backstop for backlogs
+ * larger than one budget's worth.
+ */
+async function drainTenantObservationsIngest(
+  args: {
+    tenantId: string;
+    runId?: string;
+    fullRebuild?: boolean;
+    trigger: "manual" | "scheduled";
+  },
+  deps: KnowledgeGraphObservationsIngestDeps,
+  database: Database,
+): Promise<KnowledgeGraphObservationsIngestResult> {
+  const now = deps.now ?? Date.now;
+  const drainStartedAt = now();
+  const budget = drainBudgetMs();
+  let sweeps = 0;
+  for (;;) {
+    const result = await processTenantObservationsIngest(
+      {
+        ...args,
+        // Explicit runId and fullRebuild apply to the first sweep only:
+        // follow-up sweeps are fresh runs, and re-purging would discard
+        // the graph the first sweep just wrote.
+        runId: sweeps === 0 ? args.runId : undefined,
+        fullRebuild: sweeps === 0 ? args.fullRebuild : false,
+      },
+      deps,
+      database,
+    );
+    sweeps += 1;
+    const budgetExhausted = now() - drainStartedAt >= budget;
+    if (!result.continueDrain || result.status !== "succeeded") {
+      return { ...result, metrics: { ...result.metrics, drainSweeps: sweeps } };
+    }
+    if (budgetExhausted) {
+      return {
+        ...result,
+        metrics: {
+          ...result.metrics,
+          drainSweeps: sweeps,
+          drainBudgetExhausted: true,
+        },
+      };
+    }
+  }
 }
 
 async function processTenantObservationsIngest(
@@ -385,38 +423,21 @@ async function processTenantObservationsIngest(
         upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
     });
 
-    // Backlog drain: when this run hit the per-run candidate cap, more
-    // observations are already waiting — re-invoke ourselves (fire-and-
-    // forget) so the backlog drains in successive runs instead of waiting
-    // for the 30-minute sweep. Loop guard: only chain when this run made
-    // forward progress (promoted something or advanced cursors); a run
-    // that promoted nothing AND moved no cursor would re-read the same
-    // candidates forever.
+    // Backlog signal: this run hit the per-run candidate cap AND made
+    // forward progress (promoted something or advanced cursors), so more
+    // candidates are waiting. The in-process drain loop in
+    // drainTenantObservationsIngest consumes this; a run with zero
+    // progress must not chain or it would re-read the same candidates
+    // forever.
     const madeProgress =
       source.gate.promoted.length > 0 || source.nextCursors.size > 0;
-    let selfInvoked = false;
-    if (source.truncated && madeProgress) {
-      const selfInvoke = deps.selfInvoke ?? selfInvokeObservationsIngest;
-      try {
-        await selfInvoke({ tenantId: args.tenantId, trigger: args.trigger });
-        selfInvoked = true;
-      } catch (invokeErr) {
-        // Best-effort: the scheduled sweep remains the backstop.
-        console.warn(
-          "[knowledge-graph-observations-ingest] backlog self-invoke failed",
-          {
-            tenantId: args.tenantId,
-            error: (invokeErr as Error)?.message ?? String(invokeErr),
-          },
-        );
-      }
-    }
 
     return {
       ok: true,
       runId: run.id,
       tenantId: args.tenantId,
       status: "succeeded",
+      continueDrain: source.truncated && madeProgress,
       metrics: {
         ...auditMetrics,
         entityCount: snapshot.entities.length,
@@ -424,7 +445,6 @@ async function processTenantObservationsIngest(
         evidenceCount: snapshot.evidence.length,
         ingestMode: "bedrock_extraction",
         extractionBatchesTotal: extraction.batchesTotal,
-        selfInvoked,
       },
     };
   } catch (err) {
