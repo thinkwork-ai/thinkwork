@@ -95,8 +95,8 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Routine Repo",
-    to: "/settings/routine-repo",
+    label: "Routines",
+    to: "/settings/routines",
     icon: GitBranch,
     operatorOnly: true,
   },

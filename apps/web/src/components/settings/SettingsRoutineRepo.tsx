@@ -10,7 +10,7 @@
  * before anything is stored.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Button, Input } from "@thinkwork/ui";
@@ -45,7 +45,15 @@ function stringFromMetadata(raw: unknown, key: string): string | null {
   }
 }
 
-export function SettingsRoutineRepo() {
+export function SettingsRoutineRepo({
+  embedded = false,
+  onSaved,
+}: {
+  /** Rendered inside a sheet (Routines page cog) — drop the page header and
+   * outer pane padding. Standalone route keeps the full-page chrome. */
+  embedded?: boolean;
+  onSaved?: () => void;
+} = {}) {
   const { tenantId } = useTenant();
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("");
@@ -136,18 +144,29 @@ export function SettingsRoutineRepo() {
     }
     setToken("");
     refreshCredentials({ requestPolicy: "network-only" });
+    onSaved?.();
     toast.success(
       credential ? "Routine repo connection updated" : "Routine repo connected",
     );
   }
 
-  return (
-    <SettingsPane>
-      <SettingsHeader
-        title="Routine Repo"
-        description="The GitHub repository that holds this workspace's deterministic routine code. Routines are pulled from here at execution time — the repo is the single source of truth."
-      />
-      <SettingsSection label="Connection">
+  // Embedded (sheet) mode drops the card wrapper — the sheet is the frame,
+  // and the SettingsRow dividers already separate the fields.
+  const RowsWrapper = embedded
+    ? ({ children }: { children: ReactNode }) => <div>{children}</div>
+    : ({ children }: { children: ReactNode }) => (
+        <SettingsSection label="Connection">{children}</SettingsSection>
+      );
+
+  const body = (
+    <>
+      {embedded ? null : (
+        <SettingsHeader
+          title="Routine Repo"
+          description="The GitHub repository that holds this workspace's deterministic routine code. Routines are pulled from here at execution time — the repo is the single source of truth."
+        />
+      )}
+      <RowsWrapper>
         <SettingsRow
           label="Repository URL"
           description="https://github.com/<owner>/<repo> — GitHub only for now."
@@ -208,13 +227,24 @@ export function SettingsRoutineRepo() {
               ? `${savedRepoUrl} @ ${savedBranch ?? "main"} — validated at save`
               : "The connection is validated when you save: repository reachable with the token and the branch exists."
           }
+          layout="stacked"
         >
-          <Button type="button" onClick={handleSave} disabled={!canSave}>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            className="w-full"
+          >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             {credential ? "Rotate & validate" : "Connect & validate"}
           </Button>
         </SettingsRow>
-      </SettingsSection>
-    </SettingsPane>
+      </RowsWrapper>
+    </>
   );
+
+  if (embedded) {
+    return <div className="pt-4">{body}</div>;
+  }
+  return <SettingsPane>{body}</SettingsPane>;
 }
