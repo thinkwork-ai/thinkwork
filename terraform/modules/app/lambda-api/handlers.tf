@@ -73,6 +73,11 @@ locals {
     # Read via getConfig() in admin-ops-mcp.ts; without this the tools are
     # listed but every call returns not_yet_enabled.
     ROUTINES_AGENT_TOOLS_ENABLED = "true"
+    # THINK-137 Automations U9 (R15): activates the read-only Automation
+    # agent tools on the admin-ops MCP server (automations_list,
+    # automation_get). Read via getConfig() in admin-ops-mcp.ts; without
+    # this the tools are listed but every call returns not_yet_enabled.
+    AUTOMATIONS_AGENT_TOOLS_ENABLED = "true"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
