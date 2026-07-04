@@ -3,7 +3,7 @@ import { invokeClaudeJson, parseJsonResponse } from "../../wiki/bedrock.js";
 
 function sourceAgentModelId(): string | undefined {
   return (
-    getConfig("COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID") ||
+    getConfig("BRAIN_SOURCE_AGENT_MODEL_ID") ||
     process.env.CONTEXT_ENGINE_SOURCE_AGENT_MODEL_ID
   );
 }

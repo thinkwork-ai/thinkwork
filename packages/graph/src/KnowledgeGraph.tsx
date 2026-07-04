@@ -1,10 +1,10 @@
 /**
- * KnowledgeGraph — 3D force-graph rendering Cognee-derived thread entities.
+ * KnowledgeGraph — 3D force-graph rendering Graph-extracted thread entities.
  *
  * This intentionally follows WikiGraph's force-graph discipline: graphData
  * changes only when the server graph changes, while search/status filters
  * mutate material opacity in place. That keeps the d3 simulation and camera
- * stable while operators inspect weak or diagnostic Cognee output.
+ * stable while operators inspect weak or diagnostic graph output.
  */
 import {
   forwardRef,
@@ -30,11 +30,7 @@ import {
 } from "./graph-utils.js";
 
 export type KnowledgeGraphGroundingStatus =
-  | "GROUNDED"
-  | "UNAPPROVED_TYPE"
-  | "UNGROUNDED"
-  | "CONFLICT"
-  | "UNKNOWN";
+  "GROUNDED" | "UNAPPROVED_TYPE" | "UNGROUNDED" | "CONFLICT" | "UNKNOWN";
 
 export type KnowledgeGraphProvenanceStatus = "STRONG" | "WEAK" | "MISSING";
 

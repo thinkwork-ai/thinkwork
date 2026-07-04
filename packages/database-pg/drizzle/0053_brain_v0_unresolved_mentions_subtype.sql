@@ -1,7 +1,7 @@
 -- Brain v0 subtype suggestion for unresolved mentions.
 --
 -- Plan:
---   docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md
+--   docs/plans/2026-04-29-004-feat-brain-v0-plan.md
 --
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0053_brain_v0_unresolved_mentions_subtype.sql
@@ -43,6 +43,6 @@ BEGIN
 END $$;
 
 COMMENT ON COLUMN public.wiki_unresolved_mentions.entity_subtype
-  IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
+  IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
 
 COMMIT;

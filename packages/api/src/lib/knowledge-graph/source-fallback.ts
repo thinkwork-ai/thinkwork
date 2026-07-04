@@ -41,7 +41,7 @@ export function applySourceDeclaredFallback(args: {
     const evidence = findPacketEvidence(args.source.evidence, packet.id);
     const entity: NormalizedKnowledgeGraphEntity = {
       tempId: packetTempId(packet.id),
-      cogneeNodeId: `source:${args.source.sourceKind}:${packet.id}`,
+      graphNodeId: `source:${args.source.sourceKind}:${packet.id}`,
       label: packet.title,
       normalizedLabel: normalizeLabel(packet.title),
       typeLabel: ontologyType.name,
@@ -59,7 +59,7 @@ export function applySourceDeclaredFallback(args: {
       },
       diagnostics: {
         sourceDeclaredFallback: true,
-        fallbackReason: "cognee_returned_no_approved_entities",
+        fallbackReason: "extractor_returned_no_approved_entities",
       },
       lastSeenAt: evidence?.createdAt ?? null,
     };
@@ -85,7 +85,7 @@ export function applySourceDeclaredFallback(args: {
     return [
       {
         tempId: relationshipTempId(relationship.id),
-        cogneeEdgeId: null,
+        graphEdgeId: null,
         sourceTempId: source.tempId,
         targetTempId: target.tempId,
         label: relationshipType.name,
@@ -103,7 +103,7 @@ export function applySourceDeclaredFallback(args: {
         },
         diagnostics: {
           sourceDeclaredFallback: true,
-          fallbackReason: "cognee_returned_no_approved_entities",
+          fallbackReason: "extractor_returned_no_approved_entities",
         },
         lastSeenAt: evidence?.createdAt ?? null,
       } satisfies NormalizedKnowledgeGraphRelationship,
@@ -120,7 +120,7 @@ export function applySourceDeclaredFallback(args: {
               entityTempId: entity.tempId,
               message: match,
               metadata: {
-                fallbackReason: "cognee_returned_no_approved_entities",
+                fallbackReason: "extractor_returned_no_approved_entities",
               },
             }),
           ]
@@ -138,7 +138,7 @@ export function applySourceDeclaredFallback(args: {
               relationshipTempId: relationship.tempId,
               message: match,
               metadata: {
-                fallbackReason: "cognee_returned_no_approved_entities",
+                fallbackReason: "extractor_returned_no_approved_entities",
               },
             }),
           ]
@@ -153,7 +153,7 @@ export function applySourceDeclaredFallback(args: {
     metrics: {
       ...args.snapshot.metrics,
       sourceDeclaredFallback: true,
-      sourceDeclaredReason: "cognee_returned_no_approved_entities",
+      sourceDeclaredReason: "extractor_returned_no_approved_entities",
       sourceDeclaredEntityCount: entities.length,
       sourceDeclaredRelationshipCount: relationships.length,
       sourceDeclaredEvidenceCount: evidence.length,

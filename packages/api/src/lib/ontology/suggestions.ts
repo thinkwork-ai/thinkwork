@@ -68,10 +68,7 @@ export interface OntologySuggestionFeature {
 
 export interface OntologySuggestionItemProposal {
   itemType:
-    | "entity_type"
-    | "relationship_type"
-    | "facet_template"
-    | "external_mapping";
+    "entity_type" | "relationship_type" | "facet_template" | "external_mapping";
   action: "create" | "update" | "deprecate" | "reject";
   targetKind: string;
   targetSlug: string;
@@ -411,7 +408,7 @@ export async function collectOntologySuggestionSources(args: {
   const providerStatuses: OntologyScanProviderStatus[] = [];
 
   // Primary signal: unapproved-type evidence recorded on observation ingest
-  // runs (plan R7). The Cognee normalizer drops nodes whose type is not in
+  // runs (plan R7). The extractor normalizer drops nodes whose type is not in
   // the approved ontology and records the dropped samples on the run row's
   // metrics — those samples, not brain sections, are what fresh suggestions
   // should anchor on.
@@ -660,7 +657,7 @@ function observationsFromObservationRun(run: {
         entitySubtype: entityTypeSlug,
         suggestedType: rawType,
         dropReason: "unapproved_entity_type",
-        cogneeNodeId: stringValue(record.id) || null,
+        graphNodeId: stringValue(record.id) || null,
         unapprovedNodeCount,
       },
     });

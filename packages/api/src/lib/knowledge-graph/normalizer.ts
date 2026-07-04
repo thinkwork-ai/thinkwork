@@ -1,10 +1,7 @@
-// Neutral payload home (plan 2026-07-03-005 KTD-5): structurally identical
-// to the legacy CogneeGraph* shapes; aliased locally to keep this file's
-// frozen normalization logic diff-free.
 import type {
-  GraphExtractionEdge as CogneeGraphEdge,
-  GraphExtractionNode as CogneeGraphNode,
-  GraphExtractionPayload as CogneeGraphPayload,
+  GraphExtractionEdge,
+  GraphExtractionNode,
+  GraphExtractionPayload,
 } from "./graph-payload.js";
 import {
   normalizeOntologySlug,
@@ -16,7 +13,7 @@ import type { ThreadTranscriptMessage } from "./thread-transcript.js";
 
 export interface NormalizedKnowledgeGraphEntity {
   tempId: string;
-  cogneeNodeId: string;
+  graphNodeId: string;
   label: string;
   normalizedLabel: string;
   typeLabel: string | null;
@@ -33,7 +30,7 @@ export interface NormalizedKnowledgeGraphEntity {
 
 export interface NormalizedKnowledgeGraphRelationship {
   tempId: string;
-  cogneeEdgeId: string | null;
+  graphEdgeId: string | null;
   sourceTempId: string;
   targetTempId: string;
   label: string;
@@ -64,7 +61,7 @@ export interface NormalizedKnowledgeGraphEvidence {
     | "brain_page"
     | "brain_section"
     | "hindsight_observation"
-    | "cognee_payload"
+    | "graph_payload"
     | "normalizer";
   sourceRef: string | null;
   metadata: Record<string, unknown>;
@@ -76,8 +73,8 @@ export interface NormalizedKnowledgeGraphSnapshot {
   relationships: NormalizedKnowledgeGraphRelationship[];
   evidence: NormalizedKnowledgeGraphEvidence[];
   metrics: {
-    cogneeNodeCount: number;
-    cogneeEdgeCount: number;
+    extractedNodeCount: number;
+    extractedEdgeCount: number;
     droppedNodeCount: number;
     droppedEdgeCount: number;
     structuralNodeCount: number;
@@ -97,9 +94,7 @@ export interface DroppedNodeSample {
   label: string;
   rawType: string | null;
   dropReason:
-    | "structural_node"
-    | "unapproved_entity_type"
-    | "out_of_scope_nodeset";
+    "structural_node" | "unapproved_entity_type" | "out_of_scope_nodeset";
   propertyKeys: string[];
 }
 
@@ -120,16 +115,16 @@ export interface DroppedEdgeSample {
 
 const MAX_DROP_SAMPLES = 12;
 
-export function normalizeCogneeGraph(args: {
-  graph: CogneeGraphPayload;
+export function normalizeExtractedGraph(args: {
+  graph: GraphExtractionPayload;
   transcript: ThreadTranscriptMessage[];
   ontology: KnowledgeGraphOntologyExport;
   /**
-   * Restrict ingested entities to those that belong to a Cognee NodeSet whose
-   * (normalized) label contains one of these substrings. Cognee's dogfood
-   * `/datasets/{id}/graph` returns the GLOBAL graph (all datasets), so an
-   * observations run must scope to its own NodeSet (e.g. "observations") or it
-   * would ingest thread/wiki/brain entities too. Omit for no scoping.
+   * Restrict ingested entities to those that belong to a source NodeSet whose
+   * normalized label contains one of these substrings. Some extraction payloads
+   * include a global graph, so an observations run must scope to its own
+   * NodeSet (e.g. "observations") or it would ingest thread/wiki/brain
+   * entities too. Omit for no scoping.
    */
   scopeNodeSetSubstrings?: string[];
 }): NormalizedKnowledgeGraphSnapshot {
@@ -140,7 +135,7 @@ export function normalizeCogneeGraph(args: {
   const rawNodeById = new Map(
     args.graph.nodes.map((node) => [node.id, node] as const),
   );
-  // Cognee encodes an entity's ontology type as an `is_a` EDGE pointing at an
+  // The extractor encodes an entity's ontology type as an `is_a` EDGE pointing at an
   // EntityType node (whose label is the ontology slug, e.g. "place"), NOT as a
   // node property — so the type must be resolved from edges, not coerced off
   // the node. Build node-id → EntityType-label here.
@@ -174,7 +169,7 @@ export function normalizeCogneeGraph(args: {
     const typeLabel = isAtypeByNodeId.get(node.id) ?? coerceTypeLabel(node);
     const ontologyType = findEntityType(entityTypes, typeLabel);
     if (!ontologyType) {
-      if (isStructuralCogneeNodeType(typeLabel)) {
+      if (isStructuralExtractionNodeType(typeLabel)) {
         structuralNodeCount += 1;
         addDroppedNodeSample(droppedNodeSamples, node, {
           rawType: typeLabel,
@@ -223,7 +218,7 @@ export function normalizeCogneeGraph(args: {
     }
     const entity = {
       tempId,
-      cogneeNodeId: node.id,
+      graphNodeId: node.id,
       label,
       normalizedLabel: normalizeLabel(label),
       typeLabel,
@@ -312,7 +307,7 @@ export function normalizeCogneeGraph(args: {
     }
     relationships.push({
       tempId,
-      cogneeEdgeId: edge.id ?? null,
+      graphEdgeId: edge.id ?? null,
       sourceTempId: edge.source,
       targetTempId: edge.target,
       label: edge.label,
@@ -343,8 +338,8 @@ export function normalizeCogneeGraph(args: {
       ...Array.from(relationshipEvidence.values()),
     ],
     metrics: {
-      cogneeNodeCount: args.graph.nodes.length,
-      cogneeEdgeCount: args.graph.edges.length,
+      extractedNodeCount: args.graph.nodes.length,
+      extractedEdgeCount: args.graph.edges.length,
       droppedNodeCount:
         structuralNodeCount + unapprovedNodeCount + outOfScopeNodeCount,
       droppedEdgeCount,
@@ -375,7 +370,7 @@ function messageIdForEvidence(message: ThreadTranscriptMessage): string | null {
   return evidenceSourceKind(message) === "thread_message" ? message.id : null;
 }
 
-function dedupeNodes(nodes: CogneeGraphNode[]): CogneeGraphNode[] {
+function dedupeNodes(nodes: GraphExtractionNode[]): GraphExtractionNode[] {
   const seen = new Set<string>();
   return nodes.filter((node) => {
     if (seen.has(node.id)) return false;
@@ -384,7 +379,7 @@ function dedupeNodes(nodes: CogneeGraphNode[]): CogneeGraphNode[] {
   });
 }
 
-function dedupeEdges(edges: CogneeGraphEdge[]): CogneeGraphEdge[] {
+function dedupeEdges(edges: GraphExtractionEdge[]): GraphExtractionEdge[] {
   const seen = new Set<string>();
   return edges.filter((edge) => {
     const key = edge.id ?? `${edge.source}:${edge.label}:${edge.target}`;
@@ -430,7 +425,7 @@ function findRelationshipType(
   return label ? (index.get(normalizeOntologySlug(label)) ?? null) : null;
 }
 
-function coerceTypeLabel(node: CogneeGraphNode): string | null {
+function coerceTypeLabel(node: GraphExtractionNode): string | null {
   return (
     readNestedTypeLabel(node.properties) ??
     node.type ??
@@ -461,12 +456,12 @@ function readNestedTypeLabel(
   return null;
 }
 
-function isStructuralCogneeNodeType(typeLabel: string | null): boolean {
+function isStructuralExtractionNodeType(typeLabel: string | null): boolean {
   if (!typeLabel) return false;
-  return STRUCTURAL_COGNEE_NODE_TYPES.has(normalizeOntologySlug(typeLabel));
+  return STRUCTURAL_EXTRACTION_NODE_TYPES.has(normalizeOntologySlug(typeLabel));
 }
 
-const STRUCTURAL_COGNEE_NODE_TYPES = new Set([
+const STRUCTURAL_EXTRACTION_NODE_TYPES = new Set([
   "data",
   "data_point",
   "datapoint",
@@ -479,21 +474,21 @@ const STRUCTURAL_COGNEE_NODE_TYPES = new Set([
   "textdocument",
   "text_summary",
   "textsummary",
-  // Cognee materializes each OWL ontology class as an `EntityType` node; it is
+  // The extractor materializes each OWL ontology class as an `EntityType` node; it is
   // scaffolding (the `is_a` edge target), not an ingestable entity.
   "entitytype",
   "entity_type",
 ]);
 
 /**
- * Resolve each entity's ontology type from Cognee's `is_a` EDGES. Cognee links
- * an Entity node to an EntityType node (label = ontology slug, e.g. "place")
- * via an `is_a` relationship rather than a node property. Returns node-id →
+ * Resolve each entity's ontology type from `is_a` EDGES. The extractor links an
+ * Entity node to an EntityType node (label = ontology slug, e.g. "place") via an
+ * `is_a` relationship rather than a node property. Returns node-id →
  * EntityType label.
  */
 function buildIsATypeIndex(
-  edges: CogneeGraphEdge[],
-  nodeById: Map<string, CogneeGraphNode>,
+  edges: GraphExtractionEdge[],
+  nodeById: Map<string, GraphExtractionNode>,
 ): Map<string, string> {
   const index = new Map<string, string>();
   for (const edge of edges) {
@@ -512,8 +507,8 @@ function buildIsATypeIndex(
  * `belongs_to_set` edges), for source-scoped filtering of the global graph.
  */
 function buildNodeSetMembership(
-  edges: CogneeGraphEdge[],
-  nodeById: Map<string, CogneeGraphNode>,
+  edges: GraphExtractionEdge[],
+  nodeById: Map<string, GraphExtractionNode>,
 ): Map<string, Set<string>> {
   const membership = new Map<string, Set<string>>();
   for (const edge of edges) {
@@ -607,7 +602,7 @@ function readConfidence(
 
 function addDroppedNodeSample(
   samples: DroppedNodeSample[],
-  node: CogneeGraphNode,
+  node: GraphExtractionNode,
   args: Pick<DroppedNodeSample, "rawType" | "dropReason">,
 ): void {
   if (samples.length >= MAX_DROP_SAMPLES) return;
@@ -622,8 +617,8 @@ function addDroppedNodeSample(
 
 function addDroppedEdgeSample(
   samples: DroppedEdgeSample[],
-  edge: CogneeGraphEdge,
-  rawNodeById: Map<string, CogneeGraphNode>,
+  edge: GraphExtractionEdge,
+  rawNodeById: Map<string, GraphExtractionNode>,
   args: Pick<DroppedEdgeSample, "dropReason">,
 ): void {
   if (samples.length >= MAX_DROP_SAMPLES) return;

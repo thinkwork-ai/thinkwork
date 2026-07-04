@@ -1,7 +1,7 @@
 -- Brain v0 tenant-shared entity pages.
 --
 -- Plan:
---   docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md
+--   docs/plans/2026-04-29-004-feat-brain-v0-plan.md
 --
 -- Apply manually:
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0051_brain_v0_tenant_entity_pages.sql
@@ -161,10 +161,10 @@ CREATE TRIGGER trg_tenant_entity_section_sources_tenant
   FOR EACH ROW
   EXECUTE FUNCTION public.enforce_tenant_entity_section_source_tenant();
 
-COMMENT ON TABLE public.tenant_entity_pages IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
-COMMENT ON TABLE public.tenant_entity_page_sections IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
-COMMENT ON TABLE public.tenant_entity_page_links IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
-COMMENT ON TABLE public.tenant_entity_page_aliases IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
-COMMENT ON TABLE public.tenant_entity_section_sources IS 'brain-v0: docs/plans/2026-04-29-004-feat-company-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_pages IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_page_sections IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_page_links IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_page_aliases IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
+COMMENT ON TABLE public.tenant_entity_section_sources IS 'brain-v0: docs/plans/2026-04-29-004-feat-brain-v0-plan.md';
 
 COMMIT;

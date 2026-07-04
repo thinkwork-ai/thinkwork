@@ -76,7 +76,7 @@ const run = {
   source_kind: "observations",
   source_ref: `tenant:${TENANT_ID}:observations`,
   source_label: "Hindsight observations",
-  cognee_dataset_name: `thinkwork:${TENANT_ID}:observations`,
+  source_dataset_name: `thinkwork:${TENANT_ID}:observations`,
   input: { source: "observations", fullRebuild: false },
   metadata: {},
 };
@@ -252,7 +252,7 @@ describe("knowledge-graph-observations-ingest handler", () => {
       createKnowledgeGraphObservationsIngestRunMock.mock
         .invocationCallOrder[0]!,
     );
-    // Extraction runs over the promoted packets (no Cognee round-trip).
+    // Extraction runs over the promoted packets (no external graph round-trip).
     expect(extractorMock).toHaveBeenCalledTimes(1);
     expect(extractorMock).toHaveBeenCalledWith(
       expect.objectContaining({

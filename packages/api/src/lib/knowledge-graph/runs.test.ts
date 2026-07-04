@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildCogneeDatasetName,
+  buildGraphDatasetName,
   buildObservationsDatasetName,
   buildObservationsSourceRef,
   createKnowledgeGraphObservationsIngestRun,
@@ -8,21 +8,21 @@ import {
   reapStaleObservationIngestRuns,
 } from "./runs.js";
 
-describe("buildCogneeDatasetName", () => {
-  it("can scope Cognee datasets to a specific ingest run", () => {
+describe("buildGraphDatasetName", () => {
+  it("can scope source datasets to a specific ingest run", () => {
     expect(
-      buildCogneeDatasetName("tenant-1", "thread", "thread-1", "run-1"),
+      buildGraphDatasetName("tenant-1", "thread", "thread-1", "run-1"),
     ).toBe("thinkwork:tenant-1:thread:thread-1:run:run-1");
   });
 
   it("scopes non-thread datasets by source kind and source ref", () => {
-    expect(buildCogneeDatasetName("tenant-1", "wiki", "owner:abc:recent")).toBe(
+    expect(buildGraphDatasetName("tenant-1", "wiki", "owner:abc:recent")).toBe(
       "thinkwork:tenant-1:wiki:owner:abc:recent",
     );
   });
 
   it("preserves the thread-scoped form when no run id is provided", () => {
-    expect(buildCogneeDatasetName("tenant-1", "thread", "thread-1")).toBe(
+    expect(buildGraphDatasetName("tenant-1", "thread", "thread-1")).toBe(
       "thinkwork:tenant-1:thread:thread-1",
     );
   });
@@ -142,7 +142,7 @@ describe("createKnowledgeGraphObservationsIngestRun", () => {
         tenant_id: "tenant-1",
         source_kind: "observations",
         source_ref: "tenant:tenant-1:observations",
-        cognee_dataset_name: "thinkwork:tenant-1:observations",
+        source_dataset_name: "thinkwork:tenant-1:observations",
         trigger: "scheduled",
         status: "queued",
         input: expect.objectContaining({ fullRebuild: true }),

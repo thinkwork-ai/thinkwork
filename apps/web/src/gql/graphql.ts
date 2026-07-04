@@ -2717,11 +2717,11 @@ export type KnowledgeGraphArtifactManifestSummary = {
 export type KnowledgeGraphEntity = {
   __typename?: 'KnowledgeGraphEntity';
   aliases: Array<Scalars['String']['output']>;
-  cogneeNodeId: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
   diagnostics: Scalars['AWSJSON']['output'];
   evidence: Array<KnowledgeGraphEvidence>;
   evidenceCount: Scalars['Int']['output'];
+  graphNodeId: Scalars['String']['output'];
   groundingStatus: KnowledgeGraphGroundingStatus;
   id: Scalars['ID']['output'];
   ingestRunId: Scalars['ID']['output'];
@@ -2770,7 +2770,7 @@ export type KnowledgeGraphEvidence = {
 export enum KnowledgeGraphEvidenceSourceKind {
   BrainPage = 'BRAIN_PAGE',
   BrainSection = 'BRAIN_SECTION',
-  CogneePayload = 'COGNEE_PAYLOAD',
+  GraphPayload = 'GRAPH_PAYLOAD',
   HindsightObservation = 'HINDSIGHT_OBSERVATION',
   Normalizer = 'NORMALIZER',
   ThreadMessage = 'THREAD_MESSAGE',
@@ -2821,8 +2821,6 @@ export enum KnowledgeGraphGroundingStatus {
 export type KnowledgeGraphIngestRun = {
   __typename?: 'KnowledgeGraphIngestRun';
   artifactManifests: Array<KnowledgeGraphArtifactManifestSummary>;
-  cogneeDatasetId?: Maybe<Scalars['String']['output']>;
-  cogneeDatasetName: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
   diagnosticCount: Scalars['Int']['output'];
   durationMs?: Maybe<Scalars['Int']['output']>;
@@ -2837,6 +2835,8 @@ export type KnowledgeGraphIngestRun = {
   metrics: Scalars['AWSJSON']['output'];
   relationshipCount: Scalars['Int']['output'];
   requestedByUserId?: Maybe<Scalars['ID']['output']>;
+  sourceDatasetId?: Maybe<Scalars['String']['output']>;
+  sourceDatasetName: Scalars['String']['output'];
   sourceKind: KnowledgeGraphSourceKind;
   sourceLabel?: Maybe<Scalars['String']['output']>;
   sourceRef: Scalars['String']['output'];
@@ -2865,12 +2865,12 @@ export enum KnowledgeGraphProvenanceStatus {
 
 export type KnowledgeGraphRelationship = {
   __typename?: 'KnowledgeGraphRelationship';
-  cogneeEdgeId?: Maybe<Scalars['String']['output']>;
   confidence?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   diagnostics: Scalars['AWSJSON']['output'];
   evidence: Array<KnowledgeGraphEvidence>;
   evidenceCount: Scalars['Int']['output'];
+  graphEdgeId?: Maybe<Scalars['String']['output']>;
   groundingStatus: KnowledgeGraphGroundingStatus;
   id: Scalars['ID']['output'];
   ingestRunId: Scalars['ID']['output'];

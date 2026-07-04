@@ -20,7 +20,7 @@ function profile(kind: OkfPageKind): OkfPageProfile {
       title: `Acme ${kind}`,
       description: "Generated from governed ThinkWork state.",
       resource: `thinkwork://brain/${kind}/acme-${kind}`,
-      tags: ["company-brain", kind],
+      tags: ["brain", kind],
       timestamp: BASE_TIME,
       "x-thinkwork": {
         version: 1,

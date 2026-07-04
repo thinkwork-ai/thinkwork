@@ -12,7 +12,7 @@ describe("source agent runtime", () => {
         tool_calls: [
           {
             id: "search-1",
-            tool: "company-brain.pages.search",
+            tool: "brain.pages.search",
             input: { query: "favorite restarant in Paris" },
           },
         ],
@@ -44,7 +44,7 @@ describe("source agent runtime", () => {
       stopReason: "end_turn",
     });
     const searchTool: SourceAgentTool = {
-      name: "company-brain.pages.search",
+      name: "brain.pages.search",
       description: "Search compiled ThinkWork Brain pages.",
       async execute(input, context) {
         context.rememberSource("page-auberge-bressane", {
@@ -71,7 +71,7 @@ describe("source agent runtime", () => {
       system: "You are a source-specific wiki navigator.",
       query: "favorite restarant in Paris",
       tools: [searchTool],
-      allowedTools: ["company-brain.pages.search"],
+      allowedTools: ["brain.pages.search"],
       depthCap: 3,
       model,
     });
@@ -113,14 +113,14 @@ describe("source agent runtime", () => {
       query: "favorite restaurant",
       tools: [
         {
-          name: "company-brain.pages.search",
+          name: "brain.pages.search",
           description: "Search pages.",
           async execute() {
             throw new Error("should not run");
           },
         },
       ],
-      allowedTools: ["company-brain.pages.search"],
+      allowedTools: ["brain.pages.search"],
       depthCap: 2,
       model: async () => ({
         text: JSON.stringify({
@@ -149,7 +149,7 @@ describe("source agent runtime", () => {
       query: "favorite restaurant",
       tools: [
         {
-          name: "company-brain.pages.search",
+          name: "brain.pages.search",
           description: "Search pages.",
           async execute() {
             executed = true;
@@ -157,13 +157,13 @@ describe("source agent runtime", () => {
           },
         },
       ],
-      allowedTools: ["company-brain.pages.search"],
+      allowedTools: ["brain.pages.search"],
       depthCap: 1,
       model: async () => ({
         text: `<function_calls>${JSON.stringify([
           {
             id: "search-1",
-            tool: "company-brain.pages.search",
+            tool: "brain.pages.search",
             input: { query: "favorite restaurant Paris" },
           },
         ])}</function_calls>`,
@@ -181,19 +181,19 @@ describe("source agent runtime", () => {
       query: "favorite restaurant",
       tools: [
         {
-          name: "company-brain.pages.search",
+          name: "brain.pages.search",
           description: "Search pages.",
           async execute() {
             return { observation: { pages: [] }, summary: "0 pages" };
           },
         },
       ],
-      allowedTools: ["company-brain.pages.search"],
+      allowedTools: ["brain.pages.search"],
       depthCap: 1,
       model: async () => ({
         text: JSON.stringify({
           tool_calls: [
-            { id: "search-1", tool: "company-brain.pages.search", input: {} },
+            { id: "search-1", tool: "brain.pages.search", input: {} },
           ],
         }),
       }),
@@ -217,7 +217,7 @@ describe("source agent runtime", () => {
       query: "favorite restaurant",
       tools: [
         {
-          name: "company-brain.pages.read",
+          name: "brain.pages.read",
           description: "Read a compiled page.",
           async execute(_input, context) {
             context.rememberSource("page-auberge-bressane", {});
@@ -234,7 +234,7 @@ describe("source agent runtime", () => {
           },
         },
       ],
-      allowedTools: ["company-brain.pages.read"],
+      allowedTools: ["brain.pages.read"],
       depthCap: 2,
       model: async (request) => {
         turn += 1;
@@ -244,7 +244,7 @@ describe("source agent runtime", () => {
               tool_calls: [
                 {
                   id: "read-1",
-                  tool: "company-brain.pages.read",
+                  tool: "brain.pages.read",
                   input: { page_id: "page-auberge-bressane" },
                 },
               ],

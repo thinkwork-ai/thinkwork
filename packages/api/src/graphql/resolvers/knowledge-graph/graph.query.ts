@@ -174,7 +174,7 @@ async function loadCanonicalTenantGraph(
       (array_agg(source_kind ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS source_kind,
       (array_agg(source_ref ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS source_ref,
       (array_agg(ingest_run_id ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS ingest_run_id,
-      (array_agg(cognee_edge_id ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS cognee_edge_id,
+      (array_agg(graph_edge_id ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS graph_edge_id,
       canonical_source_entity_id AS source_entity_id,
       canonical_target_entity_id AS target_entity_id,
       (array_agg(label ORDER BY evidence_count DESC, updated_at DESC, label ASC))[1] AS label,

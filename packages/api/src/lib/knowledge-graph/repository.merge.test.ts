@@ -26,7 +26,7 @@ function entity(
 ): NormalizedKnowledgeGraphSnapshot["entities"][number] {
   return {
     tempId,
-    cogneeNodeId: tempId,
+    graphNodeId: tempId,
     label: normalizedLabel,
     normalizedLabel,
     typeLabel: slug,
@@ -121,8 +121,8 @@ function snapshot(
     relationships: [],
     evidence: [],
     metrics: {
-      cogneeNodeCount: entities.length,
-      cogneeEdgeCount: 0,
+      extractedNodeCount: entities.length,
+      extractedEdgeCount: 0,
       droppedNodeCount: 0,
       droppedEdgeCount: 0,
       structuralNodeCount: 0,
@@ -139,11 +139,15 @@ function snapshot(
 }
 
 describe("mergeKnowledgeGraphSnapshot", () => {
-  it("merges into prior entities without deleting the source (Cognee-accumulator regression)", async () => {
+  it("merges into prior entities without deleting the source (extractor-accumulator regression)", async () => {
     // Prior run left one entity; this run re-mentions it plus adds a new one.
     const { tx, calls } = makeTx({
       existingEntities: [
-        { id: "acme-id", normalized_label: "acme corp", ontology_type_slug: "company" },
+        {
+          id: "acme-id",
+          normalized_label: "acme corp",
+          ontology_type_slug: "company",
+        },
       ],
     });
     const extraWork = vi.fn(async () => undefined);

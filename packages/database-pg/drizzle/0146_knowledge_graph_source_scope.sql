@@ -166,7 +166,7 @@ ALTER TABLE public.knowledge_graph_evidence
   ADD CONSTRAINT knowledge_graph_evidence_source_kind_allowed
     CHECK (source_kind IN ('thread','wiki','brain')),
   ADD CONSTRAINT knowledge_graph_evidence_evidence_source_kind_allowed
-    CHECK (evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','cognee_payload','normalizer'));
+    CHECK (evidence_source_kind IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','graph_payload','normalizer'));
 
 CREATE OR REPLACE FUNCTION public.enforce_knowledge_graph_ingest_run_scope()
 RETURNS trigger

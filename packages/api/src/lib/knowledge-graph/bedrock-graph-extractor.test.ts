@@ -9,7 +9,7 @@ import {
   kgExtractionBatchSize,
   kgExtractionModelId,
 } from "./bedrock-graph-extractor.js";
-import { normalizeCogneeGraph } from "./normalizer.js";
+import { normalizeExtractedGraph } from "./normalizer.js";
 import type { KnowledgeGraphOntologyExport } from "./ontology-export.js";
 import type { ThreadTranscriptMessage } from "./thread-transcript.js";
 import type { KnowledgeGraphSourcePacket } from "./source-adapters.js";
@@ -19,9 +19,27 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ONTOLOGY: KnowledgeGraphOntologyExport = {
   mechanism: "custom_prompt",
   entityTypes: [
-    { id: "t1", slug: "company", name: "Company", description: null, aliases: [] },
-    { id: "t2", slug: "person", name: "Person", description: null, aliases: [] },
-    { id: "t3", slug: "opportunity", name: "Opportunity", description: null, aliases: [] },
+    {
+      id: "t1",
+      slug: "company",
+      name: "Company",
+      description: null,
+      aliases: [],
+    },
+    {
+      id: "t2",
+      slug: "person",
+      name: "Person",
+      description: null,
+      aliases: [],
+    },
+    {
+      id: "t3",
+      slug: "opportunity",
+      name: "Opportunity",
+      description: null,
+      aliases: [],
+    },
   ],
   relationshipTypes: [
     {
@@ -123,19 +141,19 @@ describe("extractGraphFromPackets", () => {
     // Round-trip through the REAL frozen normalizer: labels are verbatim
     // substrings of the observation text, so provenance grounds strong and
     // the evidence rows reference the observation id.
-    const snapshot = normalizeCogneeGraph({
+    const snapshot = normalizeExtractedGraph({
       graph: result.payload,
       transcript: [observationEvidence("obs-1", text, 0)],
       ontology: ONTOLOGY,
     });
     expect(snapshot.entities).toHaveLength(2);
     expect(
-      snapshot.entities.every((entity) => entity.groundingStatus === "grounded"),
+      snapshot.entities.every(
+        (entity) => entity.groundingStatus === "grounded",
+      ),
     ).toBe(true);
     expect(
-      snapshot.entities.every(
-        (entity) => entity.provenanceStatus === "strong",
-      ),
+      snapshot.entities.every((entity) => entity.provenanceStatus === "strong"),
     ).toBe(true);
     expect(snapshot.relationships).toHaveLength(1);
     expect(snapshot.relationships[0]?.groundingStatus).toBe("grounded");
@@ -151,13 +169,20 @@ describe("extractGraphFromPackets", () => {
   it("Covers AE2: a malformed batch contributes nothing; other batches land; drops surface", async () => {
     vi.stubEnv("KG_EXTRACTION_BATCH_SIZE", "1");
     const invoke = invokeReturning([
-      { entities: [{ id: "e1", label: "Acme Corp", type: "company" }], relationships: [] },
+      {
+        entities: [{ id: "e1", label: "Acme Corp", type: "company" }],
+        relationships: [],
+      },
       "not-an-object",
       new Error("BedrockRetryExhausted"),
     ]);
 
     const result = await extractGraphFromPackets({
-      packets: [packet("p1", "Acme Corp"), packet("p2", "x"), packet("p3", "y")],
+      packets: [
+        packet("p1", "Acme Corp"),
+        packet("p2", "x"),
+        packet("p3", "y"),
+      ],
       ontology: ONTOLOGY,
       invoke: invoke as never,
     });
@@ -165,12 +190,19 @@ describe("extractGraphFromPackets", () => {
     expect(result.batchesTotal).toBe(3);
     expect(result.batchesDropped).toBe(2);
     expect(result.batchesTruncated).toBe(0);
-    expect(result.payload.nodes.map((node) => node.label)).toEqual(["Acme Corp"]);
+    expect(result.payload.nodes.map((node) => node.label)).toEqual([
+      "Acme Corp",
+    ]);
   });
 
   it("treats max_tokens truncation as a distinct dropped outcome", async () => {
     const invoke = invokeReturning(
-      [{ entities: [{ id: "e1", label: "Acme Corp", type: "company" }], relationships: [] }],
+      [
+        {
+          entities: [{ id: "e1", label: "Acme Corp", type: "company" }],
+          relationships: [],
+        },
+      ],
       "max_tokens",
     );
     const result = await extractGraphFromPackets({
@@ -197,7 +229,7 @@ describe("extractGraphFromPackets", () => {
     });
     expect(result.payload.nodes).toHaveLength(1);
 
-    const snapshot = normalizeCogneeGraph({
+    const snapshot = normalizeExtractedGraph({
       graph: result.payload,
       transcript: [observationEvidence("p1", "Mystery Blob docked.", 0)],
       ontology: ONTOLOGY,
@@ -225,7 +257,10 @@ describe("extractGraphFromPackets", () => {
     ]);
 
     const result = await extractGraphFromPackets({
-      packets: [packet("p1", "Acme Corp"), packet("p2", "acme corp and Jane Doe")],
+      packets: [
+        packet("p1", "Acme Corp"),
+        packet("p2", "acme corp and Jane Doe"),
+      ],
       ontology: ONTOLOGY,
       invoke: invoke as never,
     });

@@ -98,7 +98,7 @@ export async function loadFilteredEntities(
         (array_agg(source_kind ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS source_kind,
         (array_agg(source_ref ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS source_ref,
         (array_agg(ingest_run_id ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS ingest_run_id,
-        (array_agg(cognee_node_id ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS cognee_node_id,
+        (array_agg(graph_node_id ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS graph_node_id,
         (array_agg(label ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS label,
         normalized_label,
         (array_agg(type_label ORDER BY relationship_count DESC, evidence_count DESC, updated_at DESC, label ASC))[1] AS type_label,
