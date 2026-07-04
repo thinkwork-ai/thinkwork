@@ -31,7 +31,7 @@
  * and mcp-proxy (interactive tool calls).
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   tenantMcpServers,
@@ -1466,6 +1466,112 @@ function extractTokenFromSecretString(
   } catch {
     return secretString.length > 0 ? secretString : undefined;
   }
+}
+
+/**
+ * Ready-to-call target for a single tenant MCP server. `McpServerTarget` is the
+ * transport-only shape `mcp-client-call.ts` consumes (url + optional bearer /
+ * headers), so a resolved target can be handed straight to `mcpCallTool`.
+ */
+import type { McpServerTarget } from "./mcp-client-call.js";
+
+export type ResolveTenantMcpServerTargetResult =
+  | { kind: "ok"; target: McpServerTarget; authType: string }
+  | { kind: "missing"; reason: string }
+  | { kind: "needs_user"; reason: string };
+
+/**
+ * Resolve ONE tenant-scoped MCP server by name (or slug) to a ready-to-call
+ * target for HEADLESS, no-user execution — the Living Artifacts canvas-refresh
+ * path (THINK-145 U6, KTD7). Only tenant-owned auth models resolve unattended:
+ *   - none               → no bearer
+ *   - tenant_api_key      → resolveTenantApiKeyToken (Secrets Manager / inline)
+ *   - service_credential  → resolveServiceCredentialAuth (Secrets Manager)
+ *
+ * Per-user auth (`oauth` / `per_user_oauth` / `user_headers`) returns
+ * `needs_user`: a headless refresh has no user handle to resolve those (R9).
+ * The refresh caller already excludes per-user bindings before calling — this
+ * is defense in depth. A missing / disabled / unapproved server, or a
+ * tenant-credential that fails to resolve, returns `missing`, which the caller
+ * maps to a terminal BAD binding (R8). Secrets access is scoped to the
+ * `tenantId` named here: only THIS tenant's server rows are read, and the
+ * Secrets Manager fetch uses the row's own `auth_config.secretRef`.
+ */
+export async function resolveTenantMcpServerTarget(input: {
+  tenantId: string;
+  serverName: string;
+  logPrefix?: string;
+}): Promise<ResolveTenantMcpServerTargetResult> {
+  const logPrefix = input.logPrefix ?? "[canvas-refresh]";
+  const db = getDb();
+  const [row] = await db
+    .select({
+      slug: tenantMcpServers.slug,
+      name: tenantMcpServers.name,
+      url: tenantMcpServers.url,
+      transport: tenantMcpServers.transport,
+      auth_type: tenantMcpServers.auth_type,
+      auth_config: tenantMcpServers.auth_config,
+      enabled: tenantMcpServers.enabled,
+      status: tenantMcpServers.status,
+    })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, input.tenantId),
+        or(
+          eq(tenantMcpServers.name, input.serverName),
+          eq(tenantMcpServers.slug, input.serverName),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    return { kind: "missing", reason: "MCP server no longer exists" };
+  }
+  if (row.status !== "approved" || row.enabled !== true) {
+    return {
+      kind: "missing",
+      reason: `MCP server is not active (status=${row.status}, enabled=${row.enabled})`,
+    };
+  }
+
+  const label = row.slug ?? row.name;
+  const authType = row.auth_type ?? "none";
+  const authCfg = (row.auth_config as Record<string, unknown>) || {};
+  const target: McpServerTarget = { url: row.url, name: label };
+
+  if (authType === "none") {
+    return { kind: "ok", target, authType };
+  }
+  if (authType === "tenant_api_key") {
+    const token = await resolveTenantApiKeyToken(authCfg, logPrefix, label);
+    if (!token) {
+      return { kind: "missing", reason: "tenant API key not configured" };
+    }
+    target.token = token;
+    return { kind: "ok", target, authType };
+  }
+  if (authType === "service_credential") {
+    const resolved = await resolveServiceCredentialAuth(
+      authCfg,
+      logPrefix,
+      label,
+    );
+    if (!resolved) {
+      return { kind: "missing", reason: "service credential did not resolve" };
+    }
+    if (resolved.token) target.token = resolved.token;
+    if (resolved.headers) target.headers = resolved.headers;
+    return { kind: "ok", target, authType };
+  }
+  // oauth / per_user_oauth / user_headers → requires a per-user handle that a
+  // headless refresh does not have.
+  return {
+    kind: "needs_user",
+    reason: `auth_type ${authType} requires a signed-in user`,
+  };
 }
 
 function extractMcpToolNames(value: unknown): string[] {

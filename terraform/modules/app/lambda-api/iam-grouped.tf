@@ -547,6 +547,11 @@ locals {
           # agent_loop_continue_dispatch event so routine actions never run
           # inline in graphql-http.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger",
+          # canvas-refresh (Living Artifacts THINK-145 U6/U7): graphql-http's
+          # refreshCanvasData mutation RequestResponse-invokes it (user + agent
+          # triggers), and job-trigger's canvas_refresh branch RequestResponse-
+          # invokes it (scheduled trigger). Both run on this shared role.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-canvas-refresh",
         ]
       },
       # (was standalone managed policy "workspace_renderer_invoke")

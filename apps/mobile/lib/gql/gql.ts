@@ -93,7 +93,6 @@ type Documents = {
     "\n  mutation UpdateQuickAction($id: ID!, $input: UpdateQuickActionInput!) {\n    updateQuickAction(id: $id, input: $input) {\n      id\n      userId\n      tenantId\n      title\n      prompt\n      workspaceAgentId\n      sortOrder\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.UpdateQuickActionDocument,
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": typeof types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": typeof types.ReorderQuickActionsDocument,
-    "\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n": typeof types.RefreshGenUiDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": typeof types.CreateRecipeDocument,
 };
 const documents: Documents = {
@@ -176,7 +175,6 @@ const documents: Documents = {
     "\n  mutation UpdateQuickAction($id: ID!, $input: UpdateQuickActionInput!) {\n    updateQuickAction(id: $id, input: $input) {\n      id\n      userId\n      tenantId\n      title\n      prompt\n      workspaceAgentId\n      sortOrder\n      createdAt\n      updatedAt\n    }\n  }\n": types.UpdateQuickActionDocument,
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": types.ReorderQuickActionsDocument,
-    "\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n": types.RefreshGenUiDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": types.CreateRecipeDocument,
 };
 
@@ -510,10 +508,6 @@ export function graphql(source: "\n  mutation DeleteQuickAction($id: ID!) {\n   
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n"): (typeof documents)["\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n"): (typeof documents)["\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

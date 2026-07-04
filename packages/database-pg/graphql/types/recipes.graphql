@@ -50,5 +50,4 @@ extend type Mutation {
   createRecipe(input: CreateRecipeInput!): Recipe!
   updateRecipe(id: ID!, input: UpdateRecipeInput!): Recipe!
   deleteRecipe(id: ID!): Boolean!
-  refreshGenUI(messageId: ID!, toolIndex: Int!): Message
 }

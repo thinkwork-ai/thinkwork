@@ -1540,15 +1540,6 @@ export const ReorderQuickActionsMutation = gql`
 // Recipes (PRD-26)
 // ---------------------------------------------------------------------------
 
-export const RefreshGenUIMutation = gql`
-  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {
-    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {
-      id
-      toolResults
-    }
-  }
-`;
-
 export const CreateRecipeMutation = gql`
   mutation CreateRecipe($input: CreateRecipeInput!) {
     createRecipe(input: $input) {

@@ -1058,6 +1058,33 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars['Float']['output'];
 };
 
+export type CanvasRefreshBindingResult = {
+  __typename?: 'CanvasRefreshBindingResult';
+  bindingId: Scalars['ID']['output'];
+  elementId: Scalars['String']['output'];
+  outcome: CanvasRefreshOutcome;
+  partId: Scalars['String']['output'];
+  quality: ArtifactBindingQuality;
+  reason?: Maybe<Scalars['String']['output']>;
+};
+
+export enum CanvasRefreshOutcome {
+  Failed = 'FAILED',
+  NeedsUser = 'NEEDS_USER',
+  Refreshed = 'REFRESHED',
+  SchemaStale = 'SCHEMA_STALE',
+  ServerMissing = 'SERVER_MISSING',
+  Skipped = 'SKIPPED'
+}
+
+export type CanvasRefreshResult = {
+  __typename?: 'CanvasRefreshResult';
+  artifactId: Scalars['ID']['output'];
+  bindings: Array<CanvasRefreshBindingResult>;
+  dispatched: Scalars['Boolean']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+};
+
 export type CapabilityDivergence = {
   __typename?: 'CapabilityDivergence';
   deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
@@ -3770,7 +3797,7 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
-  refreshGenUI?: Maybe<Message>;
+  refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
    * bypassing the API freshness TTL while preserving signature/digest checks
@@ -4766,9 +4793,9 @@ export type MutationRedeemPremiumPluginInstallKeyArgs = {
 };
 
 
-export type MutationRefreshGenUiArgs = {
-  messageId: Scalars['ID']['input'];
-  toolIndex: Scalars['Int']['input'];
+export type MutationRefreshCanvasDataArgs = {
+  artifactId: Scalars['ID']['input'];
+  partId?: InputMaybe<Scalars['String']['input']>;
 };
 
 

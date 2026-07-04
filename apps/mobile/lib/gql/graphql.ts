@@ -1058,6 +1058,33 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars['Float']['output'];
 };
 
+export type CanvasRefreshBindingResult = {
+  __typename?: 'CanvasRefreshBindingResult';
+  bindingId: Scalars['ID']['output'];
+  elementId: Scalars['String']['output'];
+  outcome: CanvasRefreshOutcome;
+  partId: Scalars['String']['output'];
+  quality: ArtifactBindingQuality;
+  reason?: Maybe<Scalars['String']['output']>;
+};
+
+export enum CanvasRefreshOutcome {
+  Failed = 'FAILED',
+  NeedsUser = 'NEEDS_USER',
+  Refreshed = 'REFRESHED',
+  SchemaStale = 'SCHEMA_STALE',
+  ServerMissing = 'SERVER_MISSING',
+  Skipped = 'SKIPPED'
+}
+
+export type CanvasRefreshResult = {
+  __typename?: 'CanvasRefreshResult';
+  artifactId: Scalars['ID']['output'];
+  bindings: Array<CanvasRefreshBindingResult>;
+  dispatched: Scalars['Boolean']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+};
+
 export type CapabilityDivergence = {
   __typename?: 'CapabilityDivergence';
   deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
@@ -3770,7 +3797,7 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
-  refreshGenUI?: Maybe<Message>;
+  refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
    * bypassing the API freshness TTL while preserving signature/digest checks
@@ -4766,9 +4793,9 @@ export type MutationRedeemPremiumPluginInstallKeyArgs = {
 };
 
 
-export type MutationRefreshGenUiArgs = {
-  messageId: Scalars['ID']['input'];
-  toolIndex: Scalars['Int']['input'];
+export type MutationRefreshCanvasDataArgs = {
+  artifactId: Scalars['ID']['input'];
+  partId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -12139,14 +12166,6 @@ export type ReorderQuickActionsMutationVariables = Exact<{
 
 export type ReorderQuickActionsMutation = { __typename?: 'Mutation', reorderQuickActions: Array<{ __typename?: 'UserQuickAction', id: string, sortOrder: number }> };
 
-export type RefreshGenUiMutationVariables = Exact<{
-  messageId: Scalars['ID']['input'];
-  toolIndex: Scalars['Int']['input'];
-}>;
-
-
-export type RefreshGenUiMutation = { __typename?: 'Mutation', refreshGenUI?: { __typename?: 'Message', id: string, toolResults?: any | null } | null };
-
 export type CreateRecipeMutationVariables = Exact<{
   input: CreateRecipeInput;
 }>;
@@ -12234,5 +12253,4 @@ export const CreateQuickActionDocument = {"kind":"Document","definitions":[{"kin
 export const UpdateQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateQuickActionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"prompt"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceAgentId"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateQuickActionMutation, UpdateQuickActionMutationVariables>;
 export const DeleteQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteQuickActionMutation, DeleteQuickActionMutationVariables>;
 export const ReorderQuickActionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ReorderQuickActions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ReorderQuickActionsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"reorderQuickActions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}}]}}]} as unknown as DocumentNode<ReorderQuickActionsMutation, ReorderQuickActionsMutationVariables>;
-export const RefreshGenUiDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RefreshGenUI"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshGenUI"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"messageId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}}},{"kind":"Argument","name":{"kind":"Name","value":"toolIndex"},"value":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"toolResults"}}]}}]}}]} as unknown as DocumentNode<RefreshGenUiMutation, RefreshGenUiMutationVariables>;
 export const CreateRecipeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateRecipe"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateRecipeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createRecipe"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"genuiType"}}]}}]}}]} as unknown as DocumentNode<CreateRecipeMutation, CreateRecipeMutationVariables>;
