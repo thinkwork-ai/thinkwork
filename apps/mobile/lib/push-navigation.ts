@@ -1,7 +1,7 @@
 export type NotificationData = Record<string, unknown> | undefined | null;
 
 export type PushNavigationTarget =
-  | { kind: "computer_approval"; url: string }
+  | { kind: "computer_approval"; approvalId: string }
   | { kind: "thread"; threadId: string }
   | null;
 
@@ -12,10 +12,10 @@ export function pushNavigationTarget(
   const data = { ...(triggerPayload ?? {}), ...(contentData ?? {}) };
   if (
     data.type === "computer_approval" &&
-    typeof data.deepLinkUrl === "string" &&
-    data.deepLinkUrl.trim()
+    typeof data.approvalId === "string" &&
+    data.approvalId.trim()
   ) {
-    return { kind: "computer_approval", url: data.deepLinkUrl.trim() };
+    return { kind: "computer_approval", approvalId: data.approvalId.trim() };
   }
 
   if (typeof data.threadId === "string" && data.threadId.trim()) {

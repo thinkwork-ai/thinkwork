@@ -1344,6 +1344,82 @@ export const InboxItemQuery = graphql(`
   }
 `);
 
+export const ComputerApprovalsQuery = graphql(`
+  query ComputerApprovals($tenantId: ID!) {
+    inboxItems(tenantId: $tenantId, status: PENDING) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ComputerApprovalQuery = graphql(`
+  query ComputerApproval($id: ID!) {
+    inboxItem(id: $id) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ApproveComputerApprovalMutation = graphql(`
+  mutation ApproveComputerApproval($id: ID!, $input: ApproveInboxItemInput) {
+    approveInboxItem(id: $id, input: $input) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const RejectComputerApprovalMutation = graphql(`
+  mutation RejectComputerApproval($id: ID!, $input: RejectInboxItemInput) {
+    rejectInboxItem(id: $id, input: $input) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const DecideInboxItemMutation = graphql(`
   mutation DecideInboxItem($id: ID!, $input: InboxItemDecisionInput!) {
     decideInboxItem(id: $id, input: $input) {
