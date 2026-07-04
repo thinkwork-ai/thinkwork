@@ -130,13 +130,13 @@ describe("GeneratedArtifactCard", () => {
 });
 
 describe("isAppArtifact (THINK-116 DATA_VIEW mis-route)", () => {
-  it("does NOT treat a promoted GenUI DATA_VIEW snapshot as an applet", () => {
+  it("does NOT treat a living GenUI DATA_VIEW canvas as an applet", () => {
     expect(
       isAppArtifact({
         id: "a1",
         title: "Weekly Ticket Volume",
         type: "DATA_VIEW",
-        metadata: { kind: "json_render_snapshot" },
+        metadata: { kind: "json_render_canvas" },
       }),
     ).toBe(false);
   });

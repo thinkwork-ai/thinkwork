@@ -1,5 +1,5 @@
 import { Search, User } from "lucide-react";
-import { Input } from "@thinkwork/ui";
+import { Input, Switch } from "@thinkwork/ui";
 
 export interface ArtifactsToolbarProps {
   search: string;
@@ -13,6 +13,12 @@ export interface ArtifactsToolbarProps {
   showUserFilter?: boolean;
   userIdFilter?: string;
   onUserIdFilterChange?: (value: string) => void;
+  /**
+   * Living Artifacts (R14): canvas rows default to saved-only. This toggle
+   * flips `includeDrafts` so unsaved draft canvases also appear.
+   */
+  includeDrafts?: boolean;
+  onIncludeDraftsChange?: (value: boolean) => void;
 }
 
 // Artifacts has a single kind (`applet`) today, so the toolbar carries only
@@ -24,6 +30,8 @@ export function ArtifactsToolbar({
   showUserFilter = false,
   userIdFilter = "",
   onUserIdFilterChange,
+  includeDrafts = false,
+  onIncludeDraftsChange,
 }: ArtifactsToolbarProps) {
   return (
     <div
@@ -57,6 +65,20 @@ export function ArtifactsToolbar({
             data-testid="artifacts-user-filter-input"
           />
         </div>
+      ) : null}
+
+      {onIncludeDraftsChange ? (
+        <label
+          className="ml-auto flex items-center gap-2 text-sm text-muted-foreground"
+          data-testid="artifacts-include-drafts"
+        >
+          <Switch
+            checked={includeDrafts}
+            onCheckedChange={onIncludeDraftsChange}
+            data-testid="artifacts-include-drafts-switch"
+          />
+          Include drafts
+        </label>
       ) : null}
     </div>
   );

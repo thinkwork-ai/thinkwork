@@ -3,6 +3,7 @@ import {
   Bot,
   Brain,
   Clock,
+  FileBox,
   Cpu,
   GitBranch,
   History,
@@ -85,6 +86,15 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Activity",
     to: "/settings/activity",
     icon: History,
+  },
+  // Living Artifacts (THINK-145): canvases are saved/versioned artifacts now —
+  // the operator list surface returns to the nav. Gating matches the parent
+  // layout route (settings.artifacts.tsx), which is operator-only.
+  {
+    label: "Artifacts",
+    to: "/settings/artifacts",
+    icon: FileBox,
+    operatorOnly: true,
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
   {

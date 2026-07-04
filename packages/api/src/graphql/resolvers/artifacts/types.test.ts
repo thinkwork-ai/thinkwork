@@ -49,7 +49,17 @@ vi.mock("../../utils.js", () => ({
   },
 }));
 
-import { artifactTypeResolvers } from "./types.js";
+vi.mock("../../../lib/artifacts/payload-storage.js", () => ({
+  isArtifactPayloadS3Key: (_tenantId: string, key: string) =>
+    key.startsWith("tenants/"),
+  readArtifactPayloadFromS3: async ({ key }: { key: string }) =>
+    `payload-for:${key}`,
+}));
+
+import {
+  artifactTypeResolvers,
+  artifactVersionTypeResolvers,
+} from "./types.js";
 
 beforeEach(() => {
   mocks.nextRows = [];
@@ -154,5 +164,27 @@ describe("Artifact.bindings field resolver", () => {
       spaceId: null,
     });
     expect(result).toEqual([]);
+  });
+});
+
+describe("ArtifactVersion.content field resolver", () => {
+  it("hydrates the pinned payload from the version's S3 key", async () => {
+    const result = await artifactVersionTypeResolvers.content({
+      tenantId: TENANT_ID,
+      s3Key: "tenants/x/artifacts/v/2",
+    });
+    expect(result).toBe("payload-for:tenants/x/artifacts/v/2");
+  });
+
+  it("returns null without an s3 key or a payload-store key", async () => {
+    expect(
+      await artifactVersionTypeResolvers.content({ tenantId: TENANT_ID }),
+    ).toBeNull();
+    expect(
+      await artifactVersionTypeResolvers.content({
+        tenantId: TENANT_ID,
+        s3Key: "not-a-payload-key",
+      }),
+    ).toBeNull();
   });
 });

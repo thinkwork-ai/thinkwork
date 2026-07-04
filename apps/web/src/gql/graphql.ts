@@ -926,6 +926,7 @@ export enum ArtifactType {
 export type ArtifactVersion = {
   __typename?: 'ArtifactVersion';
   artifactId: Scalars['ID']['output'];
+  content?: Maybe<Scalars['String']['output']>;
   contentHash: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
   createdBy?: Maybe<Scalars['ID']['output']>;
@@ -3836,7 +3837,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteGenUIArtifact: Artifact;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4813,11 +4813,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-
-export type MutationPromoteGenUiArtifactArgs = {
-  input: PromoteGenUiArtifactInput;
 };
 
 
@@ -6415,14 +6410,6 @@ export type PromoteDraftAppletInput = {
   threadId: Scalars['ID']['input'];
 };
 
-export type PromoteGenUiArtifactInput = {
-  idempotencyKey: Scalars['String']['input'];
-  partId: Scalars['String']['input'];
-  sourceMessageId: Scalars['ID']['input'];
-  specHash: Scalars['String']['input'];
-  threadId: Scalars['ID']['input'];
-};
-
 export type PublishRoutineVersionInput = {
   asl: Scalars['AWSJSON']['input'];
   markdownSummary: Scalars['String']['input'];
@@ -6929,6 +6916,7 @@ export type QueryArtifactsArgs = {
   favoritedOnly?: InputMaybe<Scalars['Boolean']['input']>;
   includeDrafts?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;

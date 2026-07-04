@@ -2137,21 +2137,6 @@ export const HandleJsonRenderActionMutation = gql`
   }
 `;
 
-export const PromoteGenUIArtifactMutation = gql`
-  mutation PromoteGenUIArtifact($input: PromoteGenUIArtifactInput!) {
-    promoteGenUIArtifact(input: $input) {
-      id
-      title
-      type
-      status
-      summary
-      sourceMessageId
-      metadata
-      createdAt
-    }
-  }
-`;
-
 const ComputerApprovalFields = gql`
   fragment ComputerApprovalFields on InboxItem {
     id
@@ -2539,6 +2524,29 @@ export const ThreadArtifactsQuery = gql`
   }
 `;
 
+// Living Artifacts (THINK-145 U10): the canvas detail query carries the
+// version chain (history UI) and the per-widget data-source bindings (freshness
+// badges + provenance). `versions` intentionally omits `content` — the pinned
+// payload is hydrated on demand by `ArtifactVersionContentQuery` when a version
+// is opened, so the detail read stays light.
+const CanvasBindingFields = gql`
+  fragment CanvasBindingFields on ArtifactDataBinding {
+    id
+    partId
+    elementId
+    mcpServerRef
+    serverName
+    toolName
+    redactedArgs
+    resultShapeHash
+    authContext
+    ownerUserId
+    quality
+    lastFetchedAt
+    lastGoodAt
+  }
+`;
+
 export const ArtifactDetailForRouteQuery = gql`
   query ArtifactDetailForRoute($id: ID!) {
     artifact(id: $id) {
@@ -2558,6 +2566,126 @@ export const ArtifactDetailForRouteQuery = gql`
       favoritedAt
       createdAt
       updatedAt
+      versions {
+        id
+        version
+        contentHash
+        createdBy
+        createdAt
+      }
+      bindings {
+        ...CanvasBindingFields
+      }
+    }
+  }
+  ${CanvasBindingFields}
+`;
+
+// On-demand read of a single pinned version's canvas payload (viewing history
+// read-only). Fetches all versions' content in one round-trip — canvas parts
+// are small and v1 chains are short — and the caller picks the clicked version.
+export const ArtifactVersionContentQuery = gql`
+  query ArtifactVersionContent($id: ID!) {
+    artifact(id: $id) {
+      id
+      versions {
+        id
+        version
+        content
+      }
+    }
+  }
+`;
+
+// Living Artifacts (THINK-145 U10, R14): save a draft canvas — status flip +
+// naming + space assignment. Re-saving a saved canvas auto-pins the prior head.
+export const SaveCanvasMutation = gql`
+  mutation SaveCanvas($artifactId: ID!, $title: String!, $spaceId: ID!) {
+    saveCanvas(artifactId: $artifactId, title: $title, spaceId: $spaceId) {
+      id
+      title
+      status
+      spaceId
+      headVersion
+    }
+  }
+`;
+
+// Pin the current canvas head as a write-once, content-addressed version (R11).
+export const PinArtifactMutation = gql`
+  mutation PinArtifact($artifactId: ID!) {
+    pinArtifact(artifactId: $artifactId) {
+      id
+      headVersion
+      versions {
+        id
+        version
+        contentHash
+        createdAt
+      }
+    }
+  }
+`;
+
+// Living Artifacts (THINK-145 U10, R6): headless data-refresh trigger.
+export const RefreshCanvasDataMutation = gql`
+  mutation RefreshCanvasData($artifactId: ID!, $partId: String) {
+    refreshCanvasData(artifactId: $artifactId, partId: $partId) {
+      artifactId
+      dispatched
+      errorMessage
+      bindings {
+        bindingId
+        partId
+        elementId
+        outcome
+        quality
+        reason
+      }
+    }
+  }
+`;
+
+// Living Artifacts (THINK-145 U10, R14): tenant-wide canvas rows for the
+// Artifacts list. `includeDrafts` defaults false (saved-only); the list's
+// "Include drafts" toggle flips it. Non-canvas DATA_VIEW rows are filtered
+// client-side to living canvases.
+export const TenantCanvasesQuery = gql`
+  query TenantCanvases($tenantId: ID!, $includeDrafts: Boolean) {
+    artifacts(
+      tenantId: $tenantId
+      type: DATA_VIEW
+      includeDrafts: $includeDrafts
+      limit: 100
+    ) {
+      id
+      title
+      status
+      headVersion
+      updatedAt
+      metadata
+    }
+  }
+`;
+
+// Living Artifacts (THINK-145 U10, R15): the minimal space entry point — saved
+// canvases belonging to one space. `includeDrafts` stays false (default) so
+// only saved canvases surface.
+export const SpaceCanvasesQuery = gql`
+  query SpaceCanvases($tenantId: ID!, $spaceId: ID!) {
+    artifacts(
+      tenantId: $tenantId
+      spaceId: $spaceId
+      type: DATA_VIEW
+      limit: 100
+    ) {
+      id
+      title
+      status
+      spaceId
+      headVersion
+      updatedAt
+      metadata
     }
   }
 `;

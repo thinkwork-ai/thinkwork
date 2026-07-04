@@ -3,12 +3,59 @@ import {
   DEFAULT_SORT_BY,
   SORT_GENERATED,
   SORT_NAME,
+  canvasToArtifactItem,
   filterArtifactItems,
+  isLivingCanvasNode,
   sortArtifactItems,
   toArtifactItem,
   type ArtifactItem,
 } from "./artifacts-filtering";
 import type { AppArtifactPreview } from "@/lib/app-artifacts";
+
+describe("living-canvas list projection", () => {
+  it("recognises only living-canvas DATA_VIEW rows", () => {
+    expect(
+      isLivingCanvasNode({
+        id: "c1",
+        metadata: { kind: "json_render_canvas" },
+      }),
+    ).toBe(true);
+    expect(
+      isLivingCanvasNode({
+        id: "c2",
+        metadata: '{"kind":"json_render_canvas"}',
+      }),
+    ).toBe(true);
+    expect(
+      isLivingCanvasNode({
+        id: "s1",
+        metadata: { kind: "json_render_snapshot" },
+      }),
+    ).toBe(false);
+  });
+
+  it("maps a canvas row into an ArtifactItem (id === artifactId, head version)", () => {
+    const item = canvasToArtifactItem({
+      id: "canvas-1",
+      title: "Cost dashboard",
+      status: "final",
+      headVersion: 3,
+      updatedAt: "2026-07-04T10:00:00Z",
+      metadata: { kind: "json_render_canvas" },
+    });
+    expect(item.id).toBe("canvas-1");
+    expect(item.artifactId).toBe("canvas-1");
+    expect(item.title).toBe("Cost dashboard");
+    expect(item.version).toBe(3);
+    expect(item.generatedAt).toBe("2026-07-04T10:00:00Z");
+  });
+
+  it("shows no version chip for an unpinned (headVersion 0) canvas", () => {
+    expect(
+      canvasToArtifactItem({ id: "c", title: "x", headVersion: 0 }).version,
+    ).toBeNull();
+  });
+});
 
 const items: ArtifactItem[] = [
   {

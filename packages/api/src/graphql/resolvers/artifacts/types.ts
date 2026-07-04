@@ -20,6 +20,7 @@ import {
 import { isDocumentMetadata } from "../../../lib/artifacts/document-emission.js";
 import {
   artifactRenderKey,
+  isArtifactPayloadS3Key,
   readArtifactPayloadFromS3,
 } from "../../../lib/artifacts/payload-storage.js";
 
@@ -95,5 +96,22 @@ export const artifactTypeResolvers = {
       delete camel.frozenArgs;
       return camel;
     });
+  },
+};
+
+/**
+ * Field resolvers for the ArtifactVersion GraphQL type. `content` lazily
+ * hydrates the pinned revision's payload from its content-addressed S3 key —
+ * only when the client selects it (viewing a pinned version read-only, U10).
+ * The parent Artifact resolver already gated read access (R15), so no extra
+ * access check is needed here.
+ */
+export const artifactVersionTypeResolvers = {
+  content: async (parent: any): Promise<string | null> => {
+    const tenantId = resolveTenantId(parent);
+    const s3Key: string | null = parent?.s3Key ?? parent?.s3_key ?? null;
+    if (!tenantId || !s3Key) return null;
+    if (!isArtifactPayloadS3Key(tenantId, s3Key)) return null;
+    return readArtifactPayloadFromS3({ tenantId, key: s3Key });
   },
 };

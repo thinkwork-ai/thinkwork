@@ -4,6 +4,7 @@ import { Badge, Button } from "@thinkwork/ui";
 import { GeneratedAppArtifactShell } from "@/components/apps/GeneratedAppArtifactShell";
 import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
 import { resolveGeneratedAppRuntimeMode } from "@/lib/app-artifacts";
+import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
 
 export interface GeneratedArtifact {
   id: string;
@@ -44,14 +45,14 @@ export function GeneratedArtifactCard({
     </>
   );
 
-  // Promoted GenUI snapshots always deep-link to the full artifact page —
-  // the intermediate side panel has no inline preview to offer, so the
+  // Living GenUI canvases always deep-link to the full artifact page — the
+  // canvas surface (freshness chrome, save/pin, version history) renders there
+  // and the intermediate side panel has no inline preview to offer, so the
   // extra hop is pure friction. Other DATA_VIEWs (e.g. research_dashboard)
-  // keep the panel flow. The Canvas surface will supersede this entirely.
-  const isGenUiSnapshot =
-    artifact.type === "DATA_VIEW" &&
-    artifact.metadata?.kind === "json_render_snapshot";
-  if (onOpenArtifact && !isGenUiSnapshot) {
+  // keep the panel flow.
+  const isLivingCanvas =
+    artifact.type === "DATA_VIEW" && isLivingCanvasMetadata(artifact.metadata);
+  if (onOpenArtifact && !isLivingCanvas) {
     return (
       <button
         type="button"
@@ -137,8 +138,8 @@ export function GeneratedArtifactPreview({
         </div>
       </div>
       {artifact.type === "DATA_VIEW" ? (
-        // Promoted GenUI snapshots render on the artifact page (the preview
-        // card carries no content payload to render inline).
+        // GenUI canvases render on the artifact page (the preview card carries
+        // no content payload to render inline).
         <Button
           asChild
           variant="outline"
@@ -165,8 +166,8 @@ export function GeneratedArtifactPreview({
 }
 
 export function isAppArtifact(artifact: GeneratedArtifact) {
-  // NOT type === "DATA_VIEW": promoted GenUI snapshots (metadata.kind
-  // "json_render_snapshot") are DATA_VIEW but are NOT applets — routing them
+  // NOT type === "DATA_VIEW": living GenUI canvases (metadata.kind
+  // "json_render_canvas") are DATA_VIEW but are NOT applets — routing them
   // through the applet embed fails with "Artifact is not an applet artifact"
   // (observed live, THINK-116). They render via /artifacts/$id. App-like
   // DATA_VIEWs are still matched through their metadata kinds below.
