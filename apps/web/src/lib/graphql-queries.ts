@@ -512,6 +512,7 @@ export const SettingsAgentLoopsQuery = gql`
       enabled
       ownerUserId
       ownerAgentId
+      runAsUserId
       spaceId
       primaryTriggerFamily
       currentVersionId
@@ -536,9 +537,16 @@ export const SettingsAgentLoopsQuery = gql`
         loopPolicy
         evidencePolicy
         routineActionsSpec
+        targetSpec
         sourceMetadata
         publishedAt
         createdAt
+      }
+      webhookEndpoint {
+        webhookId
+        token
+        path
+        enabled
       }
       runs(limit: 1) {
         id
@@ -573,6 +581,7 @@ export const SettingsAgentLoopQuery = gql`
       enabled
       ownerUserId
       ownerAgentId
+      runAsUserId
       spaceId
       primaryTriggerFamily
       currentVersionId
@@ -619,6 +628,7 @@ export const SettingsAgentLoopQuery = gql`
         loopPolicy
         evidencePolicy
         routineActionsSpec
+        targetSpec
         sourceMetadata
         publishedAt
         createdAt
@@ -675,6 +685,7 @@ export const SettingsAgentLoopRunQuery = gql`
         loopPolicy
         evidencePolicy
         routineActionsSpec
+        targetSpec
         sourceMetadata
       }
       status
@@ -809,6 +820,7 @@ export const SettingsSaveAgentLoopMutation = gql`
         loopPolicy
         evidencePolicy
         routineActionsSpec
+        targetSpec
         sourceMetadata
       }
       updatedAt
@@ -859,6 +871,7 @@ export const SettingsConfirmAutomationDraftMutation = gql`
         loopPolicy
         evidencePolicy
         routineActionsSpec
+        targetSpec
         sourceMetadata
       }
       updatedAt

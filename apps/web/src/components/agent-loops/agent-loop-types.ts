@@ -4,9 +4,17 @@ export type AgentLoopLifecycleStatus =
   | "paused"
   | "archived";
 
-export type AgentLoopTriggerFamily = "manual" | "schedule";
-export type AgentLoopJudgeMode = "self_check" | "human_approval";
-export type AgentLoopCreationMode = "advanced" | "builder" | "chat" | "easy";
+// THINK-137 U3 (R2): the product trigger families are schedule | webhook.
+// `manual` stays valid as a run source / "no automatic trigger" family and is
+// read from pre-U3 rows, but the form only offers schedule | webhook.
+export type AgentLoopTriggerFamily = "manual" | "schedule" | "webhook";
+// THINK-137 U7: the compact dialog's Repeats row offers Manual as well, so the
+// form family now spans all three. Manual writes an empty trigger config.
+export type AgentLoopFormTriggerFamily = "manual" | "schedule" | "webhook";
+
+// THINK-137 U3 (R3): the authoritative target kinds.
+export type AgentLoopTargetKind = "agent_thread" | "routine" | "workflow";
+export type AgentLoopThreadMode = "new_per_run" | "fixed";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -36,26 +44,28 @@ export interface AgentLoopWorkerSpec {
   config: JsonRecord;
 }
 
-export interface AgentLoopJudgeSpec {
-  mode: AgentLoopJudgeMode;
-  criteria: string[];
-  config: JsonRecord;
+// THINK-137 U3 (R3): the authoritative target spec written by the form.
+// Mirrors packages/agent-loops-core `TargetSpec`.
+export interface AgentLoopTargetAgentThread {
+  instructions: string;
+  completionCriteria?: string[];
+  workerId?: string;
+  workerType?: "agent" | "agent_profile";
+  threadMode: AgentLoopThreadMode;
+  fixedThreadId?: string;
 }
 
-export interface AgentLoopPolicy {
-  maxIterations: number;
-  maxRuntimeMs?: number;
-  maxTokens?: number;
-  costBudgetUsd?: number;
-  retryBackoffMs?: number;
-  failBehavior: "return_blocker" | "best_effort_with_warning" | "escalate";
-  escalateOnFailure: boolean;
+export interface AgentLoopTargetRoutineRef {
+  routineId: string;
+  input?: JsonRecord | null;
+  label?: string | null;
 }
 
-export interface AgentLoopEvidencePolicy {
-  redactionState: "summary_only" | "redacted" | "offloaded" | "raw_allowed";
-  retainRawEvidence: boolean;
-  retentionDays?: number;
+export interface AgentLoopTargetSpec {
+  kind: AgentLoopTargetKind;
+  agentThread?: AgentLoopTargetAgentThread;
+  routine?: AgentLoopTargetRoutineRef;
+  workflow?: AgentLoopTargetRoutineRef;
 }
 
 export interface AgentLoopVersionSummary {
@@ -69,6 +79,8 @@ export interface AgentLoopVersionSummary {
   loopPolicy: unknown;
   evidencePolicy: unknown;
   routineActionsSpec?: unknown;
+  // THINK-137 U3 (R3): authoritative target spec; null on pre-U3 rows.
+  targetSpec?: unknown;
   sourceMetadata?: unknown;
   publishedAt?: string | null;
   createdAt?: string | null;
@@ -107,6 +119,8 @@ export interface AgentLoopRow {
   enabled: boolean;
   ownerUserId?: string | null;
   ownerAgentId?: string | null;
+  // THINK-137 U3 (R1): the user identity a run acts as.
+  runAsUserId?: string | null;
   spaceId?: string | null;
   primaryTriggerFamily: string;
   currentVersionId?: string | null;
@@ -122,8 +136,8 @@ export interface AgentLoopRow {
   totalCostUsdCents: number;
   costPerAcceptedRunUsdCents?: number | null;
   runs?: AgentLoopRunSummary[];
-  // THINK-137 U8 (R8): bound inbound webhook endpoint + metadata-only delivery
-  // history, present only for webhook-trigger automations.
+  // THINK-137 U6/U8: the minted inbound webhook endpoint + metadata-only
+  // delivery history, present only for webhook-trigger automations.
   webhookEndpoint?: AgentLoopWebhookEndpoint | null;
   webhookDeliveries?: AutomationWebhookDelivery[];
   createdAt: string;
@@ -249,42 +263,43 @@ export interface AgentLoopSpaceOption {
   slug?: string | null;
 }
 
+// Routine / workflow target options — a git_python routine (routine kind) or a
+// step_functions routine (workflow kind). `disabledReason` renders the option
+// inert with a one-line explanation instead of failing at save.
+export interface AgentLoopRoutineOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  disabledReason?: string | null;
+}
+
+// Run-as user option — a tenant member the run can act as.
+export interface AgentLoopMemberOption {
+  id: string;
+  label: string;
+}
+
 export interface AgentLoopDraft {
-  creationMode: AgentLoopCreationMode;
   name: string;
   description: string;
   lifecycleStatus: AgentLoopLifecycleStatus;
   enabled: boolean;
-  triggerFamily: AgentLoopTriggerFamily;
+  // Trigger
+  triggerFamily: AgentLoopFormTriggerFamily;
   scheduleType: string;
   scheduleExpression: string;
   timezone: string;
-  spaceId: string;
-  objective: string;
-  completionCriteriaText: string;
+  // Target
+  targetKind: AgentLoopTargetKind;
+  instructions: string;
   workerId: string;
-  judgeMode: AgentLoopJudgeMode;
-  judgeCriteriaText: string;
-  maxIterations: string;
-  maxRuntimeMinutes: string;
-  maxTokens: string;
-  costBudgetUsd: string;
-  retryBackoffMinutes: string;
-  failBehavior: "return_blocker" | "best_effort_with_warning" | "escalate";
-  escalateOnFailure: boolean;
-  redactionState: AgentLoopEvidencePolicy["redactionState"];
-  retainRawEvidence: boolean;
-  retentionDays: string;
-  suitabilityGoalStable: boolean;
-  suitabilityEvidenceAvailable: boolean;
-  suitabilityBudgeted: boolean;
-  builderThreadId?: string | null;
-  builderThreadTitle?: string | null;
-  builderSetupPrompt?: string | null;
-  /** Deterministic routine actions (plan 2026-07-03-004 U5). */
-  routineActionRoutineIds: string[];
-  /** false = routine-only Automation (no agent turn / wakeup). */
-  routineAgentTurn: boolean;
+  threadMode: AgentLoopThreadMode;
+  fixedThreadId: string;
+  routineId: string;
+  workflowId: string;
+  // Run identity + Space
+  runAsUserId: string;
+  spaceId: string;
 }
 
 export interface SaveAgentLoopPayload {
@@ -294,16 +309,16 @@ export interface SaveAgentLoopPayload {
   description?: string | null;
   lifecycleStatus: AgentLoopLifecycleStatus;
   enabled: boolean;
+  runAsUserId?: string | null;
   spaceId?: string | null;
   triggerSpec: AgentLoopTriggerSpec;
+  // Legacy inputs are still required by SaveAgentLoopInput; derived from the
+  // target config so the API contract is satisfied (goalSpec/workerSpec are
+  // non-null). judge/loop/evidence are off the product surface and omitted —
+  // the server writes column defaults.
   goalSpec: AgentLoopGoalSpec;
   workerSpec: AgentLoopWorkerSpec;
-  judgeSpec: AgentLoopJudgeSpec;
-  loopPolicy: AgentLoopPolicy;
-  evidencePolicy: AgentLoopEvidencePolicy;
-  routineActionsSpec?: {
-    actions: { routineId: string }[];
-    agentTurn: boolean;
-  } | null;
+  // THINK-137 U3 (R3): the authoritative target spec.
+  targetSpec: AgentLoopTargetSpec;
   sourceMetadata: JsonRecord;
 }

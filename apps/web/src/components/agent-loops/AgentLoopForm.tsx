@@ -1,39 +1,58 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, MessageCircle } from "lucide-react";
+import { ChevronDown, Clock, Copy } from "lucide-react";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   Textarea,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import type {
   AgentLoopDraft,
+  AgentLoopMemberOption,
+  AgentLoopRoutineOption,
   AgentLoopRow,
   AgentLoopSpaceOption,
+  AgentLoopTargetKind,
+  AgentLoopWebhookEndpoint,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
-import { AutomationAdvancedInspector } from "./AutomationAdvancedInspector";
-import { AutomationEasyForm } from "./AutomationEasyForm";
-import { AutomationPresetSheet } from "./AutomationPresetSheet";
 import {
+  customSchedulePatch,
   defaultAgentLoopDraft,
   draftFromVersion,
   draftToPayload,
+  formatTimeOfDay,
+  parseScheduleFromDraft,
+  SCHEDULE_PRESET_OPTIONS,
+  schedulePatch,
+  scheduleValueLabel,
+  spaceFieldError,
+  TIME_OPTIONS_MINUTES,
   validateDraft,
+  WEEKDAY_OPTIONS,
+  type SchedulePresetId,
 } from "./agent-loop-utils";
+
+const TARGET_KINDS: { id: AgentLoopTargetKind; label: string }[] = [
+  { id: "agent_thread", label: "Agent thread" },
+  { id: "routine", label: "Routine" },
+  { id: "workflow", label: "Workflow" },
+];
+
+const NO_SPACE = "__none__";
 
 export function AgentLoopForm({
   mode,
@@ -41,37 +60,26 @@ export function AgentLoopForm({
   initialLoop,
   workerOptions,
   spaceOptions,
+  routineOptions,
+  workflowOptions,
+  memberOptions,
   defaultSpaceId,
+  currentUserId,
   onSubmit,
-  onStartBuilder,
-  onConfirmBuilderDraft,
   onCancel,
-  automationsHref = "/settings/automations",
 }: {
   mode: "create" | "edit";
   tenantId: string;
   initialLoop?: AgentLoopRow | null;
   workerOptions: AgentLoopWorkerOption[];
   spaceOptions: AgentLoopSpaceOption[];
+  routineOptions: AgentLoopRoutineOption[];
+  workflowOptions: AgentLoopRoutineOption[];
+  memberOptions: AgentLoopMemberOption[];
   defaultSpaceId?: string | null;
+  currentUserId?: string | null;
   onSubmit: (input: SaveAgentLoopPayload) => Promise<void>;
-  onStartBuilder?: (input: {
-    tenantId: string;
-    title?: string | null;
-    prompt?: string | null;
-    builderThreadId?: string | null;
-  }) => Promise<{
-    threadCreated: boolean;
-    setupPrompt: string;
-    draft: unknown;
-    thread: { id: string; title?: string | null };
-  }>;
-  onConfirmBuilderDraft?: (
-    input: SaveAgentLoopPayload,
-    builderThreadId: string,
-  ) => Promise<void>;
   onCancel: () => void;
-  automationsHref?: string;
 }) {
   const seededDraft = useMemo(
     () =>
@@ -81,90 +89,53 @@ export function AgentLoopForm({
             workerOptions,
             spaceOptions,
             defaultSpaceId,
+            currentUserId ?? "",
           )
-        : defaultAgentLoopDraft(workerOptions, spaceOptions, defaultSpaceId),
-    [defaultSpaceId, initialLoop, spaceOptions, workerOptions],
+        : defaultAgentLoopDraft(
+            workerOptions,
+            spaceOptions,
+            defaultSpaceId,
+            currentUserId ?? "",
+          ),
+    [currentUserId, defaultSpaceId, initialLoop, spaceOptions, workerOptions],
   );
   const [draft, setDraft] = useState<AgentLoopDraft>(seededDraft);
   const [saving, setSaving] = useState(false);
-  const [builderStarting, setBuilderStarting] = useState(false);
-  const [builderAnswersApplied, setBuilderAnswersApplied] = useState(false);
-  const [presetSheetOpen, setPresetSheetOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(mode === "edit");
   const [error, setError] = useState<string | null>(null);
-  const title = mode === "edit" ? "Edit Automation" : "New Automation";
 
   useEffect(() => {
     setDraft(seededDraft);
-    setBuilderAnswersApplied(false);
-    setAdvancedOpen(mode === "edit");
     setError(null);
-  }, [mode, seededDraft]);
+  }, [seededDraft]);
 
-  const saveDisabled = saving;
-  const headerActions =
-    mode === "create" ? (
-      <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Open templates"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setPresetSheetOpen(true)}
-            >
-              <ClipboardList className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Templates</TooltipContent>
-        </Tooltip>
-        {onStartBuilder ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  builderStarting
-                    ? "Starting chat help"
-                    : draft.builderThreadId
-                      ? "Refresh chat draft"
-                      : "Chat help"
-                }
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => void startBuilder()}
-                disabled={builderStarting}
-              >
-                <MessageCircle className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {builderStarting
-                ? "Starting..."
-                : draft.builderThreadId
-                  ? "Refresh chat draft"
-                  : "Chat help"}
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-      </div>
-    ) : undefined;
+  const routineLabel = useMemo(() => {
+    if (draft.targetKind === "routine") {
+      return routineOptions.find((r) => r.id === draft.routineId)?.name ?? null;
+    }
+    if (draft.targetKind === "workflow") {
+      return (
+        workflowOptions.find((w) => w.id === draft.workflowId)?.name ?? null
+      );
+    }
+    return null;
+  }, [
+    draft.targetKind,
+    draft.routineId,
+    draft.workflowId,
+    routineOptions,
+    workflowOptions,
+  ]);
 
-  usePageHeaderActions({
-    title,
-    breadcrumbs: [
-      { label: "Automations", href: automationsHref },
-      { label: title },
-    ],
-    action: headerActions,
-    actionKey:
-      mode === "create"
-        ? `automation-form:${builderStarting ? "starting" : "idle"}:${draft.builderThreadId ?? "none"}:${onStartBuilder ? "builder" : "no-builder"}`
-        : undefined,
-  });
+  const inlineSpaceError = spaceFieldError(draft);
+  // The Trigger row is Schedule | Webhook. "Manual" lives inside the Schedule
+  // row (it maps to the manual trigger family), so schedule + manual both read
+  // as the "schedule" trigger mode here.
+  const triggerMode =
+    draft.triggerFamily === "webhook" ? "webhook" : "schedule";
+
+  function patch(next: Partial<AgentLoopDraft>) {
+    setDraft((current) => ({ ...current, ...next }));
+  }
 
   async function save() {
     const invalid = validateDraft(draft);
@@ -180,12 +151,9 @@ export function AgentLoopForm({
         tenantId,
         id: initialLoop?.id,
         workerOptions,
+        routineLabel,
       });
-      if (draft.builderThreadId && onConfirmBuilderDraft) {
-        await onConfirmBuilderDraft(payload, draft.builderThreadId);
-      } else {
-        await onSubmit(payload);
-      }
+      await onSubmit(payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -193,572 +161,509 @@ export function AgentLoopForm({
     }
   }
 
-  async function startBuilder() {
-    if (!onStartBuilder) return;
-    setBuilderStarting(true);
-    setError(null);
-    try {
-      const result = await onStartBuilder({
-        tenantId,
-        title: draft.name,
-        prompt: draft.objective,
-        builderThreadId: draft.builderThreadId,
-      });
-      const builderDraft = jsonDraft(result.draft);
-      setDraft((current) => ({
-        ...current,
-        ...builderDraft,
-        creationMode:
-          current.creationMode === "advanced" ? "advanced" : "builder",
-        builderThreadId: result.thread.id,
-        builderThreadTitle: result.thread.title ?? "Automation setup",
-        builderSetupPrompt: result.setupPrompt,
-      }));
-      setBuilderAnswersApplied(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBuilderStarting(false);
-    }
-  }
-
-  function selectPreset(nextDraft: AgentLoopDraft) {
-    setDraft((current) => ({
-      ...nextDraft,
-      creationMode:
-        current.creationMode === "advanced" ? "advanced" : "builder",
-      builderThreadId: null,
-      builderThreadTitle: null,
-      builderSetupPrompt: null,
-    }));
-    setBuilderAnswersApplied(false);
-  }
-
-  function applyBuilderAnswers(answers: BuilderAnswers) {
-    setDraft((current) =>
-      draftFromBuilderAnswers({
-        draft: current,
-        answers,
-        spaceOptions,
-        defaultSpaceId,
-      }),
-    );
-    setBuilderAnswersApplied(true);
-    setError(null);
-  }
-
   return (
-    <div>
-      <AutomationEasyForm
-        draft={draft}
-        setDraft={setDraft}
-        spaceOptions={spaceOptions}
-      />
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onCancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogTitle className="sr-only">
+          {mode === "edit" ? "Edit automation" : "New automation"}
+        </DialogTitle>
 
-      {draft.builderThreadId ? (
-        <div className="mx-auto mt-6 w-full max-w-6xl rounded-lg border border-border/70 bg-background/60 p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Chat draft helper</p>
-              <p className="text-xs text-muted-foreground">
-                Optional setup history. Applying answers updates this same
-                builder.
-              </p>
-            </div>
-            <a
-              className="text-sm text-primary hover:underline"
-              href={`/threads/${draft.builderThreadId}`}
+        {/* Borderless title */}
+        <input
+          aria-label="Automation name"
+          value={draft.name}
+          onChange={(e) => patch({ name: e.target.value })}
+          placeholder="Automation name"
+          className="w-full bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/60"
+        />
+
+        {/* Trigger + Target sit above the target-shaped body */}
+        <div>
+          <DetailRow label="Trigger">
+            <GhostSelect
+              ariaLabel="Trigger"
+              value={triggerMode}
+              onValueChange={(value) => {
+                if (value === "webhook") {
+                  patch({ triggerFamily: "webhook" });
+                } else if (draft.triggerFamily === "webhook") {
+                  patch(
+                    draft.scheduleExpression.trim()
+                      ? { triggerFamily: "schedule" }
+                      : schedulePatch({
+                          preset: "daily",
+                          timezone: draft.timezone,
+                        }),
+                  );
+                }
+              }}
+              placeholder="Schedule"
             >
-              Open setup thread
-            </a>
-          </div>
-          <AutomationBuilderQuestionCard
-            prompt={draft.objective}
-            spaceOptions={spaceOptions}
-            defaultSpaceId={defaultSpaceId}
-            applied={builderAnswersApplied}
-            onApply={applyBuilderAnswers}
-          />
+              <SelectItem value="schedule">Schedule</SelectItem>
+              <SelectItem value="webhook">Webhook</SelectItem>
+            </GhostSelect>
+          </DetailRow>
+
+          <DetailRow label="Target">
+            <GhostSelect
+              ariaLabel="Target"
+              value={draft.targetKind}
+              onValueChange={(value) =>
+                patch({ targetKind: value as AgentLoopTargetKind })
+              }
+              placeholder="Agent thread"
+            >
+              {TARGET_KINDS.map((kind) => (
+                <SelectItem key={kind.id} value={kind.id}>
+                  {kind.label}
+                </SelectItem>
+              ))}
+            </GhostSelect>
+          </DetailRow>
         </div>
-      ) : null}
 
-      <AutomationAdvancedInspector
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        tenantId={tenantId}
-        draft={draft}
-        setDraft={setDraft}
-        workerOptions={workerOptions}
-      />
-      <AutomationPresetSheet
-        open={presetSheetOpen}
-        onOpenChange={setPresetSheetOpen}
-        workerOptions={workerOptions}
-        spaceOptions={spaceOptions}
-        defaultSpaceId={defaultSpaceId}
-        onSelect={selectPreset}
-      />
+        {/* Target-shaped body */}
+        {draft.targetKind === "agent_thread" ? (
+          <div>
+            <label
+              htmlFor="automation-instructions"
+              className="mb-2 block text-sm text-muted-foreground"
+            >
+              Agent instructions
+            </label>
+            <Textarea
+              id="automation-instructions"
+              value={draft.instructions}
+              onChange={(e) => patch({ instructions: e.target.value })}
+              placeholder="What should the agent do? e.g. Review my open Linear issues every morning…"
+              className="min-h-28"
+            />
+          </div>
+        ) : draft.targetKind === "routine" ? (
+          <TargetPicker
+            ariaLabel="Routine"
+            placeholder="Choose a routine…"
+            options={routineOptions}
+            value={draft.routineId}
+            onChange={(value) => patch({ routineId: value })}
+            emptyLabel="No routines available yet."
+          />
+        ) : (
+          <TargetPicker
+            ariaLabel="Workflow"
+            placeholder="Choose a workflow…"
+            options={workflowOptions}
+            value={draft.workflowId}
+            onChange={(value) => patch({ workflowId: value })}
+            emptyLabel="No workflows available yet."
+          />
+        )}
 
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-start gap-3 pb-8 pt-6">
+        {/* Remaining details */}
+        <div>
+          {triggerMode === "schedule" ? (
+            <DetailRow label="Schedule">
+              <SchedulePopover draft={draft} patch={patch} />
+            </DetailRow>
+          ) : (
+            <div className="py-1.5">
+              <WebhookPanel endpoint={initialLoop?.webhookEndpoint} />
+            </div>
+          )}
+
+          <DetailRow label="Run as">
+            <GhostSelect
+              ariaLabel="Run as user"
+              value={draft.runAsUserId}
+              onValueChange={(value) => patch({ runAsUserId: value })}
+              placeholder="You"
+            >
+              {memberOptions.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.label}
+                  {member.id === currentUserId ? " (you)" : ""}
+                </SelectItem>
+              ))}
+            </GhostSelect>
+          </DetailRow>
+
+          <DetailRow label="Space" error={inlineSpaceError}>
+            <GhostSelect
+              ariaLabel="Space"
+              value={draft.spaceId || NO_SPACE}
+              onValueChange={(value) =>
+                patch({ spaceId: value === NO_SPACE ? "" : value })
+              }
+              placeholder="None"
+            >
+              <SelectItem value={NO_SPACE}>None</SelectItem>
+              {spaceOptions.map((space) => (
+                <SelectItem key={space.id} value={space.id}>
+                  {space.name}
+                </SelectItem>
+              ))}
+            </GhostSelect>
+          </DetailRow>
+
+          {draft.targetKind === "agent_thread" ? (
+            <>
+              <DetailRow label="Worker">
+                <GhostSelect
+                  ariaLabel="Worker"
+                  value={draft.workerId}
+                  onValueChange={(value) => patch({ workerId: value })}
+                  placeholder="Choose a worker"
+                >
+                  {workerOptions.map((worker) => (
+                    <SelectItem key={worker.id} value={worker.id}>
+                      {worker.label}
+                    </SelectItem>
+                  ))}
+                </GhostSelect>
+              </DetailRow>
+
+              <DetailRow label="Thread">
+                <GhostSelect
+                  ariaLabel="Thread mode"
+                  value={draft.threadMode}
+                  onValueChange={(value) =>
+                    patch({
+                      threadMode: value as AgentLoopDraft["threadMode"],
+                    })
+                  }
+                  placeholder="New thread per run"
+                >
+                  <SelectItem value="new_per_run">
+                    New thread per run
+                  </SelectItem>
+                  <SelectItem value="fixed">Reuse a fixed thread</SelectItem>
+                </GhostSelect>
+              </DetailRow>
+
+              {draft.threadMode === "fixed" ? (
+                <DetailRow label="Fixed thread id">
+                  <input
+                    aria-label="Fixed thread id"
+                    value={draft.fixedThreadId}
+                    onChange={(e) => patch({ fixedThreadId: e.target.value })}
+                    placeholder="thread id"
+                    className="w-40 bg-transparent px-3 py-2 text-right text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+                  />
+                </DetailRow>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <div className="ml-auto flex items-center gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={() => void save()}
-            disabled={saveDisabled}
-          >
+          <Button type="button" onClick={() => void save()} disabled={saving}>
             {saving
-              ? "Saving..."
+              ? "Saving…"
               : mode === "edit"
-                ? "Save Automation"
+                ? "Save changes"
                 : "Create automation"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-type BuilderAnswers = {
-  goal: "prompt" | "custom";
-  goalText: string;
-  space: "default" | "choose";
-  spaceText: string;
-  trigger: "manual" | "schedule";
-  done: "summary" | "custom";
-  doneText: string;
-};
-
-const builderQuestionTabs = [
-  { id: "goal", label: "Goal" },
-  { id: "space", label: "Space" },
-  { id: "trigger", label: "Trigger" },
-  { id: "done", label: "Done" },
-] as const;
-
-function AutomationBuilderQuestionCard({
-  prompt,
-  spaceOptions,
-  defaultSpaceId,
-  applied,
-  onApply,
-}: {
-  prompt: string;
-  spaceOptions: AgentLoopSpaceOption[];
-  defaultSpaceId?: string | null;
-  applied: boolean;
-  onApply: (answers: BuilderAnswers) => void;
-}) {
-  const [activeTab, setActiveTab] = useState("goal");
-  const [answers, setAnswers] = useState<BuilderAnswers>({
-    goal: "prompt",
-    goalText: "",
-    space: "default",
-    spaceText: "",
-    trigger: inferScheduledPrompt(prompt) ? "schedule" : "manual",
-    done: "summary",
-    doneText: "",
-  });
-
-  const answered = {
-    goal: answers.goal === "prompt" || answers.goalText.trim() !== "",
-    space:
-      answers.space === "default" ||
-      answers.spaceText.trim() !== "" ||
-      Boolean(defaultSpaceId || spaceOptions[0]?.id),
-    trigger: true,
-    done: answers.done === "summary" || answers.doneText.trim() !== "",
-  };
-  const allAnswered = Object.values(answered).every(Boolean);
-
-  function update<T extends keyof BuilderAnswers>(
-    key: T,
-    value: BuilderAnswers[T],
-  ) {
-    setAnswers((current) => ({ ...current, [key]: value }));
-  }
-
-  return (
-    <div
-      data-testid="automation-builder-questions"
-      className="rounded-md border border-border/70 bg-background/70 p-4"
-    >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Loop Designer questions</p>
-          <p className="text-xs text-muted-foreground">
-            Answer these here; the setup thread remains the audit trail.
-          </p>
-        </div>
-        {applied ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-            <Check className="size-3" />
-            Draft applied
-          </span>
-        ) : null}
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <TabsList
-          variant="line"
-          className="w-full justify-start overflow-x-auto border-b border-border/60"
-        >
-          {builderQuestionTabs.map((tab) => (
-            <TabsTrigger
-              key={tab.id}
-              value={tab.id}
-              className={cn(
-                "flex-none gap-1.5 px-3",
-                !answered[tab.id] && "text-muted-foreground/80",
-              )}
-            >
-              {answered[tab.id] ? (
-                <Check aria-hidden className="size-3.5 text-primary" />
-              ) : null}
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="goal">
-          <fieldset className="grid gap-3 border-0 p-0">
-            <legend className="text-sm font-medium">
-              What should this Automation accomplish each time?
-            </legend>
-            <RadioChoice
-              name="builder-goal"
-              checked={answers.goal === "prompt"}
-              label="Use my prompt"
-              description="Treat the prompt as the goal."
-              onChange={() => update("goal", "prompt")}
-            />
-            <RadioChoice
-              name="builder-goal"
-              checked={answers.goal === "custom"}
-              label="I'll refine it"
-              description="Use the note below as the tighter goal."
-              onChange={() => update("goal", "custom")}
-            />
-            {answers.goal === "custom" ? (
-              <Textarea
-                aria-label="Builder goal details"
-                value={answers.goalText}
-                onChange={(event) => update("goalText", event.target.value)}
-                placeholder="Describe the outcome the automation should produce."
-                className="min-h-20"
-              />
-            ) : null}
-          </fieldset>
-        </TabsContent>
-
-        <TabsContent value="space">
-          <fieldset className="grid gap-3 border-0 p-0">
-            <legend className="text-sm font-medium">
-              Which Space should it run in?
-            </legend>
-            <RadioChoice
-              name="builder-space"
-              checked={answers.space === "default"}
-              label="Default Space"
-              description="Use the default Space from Agent settings."
-              onChange={() => update("space", "default")}
-            />
-            <RadioChoice
-              name="builder-space"
-              checked={answers.space === "choose"}
-              label="I'll choose"
-              description="Name the Space below."
-              onChange={() => update("space", "choose")}
-            />
-            {answers.space === "choose" ? (
-              <Textarea
-                aria-label="Builder Space details"
-                value={answers.spaceText}
-                onChange={(event) => update("spaceText", event.target.value)}
-                placeholder="Type a Space name, for example Linear Web Apps."
-                className="min-h-16"
-              />
-            ) : null}
-          </fieldset>
-        </TabsContent>
-
-        <TabsContent value="trigger">
-          <fieldset className="grid gap-3 border-0 p-0">
-            <legend className="text-sm font-medium">
-              Should it run manually or on a schedule?
-            </legend>
-            <RadioChoice
-              name="builder-trigger"
-              checked={answers.trigger === "manual"}
-              label="Manual"
-              description="Run only when I start it."
-              onChange={() => update("trigger", "manual")}
-            />
-            <RadioChoice
-              name="builder-trigger"
-              checked={answers.trigger === "schedule"}
-              label="Schedule"
-              description="Create a recurring heartbeat. Advanced settings can refine the cadence."
-              onChange={() => update("trigger", "schedule")}
-            />
-          </fieldset>
-        </TabsContent>
-
-        <TabsContent value="done">
-          <fieldset className="grid gap-3 border-0 p-0">
-            <legend className="text-sm font-medium">
-              What evidence or final response means it is done?
-            </legend>
-            <RadioChoice
-              name="builder-done"
-              checked={answers.done === "summary"}
-              label="Summary"
-              description="A concise status summary is enough."
-              onChange={() => update("done", "summary")}
-            />
-            <RadioChoice
-              name="builder-done"
-              checked={answers.done === "custom"}
-              label="I'll define it"
-              description="Use explicit completion criteria."
-              onChange={() => update("done", "custom")}
-            />
-            {answers.done === "custom" ? (
-              <Textarea
-                aria-label="Builder done details"
-                value={answers.doneText}
-                onChange={(event) => update("doneText", event.target.value)}
-                placeholder="List what the final answer must include."
-                className="min-h-20"
-              />
-            ) : null}
-          </fieldset>
-        </TabsContent>
-      </Tabs>
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          size="sm"
-          disabled={!allAnswered}
-          onClick={() => onApply(answers)}
-        >
-          Apply builder answers
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Applying updates the visible draft before the Automation is created.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function RadioChoice({
-  name,
-  checked,
-  label,
-  description,
-  onChange,
-}: {
-  name: string;
-  checked: boolean;
-  label: string;
-  description: string;
-  onChange: () => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors",
-        checked
-          ? "border-primary/50 bg-primary/5"
-          : "border-border/60 bg-background/40 hover:bg-muted/40",
-      )}
-    >
-      <input
-        type="radio"
-        name={name}
-        checked={checked}
-        onChange={onChange}
-        className="mt-1 size-3.5 shrink-0 accent-primary"
-      />
-      <span className="grid min-w-0 gap-0.5">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        <span className="text-xs leading-4 text-muted-foreground">
-          {description}
-        </span>
-      </span>
-    </label>
-  );
-}
-
-function jsonDraft(value: unknown): Partial<AgentLoopDraft> {
-  const source =
-    typeof value === "string" && value.trim()
-      ? safeRecord(parseJson(value))
-      : safeRecord(value);
-  const draft: Partial<AgentLoopDraft> = {};
-  setString(draft, "name", source.name);
-  setString(draft, "description", source.description);
-  setString(draft, "scheduleType", source.scheduleType);
-  setString(draft, "scheduleExpression", source.scheduleExpression);
-  setString(draft, "timezone", source.timezone);
-  setString(draft, "objective", source.objective);
-  setString(draft, "completionCriteriaText", source.completionCriteriaText);
-  setString(draft, "workerId", source.workerId);
-  setString(draft, "judgeCriteriaText", source.judgeCriteriaText);
-  setString(draft, "maxIterations", source.maxIterations);
-  setString(draft, "maxRuntimeMinutes", source.maxRuntimeMinutes);
-  setString(draft, "maxTokens", source.maxTokens);
-  setString(draft, "costBudgetUsd", source.costBudgetUsd);
-  setString(draft, "retryBackoffMinutes", source.retryBackoffMinutes);
-  setString(draft, "retentionDays", source.retentionDays);
-  setString(draft, "builderThreadId", source.builderThreadId);
-
-  if (source.lifecycleStatus === "paused") draft.lifecycleStatus = "paused";
-  if (source.enabled === false) draft.enabled = false;
-  if (source.triggerFamily === "schedule") draft.triggerFamily = "schedule";
-  if (source.judgeMode === "human_approval") draft.judgeMode = "human_approval";
-  if (
-    source.failBehavior === "best_effort_with_warning" ||
-    source.failBehavior === "escalate"
-  ) {
-    draft.failBehavior = source.failBehavior;
-  }
-  if (
-    source.redactionState === "redacted" ||
-    source.redactionState === "offloaded" ||
-    source.redactionState === "raw_allowed"
-  ) {
-    draft.redactionState = source.redactionState;
-  }
-  if (source.escalateOnFailure === true) draft.escalateOnFailure = true;
-  if (source.retainRawEvidence === true) draft.retainRawEvidence = true;
-  if (source.suitabilityGoalStable === true) draft.suitabilityGoalStable = true;
-  if (source.suitabilityEvidenceAvailable === true) {
-    draft.suitabilityEvidenceAvailable = true;
-  }
-  if (source.suitabilityBudgeted === true) draft.suitabilityBudgeted = true;
-  return draft;
-}
-
-function safeRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
-  }
-}
-
-function setString<T extends keyof AgentLoopDraft>(
-  draft: Partial<AgentLoopDraft>,
-  key: T,
-  value: unknown,
-) {
-  if (typeof value === "string" && value.trim()) {
-    (draft as Record<string, string>)[key] = value.trim();
-  }
-}
-
-function titleFromPrompt(prompt: string): string {
-  return (
-    prompt
-      .split(/\r?\n/)[0]
-      ?.split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 8)
-      .join(" ")
-      .replace(/[.?!,:;]+$/g, "") ?? ""
-  );
-}
-
-function draftFromBuilderAnswers({
+/** The Schedule row's value control: a popover with a preset select, a
+ * 15-minute-increment time control for the timed presets, a day-of-week select
+ * for Weekly, and a raw EventBridge expression input for Custom. */
+function SchedulePopover({
   draft,
-  answers,
-  spaceOptions,
-  defaultSpaceId,
+  patch,
 }: {
   draft: AgentLoopDraft;
-  answers: BuilderAnswers;
-  spaceOptions: AgentLoopSpaceOption[];
-  defaultSpaceId?: string | null;
-}): AgentLoopDraft {
-  const objective =
-    answers.goal === "custom" && answers.goalText.trim()
-      ? answers.goalText.trim()
-      : draft.objective;
-  const spaceId =
-    answers.space === "choose"
-      ? matchSpaceId(answers.spaceText, spaceOptions) ||
-        draft.spaceId ||
-        defaultSpaceId ||
-        spaceOptions[0]?.id ||
-        ""
-      : defaultSpaceId || draft.spaceId || spaceOptions[0]?.id || "";
-  const schedule =
-    answers.trigger === "schedule" ? scheduleFromPrompt(draft.objective) : null;
-  const completionCriteriaText =
-    answers.done === "custom" && answers.doneText.trim()
-      ? answers.doneText.trim()
-      : "The automation produced a concise status summary.";
+  patch: (next: Partial<AgentLoopDraft>) => void;
+}) {
+  const parsed = parseScheduleFromDraft(draft);
+  const [open, setOpen] = useState(false);
+  // Local preset state so choosing "Custom" sticks while the user types an
+  // expression that would otherwise parse back to a named preset.
+  const [preset, setPreset] = useState<SchedulePresetId>(parsed.preset);
 
-  return {
-    ...draft,
-    name: draft.name || titleFromPrompt(objective),
-    objective,
-    spaceId,
-    triggerFamily: answers.trigger,
-    scheduleType: schedule ? "cron" : draft.scheduleType,
-    scheduleExpression: schedule ?? draft.scheduleExpression,
-    timezone: schedule ? "America/Chicago" : draft.timezone,
-    completionCriteriaText,
-    judgeCriteriaText:
-      draft.judgeCriteriaText ||
-      `Confirm that the final response satisfies: ${completionCriteriaText}`,
-    suitabilityGoalStable: true,
-    suitabilityEvidenceAvailable: true,
-    suitabilityBudgeted: true,
-  };
-}
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) setPreset(parseScheduleFromDraft(draft).preset);
+  }
 
-function matchSpaceId(
-  value: string,
-  spaceOptions: AgentLoopSpaceOption[],
-): string | null {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  const match = spaceOptions.find((space) => {
-    const name = space.name.toLowerCase();
-    const slug = space.slug?.toLowerCase() ?? "";
-    return (
-      name === normalized ||
-      slug === normalized ||
-      name.includes(normalized) ||
-      normalized.includes(name)
+  function handlePreset(value: string) {
+    const next = value as SchedulePresetId;
+    setPreset(next);
+    if (next === "custom") {
+      patch(customSchedulePatch(draft.scheduleExpression));
+      return;
+    }
+    patch(
+      schedulePatch({
+        preset: next,
+        minutesOfDay: parsed.minutesOfDay,
+        weekday: parsed.weekday,
+        timezone: draft.timezone,
+      }),
     );
-  });
-  return match?.id ?? null;
-}
+  }
 
-function inferScheduledPrompt(prompt: string): boolean {
-  return /\b(daily|weekday|weekend|weekly|monthly|morning|afternoon|evening|every|schedule|recurring)\b/i.test(
-    prompt,
+  const timedPreset =
+    preset === "daily" || preset === "weekdays" || preset === "weekly";
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        {/* Mirrors exactly what GhostSelect's SelectTrigger renders as (base
+            trigger pill + the ghost overrides) so this row's value chip is
+            indistinguishable from the other detail rows. */}
+        <button
+          type="button"
+          aria-label="Schedule"
+          className="flex h-8 w-fit select-none items-center justify-end gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted/50 dark:bg-input/30 dark:hover:bg-input/50"
+        >
+          {scheduleValueLabel(draft)}
+          <ChevronDown className="pointer-events-none size-4 shrink-0 text-muted-foreground opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 gap-3 p-3">
+        <p className="text-xs font-medium text-muted-foreground">Schedule</p>
+        <Select value={preset} onValueChange={handlePreset}>
+          <SelectTrigger aria-label="Schedule preset" className="w-full">
+            <SelectValue placeholder="Manual" />
+          </SelectTrigger>
+          <SelectContent>
+            {SCHEDULE_PRESET_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {timedPreset ? (
+          <Select
+            value={String(parsed.minutesOfDay)}
+            onValueChange={(value) =>
+              patch(
+                schedulePatch({
+                  preset: preset as "daily" | "weekdays" | "weekly",
+                  minutesOfDay: Number(value),
+                  weekday: parsed.weekday,
+                  timezone: draft.timezone,
+                }),
+              )
+            }
+          >
+            <SelectTrigger aria-label="Time" className="w-full">
+              <Clock className="size-4 text-muted-foreground" />
+              <SelectValue placeholder="9:00 AM">
+                {formatTimeOfDay(parsed.minutesOfDay)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {TIME_OPTIONS_MINUTES.map((minutes) => (
+                <SelectItem key={minutes} value={String(minutes)}>
+                  {formatTimeOfDay(minutes)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {preset === "weekly" ? (
+          <Select
+            value={parsed.weekday}
+            onValueChange={(value) =>
+              patch(
+                schedulePatch({
+                  preset: "weekly",
+                  minutesOfDay: parsed.minutesOfDay,
+                  weekday: value,
+                  timezone: draft.timezone,
+                }),
+              )
+            }
+          >
+            <SelectTrigger aria-label="Day of week" className="w-full">
+              <SelectValue placeholder="Monday" />
+            </SelectTrigger>
+            <SelectContent>
+              {WEEKDAY_OPTIONS.map((day) => (
+                <SelectItem key={day.id} value={day.id}>
+                  {day.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {preset === "custom" ? (
+          <Input
+            aria-label="Custom schedule expression"
+            value={draft.scheduleExpression}
+            onChange={(event) => patch(customSchedulePatch(event.target.value))}
+            placeholder="cron(0 9 ? * MON-FRI *)"
+            className="font-mono text-xs"
+          />
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function scheduleFromPrompt(prompt: string): string {
-  const lower = prompt.toLowerCase();
-  if (lower.includes("weekday")) return "cron(0 9 ? * MON-FRI *)";
-  if (lower.includes("weekly")) return "cron(0 9 ? * MON *)";
-  if (lower.includes("monthly")) return "cron(0 9 1 * ? *)";
-  return "cron(0 9 * * ? *)";
+function WebhookPanel({
+  endpoint,
+}: {
+  endpoint?: AgentLoopWebhookEndpoint | null;
+}) {
+  if (!endpoint) {
+    // Pre-save (create) or a saved automation whose webhook row is not yet
+    // minted: nothing to show until the endpoint exists.
+    return (
+      <div
+        data-testid="webhook-panel"
+        className="rounded-md border border-dashed border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground"
+      >
+        URL and token generate after you save.
+      </div>
+    );
+  }
+  return (
+    <div
+      data-testid="webhook-panel"
+      className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3 text-xs"
+    >
+      <CopyField label="URL" value={endpoint.path} />
+      <CopyField label="Token" value={endpoint.token} secret />
+    </div>
+  );
+}
+
+function CopyField({
+  label,
+  value,
+  secret,
+}: {
+  label: string;
+  value: string;
+  secret?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 shrink-0 text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 truncate font-mono text-foreground">
+        {secret ? "•".repeat(Math.min(value.length, 24)) : value}
+      </code>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Copy ${label.toLowerCase()}`}
+        onClick={() => void navigator.clipboard?.writeText(value)}
+      >
+        <Copy className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+function TargetPicker({
+  ariaLabel,
+  placeholder,
+  options,
+  value,
+  onChange,
+  emptyLabel,
+}: {
+  ariaLabel: string;
+  placeholder: string;
+  options: AgentLoopRoutineOption[];
+  value: string;
+  onChange: (value: string) => void;
+  emptyLabel: string;
+}) {
+  if (options.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger aria-label={ariaLabel} className="w-full">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem
+            key={option.id}
+            value={option.id}
+            disabled={Boolean(option.disabledReason)}
+          >
+            {option.name}
+            {option.disabledReason ? ` — ${option.disabledReason}` : ""}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function DetailRow({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-11 items-center gap-3 py-0.5">
+      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+      <div className="ml-auto flex min-w-0 flex-col items-end gap-0.5">
+        {children}
+        {error ? (
+          <span className="pr-3 text-xs text-destructive">{error}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function GhostSelect({
+  ariaLabel,
+  value,
+  onValueChange,
+  placeholder,
+  children,
+}: {
+  ariaLabel: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className={cn(
+          "h-auto min-h-0 w-auto justify-end gap-1.5 rounded-md border-0 bg-transparent px-3 py-2",
+          "text-sm font-medium text-foreground shadow-none hover:bg-muted/50",
+          "focus:ring-0 focus-visible:ring-0 [&>svg]:opacity-60",
+        )}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
+  );
 }

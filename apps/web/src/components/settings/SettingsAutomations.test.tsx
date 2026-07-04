@@ -250,9 +250,7 @@ describe("SettingsAutomations", () => {
 
     fireEvent.click(screen.getByText("Daily digest"));
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/settings/automations/$scheduledJobId",
-      params: { scheduledJobId: "job-1" },
-      search: { view: "list" },
+      to: "/settings/automations",
     });
   });
 });

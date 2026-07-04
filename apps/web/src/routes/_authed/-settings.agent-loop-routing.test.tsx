@@ -44,17 +44,14 @@ describe("Automation settings routing", () => {
     expect(route).not.toContain("AgentLoopInventory");
   });
 
-  it("keeps Settings scheduled-job detail as a compatibility inspector", () => {
+  it("renders the AgentLoop detail (not the legacy ScheduledJobDetail) at the Automation settings detail route", () => {
     const route = source(
-      "src/routes/_authed/settings.automations.$scheduledJobId.tsx",
-    );
-    const detail = source(
-      "src/components/scheduled-jobs/ScheduledJobDetail.tsx",
+      "src/routes/_authed/settings.automations.$automationId.tsx",
     );
 
-    expect(route).toContain("ScheduledJobDetail");
-    expect(route).toContain('backHref="/settings/automations"');
-    expect(detail).toContain("Scheduled-job compatibility detail");
-    expect(detail).toContain('label: "Scheduled jobs"');
+    expect(route).toContain('"/_authed/settings/automations/$automationId"');
+    expect(route).toContain("AgentLoopDetail");
+    expect(route).not.toContain("ScheduledJobDetail");
+    expect(route).not.toContain("$scheduledJobId");
   });
 });

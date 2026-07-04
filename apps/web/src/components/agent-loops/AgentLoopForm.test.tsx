@@ -1,3 +1,5 @@
+import { Children, isValidElement } from "react";
+import type { ReactElement } from "react";
 import {
   cleanup,
   fireEvent,
@@ -8,259 +10,117 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentLoopForm } from "./AgentLoopForm";
 import type {
+  AgentLoopMemberOption,
+  AgentLoopRoutineOption,
+  AgentLoopRow,
   AgentLoopSpaceOption,
   AgentLoopWorkerOption,
 } from "./agent-loop-types";
-
-const pageHeaderMock = vi.hoisted(() => ({
-  actions: null as {
-    title?: string;
-    action?: import("react").ReactNode;
-  } | null,
-}));
-
-// The routine-action picker queries git routines via urql; the form tests
-// render without a urql Provider, so stub the picker (it has its own
-// behavior surface and is exercised through draftToPayload/draftFromVersion
-// unit tests).
-vi.mock("./AutomationRoutineActionsPicker", () => ({
-  AutomationRoutineActionsPicker: () => (
-    <div data-testid="routine-actions-picker" />
-  ),
-}));
-
-vi.mock("@/components/schedule-picker/SchedulePicker", () => ({
-  SchedulePicker: ({
-    value,
-  }: {
-    value: { scheduleExpression: string; timezone: string };
-  }) => (
-    <div data-testid="schedule-picker">
-      {value.scheduleExpression} {value.timezone}
-    </div>
-  ),
-}));
-
-vi.mock("@/components/settings/SettingsContent", () => ({
-  SettingsPageTitle: ({
-    title,
-    description,
-  }: {
-    title: string;
-    description?: string;
-  }) => (
-    <header>
-      <h1>{title}</h1>
-      {description ? <p>{description}</p> : null}
-    </header>
-  ),
-  SettingsSection: ({
-    label,
-    children,
-  }: {
-    label?: string;
-    children: React.ReactNode;
-  }) => (
-    <section>
-      {label ? <h2>{label}</h2> : null}
-      {children}
-    </section>
-  ),
-  SettingsRow: ({
-    label,
-    children,
-  }: {
-    label: React.ReactNode;
-    children?: React.ReactNode;
-  }) => (
-    <div>
-      <div>{label}</div>
-      {children}
-    </div>
-  ),
-}));
-
-vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: (
-    actions: { title?: string; action?: import("react").ReactNode } | null,
-  ) => {
-    pageHeaderMock.actions = actions;
-  },
-}));
-
-vi.mock("@thinkwork/ui", () => ({
-  Accordion: ({
-    children,
-    value: _value,
-    onValueChange: _onValueChange,
-  }: {
-    children: React.ReactNode;
-    value?: string;
-    onValueChange?: (value: string) => void;
-  }) => <div>{children}</div>,
-  AccordionContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  AccordionItem: ({
-    children,
-    value: _value,
-  }: {
-    children: React.ReactNode;
-    value?: string;
-  }) => <div>{children}</div>,
-  AccordionTrigger: ({
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props} type="button">
-      {children}
-    </button>
-  ),
-  Button: ({
-    children,
-    variant: _variant,
-    size: _size,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: string;
-    size?: string;
-  }) => <button {...props}>{children}</button>,
-  Checkbox: ({
-    checked,
-    disabled,
-    onCheckedChange,
-    ...props
-  }: {
-    checked?: boolean;
-    disabled?: boolean;
-    onCheckedChange?: (checked: boolean) => void;
-  }) => (
-    <input
-      {...props}
-      type="checkbox"
-      checked={checked}
-      disabled={disabled}
-      onChange={(event) => onCheckedChange?.(event.target.checked)}
-    />
-  ),
-  DropdownMenu: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DropdownMenuItem: ({
-    children,
-    onSelect,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    onSelect?: () => void;
-  }) => (
-    <button {...props} type="button" onClick={onSelect}>
-      {children}
-    </button>
-  ),
-  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} />
-  ),
-  Select: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectItem: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectTrigger: ({
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
-  SelectValue: ({ placeholder }: { placeholder?: string }) => (
-    <span>{placeholder}</span>
-  ),
-  Sheet: ({ open, children }: { open?: boolean; children: React.ReactNode }) =>
-    open ? <div data-testid="sheet">{children}</div> : null,
-  SheetContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SheetDescription: ({ children }: { children: React.ReactNode }) => (
-    <p>{children}</p>
-  ),
-  SheetHeader: ({ children }: { children: React.ReactNode }) => (
-    <header>{children}</header>
-  ),
-  SheetTitle: ({ children }: { children: React.ReactNode }) => (
-    <h2>{children}</h2>
-  ),
-  Switch: ({
-    checked,
-    onCheckedChange,
-    ...props
-  }: {
-    checked?: boolean;
-    onCheckedChange?: (checked: boolean) => void;
-  }) => (
-    <input
-      {...props}
-      type="checkbox"
-      checked={checked}
-      onChange={(event) => onCheckedChange?.(event.target.checked)}
-    />
-  ),
-  Tabs: ({
-    children,
-    value: _value,
-    onValueChange: _onValueChange,
-    ...props
-  }: {
-    children: React.ReactNode;
-    value?: string;
-    onValueChange?: (value: string) => void;
-  }) => <div {...props}>{children}</div>,
-  TabsContent: ({
-    children,
-    value: _value,
-    ...props
-  }: {
-    children: React.ReactNode;
-    value?: string;
-  }) => <div {...props}>{children}</div>,
-  TabsList: ({
-    children,
-    variant: _variant,
-    ...props
-  }: React.HTMLAttributes<HTMLDivElement> & { variant?: string }) => (
-    <div {...props}>{children}</div>
-  ),
-  TabsTrigger: ({
-    children,
-    value,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { value?: string }) => (
-    <button {...props} type="button" data-value={value}>
-      {children}
-    </button>
-  ),
-  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea {...props} />
-  ),
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: React.ReactNode }) => (
-    <span>{children}</span>
-  ),
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
 
 vi.mock("@/lib/utils", () => ({
   cn: (...values: Array<string | false | null | undefined>) =>
     values.filter(Boolean).join(" "),
 }));
+
+vi.mock("@thinkwork/ui", () => {
+  const findTriggerProps = (children: React.ReactNode) => {
+    let props: { id?: string; "aria-label"?: string } = {};
+    Children.forEach(children, (child) => {
+      if (
+        isValidElement(child) &&
+        (child as ReactElement<{ "aria-label"?: string }>).props["aria-label"]
+      ) {
+        props = (child as ReactElement<{ id?: string; "aria-label"?: string }>)
+          .props;
+      }
+    });
+    return props;
+  };
+  return {
+    Button: ({
+      children,
+      variant: _variant,
+      size: _size,
+      ...props
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+      variant?: string;
+      size?: string;
+    }) => <button {...props}>{children}</button>,
+    Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+      <textarea {...props} />
+    ),
+    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+      <input {...props} />
+    ),
+    Dialog: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    Popover: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    PopoverContent: ({
+      children,
+    }: {
+      children: React.ReactNode;
+      className?: string;
+      align?: string;
+    }) => <div>{children}</div>,
+    DialogContent: ({
+      children,
+    }: {
+      children: React.ReactNode;
+      className?: string;
+    }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children: React.ReactNode }) => (
+      <h2>{children}</h2>
+    ),
+    DialogFooter: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    Select: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value?: string;
+      onValueChange?: (value: string) => void;
+      children: React.ReactNode;
+    }) => {
+      const trigger = findTriggerProps(children);
+      return (
+        <select
+          id={trigger.id}
+          aria-label={trigger["aria-label"]}
+          value={value}
+          onChange={(event) => onValueChange?.(event.target.value)}
+        >
+          {children}
+        </select>
+      );
+    },
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    SelectItem: ({
+      value,
+      children,
+      disabled,
+    }: {
+      value: string;
+      children: React.ReactNode;
+      disabled?: boolean;
+    }) => (
+      <option value={value} disabled={disabled}>
+        {children}
+      </option>
+    ),
+  };
+});
 
 const workers: AgentLoopWorkerOption[] = [
   { id: "agent-1", type: "agent", label: "Default Agent" },
@@ -268,355 +128,293 @@ const workers: AgentLoopWorkerOption[] = [
 const spaces: AgentLoopSpaceOption[] = [
   { id: "space-1", name: "Customer", slug: "customer" },
 ];
+const members: AgentLoopMemberOption[] = [{ id: "user-1", label: "You" }];
+const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
+const routines: AgentLoopRoutineOption[] = [
+  { id: ROUTINE_ID, name: "Nightly digest" },
+];
 
-afterEach(() => {
-  pageHeaderMock.actions = null;
-  cleanup();
-});
-
-function renderHeaderActions() {
-  if (pageHeaderMock.actions?.action) {
-    render(<>{pageHeaderMock.actions.action}</>);
-  }
+function baseProps() {
+  return {
+    tenantId: "tenant-1",
+    workerOptions: workers,
+    spaceOptions: spaces,
+    routineOptions: routines,
+    workflowOptions: [] as AgentLoopRoutineOption[],
+    memberOptions: members,
+    currentUserId: "user-1",
+    onCancel: vi.fn(),
+  };
 }
 
-describe("AgentLoopForm", () => {
-  it("requires an instruction before saving", () => {
-    render(
-      <AgentLoopForm
-        mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
-        onSubmit={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+afterEach(() => cleanup());
 
-    fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
-    expect(screen.getByText("Instruction is required.")).toBeTruthy();
-  });
-
-  it("renders the Devin-style builder without creation mode buttons", () => {
-    render(
-      <AgentLoopForm
-        mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
-        onSubmit={vi.fn()}
-        onStartBuilder={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-
-    expect(pageHeaderMock.actions?.title).toBe("New Automation");
-    expect(
-      screen.queryByRole("heading", { name: "New Automation" }),
-    ).toBeNull();
-    expect(screen.getByLabelText("Automation name")).toBeTruthy();
-    expect(screen.getByText("Instructions")).toBeTruthy();
-    expect(screen.getByLabelText("Automation instruction")).toBeTruthy();
-    expect(screen.getByText("Triggers")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Schedule" })).toBeTruthy();
-    expect(screen.getByTestId("schedule-picker")).toBeTruthy();
-    expect(screen.getByText("Run in")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Choose where this automation runs and whether it is active",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Advanced" })).toBeTruthy();
-    expect(
-      screen.getByText("Fine-tune runtime, review, and evidence settings"),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Chat" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Manual" })).toBeNull();
-    expect(screen.queryByText("Start session")).toBeNull();
-    expect(screen.queryByText("MCPs")).toBeNull();
-    expect(screen.queryByText("No MCPs available")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Add trigger/ })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: /Add instruction/ }),
-    ).toBeNull();
-  });
-
-  it("saves the builder from instruction and default runtime settings", async () => {
+describe("AgentLoopForm (compact dialog)", () => {
+  it("creates a schedule → routine automation with the correct targetSpec and no Space", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-
     render(
       <AgentLoopForm
         mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
+        {...baseProps()}
+        spaceOptions={[]}
         onSubmit={onSubmit}
-        onCancel={vi.fn()}
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Automation instruction"), {
-      target: { value: "Route Linear issues to the right worker." },
+    // Borderless title + prompt live in the dialog body.
+    expect(screen.getByLabelText("Automation name")).toBeTruthy();
+    expect(screen.getByLabelText("Agent instructions")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Target"), {
+      target: { value: "routine" },
+    });
+    fireEvent.change(screen.getByLabelText("Routine"), {
+      target: { value: ROUTINE_ID },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        tenantId: "tenant-1",
-        name: "Route Linear issues to the right worker",
-        spaceId: "space-1",
-        triggerSpec: expect.objectContaining({
-          family: "schedule",
-          config: expect.objectContaining({
-            scheduleExpression: "rate(7 days)",
-          }),
-        }),
-        workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
-        sourceMetadata: expect.objectContaining({
-          creationMode: "builder",
-          createdFrom: "settings.automations.builder",
-        }),
+        name: "Nightly digest",
+        spaceId: null,
+        runAsUserId: "user-1",
+        triggerSpec: expect.objectContaining({ family: "schedule" }),
+        targetSpec: {
+          kind: "routine",
+          routine: { routineId: ROUTINE_ID },
+        },
       }),
     );
   });
 
-  it("keeps chat assistance optional and confirms a linked builder draft when used", async () => {
+  it("requires a Space for webhook → agent_thread and shows the pre-save webhook placeholder", () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const onConfirmBuilderDraft = vi.fn().mockResolvedValue(undefined);
-    const onStartBuilder = vi.fn().mockResolvedValue({
-      threadCreated: true,
-      setupPrompt: "Builder questions",
-      draft: {
-        creationMode: "chat",
-        name: "Linear routing automation",
-        objective:
-          "Every weekday morning, route Linear issues to the right worker.",
-        triggerFamily: "manual",
-        scheduleType: "rate",
-        scheduleExpression: "rate(7 days)",
-        timezone: "UTC",
-        maxIterations: "1",
-        maxRuntimeMinutes: "30",
-        maxTokens: "100000",
-        retryBackoffMinutes: "5",
-        retentionDays: "30",
-        builderThreadId: "thread-1",
-      },
-      thread: { id: "thread-1", title: "Automation setup" },
-    });
-
     render(
       <AgentLoopForm
         mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
+        {...baseProps()}
+        spaceOptions={[]}
         onSubmit={onSubmit}
-        onStartBuilder={onStartBuilder}
-        onConfirmBuilderDraft={onConfirmBuilderDraft}
-        onCancel={vi.fn()}
       />,
     );
 
-    expect(onStartBuilder).not.toHaveBeenCalled();
-    renderHeaderActions();
-
-    fireEvent.change(screen.getByLabelText("Automation instruction"), {
-      target: {
-        value:
-          "Every weekday morning, route Linear issues to the right worker.",
-      },
+    fireEvent.change(screen.getByLabelText("Trigger"), {
+      target: { value: "webhook" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Chat help" }));
-
-    await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Open setup thread")).toBeTruthy();
-    expect(screen.getByTestId("automation-builder-questions")).toBeTruthy();
+    expect(screen.getByTestId("webhook-panel")).toBeTruthy();
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Create automation",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(false);
+      screen.getByText("URL and token generate after you save."),
+    ).toBeTruthy();
+    // Inline (not submit-only) space requirement, rendered in the Space row.
+    expect(
+      screen.getByText("A Space is required for agent-thread automations."),
+    ).toBeTruthy();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Apply builder answers" }),
-    );
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Handle the webhook payload." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
-    await waitFor(() => expect(onConfirmBuilderDraft).toHaveBeenCalledTimes(1));
-    expect(onConfirmBuilderDraft).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        name: "Linear routing automation",
-        spaceId: "space-1",
-        triggerSpec: expect.objectContaining({
-          family: "schedule",
-          config: expect.objectContaining({
-            scheduleExpression: "cron(0 9 ? * MON-FRI *)",
-          }),
-        }),
-        sourceMetadata: expect.objectContaining({
-          creationMode: "builder",
-          builderThreadId: "thread-1",
-        }),
-      }),
-      "thread-1",
-    );
+    expect(screen.getByText("Choose a Space.")).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("keeps the entered instruction when chat help returns an incomplete draft", async () => {
-    const onStartBuilder = vi.fn().mockResolvedValue({
-      threadCreated: true,
-      setupPrompt: "Builder questions",
-      draft: {},
-      thread: { id: "thread-1", title: "Automation setup" },
-    });
-
+  it("round-trips all R1 fields when editing", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(
       <AgentLoopForm
-        mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
-        onSubmit={vi.fn()}
-        onStartBuilder={onStartBuilder}
-        onCancel={vi.fn()}
+        mode="edit"
+        {...baseProps()}
+        initialLoop={editLoop()}
+        onSubmit={onSubmit}
       />,
     );
 
-    renderHeaderActions();
-
-    fireEvent.change(screen.getByLabelText("Automation instruction"), {
-      target: { value: "Route Linear issues to the right worker." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Chat help" }));
-
-    await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
     expect(
-      (screen.getByLabelText("Automation instruction") as HTMLTextAreaElement)
+      (screen.getByLabelText("Automation name") as HTMLInputElement).value,
+    ).toBe("Linear dispatcher");
+    expect(
+      (screen.getByLabelText("Agent instructions") as HTMLTextAreaElement)
         .value,
-    ).toBe("Route Linear issues to the right worker.");
+    ).toBe("Dispatch issues to the right worker.");
+    // Webhook trigger → the Trigger row reads "webhook" and the panel renders.
+    expect((screen.getByLabelText("Trigger") as HTMLSelectElement).value).toBe(
+      "webhook",
+    );
+    expect(screen.getByTestId("webhook-panel")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "loop-1",
+        name: "Linear dispatcher",
+        runAsUserId: "user-9",
+        spaceId: "space-1",
+        triggerSpec: expect.objectContaining({ family: "webhook" }),
+        targetSpec: expect.objectContaining({
+          kind: "agent_thread",
+          agentThread: expect.objectContaining({
+            instructions: "Dispatch issues to the right worker.",
+            threadMode: "new_per_run",
+          }),
+        }),
+      }),
+    );
   });
 
-  it("opens templates in a side sheet and applies the weekly preset to the builder", async () => {
+  it("serializes schedule popover presets to EventBridge cron config and renders the row value", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-
     render(
-      <AgentLoopForm
-        mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
-        onSubmit={onSubmit}
-        onCancel={vi.fn()}
-      />,
+      <AgentLoopForm mode="create" {...baseProps()} onSubmit={onSubmit} />,
     );
 
-    renderHeaderActions();
+    // Default seed (rate(7 days)) reads as Weekly on the closed row.
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekly");
 
-    fireEvent.click(screen.getByLabelText("Open templates"));
-    fireEvent.click(
-      screen.getByRole("button", { name: /Weekly Agent Check-In/ }),
-    );
+    fireEvent.change(screen.getByLabelText("Schedule preset"), {
+      target: { value: "weekdays" },
+    });
+    // Row value text reflects the preset + time.
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekdays at 9:00 AM");
+    // 15-minute increment time control.
+    fireEvent.change(screen.getByLabelText("Time"), {
+      target: { value: String(17 * 60 + 45) },
+    });
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Weekdays at 5:45 PM");
+
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Review my open Linear issues." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        tenantId: "tenant-1",
-        name: "Weekly Agent Check-In",
-        spaceId: "space-1",
         triggerSpec: expect.objectContaining({
           family: "schedule",
           config: expect.objectContaining({
-            scheduleExpression: "rate(7 days)",
+            scheduleType: "cron",
+            scheduleExpression: "cron(45 17 ? * MON-FRI *)",
+            timezone: "UTC",
           }),
-        }),
-        goalSpec: expect.objectContaining({
-          objective: expect.stringContaining("weekly check-in"),
-          completionCriteria: expect.arrayContaining([
-            "Summarizes notable progress.",
-          ]),
-        }),
-        workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
-        judgeSpec: expect.objectContaining({ mode: "self_check" }),
-        sourceMetadata: expect.objectContaining({
-          creationMode: "builder",
-          createdFrom: "settings.automations.builder",
-        }),
-        loopPolicy: expect.objectContaining({
-          maxIterations: 1,
-          maxRuntimeMs: 1_800_000,
-          maxTokens: 100000,
-        }),
-        evidencePolicy: expect.objectContaining({
-          redactionState: "summary_only",
         }),
       }),
     );
   });
 
-  it("keeps Advanced settings in an accordion and saves explicit criteria", async () => {
+  it("passes a custom schedule expression through raw", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-
     render(
-      <AgentLoopForm
-        mode="create"
-        tenantId="tenant-1"
-        workerOptions={workers}
-        spaceOptions={spaces}
-        defaultSpaceId="space-1"
-        onSubmit={onSubmit}
-        onCancel={vi.fn()}
-      />,
+      <AgentLoopForm mode="create" {...baseProps()} onSubmit={onSubmit} />,
     );
 
-    expect(screen.queryByTestId("sheet")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Schedule preset"), {
+      target: { value: "custom" },
+    });
+    fireEvent.change(screen.getByLabelText("Custom schedule expression"), {
+      target: { value: "rate(30 minutes)" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Schedule" }).textContent,
+    ).toContain("Custom");
 
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    fireEvent.change(screen.getByLabelText("Goal intent"), {
-      target: { value: "Review failed jobs and summarize the fix path." },
-    });
-    fireEvent.change(screen.getByLabelText("Completion criteria"), {
-      target: {
-        value: "The failure is summarized.\nThe next action is clear.",
-      },
-    });
-    fireEvent.change(screen.getByLabelText("Judge criteria"), {
-      target: { value: "The summary is specific." },
-    });
-    fireEvent.change(screen.getByLabelText("Max iterations"), {
-      target: { value: "3" },
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Poll the queue." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceMetadata: expect.objectContaining({
-          creationMode: "builder",
+        triggerSpec: expect.objectContaining({
+          family: "schedule",
+          config: expect.objectContaining({
+            scheduleType: "rate",
+            scheduleExpression: "rate(30 minutes)",
+          }),
         }),
-        goalSpec: expect.objectContaining({
-          completionCriteria: [
-            "The failure is summarized.",
-            "The next action is clear.",
-          ],
-        }),
-        judgeSpec: expect.objectContaining({
-          criteria: ["The summary is specific."],
-        }),
-        loopPolicy: expect.objectContaining({ maxIterations: 3 }),
       }),
     );
   });
+
+  it("renders the minted webhook endpoint in edit mode after save", () => {
+    render(
+      <AgentLoopForm
+        mode="edit"
+        {...baseProps()}
+        initialLoop={editLoop({
+          webhookEndpoint: {
+            webhookId: "wh-1",
+            token: "supersecrettoken",
+            path: "/webhooks/supersecrettoken",
+            enabled: true,
+          },
+        })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("/webhooks/supersecrettoken")).toBeTruthy();
+    expect(screen.getByLabelText("Copy token")).toBeTruthy();
+    // The pre-save placeholder is gone once an endpoint exists.
+    expect(
+      screen.queryByText("URL and token generate after you save."),
+    ).toBeNull();
+  });
 });
+
+function editLoop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
+  return {
+    id: "loop-1",
+    tenantId: "tenant-1",
+    name: "Linear dispatcher",
+    slug: "linear-dispatcher",
+    description: "Route Linear work.",
+    lifecycleStatus: "active",
+    enabled: true,
+    runAsUserId: "user-9",
+    spaceId: "space-1",
+    primaryTriggerFamily: "webhook",
+    currentVersionId: "version-1",
+    currentVersionNumber: 2,
+    currentVersion: {
+      id: "version-1",
+      versionNumber: 2,
+      triggerSpec: { family: "webhook", enabled: true, config: {} },
+      goalSpec: {},
+      workerSpec: {},
+      judgeSpec: {},
+      loopPolicy: {},
+      evidencePolicy: {},
+      targetSpec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Dispatch issues to the right worker.",
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
+    },
+    lastRunId: null,
+    lastRunStatus: null,
+    lastRunAt: null,
+    lastRunSummary: {},
+    acceptedRunCount: 0,
+    rejectedRunCount: 0,
+    escalatedRunCount: 0,
+    totalCostUsdCents: 0,
+    createdAt: "2026-06-22T12:00:00.000Z",
+    updatedAt: "2026-06-22T12:00:00.000Z",
+    ...overrides,
+  };
+}
