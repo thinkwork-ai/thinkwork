@@ -55,7 +55,7 @@ export function GeneratedArtifactCard({
     return (
       <button
         type="button"
-        className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-3 block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => onOpenArtifact(artifact.id)}
         aria-label={`Open artifact ${artifact.title}`}
       >
@@ -68,7 +68,7 @@ export function GeneratedArtifactCard({
     <Link
       to="/artifacts/$id"
       params={{ id: artifact.id }}
-      className="block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="mt-3 block w-full cursor-pointer rounded-xl bg-[#2c3444] px-5 py-4 text-left text-[#eef2f7] transition-colors hover:bg-[#252d3b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`Open artifact ${artifact.title}`}
     >
       {content}
