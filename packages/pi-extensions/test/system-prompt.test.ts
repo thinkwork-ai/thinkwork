@@ -68,6 +68,28 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     );
   });
 
+  it("includes canvas parity guidance only when a canvas tool is available", async () => {
+    const withCanvas = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["load_canvas", "save_canvas"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+    expect(withCanvas).toContain("### Saved canvases");
+    expect(withCanvas).toContain("`load_canvas`");
+    expect(withCanvas).toContain("open my cost dashboard");
+
+    const withoutCanvas = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["execute_code"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+    expect(withoutCanvas).not.toContain("### Saved canvases");
+  });
+
   it("omits USER.md when there is no user id", async () => {
     const prompt = await composeSystemPrompt({
       payload: {},

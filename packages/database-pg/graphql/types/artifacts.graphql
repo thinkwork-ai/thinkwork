@@ -124,6 +124,36 @@ type ArtifactDataBinding {
   updatedAt: AWSDateTime!
 }
 
+# A saved (or the current thread's draft) canvas summary for agent parity
+# (THINK-145 U9). `status` is draft | final | superseded; `headVersion` is 0
+# until the canvas has been pinned/checked in.
+type CanvasSummary {
+  artifactId: ID!
+  title: String!
+  updatedAt: AWSDateTime
+  headVersion: Int!
+  status: String!
+}
+
+# A space the acting user may save a canvas into (member-or-above role).
+type CanvasWritableSpace {
+  spaceId: ID!
+  name: String!
+}
+
+# Canvas context for a thread (THINK-145 U9). Powers the agent parity tools:
+# `currentCanvas` is the save_canvas target; `savedCanvases` is the name-
+# resolution + list_canvases set (SAVED only, drafts excluded per R19);
+# `writableSpaces` lets save_canvas resolve a named space.
+type ThreadCanvasContext {
+  threadId: ID!
+  spaceId: ID
+  spaceName: String
+  currentCanvas: CanvasSummary
+  savedCanvases: [CanvasSummary!]!
+  writableSpaces: [CanvasWritableSpace!]!
+}
+
 type Applet {
   artifact: Artifact!
   appId: ID!
@@ -280,6 +310,13 @@ extend type Query {
     cursor: String
   ): [Artifact!]!
   artifact(id: ID!): Artifact
+  # Living Artifacts (THINK-145 U9): the canvas context for a thread, powering the
+  # agent parity tools (save/load/refresh/list). Returns the thread's home space,
+  # the current canvas part (save target), the SAVED canvases in the space (drafts
+  # excluded, R19), and the spaces the acting user may save into. Gated on the
+  # acting user's space access (KTD8) — the runtime asserts that user via
+  # `x-principal-id` alongside the service secret.
+  threadCanvasContext(threadId: ID!): ThreadCanvasContext!
   applet(appId: ID!): AppletPayload
   applets(cursor: String, limit: Int): AppletConnection!
   appletState(appId: ID!, instanceId: ID!, key: String!): AppletState

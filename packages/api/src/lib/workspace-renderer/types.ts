@@ -76,12 +76,31 @@ export interface WorkspaceTupleRepository {
   listRoutableAgentProfiles?(
     tuple: ResolvedWorkspaceRenderTuple,
   ): Promise<WorkspaceAgentProfileRoutingEntry[]>;
+  /**
+   * SAVED (non-draft) canvases in the tuple's active Space (Living Artifacts
+   * THINK-145 U9, R19). Rendered as a passive `### Saved Canvases` block in
+   * AGENTS.md so the agent can resolve "open my <name>" with zero tool calls.
+   * Optional + best-effort: omitted or failing yields no block.
+   */
+  listSavedCanvases?(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceCanvasIndexEntry[]>;
+}
+
+export interface WorkspaceCanvasIndexEntry {
+  artifactId: string;
+  name: string;
 }
 
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
 export type WorkspaceHydrateOwner =
-  "agent" | "space" | "user" | "thread_notes" | "thread_goal" | "system";
+  | "agent"
+  | "space"
+  | "user"
+  | "thread_notes"
+  | "thread_goal"
+  | "system";
 
 export interface WorkspaceHydrateSource {
   owner: Exclude<WorkspaceHydrateOwner, "system">;

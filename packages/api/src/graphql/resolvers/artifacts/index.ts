@@ -1,5 +1,6 @@
 import { artifacts_ as artifacts } from "./artifacts.query.js";
 import { artifact } from "./artifact.query.js";
+import { threadCanvasContext } from "./threadCanvasContext.query.js";
 import { createArtifact } from "./createArtifact.mutation.js";
 import { promoteGenUIArtifact } from "./promoteGenUIArtifact.mutation.js";
 import { saveCanvas } from "./saveCanvas.mutation.js";
@@ -12,7 +13,7 @@ import { deleteArtifact } from "./deleteArtifact.mutation.js";
 import { artifactTypeResolvers } from "./types.js";
 
 export { artifactTypeResolvers };
-export const artifactQueries = { artifacts, artifact };
+export const artifactQueries = { artifacts, artifact, threadCanvasContext };
 export const artifactMutations = {
   createArtifact,
   promoteGenUIArtifact,

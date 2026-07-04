@@ -46,6 +46,7 @@ import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createArtifactsExtension,
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createDelegationExtension,
@@ -165,6 +166,7 @@ import {
   directMemoryGroundingQuery,
   explicitMemoryTurn,
 } from "./runtime/memory-question.js";
+import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
@@ -1445,6 +1447,33 @@ export async function buildInvocationResources(
         },
       }),
     );
+  }
+
+  // Living Artifacts agent parity — save/load/refresh/list canvases (THINK-145
+  // U9). Gated exactly like task-status/ask-user-question (never in eval mode;
+  // requires identity + API wiring) PLUS the acting user id: the canvas
+  // mutations assert R15 space-membership against that user (KTD8), so a
+  // userless turn (system channel) has no one to gate against and the tools
+  // must not register. `addExtension` folds the four tool names into the
+  // allowlist — omit that and they register but are silently gated from the
+  // model (the dark-tool failure mode; a guard test enumerates them).
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.userId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret)
+  ) {
+    addExtension(createArtifactsExtension(), {
+      canvas: createApiCanvasProvider({
+        apiUrl: asString(args.payload.thinkwork_api_url),
+        apiSecret: asString(args.payload.thinkwork_api_secret),
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        actingUserId: args.identity.userId,
+      }),
+    });
   }
 
   // fetch_workspace_source — mid-turn read-only workspace navigation (plan
