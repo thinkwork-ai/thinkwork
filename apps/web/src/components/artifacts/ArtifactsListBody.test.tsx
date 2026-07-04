@@ -32,6 +32,7 @@ const items: ArtifactItem[] = [
     generatedAt: "2026-05-08T16:00:00.000Z",
     favoritedAt: null,
     version: 1,
+    typeLabel: "App",
   },
   {
     id: "a2",
@@ -43,17 +44,19 @@ const items: ArtifactItem[] = [
     generatedAt: "2026-05-09T11:00:00.000Z",
     favoritedAt: null,
     version: 2,
+    typeLabel: "App",
   },
   {
     id: "c1",
     artifactId: "artifact-c1",
-    title: "Pipeline chart",
+    title: "Board report",
     userName: null,
     modelId: null,
     stdlibVersion: null,
     generatedAt: "",
     favoritedAt: null,
     version: null,
+    typeLabel: "Report",
   },
 ];
 
@@ -150,6 +153,12 @@ describe("ArtifactsListBody", () => {
   it("renders the generating user's name in a row", () => {
     render(<ArtifactsListBody items={items} />);
     expect(rowFor("Austin Map").textContent).toMatch(/Grace Hopper/);
+  });
+
+  it("renders the type badge for each artifact kind", () => {
+    render(<ArtifactsListBody items={items} />);
+    expect(rowFor("Austin Map").textContent).toMatch(/App/);
+    expect(rowFor("Board report").textContent).toMatch(/Report/);
   });
 
   it("forwards row clicks to the artifact viewer route", () => {

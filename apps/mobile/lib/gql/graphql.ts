@@ -795,7 +795,7 @@ export type Artifact = {
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
   title: Scalars['String']['output'];
-  type: ArtifactType;
+  type: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<ArtifactVersion>;
 };
@@ -837,19 +837,6 @@ export enum ArtifactStatus {
   Draft = 'DRAFT',
   Final = 'FINAL',
   Superseded = 'SUPERSEDED'
-}
-
-export enum ArtifactType {
-  Applet = 'APPLET',
-  AppletState = 'APPLET_STATE',
-  Brief = 'BRIEF',
-  DataView = 'DATA_VIEW',
-  Digest = 'DIGEST',
-  Draft = 'DRAFT',
-  Ideation = 'IDEATION',
-  Note = 'NOTE',
-  Plan = 'PLAN',
-  Report = 'REPORT'
 }
 
 export type ArtifactVersion = {
@@ -1454,7 +1441,7 @@ export type CreateArtifactInput = {
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
   title: Scalars['String']['input'];
-  type: ArtifactType;
+  type: Scalars['String']['input'];
 };
 
 export type CreateEvalDatasetInput = {
@@ -6849,7 +6836,7 @@ export type QueryArtifactsArgs = {
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
-  type?: InputMaybe<ArtifactType>;
+  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -10038,7 +10025,7 @@ export type UpdateArtifactInput = {
   status?: InputMaybe<ArtifactStatus>;
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<ArtifactType>;
+  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateEmailReadinessCheckInput = {
@@ -11657,7 +11644,7 @@ export type MessagesQueryVariables = Exact<{
 }>;
 
 
-export type MessagesQuery = { __typename?: 'Query', messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', cursor: string, node: { __typename?: 'Message', id: string, threadId: string, tenantId: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, toolCalls?: any | null, toolResults?: any | null, parts?: any | null, metadata?: any | null, tokenCount?: number | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus, content?: string | null, summary?: string | null } | null } }>, pageInfo: { __typename?: 'PageInfo', hasNextPage: boolean, endCursor?: string | null } } };
+export type MessagesQuery = { __typename?: 'Query', messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', cursor: string, node: { __typename?: 'Message', id: string, threadId: string, tenantId: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, toolCalls?: any | null, toolResults?: any | null, parts?: any | null, metadata?: any | null, tokenCount?: number | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus, content?: string | null, summary?: string | null } | null } }>, pageInfo: { __typename?: 'PageInfo', hasNextPage: boolean, endCursor?: string | null } } };
 
 export type RoutinesQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -11915,7 +11902,7 @@ export type ThreadQueryVariables = Exact<{
 }>;
 
 
-export type ThreadQuery = { __typename?: 'Query', thread?: { __typename?: 'Thread', id: string, tenantId: string, agentId?: string | null, spaceId: string, number: number, identifier?: string | null, title: string, status: ThreadStatus, lifecycleStatus?: ThreadLifecycleStatus | null, channel: ThreadChannel, assigneeType?: string | null, assigneeId?: string | null, reporterId?: string | null, labels?: any | null, metadata?: any | null, dueAt?: any | null, closedAt?: any | null, createdAt: any, updatedAt: any, space?: { __typename?: 'Space', id: string, name: string, slug: string } | null, messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', node: { __typename?: 'Message', id: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus } | null } }> }, attachments: Array<{ __typename?: 'ThreadAttachment', id: string, name?: string | null, mimeType?: string | null, sizeBytes?: number | null, createdAt: any }> } | null };
+export type ThreadQuery = { __typename?: 'Query', thread?: { __typename?: 'Thread', id: string, tenantId: string, agentId?: string | null, spaceId: string, number: number, identifier?: string | null, title: string, status: ThreadStatus, lifecycleStatus?: ThreadLifecycleStatus | null, channel: ThreadChannel, assigneeType?: string | null, assigneeId?: string | null, reporterId?: string | null, labels?: any | null, metadata?: any | null, dueAt?: any | null, closedAt?: any | null, createdAt: any, updatedAt: any, space?: { __typename?: 'Space', id: string, name: string, slug: string } | null, messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', node: { __typename?: 'Message', id: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus } | null } }> }, attachments: Array<{ __typename?: 'ThreadAttachment', id: string, name?: string | null, mimeType?: string | null, sizeBytes?: number | null, createdAt: any }> } | null };
 
 export type CreateThreadMutationVariables = Exact<{
   input: CreateThreadInput;
@@ -12029,14 +12016,14 @@ export type ArtifactsForThreadQueryVariables = Exact<{
 }>;
 
 
-export type ArtifactsForThreadQuery = { __typename?: 'Query', artifacts: Array<{ __typename?: 'Artifact', id: string, tenantId: string, agentId?: string | null, threadId?: string | null, title: string, type: ArtifactType, status: ArtifactStatus, summary?: string | null, createdAt: any, updatedAt: any }> };
+export type ArtifactsForThreadQuery = { __typename?: 'Query', artifacts: Array<{ __typename?: 'Artifact', id: string, tenantId: string, agentId?: string | null, threadId?: string | null, title: string, type: string, status: ArtifactStatus, summary?: string | null, createdAt: any, updatedAt: any }> };
 
 export type ArtifactDetailQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type ArtifactDetailQuery = { __typename?: 'Query', artifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus, content?: string | null, summary?: string | null, createdAt: any } | null };
+export type ArtifactDetailQuery = { __typename?: 'Query', artifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus, content?: string | null, summary?: string | null, createdAt: any } | null };
 
 export type MemoryRecordsQueryVariables = Exact<{
   userId: Scalars['ID']['input'];

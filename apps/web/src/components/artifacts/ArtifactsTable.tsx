@@ -35,6 +35,23 @@ export function ArtifactsTable({
         ),
       },
       {
+        accessorKey: "typeLabel",
+        header: "Type",
+        size: 110,
+        cell: ({ row }) =>
+          row.original.typeLabel ? (
+            <span className={COMPACT_TABLE_CELL}>
+              <Badge variant="outline" className="font-normal">
+                {row.original.typeLabel}
+              </Badge>
+            </span>
+          ) : (
+            <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+              —
+            </span>
+          ),
+      },
+      {
         accessorKey: "userName",
         header: "User",
         size: 160,

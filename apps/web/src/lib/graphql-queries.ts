@@ -2592,20 +2592,17 @@ export const RefreshCanvasDataMutation = gql`
   }
 `;
 
-// Living Artifacts (THINK-145 U10, R14): tenant-wide canvas rows for the
-// Artifacts list. `includeDrafts` defaults false (saved-only); the list's
-// "Include drafts" toggle flips it. Non-canvas DATA_VIEW rows are filtered
-// client-side to living canvases.
-export const TenantCanvasesQuery = gql`
-  query TenantCanvases($tenantId: ID!, $includeDrafts: Boolean) {
-    artifacts(
-      tenantId: $tenantId
-      type: DATA_VIEW
-      includeDrafts: $includeDrafts
-      limit: 100
-    ) {
+// THINK-145/THINK-147: tenant-wide artifact rows for the Artifacts list — EVERY
+// kind (living canvases, HTML document artifacts, and any plugin-minted type),
+// not just DATA_VIEW canvases. Applet rows are excluded client-side (they come
+// from the applets query). `includeDrafts` defaults false (saved-only); the
+// list's "Include drafts" toggle flips it. `type` drives the Type badge.
+export const TenantArtifactsListQuery = gql`
+  query TenantArtifactsList($tenantId: ID!, $includeDrafts: Boolean) {
+    artifacts(tenantId: $tenantId, includeDrafts: $includeDrafts, limit: 100) {
       id
       title
+      type
       status
       headVersion
       updatedAt
@@ -2622,7 +2619,7 @@ export const SpaceCanvasesQuery = gql`
     artifacts(
       tenantId: $tenantId
       spaceId: $spaceId
-      type: DATA_VIEW
+      type: "DATA_VIEW"
       limit: 100
     ) {
       id
