@@ -82,11 +82,13 @@ export type AgentLoopRunStatus = (typeof AGENT_LOOP_RUN_STATUSES)[number];
 export const AGENT_LOOP_ITERATION_STATUSES = [
   "queued",
   "running",
+  "waiting_for_human",
   "completed",
   "failed",
   "budget_stopped",
-  "waiting_for_human",
+  "escalated",
   "canceled",
+  "skipped",
 ] as const;
 
 export type AgentLoopIterationStatus =
@@ -143,6 +145,10 @@ export const agentLoops = pgTable(
       onDelete: "set null",
     }),
     owner_agent_id: uuid("owner_agent_id").references(() => agents.id, {
+      onDelete: "set null",
+    }),
+    // THINK-137 Automations: the user identity a run acts as (nullable).
+    run_as_user_id: uuid("run_as_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
     space_id: uuid("space_id").references(() => spaces.id, {
@@ -229,6 +235,9 @@ export const agentLoopVersions = pgTable(
     // Deterministic routine actions (plan 2026-07-03-004 U5). Null on
     // versions without routine actions; {actions[], agentTurn} otherwise.
     routine_actions_spec: jsonb("routine_actions_spec"),
+    // THINK-137 Automations target resolution spec (plan 2026-07-03 U1).
+    // Nullable; populated by later units.
+    target_spec: jsonb("target_spec"),
     source_metadata: jsonb("source_metadata")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -389,7 +398,7 @@ export const agentLoopIterations = pgTable(
     index("agent_loop_iterations_thread_turn_idx").on(table.thread_turn_id),
     check(
       "agent_loop_iterations_status_check",
-      sql`${table.status} IN ('queued', 'running', 'completed', 'failed', 'budget_stopped', 'waiting_for_human', 'canceled')`,
+      sql`${table.status} IN ('queued', 'running', 'waiting_for_human', 'completed', 'failed', 'budget_stopped', 'escalated', 'canceled', 'skipped')`,
     ),
   ],
 );

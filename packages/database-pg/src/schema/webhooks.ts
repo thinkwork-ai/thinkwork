@@ -25,6 +25,7 @@ import { agents } from "./agents";
 import { routines } from "./routines";
 import { connectProviders } from "./integrations";
 import { spaces } from "./spaces";
+import { agentLoops } from "./agent-loops";
 
 // ---------------------------------------------------------------------------
 // webhooks — webhook endpoint definitions
@@ -46,6 +47,10 @@ export const webhooks = pgTable(
     space_id: uuid("space_id").references(() => spaces.id),
     agent_id: uuid("agent_id").references(() => agents.id),
     routine_id: uuid("routine_id").references(() => routines.id),
+    // THINK-137 Automations: webhook bound to an Automation (nullable).
+    agent_loop_id: uuid("agent_loop_id").references(() => agentLoops.id, {
+      onDelete: "cascade",
+    }),
     connect_provider_id: uuid("connect_provider_id").references(
       () => connectProviders.id,
     ),
@@ -123,6 +128,10 @@ export const webhooksRelations = relations(webhooks, ({ one }) => ({
   routine: one(routines, {
     fields: [webhooks.routine_id],
     references: [routines.id],
+  }),
+  agentLoop: one(agentLoops, {
+    fields: [webhooks.agent_loop_id],
+    references: [agentLoops.id],
   }),
   connectProvider: one(connectProviders, {
     fields: [webhooks.connect_provider_id],
