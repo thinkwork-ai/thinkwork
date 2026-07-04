@@ -586,14 +586,25 @@ export function ChatSidebar() {
   // until the list query re-executes — the urql document cache doesn't
   // auto-invalidate on a live event. Both a window-focus return and an
   // onThreadUpdated event trigger a coalesced network-only refetch.
+  //
+  // Space sections own their scoped SpaceThreadsQuery inside
+  // SpaceThreadSection, so the refresh must reach them too — the epoch bump
+  // below is their signal. Without it a new message in a Space thread never
+  // updated the row's unread dot or timestamp until remount (found live
+  // during THINK-136 acceptance). SpacesQuery re-runs for the same reason:
+  // the Space-label unread badge is server-computed.
+  const [spaceSectionRefreshEpoch, setSpaceSectionRefreshEpoch] = useState(0);
   const refreshThreadLists = useCallback(() => {
     reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
     reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
     reexecuteSearchThreadsQuery({ requestPolicy: "network-only" });
+    reexecuteSpacesQuery({ requestPolicy: "network-only" });
+    setSpaceSectionRefreshEpoch((epoch) => epoch + 1);
   }, [
     reexecutePinnedThreadsQuery,
     reexecuteRecentThreadsQuery,
     reexecuteSearchThreadsQuery,
+    reexecuteSpacesQuery,
   ]);
 
   const threadListRefreshTimerRef = useRef<number | null>(null);
@@ -1002,6 +1013,7 @@ export function ChatSidebar() {
                 spaces={contextualSpaces}
                 spacesFetching={spacesFetching}
                 hasLoadedSpaces={spaces.length > 0}
+                refreshEpoch={spaceSectionRefreshEpoch}
                 spaceThreadsById={spaceThreadsById}
                 tenantId={tenantId}
                 pinnedThreadIdSet={pinnedThreadIdSet}
@@ -1689,6 +1701,7 @@ function SpacesListSection({
   spaces,
   spacesFetching,
   hasLoadedSpaces,
+  refreshEpoch,
   spaceThreadsById,
   tenantId,
   pinnedThreadIdSet,
@@ -1707,6 +1720,7 @@ function SpacesListSection({
   spaces: SpaceNavSummary[];
   spacesFetching: boolean;
   hasLoadedSpaces: boolean;
+  refreshEpoch: number;
   spaceThreadsById: ReadonlyMap<string, ChatThreadSummary[]>;
   tenantId?: string | null;
   pinnedThreadIdSet: ReadonlySet<string>;
@@ -1752,6 +1766,7 @@ function SpacesListSection({
             open={openSpaceIds.has(space.id)}
             onOpenChange={(open) => onSpaceOpenChange(space.id, open)}
             seedThreads={spaceThreadsById.get(space.id) ?? []}
+            refreshEpoch={refreshEpoch}
             tenantId={tenantId}
             pinnedThreadIdSet={pinnedThreadIdSet}
             pendingThreadDeletes={pendingThreadDeletes}
@@ -1817,6 +1832,7 @@ function SpaceThreadSection({
   open,
   onOpenChange,
   seedThreads,
+  refreshEpoch,
   tenantId,
   pinnedThreadIdSet,
   pendingThreadDeletes,
@@ -1831,6 +1847,7 @@ function SpaceThreadSection({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   seedThreads: ChatThreadSummary[];
+  refreshEpoch: number;
   tenantId?: string | null;
   pinnedThreadIdSet: ReadonlySet<string>;
   pendingThreadDeletes: ReadonlySet<string>;
@@ -1852,17 +1869,28 @@ function SpaceThreadSection({
   // section showed far fewer threads than the detail page listed. The bucketed
   // `seedThreads` still seed the list so a brand-new/optimistic thread appears
   // before this query refetches.
-  const [{ data: scopedData }] = useQuery<ThreadsPagedResult>({
-    query: SpaceThreadsQuery,
-    variables: {
-      tenantId: tenantId ?? "",
-      spaceId: space.id,
-      limit: SPACE_SECTION_FETCH_LIMIT,
-      offset: 0,
-    },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
+  const [{ data: scopedData }, reexecuteScopedQuery] =
+    useQuery<ThreadsPagedResult>({
+      query: SpaceThreadsQuery,
+      variables: {
+        tenantId: tenantId ?? "",
+        spaceId: space.id,
+        limit: SPACE_SECTION_FETCH_LIMIT,
+        offset: 0,
+      },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
+  // The sidebar-wide refresh (window focus + onThreadUpdated events) bumps
+  // refreshEpoch; without this refetch a new message in a Space thread never
+  // updates the row's unread dot or timestamp until remount.
+  const lastRefreshEpochRef = useRef(refreshEpoch);
+  useEffect(() => {
+    if (refreshEpoch === lastRefreshEpochRef.current) return;
+    lastRefreshEpochRef.current = refreshEpoch;
+    if (!tenantId) return;
+    reexecuteScopedQuery({ requestPolicy: "network-only" });
+  }, [refreshEpoch, reexecuteScopedQuery, tenantId]);
   const threads = useMemo(() => {
     const byId = new Map<string, ChatThreadSummary>();
     for (const thread of scopedData?.threadsPaged?.items ?? []) {
