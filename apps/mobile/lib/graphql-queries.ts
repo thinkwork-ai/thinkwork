@@ -68,6 +68,17 @@ export const AgentQuery = graphql(`
   }
 `);
 
+export const MyApprovedModelCatalogQuery = graphql(`
+  query MyApprovedModelCatalog {
+    myApprovedModelCatalog {
+      id
+      modelId
+      displayName
+      provider
+    }
+  }
+`);
+
 export const CreateAgentMutation = graphql(`
   mutation CreateAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {
     updateTenantAgent(tenantId: $tenantId, input: $input) {
