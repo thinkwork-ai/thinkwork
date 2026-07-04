@@ -5,6 +5,11 @@ type Artifact {
   tenantId: ID!
   agentId: ID
   threadId: ID
+  # Living Artifacts (THINK-145): the space a saved canvas belongs to. Null for
+  # draft (unsaved) canvases and all legacy artifacts.
+  spaceId: ID
+  # Version-chain head pointer. 0 until the canvas has been pinned/checked in.
+  headVersion: Int!
   title: String!
   type: ArtifactType!
   status: ArtifactStatus!
@@ -14,6 +19,58 @@ type Artifact {
   sourceMessageId: ID
   metadata: AWSJSON
   favoritedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  # Pinned, content-addressed version history (read-only; newest first).
+  versions: [ArtifactVersion!]!
+  # Per-widget data-source bindings — the saved tool call behind each widget.
+  bindings: [ArtifactDataBinding!]!
+}
+
+# A content-addressed, write-once pinned revision of a canvas artifact.
+type ArtifactVersion {
+  id: ID!
+  tenantId: ID!
+  artifactId: ID!
+  version: Int!
+  s3Key: String!
+  contentHash: String!
+  createdBy: ID
+  createdAt: AWSDateTime!
+}
+
+# Refresh identity of a data binding.
+enum ArtifactBindingAuthContext {
+  TENANT_MCP
+  PER_USER_OAUTH
+}
+
+# Freshness / quality state of a bound widget's data.
+enum ArtifactBindingQuality {
+  GOOD
+  STALE
+  BAD
+  SCHEMA_STALE
+}
+
+# The saved tool call behind a bound widget (KTD2). Frozen args are stored
+# unredacted server-side; provenance display passes the redaction gate.
+type ArtifactDataBinding {
+  id: ID!
+  tenantId: ID!
+  artifactId: ID!
+  partId: String!
+  elementId: String!
+  mcpServerRef: String!
+  serverName: String!
+  toolName: String!
+  frozenArgs: AWSJSON!
+  resultShapeHash: String!
+  authContext: ArtifactBindingAuthContext!
+  ownerUserId: ID
+  quality: ArtifactBindingQuality!
+  lastFetchedAt: AWSDateTime
+  lastGoodAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }

@@ -836,19 +836,56 @@ export type ApprovePiExtensionVersionInput = {
 export type Artifact = {
   __typename?: 'Artifact';
   agentId?: Maybe<Scalars['ID']['output']>;
+  bindings: Array<ArtifactDataBinding>;
   content?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   favoritedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  headVersion: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   s3Key?: Maybe<Scalars['String']['output']>;
   sourceMessageId?: Maybe<Scalars['ID']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
   status: ArtifactStatus;
   summary?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
   title: Scalars['String']['output'];
   type: ArtifactType;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  versions: Array<ArtifactVersion>;
+};
+
+export enum ArtifactBindingAuthContext {
+  PerUserOauth = 'PER_USER_OAUTH',
+  TenantMcp = 'TENANT_MCP'
+}
+
+export enum ArtifactBindingQuality {
+  Bad = 'BAD',
+  Good = 'GOOD',
+  SchemaStale = 'SCHEMA_STALE',
+  Stale = 'STALE'
+}
+
+export type ArtifactDataBinding = {
+  __typename?: 'ArtifactDataBinding';
+  artifactId: Scalars['ID']['output'];
+  authContext: ArtifactBindingAuthContext;
+  createdAt: Scalars['AWSDateTime']['output'];
+  elementId: Scalars['String']['output'];
+  frozenArgs: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  lastFetchedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastGoodAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  mcpServerRef: Scalars['String']['output'];
+  ownerUserId?: Maybe<Scalars['ID']['output']>;
+  partId: Scalars['String']['output'];
+  quality: ArtifactBindingQuality;
+  resultShapeHash: Scalars['String']['output'];
+  serverName: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  toolName: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
@@ -868,6 +905,18 @@ export enum ArtifactType {
   Plan = 'PLAN',
   Report = 'REPORT'
 }
+
+export type ArtifactVersion = {
+  __typename?: 'ArtifactVersion';
+  artifactId: Scalars['ID']['output'];
+  contentHash: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdBy?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  s3Key: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  version: Scalars['Int']['output'];
+};
 
 /**
  * Deployment-scoped auth-provider bridge configuration. Secret values are never

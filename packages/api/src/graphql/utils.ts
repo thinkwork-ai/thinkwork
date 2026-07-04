@@ -82,6 +82,8 @@ import {
   threadDependencies,
   // Artifacts
   artifacts,
+  artifactVersions,
+  artifactDataBindings,
   // Webhooks (PRD-19)
   webhooks,
   webhookIdempotency,
@@ -215,6 +217,8 @@ export {
   spaceKnowledgeBases,
   threadDependencies,
   artifacts,
+  artifactVersions,
+  artifactDataBindings,
   webhooks,
   webhookIdempotency,
   webhookDeliveries,
