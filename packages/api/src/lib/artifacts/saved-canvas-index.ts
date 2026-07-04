@@ -27,6 +27,13 @@ export interface SavedCanvasSummary {
   updatedAt: string | null;
   headVersion: number;
   status: string;
+  /**
+   * The canvas's json-render stable part id (`metadata.stablePartId`) — the id
+   * an agent must re-emit under to update THIS canvas instead of minting a
+   * stray thread-derived draft (checkout routing keys on it). Null for legacy
+   * rows written before the id was recorded.
+   */
+  stablePartId: string | null;
 }
 
 export interface WritableSpaceSummary {
@@ -46,6 +53,7 @@ function toSummary(row: {
   head_version: number | null;
   status: string | null;
   updated_at: Date | string | null;
+  stable_part_id?: string | null;
 }): SavedCanvasSummary {
   const updated = row.updated_at;
   return {
@@ -53,6 +61,7 @@ function toSummary(row: {
     title: row.title ?? "",
     headVersion: row.head_version ?? 0,
     status: row.status ?? "final",
+    stablePartId: row.stable_part_id ?? null,
     updatedAt:
       updated instanceof Date
         ? updated.toISOString()
@@ -61,6 +70,18 @@ function toSummary(row: {
           : null,
   };
 }
+
+/** Column set shared by the summary queries (includes the stable part id). */
+const SUMMARY_COLUMNS = {
+  id: artifacts.id,
+  title: artifacts.title,
+  head_version: artifacts.head_version,
+  status: artifacts.status,
+  updated_at: artifacts.updated_at,
+  stable_part_id: sql<string | null>`${artifacts.metadata}->>'stablePartId'`.as(
+    "stable_part_id",
+  ),
+};
 
 /**
  * SAVED (status 'final') canvases in a space, most-recently-updated first.
@@ -72,13 +93,7 @@ export async function listSavedCanvasesInSpace(
   limit = 100,
 ): Promise<SavedCanvasSummary[]> {
   const rows = await db
-    .select({
-      id: artifacts.id,
-      title: artifacts.title,
-      head_version: artifacts.head_version,
-      status: artifacts.status,
-      updated_at: artifacts.updated_at,
-    })
+    .select(SUMMARY_COLUMNS)
     .from(artifacts)
     .where(
       and(
@@ -94,22 +109,41 @@ export async function listSavedCanvasesInSpace(
 }
 
 /**
- * The most-recent canvas artifact materialized in a thread — draft (born-as-
- * artifact) or checked-out head. This is the `save_canvas` target when the
- * model names no explicit artifact. Null when the thread has no canvas.
+ * The most-recent canvas artifact materialized in a thread — checked-out head
+ * or draft (born-as-artifact). This is the `save_canvas` / `refresh` target
+ * when the model names no explicit artifact. Null when the thread has no
+ * canvas.
+ *
+ * Preference order (THINK-145 seam fix): a canvas CHECKED OUT into this thread
+ * (`metadata.checkouts` contains `{threadId}`) wins over a thread-derived
+ * draft. Rationale: when a saved canvas is open in the thread, any stray draft
+ * that exists alongside it is almost always an accidental new-part-id emission
+ * — preferring the draft made `save_canvas` persist the stray and orphan the
+ * user's real canvas. The checked-out canvas lives in ITS ORIGINAL thread's
+ * `thread_id`, so the thread-derived query never sees it; the checkout record
+ * is the only linkage.
  */
 export async function getThreadCurrentCanvas(
   tenantId: string,
   threadId: string,
 ): Promise<SavedCanvasSummary | null> {
+  const checkoutMatch = JSON.stringify([{ threadId }]);
+  const [checkedOut] = await db
+    .select(SUMMARY_COLUMNS)
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.tenant_id, tenantId),
+        sql`coalesce(${artifacts.metadata}->'checkouts', '[]'::jsonb) @> ${checkoutMatch}::jsonb`,
+        isCanvasKindPredicate(),
+      ),
+    )
+    .orderBy(desc(artifacts.updated_at))
+    .limit(1);
+  if (checkedOut) return toSummary(checkedOut);
+
   const [row] = await db
-    .select({
-      id: artifacts.id,
-      title: artifacts.title,
-      head_version: artifacts.head_version,
-      status: artifacts.status,
-      updated_at: artifacts.updated_at,
-    })
+    .select(SUMMARY_COLUMNS)
     .from(artifacts)
     .where(
       and(

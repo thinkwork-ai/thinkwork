@@ -90,7 +90,10 @@ enum CanvasRefreshOutcome {
   SKIPPED
 }
 
-# One binding's result inside a CanvasRefreshResult.
+# One binding's result inside a CanvasRefreshResult. `serverName`/`toolName`
+# identify the saved source tool call so a NEEDS_USER outcome is actionable
+# in-turn: the agent (acting for the credential owner) can re-run that tool
+# and re-emit the part instead of just reporting "needs the owner".
 type CanvasRefreshBindingResult {
   bindingId: ID!
   partId: String!
@@ -98,6 +101,8 @@ type CanvasRefreshBindingResult {
   outcome: CanvasRefreshOutcome!
   quality: ArtifactBindingQuality!
   reason: String
+  serverName: String
+  toolName: String
 }
 
 # Result of a refreshCanvasData mutation. `dispatched` is false when the refresh
@@ -136,13 +141,16 @@ type ArtifactDataBinding {
 
 # A saved (or the current thread's draft) canvas summary for agent parity
 # (THINK-145 U9). `status` is draft | final | superseded; `headVersion` is 0
-# until the canvas has been pinned/checked in.
+# until the canvas has been pinned/checked in. `stablePartId` is the canvas's
+# json-render part id — the id the agent must re-emit under to update THIS
+# canvas rather than minting a stray draft (checkout routing keys on it).
 type CanvasSummary {
   artifactId: ID!
   title: String!
   updatedAt: AWSDateTime
   headVersion: Int!
   status: String!
+  stablePartId: String
 }
 
 # A space the acting user may save a canvas into (member-or-above role).
