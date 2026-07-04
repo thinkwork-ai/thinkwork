@@ -117,6 +117,7 @@ describe("admin-ops-mcp Lambda", () => {
     global.fetch = originalFetch;
     delete process.env.ROUTINES_AGENT_TOOLS_ENABLED;
     delete process.env.WORKFLOWS_AGENT_TOOLS_ENABLED;
+    delete process.env.AUTOMATIONS_AGENT_TOOLS_ENABLED;
   });
 
   it("rejects non-POST methods", async () => {
@@ -245,6 +246,10 @@ describe("admin-ops-mcp Lambda", () => {
       "routine_repo_commit",
       "routine_run_fixtures",
       "routine_runs",
+      // Read-only Automation agent tools (THINK-137 U9, R15). Absent names
+      // here = tools silently never reach the model.
+      "automations_list",
+      "automation_get",
     ];
     for (const n of mustHave) {
       expect(names, `missing tool: ${n}`).toContain(n);
@@ -567,6 +572,61 @@ describe("admin-ops-mcp Lambda", () => {
     expect(payload).toMatchObject({
       error: "not_yet_enabled",
       tool: "routine_invoke",
+    });
+  });
+
+  it("automations_list stays inert when AUTOMATIONS_AGENT_TOOLS_ENABLED is disabled", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 50,
+          method: "tools/call",
+          params: { name: "automations_list", arguments: {} },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toMatchObject({
+      error: "not_yet_enabled",
+      tool: "automations_list",
+    });
+  });
+
+  it("automation_get stays inert when AUTOMATIONS_AGENT_TOOLS_ENABLED is disabled", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 51,
+          method: "tools/call",
+          params: {
+            name: "automation_get",
+            arguments: { automationId: "loop-uuid" },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toMatchObject({
+      error: "not_yet_enabled",
+      tool: "automation_get",
     });
   });
 

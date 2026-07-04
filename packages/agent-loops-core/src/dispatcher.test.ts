@@ -174,6 +174,53 @@ describe("dispatchAgentLoop", () => {
     });
   });
 
+  it("carries webhook delivery metadata + run-as actor into the wakeup payload for webhook triggers (R16, KTD4)", async () => {
+    const ledger = fakeLedger();
+
+    await dispatchAgentLoop(
+      baseInput({
+        trigger: {
+          family: "webhook",
+          source: "webhook:lastmile",
+          actorType: "user",
+          actorId: "run-as-user-1",
+          idempotencyKey: "webhook:evt-1",
+          webhookDelivery: {
+            source: "lastmile",
+            eventId: "evt-1",
+            payloadPointer: "s3://deliveries/evt-1.json",
+          },
+        },
+      }),
+      ledger,
+    );
+
+    // Single seam: the delivery block rides the agentLoop payload built by
+    // buildAgentLoopWakeupPayload (shared by start + deferred continuation +
+    // repair), and the run-as actor is threaded onto the enqueue request.
+    expect(ledger.wakeups[0]).toMatchObject({
+      requestedByActorType: "user",
+      requestedByActorId: "run-as-user-1",
+      payload: {
+        agentLoop: {
+          triggerFamily: "webhook",
+          triggerSource: "webhook:lastmile",
+          webhookDelivery: {
+            source: "lastmile",
+            eventId: "evt-1",
+            payloadPointer: "s3://deliveries/evt-1.json",
+          },
+        },
+      },
+    });
+  });
+
+  it("leaves webhookDelivery null on the wakeup payload for non-webhook triggers (inert)", async () => {
+    const ledger = fakeLedger();
+    await dispatchAgentLoop(baseInput(), ledger);
+    expect(ledger.wakeups[0].payload.agentLoop.webhookDelivery).toBeNull();
+  });
+
   it("reuses an existing run for duplicate idempotency keys", async () => {
     const ledger = fakeLedger();
     vi.mocked(ledger.findRunByIdempotencyKey).mockResolvedValueOnce({

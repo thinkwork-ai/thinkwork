@@ -38,6 +38,7 @@ import {
   runRoutineFixtures,
   type CommitRoutineInput,
 } from "./routine-repo-tools.js";
+import { getAutomation, listAutomations } from "./automations-tools.js";
 import {
   AdminOpsError,
   createClient,
@@ -875,6 +876,72 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
         });
       },
     },
+
+    // -------------------------------------------------------------------
+    // Automations — read-only agent view (THINK-137 U9, R15). Both tools
+    // are inert until AUTOMATIONS_AGENT_TOOLS_ENABLED=true on the runtime
+    // (same ship-inert pattern as the routine tools). Tenant-scoped on
+    // every query; no create/update/trigger tools (deferred).
+    // -------------------------------------------------------------------
+    {
+      name: "automations_list",
+      description:
+        "READ-ONLY. List the tenant's Automations (agent loops): id, name, enabled, trigger family+source, target kind+label, run-as user, space, and last run {id,status,at}. Tenant-scoped. Disabled until AUTOMATIONS_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description:
+              "Tenant UUID (omit when the admin key already pins the tenant).",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!automationsAgentToolsEnabled()) {
+          return notYetEnabled("automations_list");
+        }
+        const tenantId = requireTenantId(clientFor(args));
+        return listAutomations({ tenantId });
+      },
+    },
+    {
+      name: "automation_get",
+      description:
+        "READ-ONLY. Fetch one Automation (agent loop) by id: the list shape plus description, current-version target detail, and recentRuns (last ~10: id, status, triggerFamily, triggerSource, createdAt, finishedAt, errorCode, errorMessage). Tenant-scoped. Disabled until AUTOMATIONS_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (optional with a pinned key).",
+          },
+          automationId: {
+            type: "string",
+            description: "Automation (agent loop) UUID.",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["automationId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!automationsAgentToolsEnabled()) {
+          return notYetEnabled("automation_get");
+        }
+        const a = args as { automationId: string };
+        const tenantId = requireTenantId(clientFor(args));
+        return getAutomation({ tenantId, automationId: a.automationId });
+      },
+    },
   ];
 }
 
@@ -902,6 +969,13 @@ function workflowsAgentToolsEnabled(): boolean {
   );
 }
 
+// THINK-137 U9 (R15): read-only Automation tools gate. Mirrors the routine
+// gate exactly (getConfig() === "true"), landed in the same runtime
+// config_env map (handlers.tf).
+function automationsAgentToolsEnabled(): boolean {
+  return getConfig("AUTOMATIONS_AGENT_TOOLS_ENABLED") === "true";
+}
+
 function notYetEnabled(toolName: string): {
   error: "not_yet_enabled";
   tool: string;
@@ -910,7 +984,7 @@ function notYetEnabled(toolName: string): {
   return {
     error: "not_yet_enabled",
     tool: toolName,
-    message: `${toolName} is defined but disabled — flip WORKFLOWS_AGENT_TOOLS_ENABLED=true or ROUTINES_AGENT_TOOLS_ENABLED=true on the runtime to activate.`,
+    message: `${toolName} is defined but disabled — flip its agent-tools env flag (e.g. WORKFLOWS_AGENT_TOOLS_ENABLED, ROUTINES_AGENT_TOOLS_ENABLED, or AUTOMATIONS_AGENT_TOOLS_ENABLED) to "true" on the runtime to activate.`,
   };
 }
 

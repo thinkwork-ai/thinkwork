@@ -67,6 +67,22 @@ export interface DispatchableAgentLoopVersion {
   routineActionsSpec?: RoutineActionsSpec | null;
 }
 
+/**
+ * Webhook delivery provenance carried on a webhook-triggered run (THINK-137
+ * U9 R16, KTD4 — the SINGLE seam). Populated by U6 only when
+ * `trigger.family === 'webhook'`; passed verbatim into the wakeup payload's
+ * `agentLoop` block so the agent turn can attribute the delivered event.
+ * Absent/null for every other trigger family (inert).
+ */
+export interface AgentLoopWebhookDelivery {
+  /** Delivery source identifier (e.g. the webhook integration slug). */
+  source: string;
+  /** Provider/delivery event id, when the source supplies one. */
+  eventId?: string | null;
+  /** Pointer (e.g. S3 key / delivery-row id) to the retained raw payload. */
+  payloadPointer?: string | null;
+}
+
 export interface AgentLoopTriggerContext {
   family: AgentLoopDispatchTriggerFamily;
   source: string;
@@ -78,6 +94,10 @@ export interface AgentLoopTriggerContext {
   idempotencyKey?: string | null;
   correlationId?: string | null;
   inputSummary?: Record<string, unknown> | null;
+  /** Webhook delivery provenance (R16). Enters here for webhook triggers and
+   * flows through buildAgentLoopWakeupPayload — the only seam that carries it
+   * onto the wire. U6 populates it; inert (undefined/null) otherwise. */
+  webhookDelivery?: AgentLoopWebhookDelivery | null;
 }
 
 export interface AgentLoopScheduleGate {
@@ -195,6 +215,10 @@ export interface AgentLoopWakeupPayload {
      * Automations). Present on the initial AND resume payloads so the
      * agent always sees what the deterministic steps produced. */
     routineActionResults?: RoutineActionResult[] | null;
+    /** Webhook delivery provenance for webhook-triggered runs (R16, KTD4).
+     * Carried from the trigger context on both the start and resume payloads;
+     * null for non-webhook triggers. */
+    webhookDelivery?: AgentLoopWebhookDelivery | null;
   };
 }
 
@@ -346,6 +370,7 @@ export function buildAgentLoopWakeupPayload(input: {
       judgeMode: input.version.judgeSpec.mode,
       loopPolicy: input.version.loopPolicy,
       routineActionResults: input.routineActionResults ?? null,
+      webhookDelivery: input.trigger.webhookDelivery ?? null,
     },
   };
 }
