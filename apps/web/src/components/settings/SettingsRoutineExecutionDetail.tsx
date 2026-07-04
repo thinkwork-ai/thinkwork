@@ -28,6 +28,7 @@ import {
   normalizeRoutineExecutionManifest,
   parseAwsJson,
 } from "@/components/routines/routineExecutionManifest";
+import { GitRoutineRunPanel } from "@/components/routines/GitRoutineRunPanel";
 
 const TERMINAL_STATUSES = new Set([
   "succeeded",
@@ -139,6 +140,33 @@ export function RoutineExecutionDetailView({
               "This execution could not be loaded, or it does not belong to this routine."}
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // git_python executions have no Step Functions graph — render the
+  // SHA-centric run panel instead (plan 2026-07-03-004 U9); step_functions
+  // rows keep the graph view unchanged.
+  if (routine && (routine as { engine?: string }).engine === "git_python") {
+    return (
+      <div
+        className={`flex h-full min-h-0 w-full flex-col overflow-y-auto ${className}`}
+      >
+        {header === "routine" ? (
+          <RoutineExecutionHeaderPublisher
+            routineId={routineId}
+            executionId={executionId}
+            routineName={routine?.name}
+            status={execution.status}
+          />
+        ) : null}
+        <GitRoutineRunPanel
+          execution={execution}
+          routine={routine as never}
+          onRoutineChanged={() =>
+            refetchExecution({ requestPolicy: "network-only" })
+          }
+        />
       </div>
     );
   }

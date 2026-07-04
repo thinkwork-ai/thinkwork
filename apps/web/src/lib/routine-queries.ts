@@ -207,6 +207,9 @@ export const RoutineExecutionDetailQuery = graphql(`
       errorCode
       errorMessage
       totalLlmCostUsdCents
+      commitSha
+      validatedSha
+      cacheServed
       stepEvents {
         id
         nodeId
@@ -231,6 +234,10 @@ export const RoutineExecutionDetailQuery = graphql(`
         description
         currentVersion
         documentationMd
+        engine
+        status
+        validatedSha
+        disabledReason
       }
       aslVersion {
         id
@@ -240,6 +247,40 @@ export const RoutineExecutionDetailQuery = graphql(`
         stepManifestJson
       }
       createdAt
+    }
+  }
+`);
+
+// Repair-ladder history for git_python routines (deterministic routines
+// v1, plan 2026-07-03-004 U9). Backs the visible repair log (R12).
+export const RoutineRepairEventsQuery = graphql(`
+  query RoutineRepairEvents($routineId: ID!, $limit: Int) {
+    routineRepairEvents(routineId: $routineId, limit: $limit) {
+      id
+      routineId
+      executionId
+      eventType
+      threadRef
+      fromSha
+      toSha
+      gateResult
+      envelopeVerdict
+      budgetSnapshot
+      detailJson
+      createdAt
+    }
+  }
+`);
+
+// Human-only re-enable for budget-disabled routines (plan 2026-07-03-004
+// U9, R13). Setting status back to active clears disabled_reason
+// server-side.
+export const UpdateRoutineStatusMutation = graphql(`
+  mutation UpdateRoutineStatus($id: ID!, $input: UpdateRoutineInput!) {
+    updateRoutine(id: $id, input: $input) {
+      id
+      status
+      disabledReason
     }
   }
 `);
