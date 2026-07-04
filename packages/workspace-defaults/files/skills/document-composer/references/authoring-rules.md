@@ -58,12 +58,50 @@ quality bar, not decoration.
   legible: no stroke passes through a text label; arrow labels sit at the
   arrow's midpoint; differentiate shapes by geometry first, fill second; use
   `var(--...)` colors so diagrams follow the theme.
-- **Charts are inline SVG too** — simple bars/lines with value labels. No
-  charting libraries (scriptless).
 - **A visual complements prose, never replaces it** — every relationship a
   diagram shows must also be stated in text.
 - SVG paint-server references like `fill="url(#gradient)"` are fine —
   same-document `#refs` pass validation.
+
+## Charts (static SVG, publication grade)
+
+Charts are inline SVG rendered by you at composition time — the document tier
+is scriptless, so there is no runtime charting library and no tooltip layer.
+That is not a license for lower quality: follow this spec (the report plate's
+chart is the exemplar) and the result reads like a designed publication chart.
+
+**Form first, color last.**
+
+1. **Pick the form by the data's job.** Magnitude comparison → columns/bars;
+   change over time → a 2px line; a single headline number → a stat tile, not
+   a chart; parts of a whole at 2-3 parts → stacked bar (never a pie with more
+   than 3 slices). If the "chart" would have one value, it is a stat tile.
+2. **One axis, always.** Never two y-scales on one chart — two measures of
+   different scale become two charts or an indexed common base.
+3. **Color by job.** One series = one hue (`var(--accent)`), and NO legend —
+   the chart title names the series. 2-4 series = fixed hue order
+   (`--accent`, `--info`, `--warn`, `--bad`) with a legend; never recolor a
+   series based on its rank or value. More than ~4 series does not belong in
+   a document chart — aggregate or split into small multiples.
+
+**Anatomy (all values in the plate):**
+
+- Chart title (12px, semibold, `--ink`) + one-line qualifier (10.5px,
+  `--muted`) inside the SVG.
+- Hairline solid gridlines in `var(--line)` at clean-number ticks
+  (0/10/20/30 — never 0/13/26); y-tick labels in `--muted`, right-aligned.
+- A solid baseline at zero in `var(--muted)`. Columns grow FROM the baseline
+  (never floating), square at the base, 4px rounded data-end at the top,
+  **≤24px thick** — let the band's leftover width be air.
+- **Text wears text tokens, never the series color**: values and labels in
+  `--ink`/`--muted`; identity comes from the colored mark, not colored text.
+- **Label selectively** — the extreme or the endpoint, not every mark. The
+  axis and the data table carry the rest.
+- **Pair every chart with a `<details>` data table** of the plotted values —
+  the static medium has no tooltips, so the table is the drill-down (and the
+  accessibility fallback).
+- The figcaption states the *takeaway* ("[X] doubled after [event]"), never a
+  description of the chart type.
 
 ## Machine navigability
 

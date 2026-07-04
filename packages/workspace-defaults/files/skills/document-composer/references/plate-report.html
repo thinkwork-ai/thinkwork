@@ -109,28 +109,60 @@ svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-ser
 </article>
 
 <figure>
-<svg viewBox="0 0 720 180" role="img" aria-label="Example bar chart comparing four categories">
-<g font-size="11" fill="var(--muted)">
-<text x="60" y="150" text-anchor="middle">[Q1]</text>
-<text x="230" y="150" text-anchor="middle">[Q2]</text>
-<text x="400" y="150" text-anchor="middle">[Q3]</text>
-<text x="570" y="150" text-anchor="middle">[Q4]</text>
+<svg viewBox="0 0 720 250" role="img" aria-label="Column chart: [metric] by quarter, rising from 12 in Q1 to 35 in Q4">
+<!-- Chart anatomy (see authoring-rules.md): recessive hairline gridlines with
+     clean-number ticks; a solid baseline; single-hue columns (one series = one
+     color, no legend) capped at 24px wide with 4px rounded data-ends and square
+     baselines; text wears text tokens, never the series color; only the extreme
+     is direct-labeled — the axis carries the rest. -->
+<text x="12" y="18" font-size="12" font-weight="600" fill="var(--ink)">[Metric] by quarter</text>
+<text x="12" y="33" font-size="10.5" fill="var(--muted)">[Unit or qualifier — what one column measures]</text>
+<!-- gridlines + clean y ticks (0-40 in steps of 10) -->
+<g stroke="var(--line)" stroke-width="1">
+<line x1="48" y1="60" x2="708" y2="60"/>
+<line x1="48" y1="100" x2="708" y2="100"/>
+<line x1="48" y1="140" x2="708" y2="140"/>
+<line x1="48" y1="180" x2="708" y2="180"/>
 </g>
-<g>
-<rect x="20" y="90" width="80" height="45" rx="3" fill="var(--info-soft)" stroke="var(--info)"/>
-<rect x="190" y="70" width="80" height="65" rx="3" fill="var(--info-soft)" stroke="var(--info)"/>
-<rect x="360" y="45" width="80" height="90" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
-<rect x="530" y="25" width="80" height="110" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/>
+<g font-size="10" fill="var(--muted)" text-anchor="end">
+<text x="42" y="63">40</text>
+<text x="42" y="103">30</text>
+<text x="42" y="143">20</text>
+<text x="42" y="183">10</text>
+<text x="42" y="223">0</text>
 </g>
-<g font-size="12" fill="var(--ink)">
-<text x="60" y="83" text-anchor="middle">[12]</text>
-<text x="230" y="63" text-anchor="middle">[18]</text>
-<text x="400" y="38" text-anchor="middle">[27]</text>
-<text x="570" y="18" text-anchor="middle">[35]</text>
+<!-- columns: value v maps to height v*4; top y = 220 - v*4 -->
+<g fill="var(--accent)">
+<path d="M126,220 v-44 q0,-4 4,-4 h16 q4,0 4,4 v44 z"/>
+<path d="M291,220 v-68 q0,-4 4,-4 h16 q4,0 4,4 v68 z"/>
+<path d="M456,220 v-104 q0,-4 4,-4 h16 q4,0 4,4 v104 z"/>
+<path d="M621,220 v-136 q0,-4 4,-4 h16 q4,0 4,4 v136 z"/>
+</g>
+<!-- baseline -->
+<line x1="48" y1="220" x2="708" y2="220" stroke="var(--muted)" stroke-width="1"/>
+<!-- direct label on the extreme only; the axis carries the rest -->
+<text x="633" y="72" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="middle">[35]</text>
+<!-- x category labels -->
+<g font-size="10.5" fill="var(--muted)" text-anchor="middle">
+<text x="138" y="238">[Q1]</text>
+<text x="303" y="238">[Q2]</text>
+<text x="468" y="238">[Q3]</text>
+<text x="633" y="238">[Q4]</text>
 </g>
 </svg>
-<figcaption>Charts are simple inline SVG with value labels — no charting libraries. Replace with real data.</figcaption>
+<figcaption>[One sentence stating the takeaway the chart shows — an interpretation, not a description.]</figcaption>
 </figure>
+
+<details>
+<summary>Chart data</summary>
+<table>
+<tr><th>Quarter</th><th>[Metric]</th></tr>
+<tr><td>[Q1]</td><td>[12]</td></tr>
+<tr><td>[Q2]</td><td>[18]</td></tr>
+<tr><td>[Q3]</td><td>[27]</td></tr>
+<tr><td>[Q4]</td><td>[35]</td></tr>
+</table>
+</details>
 
 <h2 id="details">Details</h2>
 <table>
