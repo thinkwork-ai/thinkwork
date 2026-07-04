@@ -16,7 +16,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { and, artifacts, db, eq } from "../../utils.js";
-import { requireTenantMember } from "../core/authz.js";
+import { requireActingTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   assertCanvasAccess,
@@ -61,7 +61,7 @@ export const saveCanvas = async (
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantMember(ctx, row.tenant_id);
+  await requireActingTenantMember(ctx, row.tenant_id);
   if (row.tenant_id !== caller.tenantId) {
     throw new GraphQLError("Canvas belongs to a different tenant", {
       extensions: { code: "FORBIDDEN" },
@@ -130,10 +130,9 @@ export const saveCanvas = async (
     );
   }
 
-  throw new GraphQLError(
-    `Canvas cannot be saved from status '${row.status}'`,
-    { extensions: { code: "BAD_USER_INPUT" } },
-  );
+  throw new GraphQLError(`Canvas cannot be saved from status '${row.status}'`, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
 };
 
 function requiredString(value: unknown, field: string): string {

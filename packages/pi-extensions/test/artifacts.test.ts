@@ -18,6 +18,8 @@ import {
 import {
   ARTIFACTS_TOOL_NAMES,
   createArtifactsExtension,
+  LIST_CANVASES_TOOL_NAME,
+  SAVE_CANVAS_TOOL_NAME,
   resolveCanvasByName,
   resolveSaveSpaceId,
 } from "../src/artifacts.js";
@@ -349,5 +351,74 @@ describe("createArtifactsExtension", () => {
     const result = await run(listTool, {});
     expect((result as { details: { ok: boolean } }).details.ok).toBe(false);
     expect(textOf(result as never)).toContain("Error");
+  });
+
+  // KTD8 observability: the friendly tool message hides the real
+  // ApiCanvasProviderError (e.g. "Tenant membership required"). The onError
+  // sink is what makes that underlying failure observable — the server wires it
+  // to structured logging (event canvas_tool_error). Without this plumbing the
+  // dead-tool root cause was invisible.
+  it("reports a provider failure to onError with the failing phase", async () => {
+    const errors: Array<{ error: unknown; phase: string }> = [];
+    const { api, tools } = makeFakeApi();
+    const boom = new Error("Canvas API error: Tenant membership required");
+    const provider: CanvasProvider = {
+      async context() {
+        throw boom;
+      },
+      async save() {
+        throw boom;
+      },
+      async checkout() {
+        throw boom;
+      },
+      async refresh() {
+        throw boom;
+      },
+    };
+    toExtensionFactory(
+      createArtifactsExtension({
+        onError: (error, ctx) => errors.push({ error, phase: ctx.phase }),
+      }),
+      { canvas: provider },
+    )(api);
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    const result = await run(byName.get(LIST_CANVASES_TOOL_NAME)!, {});
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.phase).toBe("list_canvases.context");
+    expect(errors[0]!.error).toBe(boom);
+    // The tool still returns an explicit error result rather than throwing.
+    expect((result as { details: { ok: boolean } }).details.ok).toBe(false);
+  });
+
+  it("reports a save-phase failure distinctly from a context-phase failure", async () => {
+    const errors: Array<{ phase: string }> = [];
+    const { api, tools } = makeFakeApi();
+    const provider: CanvasProvider = {
+      // Context succeeds so we reach the save call, then save throws.
+      async context() {
+        return baseContext();
+      },
+      async save() {
+        throw new Error(
+          "Canvas API error: You are not a member of the target space",
+        );
+      },
+      async checkout() {
+        throw new Error("unused");
+      },
+      async refresh() {
+        throw new Error("unused");
+      },
+    };
+    toExtensionFactory(
+      createArtifactsExtension({
+        onError: (_error, ctx) => errors.push({ phase: ctx.phase }),
+      }),
+      { canvas: provider },
+    )(api);
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    await run(byName.get(SAVE_CANVAS_TOOL_NAME)!, { title: "My dashboard" });
+    expect(errors.map((e) => e.phase)).toEqual(["save_canvas.save"]);
   });
 });
