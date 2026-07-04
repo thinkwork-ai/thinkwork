@@ -24,7 +24,6 @@ import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   buildCanvasDataBinding,
   extractEmitJsonRenderToolPart,
-  listMcpBindingCandidates,
   threadJsonRenderActivityEvent,
   threadJsonRenderStateSnapshotActivityEvent,
   wrapEmitToolWithBindingFeedback,
@@ -781,7 +780,9 @@ export async function runAgentLoop(
   const customTools = args.tools.map((tool) =>
     tool.name === EMIT_JSON_RENDER_UI_TOOL_NAME
       ? toToolDefinition(
-          wrapEmitToolWithBindingFeedback(tool, () => toolInvocations),
+          wrapEmitToolWithBindingFeedback(tool, () => toolInvocations, {
+            log: (entry) => deps.log?.({ ...entry, threadId: args.threadId }),
+          }),
         )
       : toToolDefinition(tool),
   );
@@ -959,29 +960,17 @@ export async function runAgentLoop(
           const sourceToolCallId = recordValue(
             existing?.args,
           )?.sourceToolCallId;
+          // Binding enforcement (THINK-145): the emit wrapper already gated this
+          // call — any emit that reaches here was ACCEPTED (bound, explicit
+          // "none", or the post-rejection loop-guard) and its unbound-emit
+          // observability was logged there. Rejected emits carry no part and
+          // never reach this branch, so this recompute only re-derives the
+          // descriptor the loop rides on the activity payload.
           const binding = buildCanvasDataBinding({
             partId: jsonRenderPart.id,
             sourceToolCallId,
             toolInvocations,
           });
-          // Observability (THINK-145): the previously silent unbound path. When
-          // an emit records no binding but bindable MCP calls exist this turn,
-          // the model likely omitted/mis-referenced sourceToolCallId — surface
-          // it so unbound rates are countable. The emit tool result already
-          // hands the model the candidate ids to self-correct.
-          if (!binding) {
-            const candidateCount =
-              listMcpBindingCandidates(toolInvocations).length;
-            if (candidateCount > 0) {
-              deps.log?.({
-                level: "warn",
-                event: "json_render_unbound_emit",
-                threadId: args.threadId,
-                partId: jsonRenderPart.id,
-                candidateCount,
-              });
-            }
-          }
           // Additive AG-UI emission (Living Artifacts U3, KTD1/R1): keep the
           // legacy ui_message_chunk event flowing untouched AND emit a
           // per-part STATE_SNAPSHOT event. The web fold handles both kinds and

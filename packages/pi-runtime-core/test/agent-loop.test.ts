@@ -854,7 +854,12 @@ describe("runAgentLoop", () => {
     );
   });
 
-  it("warns json_render_unbound_emit when an emit records no binding but MCP candidates exist (THINK-145)", async () => {
+  it("emits an accepted (part-bearing) emit event without re-logging unbound observability — enforcement + logging live in the emit wrapper (THINK-145)", async () => {
+    // Binding enforcement moved into wrapEmitToolWithBindingFeedback: only
+    // ACCEPTED emits carry a part into the tool_execution_end handler, and the
+    // wrapper already logged any unbound-emit observability. This synthetic
+    // event bypasses the wrapper, so the loop must simply emit the part (never
+    // lose it) and must NOT re-log json_render_unbound_emit itself.
     const fixture = createTaskReviewJsonRenderFixture();
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
@@ -880,7 +885,7 @@ describe("runAgentLoop", () => {
           },
           isError: false,
         } as AgentSessionEvent,
-        // Emit WITHOUT sourceToolCallId → unbound while a candidate exists.
+        // Accepted emit (part present) without sourceToolCallId.
         {
           type: "tool_execution_start",
           toolCallId: "c1",
@@ -904,20 +909,21 @@ describe("runAgentLoop", () => {
       event: string;
       [key: string]: unknown;
     }> = [];
+    const emitted: Array<{ eventType: string }> = [];
 
     await runAgentLoop(baseArgs(), {
       openSession: async () => ({ session, modelId: "m" }),
       log: (entry) => logs.push(entry),
+      emitActivity: (event) => emitted.push(event),
     });
 
-    expect(logs).toContainEqual(
-      expect.objectContaining({
-        level: "warn",
-        event: "json_render_unbound_emit",
-        threadId: "thread-1",
-        partId: fixture.id,
-        candidateCount: 1,
-      }),
+    // The accepted part is emitted (not lost).
+    expect(emitted).toContainEqual(
+      expect.objectContaining({ eventType: "ui_message_chunk" }),
+    );
+    // The loop no longer owns unbound-emit logging (it lives in the wrapper).
+    expect(logs).not.toContainEqual(
+      expect.objectContaining({ event: "json_render_unbound_emit" }),
     );
   });
 
