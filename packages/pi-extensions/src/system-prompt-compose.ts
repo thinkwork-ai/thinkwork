@@ -1,8 +1,21 @@
 import {
   threadJsonRenderComponentNames,
+  threadJsonRenderDomainComponentDefinitions,
   threadJsonRenderDomainComponentNames,
   threadJsonRenderPrimitiveComponentNames,
 } from "@thinkwork/thread-json-render";
+
+// Per-domain-component usage lines for the Generated Thread UI policy. The
+// catalog's zod prop schemas are strict, so the model MUST see each
+// component's description + a valid example — names alone caused live
+// validator rejections (JSON_RENDER_UNKNOWN_KEY/SPEC_INVALID) and silent
+// prose fallbacks the first day `chart`/`table` shipped.
+const jsonRenderDomainComponentUsage = Object.entries(
+  threadJsonRenderDomainComponentDefinitions,
+).map(
+  ([name, def]) =>
+    `  - \`${name}\` — ${def.description} Example props: ${JSON.stringify(def.example)}`,
+);
 
 export interface PiInvocationPayload {
   agent_name?: unknown;
@@ -141,8 +154,9 @@ function buildRuntimeToolPolicy(
         '- For Work Item approval actions, use durable action params `target: "work_item_status"`, `workItemId`, and either `statusCategory` or `statusId`; the button label/kind does not decide the status by itself.',
         "- Display-only generated UI can omit `durableActions`; do not add action descriptors unless a user click should perform a bounded ThinkWork action.",
         "- If the generated UI would need unsupported components or open-ended custom behavior, answer in normal prose instead of emitting UI.",
-        `- ThinkWork domain components: ${threadJsonRenderDomainComponentNames.join(", ")}.`,
-        `- Upstream shadcn primitive components: ${threadJsonRenderPrimitiveComponentNames.join(", ")}.`,
+        `- ThinkWork domain components (match each example's prop shape exactly — prop schemas are strict and unknown keys are rejected):`,
+        ...jsonRenderDomainComponentUsage,
+        `- Upstream primitive components: ${threadJsonRenderPrimitiveComponentNames.join(", ")}.`,
         `- Total allowed json-render components: ${threadJsonRenderComponentNames.length}.`,
       ]
     : [];
