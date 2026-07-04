@@ -102,8 +102,23 @@ type AgentLoop {
   costPerAcceptedRunUsdCents: Int
   versions: [AgentLoopVersion!]!
   runs(limit: Int, cursor: String, status: AgentLoopRunStatus): [AgentLoopRun!]!
+  # THINK-137 U6 (R6): the inbound webhook endpoint minted for a webhook-trigger
+  # automation. Null when the automation has no bound webhook row (non-webhook
+  # triggers, or pre-U6 rows). The UI renders the endpoint URL as
+  # `<api-base><path>` and copies the token.
+  webhookEndpoint: AgentLoopWebhookEndpoint
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
+}
+
+# The inbound webhook endpoint bound to a webhook-trigger Automation (R6).
+type AgentLoopWebhookEndpoint {
+  webhookId: ID!
+  token: String!
+  # Path to POST deliveries to, relative to the webhooks API host: `/webhooks/<token>`.
+  path: String!
+  # Mirrors the automation's enabled state — a disabled endpoint 404s inbound.
+  enabled: Boolean!
 }
 
 type AgentLoopVersion {

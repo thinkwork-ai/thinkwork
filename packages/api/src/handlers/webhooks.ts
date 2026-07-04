@@ -30,6 +30,7 @@ import {
 import { db } from "../lib/db.js";
 import { json, error, notFound } from "../lib/response.js";
 import { startSpaceWebhookThread } from "../lib/spaces/space-webhook-thread-start.js";
+import { dispatchAutomationWebhook } from "../lib/webhooks/automation-webhook-dispatch.js";
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter (sliding window, resets on cold start)
@@ -289,9 +290,15 @@ async function triggerByToken(
     };
   }
 
-  // 3. Idempotency check
+  // 3. Idempotency check.
+  //
+  // The automation branch (THINK-137 U6) does NOT use webhook_idempotency: its
+  // load-bearing idempotency is the dispatcher's derived key on agent_loop_runs
+  // (header-when-present, else a hash of webhook id + body). The legacy agent /
+  // routine branches keep the header-only skip-when-absent behavior (U8 retires
+  // them).
   const idempotencyKey = headers["x-idempotency-key"];
-  if (idempotencyKey) {
+  if (targetType !== "automation" && idempotencyKey) {
     const [existing] = await db
       .select()
       .from(webhookIdempotency)
@@ -321,6 +328,25 @@ async function triggerByToken(
 
   // 5. Dispatch based on target type
 
+  if (targetType === "automation" && webhook.agent_loop_id) {
+    const { response, delivery } = await dispatchAutomationWebhook({
+      webhook,
+      parsedBody,
+      rawBody,
+      headerIdempotencyKey: idempotencyKey,
+    });
+    record.resolution_status = delivery.resolution_status;
+    record.status_code = delivery.status_code;
+    if (delivery.thread_id !== undefined) record.thread_id = delivery.thread_id;
+    if (delivery.thread_created !== undefined) {
+      record.thread_created = delivery.thread_created;
+    }
+    if (delivery.error_message !== undefined) {
+      record.error_message = delivery.error_message;
+    }
+    if (delivery.is_replay !== undefined) record.is_replay = delivery.is_replay;
+    return response;
+  }
   if (targetType === "agent" && webhook.agent_id) {
     return dispatchAgent(webhook, parsedBody, idempotencyKey, record);
   }

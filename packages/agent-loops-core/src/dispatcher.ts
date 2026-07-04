@@ -75,7 +75,9 @@ export async function dispatchAgentLoop(
   // / cost caps. A guard trip is recorded exactly like any other skip (run +
   // iteration created with status skipped + code/reason, summarized on the
   // loop) so the UI shows why.
-  const guardSkip = baseGate.ok ? await evaluateGuardGate(input, ledger, now) : null;
+  const guardSkip = baseGate.ok
+    ? await evaluateGuardGate(input, ledger, now)
+    : null;
   // R5 run-as tenant cross-check (THINK-137 U5). A run-as user that does not
   // belong to the automation's tenant HARD-REJECTS the run (recorded as a
   // skip with code run_as_tenant_mismatch) — it is NEVER silently downgraded
@@ -185,7 +187,17 @@ export async function continueAgentLoopDispatch(
   };
 
   // ---- Routine actions run first, serially, at zero token cost ----------
-  const actions = input.version.routineActionsSpec?.actions ?? [];
+  const storedActions = input.version.routineActionsSpec?.actions ?? [];
+  // Per-dispatch input override (THINK-137 U6, R7): the inbound webhook body is
+  // merged into each action's input WITHOUT mutating the stored target_spec —
+  // we build fresh action objects. Webhook fields win over the saved input.
+  const inputOverride = input.trigger.routineInputOverride ?? null;
+  const actions = inputOverride
+    ? storedActions.map((action) => ({
+        ...action,
+        input: { ...(action.input ?? {}), ...inputOverride },
+      }))
+    : storedActions;
   const agentTurn = input.version.routineActionsSpec?.agentTurn !== false;
   let routineResults: RoutineActionResult[] | null = null;
   if (actions.length > 0) {
@@ -201,7 +213,11 @@ export async function continueAgentLoopDispatch(
         errorMessage: message,
         now: failedAt,
       });
-      await raiseHeadlessFailure("routine_runner_unavailable", message, failedAt);
+      await raiseHeadlessFailure(
+        "routine_runner_unavailable",
+        message,
+        failedAt,
+      );
       await ledger.updateLoopAfterDispatch({
         tenantId: input.tenantId,
         loopId: input.loop.id,
