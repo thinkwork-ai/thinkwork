@@ -1085,6 +1085,12 @@ export type CanvasRefreshResult = {
   errorMessage?: Maybe<Scalars['String']['output']>;
 };
 
+export type CanvasRefreshSchedule = {
+  __typename?: 'CanvasRefreshSchedule';
+  scheduleExpression: Scalars['String']['output'];
+  scheduledJobId: Scalars['ID']['output'];
+};
+
 export type CapabilityDivergence = {
   __typename?: 'CapabilityDivergence';
   deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
@@ -3653,6 +3659,7 @@ export type Mutation = {
   connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
+  createCanvasRefreshSchedule: CanvasRefreshSchedule;
   /**
    * Queue an async export of audit events matching the filter. Validates:
    *   - 90-day cap on (until - since)
@@ -4219,6 +4226,13 @@ export type MutationCreateAgentProfileArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateCanvasRefreshScheduleArgs = {
+  artifactId: Scalars['ID']['input'];
+  intervalMinutes: Scalars['Int']['input'];
+  partId?: InputMaybe<Scalars['String']['input']>;
 };
 
 

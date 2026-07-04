@@ -53,6 +53,12 @@ enum ArtifactBindingQuality {
   SCHEMA_STALE
 }
 
+# Result of createCanvasRefreshSchedule (THINK-145 U7).
+type CanvasRefreshSchedule {
+  scheduledJobId: ID!
+  scheduleExpression: String!
+}
+
 # Per-binding outcome of a headless canvas data-refresh (THINK-145 U6).
 enum CanvasRefreshOutcome {
   # Fresh data applied to the head; quality flipped to GOOD.
@@ -301,6 +307,14 @@ extend type Mutation {
   # action); the per-user-OAuth exclusion (R9) is enforced server-side. Pass
   # `partId` to refresh only that part's bindings.
   refreshCanvasData(artifactId: ID!, partId: String): CanvasRefreshResult!
+  # Living Artifacts (THINK-145 U7): create a recurring headless refresh schedule
+  # for a canvas (R6 schedule leg). Write-side (member-or-above) — standing up
+  # background infra. `intervalMinutes` is floored at 15; per-tenant capped.
+  createCanvasRefreshSchedule(
+    artifactId: ID!
+    intervalMinutes: Int!
+    partId: String
+  ): CanvasRefreshSchedule!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
