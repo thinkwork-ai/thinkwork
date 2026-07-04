@@ -7,6 +7,7 @@ import {
   type AgentLoopRunStatus,
   type DispatchableAgentLoopVersion,
   buildAgentLoopWakeupPayload,
+  isHeadlessTarget,
   workerAgentId,
 } from "./run-ledger";
 import type { RoutineActionResult } from "./contracts";
@@ -68,7 +69,14 @@ export async function dispatchAgentLoop(
     }
   }
 
-  const startGate = evaluateStartGate(input);
+  const baseGate = evaluateStartGate(input);
+  // R11 run guards (THINK-137 U4) sit AFTER the base start gate: only a run
+  // that would otherwise dispatch is checked against the target's concurrency
+  // / cost caps. A guard trip is recorded exactly like any other skip (run +
+  // iteration created with status skipped + code/reason, summarized on the
+  // loop) so the UI shows why.
+  const guardSkip = baseGate.ok ? await evaluateGuardGate(input, ledger, now) : null;
+  const startGate: StartGateResult = guardSkip ?? baseGate;
   const run = await ledger.createRun(
     buildRunInput({
       input,
@@ -149,6 +157,26 @@ export async function continueAgentLoopDispatch(
   const agentId =
     refs.workerAgentId ?? workerAgentId(input.version.workerSpec) ?? null;
 
+  // Headless (routine/workflow) runs open no Thread, so a failure would be
+  // invisible — surface it as a deduplicated inbox item (THINK-137 U4, R10).
+  const headless = isHeadlessTarget(input.version);
+  const raiseHeadlessFailure = async (
+    errorCode: string,
+    errorMessage: string,
+    at: Date,
+  ): Promise<void> => {
+    if (!headless) return;
+    await ledger.raiseHeadlessFailureItem?.({
+      tenantId: input.tenantId,
+      agentLoopId: input.loop.id,
+      loopName: input.loop.name ?? null,
+      runId: refs.runId,
+      errorCode,
+      errorMessage,
+      now: at,
+    });
+  };
+
   // ---- Routine actions run first, serially, at zero token cost ----------
   const actions = input.version.routineActionsSpec?.actions ?? [];
   const agentTurn = input.version.routineActionsSpec?.agentTurn !== false;
@@ -157,14 +185,16 @@ export async function continueAgentLoopDispatch(
     if (!ledger.runRoutineAction) {
       const message =
         "This dispatch path cannot execute routine actions (no runner wired).";
+      const failedAt = new Date();
       await ledger.markDispatchFailed({
         tenantId: input.tenantId,
         runId: refs.runId,
         iterationId: refs.iterationId,
         errorCode: "routine_runner_unavailable",
         errorMessage: message,
-        now: new Date(),
+        now: failedAt,
       });
+      await raiseHeadlessFailure("routine_runner_unavailable", message, failedAt);
       await ledger.updateLoopAfterDispatch({
         tenantId: input.tenantId,
         loopId: input.loop.id,
@@ -229,16 +259,32 @@ export async function continueAgentLoopDispatch(
         results,
         now,
       });
+      if (status === "failed") {
+        const failedActions = results.filter((r) => r.status !== "succeeded");
+        const detail =
+          failedActions
+            .map((r) => r.errorMessage ?? r.errorClass ?? "routine failed")
+            .join("; ")
+            .slice(0, MAX_ERROR_LENGTH) || "one or more routine actions failed";
+        await raiseHeadlessFailure("routine_action_failed", detail, now);
+      }
     } else {
+      const message =
+        "Ledger cannot complete a routine-only run (no completion wired).";
+      const failedAt = new Date();
       await ledger.markDispatchFailed({
         tenantId: input.tenantId,
         runId: refs.runId,
         iterationId: refs.iterationId,
         errorCode: "routine_only_completion_unavailable",
-        errorMessage:
-          "Ledger cannot complete a routine-only run (no completion wired).",
-        now: new Date(),
+        errorMessage: message,
+        now: failedAt,
       });
+      await raiseHeadlessFailure(
+        "routine_only_completion_unavailable",
+        message,
+        failedAt,
+      );
     }
     await ledger.updateLoopAfterDispatch({
       tenantId: input.tenantId,
@@ -407,11 +453,66 @@ export function isRepairableHalfBuiltStart(
   return agentTurn;
 }
 
-function evaluateStartGate(
-  input: AgentLoopDispatchInput,
-):
+type StartGateResult =
   | { ok: true; workerAgentId: string }
-  | { ok: false; code: string; reason: string } {
+  | { ok: false; code: string; reason: string };
+
+/**
+ * R11 run-guard gate (THINK-137 U4). Consults `version.guards` against the
+ * ledger's OPTIONAL count/sum reads. Returns a skip result when a cap is hit,
+ * else null (dispatch proceeds). The gate is inert unless BOTH the target
+ * carries the guard AND the ledger implements the corresponding read.
+ */
+async function evaluateGuardGate(
+  input: AgentLoopDispatchInput,
+  ledger: AgentLoopDispatchLedger,
+  now: Date,
+): Promise<{ ok: false; code: string; reason: string } | null> {
+  const guards = input.version?.guards;
+  if (!guards) return null;
+
+  if (guards.maxConcurrentRuns != null && ledger.countActiveRuns) {
+    const active = await ledger.countActiveRuns({
+      tenantId: input.tenantId,
+      agentLoopId: input.loop.id,
+    });
+    if (active >= guards.maxConcurrentRuns) {
+      return {
+        ok: false,
+        code: "max_concurrent_runs",
+        reason: `AgentLoop already has ${active} active run(s); concurrency cap is ${guards.maxConcurrentRuns}.`,
+      };
+    }
+  }
+
+  if (guards.monthlyCostCapUsd != null && ledger.sumMonthlyCostCents) {
+    // WIRED-BUT-INERT: runs currently record no cost (total_cost_usd_cents is
+    // never written), so sumMonthlyCostCents returns 0 and this cap never
+    // trips in practice. It ships wired so it enforces automatically once
+    // cost accounting lands — no dispatcher change needed then.
+    const spentCents = await ledger.sumMonthlyCostCents({
+      tenantId: input.tenantId,
+      agentLoopId: input.loop.id,
+      monthStart: startOfMonthUtc(now),
+    });
+    const capCents = Math.round(guards.monthlyCostCapUsd * 100);
+    if (spentCents >= capCents) {
+      return {
+        ok: false,
+        code: "monthly_cost_cap",
+        reason: `AgentLoop monthly cost cap of $${guards.monthlyCostCapUsd} reached ($${(spentCents / 100).toFixed(2)} spent).`,
+      };
+    }
+  }
+
+  return null;
+}
+
+function startOfMonthUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function evaluateStartGate(input: AgentLoopDispatchInput): StartGateResult {
   if (!input.loop.enabled) {
     return {
       ok: false,

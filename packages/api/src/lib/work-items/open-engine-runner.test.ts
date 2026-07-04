@@ -48,6 +48,7 @@ const baseVersion: DispatchableAgentLoopVersion = {
     failBehavior: "return_blocker",
     escalateOnFailure: false,
   },
+  targetKind: "agent_thread",
 };
 
 function workItem(

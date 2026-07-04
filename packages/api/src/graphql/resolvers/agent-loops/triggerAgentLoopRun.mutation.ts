@@ -1,5 +1,6 @@
 import {
   dispatchAgentLoop,
+  dispatchNeedsThread,
   resolveDispatchableVersion,
   workerAgentId,
 } from "@thinkwork/agent-loops-core";
@@ -82,23 +83,25 @@ export async function triggerAgentLoopRun(
   // actions and enqueues (or skips) the wakeup.
   const routineActionsSpec = dispatchVersion?.routineActionsSpec ?? null;
   const hasRoutineActions = (routineActionsSpec?.actions.length ?? 0) > 0;
-  // Routine-only Automations complete with no agent turn — creating an
-  // execution thread would leave an empty "Working…" thread hung forever
-  // (plan 2026-07-03-004 U5).
-  const routineOnly =
-    hasRoutineActions && routineActionsSpec?.agentTurn === false;
 
   const workerId = workerAgentId(dispatchVersion?.workerSpec ?? null);
   const configuredSpaceId = loop.space_id
     ? await loadActiveSpaceId(db, loop.tenant_id, loop.space_id)
     : null;
+  // R4: agent_thread targets inherit the worker default Space when unset; a
+  // headless routine/workflow target must NOT (see dispatchNeedsThread).
+  const isAgentThreadTarget = dispatchVersion?.targetKind === "agent_thread";
   const executionSpaceId =
     configuredSpaceId ??
-    (workerId
+    (isAgentThreadTarget && workerId
       ? await loadAgentDefaultSpaceId(db, loop.tenant_id, workerId)
       : null);
+  // No Space ⇒ no thread (THINK-137 U4, R4). Shared seam with job-trigger:
+  // a thread is created ONLY for an agent_thread target with a resolved Space.
   const executionThread =
-    workerId && loop.lifecycle_status === "active" && !routineOnly
+    dispatchNeedsThread(dispatchVersion, executionSpaceId) &&
+    workerId &&
+    loop.lifecycle_status === "active"
       ? await ensureThreadForWork({
           tenantId: loop.tenant_id,
           agentId: workerId,

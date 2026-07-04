@@ -396,6 +396,10 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           workerSpec: version.worker_spec,
           judgeSpec: version.judge_spec,
           loopPolicy: version.loop_policy,
+          // Finalize only runs after an agent turn, which is always an
+          // agent_thread target (routine/workflow targets never enqueue a
+          // wakeup, so never reach the judgment path). THINK-137 U4.
+          targetKind: "agent_thread",
         },
         run: {
           id: run.id,

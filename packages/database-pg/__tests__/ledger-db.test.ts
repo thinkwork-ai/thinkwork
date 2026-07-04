@@ -20,6 +20,7 @@ import {
   agentLoopIterations,
   agentLoopRuns,
   agentWakeupRequests,
+  inboxItems,
 } from "../src/schema/index";
 import type {
   AgentLoopCreateIterationInput,
@@ -47,6 +48,13 @@ function mockDb(selectResults: unknown[][] = [], insertResults: unknown[][] = []
   const db = {
     select() {
       let table: unknown;
+      const resolve = () => {
+        calls.push({ op: "select", table });
+        return Promise.resolve(selectQueue.shift() ?? []);
+      };
+      // Chain is also thenable so aggregate reads that end at `.where()`
+      // (count/sum — no `.limit()`) resolve when awaited, mirroring Drizzle's
+      // awaitable query builder. Explicit `.limit()` paths still resolve too.
       const chain: Record<string, unknown> = {
         from(t: unknown) {
           table = t;
@@ -56,22 +64,36 @@ function mockDb(selectResults: unknown[][] = [], insertResults: unknown[][] = []
           return chain;
         },
         limit() {
-          calls.push({ op: "select", table });
-          return Promise.resolve(selectQueue.shift() ?? []);
+          return resolve();
+        },
+        then(onFulfilled: (v: unknown) => unknown, onRejected?: unknown) {
+          return resolve().then(onFulfilled, onRejected as never);
         },
       };
       return chain;
     },
     insert(table: unknown) {
       let values: Record<string, unknown> = {};
+      let recorded = false;
+      const record = () => {
+        if (!recorded) {
+          calls.push({ op: "insert", table, values });
+          recorded = true;
+        }
+        return Promise.resolve(insertQueue.shift() ?? [{ id: "generated-id" }]);
+      };
       const chain: Record<string, unknown> = {
         values(v: Record<string, unknown>) {
           values = v;
           return chain;
         },
         returning() {
-          calls.push({ op: "insert", table, values });
-          return Promise.resolve(insertQueue.shift() ?? [{ id: "generated-id" }]);
+          return record();
+        },
+        // Inserts without `.returning()` (e.g. inbox-item insert) are awaited
+        // directly — Drizzle's insert builder is thenable.
+        then(onFulfilled: (v: unknown) => unknown, onRejected?: unknown) {
+          return record().then(onFulfilled, onRejected as never);
         },
       };
       return chain;
@@ -323,5 +345,102 @@ describe("loadAgentLoopRunRepairState", () => {
     expect(
       await loadAgentLoopRunRepairState(db, "tenant-1", "run-x"),
     ).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R11 guard reads + headless-failure inbox (THINK-137 U4)
+// ---------------------------------------------------------------------------
+
+describe("countActiveRuns", () => {
+  it("counts non-terminal runs for the loop and coerces to a number", async () => {
+    const { db, calls } = mockDb([[{ count: 2 }]]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    const n = await ledger.countActiveRuns!({
+      tenantId: "tenant-1",
+      agentLoopId: "loop-1",
+    });
+
+    expect(n).toBe(2);
+    expect(calls.find((c) => c.op === "select")?.table).toBe(agentLoopRuns);
+  });
+});
+
+describe("sumMonthlyCostCents (wired-but-inert)", () => {
+  it("returns the coalesced month sum", async () => {
+    const { db } = mockDb([[{ total: 0 }]]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    const cents = await ledger.sumMonthlyCostCents!({
+      tenantId: "tenant-1",
+      agentLoopId: "loop-1",
+      monthStart: new Date("2026-07-01T00:00:00Z"),
+    });
+
+    expect(cents).toBe(0);
+  });
+});
+
+describe("raiseHeadlessFailureItem dedup (R10)", () => {
+  it("inserts a new pending inbox item when none is open", async () => {
+    // Dedup probe returns no open item → insert.
+    const { db, calls } = mockDb([[]]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    await ledger.raiseHeadlessFailureItem!({
+      tenantId: "tenant-1",
+      agentLoopId: "loop-1",
+      loopName: "Nightly sync",
+      runId: "run-1",
+      errorCode: "routine_action_failed",
+      errorMessage: "boom",
+      now: NOW,
+    });
+
+    const insert = calls.find((c) => c.op === "insert");
+    expect(insert?.table).toBe(inboxItems);
+    expect(insert?.values).toMatchObject({
+      tenant_id: "tenant-1",
+      type: "automation_headless_failure",
+      status: "pending",
+      entity_type: "agent_loop",
+      entity_id: "loop-1",
+      config: {
+        runId: "run-1",
+        errorCode: "routine_action_failed",
+        failureCount: 1,
+      },
+    });
+    expect(calls.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("UPDATES the existing open item (increments failureCount) instead of inserting a duplicate", async () => {
+    // Dedup probe finds an open item with a prior count.
+    const { db, calls } = mockDb([
+      [{ id: "inbox-1", config: { failureCount: 2, runId: "run-old" } }],
+    ]);
+    const ledger = createDbAgentLoopLedger(db);
+
+    await ledger.raiseHeadlessFailureItem!({
+      tenantId: "tenant-1",
+      agentLoopId: "loop-1",
+      loopName: "Nightly sync",
+      runId: "run-2",
+      errorCode: "routine_action_failed",
+      errorMessage: "boom again",
+      now: NOW,
+    });
+
+    expect(calls.some((c) => c.op === "insert")).toBe(false);
+    const update = calls.find((c) => c.op === "update");
+    expect(update?.table).toBe(inboxItems);
+    expect(update?.set).toMatchObject({
+      config: {
+        runId: "run-2",
+        errorCode: "routine_action_failed",
+        failureCount: 3,
+      },
+    });
   });
 });
