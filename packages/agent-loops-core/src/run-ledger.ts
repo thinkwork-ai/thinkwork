@@ -97,6 +97,17 @@ export interface AgentLoopTriggerContext {
   source: string;
   actorType?: string | null;
   actorId?: string | null;
+  /**
+   * Per-Sender Context Injection identity (THINK-137 U5, R5). The user whose
+   * workspace projection + memory bank the agent turn resolves — the
+   * automation's `run_as_user_id` (defaults to the creator; U3). This is
+   * DISTINCT from `actorType`/`actorId`, which record the TRIGGER actor (who
+   * fired this dispatch — the scheduler=system, or the manual triggerer) and
+   * stay on the run row. When null the run has no injected identity: the
+   * wakeup is a system actor and no CURRENT_USER_ID is plumbed. Both dispatch
+   * call sites resolve this as `loop.run_as_user_id ?? null`.
+   */
+  runAsUserId?: string | null;
   threadId?: string | null;
   spaceId?: string | null;
   scheduledJobId?: string | null;
@@ -217,6 +228,16 @@ export interface AgentLoopWakeupPayload {
     triggerFamily: AgentLoopDispatchTriggerFamily;
     triggerSource: string;
     scheduledJobId?: string | null;
+    /**
+     * Per-Sender Context Injection identity (THINK-137 U5, R5). The run-as
+     * user carried onto the payload for both the initial AND resume turns so
+     * the identity is durable/inspectable. Injection into the AgentCore
+     * envelope's `scope.user_id` actually rides the wakeup row's
+     * `requested_by_actor_*` columns (which wakeup-processor maps to
+     * `invokerUserId` → `user_id`); this field is the parity-visible copy.
+     * Null when the automation has no run-as identity (system-actor run).
+     */
+    runAsUserId?: string | null;
     completionCriteria: string[];
     judgeMode: string;
     loopPolicy: LoopPolicy;
@@ -243,6 +264,16 @@ export interface AgentLoopDispatchLedger {
     tenantId: string;
     runId: string;
   }): Promise<AgentLoopRunRepairState | null>;
+  /**
+   * Loads the tenant a user belongs to, for the run-as tenant-membership
+   * cross-check (THINK-137 U5, R5). Returns null when the user does not exist.
+   * Optional: the gate is inert (no cross-check, run-as still injected) unless
+   * the ledger implements it — but the shared DB ledger always does, so both
+   * dispatch call sites get the hard rejection. Mirrors
+   * `startSkillRunService`'s `invoker.tenant_id !== tenantId` check (KTD3), NOT
+   * `resolveCaller` widening.
+   */
+  loadUserTenantId?(input: { userId: string }): Promise<string | null>;
   createRun(input: AgentLoopCreateRunInput): Promise<AgentLoopRunRef>;
   createIteration(
     input: AgentLoopCreateIterationInput,
@@ -387,6 +418,9 @@ export function buildAgentLoopWakeupPayload(input: {
   iterationId: string;
   goalModeAction?: "start" | "resume";
   routineActionResults?: RoutineActionResult[] | null;
+  /** Per-Sender Context Injection identity (THINK-137 U5, R5). Carried
+   * IDENTICALLY on the initial ("start") and resume payloads. */
+  runAsUserId?: string | null;
 }): AgentLoopWakeupPayload {
   const tokenBudget =
     input.version.loopPolicy.maxTokens ?? DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET;
@@ -413,6 +447,7 @@ export function buildAgentLoopWakeupPayload(input: {
       triggerFamily: input.trigger.family,
       triggerSource: input.trigger.source,
       scheduledJobId: input.trigger.scheduledJobId ?? null,
+      runAsUserId: input.runAsUserId ?? null,
       completionCriteria: input.version.goalSpec.completionCriteria,
       judgeMode: input.version.judgeSpec.mode,
       loopPolicy: input.version.loopPolicy,

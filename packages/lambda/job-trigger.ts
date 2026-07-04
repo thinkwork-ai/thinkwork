@@ -653,6 +653,7 @@ async function handleAgentLoopContinueDispatch(input: {
       enabled: agentLoops.enabled,
       lifecycle_status: agentLoops.lifecycle_status,
       current_version_id: agentLoops.current_version_id,
+      run_as_user_id: agentLoops.run_as_user_id,
     })
     .from(agentLoops)
     .where(
@@ -701,6 +702,10 @@ async function handleAgentLoopContinueDispatch(input: {
         source: "manual_run",
         actorType: event.actorId ? "user" : "system",
         actorId: event.actorId ?? null,
+        // R5 (THINK-137 U5): the deferred continuation enqueues the wakeup, so
+        // the run-as identity must ride here too. The tenant cross-check
+        // already ran in the mutation's dispatchAgentLoop before deferral.
+        runAsUserId: loop.run_as_user_id ?? null,
         threadId: event.threadId ?? null,
         spaceId: event.spaceId ?? null,
       },
@@ -766,6 +771,7 @@ async function handleAgentLoopSchedule(input: {
       lifecycle_status: agentLoops.lifecycle_status,
       current_version_id: agentLoops.current_version_id,
       space_id: agentLoops.space_id,
+      run_as_user_id: agentLoops.run_as_user_id,
     })
     .from(agentLoops)
     .where(
@@ -893,8 +899,14 @@ async function handleAgentLoopSchedule(input: {
       trigger: {
         family: "schedule",
         source: AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
+        // Trigger actor = the scheduled-job owner (or system). Recorded on the
+        // run row's actor_*. DISTINCT from the run-as identity below (R5).
         actorType: input.actorId ? "user" : "system",
         actorId: input.actorId,
+        // R5 (THINK-137 U5): the automation's run_as_user_id drives per-sender
+        // context injection (workspace projection + memory bank). Null ⇒
+        // system-actor run, no identity injected.
+        runAsUserId: loop.run_as_user_id ?? null,
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         scheduledJobId: triggerId,

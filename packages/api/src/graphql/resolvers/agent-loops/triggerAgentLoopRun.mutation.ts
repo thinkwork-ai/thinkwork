@@ -126,8 +126,14 @@ export async function triggerAgentLoopRun(
       trigger: {
         family: "manual",
         source: "manual_run",
+        // Trigger actor = the operator who fired this run. Recorded on the run
+        // row's actor_*, DISTINCT from the run-as identity below (R5).
         actorType: actorId ? "user" : "system",
         actorId,
+        // R5 (THINK-137 U5): per-sender context injection uses the
+        // automation's run_as_user_id (defaults to the creator; U3), not the
+        // triggering operator. Null ⇒ system-actor run, no identity injected.
+        runAsUserId: loop.run_as_user_id ?? null,
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         idempotencyKey,
