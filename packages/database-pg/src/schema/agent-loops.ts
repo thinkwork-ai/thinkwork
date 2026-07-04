@@ -1,20 +1,17 @@
 /**
- * AgentLoop product identity, version snapshots, run ledger, judgments, and
- * evidence. EventBridge scheduled_jobs rows remain schedule plumbing and bind
- * back through scheduled_jobs.agent_loop_id.
+ * AgentLoop product identity, version snapshots, and run ledger. EventBridge
+ * scheduled_jobs rows remain schedule plumbing and bind back through
+ * scheduled_jobs.agent_loop_id.
  */
 
 import type {
-  EvidencePolicy,
   GoalSpec,
-  JudgeSpec,
   LoopPolicy,
   TriggerSpec,
   WorkerSpec,
 } from "@thinkwork/agent-loops-core";
 import {
   bigint,
-  bigserial,
   boolean,
   check,
   index,
@@ -94,39 +91,6 @@ export const AGENT_LOOP_ITERATION_STATUSES = [
 export type AgentLoopIterationStatus =
   (typeof AGENT_LOOP_ITERATION_STATUSES)[number];
 
-export const AGENT_LOOP_JUDGE_MODES = [
-  "self_check",
-  "human_approval",
-  "model_judge",
-  "reviewer_agent",
-  "eval_threshold",
-  "external_callback",
-] as const;
-
-export type AgentLoopJudgeMode = (typeof AGENT_LOOP_JUDGE_MODES)[number];
-
-export const AGENT_LOOP_JUDGMENT_OUTCOMES = [
-  "complete",
-  "continue",
-  "failed",
-  "budget_stopped",
-  "needs_human_approval",
-  "escalated",
-] as const;
-
-export type AgentLoopJudgmentOutcome =
-  (typeof AGENT_LOOP_JUDGMENT_OUTCOMES)[number];
-
-export const AGENT_LOOP_EVIDENCE_REDACTION_STATES = [
-  "summary_only",
-  "redacted",
-  "offloaded",
-  "raw_allowed",
-] as const;
-
-export type AgentLoopEvidenceRedactionState =
-  (typeof AGENT_LOOP_EVIDENCE_REDACTION_STATES)[number];
-
 export const agentLoops = pgTable(
   "agent_loops",
   {
@@ -166,17 +130,6 @@ export const agentLoops = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
-    accepted_run_count: integer("accepted_run_count").notNull().default(0),
-    rejected_run_count: integer("rejected_run_count").notNull().default(0),
-    escalated_run_count: integer("escalated_run_count").notNull().default(0),
-    total_cost_usd_cents: bigint("total_cost_usd_cents", {
-      mode: "number",
-    })
-      .notNull()
-      .default(0),
-    cost_per_accepted_run_usd_cents: bigint("cost_per_accepted_run_usd_cents", {
-      mode: "number",
-    }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -224,16 +177,7 @@ export const agentLoopVersions = pgTable(
     trigger_spec: jsonb("trigger_spec").$type<TriggerSpec>().notNull(),
     goal_spec: jsonb("goal_spec").$type<GoalSpec>().notNull(),
     worker_spec: jsonb("worker_spec").$type<WorkerSpec>().notNull(),
-    // THINK-137 U10: judge / evidence are off the product surface and no longer
-    // written. Made nullable so the follow-up PR can DROP these columns; the
-    // judge/evidence/ROI feature was removed here (code) and drops in PR B.
-    judge_spec: jsonb("judge_spec").$type<JudgeSpec>(),
     loop_policy: jsonb("loop_policy").$type<LoopPolicy>().notNull(),
-    evidence_policy: jsonb("evidence_policy")
-      .$type<EvidencePolicy>()
-      .default(
-        sql`'{"redactionState":"summary_only","retainRawEvidence":false}'::jsonb`,
-      ),
     // Deterministic routine actions (plan 2026-07-03-004 U5). Null on
     // versions without routine actions; {actions[], agentTurn} otherwise.
     routine_actions_spec: jsonb("routine_actions_spec"),
@@ -405,111 +349,6 @@ export const agentLoopIterations = pgTable(
   ],
 );
 
-export const agentLoopJudgments = pgTable(
-  "agent_loop_judgments",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    tenant_id: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    agent_loop_run_id: uuid("agent_loop_run_id")
-      .notNull()
-      .references(() => agentLoopRuns.id, { onDelete: "cascade" }),
-    agent_loop_iteration_id: uuid("agent_loop_iteration_id").references(
-      () => agentLoopIterations.id,
-      { onDelete: "cascade" },
-    ),
-    judge_mode: text("judge_mode").notNull(),
-    outcome: text("outcome").notNull(),
-    confidence: integer("confidence"),
-    rationale: text("rationale"),
-    terminal_reason: text("terminal_reason"),
-    structured_output: jsonb("structured_output")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    index("agent_loop_judgments_run_idx").on(table.agent_loop_run_id),
-    index("agent_loop_judgments_iteration_idx").on(
-      table.agent_loop_iteration_id,
-    ),
-    index("agent_loop_judgments_tenant_outcome_idx").on(
-      table.tenant_id,
-      table.outcome,
-    ),
-    check(
-      "agent_loop_judgments_mode_check",
-      sql`${table.judge_mode} IN ('self_check', 'human_approval', 'model_judge', 'reviewer_agent', 'eval_threshold', 'external_callback')`,
-    ),
-    check(
-      "agent_loop_judgments_outcome_check",
-      sql`${table.outcome} IN ('complete', 'continue', 'failed', 'budget_stopped', 'needs_human_approval', 'escalated')`,
-    ),
-  ],
-);
-
-export const agentLoopEvidence = pgTable(
-  "agent_loop_evidence",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    agent_loop_id: uuid("agent_loop_id")
-      .notNull()
-      .references(() => agentLoops.id, { onDelete: "cascade" }),
-    agent_loop_run_id: uuid("agent_loop_run_id").references(
-      () => agentLoopRuns.id,
-      { onDelete: "cascade" },
-    ),
-    agent_loop_iteration_id: uuid("agent_loop_iteration_id").references(
-      () => agentLoopIterations.id,
-      { onDelete: "set null" },
-    ),
-    agent_loop_judgment_id: bigint("agent_loop_judgment_id", {
-      mode: "number",
-    }).references(() => agentLoopJudgments.id, { onDelete: "set null" }),
-    evidence_type: text("evidence_type").notNull(),
-    source_system: text("source_system").notNull(),
-    source_id: text("source_id"),
-    uri: text("uri"),
-    summary: jsonb("summary")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    redaction_state: text("redaction_state").notNull().default("summary_only"),
-    sensitivity: text("sensitivity"),
-    retention_expires_at: timestamp("retention_expires_at", {
-      withTimezone: true,
-    }),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    index("agent_loop_evidence_run_idx").on(table.agent_loop_run_id),
-    index("agent_loop_evidence_loop_idx").on(table.agent_loop_id),
-    index("agent_loop_evidence_iteration_idx").on(
-      table.agent_loop_iteration_id,
-    ),
-    index("agent_loop_evidence_source_idx").on(
-      table.tenant_id,
-      table.source_system,
-      table.source_id,
-    ),
-    check(
-      "agent_loop_evidence_redaction_state_check",
-      sql`${table.redaction_state} IN ('summary_only', 'redacted', 'offloaded', 'raw_allowed')`,
-    ),
-  ],
-);
-
 export const agentLoopsRelations = relations(agentLoops, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [agentLoops.tenant_id],
@@ -529,7 +368,6 @@ export const agentLoopsRelations = relations(agentLoops, ({ one, many }) => ({
   }),
   versions: many(agentLoopVersions),
   runs: many(agentLoopRuns),
-  evidence: many(agentLoopEvidence),
 }));
 
 export const agentLoopVersionsRelations = relations(
@@ -562,14 +400,12 @@ export const agentLoopRunsRelations = relations(
       references: [agentLoopVersions.id],
     }),
     iterations: many(agentLoopIterations),
-    judgments: many(agentLoopJudgments),
-    evidence: many(agentLoopEvidence),
   }),
 );
 
 export const agentLoopIterationsRelations = relations(
   agentLoopIterations,
-  ({ one, many }) => ({
+  ({ one }) => ({
     tenant: one(tenants, {
       fields: [agentLoopIterations.tenant_id],
       references: [tenants.id],
@@ -585,53 +421,6 @@ export const agentLoopIterationsRelations = relations(
     threadTurn: one(threadTurns, {
       fields: [agentLoopIterations.thread_turn_id],
       references: [threadTurns.id],
-    }),
-    judgments: many(agentLoopJudgments),
-    evidence: many(agentLoopEvidence),
-  }),
-);
-
-export const agentLoopJudgmentsRelations = relations(
-  agentLoopJudgments,
-  ({ one, many }) => ({
-    tenant: one(tenants, {
-      fields: [agentLoopJudgments.tenant_id],
-      references: [tenants.id],
-    }),
-    agentLoopRun: one(agentLoopRuns, {
-      fields: [agentLoopJudgments.agent_loop_run_id],
-      references: [agentLoopRuns.id],
-    }),
-    agentLoopIteration: one(agentLoopIterations, {
-      fields: [agentLoopJudgments.agent_loop_iteration_id],
-      references: [agentLoopIterations.id],
-    }),
-    evidence: many(agentLoopEvidence),
-  }),
-);
-
-export const agentLoopEvidenceRelations = relations(
-  agentLoopEvidence,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [agentLoopEvidence.tenant_id],
-      references: [tenants.id],
-    }),
-    agentLoop: one(agentLoops, {
-      fields: [agentLoopEvidence.agent_loop_id],
-      references: [agentLoops.id],
-    }),
-    agentLoopRun: one(agentLoopRuns, {
-      fields: [agentLoopEvidence.agent_loop_run_id],
-      references: [agentLoopRuns.id],
-    }),
-    agentLoopIteration: one(agentLoopIterations, {
-      fields: [agentLoopEvidence.agent_loop_iteration_id],
-      references: [agentLoopIterations.id],
-    }),
-    agentLoopJudgment: one(agentLoopJudgments, {
-      fields: [agentLoopEvidence.agent_loop_judgment_id],
-      references: [agentLoopJudgments.id],
     }),
   }),
 );
