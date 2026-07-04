@@ -194,6 +194,18 @@ describe("deleteThread", () => {
     expect(operations.find((op) => op.table === "documents")?.values).toEqual({
       thread_id: null,
     });
+    // Living Artifacts R12: a canvas survives its thread — deletion nulls the
+    // artifact's thread provenance rather than deleting/cascading the row.
+    const artifactUpdates = operations.filter(
+      (op) => op.type === "update" && op.table === "artifacts",
+    );
+    expect(
+      artifactUpdates.some(
+        (op) =>
+          (op.values as Record<string, unknown> | undefined)?.thread_id ===
+          null,
+      ),
+    ).toBe(true);
   });
 
   it("returns false without mutating when the thread does not exist", async () => {

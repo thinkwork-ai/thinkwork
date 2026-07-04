@@ -26,6 +26,13 @@ import {
 const SNAPSHOT_SCHEMA_VERSION = "thread-json-render-artifact-snapshot/v1";
 const SNAPSHOT_KIND = "json_render_snapshot";
 
+/**
+ * @deprecated for canvases (Living Artifacts THINK-145 U4, R10). GenUI canvases
+ * are now born as draft artifacts (see `lib/artifacts/born-artifact.ts`) and
+ * saved via `saveCanvas` — a status flip, not this promote-copy write. This
+ * resolver remains only for legacy/non-canvas callers (web wiring migration is
+ * U10); do not route new canvas snapshots through it.
+ */
 export const promoteGenUIArtifact = async (
   _parent: unknown,
   args: { input?: PromoteGenUIArtifactInput },
