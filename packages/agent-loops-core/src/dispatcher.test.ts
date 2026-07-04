@@ -429,6 +429,165 @@ describe("dispatchAgentLoop routine actions", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Target-spec resolution (THINK-137 U3)
+// ---------------------------------------------------------------------------
+
+import { resolveDispatchableVersion } from "./run-ledger";
+
+const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
+
+describe("resolveDispatchableVersion", () => {
+  it("resolves a legacy goal/worker row (no target_spec) to an agent-turn version", () => {
+    const resolved = resolveDispatchableVersion({
+      id: "version-1",
+      version_status: "active",
+      goal_spec: {
+        objective: "Prepare the brief",
+        completionCriteria: ["done"],
+      },
+      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+      judge_spec: { mode: "self_check", criteria: [], config: {} },
+      loop_policy: {
+        maxIterations: 1,
+        failBehavior: "return_blocker",
+        escalateOnFailure: false,
+      },
+      routine_actions_spec: null,
+      target_spec: null,
+    });
+    expect(resolved.goalSpec.objective).toBe("Prepare the brief");
+    expect(resolved.workerSpec).toMatchObject({ type: "agent", id: "agent-1" });
+    expect(resolved.routineActionsSpec).toBeNull();
+  });
+
+  it("prefers an authoritative target_spec over the legacy blobs", () => {
+    const resolved = resolveDispatchableVersion({
+      id: "version-1",
+      version_status: "active",
+      goal_spec: {
+        objective: "STALE legacy objective",
+        completionCriteria: [],
+      },
+      worker_spec: {
+        type: "agent",
+        id: "legacy-agent",
+        toolHints: [],
+        config: {},
+      },
+      judge_spec: { mode: "self_check", criteria: [], config: {} },
+      loop_policy: {
+        maxIterations: 1,
+        failBehavior: "return_blocker",
+        escalateOnFailure: false,
+      },
+      target_spec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Authoritative instructions",
+          workerId: "target-agent",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
+    });
+    expect(resolved.goalSpec.objective).toBe("Authoritative instructions");
+    expect(resolved.workerSpec.id).toBe("target-agent");
+  });
+
+  it("reconstructs a token-free routineActionsSpec for a routine-kind target", () => {
+    const resolved = resolveDispatchableVersion({
+      id: "version-1",
+      version_status: "active",
+      goal_spec: { objective: "", completionCriteria: [] },
+      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+      judge_spec: { mode: "self_check", criteria: [], config: {} },
+      loop_policy: {
+        maxIterations: 1,
+        failBehavior: "return_blocker",
+        escalateOnFailure: false,
+      },
+      target_spec: {
+        kind: "routine",
+        routine: { routineId: ROUTINE_ID, label: "Check" },
+      },
+    });
+    expect(resolved.routineActionsSpec).toEqual({
+      actions: [{ routineId: ROUTINE_ID, label: "Check" }],
+      agentTurn: false,
+    });
+  });
+});
+
+describe("dispatchAgentLoop via resolved routine-kind target", () => {
+  it("dispatches a routine-kind target token-free, exactly like the agentTurn:false path (no thread, no wakeup)", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    const completeRoutineOnlyRun = vi.fn();
+    Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
+
+    // A row whose target_spec is kind routine (no legacy routine_actions_spec).
+    const version = resolveDispatchableVersion({
+      id: "version-1",
+      version_status: "active",
+      goal_spec: { objective: "", completionCriteria: [] },
+      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+      judge_spec: { mode: "self_check", criteria: [], config: {} },
+      loop_policy: {
+        maxIterations: 1,
+        failBehavior: "return_blocker",
+        escalateOnFailure: false,
+      },
+      target_spec: {
+        kind: "routine",
+        routine: { routineId: ROUTINE_ID, label: "LastMile check" },
+      },
+    });
+
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+
+    expect(result.status).toBe("completed_routine_only");
+    expect(runRoutineAction).toHaveBeenCalledTimes(1);
+    expect(ledger.wakeups).toHaveLength(0);
+    expect(completeRoutineOnlyRun).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" }),
+    );
+  });
+
+  it("resolves a legacy routine-only row (no target_spec) to the same token-free dispatch", async () => {
+    const ledger = fakeLedger();
+    const runRoutineAction = vi.fn(async () => okRoutineResult());
+    const completeRoutineOnlyRun = vi.fn();
+    Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
+
+    const version = resolveDispatchableVersion({
+      id: "version-1",
+      version_status: "active",
+      goal_spec: { objective: "", completionCriteria: [] },
+      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+      judge_spec: { mode: "self_check", criteria: [], config: {} },
+      loop_policy: {
+        maxIterations: 1,
+        failBehavior: "return_blocker",
+        escalateOnFailure: false,
+      },
+      routine_actions_spec: {
+        actions: [{ routineId: ROUTINE_ID, label: "LastMile check" }],
+        agentTurn: false,
+      },
+      target_spec: null,
+    });
+
+    const result = await dispatchAgentLoop(baseInput({ version }), ledger);
+
+    expect(result.status).toBe("completed_routine_only");
+    expect(ledger.wakeups).toHaveLength(0);
+    expect(completeRoutineOnlyRun).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Recoverable idempotency repair (THINK-137 U2)
 // ---------------------------------------------------------------------------
 

@@ -303,6 +303,7 @@ export type AgentLoop = {
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   primaryTriggerFamily: AgentLoopTriggerFamily;
   rejectedRunCount: Scalars['Int']['output'];
+  runAsUserId?: Maybe<Scalars['ID']['output']>;
   runs: Array<AgentLoopRun>;
   slug: Scalars['String']['output'];
   spaceId?: Maybe<Scalars['ID']['output']>;
@@ -469,10 +470,7 @@ export enum AgentLoopRunStatus {
 }
 
 export enum AgentLoopTriggerFamily {
-  Api = 'api',
-  AppEvent = 'app_event',
   Manual = 'manual',
-  N8n = 'n8n',
   Schedule = 'schedule',
   Webhook = 'webhook'
 }
@@ -492,6 +490,7 @@ export type AgentLoopVersion = {
   publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   routineActionsSpec?: Maybe<Scalars['AWSJSON']['output']>;
   sourceMetadata: Scalars['AWSJSON']['output'];
+  targetSpec?: Maybe<Scalars['AWSJSON']['output']>;
   tenantId: Scalars['ID']['output'];
   triggerSpec: Scalars['AWSJSON']['output'];
   versionNumber: Scalars['Int']['output'];
@@ -8419,16 +8418,18 @@ export type SaveAgentLoopInput = {
   evidencePolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   goalSpec: Scalars['AWSJSON']['input'];
   id?: InputMaybe<Scalars['ID']['input']>;
-  judgeSpec: Scalars['AWSJSON']['input'];
+  judgeSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   lifecycleStatus?: InputMaybe<AgentLoopLifecycleStatus>;
   loopPolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
   ownerAgentId?: InputMaybe<Scalars['ID']['input']>;
   ownerUserId?: InputMaybe<Scalars['ID']['input']>;
   routineActionsSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
+  runAsUserId?: InputMaybe<Scalars['ID']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
   sourceMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
+  targetSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId: Scalars['ID']['input'];
   triggerSpec: Scalars['AWSJSON']['input'];
   workerSpec: Scalars['AWSJSON']['input'];
