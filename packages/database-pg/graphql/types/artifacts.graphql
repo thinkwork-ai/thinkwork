@@ -255,6 +255,11 @@ extend type Mutation {
   saveCanvas(artifactId: ID!, title: String!, spaceId: ID!): Artifact!
   # Pin the current canvas head as a write-once, content-addressed version (R11).
   pinArtifact(artifactId: ID!): Artifact!
+  # Living Artifacts (THINK-145 U8, R13): reopen a saved canvas in a same-space
+  # thread. Materializes its head as a live part under its original stable part
+  # id; a later re-emission + re-save appends a version to the SAME artifact.
+  # Cross-space check-out is rejected.
+  checkoutCanvas(artifactId: ID!, threadId: ID!): Artifact!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
