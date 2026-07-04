@@ -6,7 +6,7 @@
 
 import { Command } from "commander";
 import { graphql } from "../gql/index.js";
-import { ArtifactType, ArtifactStatus } from "../gql/graphql.js";
+import { ArtifactStatus } from "../gql/graphql.js";
 import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { getGqlClient, gqlQuery } from "../lib/gql-client.js";
@@ -23,7 +23,7 @@ const ArtifactsDoc = graphql(`
     $tenantId: ID!
     $threadId: ID
     $agentId: ID
-    $type: ArtifactType
+    $type: String
     $status: ArtifactStatus
     $limit: Int
     $cursor: String
@@ -116,9 +116,6 @@ async function resolveArtContext(opts: ArtCliOptions) {
   process.exit(1);
 }
 
-const TYPE_BY_NAME: Record<string, ArtifactType> = Object.fromEntries(
-  Object.values(ArtifactType).map((v) => [v as unknown as string, v]),
-);
 const STATUS_BY_NAME: Record<string, ArtifactStatus> = Object.fromEntries(
   Object.values(ArtifactStatus).map((v) => [v as unknown as string, v]),
 );
@@ -134,9 +131,9 @@ interface ListOptions extends ArtCliOptions {
 
 async function runArtList(opts: ListOptions): Promise<void> {
   const ctx = await resolveArtContext(opts);
-  const type = opts.type
-    ? (TYPE_BY_NAME[opts.type.toUpperCase()] ?? null)
-    : null;
+  // Artifact type is an open, plugin-extensible vocabulary — pass the raw value
+  // through (uppercased for wire convention); the server lowercases on read.
+  const type = opts.type ? opts.type.toUpperCase() : null;
   const status = opts.status
     ? (STATUS_BY_NAME[opts.status.toUpperCase()] ?? null)
     : null;
@@ -232,7 +229,10 @@ export function registerArtifactCommand(program: Command): void {
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--thread <id>", "Filter by thread")
     .option("--agent <id>", "Filter by producing agent")
-    .option("--type <t>", "DATA_VIEW | NOTE | REPORT | PLAN | DRAFT | DIGEST")
+    .option(
+      "--type <t>",
+      "Artifact type filter (open vocabulary, e.g. DATA_VIEW, REPORT, PLAN)",
+    )
     .option("--status <s>", "DRAFT | FINAL | SUPERSEDED")
     .option("--limit <n>", "Max rows", "25")
     .option("--cursor <c>", "Pagination cursor")

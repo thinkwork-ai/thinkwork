@@ -3,57 +3,122 @@ import {
   DEFAULT_SORT_BY,
   SORT_GENERATED,
   SORT_NAME,
-  canvasToArtifactItem,
+  artifactNodeToItem,
   filterArtifactItems,
-  isLivingCanvasNode,
+  isAppletArtifactNode,
   sortArtifactItems,
   toArtifactItem,
   type ArtifactItem,
 } from "./artifacts-filtering";
 import type { AppArtifactPreview } from "@/lib/app-artifacts";
 
-describe("living-canvas list projection", () => {
-  it("recognises only living-canvas DATA_VIEW rows", () => {
-    expect(
-      isLivingCanvasNode({
-        id: "c1",
-        metadata: { kind: "json_render_canvas" },
-      }),
-    ).toBe(true);
-    expect(
-      isLivingCanvasNode({
-        id: "c2",
-        metadata: '{"kind":"json_render_canvas"}',
-      }),
-    ).toBe(true);
-    expect(
-      isLivingCanvasNode({
-        id: "s1",
-        metadata: { kind: "json_render_snapshot" },
-      }),
-    ).toBe(false);
-  });
-
-  it("maps a canvas row into an ArtifactItem (id === artifactId, head version)", () => {
-    const item = canvasToArtifactItem({
+describe("artifact list projection", () => {
+  it("maps a living-canvas row into an ArtifactItem (id === artifactId, head version, Canvas badge)", () => {
+    const item = artifactNodeToItem({
       id: "canvas-1",
       title: "Cost dashboard",
+      type: "DATA_VIEW",
       status: "final",
       headVersion: 3,
       updatedAt: "2026-07-04T10:00:00Z",
       metadata: { kind: "json_render_canvas" },
     });
-    expect(item.id).toBe("canvas-1");
-    expect(item.artifactId).toBe("canvas-1");
-    expect(item.title).toBe("Cost dashboard");
-    expect(item.version).toBe(3);
-    expect(item.generatedAt).toBe("2026-07-04T10:00:00Z");
+    expect(item).not.toBeNull();
+    expect(item?.id).toBe("canvas-1");
+    expect(item?.artifactId).toBe("canvas-1");
+    expect(item?.title).toBe("Cost dashboard");
+    expect(item?.version).toBe(3);
+    expect(item?.generatedAt).toBe("2026-07-04T10:00:00Z");
+    expect(item?.typeLabel).toBe("Canvas");
+  });
+
+  it("accepts a stringified metadata blob", () => {
+    const item = artifactNodeToItem({
+      id: "c2",
+      title: "x",
+      type: "DATA_VIEW",
+      metadata: '{"kind":"json_render_canvas"}',
+    });
+    expect(item?.typeLabel).toBe("Canvas");
   });
 
   it("shows no version chip for an unpinned (headVersion 0) canvas", () => {
     expect(
-      canvasToArtifactItem({ id: "c", title: "x", headVersion: 0 }).version,
+      artifactNodeToItem({ id: "c", title: "x", headVersion: 0 })?.version,
     ).toBeNull();
+  });
+
+  it("maps an HTML document artifact with a title-cased genre badge", () => {
+    const item = artifactNodeToItem({
+      id: "doc-1",
+      title: "Q3 Board Report",
+      type: "REPORT",
+      status: "final",
+      updatedAt: "2026-07-04T10:00:00Z",
+      metadata: { kind: "document" },
+    });
+    expect(item).not.toBeNull();
+    expect(item?.typeLabel).toBe("Report");
+    expect(item?.title).toBe("Q3 Board Report");
+  });
+
+  it("falls back to 'Document' (not 'Canvas') for a titleless document", () => {
+    const item = artifactNodeToItem({
+      id: "doc-2",
+      type: "PLAN",
+      metadata: { kind: "document" },
+    });
+    expect(item?.title).toBe("Document");
+    expect(item?.typeLabel).toBe("Plan");
+  });
+
+  it("keeps an unknown plugin-minted type with a title-cased badge (not dropped)", () => {
+    const item = artifactNodeToItem({
+      id: "ev-1",
+      title: "SOC2 access review",
+      type: "SOC2_EVIDENCE",
+      metadata: { kind: "soc2_evidence" },
+    });
+    expect(item).not.toBeNull();
+    expect(item?.typeLabel).toBe("Soc2 Evidence");
+  });
+
+  it("excludes applet-kind rows to avoid duplicates with the applets query", () => {
+    expect(
+      artifactNodeToItem({
+        id: "app-1",
+        title: "Pipeline app",
+        type: "APPLET",
+        metadata: { kind: "computer_applet" },
+      }),
+    ).toBeNull();
+    expect(
+      artifactNodeToItem({
+        id: "app-2",
+        title: "Dash",
+        type: "DATA_VIEW",
+        metadata: { kind: "research_dashboard" },
+      }),
+    ).toBeNull();
+    expect(
+      artifactNodeToItem({
+        id: "app-3",
+        title: "Surface app",
+        type: "DATA_VIEW",
+        metadata: { uiSurface: "app" },
+      }),
+    ).toBeNull();
+  });
+
+  it("isAppletArtifactNode flags applet-kind rows and passes real artifacts", () => {
+    expect(isAppletArtifactNode({ id: "x", type: "APPLET_STATE" })).toBe(true);
+    expect(
+      isAppletArtifactNode({
+        id: "y",
+        type: "DATA_VIEW",
+        metadata: { kind: "json_render_canvas" },
+      }),
+    ).toBe(false);
   });
 });
 
@@ -68,6 +133,7 @@ const items: ArtifactItem[] = [
     generatedAt: "2026-05-09T10:00:00.000Z",
     favoritedAt: null,
     version: 1,
+    typeLabel: "App",
   },
   {
     id: "a2",
@@ -79,6 +145,7 @@ const items: ArtifactItem[] = [
     generatedAt: "2026-05-09T11:00:00.000Z",
     favoritedAt: null,
     version: 2,
+    typeLabel: "App",
   },
   {
     id: "c1",
@@ -90,6 +157,7 @@ const items: ArtifactItem[] = [
     generatedAt: "",
     favoritedAt: null,
     version: null,
+    typeLabel: "Canvas",
   },
 ];
 
@@ -116,6 +184,12 @@ describe("filterArtifactItems", () => {
     ).toEqual(["a2"]);
   });
 
+  it("matches the type label badge text", () => {
+    expect(
+      filterArtifactItems({ items, search: "canvas" }).map((r) => r.id),
+    ).toEqual(["c1"]);
+  });
+
   it("returns empty when the search excludes everything", () => {
     expect(filterArtifactItems({ items, search: "nothing-matches" })).toEqual(
       [],
@@ -139,6 +213,7 @@ describe("sortArtifactItems", () => {
       generatedAt: overrides.generatedAt ?? "",
       favoritedAt: overrides.favoritedAt ?? null,
       version: overrides.version ?? null,
+      typeLabel: overrides.typeLabel ?? null,
     };
   }
 
@@ -235,6 +310,7 @@ describe("toArtifactItem", () => {
       generatedAt: "2026-05-08T16:00:00.000Z",
       favoritedAt: "2026-05-10T18:00:00.000Z",
       version: 1,
+      typeLabel: "App",
     });
   });
 

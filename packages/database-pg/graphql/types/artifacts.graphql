@@ -11,7 +11,12 @@ type Artifact {
   # Version-chain head pointer. 0 until the canvas has been pinned/checked in.
   headVersion: Int!
   title: String!
-  type: ArtifactType!
+  # Artifact type is an OPEN, plugin-extensible vocabulary — not a closed enum.
+  # Third-party plugins mint artifact types we cannot know in advance, so the
+  # wire type is a plain String. Stored lowercase, served uppercase (see
+  # `artifactToCamel`). Core types today include
+  # data_view/applet/report/plan/brief/ideation, but the set is NOT closed.
+  type: String!
   status: ArtifactStatus!
   content: String
   s3Key: String
@@ -214,20 +219,6 @@ type AppletState {
   updatedAt: AWSDateTime!
 }
 
-enum ArtifactType {
-  DATA_VIEW
-  APPLET
-  APPLET_STATE
-  NOTE
-  REPORT
-  PLAN
-  DRAFT
-  DIGEST
-  # HTML Document Artifacts (THINK-147): document genres beyond REPORT/PLAN.
-  IDEATION
-  BRIEF
-}
-
 enum ArtifactStatus {
   DRAFT
   FINAL
@@ -239,7 +230,8 @@ input CreateArtifactInput {
   agentId: ID
   threadId: ID
   title: String!
-  type: ArtifactType!
+  # Open, plugin-extensible vocabulary (see Artifact.type). Stored lowercase.
+  type: String!
   status: ArtifactStatus
   content: String
   s3Key: String
@@ -250,7 +242,8 @@ input CreateArtifactInput {
 
 input UpdateArtifactInput {
   title: String
-  type: ArtifactType
+  # Open, plugin-extensible vocabulary (see Artifact.type).
+  type: String
   status: ArtifactStatus
   content: String
   s3Key: String
@@ -293,7 +286,7 @@ extend type Query {
     tenantId: ID!
     threadId: ID
     agentId: ID
-    type: ArtifactType
+    type: String
     status: ArtifactStatus
     # When true, return only artifacts with a non-null favoritedAt,
     # ordered favoritedAt DESC. Drives the apps/web sidebar

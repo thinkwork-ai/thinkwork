@@ -12,18 +12,17 @@ import { useTenant } from "@/context/TenantContext";
 import { AdminAppletsQuery } from "@/lib/applet-admin-queries";
 import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
-import { AppletsQuery, TenantCanvasesQuery } from "@/lib/graphql-queries";
+import { AppletsQuery, TenantArtifactsListQuery } from "@/lib/graphql-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
-  canvasToArtifactItem,
+  artifactNodeToItem,
   DEFAULT_SORT_BY,
   filterArtifactItems,
-  isLivingCanvasNode,
   sortArtifactItems,
   toArtifactItem,
   type ArtifactItem,
-  type CanvasListNode,
+  type ArtifactListNode,
 } from "./artifacts-filtering";
 
 interface AppletsResult {
@@ -158,14 +157,17 @@ function LiveArtifactsListBody({
     pause: !filterActive,
   });
 
-  // Living canvases join the list via the artifacts query. Suppressed while the
+  // Every artifact kind (living canvases, HTML documents, plugin-minted types)
+  // joins the list via the tenant-wide artifacts query. Suppressed while the
   // operator user-ID filter is active (that view is applet-scoped by user).
-  const [canvasResult] = useQuery<{ artifacts?: CanvasListNode[] | null }>({
-    query: TenantCanvasesQuery,
-    variables: { tenantId: tenantId ?? "", includeDrafts },
-    requestPolicy: "cache-and-network",
-    pause: !tenantId || filterActive,
-  });
+  const [artifactsResult] = useQuery<{ artifacts?: ArtifactListNode[] | null }>(
+    {
+      query: TenantArtifactsListQuery,
+      variables: { tenantId: tenantId ?? "", includeDrafts },
+      requestPolicy: "cache-and-network",
+      pause: !tenantId || filterActive,
+    },
+  );
 
   const source = filterActive ? adminResult : defaultResult;
   const rawNodes = filterActive
@@ -177,11 +179,13 @@ function LiveArtifactsListBody({
       toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
     );
     if (filterActive) return appletItems;
-    const canvasItems = (canvasResult.data?.artifacts ?? [])
-      .filter(isLivingCanvasNode)
-      .map(canvasToArtifactItem);
-    return [...appletItems, ...canvasItems];
-  }, [rawNodes, filterActive, canvasResult.data?.artifacts]);
+    // Map every non-applet artifact row (applet-kind rows return null and are
+    // dropped — they're already covered by the applets query above).
+    const artifactItems = (artifactsResult.data?.artifacts ?? [])
+      .map(artifactNodeToItem)
+      .filter((item): item is ArtifactItem => item !== null);
+    return [...appletItems, ...artifactItems];
+  }, [rawNodes, filterActive, artifactsResult.data?.artifacts]);
 
   return (
     <ArtifactsListBodyView
