@@ -57,3 +57,12 @@ describe("ChartView", () => {
     expect(screen.getByTestId("json-render-chart-empty")).toBeTruthy();
   });
 });
+
+describe("ChartView width regression (THINK-116 live squish)", () => {
+  it("the chart card claims full width — charts have no intrinsic width", () => {
+    render(<ChartView kind="bar" title="T" xKey="x" series={[{ dataKey: "y", colorKey: "chart-1" }]} data={[{ x: "a", y: 1 }]} />);
+    const card = screen.getByTestId("json-render-chart");
+    expect(card.className).toContain("w-full");
+    expect(card.className).toContain("min-w-0");
+  });
+});

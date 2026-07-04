@@ -10,6 +10,7 @@ vi.mock("@/components/apps/InlineAppletEmbed", () => ({
 import {
   GeneratedArtifactCard,
   GeneratedArtifactPreview,
+  isAppArtifact,
 } from "./GeneratedArtifactCard";
 
 afterEach(cleanup);
@@ -125,5 +126,30 @@ describe("GeneratedArtifactCard", () => {
     expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
     expect(screen.getByText("NOTE")).toBeTruthy();
     expect(screen.queryByText(/preview unavailable/i)).toBeNull();
+  });
+});
+
+describe("isAppArtifact (THINK-116 DATA_VIEW mis-route)", () => {
+  it("does NOT treat a promoted GenUI DATA_VIEW snapshot as an applet", () => {
+    expect(
+      isAppArtifact({
+        id: "a1",
+        title: "Weekly Ticket Volume",
+        type: "DATA_VIEW",
+        metadata: { kind: "json_render_snapshot" },
+      }),
+    ).toBe(false);
+  });
+
+  it("still treats APPLET and app-kind artifacts as apps", () => {
+    expect(isAppArtifact({ id: "a2", title: "t", type: "APPLET" })).toBe(true);
+    expect(
+      isAppArtifact({
+        id: "a3",
+        title: "t",
+        type: "DATA_VIEW",
+        metadata: { kind: "research_dashboard" },
+      }),
+    ).toBe(true);
   });
 });

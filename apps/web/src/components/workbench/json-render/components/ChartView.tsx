@@ -78,8 +78,10 @@ export function ChartView({
       : buildChartConfig(safeSeries);
   const hasChart = safeSeries.length > 0 && safeData.length > 0;
 
+  // w-full min-w-0: a chart has no intrinsic width — never let a
+  // non-stretch flex parent collapse it (live squish bug, THINK-116).
   return (
-    <Card data-testid="json-render-chart">
+    <Card className="w-full min-w-0" data-testid="json-render-chart">
       {title || description ? (
         <CardHeader>
           {title ? <CardTitle>{title}</CardTitle> : null}

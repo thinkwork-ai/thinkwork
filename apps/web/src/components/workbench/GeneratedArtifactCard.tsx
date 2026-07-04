@@ -129,23 +129,42 @@ export function GeneratedArtifactPreview({
           ) : null}
         </div>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled
-        className="justify-self-start"
-      >
-        Preview unavailable
-      </Button>
+      {artifact.type === "DATA_VIEW" ? (
+        // Promoted GenUI snapshots render on the artifact page (the preview
+        // card carries no content payload to render inline).
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="justify-self-start"
+        >
+          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+            Open data view
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled
+          className="justify-self-start"
+        >
+          Preview unavailable
+        </Button>
+      )}
     </article>
   );
 }
 
 export function isAppArtifact(artifact: GeneratedArtifact) {
+  // NOT type === "DATA_VIEW": promoted GenUI snapshots (metadata.kind
+  // "json_render_snapshot") are DATA_VIEW but are NOT applets — routing them
+  // through the applet embed fails with "Artifact is not an applet artifact"
+  // (observed live, THINK-116). They render via /artifacts/$id. App-like
+  // DATA_VIEWs are still matched through their metadata kinds below.
   return (
     artifact.type === "APPLET" ||
-    artifact.type === "DATA_VIEW" ||
     artifact.metadata?.kind === "computer_applet" ||
     artifact.metadata?.kind === "research_dashboard" ||
     artifact.metadata?.uiSurface === "app"
