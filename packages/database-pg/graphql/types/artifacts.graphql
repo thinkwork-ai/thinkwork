@@ -220,6 +220,10 @@ extend type Query {
     # ordered favoritedAt DESC. Drives the apps/web sidebar
     # Favorites section.
     favoritedOnly: Boolean
+    # Living Artifacts (THINK-145, R14): canvas list surfaces default to SAVED
+    # canvases. Set true to also return draft-status canvases (unsaved GenUI
+    # emissions). Non-canvas artifacts are always returned regardless.
+    includeDrafts: Boolean
     limit: Int
     cursor: String
   ): [Artifact!]!
@@ -238,7 +242,16 @@ extend type Query {
 
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
+  # DEPRECATED for canvases (Living Artifacts THINK-145, R10): GenUI canvases
+  # are born as draft artifacts and saved via `saveCanvas` (a status flip, not
+  # a promote-copy). This remains only for legacy/non-canvas callers.
   promoteGenUIArtifact(input: PromoteGenUIArtifactInput!): Artifact!
+  # Living Artifacts (THINK-145 U4): save a draft canvas — status flip + naming
+  # + space assignment (R10/R12/R15). Re-saving a saved canvas auto-pins the
+  # prior head as a version (KTD3 check-in rule).
+  saveCanvas(artifactId: ID!, title: String!, spaceId: ID!): Artifact!
+  # Pin the current canvas head as a write-once, content-addressed version (R11).
+  pinArtifact(artifactId: ID!): Artifact!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!

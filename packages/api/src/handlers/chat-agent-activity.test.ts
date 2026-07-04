@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   appendThreadTurnEvent: vi.fn(),
   notifyThreadTurnStep: vi.fn(),
+  upsertDraftCanvasFromActivityEvent: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -75,6 +76,14 @@ vi.mock("../graphql/notify.js", () => ({
   notifyThreadUpdate: vi.fn(),
 }));
 
+// Born-as-artifact upsert (THINK-145 U4) is exercised in born-artifact.test.ts;
+// here it is mocked so the handler's failure-isolated best-effort call is
+// observable without pulling in the S3/db write path.
+vi.mock("../lib/artifacts/born-artifact.js", () => ({
+  BORN_CANVAS_EVENT_TYPES: new Set(["ui_message_chunk", "state_snapshot"]),
+  upsertDraftCanvasFromActivityEvent: mocks.upsertDraftCanvasFromActivityEvent,
+}));
+
 import { handler } from "./chat-agent-activity.js";
 import { ThreadTurnEventError } from "../lib/thread-turn-events.js";
 
@@ -103,6 +112,9 @@ beforeEach(() => {
     seq: seqCounter++,
   }));
   mocks.notifyThreadTurnStep.mockResolvedValue(undefined);
+  mocks.upsertDraftCanvasFromActivityEvent.mockResolvedValue({
+    artifactId: "artifact-1",
+  });
 });
 
 afterEach(() => {
@@ -305,6 +317,21 @@ describe("chat-agent-activity — append + publish", () => {
       },
       seq: 0,
     });
+    // Born-as-artifact: the json-render event drives the draft-canvas upsert.
+    expect(mocks.upsertDraftCanvasFromActivityEvent).toHaveBeenCalledTimes(1);
+    expect(mocks.upsertDraftCanvasFromActivityEvent.mock.calls[0][0]).toMatchObject({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      payload: {
+        kind: "thread_json_render.ui_message_chunk",
+        chunk: part,
+      },
+    });
+  });
+
+  it("does not attempt a born-as-artifact upsert for non-canvas events", async () => {
+    await handler(mockEvent());
+    expect(mocks.upsertDraftCanvasFromActivityEvent).not.toHaveBeenCalled();
   });
 
   it("appends a batch in order with monotonic seq", async () => {

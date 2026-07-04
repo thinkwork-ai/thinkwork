@@ -6,6 +6,7 @@ import {
   and,
   desc,
   lt,
+  sql,
   artifacts,
   artifactToCamel,
 } from "../../utils.js";
@@ -15,6 +16,7 @@ import {
   canvasListVisibilityPredicate,
   excludeCanvasArtifactsPredicate,
 } from "../../../lib/artifacts/canvas-access.js";
+import { CANVAS_METADATA_KIND } from "../../../lib/artifacts/canvas-lifecycle.js";
 
 export const artifacts_ = async (
   _parent: any,
@@ -30,15 +32,21 @@ export const artifacts_ = async (
   if (args.favoritedOnly === true) {
     conditions.push(isNotNull(artifacts.favorited_at));
   }
+  // R14: canvas list surfaces default to SAVED canvases; draft-status canvases
+  // are hidden behind the explicit includeDrafts filter. Non-canvas artifacts
+  // are unaffected (this only excludes draft rows carrying the canvas marker).
+  if (args.includeDrafts !== true) {
+    conditions.push(
+      sql`NOT (${artifacts.metadata}->>'kind' = ${CANVAS_METADATA_KIND} AND ${artifacts.status} = 'draft')`,
+    );
+  }
   if (args.cursor)
     conditions.push(lt(artifacts.created_at, new Date(args.cursor)));
 
   // Canvas visibility (R15): a canvas-kind artifact appears in the list only
   // when the caller may see it — saved canvases through an accessible space,
   // drafts through their own thread. Non-canvas rows are unaffected. Service-
-  // secret callers (trusted infra) bypass. NOTE: this unit does not yet apply
-  // the R14 saved-only default (there is no draft/saved filter arg on this
-  // query — that filter seam lands with U4/U10); it only enforces access.
+  // secret callers (trusted infra) bypass.
   if (!hasServiceSecret(ctx)) {
     const caller = await resolveCallerFromAuth(ctx.auth);
     if (caller.userId) {

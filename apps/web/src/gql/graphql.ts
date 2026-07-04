@@ -3747,6 +3747,7 @@ export type Mutation = {
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
   overrideEvalCaseVerdict: Scalars['Boolean']['output'];
   overrideEvalResult: EvalResult;
+  pinArtifact: Artifact;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
@@ -3828,6 +3829,7 @@ export type Mutation = {
   saveAgentLoop: AgentLoop;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
+  saveCanvas: Artifact;
   saveEmailProviderCredential: EmailProviderInstall;
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
@@ -4695,6 +4697,11 @@ export type MutationOverrideEvalResultArgs = {
 };
 
 
+export type MutationPinArtifactArgs = {
+  artifactId: Scalars['ID']['input'];
+};
+
+
 export type MutationPinThreadArgs = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -4977,6 +4984,13 @@ export type MutationSaveAppletArgs = {
 
 export type MutationSaveAppletStateArgs = {
   input: SaveAppletStateInput;
+};
+
+
+export type MutationSaveCanvasArgs = {
+  artifactId: Scalars['ID']['input'];
+  spaceId: Scalars['ID']['input'];
+  title: Scalars['String']['input'];
 };
 
 
@@ -6814,6 +6828,7 @@ export type QueryArtifactsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   favoritedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  includeDrafts?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];

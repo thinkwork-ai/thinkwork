@@ -37,6 +37,10 @@ import {
 } from "../lib/thread-turn-events.js";
 import { notifyThreadTurnStep } from "../graphql/notify.js";
 import { handleQuestionIntake } from "../lib/user-questions/intake.js";
+import {
+  BORN_CANVAS_EVENT_TYPES,
+  upsertDraftCanvasFromActivityEvent,
+} from "../lib/artifacts/born-artifact.js";
 
 const db = getDb();
 
@@ -198,6 +202,23 @@ export async function handler(
         color: ev.color ?? undefined,
       });
       appended++;
+      // Born-as-artifact (THINK-145 U4, R10): a json-render part event upserts
+      // a draft canvas artifact keyed by its stable part id. Best-effort and
+      // failure-isolated exactly like the notify below — a canvas persist fault
+      // must never fail the durable activity append.
+      if (BORN_CANVAS_EVENT_TYPES.has(ev.event_type)) {
+        await upsertDraftCanvasFromActivityEvent({
+          tenantId: payload.tenant_id,
+          threadId: payload.thread_id,
+          agentId,
+          payload: ev.payload,
+        }).catch((err) => {
+          console.error(
+            `[chat-agent-activity] born-as-artifact upsert failed (best-effort):`,
+            err,
+          );
+        });
+      }
       // Best-effort publish — a notify failure must NEVER fail the request
       // (the durable append already succeeded; the client replays via
       // threadTurnEvents). createdAt is display-ordering only; seq is the
