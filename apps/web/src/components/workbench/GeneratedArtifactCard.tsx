@@ -52,7 +52,11 @@ export function GeneratedArtifactCard({
   // keep the panel flow.
   const isLivingCanvas =
     artifact.type === "DATA_VIEW" && isLivingCanvasMetadata(artifact.metadata);
-  if (onOpenArtifact && !isLivingCanvas) {
+  // Dual-body documents (THINK-147) render in the full-height reader at
+  // /artifacts/$id — the side panel has no document preview, so deep-link
+  // like living canvases do.
+  const isDocument = artifact.metadata?.kind === "document";
+  if (onOpenArtifact && !isLivingCanvas && !isDocument) {
     return (
       <button
         type="button"
@@ -137,7 +141,20 @@ export function GeneratedArtifactPreview({
           ) : null}
         </div>
       </div>
-      {artifact.type === "DATA_VIEW" ? (
+      {artifact.metadata?.kind === "document" ? (
+        // Dual-body documents (THINK-147): the reader at /artifacts/$id owns
+        // rendering; the panel offers the jump instead of a dead preview.
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="justify-self-start"
+        >
+          <Link to="/artifacts/$id" params={{ id: artifact.id }}>
+            Open document
+          </Link>
+        </Button>
+      ) : artifact.type === "DATA_VIEW" ? (
         // GenUI canvases render on the artifact page (the preview card carries
         // no content payload to render inline).
         <Button
