@@ -15,8 +15,8 @@ import { COLORS } from "@/lib/theme";
 import { Text } from "@/components/ui/typography";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { ChatBubble } from "@/components/chat/ChatBubble";
-import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
 import { ROUTINE_BUILDER_PROMPT } from "@/prompts/routine-builder";
@@ -65,6 +65,7 @@ export default function RoutineBuilderScreen() {
   const isEditMode = params.edit === "true";
   const hasErrorContext = isEditMode && !!params.errorContext;
   const [building, setBuilding] = useState(false);
+  const [messageText, setMessageText] = useState(params.errorContext ?? "");
   const buildingStartedAt = useRef<number | null>(null);
 
   // Fetch existing routine for edit mode
@@ -214,6 +215,13 @@ export default function RoutineBuilderScreen() {
     });
   };
 
+  const handleSubmit = useCallback(() => {
+    const content = messageText.trim();
+    if (!content || !sessionThreadId) return;
+    setMessageText("");
+    void handleSend(content);
+  }, [messageText, sessionThreadId, handleSend]);
+
   return (
     <DetailLayout
       title="Routine Builder"
@@ -294,10 +302,13 @@ export default function RoutineBuilderScreen() {
         )}
 
         <WebContent>
-          <ChatInput
-            onSend={handleSend}
+          <MessageInputFooter
+            value={messageText}
+            onChangeText={setMessageText}
+            onSubmit={handleSubmit}
             disabled={!sessionThreadId}
-            initialValue={params.errorContext ?? undefined}
+            colors={colors}
+            isDark={colorScheme === "dark"}
           />
         </WebContent>
       </KeyboardAvoidingView>

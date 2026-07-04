@@ -14,8 +14,11 @@ import { Text } from "@/components/ui/typography";
 import { useGatewayChat, type ChatMessage } from "@/hooks/useGatewayChat";
 import { useGraphQLChat } from "@/hooks/useGraphQLChat";
 import { ChatBubble } from "./ChatBubble";
-import { ChatInput, type SelectedMention } from "./ChatInput";
 import type { MentionCandidate } from "./MentionAutocomplete";
+import {
+  MessageInputFooter,
+  type MessageInputMention,
+} from "@/components/input/MessageInputFooter";
 import { AgentPicker } from "./AgentPicker";
 import { useColorScheme } from "nativewind";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
@@ -46,7 +49,10 @@ interface ChatScreenProps {
 
 interface ChatViewProps {
   messages: ChatMessage[];
-  send: (text: string, mentions?: SelectedMention[]) => void;
+  send: (
+    text: string,
+    mentions?: Array<{ id: string; name: string; type: "member" | "assistant" }>,
+  ) => void;
   connectionStatus: "connecting" | "connected" | "disconnected" | "error";
   isStreaming: boolean;
   historyLoaded: boolean;
@@ -170,11 +176,46 @@ function ChatView({
 }: ChatViewProps) {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const insets = useSafeAreaInsets();
-  const [pendingMentions, setPendingMentions] = useState<SelectedMention[]>([]);
+  const [messageText, setMessageText] = useState("");
+  const [pendingMentions, setPendingMentions] = useState<
+    MessageInputMention[]
+  >([]);
   const { colorScheme } = useColorScheme();
   const { isWide } = useMediaQuery();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const router = useRouter();
+
+  const handleSubmit = useCallback(() => {
+    const text = messageText.trim();
+    if (!text || connectionStatus !== "connected") return;
+    let enrichedText = text;
+    if (pendingMentions.length > 0) {
+      const assistantMentions = pendingMentions.filter(
+        (m) => m.type === "assistant",
+      );
+      if (assistantMentions.length > 0) {
+        const instructions = assistantMentions
+          .map(
+            (m) =>
+              `ACTION REQUIRED: The user mentioned @${m.displayName}. You MUST call the request_assistant tool to delegate to them. Use targetAssistantId="${m.id}", parentTicketId from your current thread context. Compose a clear request message based on what the user asked. Do NOT just describe what you would do — actually call the tool.`,
+          )
+          .join("\n");
+        enrichedText = `${text}\n\n[SYSTEM INSTRUCTION]\n${instructions}\n[/SYSTEM INSTRUCTION]`;
+      }
+    }
+    send(
+      enrichedText,
+      pendingMentions.length > 0
+        ? pendingMentions.map((mention) => ({
+            id: mention.id,
+            name: mention.displayName,
+            type: mention.type,
+          }))
+        : undefined,
+    );
+    setMessageText("");
+    setPendingMentions([]);
+  }, [connectionStatus, messageText, pendingMentions, send]);
 
   // Track IDs present at initial load so we only animate truly new messages
   const initialIds = useRef<Set<string> | null>(null);
@@ -335,31 +376,15 @@ function ChatView({
       )}
 
       <WebContent centered>
-        <ChatInput
-          onSend={(text) => {
-            let enrichedText = text;
-            if (pendingMentions.length > 0) {
-              const assistantMentions = pendingMentions.filter(
-                (m) => m.type === "assistant",
-              );
-              if (assistantMentions.length > 0) {
-                const instructions = assistantMentions
-                  .map(
-                    (m) =>
-                      `ACTION REQUIRED: The user mentioned @${m.name}. You MUST call the request_assistant tool to delegate to them. Use targetAssistantId="${m.id}", parentTicketId from your current thread context. Compose a clear request message based on what the user asked. Do NOT just describe what you would do — actually call the tool.`,
-                  )
-                  .join("\n");
-                enrichedText = `${text}\n\n[SYSTEM INSTRUCTION]\n${instructions}\n[/SYSTEM INSTRUCTION]`;
-              }
-            }
-            send(
-              enrichedText,
-              pendingMentions.length > 0 ? pendingMentions : undefined,
-            );
-            setPendingMentions([]);
-          }}
+        <MessageInputFooter
+          value={messageText}
+          onChangeText={setMessageText}
+          onSubmit={handleSubmit}
           disabled={connectionStatus !== "connected"}
-          mentions={mentionCandidates ?? []}
+          colors={colors}
+          isDark={colorScheme === "dark"}
+          mentionCandidates={mentionCandidates ?? []}
+          selectedMentions={pendingMentions}
           onMentionsChange={setPendingMentions}
         />
       </WebContent>

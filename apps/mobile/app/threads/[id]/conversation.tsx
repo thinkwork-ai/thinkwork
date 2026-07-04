@@ -1,19 +1,25 @@
-import React, { useRef, useMemo, useState, useEffect } from "react";
+import React, { useRef, useMemo, useState, useEffect, useCallback } from "react";
 import {
+  Alert,
   View,
   FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Keyboard,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, MoreHorizontal } from "lucide-react-native";
 import { Text } from "@/components/ui/typography";
 import { ChatBubble } from "@/components/chat/ChatBubble";
-import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import {
+  MessageInputFooter,
+  type MessageInputMention,
+} from "@/components/input/MessageInputFooter";
+import {
+  type SendMessageGoalMode,
   useNewMessageSubscription,
   useThread,
 } from "@thinkwork/react-native-sdk";
@@ -22,19 +28,37 @@ import { useMessages as useLocalMessages } from "@/lib/hooks/use-messages";
 import {
   SendMessageMutation,
   ThreadMentionTargetsQuery,
+  MyApprovedModelCatalogQuery,
 } from "@/lib/graphql-queries";
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import {
   mentionCandidatesForTargets,
-  sendMessageMentionsForInput,
 } from "@/lib/thread-mentions";
+import { buildThreadConversationSendVariables } from "@/lib/thread-conversation-send";
+import {
+  applyGoalIntent,
+  cancelGoalIntent,
+  clearGoalIntent,
+  emptyGoalIntentDraft,
+  type GoalIntentDraft,
+} from "@/lib/composer-goal-intent";
+import type { ApprovedComposerModel } from "@/lib/composer-model-selection";
+import { pickImage } from "@/lib/agent/capture-image";
+import {
+  launchCamera,
+  launchImagePicker,
+} from "@/lib/agent/tools/image-picker";
+import {
+  launchDocumentPicker,
+  type PickedDocument,
+} from "@/lib/agent/tools/file-picker";
+import type { ImagePart } from "@/lib/agent/types";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
 import { WebContent } from "@/components/layout/web-content";
-import type { SelectedMention } from "@/components/chat/ChatInput";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { isSystemMessage } from "@/components/chat/system-message";
 
@@ -80,6 +104,9 @@ export default function ThreadConversationScreen() {
     variables: { threadId: id ?? "" },
     pause: !id,
   });
+  const [{ data: modelCatalogData }] = useQuery({
+    query: MyApprovedModelCatalogQuery,
+  });
   const mentionCandidates = useMemo(
     () =>
       mentionCandidatesForTargets(
@@ -102,8 +129,30 @@ export default function ThreadConversationScreen() {
       ),
     [mentionTargetsData?.threadMentionTargets],
   );
-  const [pendingMentions, setPendingMentions] = useState<SelectedMention[]>([]);
+  const [messageText, setMessageText] = useState("");
+  const [pendingMentions, setPendingMentions] = useState<
+    MessageInputMention[]
+  >([]);
+  const [attachedImage, setAttachedImage] = useState<ImagePart | null>(null);
+  const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = useState<PickedDocument | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [goalDraft, setGoalDraft] = useState<GoalIntentDraft>(
+    emptyGoalIntentDraft,
+  );
+  const [activeGoalMode, setActiveGoalMode] =
+    useState<SendMessageGoalMode | null>(null);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
+  const approvedModels = useMemo<ApprovedComposerModel[] | null>(() => {
+    const models = modelCatalogData?.myApprovedModelCatalog;
+    return models ? [...models] : null;
+  }, [modelCatalogData?.myApprovedModelCatalog]);
+  const selectedModel = useMemo(
+    () =>
+      approvedModels?.find((model) => model.modelId === selectedModelId) ??
+      null,
+    [approvedModels, selectedModelId],
+  );
 
   // Convert messages to ChatMessage type with timestamp. SDK returns role as
   // the uppercase enum literal ("USER" | "ASSISTANT" | ...) whereas the
@@ -175,27 +224,74 @@ export default function ThreadConversationScreen() {
     chatMessages.length > 0 ? chatMessages[chatMessages.length - 1] : null;
   const isStreaming = lastMsg?.role === "user";
 
-  const handleSend = async (content: string) => {
-    if (!id) return;
-    const mentionsToSend =
-      pendingMentions
-        .filter(isSendableMention)
-        .filter((mention) => content.includes(mention.rawText));
-    setPendingMentions([]);
-    try {
-      await executeSendMessage({
-        input: {
-          threadId: id,
-          role: "USER" as any,
-          content,
-          senderType: "user",
-          ...(currentUser?.id ? { senderId: currentUser.id } : {}),
-          ...(mentionsToSend.length > 0
-            ? { mentions: sendMessageMentionsForInput(mentionsToSend) as any }
-            : {}),
+  const handleAttach = useCallback(() => {
+    Alert.alert("Attach image", undefined, [
+      {
+        text: "Photo Library",
+        onPress: async () => {
+          const img = await pickImage(launchImagePicker);
+          if (img) {
+            setAttachedImage(img);
+            setAttachedImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
         },
-      });
+      },
+      {
+        text: "Camera",
+        onPress: async () => {
+          const img = await pickImage(launchCamera);
+          if (img) {
+            setAttachedImage(img);
+            setAttachedImageUri(`data:image/${img.format};base64,${img.data}`);
+          }
+        },
+      },
+      {
+        text: "File",
+        onPress: async () => {
+          const result = await launchDocumentPicker();
+          const file = result.canceled ? null : result.assets?.[0];
+          if (file) setAttachedFile(file);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, []);
+
+  const handleSend = async () => {
+    if (!id) return;
+    const content = messageText.trim();
+    const image = attachedImage;
+    const file = attachedFile;
+    if (!content && !image && !file) return;
+
+    const userText =
+      content ||
+      (file ? `Attached file: ${file.name}.` : "Attached image for this turn.");
+    setMessageText("");
+    setAttachedImage(null);
+    setAttachedImageUri(null);
+    setAttachedFile(null);
+    setPendingMentions([]);
+    Keyboard.dismiss();
+
+    try {
+      await executeSendMessage(
+        buildThreadConversationSendVariables({
+          threadId: id,
+          content: userText,
+          currentUserId: currentUser?.id,
+          mentions: pendingMentions,
+          modelId: selectedModel?.modelId,
+          goalMode: activeGoalMode,
+        }) as any,
+      );
       markThreadActive(id);
+      if (activeGoalMode) {
+        const next = clearGoalIntent();
+        setGoalDraft(next.draft);
+        setActiveGoalMode(next.activeGoalMode);
+      }
     } catch (e) {
       console.error("[ThreadChat] send failed:", e);
     }
@@ -290,30 +386,54 @@ export default function ThreadConversationScreen() {
 
           {/* Input */}
           <WebContent>
-            <ChatInput
-              onSend={handleSend}
-              mentions={mentionCandidates ?? []}
+            <MessageInputFooter
+              value={messageText}
+              onChangeText={setMessageText}
+              onSubmit={handleSend}
+              colors={colors}
+              isDark={colorScheme === "dark"}
+              onAttach={handleAttach}
+              mentionCandidates={mentionCandidates ?? []}
+              selectedMentions={pendingMentions}
               onMentionsChange={setPendingMentions}
+              attachedImageUri={attachedImageUri}
+              attachedFileName={attachedFile?.name ?? null}
+              onRemoveAttachment={() => {
+                setAttachedImage(null);
+                setAttachedImageUri(null);
+                setAttachedFile(null);
+              }}
+              modelOptions={approvedModels}
+              selectedModelId={selectedModelId}
+              onModelSelect={(model) => setSelectedModelId(model.modelId)}
+              goalDraft={goalDraft}
+              goalActive={Boolean(activeGoalMode)}
+              onGoalDraftChange={setGoalDraft}
+              onGoalApply={(draft) => {
+                const next = applyGoalIntent(
+                  { draft: goalDraft, activeGoalMode },
+                  draft,
+                );
+                setGoalDraft(next.draft);
+                setActiveGoalMode(next.activeGoalMode);
+              }}
+              onGoalCancel={() => {
+                const next = cancelGoalIntent({
+                  draft: goalDraft,
+                  activeGoalMode,
+                });
+                setGoalDraft(next.draft);
+                setActiveGoalMode(next.activeGoalMode);
+              }}
+              onGoalClear={() => {
+                const next = clearGoalIntent();
+                setGoalDraft(next.draft);
+                setActiveGoalMode(next.activeGoalMode);
+              }}
             />
           </WebContent>
         </KeyboardAvoidingView>
       </View>
     </View>
-  );
-}
-
-function isSendableMention(
-  mention: SelectedMention,
-): mention is SelectedMention & {
-  targetType: "USER" | "AGENT";
-  targetId: string;
-  displayName: string;
-  rawText: string;
-} {
-  return Boolean(
-    mention.targetType &&
-      mention.targetId &&
-      mention.displayName &&
-      mention.rawText,
   );
 }
