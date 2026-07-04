@@ -3183,11 +3183,13 @@ export async function handleInvocation(
     // structured content the model returned as *markdown* (a GFM table or a
     // clean list of records) and, if it converts + validates through the SAME
     // strict validator the emit tool uses, emits it as an additional
-    // data-json-render part. SHIP-INERT: gated on
-    // `thread_json_render_safety_net_enabled`; default/absent = OFF, so runtime
-    // behavior is byte-for-byte unchanged until a host opts in. The original
-    // assistant prose is always kept intact — this augments, never replaces.
-    if (args.payload.thread_json_render_safety_net_enabled === true) {
+    // data-json-render part. DEFAULT-ON (THINK-145): live dev evidence showed
+    // models return markdown tables despite the advisory trigger policy, so
+    // first-class components must not depend on model compliance. Hosts can
+    // kill-switch per dispatch with
+    // `thread_json_render_safety_net_enabled: false`. The original assistant
+    // prose is always kept intact — this augments, never replaces.
+    if (args.payload.thread_json_render_safety_net_enabled !== false) {
       try {
         const conversion = detectAndConvert(runResult.content);
         if (conversion.matched && conversion.part) {
