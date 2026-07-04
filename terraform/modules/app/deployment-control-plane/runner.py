@@ -1881,6 +1881,10 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "",
         ),
         "n8n_operator_secret_arn": n8n_guardrails.get("n8n_operator_secret_arn", ""),
+        "n8n_agent_step_bridge_credential_secret_arn": n8n_guardrails.get(
+            "n8n_agent_step_bridge_credential_secret_arn",
+            "",
+        ),
         "n8n_service_credential_secret_arn": n8n_guardrails.get(
             "n8n_service_credential_secret_arn",
             "",
@@ -3369,6 +3373,11 @@ variable "n8n_operator_secret_arn" {{
   type = string
 }}
 
+variable "n8n_agent_step_bridge_credential_secret_arn" {{
+  type    = string
+  default = ""
+}}
+
 variable "n8n_service_credential_secret_arn" {{
   type = string
 }}
@@ -3594,6 +3603,7 @@ module "thinkwork" {{
   n8n_database_name                = var.n8n_database_name
   n8n_encryption_key_secret_arn    = var.n8n_encryption_key_secret_arn
   n8n_operator_secret_arn          = var.n8n_operator_secret_arn
+  n8n_agent_step_bridge_credential_secret_arn = var.n8n_agent_step_bridge_credential_secret_arn
   n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
   n8n_storage_bucket_name          = var.n8n_storage_bucket_name
   n8n_create_storage_bucket        = var.n8n_create_storage_bucket
