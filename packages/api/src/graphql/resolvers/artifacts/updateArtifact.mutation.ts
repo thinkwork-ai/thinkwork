@@ -1,6 +1,7 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, randomUUID, artifacts } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
+import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 import {
   artifactContentBelongsInPayloadStore,
   artifactToCamelWithPayload,
@@ -19,6 +20,9 @@ export const updateArtifact = async (
     .where(eq(artifacts.id, args.id));
   if (!existing) throw new Error("Artifact not found");
   await requireTenantMember(ctx, existing.tenant_id);
+  // Canvas writes require a member-or-above space role (saved) or originating-
+  // thread visibility (draft) per R15. No-op for non-canvas artifacts.
+  await assertCanvasAccess(ctx, existing, "write");
   if (i.s3Key !== undefined && i.s3Key !== null) {
     throw new Error("Artifact s3Key is server-managed");
   }
