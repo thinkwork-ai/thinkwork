@@ -1881,6 +1881,10 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "",
         ),
         "n8n_operator_secret_arn": n8n_guardrails.get("n8n_operator_secret_arn", ""),
+        "n8n_agent_step_bridge_credential_secret_arn": n8n_guardrails.get(
+            "n8n_agent_step_bridge_credential_secret_arn",
+            "",
+        ),
         "n8n_service_credential_secret_arn": n8n_guardrails.get(
             "n8n_service_credential_secret_arn",
             "",
