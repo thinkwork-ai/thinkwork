@@ -1,4 +1,5 @@
 import { memoryRecords } from "./memoryRecords.query.js";
+import { memoryRecordsByIds } from "./memoryRecordsByIds.query.js";
 import { memorySearch } from "./memorySearch.query.js";
 import { memoryGraph } from "./memoryGraph.query.js";
 import { memorySystemConfig } from "./memorySystemConfig.query.js";
@@ -23,6 +24,7 @@ import { brainDreamRuns } from "./brainDreamRuns.query.js";
 
 export const memoryQueries = {
   memoryRecords,
+  memoryRecordsByIds,
   memorySearch,
   spaceMemorySearch,
   memoryGraph,

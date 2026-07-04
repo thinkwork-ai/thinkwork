@@ -264,6 +264,7 @@ extend type Query {
     query: String
     limit: Int
   ): [MemoryRecord!]!
+  memoryRecordsByIds(tenantId: ID!, ids: [ID!]!): [MemoryRecord!]!
   memorySearch(
     tenantId: ID
     userId: ID
