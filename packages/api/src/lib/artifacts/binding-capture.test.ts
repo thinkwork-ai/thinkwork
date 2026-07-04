@@ -13,6 +13,7 @@ const OWNER_ID = "55555555-5555-5555-5555-555555555555";
 const mocks = vi.hoisted(() => ({
   bindingInserts: [] as Array<Record<string, unknown>>,
   onConflicts: [] as Array<Record<string, unknown>>,
+  wherePredicates: [] as Array<{ table: string; predicate: unknown }>,
   // Per-table select results the mock db hands back at `.limit()`.
   mcpServerRow: null as { auth_type: string } | null,
   threadRow: null as { user_id: string | null } | null,
@@ -32,6 +33,7 @@ vi.mock("../../graphql/utils.js", () => {
     __table: "tenant_mcp_servers",
     tenant_id: { name: "tenant_id" },
     name: { name: "name" },
+    slug: { name: "slug" },
     auth_type: { name: "auth_type" },
   };
   const threads = {
@@ -47,7 +49,10 @@ vi.mock("../../graphql/utils.js", () => {
         table = tbl.__table;
         return builder;
       },
-      where: () => builder,
+      where: (predicate: unknown) => {
+        mocks.wherePredicates.push({ table, predicate });
+        return builder;
+      },
       limit: () => {
         if (table === "tenant_mcp_servers") {
           return Promise.resolve(
@@ -83,8 +88,9 @@ vi.mock("../../graphql/utils.js", () => {
       select: vi.fn(() => selectBuilder()),
       insert: vi.fn(() => insertBuilder),
     },
-    eq: (..._a: unknown[]) => ({ eq: _a }),
+    eq: (...a: unknown[]) => ({ eq: a }),
     and: (...a: unknown[]) => ({ and: a }),
+    or: (...a: unknown[]) => ({ or: a }),
     sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
       sql: strings.join("?"),
       values,
@@ -122,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.bindingInserts.length = 0;
   mocks.onConflicts.length = 0;
+  mocks.wherePredicates.length = 0;
   mocks.mcpServerRow = null;
   mocks.threadRow = null;
 });
@@ -176,6 +183,35 @@ describe("upsertBindingFromActivityEvent", () => {
       threadId: THREAD_ID,
       payload: payloadWithBinding(part, descriptor(part)),
     });
+    expect(mocks.bindingInserts[0]).toMatchObject({
+      auth_context: "per_user_oauth",
+      owner_user_id: OWNER_ID,
+    });
+  });
+
+  it("matches the MCP server registry by SLUG or name — the runtime sends the slug", async () => {
+    // Regression (THINK-145 U11 live): the runtime identifies servers by slug
+    // ("twenty--crm"); matching only tenant_mcp_servers.name ("Twenty CRM")
+    // silently fell through to tenant_mcp with no owner.
+    const part = createTaskReviewJsonRenderFixture();
+    mocks.mcpServerRow = { auth_type: "oauth" };
+    mocks.threadRow = { user_id: OWNER_ID };
+    await upsertBindingFromActivityEvent({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      payload: payloadWithBinding(
+        part,
+        descriptor(part, { serverName: "twenty--crm" }),
+      ),
+    });
+    const mcpWhere = mocks.wherePredicates.find(
+      (w) => w.table === "tenant_mcp_servers",
+    );
+    const flat = JSON.stringify(mcpWhere?.predicate);
+    // The lookup must OR over both identity columns.
+    expect(flat).toContain('"or"');
+    expect(flat).toContain('"slug"');
+    expect(flat).toContain('"name"');
     expect(mocks.bindingInserts[0]).toMatchObject({
       auth_context: "per_user_oauth",
       owner_user_id: OWNER_ID,

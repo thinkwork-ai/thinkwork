@@ -29,6 +29,7 @@ import {
   db,
   eq,
   and,
+  or,
   sql,
   tenantMcpServers,
   threads,
@@ -44,6 +45,13 @@ type AuthContext = "tenant_mcp" | "per_user_oauth";
  * is tenant-scoped and refreshable unattended. An unresolved server name is
  * treated as tenant_mcp — the missing-server case degrades to a terminal BAD
  * state at refresh time (U6), not a mis-scoped credential.
+ *
+ * The runtime identifies a server by its SLUG (the mcp_configs key, e.g.
+ * `twenty--crm`), not its display name ("Twenty CRM"). Matching only on
+ * `name` silently misclassified every slug-named binding as tenant_mcp
+ * (observed live: a Twenty per-user-OAuth chart captured as tenant_mcp with
+ * no owner, THINK-145 U11). Match slug first; keep name as a fallback for
+ * rows registered before slugs were backfilled.
  */
 async function classifyAuthContext(
   tenantId: string,
@@ -55,7 +63,10 @@ async function classifyAuthContext(
     .where(
       and(
         eq(tenantMcpServers.tenant_id, tenantId),
-        eq(tenantMcpServers.name, serverName),
+        or(
+          eq(tenantMcpServers.slug, serverName),
+          eq(tenantMcpServers.name, serverName),
+        ),
       ),
     )
     .limit(1);
