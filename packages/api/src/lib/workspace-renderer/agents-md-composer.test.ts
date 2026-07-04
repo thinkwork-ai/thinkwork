@@ -139,6 +139,28 @@ describe("composeAgentsMdWithRouting", () => {
     expect(composed).not.toContain("not currently hydrated");
   });
 
+  it("renders a Saved Canvases manifest block when canvases are present (U9)", () => {
+    const composed = composeAgentsMdWithRouting({
+      ...ROUTING_INPUT,
+      canvases: [
+        { name: "Cost Dashboard", artifactId: "art-1" },
+        { name: "Sales Dashboard", artifactId: "art-2" },
+      ],
+    });
+    expect(composed).toContain("### Saved Canvases");
+    expect(composed).toContain("- Cost Dashboard — `art-1`");
+    expect(composed).toContain("- Sales Dashboard — `art-2`");
+    expect(composed).toContain("`load_canvas`");
+  });
+
+  it("omits the Saved Canvases block when there are no saved canvases", () => {
+    const composed = composeAgentsMdWithRouting({
+      ...ROUTING_INPUT,
+      canvases: [],
+    });
+    expect(composed).not.toContain("### Saved Canvases");
+  });
+
   it("collapses multi-line routing guidance to keep the section deterministic", () => {
     const composed = composeAgentsMdWithRouting({
       ...ROUTING_INPUT,

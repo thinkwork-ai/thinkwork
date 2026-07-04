@@ -44,6 +44,7 @@ import type {
   WorkspaceHydrateStatusMount,
   RenderedWorkspaceTuple,
   ResolvedWorkspaceRenderTuple,
+  WorkspaceCanvasIndexEntry,
   WorkspaceSpaceIndexEntry,
   WorkspaceSpaceParticipantEntry,
   WorkspaceObjectMetadata,
@@ -661,6 +662,7 @@ function renderGeneratedAgentsMd(input: {
   spaces: WorkspaceSpaceIndexEntry[];
   participants: WorkspaceSpaceParticipantEntry[];
   agentProfiles: WorkspaceAgentProfileRoutingEntry[];
+  canvases?: Array<{ name: string; artifactId: string }>;
   userHydrated: boolean;
 }): string {
   const normalizedSpaces = input.spaces.length
@@ -691,6 +693,7 @@ function renderGeneratedAgentsMd(input: {
       name: profile.name,
       routingGuidance: profile.routingGuidance,
     })),
+    canvases: input.canvases ?? [],
   });
 }
 
@@ -929,6 +932,21 @@ export async function renderWorkspaceTuple(
     agentAllowedTools: input.agentAllowedTools,
     modelRoutingSources,
   });
+  // Saved-canvas manifest (THINK-145 U9, R19): SAVED canvases in the active
+  // Space, rendered as a passive AGENTS.md block. Best-effort — a repository
+  // that omits the method or a query failure degrades to no block, never a
+  // failed render. Routed through the repository (like listAuthorizedSpaces) so
+  // it honors an injected fake and never touches the DB in unit tests.
+  const resolveSavedCanvasIndex = async (): Promise<
+    WorkspaceCanvasIndexEntry[]
+  > => {
+    if (!repository.listSavedCanvases) return [];
+    try {
+      return await repository.listSavedCanvases(tuple);
+    } catch {
+      return [];
+    }
+  };
   const [
     authorizedSpaces,
     spaceParticipants,
@@ -938,6 +956,7 @@ export async function renderWorkspaceTuple(
     existingManifest,
     existingAgentsMd,
     existingGeneratedContext,
+    savedCanvasIndex,
   ] = await Promise.all([
     repository.listAuthorizedSpaces?.(tuple) ??
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
@@ -948,6 +967,7 @@ export async function renderWorkspaceTuple(
     objectStore.getText({ bucket, key: manifestKey }),
     objectStore.getText({ bucket, key: agentsMdKey }),
     objectStore.getText({ bucket, key: generatedContextFile.key }),
+    resolveSavedCanvasIndex(),
   ]);
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
@@ -955,6 +975,10 @@ export async function renderWorkspaceTuple(
     spaces: authorizedSpaces,
     participants: spaceParticipants,
     agentProfiles: routableAgentProfiles,
+    canvases: savedCanvasIndex.map((canvas) => ({
+      name: canvas.name,
+      artifactId: canvas.artifactId,
+    })),
     userHydrated: Boolean(userPrefix),
   });
   const generatedFiles: GeneratedWorkspaceFile[] = [

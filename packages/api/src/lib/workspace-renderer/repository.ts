@@ -1,18 +1,24 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentProfileSpaceAssignments,
   agentProfiles,
   agents,
+  artifacts,
   spaceMembers,
   spaces,
   tenants,
   threads,
   users,
 } from "@thinkwork/database-pg/schema";
+import {
+  CANVAS_LIVING_KIND,
+  CANVAS_SNAPSHOT_KIND,
+} from "../artifacts/canvas-access.js";
 import type {
   ResolvedWorkspaceRenderTuple,
   WorkspaceAgentProfileRoutingEntry,
+  WorkspaceCanvasIndexEntry,
   WorkspaceSpaceIndexEntry,
   WorkspaceSpaceParticipantEntry,
   WorkspaceRenderTupleInput,
@@ -296,5 +302,29 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
           left.name.localeCompare(right.name) ||
           left.slug.localeCompare(right.slug),
       );
+  }
+
+  async listSavedCanvases(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceCanvasIndexEntry[]> {
+    if (!tuple.spaceId) return [];
+    const rows = await this.db
+      .select({ id: artifacts.id, title: artifacts.title })
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.tenant_id, tuple.tenantId),
+          eq(artifacts.space_id, tuple.spaceId),
+          eq(artifacts.status, "final"),
+          sql`(${artifacts.metadata}->>'kind' = ${CANVAS_LIVING_KIND}
+            OR ${artifacts.metadata}->>'kind' = ${CANVAS_SNAPSHOT_KIND})`,
+        ),
+      )
+      .orderBy(desc(artifacts.updated_at))
+      .limit(100);
+    return rows.map((row) => ({
+      artifactId: row.id,
+      name: row.title ?? "",
+    }));
   }
 }

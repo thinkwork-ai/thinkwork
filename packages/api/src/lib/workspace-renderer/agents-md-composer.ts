@@ -224,12 +224,24 @@ export interface AgentsMdRoutingParticipantEntry {
   folderPath: string;
 }
 
+/**
+ * A saved-canvas manifest row (Living Artifacts THINK-145 U9, R19). The passive
+ * manifest lets the agent resolve "open my <name>" with zero tool calls;
+ * `list_canvases` is the fresh truth after a mid-thread save. Drafts are
+ * excluded by the composing query.
+ */
+export interface AgentsMdRoutingCanvasEntry {
+  name: string;
+  artifactId: string;
+}
+
 export interface ComposeAgentsMdRoutingInput {
   baseline: string;
   spaces: AgentsMdRoutingSpaceEntry[];
   user?: AgentsMdRoutingUserEntry | null;
   participants?: AgentsMdRoutingParticipantEntry[];
   agentProfiles?: AgentsMdRoutingProfileEntry[];
+  canvases?: AgentsMdRoutingCanvasEntry[];
 }
 
 /**
@@ -270,6 +282,7 @@ export function composeAgentsMdWithRouting(
   const baseline = stripGeneratedAgentsMdSections(input.baseline).trimEnd();
   const participants = input.participants ?? [];
   const agentProfiles = input.agentProfiles ?? [];
+  const canvases = input.canvases ?? [];
 
   const lines: string[] = [
     WORKSPACE_ROUTING_MARKER,
@@ -318,6 +331,20 @@ export function composeAgentsMdWithRouting(
         : "";
       lines.push(
         guidance ? `- ${profile.name} — ${guidance}` : `- ${profile.name}`,
+      );
+    }
+  }
+  if (canvases.length > 0) {
+    lines.push(
+      "",
+      "### Saved Canvases",
+      "",
+      "Saved canvases in the active Space. To open one, call `load_canvas` with its name; `list_canvases` is authoritative after a mid-thread save.",
+      "",
+    );
+    for (const canvas of canvases) {
+      lines.push(
+        `- ${collapseWhitespace(canvas.name)} — \`${canvas.artifactId}\``,
       );
     }
   }
