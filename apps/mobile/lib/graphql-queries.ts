@@ -844,6 +844,8 @@ export const NewThreadMentionTargetsQuery = graphql(`
       isDefaultAgent
       avatarUrl
       role
+      email
+      description
     }
   }
 `);
@@ -859,6 +861,8 @@ export const ThreadMentionTargetsQuery = graphql(`
       isDefaultAgent
       avatarUrl
       role
+      email
+      description
     }
   }
 `);

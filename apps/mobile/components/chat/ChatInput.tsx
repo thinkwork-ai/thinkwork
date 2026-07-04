@@ -20,6 +20,10 @@ export interface SelectedMention {
   id: string;
   name: string;
   type: "member" | "assistant";
+  targetId?: string;
+  targetType?: "USER" | "AGENT";
+  displayName?: string;
+  rawText?: string;
 }
 
 interface ChatInputProps {
@@ -107,11 +111,20 @@ export function ChatInput({
     setCursorPos(newCursorPos);
 
     // Track in selectedMentions (avoid dupes)
+    const rawText = "@" + candidate.name;
     const updated = selectedMentions.some((m) => m.id === candidate.id)
       ? selectedMentions
       : [
           ...selectedMentions,
-          { id: candidate.id, name: candidate.name, type: candidate.type },
+          {
+            id: candidate.id,
+            name: candidate.name,
+            type: candidate.type,
+            targetId: candidate.targetId,
+            targetType: candidate.targetType,
+            displayName: candidate.displayName ?? candidate.name,
+            rawText,
+          },
         ];
     setSelectedMentions(updated);
     if (onMentionsChange) onMentionsChange(updated);

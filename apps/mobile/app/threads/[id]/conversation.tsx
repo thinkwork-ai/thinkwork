@@ -15,13 +15,21 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import {
   useNewMessageSubscription,
-  useSendMessage,
   useThread,
 } from "@thinkwork/react-native-sdk";
+import { useMutation, useQuery } from "urql";
 import { useMessages as useLocalMessages } from "@/lib/hooks/use-messages";
+import {
+  SendMessageMutation,
+  ThreadMentionTargetsQuery,
+} from "@/lib/graphql-queries";
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
+import {
+  mentionCandidatesForTargets,
+  sendMessageMentionsForInput,
+} from "@/lib/thread-mentions";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
@@ -64,11 +72,36 @@ export default function ThreadConversationScreen() {
     }
   }, [subData]);
 
-  const sendMessage = useSendMessage();
+  const [, executeSendMessage] = useMutation(SendMessageMutation);
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
-  // TODO: mentionCandidates query not yet available in GraphQL schema
-  const mentionCandidates: any[] = [];
+  const [{ data: mentionTargetsData }] = useQuery({
+    query: ThreadMentionTargetsQuery,
+    variables: { threadId: id ?? "" },
+    pause: !id,
+  });
+  const mentionCandidates = useMemo(
+    () =>
+      mentionCandidatesForTargets(
+        (mentionTargetsData?.threadMentionTargets ?? [])
+          .filter((target) =>
+            ["USER", "AGENT"].includes(String(target.targetType)),
+          )
+          .map((target) => ({
+            id: target.id,
+            targetType: target.targetType as "USER" | "AGENT",
+            targetId: target.targetId,
+            displayName: target.displayName,
+            aliases: target.aliases,
+            isDefaultAgent: target.isDefaultAgent,
+            avatarUrl: target.avatarUrl,
+            role: target.role,
+            email: target.email,
+            description: target.description,
+          })),
+      ),
+    [mentionTargetsData?.threadMentionTargets],
+  );
   const [pendingMentions, setPendingMentions] = useState<SelectedMention[]>([]);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
 
@@ -145,11 +178,22 @@ export default function ThreadConversationScreen() {
   const handleSend = async (content: string) => {
     if (!id) return;
     const mentionsToSend =
-      pendingMentions.length > 0 ? pendingMentions : undefined;
+      pendingMentions
+        .filter(isSendableMention)
+        .filter((mention) => content.includes(mention.rawText));
     setPendingMentions([]);
     try {
-      await sendMessage(id, content, {
-        ...(currentUser?.id ? { senderId: currentUser.id } : {}),
+      await executeSendMessage({
+        input: {
+          threadId: id,
+          role: "USER" as any,
+          content,
+          senderType: "user",
+          ...(currentUser?.id ? { senderId: currentUser.id } : {}),
+          ...(mentionsToSend.length > 0
+            ? { mentions: sendMessageMentionsForInput(mentionsToSend) as any }
+            : {}),
+        },
       });
       markThreadActive(id);
     } catch (e) {
@@ -255,5 +299,21 @@ export default function ThreadConversationScreen() {
         </KeyboardAvoidingView>
       </View>
     </View>
+  );
+}
+
+function isSendableMention(
+  mention: SelectedMention,
+): mention is SelectedMention & {
+  targetType: "USER" | "AGENT";
+  targetId: string;
+  displayName: string;
+  rawText: string;
+} {
+  return Boolean(
+    mention.targetType &&
+      mention.targetId &&
+      mention.displayName &&
+      mention.rawText,
   );
 }
