@@ -19,6 +19,11 @@ export interface ChatThreadSummary {
     kind?: string | null;
   } | null;
   lastReadAt?: string | null;
+  /**
+   * The CALLER's notification preference for this thread (SUBSCRIBED |
+   * MENTIONS | MUTED). Null/absent when the caller has no participant row.
+   */
+  viewerNotificationPreference?: string | null;
   lastActivityAt?: string | null;
   lastTurnCompletedAt?: string | null;
   archivedAt?: string | null;
@@ -41,6 +46,11 @@ export function isThreadAwaitingUser(thread: ChatThreadSummary): boolean {
 export function formatCompactCount(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(value);
+}
+
+/** True when the caller muted this thread (OS notifications suppressed unless @mentioned). */
+export function isThreadMuted(thread: ChatThreadSummary): boolean {
+  return (thread.viewerNotificationPreference ?? "").toUpperCase() === "MUTED";
 }
 
 export function threadTitle(thread: ChatThreadSummary): string {

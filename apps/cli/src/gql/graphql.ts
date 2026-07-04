@@ -3794,6 +3794,13 @@ export type Mutation = {
   setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
+  /**
+   * Set the CALLER's notification preference for one thread (mute / mentions-only /
+   * subscribed). Writes only the caller's own thread_participants row, creating it
+   * if the caller can see the thread but isn't a participant yet. A direct
+   * @mention always punches through MUTED/MENTIONS on the activity fan-out.
+   */
+  setThreadNotificationPreference: ThreadParticipant;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startAutomationBuilder: AutomationBuilderSession;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
@@ -5003,6 +5010,13 @@ export type MutationSetSpaceToolsArgs = {
 export type MutationSetTenantMemberPasswordArgs = {
   input: SetTenantMemberPasswordInput;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetThreadNotificationPreferenceArgs = {
+  preference: ThreadParticipantNotificationPreference;
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -9420,6 +9434,12 @@ export type Thread = {
   updatedAt: Scalars['AWSDateTime']['output'];
   user?: Maybe<User>;
   userId?: Maybe<Scalars['ID']['output']>;
+  /**
+   * The CALLER's notification preference for this thread (their
+   * thread_participants row). Null when the caller has no participant row or on
+   * query paths that don't join it (only threadsPaged and pinnedThreads do).
+   */
+  viewerNotificationPreference?: Maybe<ThreadParticipantNotificationPreference>;
 };
 
 

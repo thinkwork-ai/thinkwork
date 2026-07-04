@@ -175,6 +175,7 @@ export async function loadPinnedThreads(
       last_read_at: sql<Date | null>`COALESCE(${threadParticipants.last_read_at}, ${threads.last_read_at})`,
       pinned_at: threadParticipants.pinned_at,
       pin_order: threadParticipants.pin_order,
+      viewer_notification_preference: threadParticipants.notification_preference,
     })
     .from(threadParticipants)
     .innerJoin(
@@ -215,6 +216,12 @@ export async function loadPinnedThread(
 
 export function rowToPinnedThread(row: Record<string, unknown>) {
   const thread = threadToCamel(row);
+  // The pinned row IS the caller's participant row, so its preference is the
+  // viewer-scoped value (snakeToCamel already produced the camel key).
+  if (typeof thread.viewerNotificationPreference === "string") {
+    thread.viewerNotificationPreference =
+      thread.viewerNotificationPreference.toUpperCase();
+  }
   return {
     thread,
     pinnedAt:
