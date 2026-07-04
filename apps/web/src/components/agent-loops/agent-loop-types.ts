@@ -122,8 +122,36 @@ export interface AgentLoopRow {
   totalCostUsdCents: number;
   costPerAcceptedRunUsdCents?: number | null;
   runs?: AgentLoopRunSummary[];
+  // THINK-137 U8 (R8): bound inbound webhook endpoint + metadata-only delivery
+  // history, present only for webhook-trigger automations.
+  webhookEndpoint?: AgentLoopWebhookEndpoint | null;
+  webhookDeliveries?: AutomationWebhookDelivery[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AgentLoopWebhookEndpoint {
+  webhookId: string;
+  token: string;
+  path: string;
+  enabled: boolean;
+}
+
+export interface AutomationWebhookDelivery {
+  id: string;
+  receivedAt: string;
+  resolutionStatus: string;
+  signatureStatus: string;
+  statusCode?: number | null;
+  providerName?: string | null;
+  providerEventId?: string | null;
+  normalizedKind?: string | null;
+  threadId?: string | null;
+  threadCreated?: boolean | null;
+  isReplay: boolean;
+  retryCount: number;
+  durationMs?: number | null;
+  errorMessage?: string | null;
 }
 
 export interface AgentLoopEvidenceItem {

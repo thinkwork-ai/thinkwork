@@ -54,6 +54,10 @@ import {
 } from "@/lib/settings-queries";
 import { AgentLoopForm } from "./AgentLoopForm";
 import { buildWorkerOptions } from "./AgentLoopInventory";
+import {
+  AutomationWebhookDeliveriesPanel,
+  AutomationWebhookEndpointPanel,
+} from "./AutomationWebhookPanel";
 import { AutomationDetailAdvancedInspector } from "./AutomationDetailAdvancedInspector";
 import { AutomationRunsList } from "./AutomationRunsList";
 import { AutomationStatusRail } from "./AutomationStatusRail";
@@ -372,6 +376,8 @@ export function AgentLoopDetailContent({
   const criteria = Array.isArray(goal.completionCriteria)
     ? goal.completionCriteria.filter((entry) => typeof entry === "string")
     : [];
+  const webhookEndpoint = loop.webhookEndpoint ?? null;
+  const webhookDeliveries = loop.webhookDeliveries ?? [];
 
   return (
     <div className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto p-6">
@@ -450,6 +456,10 @@ export function AgentLoopDetailContent({
                   </div>
                 )}
               </section>
+
+              {webhookEndpoint ? (
+                <AutomationWebhookEndpointPanel endpoint={webhookEndpoint} />
+              ) : null}
             </main>
 
             <AutomationStatusRail
@@ -461,13 +471,17 @@ export function AgentLoopDetailContent({
           </div>
         </TabsContent>
 
-        <TabsContent value="activity" className="mt-0">
+        <TabsContent value="activity" className="mt-0 space-y-8">
           <section>
             <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
               Recent Runs
             </h2>
             <AutomationRunsList runs={loop.runs ?? []} onOpenRun={onOpenRun} />
           </section>
+
+          {webhookEndpoint ? (
+            <AutomationWebhookDeliveriesPanel deliveries={webhookDeliveries} />
+          ) : null}
         </TabsContent>
       </Tabs>
 

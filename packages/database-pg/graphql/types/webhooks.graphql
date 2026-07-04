@@ -10,6 +10,11 @@ type Webhook {
   spaceId: ID
   agentId: ID
   routineId: ID
+  # THINK-137 U8 (R8): the Automation this webhook is folded into, when
+  # target_type='automation'. Null for legacy/connector rows. The retired
+  # Settings → Webhooks detail route uses this to redirect to the owning
+  # Automation.
+  agentLoopId: ID
   prompt: String
   config: AWSJSON
   enabled: Boolean!
