@@ -17,7 +17,14 @@
 
 import { createHash } from "node:crypto";
 import { GraphQLError } from "graphql";
-import { and, artifacts, artifactVersions, db, eq, sql } from "../../graphql/utils.js";
+import {
+  and,
+  artifacts,
+  artifactVersions,
+  db,
+  eq,
+  sql,
+} from "../../graphql/utils.js";
 import { CANVAS_LIVING_KIND } from "./canvas-access.js";
 import {
   artifactContentKey,
@@ -28,7 +35,7 @@ import {
 
 /**
  * `artifacts.metadata.kind` marker for a living GenUI canvas. Distinct from the
- * legacy `promoteGenUIArtifact` snapshot kind (`json_render_snapshot`) — living
+ * retired promote-copy snapshot kind (`json_render_snapshot`) — living
  * semantics (born-as-artifact, save flip, version chain) apply to this kind
  * only in v1.
  */
@@ -165,17 +172,13 @@ export async function pinHeadToVersion(input: {
       ...(input.extraUpdates ?? {}),
     })
     .where(
-      and(
-        eq(artifacts.id, row.id),
-        eq(artifacts.head_write_seq, observedSeq),
-      ),
+      and(eq(artifacts.id, row.id), eq(artifacts.head_write_seq, observedSeq)),
     )
     .returning();
   if (!updated) {
-    throw new GraphQLError(
-      "Canvas head changed concurrently; retry the pin",
-      { extensions: { code: "CONFLICT" } },
-    );
+    throw new GraphQLError("Canvas head changed concurrently; retry the pin", {
+      extensions: { code: "CONFLICT" },
+    });
   }
 
   await db.insert(artifactVersions).values({

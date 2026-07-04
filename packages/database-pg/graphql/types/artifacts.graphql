@@ -210,14 +210,6 @@ input CreateArtifactInput {
   metadata: AWSJSON
 }
 
-input PromoteGenUIArtifactInput {
-  threadId: ID!
-  sourceMessageId: ID!
-  partId: String!
-  specHash: String!
-  idempotencyKey: String!
-}
-
 input UpdateArtifactInput {
   title: String
   type: ArtifactType
@@ -295,10 +287,6 @@ extend type Query {
 
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
-  # DEPRECATED for canvases (Living Artifacts THINK-145, R10): GenUI canvases
-  # are born as draft artifacts and saved via `saveCanvas` (a status flip, not
-  # a promote-copy). This remains only for legacy/non-canvas callers.
-  promoteGenUIArtifact(input: PromoteGenUIArtifactInput!): Artifact!
   # Living Artifacts (THINK-145 U4): save a draft canvas — status flip + naming
   # + space assignment (R10/R12/R15). Re-saving a saved canvas auto-pins the
   # prior head as a version (KTD3 check-in rule).

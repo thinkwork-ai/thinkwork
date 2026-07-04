@@ -3798,7 +3798,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteGenUIArtifact: Artifact;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4645,10 +4644,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-export type MutationPromoteGenUiArtifactArgs = {
-  input: PromoteGenUiArtifactInput;
 };
 
 export type MutationPublishRoutineVersionArgs = {
@@ -6108,14 +6103,6 @@ export type PromoteDraftAppletInput = {
   promotionProof: Scalars["String"]["input"];
   promotionProofExpiresAt: Scalars["AWSDateTime"]["input"];
   sourceDigest: Scalars["String"]["input"];
-  threadId: Scalars["ID"]["input"];
-};
-
-export type PromoteGenUiArtifactInput = {
-  idempotencyKey: Scalars["String"]["input"];
-  partId: Scalars["String"]["input"];
-  sourceMessageId: Scalars["ID"]["input"];
-  specHash: Scalars["String"]["input"];
   threadId: Scalars["ID"]["input"];
 };
 

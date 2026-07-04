@@ -3,7 +3,7 @@
  *
  * A living canvas stores its head (and each pinned version) as the stably-
  * stringified persisted json-render PART — `{ type: "data-json-render", id,
- * data }` — NOT the legacy `promoteGenUIArtifact` snapshot envelope. This
+ * data }` — NOT the retired promote-copy snapshot envelope. This
  * extracts the `{ id, data }` the thread json-render renderer consumes.
  */
 

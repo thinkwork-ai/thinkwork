@@ -2115,21 +2115,6 @@ export const HandleJsonRenderActionMutation = gql`
   }
 `;
 
-export const PromoteGenUIArtifactMutation = gql`
-  mutation PromoteGenUIArtifact($input: PromoteGenUIArtifactInput!) {
-    promoteGenUIArtifact(input: $input) {
-      id
-      title
-      type
-      status
-      summary
-      sourceMessageId
-      metadata
-      createdAt
-    }
-  }
-`;
-
 const ComputerApprovalFields = gql`
   fragment ComputerApprovalFields on InboxItem {
     id

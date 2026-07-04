@@ -24,13 +24,15 @@
  *   - Non-canvas artifacts: no-op — the caller's existing tenant-member gate
  *     stands unchanged.
  *
- * Historical note (the dead gate this unit fixes): `artifact.query.ts` used to
- * inline a check on `metadata.kind === "genui_snapshot"`, but
- * `promoteGenUIArtifact` writes `metadata.kind === "json_render_snapshot"`, so
- * the old gate never fired and every promoted snapshot was readable by any
- * tenant member regardless of thread visibility. `CANVAS_SNAPSHOT_KIND` below
- * is the value the writer actually persists; the old string is intentionally
- * NOT recognized (a regression test pins this).
+ * Historical note: `artifact.query.ts` used to inline a check on
+ * `metadata.kind === "genui_snapshot"`, but the retired `promoteGenUIArtifact`
+ * writer persisted `metadata.kind === "json_render_snapshot"`, so the old gate
+ * never fired and every promoted snapshot was readable by any tenant member
+ * regardless of thread visibility. The living canvas (`json_render_canvas`) is
+ * now the only GenUI artifact writer; `CANVAS_SNAPSHOT_KIND` below is retained
+ * only so any straggler snapshot rows on customer stages still get the
+ * space/thread access gate (defense in depth). The old `genui_snapshot` string
+ * is intentionally NOT recognized (a regression test pins this).
  */
 
 import { GraphQLError } from "graphql";
@@ -51,10 +53,12 @@ import { canAccessSpace } from "../../graphql/resolvers/spaces/shared.js";
 import { callerVisibleThreadPredicate } from "../../graphql/resolvers/threads/access.js";
 
 /**
- * The `metadata.kind` value that `promoteGenUIArtifact` (and, going forward,
- * the born-as-artifact canvas writer) persists. Kept as the single source of
- * truth for canvas detection so the query gates, the write gates, and the list
- * predicate can never drift from the writer again.
+ * @deprecated The `metadata.kind` value the retired `promoteGenUIArtifact`
+ * writer persisted. No writer emits this kind anymore (the living canvas is the
+ * only GenUI artifact system — see `CANVAS_LIVING_KIND`). Retained solely so
+ * access gates still recognize any straggler snapshot rows on customer stages
+ * and keep them space/thread-scoped (defense in depth). Do not add new writers
+ * for this kind.
  */
 export const CANVAS_SNAPSHOT_KIND = "json_render_snapshot";
 

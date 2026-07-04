@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
-import { createTaskReviewJsonRenderFixture } from "@/components/workbench/json-render/fixtures";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
 vi.mock("urql", () => ({
@@ -277,39 +276,6 @@ describe("AppletRouteContent", () => {
     expect(
       shell.querySelector('[data-runtime-mode="nativeTrusted"]'),
     ).toBeNull();
-  });
-});
-
-describe("data-view json-render snapshots", () => {
-  it("renders a promoted json-render snapshot without mounting the applet iframe", () => {
-    const fixture = createTaskReviewJsonRenderFixture();
-    const snapshot = {
-      schemaVersion: "thread-json-render-artifact-snapshot/v1",
-      kind: "json_render_snapshot",
-      source: {
-        threadId: "thread-1",
-        sourceMessageId: "message-1",
-        partId: fixture.id,
-        specHash: fixture.data.specHash,
-        promotedAt: "2026-06-21T00:00:00Z",
-        promotedByUserId: "user-1",
-      },
-      jsonRender: fixture,
-    };
-    setRouteQueryMocks({
-      artifact: artifactPayload({
-        type: "DATA_VIEW",
-        content: JSON.stringify(snapshot),
-        metadata: { kind: "json_render_snapshot" },
-      }),
-      applet: null,
-    });
-
-    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
-
-    expect(screen.getByText("Data view")).toBeTruthy();
-    expect(screen.getByText("Review onboarding task")).toBeTruthy();
-    expect(screen.queryByTestId("applet-iframe-host")).toBeNull();
   });
 });
 
