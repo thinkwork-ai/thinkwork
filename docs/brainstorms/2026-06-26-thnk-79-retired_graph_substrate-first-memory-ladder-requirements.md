@@ -225,7 +225,7 @@ After plan review, the first implementation slice is narrowed further:
   "promotion from user memory." A session may produce both user and space
   captures, but the durable space write targets the space scope directly.
 - **Follow-up:** company-level distillation, ontology processing, and wiki
-  rendering move into a later ontology -> wiki / company Brain effort.
+  rendering move into a later ontology -> wiki / ThinkWork Brain effort.
 
 This amendment preserves the the retired graph substrate-first and Hindsight-deprecation direction,
 but changes the first proof from the full user -> space -> company ladder to a
