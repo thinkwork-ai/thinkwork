@@ -338,7 +338,9 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
-  // THINK-116 U7 — deterministic markdown→GenUI safety-net backstop (ship-inert).
+  // THINK-116 U7 — deterministic markdown→GenUI safety-net backstop.
+  // DEFAULT-ON since THINK-145: absent flag = enabled; explicit false is the
+  // per-dispatch kill-switch.
   const MARKDOWN_TABLE_RESPONSE = [
     "Here are the open work items:",
     "",
@@ -348,9 +350,35 @@ describe("handleInvocation — happy path", () => {
     "| Launch | Ada | 1 |",
   ].join("\n");
 
-  it("safety-net is INERT by default: a markdown-table response emits NO json-render part", async () => {
+  it("safety-net is ON by default: a markdown-table response is converted with no opt-in flag", async () => {
     const result = await handleInvocation({
       payload: VALID_PAYLOAD(),
+      deps: makeDeps({
+        runAgentLoop: async () => ({
+          content: MARKDOWN_TABLE_RESPONSE,
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    // Prose is untouched — the part augments it.
+    expect((body.response as Record<string, unknown>).content).toBe(
+      MARKDOWN_TABLE_RESPONSE,
+    );
+    const parts = body.ui_message_parts as Array<Record<string, unknown>>;
+    expect(parts).toHaveLength(1);
+    expect(parts[0].type).toBe("data-json-render");
+  });
+
+  it("safety-net kill-switch: explicit false emits NO json-render part", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        thread_json_render_safety_net_enabled: false,
+      }),
       deps: makeDeps({
         runAgentLoop: async () => ({
           content: MARKDOWN_TABLE_RESPONSE,

@@ -11,8 +11,8 @@ import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
   THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
-  buildEmitBindingFeedback,
   buildEmitJsonRenderUiTool,
+  decideEmitBinding,
   extractEmitJsonRenderToolPart,
   listMcpBindingCandidates,
   normalizeRuntimeThreadJsonRenderInput,
@@ -20,6 +20,7 @@ import {
   threadJsonRenderStateSnapshotActivityEvent,
   wrapEmitToolWithBindingFeedback,
   type CanvasBindingSourceInvocation,
+  type EmitBindingLogEntry,
 } from "../src/json-render-runtime.js";
 
 describe("runtime Thread json-render helper", () => {
@@ -318,10 +319,17 @@ describe("emit binding feedback loop (THINK-145)", () => {
     ]);
   });
 
-  it("confirms the binding when a valid sourceToolCallId is passed", () => {
-    const feedback = buildEmitBindingFeedback({
+  const textOf = (result: unknown): string =>
+    (result as { content: { text: string }[] }).content
+      .map((c) => c.text)
+      .join("\n");
+  const partOf = (result: unknown) => extractEmitJsonRenderToolPart(result);
+
+  it("accepts + confirms the binding when a valid sourceToolCallId is passed", () => {
+    const enforcement = decideEmitBinding({
       partId: "json-render:p1",
       sourceToolCallId: "functions.mcp_twenty--crm_execute_tool:15",
+      alreadyRejected: false,
       toolInvocations: [
         mcpInvocation(
           "functions.mcp_twenty--crm_execute_tool:15",
@@ -330,17 +338,18 @@ describe("emit binding feedback loop (THINK-145)", () => {
         ),
       ],
     });
-    expect(feedback.bound).toBe(true);
-    expect(feedback.text).toBe(
-      "Data-source binding recorded: twenty-crm/execute_tool.",
-    );
-    expect(feedback.binding).not.toBeNull();
+    expect(enforcement.decision).toBe("accept");
+    expect(enforcement).toMatchObject({
+      reason: "bound",
+      confirmText: "Data-source binding recorded: twenty-crm/execute_tool.",
+    });
   });
 
-  it("hands back the exact candidate ids when unbound with MCP candidates", () => {
-    const feedback = buildEmitBindingFeedback({
+  it("rejects with the exact candidate ids when unbound with MCP candidates", () => {
+    const enforcement = decideEmitBinding({
       partId: "json-render:p1",
       sourceToolCallId: undefined,
+      alreadyRejected: false,
       toolInvocations: [
         mcpInvocation(
           "functions.mcp_twenty--crm_execute_tool:15",
@@ -350,32 +359,115 @@ describe("emit binding feedback loop (THINK-145)", () => {
         mcpInvocation("functions.mcp_github_search:3", "github", "search"),
       ],
     });
-    expect(feedback.bound).toBe(false);
-    expect(feedback.candidateCount).toBe(2);
-    expect(feedback.text).toContain("No data-source binding was recorded.");
-    expect(feedback.text).toContain("re-emit with the SAME id");
-    expect(feedback.text).toContain(
+    expect(enforcement.decision).toBe("reject");
+    if (enforcement.decision !== "reject") throw new Error("expected reject");
+    expect(enforcement.candidateCount).toBe(2);
+    expect(enforcement.text).toContain("was NOT accepted");
+    expect(enforcement.text).toContain("Re-emit the SAME id");
+    expect(enforcement.text).toContain('sourceToolCallId: "none"');
+    expect(enforcement.text).toContain(
       "functions.mcp_twenty--crm_execute_tool:15 — twenty-crm/execute_tool",
     );
-    expect(feedback.text).toContain(
+    expect(enforcement.text).toContain(
       "functions.mcp_github_search:3 — github/search",
     );
   });
 
-  it("emits no nudge when no MCP invocations exist", () => {
-    const feedback = buildEmitBindingFeedback({
+  it("accepts without enforcement when no MCP invocations exist (static UI)", () => {
+    const enforcement = decideEmitBinding({
       partId: "json-render:p1",
       sourceToolCallId: undefined,
+      alreadyRejected: false,
       toolInvocations: [{ id: "functions.bash:1", status: "ok", result: {} }],
     });
-    expect(feedback.bound).toBe(false);
-    expect(feedback.candidateCount).toBe(0);
-    expect(feedback.text).toBeNull();
+    expect(enforcement).toEqual({
+      decision: "accept",
+      reason: "no_candidates",
+    });
   });
 
-  it("re-emit with the source id produces a binding (two executes through the registry)", async () => {
+  it('accepts unbound when sourceToolCallId is the literal "none" opt-out', () => {
+    const enforcement = decideEmitBinding({
+      partId: "json-render:p1",
+      sourceToolCallId: "none",
+      alreadyRejected: false,
+      toolInvocations: [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+    });
+    expect(enforcement).toMatchObject({
+      decision: "accept",
+      reason: "explicit_none",
+      candidateCount: 1,
+    });
+  });
+
+  it("accepts a re-emit still unbound after a prior rejection (loop guard)", () => {
+    const enforcement = decideEmitBinding({
+      partId: "json-render:p1",
+      sourceToolCallId: undefined,
+      alreadyRejected: true,
+      toolInvocations: [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+    });
+    expect(enforcement).toMatchObject({
+      decision: "accept",
+      reason: "post_rejection",
+      candidateCount: 1,
+    });
+  });
+
+  it("rejects an unbound emit with candidates: no part, error-shaped result, and a warn log", async () => {
     const fixture = createTaskReviewJsonRenderFixture();
-    // The live per-turn registry the loop would own; shared across executes.
+    const logs: EmitBindingLogEntry[] = [];
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+      { log: (entry) => logs.push(entry) },
+    );
+
+    const result = await tool.execute("call-1", {
+      id: "json-render:stable",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    });
+
+    // Rejected: the model sees the correction and the loop can extract NO part
+    // (so no state_snapshot / ui_message_chunk / binding side effects fire).
+    expect(textOf(result)).toContain("was NOT accepted");
+    expect(textOf(result)).toContain(
+      "functions.mcp_twenty--crm_execute_tool:15",
+    );
+    expect(partOf(result)).toBeNull();
+    expect((result as { details?: { ok?: boolean } }).details?.ok).toBe(false);
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        event: "json_render_unbound_emit",
+        reason: "rejected",
+        partId: "json-render:stable",
+        candidateCount: 1,
+      }),
+    );
+  });
+
+  it("re-emit with the source id succeeds and captures a binding", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
     const registry: CanvasBindingSourceInvocation[] = [
       mcpInvocation(
         "functions.mcp_twenty--crm_execute_tool:15",
@@ -388,20 +480,17 @@ describe("emit binding feedback loop (THINK-145)", () => {
       () => registry,
     );
 
-    // First emit: model forgot sourceToolCallId → result nudges with candidate.
+    // First emit: no sourceToolCallId → REJECTED (no part reaches the loop).
     const first = await tool.execute("call-1", {
       id: "json-render:stable",
       spec: fixture.data.spec,
       mobileFallback: fixture.data.mobileFallback,
       durableActions: fixture.data.durableActions,
     });
-    const firstText = (first as { content: { text: string }[] }).content
-      .map((c) => c.text)
-      .join("\n");
-    expect(firstText).toContain("No data-source binding was recorded.");
-    expect(firstText).toContain("functions.mcp_twenty--crm_execute_tool:15");
+    expect(textOf(first)).toContain("was NOT accepted");
+    expect(partOf(first)).toBeNull();
 
-    // Second emit: re-emit SAME part id WITH the source id → confirmed binding.
+    // Second emit: SAME part id WITH the source id → accepted + confirmed.
     const second = await tool.execute("call-2", {
       id: "json-render:stable",
       sourceToolCallId: "functions.mcp_twenty--crm_execute_tool:15",
@@ -409,15 +498,100 @@ describe("emit binding feedback loop (THINK-145)", () => {
       mobileFallback: fixture.data.mobileFallback,
       durableActions: fixture.data.durableActions,
     });
-    const secondText = (second as { content: { text: string }[] }).content
-      .map((c) => c.text)
-      .join("\n");
-    expect(secondText).toContain(
+    expect(textOf(second)).toContain(
       "Data-source binding recorded: twenty-crm/execute_tool.",
+    );
+    expect(partOf(second)).not.toBeNull();
+  });
+
+  it("re-emit still unbound is ACCEPTED once (loop guard: at most one rejection per part id)", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const logs: EmitBindingLogEntry[] = [];
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+      { log: (entry) => logs.push(entry) },
+    );
+
+    const args = {
+      id: "json-render:stable",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    };
+    const first = await tool.execute("call-1", args);
+    expect(partOf(first)).toBeNull(); // rejected once
+
+    // Same still-unbound part id again → accepted so the UI is never lost.
+    const second = await tool.execute("call-2", args);
+    expect(partOf(second)).not.toBeNull();
+    expect(logs.filter((l) => l.reason === "rejected")).toHaveLength(1);
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        reason: "post_rejection",
+        partId: "json-render:stable",
+      }),
     );
   });
 
-  it("passes a rejected emit through untouched (no feedback pollution)", async () => {
+  it('accepts an unbound emit tagged "none" without rejecting (warn reason=explicit_none)', async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const logs: EmitBindingLogEntry[] = [];
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => [
+        mcpInvocation(
+          "functions.mcp_twenty--crm_execute_tool:15",
+          "twenty-crm",
+          "execute_tool",
+        ),
+      ],
+      { log: (entry) => logs.push(entry) },
+    );
+
+    const result = await tool.execute("call-1", {
+      id: "json-render:stable",
+      sourceToolCallId: "none",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    });
+    expect(partOf(result)).not.toBeNull(); // accepted, part flows to the loop
+    expect(textOf(result)).not.toContain("was NOT accepted");
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        reason: "explicit_none",
+        partId: "json-render:stable",
+      }),
+    );
+  });
+
+  it("does not enforce when no candidate tool calls exist (static UI turns)", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const logs: EmitBindingLogEntry[] = [];
+    const tool = wrapEmitToolWithBindingFeedback(
+      buildEmitJsonRenderUiTool(),
+      () => [{ id: "functions.bash:1", status: "ok", result: {} }],
+      { log: (entry) => logs.push(entry) },
+    );
+    const result = await tool.execute("call-1", {
+      id: "json-render:stable",
+      spec: fixture.data.spec,
+      mobileFallback: fixture.data.mobileFallback,
+      durableActions: fixture.data.durableActions,
+    });
+    expect(partOf(result)).not.toBeNull();
+    expect(textOf(result)).not.toContain("was NOT accepted");
+    expect(logs).toHaveLength(0);
+  });
+
+  it("passes a validator-rejected emit through untouched (no enforcement pollution)", async () => {
     const tool = wrapEmitToolWithBindingFeedback(
       buildEmitJsonRenderUiTool(),
       () => [
@@ -432,11 +606,10 @@ describe("emit binding feedback loop (THINK-145)", () => {
       spec: { not: "a valid spec" },
       mobileFallback: { title: "t", summary: "s" },
     });
-    const text = (result as { content: { text: string }[] }).content
-      .map((c) => c.text)
-      .join("\n");
-    expect(text).toContain("rejected by the ThinkWork json-render validator");
-    expect(text).not.toContain("No data-source binding was recorded.");
+    expect(textOf(result)).toContain(
+      "rejected by the ThinkWork json-render validator",
+    );
+    expect(textOf(result)).not.toContain("was NOT accepted");
   });
 });
 
