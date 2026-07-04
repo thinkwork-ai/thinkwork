@@ -33,7 +33,10 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
-import { DocumentCard } from "@/components/workbench/DocumentCard";
+import {
+  DocumentCard,
+  type DocumentCardData,
+} from "@/components/workbench/DocumentCard";
 import { useTenant } from "@/context/TenantContext";
 import {
   Children,
@@ -2089,6 +2092,7 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
+  const documentCards = documentCardsForTurn(turn);
   const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
@@ -2104,6 +2108,7 @@ function ThreadTurnActivity({
     header !== null &&
     (RENDERED_TURN_STATUSES.has(status) ||
       rows.length > 0 ||
+      documentCards.length > 0 ||
       Boolean(turn.error));
   if (!shouldRender) return null;
 
@@ -2170,6 +2175,9 @@ function ThreadTurnActivity({
             <ActionRow title="Run failed" detail={failureDetail} kind="tool" />
           ) : null}
         </ThinkingRow>
+        {documentCards.map((card) => (
+          <DocumentCard key={`${turn.id}-doc-${card.artifactId}`} card={card} />
+        ))}
       </div>
       {canFlag ? (
         <Button
@@ -4184,6 +4192,38 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   return rows;
 }
 
+// HTML Document Artifacts (THINK-147 U6): document cards are the turn's
+// deliverable, so they render inline in the transcript rather than inside the
+// collapsed turn-activity disclosure. Multiple emits for the same artifact in
+// one turn (draft → final) collapse to the latest card.
+function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
+  const byArtifact = new Map<string, DocumentCardData>();
+  const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {
+    const ta = parseEventTimestamp(a.createdAt);
+    const tb = parseEventTimestamp(b.createdAt);
+    if (ta !== tb) return ta - tb;
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+  for (const event of sortedEvents) {
+    if (stringValue(event.eventType) !== "ui_message_chunk") continue;
+    const payload = parseRecord(event.payload);
+    if (stringValue(payload.kind) !== "document.card") continue;
+    const card = parseRecord(payload.card);
+    const artifactId = stringValue(card.artifactId);
+    if (!artifactId) continue;
+    byArtifact.set(artifactId, {
+      artifactId,
+      title: stringValue(card.title) || "Document",
+      genre: stringValue(card.genre) || undefined,
+      abstract: stringValue(card.abstract) || undefined,
+      status: stringValue(card.status) || undefined,
+      headVersion:
+        typeof card.headVersion === "number" ? card.headVersion : undefined,
+    });
+  }
+  return [...byArtifact.values()];
+}
+
 function questionCardsForMessage(
   message: TaskThreadMessage,
 ): QuestionCardPayload[] {
@@ -4707,42 +4747,15 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
-  // HTML Document Artifacts (THINK-147 U6): the compact document card (R4).
-  // Full bodies never ride the event pipeline; this renders the pointer card
-  // linking to the reader.
+  // HTML Document Artifacts (THINK-147 U6): document.card events render as an
+  // always-visible inline card at the turn level (documentCardsForTurn), never
+  // as a collapsed activity row — burying the deliverable behind two
+  // disclosures made it invisible in live E2E.
   if (
     eventType === "ui_message_chunk" &&
     stringValue(payload.kind) === "document.card"
   ) {
-    const card = parseRecord(payload.card);
-    const artifactId = stringValue(card.artifactId);
-    const title = stringValue(card.title) || "Document";
-    if (!artifactId) {
-      return {
-        title: `Document: ${title}`,
-        detail,
-        kind: "source",
-      } satisfies ActionRowData;
-    }
-    return {
-      title: `Document: ${title}`,
-      detail: stringValue(card.abstract) || detail,
-      kind: "source",
-      hideIcon: true,
-      content: (
-        <DocumentCard
-          card={{
-            artifactId,
-            title,
-            genre: stringValue(card.genre) || undefined,
-            abstract: stringValue(card.abstract) || undefined,
-            status: stringValue(card.status) || undefined,
-            headVersion:
-              typeof card.headVersion === "number" ? card.headVersion : undefined,
-          }}
-        />
-      ),
-    };
+    return null;
   }
 
   if (
@@ -4853,11 +4866,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 
