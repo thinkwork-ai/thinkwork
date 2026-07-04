@@ -41,6 +41,7 @@ import {
   BORN_CANVAS_EVENT_TYPES,
   upsertDraftCanvasFromActivityEvent,
 } from "../lib/artifacts/born-artifact.js";
+import { upsertBindingFromActivityEvent } from "../lib/artifacts/binding-capture.js";
 
 const db = getDb();
 
@@ -215,6 +216,22 @@ export async function handler(
         }).catch((err) => {
           console.error(
             `[chat-agent-activity] born-as-artifact upsert failed (best-effort):`,
+            err,
+          );
+        });
+        // Data-source binding capture (THINK-145 U5, KTD4/R4): when the canvas
+        // event carries a binding descriptor, upsert its artifact_data_bindings
+        // row (auth-context classified server-side). Runs AFTER the born-artifact
+        // upsert so the artifact row (FK target) exists. Absent binding → no-op,
+        // leaving any existing binding untouched (preserve-on-absent). Best-effort
+        // and failure-isolated — a binding fault never fails the durable append.
+        await upsertBindingFromActivityEvent({
+          tenantId: payload.tenant_id,
+          threadId: payload.thread_id,
+          payload: ev.payload,
+        }).catch((err) => {
+          console.error(
+            `[chat-agent-activity] data-binding capture failed (best-effort):`,
             err,
           );
         });

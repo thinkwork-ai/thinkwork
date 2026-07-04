@@ -7,6 +7,7 @@
  * on an Artifact, so the base `artifact(s)` queries stay unchanged.
  */
 
+import { redactBindingArgs } from "@thinkwork/thread-json-render";
 import {
   and,
   artifactDataBindings,
@@ -59,6 +60,11 @@ export const artifactTypeResolvers = {
       if (typeof camel.quality === "string") {
         camel.quality = camel.quality.toUpperCase();
       }
+      // KTD9: never expose raw frozen_args. Provenance shows redactedArgs only,
+      // computed server-side through the redaction gate (R15 audience is every
+      // space member). The raw column is dropped from the resolved shape.
+      camel.redactedArgs = redactBindingArgs(row.frozen_args);
+      delete camel.frozenArgs;
       return camel;
     });
   },

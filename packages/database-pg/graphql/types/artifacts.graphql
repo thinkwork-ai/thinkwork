@@ -64,7 +64,10 @@ type ArtifactDataBinding {
   mcpServerRef: String!
   serverName: String!
   toolName: String!
-  frozenArgs: AWSJSON!
+  # Frozen invocation args passed through the KTD9 redaction gate server-side.
+  # Raw args are NEVER exposed — R15 widened provenance to every space member,
+  # so secret-shaped keys, PII value shapes, and over-cap values are masked.
+  redactedArgs: AWSJSON!
   resultShapeHash: String!
   authContext: ArtifactBindingAuthContext!
   ownerUserId: ID

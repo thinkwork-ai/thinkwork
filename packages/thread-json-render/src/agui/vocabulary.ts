@@ -74,12 +74,89 @@ export type ThreadJsonRenderAgUiEvent =
   | ThreadJsonRenderStateDeltaEvent;
 
 /**
+ * Data-source binding descriptor (Living Artifacts / THINK-145, KTD4/R4).
+ *
+ * Captured at the agent-loop toolResult seam and carried additively on the
+ * activity-event payload so the persistence side (chat-agent-activity) can
+ * upsert an `artifact_data_bindings` row without any runtime→API round trip.
+ *
+ * v1 binds ONE primary data source per canvas part (`elementId` is always ""),
+ * per the plan's "one canvas part = one primary data source" simplification —
+ * the row key is (artifact, part, element) so per-element bindings can be added
+ * later without a wire-format break.
+ *
+ * `authContext` is intentionally NOT part of this descriptor: the runtime knows
+ * the MCP server NAME but not whether that server is tenant-scoped or per-user
+ * OAuth, so classification happens server-side against `tenant_mcp_servers`.
+ */
+export interface ThreadJsonRenderDataBindingDescriptor {
+  /** Canvas part the binding addresses (== the emitted part's stable id). */
+  partId: string;
+  /** Widget address within the part. "" in v1 (whole-part primary source). */
+  elementId: string;
+  /** Soft reference to the MCP server (its name; resolved to a row on refresh). */
+  serverRef: string;
+  /** Captured MCP server display name. */
+  serverName: string;
+  /** MCP tool name (the real tool, not the `mcp_<server>_<tool>` exposed name). */
+  toolName: string;
+  /** Frozen arguments of the recorded invocation (unredacted; display gates). */
+  frozenArgs: Record<string, unknown>;
+  /** Stable hash of the result's sorted key structure (R7). */
+  resultShapeHash: string;
+}
+
+/**
  * `thread_turn_events.payload` shape for a STATE_SNAPSHOT — the pipeline
- * envelope (`kind` + AG-UI `event`) the web folds on.
+ * envelope (`kind` + AG-UI `event`) the web folds on. `binding` is additive
+ * (KTD4): present only when the emit declared a valid data source; the web fold
+ * ignores it and the persistence side consumes it.
  */
 export interface ThreadJsonRenderStateSnapshotPayload {
   kind: typeof THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND;
   event: ThreadJsonRenderStateSnapshotEvent;
+  binding?: ThreadJsonRenderDataBindingDescriptor;
+}
+
+/**
+ * Narrow an arbitrary `thread_turn_events` payload to its data-source binding
+ * descriptor when present. Consumed by the persistence side (U5) to upsert the
+ * `artifact_data_bindings` row; returns null for any payload without a
+ * well-formed `binding`. An absent binding is legal (unbound widget) and must
+ * leave existing binding rows untouched (preserve-on-absent, KTD4).
+ */
+export function bindingDescriptorFromPayload(
+  payload: unknown,
+): ThreadJsonRenderDataBindingDescriptor | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const binding = (payload as Record<string, unknown>).binding;
+  if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+    return null;
+  }
+  const b = binding as Record<string, unknown>;
+  if (
+    typeof b.partId !== "string" ||
+    typeof b.serverRef !== "string" ||
+    typeof b.serverName !== "string" ||
+    typeof b.toolName !== "string" ||
+    typeof b.resultShapeHash !== "string" ||
+    !b.frozenArgs ||
+    typeof b.frozenArgs !== "object" ||
+    Array.isArray(b.frozenArgs)
+  ) {
+    return null;
+  }
+  return {
+    partId: b.partId,
+    elementId: typeof b.elementId === "string" ? b.elementId : "",
+    serverRef: b.serverRef,
+    serverName: b.serverName,
+    toolName: b.toolName,
+    frozenArgs: b.frozenArgs as Record<string, unknown>,
+    resultShapeHash: b.resultShapeHash,
+  };
 }
 
 /** part → STATE_SNAPSHOT envelope. */

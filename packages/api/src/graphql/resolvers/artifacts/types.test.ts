@@ -120,6 +120,32 @@ describe("Artifact.bindings field resolver", () => {
     });
   });
 
+  it("exposes redactedArgs (KTD9) and never the raw frozen_args", async () => {
+    mocks.nextRows = [
+      {
+        id: "b1",
+        tenant_id: TENANT_ID,
+        artifact_id: ARTIFACT_ID,
+        part_id: "part-1",
+        element_id: "",
+        auth_context: "tenant_mcp",
+        quality: "good",
+        frozen_args: { region: "us-east-1", apiKey: "sk-live-secret" },
+      },
+    ];
+
+    const [binding] = (await artifactTypeResolvers.bindings({
+      id: ARTIFACT_ID,
+      tenantId: TENANT_ID,
+    })) as Array<Record<string, unknown>>;
+
+    expect(binding.frozenArgs).toBeUndefined();
+    expect(binding.redactedArgs).toEqual({
+      region: "us-east-1",
+      apiKey: "[redacted]",
+    });
+  });
+
   it("tolerates a draft canvas (null spaceId) parent and resolves by artifact id", async () => {
     mocks.nextRows = [];
     const result = await artifactTypeResolvers.bindings({
