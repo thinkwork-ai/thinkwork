@@ -18,11 +18,13 @@ import type { GraphQLContext } from "../../context.js";
 import { and, artifacts, db, eq } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-// U2 unifies via assertCanvasAccess; U4 uses a minimal inline membership check.
-import { canAccessSpace } from "../spaces/shared.js";
+import {
+  assertCanvasAccess,
+  hasSpaceWriteRole,
+} from "../../../lib/artifacts/canvas-access.js";
 import {
   boundedCanvasText,
-  isCanvasArtifact,
+  isLivingCanvasMetadata,
   pinHeadToVersion,
   type CanvasArtifactRow,
 } from "../../../lib/artifacts/canvas-lifecycle.js";
@@ -65,17 +67,19 @@ export const saveCanvas = async (
       extensions: { code: "FORBIDDEN" },
     });
   }
-  if (!isCanvasArtifact(row.metadata)) {
+  if (!isLivingCanvasMetadata(row.metadata)) {
     throw new GraphQLError("saveCanvas is only valid for GenUI canvases", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
 
-  // R15: saving requires membership in the space being assigned.
-  // U2 unifies via assertCanvasAccess (member-or-above); U4's inline check is
-  // canAccessSpace, which is role-agnostic but sufficient for the lifecycle.
-  const canAccess = await canAccessSpace(ctx, row.tenant_id, spaceId);
-  if (!canAccess) {
+  // Write access to THIS canvas: draft → originating-thread visibility;
+  // already-saved → member-or-above on its current space (R15/U2).
+  await assertCanvasAccess(ctx, row, "write");
+
+  // R15: saving requires member-or-above in the space being ASSIGNED —
+  // viewer-role members and public-space non-members cannot save into it.
+  if (!(await hasSpaceWriteRole(row.tenant_id, spaceId, caller.userId))) {
     throw new GraphQLError("You are not a member of the target space", {
       extensions: { code: "FORBIDDEN" },
     });

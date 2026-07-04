@@ -70,8 +70,13 @@ vi.mock("../core/authz.js", () => ({
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerFromAuth: mocks.resolveCallerFromAuth,
 }));
-vi.mock("../spaces/shared.js", () => ({
-  canAccessSpace: mocks.canAccessSpace,
+// U2 access layer: assertCanvasAccess is a no-op by default (write access
+// granted); hasSpaceWriteRole reuses the existing toggle so the
+// rejects-target-space test keeps working.
+vi.mock("../../../lib/artifacts/canvas-access.js", () => ({
+  CANVAS_LIVING_KIND: "json_render_canvas",
+  assertCanvasAccess: vi.fn(() => Promise.resolve()),
+  hasSpaceWriteRole: (...args: unknown[]) => mocks.canAccessSpace(...args),
 }));
 vi.mock("./payload.js", () => ({
   artifactToCamelWithPayload: mocks.artifactToCamelWithPayload,

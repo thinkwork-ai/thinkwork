@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { GraphQLError } from "graphql";
 import { and, artifacts, artifactVersions, db, eq, sql } from "../../graphql/utils.js";
+import { CANVAS_LIVING_KIND } from "./canvas-access.js";
 import {
   artifactContentKey,
   isArtifactPayloadS3Key,
@@ -31,7 +32,7 @@ import {
  * semantics (born-as-artifact, save flip, version chain) apply to this kind
  * only in v1.
  */
-export const CANVAS_METADATA_KIND = "json_render_canvas" as const;
+export const CANVAS_METADATA_KIND = CANVAS_LIVING_KIND;
 
 /** JSON content type used for canvas head + pinned-version payloads. */
 export const CANVAS_CONTENT_TYPE = "application/json; charset=utf-8" as const;
@@ -48,8 +49,13 @@ export interface CanvasArtifactRow {
   metadata?: unknown;
 }
 
-/** True when the artifact row carries the living-canvas metadata marker. */
-export function isCanvasArtifact(metadata: unknown): boolean {
+/**
+ * True when the metadata carries the LIVING-canvas marker specifically
+ * (lifecycle ops apply to living canvases only, not legacy snapshots).
+ * Distinct from canvas-access's `isCanvasArtifact`, which matches every
+ * canvas kind for access gating.
+ */
+export function isLivingCanvasMetadata(metadata: unknown): boolean {
   const parsed = parseMetadata(metadata);
   return (
     parsed !== null &&

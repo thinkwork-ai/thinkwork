@@ -58,9 +58,16 @@ import { callerVisibleThreadPredicate } from "../../graphql/resolvers/threads/ac
  */
 export const CANVAS_SNAPSHOT_KIND = "json_render_snapshot";
 
+/**
+ * The kind the born-as-artifact writer persists for living canvases
+ * (`canvas-lifecycle.ts` — kept in sync by canvas-access.test.ts).
+ */
+export const CANVAS_LIVING_KIND = "json_render_canvas";
+
 /** Every metadata kind that carries living-canvas access semantics in v1. */
 const CANVAS_METADATA_KINDS: ReadonlySet<string> = new Set([
   CANVAS_SNAPSHOT_KIND,
+  CANVAS_LIVING_KIND,
 ]);
 
 export type CanvasAccessMode = "read" | "write";
@@ -169,7 +176,7 @@ export async function assertCanvasAccess(
  * space. The `viewer` role and non-members (including on public spaces) are
  * excluded — canvas writes require an actual membership row.
  */
-async function hasSpaceWriteRole(
+export async function hasSpaceWriteRole(
   tenantId: string,
   spaceId: string,
   userId: string,
@@ -206,7 +213,8 @@ export function canvasListVisibilityPredicate(
   callerUserId: string,
 ) {
   return sql`(
-    ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}
+    (${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}
+     AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND})
     OR (
       ${artifacts.space_id} IS NOT NULL
       AND EXISTS (
@@ -253,5 +261,6 @@ export function canvasListVisibilityPredicate(
 
 /** SQL predicate that excludes ALL canvas-kind artifacts (fail-closed). */
 export function excludeCanvasArtifactsPredicate() {
-  return sql`${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}`;
+  return sql`(${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_SNAPSHOT_KIND}
+    AND ${artifacts.metadata}->>'kind' IS DISTINCT FROM ${CANVAS_LIVING_KIND})`;
 }

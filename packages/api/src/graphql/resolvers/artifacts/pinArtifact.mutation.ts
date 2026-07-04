@@ -12,10 +12,9 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, artifacts } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
-// U2 unifies via assertCanvasAccess; U4 uses a minimal inline membership check.
-import { canAccessSpace } from "../spaces/shared.js";
+import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 import {
-  isCanvasArtifact,
+  isLivingCanvasMetadata,
   pinHeadToVersion,
   type CanvasArtifactRow,
 } from "../../../lib/artifacts/canvas-lifecycle.js";
@@ -55,22 +54,15 @@ export const pinArtifact = async (
       extensions: { code: "FORBIDDEN" },
     });
   }
-  if (!isCanvasArtifact(row.metadata)) {
+  if (!isLivingCanvasMetadata(row.metadata)) {
     throw new GraphQLError("pinArtifact is only valid for GenUI canvases", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
 
-  // Saved canvases (non-null space) require space membership to pin; draft
-  // canvases fall back to tenant membership (checked above). U2 unifies this.
-  if (row.space_id) {
-    const canAccess = await canAccessSpace(ctx, row.tenant_id, row.space_id);
-    if (!canAccess) {
-      throw new GraphQLError("You are not a member of the canvas space", {
-        extensions: { code: "FORBIDDEN" },
-      });
-    }
-  }
+  // Pinning is a write: saved canvases require member-or-above on their
+  // space; drafts require originating-thread visibility (R15/U2).
+  await assertCanvasAccess(ctx, row, "write");
 
   const updated = await pinHeadToVersion({
     row: row as unknown as CanvasArtifactRow,

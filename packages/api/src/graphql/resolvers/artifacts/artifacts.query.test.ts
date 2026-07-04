@@ -43,6 +43,12 @@ vi.mock("../../utils.js", () => ({
   },
 }));
 
+// Bypass the R15 canvas-visibility predicate (U2's territory, tested in
+// canvas-access.test.ts) so this file isolates the R14 draft filter.
+vi.mock("../core/authz.js", () => ({
+  hasServiceSecret: () => true,
+}));
+
 import { artifacts_ } from "./artifacts.query.js";
 
 const ctx = { auth: { authType: "cognito" } } as never;
