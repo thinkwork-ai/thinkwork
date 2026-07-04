@@ -27,7 +27,12 @@ vi.mock("urql", () => ({
 }));
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1" }),
+  useTenant: () => ({ tenantId: "tenant-1", userId: "user-1" }),
+}));
+
+vi.mock("@/lib/utils", () => ({
+  cn: (...values: Array<string | false | null | undefined>) =>
+    values.filter(Boolean).join(" "),
 }));
 
 vi.mock("@/components/LoadingShimmer", () => ({
@@ -108,7 +113,12 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
-import { AgentLoopInventory, buildWorkerOptions } from "./AgentLoopInventory";
+import {
+  AgentLoopInventory,
+  buildWorkerOptions,
+  targetLabel,
+  triggerLabel,
+} from "./AgentLoopInventory";
 
 function loop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
   return {
@@ -222,9 +232,34 @@ describe("AgentLoopInventory", () => {
 
     fireEvent.click(await screen.findByText("Weekly Agent Check-In"));
     expect(navigateMock).toHaveBeenCalledWith({
-      to: "/automations/$scheduledJobId",
-      params: { scheduledJobId: "loop-1" },
+      to: "/automations/$automationId",
+      params: { automationId: "loop-1" },
     });
+  });
+
+  it("derives Trigger and Target column labels from the version spec", () => {
+    expect(triggerLabel(loop())).toBe("rate(7 days)");
+    expect(targetLabel(loop())).toBe("Agent thread");
+    expect(triggerLabel(loop({ primaryTriggerFamily: "webhook" }))).toBe(
+      "Webhook",
+    );
+    expect(
+      targetLabel(
+        loop({
+          currentVersion: {
+            id: "v",
+            versionNumber: 1,
+            triggerSpec: {},
+            goalSpec: {},
+            workerSpec: {},
+            judgeSpec: {},
+            loopPolicy: {},
+            evidencePolicy: {},
+            targetSpec: { kind: "routine", routine: { routineId: "r" } },
+          },
+        }),
+      ),
+    ).toBe("Routine");
   });
 
   it("creates automations and navigates to the created loop", async () => {

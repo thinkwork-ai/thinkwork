@@ -223,14 +223,14 @@ export function SettingsAutomations({
     [displayState, filteredRows],
   );
 
+  // The legacy scheduled-job detail route was retired when
+  // /settings/automations/$automationId became the AgentLoop detail
+  // (THINK-137 U7). This (unrouted) scheduled-jobs table now returns to the
+  // Automations list rather than deep-linking to a detail that no longer
+  // renders scheduled jobs.
   const openJob = useCallback(
-    (row: ScheduledJobRow) =>
-      navigate({
-        to: "/settings/automations/$scheduledJobId",
-        params: { scheduledJobId: row.id },
-        search: displayStateToSearch(displayState, AUTOMATIONS_DISPLAY_CONFIG),
-      }),
-    [displayState, navigate],
+    (_row: ScheduledJobRow) => navigate({ to: "/settings/automations" }),
+    [navigate],
   );
 
   const columns = useMemo<ColumnDef<ScheduledJobRow>[]>(
