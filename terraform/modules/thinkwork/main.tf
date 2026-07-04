@@ -82,7 +82,12 @@ locals {
       "bedrock-agentcore",
       "bedrock-agentcore-control",
       "bedrock-agentcore.gateway",
-      "execute-api",
+      # NOTE: never add "execute-api" here. Its private DNS captures ALL
+      # *.execute-api.<region>.amazonaws.com traffic from the VPC, but the
+      # endpoint only serves PRIVATE REST APIs — this stack's HTTP APIs (v2)
+      # reject VPC-endpoint traffic with 403 {"message":"Forbidden"}. In-VPC
+      # callers (e.g. the Pi runtime's admin-ops MCP connect) must reach the
+      # regional API publicly via the NAT gateway instead (THINK-144).
       "lambda",
       "logs",
       "rds-data",
