@@ -87,6 +87,11 @@ export interface RoutineExecGitInput {
   triggerId?: string | null;
   /** execute (default) | gate | dry_run */
   mode?: "execute" | "gate" | "dry_run";
+  /** gate mode: gate this exact commit SHA instead of resolving branch
+   * HEAD. The repair commit seam passes the SHA it just pushed — reading
+   * HEAD immediately after a push can race replication and false-green
+   * against the previous commit. */
+  sha?: string;
   /** dry_run only: working files keyed by repo path (module + fixtures). */
   files?: Record<string, string>;
   /** dry_run only: module path within `files`. */
@@ -304,17 +309,22 @@ export async function executeGitRoutine(
 
   let headSha: string | null = null;
   let gitError: string | null = null;
-  try {
-    headSha = await withGithubRetry(async () => {
-      const ref = await octokit.git.getRef({
-        owner: credential.owner,
-        repo: credential.repo,
-        ref: `heads/${credential.branch}`,
+  if (mode === "gate" && event.sha) {
+    // Explicit target (repair commit seam) — no HEAD resolution race.
+    headSha = event.sha;
+  } else {
+    try {
+      headSha = await withGithubRetry(async () => {
+        const ref = await octokit.git.getRef({
+          owner: credential.owner,
+          repo: credential.repo,
+          ref: `heads/${credential.branch}`,
+        });
+        return ref.data.object.sha;
       });
-      return ref.data.object.sha;
-    });
-  } catch (err) {
-    gitError = (err as Error).message;
+    } catch (err) {
+      gitError = (err as Error).message;
+    }
   }
 
   // ---- Choose the SHA to execute ------------------------------------------

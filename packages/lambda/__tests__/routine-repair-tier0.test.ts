@@ -422,3 +422,34 @@ describe("tier-1 escalation chain (U8)", () => {
     expect(repairDispatcher).not.toHaveBeenCalled();
   });
 });
+
+describe("gate mode with an explicit SHA (repair-commit race fix)", () => {
+  it("gates the given SHA without resolving branch HEAD", async () => {
+    const { db, updates } = fakeDb({
+      routines: [gitRoutineRow()],
+      credentials: [repoCredentialRow()],
+    });
+    const octokit = fakeOctokit({
+      // HEAD still points at the OLD sha (replication lag) — must not
+      // matter because the gate targets the explicit new SHA.
+      headSha: VALIDATED_SHA,
+      files: { [MODULE]: MODULE_CODE, [FIXTURE]: FIXTURE_BASIC },
+    });
+    const pythonTask = vi.fn(async () => okTask({ ok: true, count: 3 }));
+    const result = await executeGitRoutine(
+      { routineId: ROUTINE_ID, mode: "gate", sha: NEW_SHA },
+      optionsWith({
+        database: db as never,
+        pythonTask,
+        octokitFactory: () => octokit as never,
+      }),
+    );
+    expect(result.status).toBe("gate_green");
+    expect(octokit.git.getRef).not.toHaveBeenCalled();
+    // The gate ran fixtures against NEW_SHA and promoted it.
+    const promote = updates.find(
+      (u) => u.table === routines && u.set.validated_sha === NEW_SHA,
+    );
+    expect(promote).toBeDefined();
+  });
+});

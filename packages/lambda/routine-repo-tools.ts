@@ -541,7 +541,9 @@ export async function commitRoutine(
   let gate: RoutineExecGitResult | undefined;
   if (isRepair && routine) {
     const invoke = deps.invokeExecutor ?? defaultInvokeExecutor;
-    gate = await invoke({ routineId, mode: "gate" });
+    // Gate the exact commit just pushed — resolving branch HEAD here can
+    // race GitHub replication and gate the PREVIOUS commit (false green).
+    gate = await invoke({ routineId, mode: "gate", sha: commitSha });
     const gateGreen = gate.status === "gate_green";
     const now = new Date();
     const attemptsBefore = await repairAttemptsToday(
