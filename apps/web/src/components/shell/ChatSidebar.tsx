@@ -23,6 +23,8 @@ import {
   Anchor,
   Archive,
   ArrowLeft,
+  Bell,
+  BellOff,
   CheckCheck,
   ChevronDown,
   ChevronsDown,
@@ -92,6 +94,7 @@ import {
   PinThreadMutation,
   PinnedThreadsQuery,
   ReorderPinnedThreadsMutation,
+  SetThreadNotificationPreferenceMutation,
   SpaceThreadsQuery,
   SpacesQuery,
   ThreadsPagedQuery,
@@ -120,6 +123,7 @@ import {
   formatTinyRelativeDate,
   isThreadAwaitingUser,
   isThreadLocallyRead,
+  isThreadMuted,
   isThreadUnread,
   type LocallyReadThreadAt,
   selectNextThreadBelowDeleted,
@@ -2076,8 +2080,16 @@ function ChatThreadRow({
   onUnpin?: () => void;
   pinned?: boolean;
 }) {
+  const { tenantId } = useTenant();
   const unread = isThreadUnread(thread) && !locallyRead;
   const awaitingUser = isThreadAwaitingUser(thread);
+  // Optimistic mute state: the row owns the toggle so no list refetch is
+  // needed; the next query refresh delivers the same server value.
+  const [mutedOverride, setMutedOverride] = useState<boolean | null>(null);
+  const muted = mutedOverride ?? isThreadMuted(thread);
+  const [, setThreadNotificationPreference] = useMutation(
+    SetThreadNotificationPreferenceMutation,
+  );
   const activity = threadActivityAt(thread);
   const relativeDate = formatTinyRelativeDate(activity);
   const title = threadTitle(thread);
@@ -2169,6 +2181,23 @@ function ChatThreadRow({
       }),
     );
   }, [renameDraft, thread.id, title, updateThreadTitle]);
+
+  async function handleToggleMute() {
+    if (!tenantId) return;
+    const next = !muted;
+    setMutedOverride(next);
+    const result = await setThreadNotificationPreference({
+      tenantId,
+      threadId: thread.id,
+      preference: next ? "MUTED" : "SUBSCRIBED",
+    });
+    if (result.error) {
+      setMutedOverride(!next);
+      toast.error(
+        `Could not ${next ? "mute" : "unmute"} thread: ${result.error.message}`,
+      );
+    }
+  }
 
   async function handleConfirmDelete() {
     setThreadDeletePending(thread.id, true);
@@ -2289,6 +2318,17 @@ function ChatThreadRow({
               <Pencil className="size-4" />
               Rename
             </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!tenantId}
+              onSelect={() => void handleToggleMute()}
+            >
+              {muted ? (
+                <Bell className="size-4" />
+              ) : (
+                <BellOff className="size-4" />
+              )}
+              {muted ? "Unmute" : "Mute"}
+            </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       )}
@@ -2319,6 +2359,11 @@ function ChatThreadRow({
             <span
               className="absolute right-3 top-1/2 size-2 -translate-y-1/2 rounded-full bg-blue-400 group-hover/thread-row:hidden"
               aria-label="Unread"
+            />
+          ) : !renamingTitle && muted ? (
+            <BellOff
+              className="absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/40 group-hover/thread-row:hidden"
+              aria-label="Notifications muted"
             />
           ) : !renamingTitle && relativeDate ? (
             <span

@@ -57,6 +57,7 @@ export const ThreadsPagedQuery = gql`
         lastActivityAt
         lastTurnCompletedAt
         lastReadAt
+        viewerNotificationPreference
         archivedAt
         createdAt
         updatedAt
@@ -95,6 +96,7 @@ export const PinnedThreadsQuery = gql`
         lastActivityAt
         lastTurnCompletedAt
         lastReadAt
+        viewerNotificationPreference
         archivedAt
         createdAt
         updatedAt
@@ -985,6 +987,7 @@ export const SpaceThreadsQuery = gql`
         spaceId
         metadata
         lastReadAt
+        viewerNotificationPreference
         lastActivityAt
         lastTurnCompletedAt
         archivedAt
@@ -992,6 +995,24 @@ export const SpaceThreadsQuery = gql`
         updatedAt
       }
       totalCount
+    }
+  }
+`;
+
+export const SetThreadNotificationPreferenceMutation = gql`
+  mutation SetThreadNotificationPreference(
+    $tenantId: ID!
+    $threadId: ID!
+    $preference: ThreadParticipantNotificationPreference!
+  ) {
+    setThreadNotificationPreference(
+      tenantId: $tenantId
+      threadId: $threadId
+      preference: $preference
+    ) {
+      id
+      threadId
+      notificationPreference
     }
   }
 `;

@@ -44,7 +44,7 @@ function uppercaseFields(
   return row;
 }
 
-function threadParticipantToCamel(row: Record<string, unknown>) {
+export function threadParticipantToCamel(row: Record<string, unknown>) {
   return uppercaseFields(snakeToCamel(row), THREAD_PARTICIPANT_ENUM_FIELDS);
 }
 

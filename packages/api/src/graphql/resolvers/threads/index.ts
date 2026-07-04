@@ -27,6 +27,7 @@ import { delegateThread } from "./delegateThread.mutation.js";
 import { pinThread } from "./pinThread.mutation.js";
 import { unpinThread } from "./unpinThread.mutation.js";
 import { reorderPinnedThreads } from "./reorderPinnedThreads.mutation.js";
+import { setThreadNotificationPreference } from "./setThreadNotificationPreference.mutation.js";
 
 export const threadQueries = {
   threads: threads_query,
@@ -60,4 +61,5 @@ export const threadMutations = {
   pinThread,
   unpinThread,
   reorderPinnedThreads,
+  setThreadNotificationPreference,
 };

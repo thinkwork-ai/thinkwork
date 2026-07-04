@@ -3,6 +3,7 @@ import {
   displayedUnreadThreads,
   filterUnreadThreads,
   groupThreadsByRecency,
+  isThreadMuted,
   recencyGroupLabel,
   sortThreadsByActivityDesc,
 } from "./chat-sidebar-types";
@@ -12,6 +13,22 @@ afterEach(() => {
 });
 
 describe("chat-sidebar-types", () => {
+  it("reads the viewer's muted state case-insensitively and defaults to unmuted", () => {
+    expect(isThreadMuted({ id: "t1" })).toBe(false);
+    expect(
+      isThreadMuted({ id: "t1", viewerNotificationPreference: null }),
+    ).toBe(false);
+    expect(
+      isThreadMuted({ id: "t1", viewerNotificationPreference: "SUBSCRIBED" }),
+    ).toBe(false);
+    expect(
+      isThreadMuted({ id: "t1", viewerNotificationPreference: "MUTED" }),
+    ).toBe(true);
+    expect(
+      isThreadMuted({ id: "t1", viewerNotificationPreference: "muted" }),
+    ).toBe(true);
+  });
+
   it("uses only Today, Yesterday, and Older recency groups", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-19T12:00:00Z"));

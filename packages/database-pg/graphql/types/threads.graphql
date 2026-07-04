@@ -87,6 +87,12 @@ type Thread {
   lastModel: String
   lastResponsePreview: String
   lastReadAt: AWSDateTime
+  """
+  The CALLER's notification preference for this thread (their
+  thread_participants row). Null when the caller has no participant row or on
+  query paths that don't join it (only threadsPaged and pinnedThreads do).
+  """
+  viewerNotificationPreference: ThreadParticipantNotificationPreference
   createdByType: String
   createdById: String
   attachments: [ThreadAttachment!]!
@@ -317,6 +323,18 @@ extend type Mutation {
 
   escalateThread(input: EscalateThreadInput!): Thread!
   delegateThread(input: DelegateThreadInput!): Thread!
+
+  """
+  Set the CALLER's notification preference for one thread (mute / mentions-only /
+  subscribed). Writes only the caller's own thread_participants row, creating it
+  if the caller can see the thread but isn't a participant yet. A direct
+  @mention always punches through MUTED/MENTIONS on the activity fan-out.
+  """
+  setThreadNotificationPreference(
+    tenantId: ID!
+    threadId: ID!
+    preference: ThreadParticipantNotificationPreference!
+  ): ThreadParticipant!
 }
 
 """

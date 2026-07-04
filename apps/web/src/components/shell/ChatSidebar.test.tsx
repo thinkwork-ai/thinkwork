@@ -110,6 +110,9 @@ const {
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
+    SetThreadNotificationPreferenceMutation: Symbol(
+      "SetThreadNotificationPreferenceMutation",
+    ),
     SpaceThreadsQuery: Symbol("SpaceThreadsQuery"),
     SpacesQuery: Symbol("SpacesQuery"),
     ThreadsPagedQuery: Symbol("ThreadsPagedQuery"),

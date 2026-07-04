@@ -137,10 +137,14 @@ export const threadsPaged_query = async (
     items: rows.map((r) => {
       const participantReadState = callerReadStateByThreadId.get(r.id);
       if (!participantReadState) return threadToCamel(r);
-      return threadToCamel({
-        ...r,
-        last_read_at: participantReadState.last_read_at,
-      });
+      return {
+        ...threadToCamel({
+          ...r,
+          last_read_at: participantReadState.last_read_at,
+        }),
+        viewerNotificationPreference:
+          participantReadState.notification_preference?.toUpperCase() ?? null,
+      };
     }),
     totalCount: countResult[0]?.count ?? 0,
   };
@@ -167,13 +171,17 @@ async function loadCallerReadState(input: {
   threadIds: string[];
 }) {
   if (!input.callerUserId || input.threadIds.length === 0) {
-    return new Map<string, { last_read_at: Date | null }>();
+    return new Map<
+      string,
+      { last_read_at: Date | null; notification_preference: string | null }
+    >();
   }
 
   const rows = await db
     .select({
       thread_id: threadParticipants.thread_id,
       last_read_at: threadParticipants.last_read_at,
+      notification_preference: threadParticipants.notification_preference,
     })
     .from(threadParticipants)
     .where(
