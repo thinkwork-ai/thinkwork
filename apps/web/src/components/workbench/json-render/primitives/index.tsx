@@ -181,7 +181,10 @@ const Stack = ({ props, children }: P<"Stack">) => {
         "flex",
         isHorizontal ? "flex-row flex-wrap" : "flex-col",
         gapMap[props?.gap ?? "md"] ?? "gap-3",
-        alignMap[props?.align ?? "start"] ?? "items-start",
+        // No align prop -> CSS-normal (stretch). Defaulting to items-start
+        // collapsed width-less children (recharts/table cards) to ~32px in
+        // live threads — text children have intrinsic width, charts don't.
+        props?.align ? (alignMap[props.align] ?? "") : "",
         justifyMap[props?.justify ?? "start"] ?? "",
         props?.className,
       )}

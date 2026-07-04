@@ -17,7 +17,7 @@ const fallback: ComponentRenderer = ({ element }) => (
 );
 
 function renderSpec(spec: unknown) {
-  render(
+  return render(
     <JSONUIProvider registry={threadJsonRenderPrimitiveRegistry}>
       <Renderer
         fallback={fallback}
@@ -114,5 +114,51 @@ describe("owned Base UI primitive components", () => {
       screen.getByRole("heading", { name: "Pipeline health" }),
     ).toBeTruthy();
     expect(screen.getByText("All checks are ready.")).toBeTruthy();
+  });
+});
+
+describe("Stack width regression (THINK-116 live squish)", () => {
+  it("does not force items-start when align is null — width-less children must stretch", () => {
+    const { container } = renderSpec({
+      root: "stack",
+      elements: {
+        stack: {
+          type: "Stack",
+          props: {
+            gap: null,
+            align: null,
+            justify: null,
+            className: null,
+            direction: null,
+          },
+          children: [],
+        },
+      },
+    });
+    const stack = container.querySelector(".flex.flex-col");
+    expect(stack).toBeTruthy();
+    // items-start on an align-less Stack collapsed recharts/table cards to
+    // ~32px in live threads. Default must be CSS-normal (stretch).
+    expect(stack?.className).not.toContain("items-start");
+  });
+
+  it("still honors an explicit align prop", () => {
+    const { container } = renderSpec({
+      root: "stack",
+      elements: {
+        stack: {
+          type: "Stack",
+          props: {
+            gap: null,
+            align: "center",
+            justify: null,
+            className: null,
+            direction: null,
+          },
+          children: [],
+        },
+      },
+    });
+    expect(container.querySelector(".items-center")).toBeTruthy();
   });
 });
