@@ -633,12 +633,6 @@ export const SettingsAgentLoopQuery = gql`
         publishedAt
         createdAt
       }
-      webhookEndpoint {
-        webhookId
-        token
-        path
-        enabled
-      }
       runs(limit: $runLimit) {
         id
         threadId
