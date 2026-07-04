@@ -3,7 +3,9 @@ import {
   type AgentLoopDispatchInput,
   type AgentLoopDispatchLedger,
   type AgentLoopDispatchResult,
+  type AgentLoopRunRepairState,
   type AgentLoopRunStatus,
+  type DispatchableAgentLoopVersion,
   buildAgentLoopWakeupPayload,
   workerAgentId,
 } from "./run-ledger";
@@ -33,6 +35,31 @@ export async function dispatchAgentLoop(
       idempotencyKey,
     });
     if (existing) {
+      // Recoverable idempotency repair (THINK-137 U2): a matching run whose
+      // side-effect set is incomplete — a half-built agent-turn start whose
+      // wakeup was never recorded — re-enters the continuation instead of
+      // being returned as final. enqueueWakeup does a lookup-or-insert on the
+      // per-run idempotency key, so a repair after a crash between the wakeup
+      // insert and markIterationWakeup finds the existing wakeup row rather
+      // than double-dispatching.
+      const repairState = ledger.loadRunRepairState
+        ? await ledger.loadRunRepairState({
+            tenantId: input.tenantId,
+            runId: existing.id,
+          })
+        : null;
+      if (isRepairableHalfBuiltStart(repairState, input.version)) {
+        return continueAgentLoopDispatch(
+          input,
+          {
+            runId: existing.id,
+            iterationId: repairState!.iterationId!,
+            workerAgentId:
+              workerAgentId(input.version?.workerSpec) ?? undefined,
+          },
+          ledger,
+        );
+      }
       return {
         status: "reused",
         runId: existing.id,
@@ -342,6 +369,32 @@ export async function continueAgentLoopDispatch(
       error: message,
     };
   }
+}
+
+/**
+ * Reuse-vs-repair predicate (THINK-137 U2). A run found by idempotency key
+ * is REPAIRED (its continuation re-entered) rather than reused only when it
+ * is a half-built agent-turn start:
+ *
+ *   - the run is still `queued` (terminal/skipped runs are final), and
+ *   - its first iteration never recorded a wakeup id, and
+ *   - the version resolves to an agent-turn dispatch.
+ *
+ * Routine-only versions (`agentTurn: false`) legitimately complete without a
+ * wakeup, so a `queued` + no-wakeup routine-only run is ambiguous, not
+ * half-built — those are never auto-repaired here (the executor owns their
+ * repair). Absence of routine actions => `agentTurn !== false` => agent turn.
+ */
+export function isRepairableHalfBuiltStart(
+  repairState: AgentLoopRunRepairState | null,
+  version: DispatchableAgentLoopVersion | null,
+): boolean {
+  if (!version) return false;
+  if (!repairState || !repairState.iterationId) return false;
+  if (repairState.status !== "queued") return false;
+  if (repairState.hasWakeup) return false;
+  const agentTurn = version.routineActionsSpec?.agentTurn !== false;
+  return agentTurn;
 }
 
 function evaluateStartGate(

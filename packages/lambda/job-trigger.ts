@@ -16,6 +16,7 @@ import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
   continueAgentLoopDispatch,
+  isRepairableHalfBuiltStart,
   normalizeRoutineActionsSpec,
   type RoutineActionResult,
   dispatchAgentLoop,
@@ -23,11 +24,17 @@ import {
   type AgentLoopDispatchLedger,
 } from "@thinkwork/agent-loops-core";
 import { createHash, randomBytes } from "node:crypto";
-import { ensureThreadForWork, getDb } from "@thinkwork/database-pg";
 import {
-  agentWakeupRequests,
+  createDbAgentLoopLedger,
+  ensureThreadForWork,
+  findAgentLoopRunByIdempotencyKey,
+  getDb,
+  loadActiveSpaceId,
+  loadAgentDefaultSpaceId,
+  loadAgentLoopRunRepairState,
+} from "@thinkwork/database-pg";
+import {
   agents,
-  agentLoopIterations,
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
@@ -44,7 +51,6 @@ import {
   threadIdleLearningRuns,
   threadIdleLearningState,
   threadTurns,
-  spaces,
   users,
   workflowEngineBindings,
   workflowEvidence,
@@ -535,256 +541,87 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
 
 type JobTriggerDb = ReturnType<typeof getDb>;
 
-function createAgentLoopLedger(db: JobTriggerDb): AgentLoopDispatchLedger {
-  return {
-    async findRunByIdempotencyKey(input) {
-      const [row] = await db
-        .select({ id: agentLoopRuns.id, status: agentLoopRuns.status })
-        .from(agentLoopRuns)
-        .where(
-          and(
-            eq(agentLoopRuns.tenant_id, input.tenantId),
-            eq(agentLoopRuns.idempotency_key, input.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      return row ? { id: row.id, status: row.status as never } : null;
-    },
-
-    async createRun(input) {
-      const [row] = await db
-        .insert(agentLoopRuns)
-        .values({
-          tenant_id: input.tenantId,
-          agent_loop_id: input.agentLoopId,
-          agent_loop_version_id: input.agentLoopVersionId ?? null,
-          status: input.status,
-          trigger_family: input.triggerFamily,
-          trigger_source: input.triggerSource,
-          scheduled_job_id: input.scheduledJobId ?? null,
-          actor_type: input.actorType ?? null,
-          actor_id: input.actorId ?? null,
-          idempotency_key: input.idempotencyKey ?? null,
-          correlation_id: input.correlationId,
-          current_iteration: input.currentIteration,
-          policy_snapshot: input.policySnapshot,
-          input_summary: input.inputSummary,
-          error_code: input.errorCode ?? null,
-          error_message: input.errorMessage ?? null,
-          last_event_at: input.now,
-          created_at: input.now,
-          updated_at: input.now,
-        })
-        .returning({ id: agentLoopRuns.id, status: agentLoopRuns.status });
-      return { id: row.id, status: row.status as never };
-    },
-
-    async createIteration(input) {
-      const [row] = await db
-        .insert(agentLoopIterations)
-        .values({
-          tenant_id: input.tenantId,
-          agent_loop_run_id: input.runId,
-          iteration_number: input.iterationNumber,
-          status: input.status,
-          goal_mode_action: input.goalModeAction,
-          input_summary: input.inputSummary,
-          error_code: input.errorCode ?? null,
-          error_message: input.errorMessage ?? null,
-          created_at: input.now,
-          updated_at: input.now,
-        })
-        .returning({ id: agentLoopIterations.id });
-      return { id: row.id };
-    },
-
-    async enqueueWakeup(input) {
-      const [row] = await db
-        .insert(agentWakeupRequests)
-        .values({
-          tenant_id: input.tenantId,
-          agent_id: input.agentId,
-          source: input.source,
-          trigger_detail: input.triggerDetail,
-          reason: input.reason,
-          payload: input.payload,
-          status: "queued",
-          idempotency_key: input.idempotencyKey,
-          requested_by_actor_type: input.requestedByActorType ?? null,
-          requested_by_actor_id: input.requestedByActorId ?? null,
-          requested_at: input.now,
-          created_at: input.now,
-        })
-        .returning({ id: agentWakeupRequests.id });
-      return { id: row.id };
-    },
-
-    async markIterationWakeup(input) {
-      await db
-        .update(agentLoopIterations)
-        .set({
-          agent_wakeup_request_id: input.wakeupId,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopIterations.id, input.iterationId));
-    },
-
-    async markDispatchFailed(input) {
-      await db
-        .update(agentLoopRuns)
-        .set({
-          status: "failed",
-          error_code: input.errorCode,
-          error_message: input.errorMessage,
-          finished_at: input.now,
-          last_event_at: input.now,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopRuns.id, input.runId));
-      await db
-        .update(agentLoopIterations)
-        .set({
-          status: "failed",
-          error_code: input.errorCode,
-          error_message: input.errorMessage,
-          finished_at: input.now,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopIterations.id, input.iterationId));
-    },
-
-    async updateLoopAfterDispatch(input) {
-      await db
-        .update(agentLoops)
-        .set({
-          last_run_id: input.runId,
-          last_run_status: input.status,
-          last_run_at: input.now,
-          last_run_summary: {
-            triggerFamily: input.triggerFamily,
-            currentIteration: input.currentIteration,
-            ...input.summary,
-          },
-          updated_at: input.now,
-        })
-        .where(eq(agentLoops.id, input.loopId));
-    },
-
-    // ---- Deterministic routine actions (plan 2026-07-03-004 U5) --------
-
-    async runRoutineAction(input) {
-      const { LambdaClient, InvokeCommand } = await import(
-        "@aws-sdk/client-lambda"
-      );
-      const lambda = new LambdaClient({});
-      const fnName = runtimeFunctionName(
-        "ROUTINE_EXEC_GIT_FUNCTION_NAME",
-        "routine-exec-git",
-      );
-      // RequestResponse and surface errors — never fire-and-forget.
-      const response = await lambda.send(
-        new InvokeCommand({
-          FunctionName: fnName,
-          InvocationType: "RequestResponse",
-          Payload: new TextEncoder().encode(
-            JSON.stringify({
-              routineId: input.action.routineId,
-              input: input.action.input ?? {},
-              triggerSource: "automation",
-            }),
-          ),
+/**
+ * The one call-site-specific ledger hook (THINK-137 U2): executes a routine
+ * action by RequestResponse-invoking the routine-exec-git Lambda. Kept in
+ * job-trigger because it reaches an AWS Lambda, not the DB — the shared
+ * DB-backed ledger (createDbAgentLoopLedger) owns every other method.
+ * graphql-http omits this hook and defers routine continuation here (KTD-3).
+ */
+const runRoutineActionHook: NonNullable<
+  AgentLoopDispatchLedger["runRoutineAction"]
+> = async (input) => {
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const lambda = new LambdaClient({});
+  const fnName = runtimeFunctionName(
+    "ROUTINE_EXEC_GIT_FUNCTION_NAME",
+    "routine-exec-git",
+  );
+  // RequestResponse and surface errors — never fire-and-forget.
+  const response = await lambda.send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(
+        JSON.stringify({
+          routineId: input.action.routineId,
+          input: input.action.input ?? {},
+          triggerSource: "automation",
         }),
-      );
-      if (response.FunctionError) {
-        return {
-          routineId: input.action.routineId,
-          label: input.action.label ?? null,
-          status: "failed",
-          errorClass: "routine_invoke_failed",
-          errorMessage: `executor function error: ${response.FunctionError}`,
-        };
-      }
-      const text = response.Payload
-        ? new TextDecoder().decode(response.Payload)
-        : "";
-      let parsed: {
-        status?: string;
-        executionId?: string;
-        commitSha?: string | null;
-        cacheServed?: boolean;
-        outputJson?: unknown;
-        errorClass?: string;
-        errorMessage?: string;
-      } = {};
-      try {
-        parsed = text ? JSON.parse(text) : {};
-      } catch {
-        return {
-          routineId: input.action.routineId,
-          label: input.action.label ?? null,
-          status: "failed",
-          errorClass: "routine_invoke_failed",
-          errorMessage: "executor returned malformed JSON",
-        };
-      }
-      const succeeded = parsed.status === "succeeded";
-      const result: RoutineActionResult = {
-        routineId: input.action.routineId,
-        label: input.action.label ?? null,
-        status: succeeded ? "succeeded" : "failed",
-        executionId: parsed.executionId ?? null,
-        commitSha: parsed.commitSha ?? null,
-        cacheServed: parsed.cacheServed === true,
-        outputJson: succeeded ? (parsed.outputJson ?? null) : undefined,
-        errorClass: succeeded ? null : (parsed.errorClass ?? parsed.status),
-        errorMessage: succeeded ? null : (parsed.errorMessage ?? null),
-      };
-      return result;
-    },
-
-    async recordRoutineActionResults(input) {
-      // Merge into the iteration record so the resume-turn payload path
-      // re-injects the same results (payload parity).
-      await db
-        .update(agentLoopIterations)
-        .set({
-          input_summary: sql`coalesce(${agentLoopIterations.input_summary}, '{}'::jsonb) || ${JSON.stringify(
-            { routineActionResults: input.results },
-          )}::jsonb`,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopIterations.id, input.iterationId));
-    },
-
-    async completeRoutineOnlyRun(input) {
-      const outcome = {
-        source: "routine_actions",
-        routineActions: {
-          total: input.results.length,
-          failed: input.results.filter((r) => r.status !== "succeeded").length,
-        },
-      };
-      await db
-        .update(agentLoopIterations)
-        .set({
-          status: input.status === "completed" ? "completed" : "failed",
-          output_summary: outcome,
-          finished_at: input.now,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopIterations.id, input.iterationId));
-      await db
-        .update(agentLoopRuns)
-        .set({
-          status: input.status,
-          output_summary: outcome,
-          finished_at: input.now,
-          last_event_at: input.now,
-          updated_at: input.now,
-        })
-        .where(eq(agentLoopRuns.id, input.runId));
-    },
+      ),
+    }),
+  );
+  if (response.FunctionError) {
+    return {
+      routineId: input.action.routineId,
+      label: input.action.label ?? null,
+      status: "failed",
+      errorClass: "routine_invoke_failed",
+      errorMessage: `executor function error: ${response.FunctionError}`,
+    };
+  }
+  const text = response.Payload
+    ? new TextDecoder().decode(response.Payload)
+    : "";
+  let parsed: {
+    status?: string;
+    executionId?: string;
+    commitSha?: string | null;
+    cacheServed?: boolean;
+    outputJson?: unknown;
+    errorClass?: string;
+    errorMessage?: string;
+  } = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    return {
+      routineId: input.action.routineId,
+      label: input.action.label ?? null,
+      status: "failed",
+      errorClass: "routine_invoke_failed",
+      errorMessage: "executor returned malformed JSON",
+    };
+  }
+  const succeeded = parsed.status === "succeeded";
+  const result: RoutineActionResult = {
+    routineId: input.action.routineId,
+    label: input.action.label ?? null,
+    status: succeeded ? "succeeded" : "failed",
+    executionId: parsed.executionId ?? null,
+    commitSha: parsed.commitSha ?? null,
+    cacheServed: parsed.cacheServed === true,
+    outputJson: succeeded ? (parsed.outputJson ?? null) : undefined,
+    errorClass: succeeded ? null : (parsed.errorClass ?? parsed.status),
+    errorMessage: succeeded ? null : (parsed.errorMessage ?? null),
   };
+  return result;
+};
+
+function createAgentLoopLedger(db: JobTriggerDb): AgentLoopDispatchLedger {
+  return createDbAgentLoopLedger(db, { runRoutineAction: runRoutineActionHook });
 }
 
 /**
@@ -901,77 +738,6 @@ function scheduledAgentLoopIdempotencyKey(event: JobTriggerEvent): string {
   return `${AGENT_LOOP_SCHEDULE_TRIGGER_TYPE}:${event.triggerId}:${fireId}`;
 }
 
-async function findAgentLoopRunByIdempotencyKey(
-  db: JobTriggerDb,
-  tenantId: string,
-  idempotencyKey: string,
-): Promise<{ id: string; status: string } | null> {
-  const [row] = await db
-    .select({ id: agentLoopRuns.id, status: agentLoopRuns.status })
-    .from(agentLoopRuns)
-    .where(
-      and(
-        eq(agentLoopRuns.tenant_id, tenantId),
-        eq(agentLoopRuns.idempotency_key, idempotencyKey),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
-}
-
-async function loadAgentDefaultSpaceId(
-  db: JobTriggerDb,
-  tenantId: string,
-  agentId: string,
-): Promise<string | null> {
-  const [agent] = await db
-    .select({ runtimeConfig: agents.runtime_config })
-    .from(agents)
-    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
-    .limit(1);
-  const defaultSpaceId = defaultSpaceIdFromRuntimeConfig(agent?.runtimeConfig);
-  if (!defaultSpaceId) return null;
-  const [space] = await db
-    .select({ id: spaces.id })
-    .from(spaces)
-    .where(
-      and(
-        eq(spaces.id, defaultSpaceId),
-        eq(spaces.tenant_id, tenantId),
-        eq(spaces.status, "active"),
-      ),
-    )
-    .limit(1);
-  return space?.id ?? null;
-}
-
-async function loadActiveSpaceId(
-  db: JobTriggerDb,
-  tenantId: string,
-  spaceId: string,
-): Promise<string | null> {
-  const [space] = await db
-    .select({ id: spaces.id })
-    .from(spaces)
-    .where(
-      and(
-        eq(spaces.id, spaceId),
-        eq(spaces.tenant_id, tenantId),
-        eq(spaces.status, "active"),
-      ),
-    )
-    .limit(1);
-  return space?.id ?? null;
-}
-
-function defaultSpaceIdFromRuntimeConfig(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
-  return typeof defaultSpaceId === "string" && defaultSpaceId.trim()
-    ? defaultSpaceId
-    : null;
-}
-
 async function handleAgentLoopSchedule(input: {
   db: JobTriggerDb;
   event: JobTriggerEvent;
@@ -1055,12 +821,40 @@ async function handleAgentLoopSchedule(input: {
       )[0]
     : null;
   const idempotencyKey = scheduledAgentLoopIdempotencyKey(event);
+  const dispatchVersion = version
+    ? {
+        id: version.id,
+        versionStatus: version.version_status,
+        goalSpec: version.goal_spec,
+        workerSpec: version.worker_spec,
+        judgeSpec: version.judge_spec,
+        loopPolicy: version.loop_policy,
+        routineActionsSpec: normalizeRoutineActionsSpec(
+          version.routine_actions_spec,
+        ),
+      }
+    : null;
+
+  // Idempotency (THINK-137 U2). A run already exists for this fire when
+  // EventBridge redelivers or overlapping fires race. A *complete* run is
+  // reused (no new thread, no re-dispatch). A *half-built agent-turn start*
+  // — queued, its first iteration never recorded a wakeup — is repaired: we
+  // fall through to dispatchAgentLoop, which re-enters the continuation on
+  // the existing run (enqueueWakeup's lookup-or-insert prevents a double
+  // dispatch). Repair reuses the existing run, so no execution thread is
+  // created for it.
   const existingIdempotentRun = await findAgentLoopRunByIdempotencyKey(
     db,
     tenantId,
     idempotencyKey,
   );
-  if (existingIdempotentRun) {
+  const repairState = existingIdempotentRun
+    ? await loadAgentLoopRunRepairState(db, tenantId, existingIdempotentRun.id)
+    : null;
+  const willRepairExisting =
+    existingIdempotentRun != null &&
+    isRepairableHalfBuiltStart(repairState, dispatchVersion);
+  if (existingIdempotentRun && !willRepairExisting) {
     await db
       .update(scheduledJobs)
       .set({
@@ -1085,10 +879,14 @@ async function handleAgentLoopSchedule(input: {
     (workerId ? await loadAgentDefaultSpaceId(db, tenantId, workerId) : null);
   // Routine-only Automations (plan 2026-07-03-004 U5) run their actions
   // token-free and complete with no agent turn — creating an execution
-  // thread here leaves an empty "Working…" thread hung forever.
+  // thread here leaves an empty "Working…" thread hung forever. A repair
+  // reuses the existing run/iteration, so it needs no new thread either.
   const routineOnly = isRoutineOnlyVersion(version?.routine_actions_spec);
   const executionThread =
-    workerId && loop.lifecycle_status === "active" && !routineOnly
+    !willRepairExisting &&
+    workerId &&
+    loop.lifecycle_status === "active" &&
+    !routineOnly
       ? await ensureThreadForWork({
           tenantId,
           agentId: workerId,
@@ -1109,19 +907,7 @@ async function handleAgentLoopSchedule(input: {
         enabled: loop.enabled,
         lifecycleStatus: loop.lifecycle_status,
       },
-      version: version
-        ? {
-            id: version.id,
-            versionStatus: version.version_status,
-            goalSpec: version.goal_spec,
-            workerSpec: version.worker_spec,
-            judgeSpec: version.judge_spec,
-            loopPolicy: version.loop_policy,
-            routineActionsSpec: normalizeRoutineActionsSpec(
-              version.routine_actions_spec,
-            ),
-          }
-        : null,
+      version: dispatchVersion,
       trigger: {
         family: "schedule",
         source: AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,

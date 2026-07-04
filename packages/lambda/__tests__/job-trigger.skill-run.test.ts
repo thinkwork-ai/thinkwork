@@ -77,17 +77,26 @@ const updateChain = () => ({
   },
 });
 
-vi.mock("@thinkwork/database-pg", () => ({
-  getDb: () => ({
-    select: () => selectChain((mockSelect() as Rows) ?? []),
-    insert: () => insertChain((mockInsert() as Rows) ?? []),
-    update: () => {
-      mockUpdate();
-      return updateChain();
-    },
-  }),
-  ensureThreadForWork: mockEnsureThreadForWork,
-}));
+// Delegate to the REAL @thinkwork/database-pg for the shared AgentLoop ledger
+// + caller helpers (THINK-137 U2) so their exact row shapes are exercised;
+// only getDb + ensureThreadForWork are seams. The real ledger drives the same
+// mock db chain below, so the mockSelect/mockInsert queues still steer it.
+vi.mock("@thinkwork/database-pg", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/database-pg")>();
+  return {
+    ...actual,
+    getDb: () => ({
+      select: () => selectChain((mockSelect() as Rows) ?? []),
+      insert: () => insertChain((mockInsert() as Rows) ?? []),
+      update: () => {
+        mockUpdate();
+        return updateChain();
+      },
+    }),
+    ensureThreadForWork: mockEnsureThreadForWork,
+  };
+});
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agentWakeupRequests: { id: "agent_wakeup_requests.id" },
@@ -303,6 +312,9 @@ vi.mock("drizzle-orm", () => ({
   eq: (...args: unknown[]) => ({ _eq: args }),
   gte: (...args: unknown[]) => ({ _gte: args }),
   sql: (...args: unknown[]) => ({ _sql: args }),
+  // Real @thinkwork/database-pg schema modules call relations() at import
+  // (loaded via the importOriginal delegation above); a no-op satisfies them.
+  relations: () => ({}),
 }));
 
 vi.mock("@aws-sdk/client-lambda", () => ({

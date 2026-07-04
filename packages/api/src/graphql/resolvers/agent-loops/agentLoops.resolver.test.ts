@@ -218,12 +218,15 @@ describe("AgentLoop resolvers", () => {
           },
         ];
       }
-      if (call === 3) return [];
+      if (call === 3) return []; // findAgentLoopRunByIdempotencyKey pre-check
       if (call === 4) {
-        return [{ id: "loop-space-1" }];
+        return [{ id: "loop-space-1" }]; // loadActiveSpaceId
       }
-      if (call === 5) return [];
-      if (call === 6) {
+      if (call === 5) return []; // dispatch internal findRunByIdempotencyKey
+      // call 6: enqueueWakeup lookup-or-insert probe (no existing wakeup, so
+      // it inserts) — THINK-137 U2.
+      if (call === 6) return [];
+      if (call === 7) {
         return [
           {
             id: "run-1",

@@ -95,6 +95,18 @@ export interface AgentLoopRunRef {
   status: AgentLoopRunStatus;
 }
 
+/**
+ * Side-effect completeness of a run found by idempotency key, used to
+ * decide reuse-vs-repair (THINK-137 U2). `hasWakeup` is true once the
+ * first iteration recorded its `agent_wakeup_request_id`; a `queued` run
+ * whose iteration has no wakeup is a half-built start.
+ */
+export interface AgentLoopRunRepairState {
+  status: AgentLoopRunStatus;
+  iterationId: string | null;
+  hasWakeup: boolean;
+}
+
 export interface AgentLoopIterationRef {
   id: string;
 }
@@ -186,6 +198,13 @@ export interface AgentLoopDispatchLedger {
     tenantId: string;
     idempotencyKey: string;
   }): Promise<AgentLoopRunRef | null>;
+  /** Loads the side-effect completeness of an existing run so dispatch can
+   * decide reuse-vs-repair (THINK-137 U2). Optional: ledgers without it
+   * fall back to today's behavior (any matching run is `reused`). */
+  loadRunRepairState?(input: {
+    tenantId: string;
+    runId: string;
+  }): Promise<AgentLoopRunRepairState | null>;
   createRun(input: AgentLoopCreateRunInput): Promise<AgentLoopRunRef>;
   createIteration(
     input: AgentLoopCreateIterationInput,
