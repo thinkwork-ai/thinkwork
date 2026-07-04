@@ -27,10 +27,15 @@ const routineExecutionRoute = read(
 );
 
 describe("Settings workflow routing", () => {
-  it("exposes Workflows as the top-level settings surface instead of Routines", () => {
+  it("exposes both Workflows (step_functions) and Routines (git_python) as settings surfaces", () => {
     expect(navSource).toContain('label: "Workflows"');
     expect(navSource).toContain('to: "/settings/workflows"');
-    expect(navSource).not.toContain('label: "Routines"');
+    // Deterministic git-backed routines are their own top-level surface
+    // (plan 2026-07-03-004) — distinct from the step_functions Workflows
+    // page. The legacy step_functions routine *detail* URLs still redirect
+    // to Workflows (asserted below).
+    expect(navSource).toContain('label: "Routines"');
+    expect(navSource).toContain('to: "/settings/routines"');
   });
 
   it("mounts aggregate workflow inventory, detail, and run routes", () => {
@@ -49,9 +54,12 @@ describe("Settings workflow routing", () => {
     );
   });
 
-  it("keeps legacy routine URLs as compatibility redirects or fallbacks", () => {
-    expect(routineListRoute).toContain("redirect({");
-    expect(routineListRoute).toContain('to: "/settings/workflows"');
+  it("mounts the git-backed Routines list and keeps legacy step_functions routine detail URLs as redirects", () => {
+    // The list route is now the real deterministic Routines page.
+    expect(routineListRoute).toContain("SettingsRoutines");
+    expect(routineListRoute).not.toContain("redirect({");
+    // step_functions routine detail/execution URLs still fall back to the
+    // Workflows surface.
     expect(routineDetailRoute).toContain("RoutineWorkflowDetailRedirect");
     expect(routineExecutionRoute).toContain("RoutineWorkflowRunRedirect");
   });

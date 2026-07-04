@@ -753,9 +753,12 @@ export const SettingsGitRoutinesQuery = gql`
       description
       engine
       status
-      validatedSha
+      modulePath
       fixturePaths
+      credentialRefs
+      validatedSha
       disabledReason
+      lastRunAt
     }
   }
 `;
