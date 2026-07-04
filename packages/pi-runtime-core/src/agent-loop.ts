@@ -24,6 +24,7 @@ import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   extractEmitJsonRenderToolPart,
   threadJsonRenderActivityEvent,
+  threadJsonRenderStateSnapshotActivityEvent,
 } from "./json-render-runtime.js";
 import {
   extractMcpAppPartsFromToolResult,
@@ -935,9 +936,17 @@ export async function runAgentLoop(
           uiMessageParts = mergeFinalUiMessageParts(uiMessageParts, [
             jsonRenderPart,
           ]);
+          // Additive AG-UI emission (Living Artifacts U3, KTD1/R1): keep the
+          // legacy ui_message_chunk event flowing untouched AND emit a
+          // per-part STATE_SNAPSHOT event. The web fold handles both kinds and
+          // merges by part id, so the snapshot round-trips to the same render.
           emitActivitySafely(
             deps,
             threadJsonRenderActivityEvent(jsonRenderPart),
+          );
+          emitActivitySafely(
+            deps,
+            threadJsonRenderStateSnapshotActivityEvent(jsonRenderPart),
           );
         }
         if (!event.isError) {

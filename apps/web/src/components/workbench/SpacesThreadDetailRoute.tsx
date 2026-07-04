@@ -34,6 +34,7 @@ import {
   mergeUIMessageChunk,
   type UIMessageStreamState,
 } from "@/lib/ui-message-merge";
+import { partFromThreadJsonRenderStateSnapshotPayload } from "@thinkwork/thread-json-render";
 import { toUserQuestionStatus } from "@/lib/user-question-record";
 import {
   InlineShortcutText,
@@ -2960,7 +2961,16 @@ function latestLiveStreamState(
   return undefined;
 }
 
-function uiMessageChunkFromThreadTurnPayload(payload: unknown): unknown | null {
+export function uiMessageChunkFromThreadTurnPayload(
+  payload: unknown,
+): unknown | null {
+  // AG-UI STATE_SNAPSHOT (Living Artifacts U3): unwrap the envelope to the same
+  // part the legacy chunk kind carries, then fall through to the shared
+  // merge-by-id path. Unknown future event types return null below and are
+  // ignored without breaking the fold.
+  const snapshotPart = partFromThreadJsonRenderStateSnapshotPayload(payload);
+  if (snapshotPart) return snapshotPart;
+
   const record = metadataObject(payload);
   if (!record) return null;
   if (

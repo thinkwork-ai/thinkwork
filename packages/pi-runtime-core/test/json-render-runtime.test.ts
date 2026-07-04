@@ -4,12 +4,18 @@ import { resolve } from "node:path";
 import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 import {
+  partFromThreadJsonRenderStateSnapshotPayload,
+  THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
+} from "@thinkwork/thread-json-render";
+import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
+  THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
   buildEmitJsonRenderUiTool,
   extractEmitJsonRenderToolPart,
   normalizeRuntimeThreadJsonRenderInput,
   threadJsonRenderActivityEvent,
+  threadJsonRenderStateSnapshotActivityEvent,
 } from "../src/json-render-runtime.js";
 
 describe("runtime Thread json-render helper", () => {
@@ -190,6 +196,34 @@ describe("runtime Thread json-render helper", () => {
         chunk: fixture,
       },
     });
+  });
+
+  it("builds an additive AG-UI STATE_SNAPSHOT activity event that round-trips the part", () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+    const event = threadJsonRenderStateSnapshotActivityEvent(fixture);
+
+    expect(event).toMatchObject({
+      eventType: THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
+      stream: "ui",
+      payload: {
+        kind: THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
+        event: {
+          type: "STATE_SNAPSHOT",
+          partId: fixture.id,
+          snapshot: fixture,
+        },
+      },
+    });
+    // The snapshot round-trips to exactly the part the legacy chunk carries.
+    expect(partFromThreadJsonRenderStateSnapshotPayload(event.payload)).toEqual(
+      fixture,
+    );
+    // Legacy and snapshot events describe the same part id → the web fold
+    // merges them by id (idempotent dual-emission).
+    const legacy = threadJsonRenderActivityEvent(fixture);
+    expect((legacy.payload as { chunk: { id: string } }).chunk.id).toBe(
+      partFromThreadJsonRenderStateSnapshotPayload(event.payload)?.id,
+    );
   });
 
   it("exposes a narrow emit_json_render_ui tool", async () => {

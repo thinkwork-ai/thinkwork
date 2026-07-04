@@ -1,4 +1,5 @@
 export * from "./actions.js";
+export * from "./agui/vocabulary.js";
 export * from "./catalog.js";
 export * from "./primitive-catalog.js";
 export * from "./hash.js";

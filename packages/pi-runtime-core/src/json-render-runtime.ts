@@ -3,12 +3,15 @@ import {
   THREAD_JSON_RENDER_CATALOG_VERSION,
   THREAD_JSON_RENDER_PART_TYPE,
   THREAD_JSON_RENDER_SCHEMA_VERSION,
+  THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
   createThreadJsonRenderSpecHash,
   threadJsonRenderComponentDefinitions,
+  threadJsonRenderPartToStateSnapshot,
   type ThreadJsonRenderData,
   type ThreadJsonRenderDiagnostic,
   type ThreadJsonRenderPart,
   type ThreadJsonRenderSpec,
+  type ThreadJsonRenderStateSnapshotPayload,
   validateThreadJsonRenderData,
   validateThreadJsonRenderPart,
 } from "@thinkwork/thread-json-render";
@@ -23,6 +26,10 @@ export const THREAD_JSON_RENDER_ACTIVITY_EVENT_TYPE =
 export const THREAD_JSON_RENDER_ACTIVITY_STREAM = "ui" as const;
 export const THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND =
   "thread_json_render.ui_message_chunk" as const;
+/** AG-UI STATE_SNAPSHOT activity event type (KTD1); distinct from the legacy
+ *  `ui_message_chunk` type so both can ride the pipeline additively. */
+export const THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE =
+  "state_snapshot" as const;
 
 export interface ThreadJsonRenderRuntimePartResult {
   part?: ThreadJsonRenderPart;
@@ -204,6 +211,31 @@ export function threadJsonRenderActivityEvent(
       kind: THREAD_JSON_RENDER_ACTIVITY_PAYLOAD_KIND,
       chunk: part,
     } satisfies ThreadJsonRenderActivityPayload,
+  };
+}
+
+/**
+ * AG-UI STATE_SNAPSHOT activity event for a single json-render part (KTD1, R1).
+ *
+ * Emitted ADDITIVELY alongside {@link threadJsonRenderActivityEvent}: the
+ * legacy `ui_message_chunk` kind keeps flowing untouched, and this carries the
+ * same part under the AG-UI `state_snapshot` payload kind. The web fold merges
+ * both by part id, so a part that round-trips through the snapshot renders
+ * identically to the legacy chunk. Always ONE part per event — never a
+ * multi-part canvas — so `assertThreadTurnEventPayloadSize` (64KB) holds by
+ * construction.
+ */
+export function threadJsonRenderStateSnapshotActivityEvent(
+  part: ThreadJsonRenderPart,
+): ActivityEmitEvent {
+  return {
+    eventType: THREAD_JSON_RENDER_STATE_SNAPSHOT_ACTIVITY_EVENT_TYPE,
+    message: part.data.mobileFallback.title,
+    stream: THREAD_JSON_RENDER_ACTIVITY_STREAM,
+    payload: {
+      kind: THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
+      event: threadJsonRenderPartToStateSnapshot(part),
+    } satisfies ThreadJsonRenderStateSnapshotPayload,
   };
 }
 

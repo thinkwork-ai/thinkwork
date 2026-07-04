@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createTaskReviewJsonRenderFixture,
+  threadJsonRenderStateSnapshotPayload,
+  type ThreadJsonRenderPart,
+} from "@thinkwork/thread-json-render";
+import {
   appendThreadTurnEvent,
   assertThreadTurnEventPayloadSize,
   nextThreadTurnEventSeq,
@@ -49,5 +54,37 @@ describe("thread-turn-events", () => {
     expect(() =>
       assertThreadTurnEventPayloadSize({ text: "x".repeat(20) }, 10),
     ).toThrow(ThreadTurnEventError);
+  });
+
+  // Living Artifacts U3 / KTD1: an AG-UI STATE_SNAPSHOT carries exactly one
+  // json-render part, so a normal per-part snapshot passes the 64KB guard by
+  // construction — while an oversized part still trips it (never silently
+  // truncated: the guard rejects the whole payload).
+  it("passes a normal per-part STATE_SNAPSHOT through the 64KB guard", () => {
+    const payload = threadJsonRenderStateSnapshotPayload(
+      createTaskReviewJsonRenderFixture(),
+    );
+    expect(() => assertThreadTurnEventPayloadSize(payload)).not.toThrow();
+  });
+
+  it("still trips the 64KB guard when a single snapshot part is oversized", () => {
+    const base = createTaskReviewJsonRenderFixture();
+    const oversized: ThreadJsonRenderPart = {
+      ...base,
+      data: {
+        ...base.data,
+        mobileFallback: {
+          ...base.data.mobileFallback,
+          summary: "x".repeat(70 * 1024),
+        },
+      },
+    };
+    const payload = threadJsonRenderStateSnapshotPayload(oversized);
+    expect(() => assertThreadTurnEventPayloadSize(payload)).toThrow(
+      ThreadTurnEventError,
+    );
+    expect(() => assertThreadTurnEventPayloadSize(payload)).toThrow(
+      /exceeds 65536 bytes/,
+    );
   });
 });
