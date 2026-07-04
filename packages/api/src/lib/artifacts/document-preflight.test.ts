@@ -133,7 +133,14 @@ describe("runDocumentPreflight", () => {
 
   it("rejects <base>, <meta refresh>, @import, and external CSS url()", () => {
     expect(
-      codes(run(VALID_DOC.replace("<style>", '<base href="https://x.example/">\n<style>'))),
+      codes(
+        run(
+          VALID_DOC.replace(
+            "<style>",
+            '<base href="https://x.example/">\n<style>',
+          ),
+        ),
+      ),
     ).toContain("EXTERNAL_REF");
     expect(
       codes(
@@ -146,7 +153,9 @@ describe("runDocumentPreflight", () => {
       ),
     ).toContain("EXTERNAL_REF");
     expect(
-      codes(run(VALID_DOC.replace(":root {", '@import url("x.css");\n:root {'))),
+      codes(
+        run(VALID_DOC.replace(":root {", '@import url("x.css");\n:root {')),
+      ),
     ).toContain("EXTERNAL_REF");
     expect(
       codes(

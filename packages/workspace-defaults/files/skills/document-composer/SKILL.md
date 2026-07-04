@@ -23,12 +23,12 @@ call. The thread shows a compact card linking to the full-page reader.
 
 Pick one; open its plate in `references/` and imitate its structure:
 
-| Genre | Use for | Plate |
-|---|---|---|
-| `ideation` | Ranked options/ideas with evidence and a rejection record | `references/plate-ideation.html` |
-| `plan` | How something will be done: decisions, requirements, steps | `references/plate-plan.html` |
-| `report` | What happened / what is true: findings, metrics, analysis | `references/plate-report.html` |
-| `brief` | A compact one-page summary for a decision-maker | `references/plate-brief.html` |
+| Genre      | Use for                                                    | Plate                            |
+| ---------- | ---------------------------------------------------------- | -------------------------------- |
+| `ideation` | Ranked options/ideas with evidence and a rejection record  | `references/plate-ideation.html` |
+| `plan`     | How something will be done: decisions, requirements, steps | `references/plate-plan.html`     |
+| `report`   | What happened / what is true: findings, metrics, analysis  | `references/plate-report.html`   |
+| `brief`    | A compact one-page summary for a decision-maker            | `references/plate-brief.html`    |
 
 ## Composing the two bodies
 

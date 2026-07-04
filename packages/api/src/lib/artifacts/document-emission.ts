@@ -32,7 +32,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
 import { messages } from "@thinkwork/database-pg/schema";
-import { and, artifacts, artifactVersions, db, eq, sql } from "../../graphql/utils.js";
+import {
+  and,
+  artifacts,
+  artifactVersions,
+  db,
+  eq,
+  sql,
+} from "../../graphql/utils.js";
 import { hasSpaceWriteRole } from "./canvas-access.js";
 import { boundedCanvasText } from "./canvas-lifecycle.js";
 import {
@@ -55,12 +62,7 @@ import { notifyThreadTurnStep } from "../../graphql/notify.js";
 export const DOCUMENT_METADATA_KIND = "document" as const;
 
 /** v1 genres (KTD3): genre IS the artifact `type` (lowercase DB value). */
-export const DOCUMENT_GENRES = [
-  "ideation",
-  "plan",
-  "report",
-  "brief",
-] as const;
+export const DOCUMENT_GENRES = ["ideation", "plan", "report", "brief"] as const;
 export type DocumentGenre = (typeof DOCUMENT_GENRES)[number];
 
 /** `thread_turn_events.payload.kind` for the compact in-thread card (R4). */
@@ -129,8 +131,7 @@ export interface DocumentEmitInput {
 }
 
 export type DocumentEmitParse =
-  | { ok: true; value: DocumentEmitInput }
-  | { ok: false; error: string };
+  { ok: true; value: DocumentEmitInput } | { ok: false; error: string };
 
 /** Shape validation — tool bugs, not model-actionable content rejects. */
 export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
@@ -177,7 +178,7 @@ export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
   if (doc.spaceId !== undefined && status !== "final") {
     return {
       ok: false,
-      error: "document.spaceId is only valid with status \"final\"",
+      error: 'document.spaceId is only valid with status "final"',
     };
   }
   return {
@@ -339,7 +340,14 @@ function defaultDeps(): DocumentEmissionDeps {
     },
     hasSpaceWriteRole,
     pinDocumentHead,
-    appendCardEvent: async ({ tenantId, turnId, threadId, agentId, title, card }) => {
+    appendCardEvent: async ({
+      tenantId,
+      turnId,
+      threadId,
+      agentId,
+      title,
+      card,
+    }) => {
       const store = drizzleThreadTurnEventStore();
       const row = await appendThreadTurnEvent(store, {
         tenantId,
@@ -513,7 +521,11 @@ export async function handleDocumentEmission(
     );
     return {
       statusCode: 200,
-      body: { ok: false, code: "PREFLIGHT_REJECTED", diagnostics: preflight.diagnostics },
+      body: {
+        ok: false,
+        code: "PREFLIGHT_REJECTED",
+        diagnostics: preflight.diagnostics,
+      },
     };
   }
 
@@ -611,7 +623,11 @@ export async function handleDocumentEmission(
     if (!row) {
       return {
         statusCode: 500,
-        body: { ok: false, error: "Document row missing after upsert", code: "INTERNAL" },
+        body: {
+          ok: false,
+          error: "Document row missing after upsert",
+          code: "INTERNAL",
+        },
       };
     }
     try {
@@ -659,7 +675,10 @@ export async function handleDocumentEmission(
     .catch((err) => {
       // Best-effort like every activity append side-effect: the document is
       // durably persisted; a card fault costs thread visibility, not data.
-      console.error("[document-emission] card append failed (best-effort):", err);
+      console.error(
+        "[document-emission] card append failed (best-effort):",
+        err,
+      );
     });
 
   return {

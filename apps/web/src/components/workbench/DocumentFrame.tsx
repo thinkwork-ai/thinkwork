@@ -34,7 +34,9 @@ export interface DocumentFrameProps {
 }
 
 /** Resolve the app theme to the binary token documents style against. */
-export function documentThemeToken(theme: string | undefined): "light" | "dark" {
+export function documentThemeToken(
+  theme: string | undefined,
+): "light" | "dark" {
   if (theme === "dark") return "dark";
   if (theme === "light") return "light";
   // "system" (or unknown): follow the OS preference like the app shell does.

@@ -19,16 +19,14 @@
 
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { defineExtension, type ThinkworkExtension } from "./define-extension.js";
+import {
+  defineExtension,
+  type ThinkworkExtension,
+} from "./define-extension.js";
 
 export const EMIT_DOCUMENT_TOOL_NAME = "emit_document";
 
-export const DOCUMENT_GENRES = [
-  "ideation",
-  "plan",
-  "report",
-  "brief",
-] as const;
+export const DOCUMENT_GENRES = ["ideation", "plan", "report", "brief"] as const;
 
 /**
  * Local fast-fail ceilings. Kept in sync with the server-side source of truth

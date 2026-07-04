@@ -40,8 +40,7 @@ export interface DocumentPreflightDiagnostic {
 }
 
 export type DocumentPreflightResult =
-  | { ok: true }
-  | { ok: false; diagnostics: DocumentPreflightDiagnostic[] };
+  { ok: true } | { ok: false; diagnostics: DocumentPreflightDiagnostic[] };
 
 /** URL-bearing attributes that are rejected unless the value is inert. */
 const URL_ATTRIBUTES = [
@@ -167,11 +166,7 @@ export function runDocumentPreflight(input: {
   }
 
   // ---- External references (default-deny) --------------------------------
-  const flagExternal = (
-    attr: string,
-    value: string,
-    index: number,
-  ): void => {
+  const flagExternal = (attr: string, value: string, index: number): void => {
     diagnostics.push({
       code: "EXTERNAL_REF",
       message: `${attr}="${snippet(value)}" references outside the document. Documents must be fully self-contained: inline the asset as a data: URI, use a same-document #anchor, or remove it. External fonts/styles must become inline CSS with system font stacks.`,

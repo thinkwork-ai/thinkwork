@@ -5,10 +5,7 @@
  * `json_render_snapshot` regression this repo already shipped once).
  */
 import { describe, expect, it } from "vitest";
-import {
-  DOCUMENT_GATED_KIND,
-  isCanvasArtifact,
-} from "./canvas-access.js";
+import { DOCUMENT_GATED_KIND, isCanvasArtifact } from "./canvas-access.js";
 import { DOCUMENT_METADATA_KIND } from "./document-emission.js";
 
 describe("document access gating (gate-fires)", () => {

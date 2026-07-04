@@ -24,7 +24,8 @@ const VALID_DOCUMENT = {
   title: "Q3 Report",
   abstract: "Numbers are up.",
   digestMarkdown: "# Q3 Report\n\nNumbers are up.",
-  renderHtml: "<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id=\"t\">Q3</h1></body></html>",
+  renderHtml:
+    '<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id="t">Q3</h1></body></html>',
   status: "draft",
 };
 
@@ -104,9 +105,15 @@ beforeEach(() => {
 
 describe("parseDocumentEmitInput", () => {
   it("rejects bad genres, missing bodies, and spaceId on drafts", () => {
-    expect(parseDocumentEmitInput({ ...VALID_DOCUMENT, genre: "novel" }).ok).toBe(false);
-    expect(parseDocumentEmitInput({ ...VALID_DOCUMENT, digestMarkdown: "" }).ok).toBe(false);
-    expect(parseDocumentEmitInput({ ...VALID_DOCUMENT, renderHtml: " " }).ok).toBe(false);
+    expect(
+      parseDocumentEmitInput({ ...VALID_DOCUMENT, genre: "novel" }).ok,
+    ).toBe(false);
+    expect(
+      parseDocumentEmitInput({ ...VALID_DOCUMENT, digestMarkdown: "" }).ok,
+    ).toBe(false);
+    expect(
+      parseDocumentEmitInput({ ...VALID_DOCUMENT, renderHtml: " " }).ok,
+    ).toBe(false);
     expect(
       parseDocumentEmitInput({ ...VALID_DOCUMENT, spaceId: SPACE_ID }).ok,
     ).toBe(false);
@@ -138,9 +145,9 @@ describe("handleDocumentEmission", () => {
     expect(recorded.cards).toHaveLength(1);
     const card = recorded.cards[0].card as Record<string, unknown>;
     expect(card.title).toBe("Q3 Report");
-    expect(
-      Buffer.byteLength(JSON.stringify(card), "utf8"),
-    ).toBeLessThanOrEqual(DOCUMENT_CARD_MAX_BYTES);
+    expect(Buffer.byteLength(JSON.stringify(card), "utf8")).toBeLessThanOrEqual(
+      DOCUMENT_CARD_MAX_BYTES,
+    );
     // The full bodies never appear in the card.
     expect(JSON.stringify(recorded.cards[0])).not.toContain("<!DOCTYPE");
   });
@@ -240,9 +247,9 @@ describe("buildDocumentCard", () => {
       status: "draft",
       headVersion: 0,
     });
-    expect(
-      Buffer.byteLength(JSON.stringify(card), "utf8"),
-    ).toBeLessThanOrEqual(DOCUMENT_CARD_MAX_BYTES);
+    expect(Buffer.byteLength(JSON.stringify(card), "utf8")).toBeLessThanOrEqual(
+      DOCUMENT_CARD_MAX_BYTES,
+    );
     expect(card.abstract).toContain("…");
   });
 

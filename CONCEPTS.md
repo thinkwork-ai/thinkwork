@@ -114,6 +114,20 @@ The mechanical rule deciding which knowledge-graph entities earn wiki pages: an 
 ### Progressive Discovery
 The agent's Brain-first memory read path: consult the compiled wiki and knowledge graph first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
 
+## Document Artifacts
+
+### Document Artifact
+A dual-body artifact kind: a canonical markdown digest (the record agents, mobile, and Brain consume) plus a self-contained single-file HTML render (the human-facing body), both emitted in one `emit_document` call. Born-as-artifact like a Living Canvas but with no data bindings — the simplest kind on the living-artifacts substrate. Four v1 genres: Ideation, Plan, Report, Brief.
+
+### Document Tier
+The scriptless rendering containment level for Document Artifacts: the sandboxed-iframe trust model with `allow-scripts` stripped (zero grants). Contrast with the app tier (McpAppFrame), which grants script execution. A document that needs interactivity graduates to the app tier deliberately; it never gains scripts at the document tier.
+
+### DocSpector
+The emission-time preflight validator for Document Artifacts: default-deny rejection of non-self-contained HTML (any URL-resolving attribute or CSS value that is not `data:`, `#fragment`, or `mailto:`), any `<script>` at the document tier, oversize bodies, and missing dark-mode support — with model-actionable diagnostics so the agent self-corrects in-turn. Named after SkillSpector, the skill-publish trust gate.
+
+### Genre Plate
+A complete exemplar document shipped in the document-composer skill's references, one per genre, that the agent imitates structurally when composing — pattern-book plates rather than prose style rules. The v1 plates encode the house style (header anatomy, inline-SVG visuals, dual-theme tokens, print CSS) with full self-containment (system fonts).
+
 ## Flagged ambiguities
 
 ## MCP Apps

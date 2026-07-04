@@ -21,10 +21,15 @@ interface RegisteredTool {
   execute: (
     id: string,
     params: Record<string, unknown>,
-  ) => Promise<{ content: Array<{ type: string; text: string }>; details?: Record<string, unknown> }>;
+  ) => Promise<{
+    content: Array<{ type: string; text: string }>;
+    details?: Record<string, unknown>;
+  }>;
 }
 
-function register(options: Parameters<typeof createDocumentComposerExtension>[0]) {
+function register(
+  options: Parameters<typeof createDocumentComposerExtension>[0],
+) {
   const tools: RegisteredTool[] = [];
   const extension = createDocumentComposerExtension(options);
   extension.register(
@@ -39,7 +44,8 @@ const VALID_PARAMS = {
   title: "Q3 Report",
   abstract: "Numbers are up.",
   digest_markdown: "# Q3\n\nNumbers up.",
-  render_html: "<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id=\"t\">Q3</h1></body></html>",
+  render_html:
+    '<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id="t">Q3</h1></body></html>',
 };
 
 function okFetch(body: Record<string, unknown>): typeof fetch {
@@ -98,11 +104,19 @@ describe("createDocumentComposerExtension", () => {
 
   it("returns server diagnostics verbatim as the tool result (R7)", async () => {
     const diagnostics = [
-      { code: "EXTERNAL_REF", message: "fonts.googleapis.com", location: "line 3" },
+      {
+        code: "EXTERNAL_REF",
+        message: "fonts.googleapis.com",
+        location: "line 3",
+      },
     ];
     const { tools } = register({
       documentComposerConfig: CONFIG,
-      fetchImpl: okFetch({ ok: false, code: "PREFLIGHT_REJECTED", diagnostics }),
+      fetchImpl: okFetch({
+        ok: false,
+        code: "PREFLIGHT_REJECTED",
+        diagnostics,
+      }),
     });
     const result = await tools[0].execute("call-1", VALID_PARAMS);
     expect(result.content[0].text).toContain("REJECTED");
@@ -118,7 +132,9 @@ describe("createDocumentComposerExtension", () => {
       render_html: "x".repeat(EMIT_DOCUMENT_RENDER_MAX_BYTES + 1),
     });
     expect(result.content[0].text).toContain("SIZE_CEILING");
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(0);
   });
 
   it("rejects an unknown genre locally", async () => {
@@ -134,7 +150,11 @@ describe("createDocumentComposerExtension", () => {
   it("surfaces FORBIDDEN refusals as text, and throws on HTTP failure", async () => {
     const { tools } = register({
       documentComposerConfig: CONFIG,
-      fetchImpl: okFetch({ ok: false, code: "FORBIDDEN", error: "not a member" }),
+      fetchImpl: okFetch({
+        ok: false,
+        code: "FORBIDDEN",
+        error: "not a member",
+      }),
     });
     const refused = await tools[0].execute("call-1", VALID_PARAMS);
     expect(refused.content[0].text).toContain("FORBIDDEN");
