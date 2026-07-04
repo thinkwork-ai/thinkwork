@@ -311,6 +311,7 @@ export type AgentLoop = {
   totalCostUsdCents: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<AgentLoopVersion>;
+  webhookDeliveries: Array<AutomationWebhookDelivery>;
   webhookEndpoint?: Maybe<AgentLoopWebhookEndpoint>;
 };
 
@@ -319,6 +320,11 @@ export type AgentLoopRunsArgs = {
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<AgentLoopRunStatus>;
+};
+
+
+export type AgentLoopWebhookDeliveriesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type AgentLoopEvidence = {
@@ -970,6 +976,24 @@ export type AutomationBuilderSession = {
   threadCreated: Scalars['Boolean']['output'];
 };
 
+export type AutomationWebhookDelivery = {
+  __typename?: 'AutomationWebhookDelivery';
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  isReplay: Scalars['Boolean']['output'];
+  normalizedKind?: Maybe<Scalars['String']['output']>;
+  providerEventId?: Maybe<Scalars['String']['output']>;
+  providerName?: Maybe<Scalars['String']['output']>;
+  receivedAt: Scalars['AWSDateTime']['output'];
+  resolutionStatus: Scalars['String']['output'];
+  retryCount: Scalars['Int']['output'];
+  signatureStatus: Scalars['String']['output'];
+  statusCode?: Maybe<Scalars['Int']['output']>;
+  threadCreated?: Maybe<Scalars['Boolean']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type BedrockModelImportCandidate = {
   __typename?: 'BedrockModelImportCandidate';
   alreadyImported: Scalars['Boolean']['output'];
@@ -1101,6 +1125,21 @@ export type CanvasRefreshSchedule = {
   __typename?: 'CanvasRefreshSchedule';
   scheduleExpression: Scalars['String']['output'];
   scheduledJobId: Scalars['ID']['output'];
+};
+
+export type CanvasSummary = {
+  __typename?: 'CanvasSummary';
+  artifactId: Scalars['ID']['output'];
+  headVersion: Scalars['Int']['output'];
+  status: Scalars['String']['output'];
+  title: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+};
+
+export type CanvasWritableSpace = {
+  __typename?: 'CanvasWritableSpace';
+  name: Scalars['String']['output'];
+  spaceId: Scalars['ID']['output'];
 };
 
 export type CapabilityDivergence = {
@@ -6650,6 +6689,7 @@ export type Query = {
   testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
+  threadCanvasContext: ThreadCanvasContext;
   threadGoal?: Maybe<ThreadGoal>;
   threadGoalFiles?: Maybe<ThreadGoalFiles>;
   threadIdleLearningRun?: Maybe<ThreadIdleLearningRun>;
@@ -7601,6 +7641,11 @@ export type QueryThreadArgs = {
 export type QueryThreadByNumberArgs = {
   number: Scalars['Int']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadCanvasContextArgs = {
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -9600,6 +9645,16 @@ export type ThreadAttachment = {
   uploadedBy?: Maybe<Scalars['ID']['output']>;
 };
 
+export type ThreadCanvasContext = {
+  __typename?: 'ThreadCanvasContext';
+  currentCanvas?: Maybe<CanvasSummary>;
+  savedCanvases: Array<CanvasSummary>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  spaceName?: Maybe<Scalars['String']['output']>;
+  threadId: Scalars['ID']['output'];
+  writableSpaces: Array<CanvasWritableSpace>;
+};
+
 export enum ThreadChannel {
   Api = 'API',
   Chat = 'CHAT',
@@ -10645,6 +10700,7 @@ export enum WakeupRequestStatus {
 export type Webhook = {
   __typename?: 'Webhook';
   agentId?: Maybe<Scalars['ID']['output']>;
+  agentLoopId?: Maybe<Scalars['ID']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
