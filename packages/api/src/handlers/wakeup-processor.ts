@@ -1615,6 +1615,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
       break;
     }
+    case "routine_repair": {
+      // Deterministic routines v1 (plan 2026-07-03-004 U8, KTD-4): the
+      // repair dispatch builds the full instruction — pointer context plus
+      // the fenced untrusted error output — into payload.message. Without
+      // it the agent only sees the short reason string and cannot know to
+      // use the routine repair tools.
+      agentMessage = String(
+        payload?.message || `Wakeup triggered: ${reason || wakeup.source}`,
+      );
+      break;
+    }
     default: {
       agentMessage = `Wakeup triggered: ${reason || wakeup.source}`;
     }
