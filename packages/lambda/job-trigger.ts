@@ -884,6 +884,14 @@ async function handleAgentLoopContinueDispatch(input: {
   );
 }
 
+/** A version is routine-only when it carries routine actions AND does not
+ * run an agent turn — such runs complete without a wakeup, so no execution
+ * thread should be created (plan 2026-07-03-004 U5). */
+export function isRoutineOnlyVersion(routineActionsSpec: unknown): boolean {
+  const spec = normalizeRoutineActionsSpec(routineActionsSpec);
+  return Boolean(spec && spec.actions.length > 0 && spec.agentTurn === false);
+}
+
 function scheduledAgentLoopIdempotencyKey(event: JobTriggerEvent): string {
   const fireId =
     event.fireId ||
@@ -1075,8 +1083,12 @@ async function handleAgentLoopSchedule(input: {
   const executionSpaceId =
     configuredSpaceId ??
     (workerId ? await loadAgentDefaultSpaceId(db, tenantId, workerId) : null);
+  // Routine-only Automations (plan 2026-07-03-004 U5) run their actions
+  // token-free and complete with no agent turn — creating an execution
+  // thread here leaves an empty "Working…" thread hung forever.
+  const routineOnly = isRoutineOnlyVersion(version?.routine_actions_spec);
   const executionThread =
-    workerId && loop.lifecycle_status === "active"
+    workerId && loop.lifecycle_status === "active" && !routineOnly
       ? await ensureThreadForWork({
           tenantId,
           agentId: workerId,

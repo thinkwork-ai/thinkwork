@@ -71,6 +71,20 @@ export async function triggerAgentLoopRun(
     return agentLoopRowToGraphql(run);
   }
 
+  // Routine-bearing Automations defer their continuation to job-trigger
+  // (KTD-3): graphql-http never invokes the routine executor inline — the
+  // run/iteration rows are created here, then job-trigger executes the
+  // actions and enqueues (or skips) the wakeup.
+  const routineActionsSpec = normalizeRoutineActionsSpec(
+    version?.routine_actions_spec ?? null,
+  );
+  const hasRoutineActions = (routineActionsSpec?.actions.length ?? 0) > 0;
+  // Routine-only Automations complete with no agent turn — creating an
+  // execution thread would leave an empty "Working…" thread hung forever
+  // (plan 2026-07-03-004 U5).
+  const routineOnly =
+    hasRoutineActions && routineActionsSpec?.agentTurn === false;
+
   const workerId = workerAgentId(version?.worker_spec ?? null);
   const configuredSpaceId = loop.space_id
     ? await loadActiveSpaceId(loop.tenant_id, loop.space_id)
@@ -79,7 +93,7 @@ export async function triggerAgentLoopRun(
     configuredSpaceId ??
     (workerId ? await loadAgentDefaultSpaceId(loop.tenant_id, workerId) : null);
   const executionThread =
-    workerId && loop.lifecycle_status === "active"
+    workerId && loop.lifecycle_status === "active" && !routineOnly
       ? await ensureThreadForWork({
           tenantId: loop.tenant_id,
           agentId: workerId,
@@ -89,15 +103,6 @@ export async function triggerAgentLoopRun(
           channel: "schedule",
         })
       : null;
-
-  // Routine-bearing Automations defer their continuation to job-trigger
-  // (KTD-3): graphql-http never invokes the routine executor inline — the
-  // run/iteration rows are created here, then job-trigger executes the
-  // actions and enqueues (or skips) the wakeup.
-  const routineActionsSpec = normalizeRoutineActionsSpec(
-    version?.routine_actions_spec ?? null,
-  );
-  const hasRoutineActions = (routineActionsSpec?.actions.length ?? 0) > 0;
 
   const result = await dispatchAgentLoop(
     {
