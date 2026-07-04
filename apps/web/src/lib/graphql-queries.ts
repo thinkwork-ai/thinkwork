@@ -2523,10 +2523,13 @@ export const ArtifactDetailForRouteQuery = gql`
       id
       tenantId
       threadId
+      spaceId
+      headVersion
       title
       type
       status
       content
+      renderHtml
       summary
       sourceMessageId
       metadata

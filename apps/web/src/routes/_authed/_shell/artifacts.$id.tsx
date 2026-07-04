@@ -9,7 +9,7 @@ import {
 import { javascript } from "@codemirror/lang-javascript";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import CodeMirror from "@uiw/react-codemirror";
-import { Braces, RefreshCw, Save } from "lucide-react";
+import { Braces, Download, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { Button, cn } from "@thinkwork/ui";
@@ -23,6 +23,7 @@ import {
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
+import { DocumentFrame } from "@/components/workbench/DocumentFrame";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -55,16 +56,40 @@ interface ArtifactRouteNode {
   id: string;
   tenantId: string;
   threadId?: string | null;
+  spaceId?: string | null;
+  headVersion?: number | null;
   title: string;
   type: string;
   status: string;
   content?: string | null;
+  renderHtml?: string | null;
   summary?: string | null;
   sourceMessageId?: string | null;
   metadata?: unknown;
   favoritedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** HTML Document Artifacts (THINK-147): dual-body document detection. */
+function isDocumentArtifactNode(artifact: ArtifactRouteNode): boolean {
+  const metadata = artifact.metadata;
+  const parsed =
+    typeof metadata === "string"
+      ? (() => {
+          try {
+            return JSON.parse(metadata) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : metadata;
+  return (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    (parsed as { kind?: unknown }).kind === "document"
+  );
 }
 
 function AppArtifactPage() {
@@ -210,6 +235,16 @@ export function AppletRouteContent({
     );
   }
 
+  if (isDocumentArtifactNode(artifact)) {
+    return (
+      <DocumentArtifactContent
+        artifact={artifact}
+        backHref={backHref}
+        breadcrumbRoot={breadcrumbRoot}
+      />
+    );
+  }
+
   if (artifact.type === "DATA_VIEW") {
     return (
       <DataViewArtifactContent
@@ -340,6 +375,111 @@ export function AppletRouteContent({
         appPanel
       )}
     </AppArtifactSplitShell>
+  );
+}
+
+/**
+ * HTML Document Artifacts (THINK-147 U6): the full-height document reader.
+ * The render body is served only through the access-gated `renderHtml`
+ * resolver and displayed in the zero-grant DocumentFrame. Export = Download
+ * (the self-contained file is the export; its print CSS makes browser
+ * print-to-PDF work from the opened file).
+ */
+function DocumentArtifactContent({
+  artifact,
+  backHref,
+  breadcrumbRoot,
+}: {
+  artifact: ArtifactRouteNode;
+  backHref: string;
+  breadcrumbRoot?: { label: string; href: string };
+}) {
+  const downloadDocument = useCallback(() => {
+    if (!artifact.renderHtml) return;
+    const blob = new Blob([artifact.renderHtml], {
+      type: "text/html;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${artifact.title.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "document"}.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [artifact.renderHtml, artifact.title]);
+
+  const composedHeaderAction = useMemo<ReactNode>(
+    () => (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={downloadDocument}
+          disabled={!artifact.renderHtml}
+          data-testid="document-download"
+        >
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+          Download
+        </Button>
+        <ArtifactDetailActions
+          artifactId={artifact.id}
+          artifactTitle={artifact.title}
+        />
+      </div>
+    ),
+    [artifact.id, artifact.renderHtml, artifact.title, downloadDocument],
+  );
+  const titleTrailing = useMemo<ReactNode>(
+    () => (
+      <PinToggleButton
+        artifactId={artifact.id}
+        favoritedAt={artifact.favoritedAt ?? null}
+        testId="artifact-header-pin-toggle"
+      />
+    ),
+    [artifact.favoritedAt, artifact.id],
+  );
+
+  usePageHeaderActions({
+    title: artifact.title,
+    ...(breadcrumbRoot
+      ? { breadcrumbs: [breadcrumbRoot, { label: artifact.title }] }
+      : {}),
+    backHref,
+    backBehavior: "history",
+    action: composedHeaderAction,
+    titleTrailing,
+    actionKey: `document-actions:${artifact.id}:${artifact.favoritedAt ?? "_"}`,
+  });
+
+  const statusChip =
+    artifact.status === "FINAL"
+      ? `Final · v${artifact.headVersion ?? 0}`
+      : "Draft";
+
+  return (
+    <main className="flex h-full min-h-0 w-full flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b border-border/70 px-4 py-1.5 text-xs text-muted-foreground">
+        <span className="rounded-full bg-muted px-2 py-0.5 font-medium capitalize">
+          {artifact.type.toLowerCase()}
+        </span>
+        <span data-testid="document-status-chip">{statusChip}</span>
+        <span>· Updated {relativeTime(artifact.updatedAt)}</span>
+      </div>
+      {artifact.renderHtml ? (
+        <DocumentFrame
+          html={artifact.renderHtml}
+          title={artifact.title}
+          fullHeight
+        />
+      ) : (
+        <div className="flex flex-1 items-center justify-center p-6">
+          <p className="text-sm text-muted-foreground">
+            This document&apos;s render is unavailable. The markdown record is
+            preserved; try re-emitting the document from its thread.
+          </p>
+        </div>
+      )}
+    </main>
   );
 }
 

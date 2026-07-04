@@ -49,3 +49,16 @@ describe("uiMessageChunkFromThreadTurnPayload (thread_turn_events fold)", () => 
     expect(uiMessageChunkFromThreadTurnPayload("nope")).toBeNull();
   });
 });
+
+describe("document.card fold behavior (THINK-147 U6)", () => {
+  it("document.card payloads are NOT folded into json-render parts", () => {
+    // The card must flow through as a plain turn event (rendered by
+    // actionRowForEvent), never into the strict-validated parts stream.
+    expect(
+      uiMessageChunkFromThreadTurnPayload({
+        kind: "document.card",
+        card: { artifactId: "a", title: "T" },
+      }),
+    ).toBeNull();
+  });
+});
