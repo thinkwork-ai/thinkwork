@@ -1,6 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { View, Pressable, Animated, Alert } from "react-native";
-import { X, CheckCircle } from "lucide-react-native";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { View, Animated, Alert, AppState } from "react-native";
 import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 
@@ -22,8 +28,15 @@ interface VoiceDictationBarProps {
   onTranscript: (text: string) => void;
   onInterim: (text: string) => void;
   onCancel: () => void;
+  onListeningChange?: (listening: boolean) => void;
   colors: (typeof COLORS)["dark"];
   isDark: boolean;
+}
+
+export interface VoiceDictationBarRef {
+  start: () => Promise<boolean>;
+  stop: () => void;
+  cancel: () => void;
 }
 
 /** Check if speech recognition native module is available */
@@ -32,7 +45,7 @@ export function isSpeechAvailable(): boolean {
 }
 
 /** Animated waveform bars for visual feedback while recording */
-function WaveformBars({ isDark }: { isDark: boolean }) {
+export function WaveformBars({ isDark }: { isDark: boolean }) {
   const bars = useRef(
     Array.from({ length: 7 }, () => new Animated.Value(0.3)),
   ).current;
@@ -82,18 +95,28 @@ function WaveformBars({ isDark }: { isDark: boolean }) {
 /** No-op placeholder hooks when native module isn't available */
 function useNoopEvent(_event: string, _callback: any) {}
 
-export function VoiceDictationBar({
-  onTranscript,
-  onInterim,
-  onCancel,
-  colors,
-  isDark,
-}: VoiceDictationBarProps) {
+export const VoiceDictationBar = forwardRef<
+  VoiceDictationBarRef,
+  VoiceDictationBarProps
+>(function VoiceDictationBar(
+  { onTranscript, onInterim, onCancel, onListeningChange, colors, isDark },
+  ref,
+) {
   const [seconds, setSeconds] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const transcriptRef = useRef("");
+  const committedRef = useRef(false);
 
   const useEvent = speechAvailable ? useSpeechRecognitionEvent : useNoopEvent;
+
+  const setListening = useCallback(
+    (listening: boolean) => {
+      setIsListening(listening);
+      onListeningChange?.(listening);
+      if (!listening) setSeconds(0);
+    },
+    [onListeningChange],
+  );
 
   // Timer
   useEffect(() => {
@@ -104,7 +127,7 @@ export function VoiceDictationBar({
 
   // Speech recognition events
   useEvent("start", () => {
-    setIsListening(true);
+    setListening(true);
   });
 
   useEvent("result", (event: any) => {
@@ -114,110 +137,114 @@ export function VoiceDictationBar({
   });
 
   useEvent("end", () => {
+    if (committedRef.current) {
+      setListening(false);
+      return;
+    }
     if (transcriptRef.current) {
+      committedRef.current = true;
       onTranscript(transcriptRef.current);
     } else {
       onCancel();
     }
+    setListening(false);
   });
 
   useEvent("error", (event: any) => {
     console.warn("[VoiceDictation] Error:", event.error);
+    setListening(false);
     onCancel();
   });
 
-  // Start recognition on mount
-  useEffect(() => {
+  const commitTranscript = useCallback(() => {
+    if (committedRef.current) return;
+    if (transcriptRef.current) {
+      committedRef.current = true;
+      onTranscript(transcriptRef.current);
+    } else {
+      onCancel();
+    }
+  }, [onCancel, onTranscript]);
+
+  const start = useCallback(async () => {
     if (!speechAvailable) {
       Alert.alert(
         "Voice Input Unavailable",
         "A native app build is required for voice input. Please install the latest TestFlight build.",
       );
       onCancel();
-      return;
+      return false;
     }
 
-    let cancelled = false;
-
-    async function start() {
-      const { granted } =
-        await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!granted) {
-        Alert.alert(
-          "Microphone Access Required",
-          "Please enable microphone and speech recognition permissions in Settings to use voice input.",
-        );
-        onCancel();
-        return;
-      }
-      if (cancelled) return;
-      ExpoSpeechRecognitionModule.start({
-        lang: "en-US",
-        interimResults: true,
-        continuous: true,
-      });
+    const { granted } =
+      await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      Alert.alert(
+        "Microphone Access Required",
+        "Please enable microphone and speech recognition permissions in Settings to use voice input.",
+      );
+      onCancel();
+      return false;
     }
 
-    start();
+    transcriptRef.current = "";
+    committedRef.current = false;
+    setListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: "en-US",
+      interimResults: true,
+      continuous: true,
+    });
+    return true;
+  }, [onCancel, setListening]);
+
+  const stop = useCallback(() => {
+    if (!speechAvailable || !isListening) return;
+    commitTranscript();
+    setListening(false);
+    ExpoSpeechRecognitionModule.stop();
+  }, [commitTranscript, isListening, setListening]);
+
+  const cancel = useCallback(() => {
+    if (speechAvailable && isListening) ExpoSpeechRecognitionModule.abort();
+    setListening(false);
+    onCancel();
+  }, [isListening, onCancel, setListening]);
+
+  useImperativeHandle(ref, () => ({ start, stop, cancel }), [
+    cancel,
+    start,
+    stop,
+  ]);
+
+  useEffect(() => {
     return () => {
-      cancelled = true;
       if (speechAvailable) ExpoSpeechRecognitionModule.abort();
     };
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    if (speechAvailable) ExpoSpeechRecognitionModule.stop();
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    if (speechAvailable) ExpoSpeechRecognitionModule.abort();
-    onCancel();
-  }, [onCancel]);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (isListening && (nextState === "background" || nextState === "inactive")) {
+        stop();
+      }
+    });
+    return () => sub.remove();
+  }, [isListening, stop]);
 
   const timerText = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
+  if (!isListening) return null;
+
   return (
-    <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
-      {/* Cancel */}
-      <Pressable
-        onPress={handleCancel}
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: isDark ? "#404040" : "#d4d4d4",
-        }}
+    <View className="flex-row items-center gap-2">
+      <WaveformBars isDark={isDark} />
+      <Text
+        className="text-xs font-mono"
+        style={{ color: colors.mutedForeground }}
       >
-        <X size={18} color={isDark ? "#e5e5e5" : "#404040"} />
-      </Pressable>
-
-      {/* Waveform + timer */}
-      <View className="flex-row items-center gap-3">
-        <WaveformBars isDark={isDark} />
-        <Text
-          className="text-sm font-mono"
-          style={{ color: colors.mutedForeground }}
-        >
-          {timerText}
-        </Text>
-      </View>
-
-      {/* Confirm */}
-      <Pressable
-        onPress={handleConfirm}
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.primary,
-        }}
-      >
-        <CheckCircle size={20} color="#ffffff" />
-      </Pressable>
+        {timerText}
+      </Text>
     </View>
   );
-}
+});
