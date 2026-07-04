@@ -251,61 +251,13 @@ variable "agentcore_memory_id" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export. Hosted ThinkWork may choose 'cognee' when the Company Brain substrate is enabled."
+  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export."
   type        = string
   default     = "hindsight"
   validation {
-    condition     = contains(["hindsight", "agentcore", "cognee"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight', 'agentcore', or 'cognee'."
+    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
   }
-}
-
-variable "cognee_enabled" {
-  description = "Whether the Cognee knowledge graph add-on is enabled for this deployment."
-  type        = bool
-  default     = false
-}
-
-variable "cognee_endpoint" {
-  description = "Internal Cognee API endpoint (empty when disabled)."
-  type        = string
-  default     = ""
-}
-
-variable "cognee_log_group_name" {
-  description = "CloudWatch log group for Cognee (empty when disabled)."
-  type        = string
-  default     = ""
-}
-
-variable "cognee_backend_mode" {
-  description = "Selected Cognee backend mode (empty when disabled)."
-  type        = string
-  default     = ""
-}
-
-variable "cognee_cluster_arn" {
-  description = "ECS cluster ARN for Cognee (empty when disabled)."
-  type        = string
-  default     = ""
-}
-
-variable "cognee_service_name" {
-  description = "ECS service name for Cognee (empty when disabled)."
-  type        = string
-  default     = ""
-}
-
-variable "cognee_worker_subnet_ids" {
-  description = "Subnet IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
-  type        = list(string)
-  default     = []
-}
-
-variable "cognee_worker_security_group_ids" {
-  description = "Security group IDs for the Knowledge Graph ingest worker Lambda VPC attachment. Leave empty to deploy the worker without VPC access."
-  type        = list(string)
-  default     = []
 }
 
 variable "okf_efs_subnet_ids" {
@@ -531,7 +483,7 @@ variable "company_brain_backdoor_install_key_stages" {
 }
 
 variable "kg_obs_max_candidates_per_run" {
-  description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost AND keeps each Cognee cognify small enough to index within budget on the single dogfood task; truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
+  description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost and lets truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
   type        = string
   default     = "10"
 }

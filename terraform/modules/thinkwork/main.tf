@@ -47,11 +47,9 @@ locals {
 
   # Hindsight is the canonical user/Space memory provider for full ThinkWork
   # installs. AgentCore managed memory remains available as an explicit
-  # low-cost/development opt-out; Cognee stays optional Brain infrastructure.
-  # We still honor var.memory_engine == "hindsight" so existing tfvars keep
-  # working even when enable_hindsight was not set.
+  # low-cost/development opt-out. We still honor var.memory_engine == "hindsight"
+  # so existing tfvars keep working even when enable_hindsight was not set.
   hindsight_enabled      = var.enable_hindsight || var.memory_engine == "hindsight"
-  cognee_enabled         = var.enable_cognee
   twenty_provisioned     = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_provisioned && var.twenty_runtime_enabled
   twenty_domain          = var.twenty_domain != "" ? var.twenty_domain : (var.www_domain != "" ? "crm.${var.www_domain}" : "")
@@ -68,11 +66,6 @@ locals {
   n8n_domain          = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
   n8n_public_url      = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
   n8n_certificate_arn = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : var.www_certificate_arn
-  cognee_worker_subnet_ids = (
-    length(module.vpc.private_subnet_ids) > 0
-    ? module.vpc.private_subnet_ids
-    : module.vpc.public_subnet_ids
-  )
   okf_wiki_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -97,32 +90,17 @@ locals {
       "ssm",
       "sts",
       "xray",
+      "bedrock-runtime",
     ],
-    local.cognee_enabled ? [] : ["bedrock-runtime"],
   ))
-  brain_private_interface_endpoint_services = toset([
-    "bedrock",
-    "bedrock-agentcore",
-    "bedrock-agentcore-control",
-    "bedrock-agentcore.gateway",
-    "execute-api",
-    "lambda",
-    "logs",
-    "rds-data",
-    "secretsmanager",
-    "ssm",
-    "sts",
-    "xray",
-  ])
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
   # is active per deployment for recall/inspect/export. Empty selects
   # Hindsight for full installs; callers can explicitly choose AgentCore for
   # low-cost/development deployments. Legacy value "managed" maps to
-  # "agentcore"; "cognee" remains a legacy diagnostic compatibility value, not
-  # the supported user/Space memory path.
+  # "agentcore".
   resolved_memory_engine = (
-    var.memory_engine == "hindsight" || var.memory_engine == "agentcore" || var.memory_engine == "cognee"
+    var.memory_engine == "hindsight" || var.memory_engine == "agentcore"
     ? var.memory_engine
     : var.memory_engine == "managed"
     ? "agentcore"
@@ -218,13 +196,6 @@ locals {
   ) : ""
 }
 
-check "memory_engine_requires_enabled_backend" {
-  assert {
-    condition     = var.memory_engine != "cognee" || var.enable_cognee
-    error_message = "memory_engine = 'cognee' requires enable_cognee = true."
-  }
-}
-
 ################################################################################
 # Workspace Guard
 ################################################################################
@@ -259,121 +230,6 @@ resource "terraform_data" "customer_domain_configuration_guardrails" {
     }
   }
 }
-
-resource "terraform_data" "cognee_configuration_guardrails" {
-  count = var.enable_cognee ? 1 : 0
-
-  input = {
-    cognee_backend_mode            = var.cognee_backend_mode
-    cognee_brain_storage_tier      = var.cognee_brain_storage_tier
-    cognee_desired_count           = var.cognee_desired_count
-    cognee_image_uri               = var.cognee_image_uri
-    cognee_db_name                 = var.cognee_db_name
-    cognee_db_password_secret_arn  = var.cognee_db_password_secret_arn
-    cognee_llm_provider            = var.cognee_llm_provider
-    cognee_embedding_provider      = var.cognee_embedding_provider
-    cognee_bedrock_model_resources = var.cognee_bedrock_model_resource_arns
-    public_subnet_count            = length(module.vpc.public_subnet_ids)
-  }
-
-  lifecycle {
-    precondition {
-      condition     = var.cognee_image_uri != ""
-      error_message = "enable_cognee requires cognee_image_uri pinned to an immutable digest."
-    }
-
-    precondition {
-      condition     = var.cognee_db_password_secret_arn != ""
-      error_message = "enable_cognee requires cognee_db_password_secret_arn for a dedicated Cognee database user."
-    }
-
-    precondition {
-      condition     = var.cognee_db_password_secret_arn != module.database.graphql_db_secret_arn
-      error_message = "enable_cognee requires a dedicated Cognee database secret, not the shared Thinkwork admin database secret."
-    }
-
-    precondition {
-      condition     = var.cognee_db_name != var.database_name
-      error_message = "cognee_db_name must be distinct from the shared Thinkwork database name."
-    }
-
-    precondition {
-      condition     = length(module.vpc.public_subnet_ids) > 0
-      error_message = "enable_cognee requires at least one public subnet for the phase-1 public-subnet task egress pattern."
-    }
-
-    precondition {
-      condition     = var.cognee_backend_mode != "dogfood" || var.cognee_desired_count == 1
-      error_message = "cognee_backend_mode = dogfood requires cognee_desired_count = 1."
-    }
-
-    precondition {
-      condition = (
-        var.cognee_brain_storage_tier != "default" ||
-        (
-          var.cognee_backend_mode == "dogfood" &&
-          var.cognee_vector_db_provider == "lancedb" &&
-          var.cognee_graph_database_provider == "kuzu" &&
-          var.cognee_desired_count == 1
-        )
-      )
-      error_message = "cognee_brain_storage_tier = default requires dogfood backend mode, lancedb vectors, kuzu graph storage, and desired_count = 1."
-    }
-
-    precondition {
-      condition = (
-        var.cognee_brain_storage_tier != "production" ||
-        (
-          var.cognee_backend_mode == "remote" &&
-          var.cognee_vector_db_provider == "neptune_analytics" &&
-          var.cognee_graph_database_provider == "neptune_analytics" &&
-          var.cognee_neptune_graph_id != "" &&
-          var.cognee_neptune_endpoint != ""
-        )
-      )
-      error_message = "cognee_brain_storage_tier = production requires remote mode with Neptune Analytics graph/vector providers, cognee_neptune_graph_id, and cognee_neptune_endpoint."
-    }
-
-    precondition {
-      condition     = !contains(["opensearch", "opensearch_serverless", "aoss"], lower(var.cognee_vector_db_provider))
-      error_message = "Company Brain production must not use direct OpenSearch vector storage; use Neptune Analytics for production graph/vector."
-    }
-
-    precondition {
-      condition = (
-        var.cognee_backend_mode != "remote" ||
-        (
-          (
-            var.cognee_vector_db_url != "" ||
-            (var.cognee_vector_db_provider == "neptune_analytics" && var.cognee_neptune_endpoint != "")
-          ) &&
-          (
-            var.cognee_graph_database_url != "" ||
-            (var.cognee_graph_database_provider == "neptune_analytics" && var.cognee_neptune_endpoint != "")
-          )
-        )
-      )
-      error_message = "cognee_backend_mode = remote requires vector/graph URLs, or Neptune Analytics providers with cognee_neptune_endpoint."
-    }
-
-    precondition {
-      condition = (
-        (var.cognee_llm_provider == "bedrock" || var.cognee_llm_api_key_secret_arn != "") &&
-        (var.cognee_embedding_provider == "bedrock" || var.cognee_embedding_api_key_secret_arn != "")
-      )
-      error_message = "Non-Bedrock Cognee LLM or embedding providers require matching secret ARN inputs."
-    }
-
-    precondition {
-      condition = (
-        (var.cognee_llm_provider != "bedrock" && var.cognee_embedding_provider != "bedrock") ||
-        length(var.cognee_bedrock_model_resource_arns) > 0
-      )
-      error_message = "Bedrock Cognee providers require explicit cognee_bedrock_model_resource_arns."
-    }
-  }
-}
-
 resource "terraform_data" "okf_wiki_efs_guardrails" {
   count = var.okf_wiki_efs_enabled ? 1 : 0
 
@@ -624,79 +480,6 @@ resource "terraform_data" "n8n_runtime_state_guardrails" {
     }
   }
 }
-
-resource "aws_security_group" "cognee_worker" {
-  count = local.cognee_enabled ? 1 : 0
-
-  name_prefix = "thinkwork-${var.stage}-cognee-worker-"
-  description = "Knowledge Graph ingest Lambda access to Cognee and Aurora"
-  vpc_id      = module.vpc.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "thinkwork-${var.stage}-cognee-worker-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_security_group_rule" "aurora_from_cognee_worker" {
-  count = local.cognee_enabled ? 1 : 0
-
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.cognee_worker[0].id
-  security_group_id        = module.database.db_security_group_id
-}
-
-# VPC-attached Knowledge Graph workers (attached for Cognee's internal ALB)
-# have no public egress — the VPC has no NAT — so the observation promotion
-# classifier's direct Bedrock calls need an interface endpoint inside the VPC.
-# Private DNS keeps the SDK's default bedrock-runtime hostname resolving to
-# the endpoint ENIs — for EVERY resource in the VPC, so the ingress must
-# admit the whole VPC CIDR: the Cognee ECS task (its own SG) and any future
-# in-VPC Bedrock caller resolve to this endpoint the moment it exists.
-data "aws_vpc" "bedrock_endpoint_scope" {
-  count = local.cognee_enabled ? 1 : 0
-  id    = module.vpc.vpc_id
-}
-
-resource "aws_security_group" "bedrock_runtime_endpoint" {
-  count = local.cognee_enabled ? 1 : 0
-
-  name_prefix = "thinkwork-${var.stage}-bedrock-vpce-"
-  description = "HTTPS to the Bedrock runtime interface endpoint"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.bedrock_endpoint_scope[0].cidr_block]
-  }
-
-  tags = { Name = "thinkwork-${var.stage}-bedrock-vpce-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_vpc_endpoint" "bedrock_runtime" {
-  count = local.cognee_enabled ? 1 : 0
-
-  vpc_id              = module.vpc.vpc_id
-  service_name        = "com.amazonaws.${var.region}.bedrock-runtime"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.cognee_worker_subnet_ids
-  security_group_ids  = [aws_security_group.bedrock_runtime_endpoint[0].id]
-  private_dns_enabled = true
-
-  tags = { Name = "thinkwork-${var.stage}-bedrock-runtime-vpce" }
-}
-
 resource "aws_security_group" "okf_wiki_lambda" {
   count = var.okf_wiki_efs_enabled ? 1 : 0
 
@@ -747,18 +530,6 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
   source_security_group_id = aws_security_group.okf_wiki_lambda[0].id
   security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
 }
-
-resource "aws_security_group_rule" "okf_wiki_vpce_from_cognee_worker" {
-  count = local.okf_wiki_private_endpoints_enabled && local.cognee_enabled ? 1 : 0
-
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.cognee_worker[0].id
-  security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
-}
-
 # Interface endpoints with private DNS capture the WHOLE VPC's traffic to the
 # covered AWS APIs (logs, ssm, sts, bedrock, ...): every workload in the VPC
 # resolves those hostnames to the endpoint's private IP, so per-source-SG
@@ -817,59 +588,6 @@ resource "aws_vpc_endpoint" "okf_wiki_s3" {
     Purpose = "okf-wiki-private-egress"
   }
 }
-
-resource "aws_security_group" "brain_private_vpc_endpoint" {
-  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? 1 : 0
-
-  name_prefix = "thinkwork-${var.stage}-brain-vpce-"
-  description = "HTTPS endpoints for private Company Brain/Pi runtime egress"
-  vpc_id      = module.vpc.vpc_id
-
-  tags = { Name = "thinkwork-${var.stage}-brain-vpce-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_security_group_rule" "brain_vpce_from_cognee_worker" {
-  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? 1 : 0
-
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.cognee_worker[0].id
-  security_group_id        = aws_security_group.brain_private_vpc_endpoint[0].id
-}
-
-resource "aws_vpc_endpoint" "brain_private_interface" {
-  for_each = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled ? local.brain_private_interface_endpoint_services : toset([])
-
-  vpc_id              = module.vpc.vpc_id
-  service_name        = "com.amazonaws.${var.region}.${each.key}"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.cognee_worker_subnet_ids
-  security_group_ids  = [aws_security_group.brain_private_vpc_endpoint[0].id]
-  private_dns_enabled = true
-
-  tags = {
-    Name    = "thinkwork-${var.stage}-brain-${each.key}-vpce"
-    Purpose = "company-brain-private-runtime-egress"
-  }
-}
-
-resource "aws_vpc_endpoint" "brain_private_s3" {
-  count = local.cognee_enabled && !local.okf_wiki_private_endpoints_enabled && length(local.okf_wiki_route_table_ids) > 0 ? 1 : 0
-
-  vpc_id            = module.vpc.vpc_id
-  service_name      = "com.amazonaws.${var.region}.s3"
-  vpc_endpoint_type = "Gateway"
-  route_table_ids   = local.okf_wiki_route_table_ids
-
-  tags = {
-    Name    = "thinkwork-${var.stage}-brain-s3-vpce"
-    Purpose = "company-brain-private-runtime-egress"
-  }
-}
-
 resource "aws_security_group_rule" "okf_wiki_efs_from_lambda" {
   count = var.okf_wiki_efs_enabled ? 1 : 0
 
@@ -1297,14 +1015,6 @@ module "api" {
   hindsight_endpoint                    = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                   = module.agentcore_memory.memory_id
   memory_engine                         = local.resolved_memory_engine
-  cognee_enabled                        = local.cognee_enabled
-  cognee_endpoint                       = local.cognee_enabled ? module.cognee[0].cognee_endpoint : ""
-  cognee_log_group_name                 = local.cognee_enabled ? module.cognee[0].cognee_log_group_name : ""
-  cognee_backend_mode                   = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : ""
-  cognee_cluster_arn                    = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : ""
-  cognee_service_name                   = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
-  cognee_worker_subnet_ids              = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
-  cognee_worker_security_group_ids      = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
   okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
   okf_efs_mount_target_ids              = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
@@ -1427,9 +1137,6 @@ module "agentcore_pi" {
   db_cluster_arn = module.database.db_cluster_arn
   db_secret_arn  = module.database.graphql_db_secret_arn
 
-  cognee_subnet_ids         = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
-  cognee_security_group_ids = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
-
   okf_efs_enabled               = var.okf_wiki_efs_enabled
   okf_efs_subnet_ids            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
@@ -1549,71 +1256,6 @@ module "hindsight" {
   consolidation_dedup_threshold = var.hindsight_consolidation_dedup_threshold
   observations_mission          = var.hindsight_observations_mission
 }
-
-module "cognee" {
-  count  = local.cognee_enabled ? 1 : 0
-  source = "../../../plugins/company-brain/terraform/cognee"
-
-  stage                  = var.stage
-  vpc_id                 = module.vpc.vpc_id
-  subnet_ids             = module.vpc.public_subnet_ids
-  db_security_group_id   = module.database.db_security_group_id
-  db_host                = module.database.cluster_endpoint
-  db_name                = var.cognee_db_name
-  db_username            = var.cognee_db_username
-  db_password_secret_arn = var.cognee_db_password_secret_arn
-
-  allowed_internal_cidr_blocks = var.cognee_allowed_internal_cidr_blocks
-  allowed_internal_security_group_ids = concat(
-    var.cognee_allowed_internal_security_group_ids,
-    [aws_security_group.cognee_worker[0].id],
-  )
-  image_uri     = var.cognee_image_uri
-  desired_count = var.cognee_desired_count
-  backend_mode  = var.cognee_backend_mode
-
-  brain_tenant_id                = var.cognee_brain_tenant_id
-  brain_instance_key             = var.cognee_brain_instance_key
-  brain_storage_tier             = var.cognee_brain_storage_tier
-  brain_s3_artifact_root         = var.cognee_brain_s3_artifact_root
-  brain_s3_manifest_root         = var.cognee_brain_s3_manifest_root
-  brain_s3_vault_projection_root = var.cognee_brain_s3_vault_projection_root
-  brain_artifacts_bucket_arn     = var.cognee_brain_artifacts_bucket_arn
-  brain_artifacts_prefixes       = var.cognee_brain_artifacts_prefixes
-  private_substrate_mode         = var.cognee_private_substrate_mode
-  require_authentication         = var.cognee_require_authentication
-  enable_backend_access_control  = var.cognee_enable_backend_access_control
-  cors_allowed_origins           = var.cognee_cors_allowed_origins
-
-  llm_provider           = var.cognee_llm_provider
-  llm_model              = var.cognee_llm_model
-  llm_api_key_secret_arn = var.cognee_llm_api_key_secret_arn
-
-  embedding_provider           = var.cognee_embedding_provider
-  embedding_model              = var.cognee_embedding_model
-  embedding_dimensions         = var.cognee_embedding_dimensions
-  embedding_api_key_secret_arn = var.cognee_embedding_api_key_secret_arn
-
-  vector_db_provider       = var.cognee_vector_db_provider
-  vector_db_url            = var.cognee_vector_db_url
-  vector_db_key_secret_arn = var.cognee_vector_db_key_secret_arn
-
-  graph_database_provider            = var.cognee_graph_database_provider
-  graph_database_url                 = var.cognee_graph_database_url
-  graph_database_username            = var.cognee_graph_database_username
-  graph_database_password_secret_arn = var.cognee_graph_database_password_secret_arn
-
-  neptune_graph_id   = var.cognee_neptune_graph_id
-  neptune_graph_arn  = var.cognee_neptune_graph_arn
-  neptune_endpoint   = var.cognee_neptune_endpoint
-  production_posture = var.cognee_production_posture
-
-  bedrock_model_resource_arns = var.cognee_bedrock_model_resource_arns
-  kms_key_arns                = var.cognee_kms_key_arns
-
-  depends_on = [terraform_data.cognee_configuration_guardrails]
-}
-
 module "twenty" {
   count  = local.twenty_provisioned ? 1 : 0
   source = "../../../plugins/twenty/terraform/twenty"

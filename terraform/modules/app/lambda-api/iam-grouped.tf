@@ -25,7 +25,7 @@
 # standalone managed-policy attachment. (Managed-policy attachments have a
 # default quota of 10 per role; the steady state here is
 # AWSLambdaBasicExecutionRole + these four, plus the conditional AWS-managed
-# VPC-access policy when Cognee workers are enabled.)
+# VPC-access policy when OKF EFS wiring is enabled.)
 #
 # Each managed policy document caps at 6,144 characters (JSON minus
 # whitespace) — check rendered size before adding large statements, and
@@ -849,11 +849,9 @@ locals {
         "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:*",
       ]
     },
-    # (was standalone managed policy "lambda_cognee_health_read")
-    # graphql-http's Knowledge Graph health check validates the private
-    # Cognee service from outside the VPC by reading ECS service steadiness
-    # and ALB target health. ELBv2 Describe* actions do not support useful
-    # resource scoping.
+    # Managed-application and runtime health checks read ECS service
+    # steadiness and ALB target health. ELBv2 Describe* actions do not
+    # support useful resource scoping.
     {
       Effect = "Allow"
       Action = [
@@ -956,9 +954,4 @@ moved {
 moved {
   from = aws_iam_role_policy_attachment.lambda_bedrock_knowledge_base
   to   = aws_iam_role_policy_attachment.api_ai
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.lambda_cognee_health_read
-  to   = aws_iam_role_policy_attachment.api_observability
 }
