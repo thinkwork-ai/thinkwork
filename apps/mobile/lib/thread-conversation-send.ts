@@ -3,7 +3,7 @@ import { sendMessageMentionsForInput } from "@/lib/thread-mentions";
 import {
   buildSendMessageMutationVariables,
   type SendMessageGoalMode,
-} from "../../../packages/react-native-sdk/src/send-message-options";
+} from "@thinkwork/react-native-sdk";
 
 export interface ThreadConversationSendVariablesArgs {
   threadId: string;

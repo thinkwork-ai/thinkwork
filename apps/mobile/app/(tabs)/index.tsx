@@ -54,6 +54,16 @@ import {
   type ThreadFilters,
 } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
+import {
+  PersistentSegmentPanels,
+  SegmentedControl,
+} from "@/components/home/SegmentedControl";
+import {
+  HOME_SEGMENTS,
+  type HomeSegmentKey,
+} from "@/components/home/segments";
+import { WikiSegmentPlaceholder } from "@/components/home/WikiSegmentPlaceholder";
+import { WorkItemList } from "@/components/work-items/WorkItemList";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
   clearPendingThreadStart,
@@ -309,6 +319,9 @@ export default function ThreadsScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const hasActiveFilters =
     !!filters.spaceId || filters.channels.length > 0 || filters.showArchived;
+  const [activeSegment, setActiveSegment] =
+    useState<HomeSegmentKey>("threads");
+  const [workItemFiltersOpen, setWorkItemFiltersOpen] = useState(false);
 
   // Only apply filters when the filter panel is open
   const appliedFilters = filtersOpen
@@ -957,25 +970,35 @@ export default function ThreadsScreen() {
 
             {/* Right: Filter + Menu */}
             <View className="flex-row items-center gap-3">
-              <Pressable
-                onPress={() => setFiltersOpen((o) => !o)}
-                className="p-2 relative"
-              >
-                <Filter
-                  size={22}
-                  color={
-                    filtersOpen && hasActiveFilters
-                      ? colors.primary
-                      : colors.foreground
+              {activeSegment === "threads" || activeSegment === "work-items" ? (
+                <Pressable
+                  onPress={() =>
+                    activeSegment === "threads"
+                      ? setFiltersOpen((o) => !o)
+                      : setWorkItemFiltersOpen((o) => !o)
                   }
-                />
-                {filtersOpen && hasActiveFilters && (
-                  <View
-                    className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                    style={{ backgroundColor: colors.primary }}
+                  className="p-2 relative"
+                >
+                  <Filter
+                    size={22}
+                    color={
+                      (
+                        activeSegment === "threads"
+                          ? filtersOpen && hasActiveFilters
+                          : workItemFiltersOpen
+                      )
+                        ? colors.primary
+                        : colors.foreground
+                    }
                   />
-                )}
-              </Pressable>
+                  {activeSegment === "threads" && filtersOpen && hasActiveFilters && (
+                    <View
+                      className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                      style={{ backgroundColor: colors.primary }}
+                    />
+                  )}
+                </Pressable>
+              ) : null}
               <HeaderContextMenu
                 items={[
                   {
@@ -1098,108 +1121,149 @@ export default function ThreadsScreen() {
         </View>
       ) : null}
 
+      <SegmentedControl
+        segments={HOME_SEGMENTS}
+        activeKey={activeSegment}
+        onChange={(key) => setActiveSegment(key as HomeSegmentKey)}
+      />
+
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
-        <WebContent>
-          {filtersOpen && (
-            <ThreadFilterBar
-              filters={filters}
-              spaces={spaces}
-              onFiltersChange={setFilters}
-            />
-          )}
-
-          <FlatList
-            style={{ flex: 1 }}
-            data={filteredThreads}
-            keyExtractor={(item: any) => item.id}
-            renderItem={({ item }) => (
-              <ThreadRow
-                thread={item}
-                isUnread={isUnread(
-                  item.id,
-                  item.lastTurnCompletedAt || item.createdAt,
-                  item.lastReadAt,
-                )}
-                needsHitl={pendingReviewsByThreadId.has(item.id)}
-                hitlPreview={
-                  subAgentReviewPreview(pendingReviewsByThreadId.get(item.id), {
-                    pairedAgentIds,
-                    agentNames,
-                  }) ?? hitlThreadPreview(pendingReviewsByThreadId.get(item.id))
-                }
-                isActive={isThreadActive(item.id)}
-                onArchive={handleArchive}
-                onPress={() => handleThreadPress(item)}
-              />
-            )}
-            ItemSeparatorComponent={() => (
-              <View
-                className="h-px bg-neutral-200 dark:bg-neutral-800"
-                style={{ marginLeft: 68 }}
-              />
-            )}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={colors.primary}
-              />
+        <PersistentSegmentPanels
+          segments={HOME_SEGMENTS}
+          activeKey={activeSegment}
+          renderSegment={(segment) => {
+            if (segment.key === "work-items") {
+              return (
+                <WorkItemList
+                  tenantId={tenantId}
+                  callerUserId={callerUserId}
+                  filtersOpen={workItemFiltersOpen}
+                />
+              );
             }
-            scrollEnabled={filteredThreads.length > 0}
-            ListEmptyComponent={
-              <View className="items-center gap-2">
-                <ListTodo size={32} color={colors.mutedForeground} />
-                <Muted>
-                  {noAssignedComputer
-                    ? "Ask an operator to assign a Computer"
-                    : "No threads found"}
-                </Muted>
+            if (segment.key === "wiki") {
+              return <WikiSegmentPlaceholder />;
+            }
+            return (
+              <View className="flex-1">
+                <View className="flex-1">
+                  <WebContent>
+                    {filtersOpen && (
+                      <ThreadFilterBar
+                        filters={filters}
+                        spaces={spaces}
+                        onFiltersChange={setFilters}
+                      />
+                    )}
+
+                    <FlatList
+                      style={{ flex: 1 }}
+                      data={filteredThreads}
+                      keyExtractor={(item: any) => item.id}
+                      renderItem={({ item }) => (
+                        <ThreadRow
+                          thread={item}
+                          isUnread={isUnread(
+                            item.id,
+                            item.lastTurnCompletedAt || item.createdAt,
+                            item.lastReadAt,
+                          )}
+                          needsHitl={pendingReviewsByThreadId.has(item.id)}
+                          hitlPreview={
+                            subAgentReviewPreview(
+                              pendingReviewsByThreadId.get(item.id),
+                              {
+                                pairedAgentIds,
+                                agentNames,
+                              },
+                            ) ??
+                            hitlThreadPreview(
+                              pendingReviewsByThreadId.get(item.id),
+                            )
+                          }
+                          isActive={isThreadActive(item.id)}
+                          onArchive={handleArchive}
+                          onPress={() => handleThreadPress(item)}
+                        />
+                      )}
+                      ItemSeparatorComponent={() => (
+                        <View
+                          className="h-px bg-neutral-200 dark:bg-neutral-800"
+                          style={{ marginLeft: 68 }}
+                        />
+                      )}
+                      refreshControl={
+                        <RefreshControl
+                          refreshing={refreshing}
+                          onRefresh={handleRefresh}
+                          tintColor={colors.primary}
+                        />
+                      }
+                      scrollEnabled={filteredThreads.length > 0}
+                      ListEmptyComponent={
+                        <View className="items-center gap-2">
+                          <ListTodo
+                            size={32}
+                            color={colors.mutedForeground}
+                          />
+                          <Muted>
+                            {noAssignedComputer
+                              ? "Ask an operator to assign a Computer"
+                              : "No threads found"}
+                          </Muted>
+                        </View>
+                      }
+                      contentContainerStyle={
+                        filteredThreads.length === 0
+                          ? { flexGrow: 1, justifyContent: "center" }
+                          : { paddingTop: 8 }
+                      }
+                    />
+                  </WebContent>
+                </View>
+
+                <View>
+                  <MessageInputFooter
+                    ref={messageInputRef}
+                    value={newThreadText}
+                    onChangeText={setNewThreadText}
+                    onSubmit={() => handleCreateThread()}
+                    placeholder={
+                      noAssignedComputer
+                        ? "Ask an operator to assign a Computer"
+                        : "Start a new thread..."
+                    }
+                    disabled={noAssignedComputer}
+                    colors={colors}
+                    isDark={isDark}
+                    onAttach={handleNewThreadAttach}
+                    attachedImageUri={newThreadImageUri}
+                    onRemoveAttachment={() => {
+                      setNewThreadImage(null);
+                      setNewThreadImageUri(null);
+                    }}
+                    agentEnabled={effectiveNewThreadAgentEnabled}
+                    onToggleAgent={() => {
+                      newThreadAgentOverriddenRef.current = true;
+                      setNewThreadAgentEnabled((v) => !v);
+                    }}
+                    mentionCandidates={newThreadMentionCandidates}
+                    selectedMentions={newThreadMentions}
+                    onMentionsChange={setNewThreadMentions}
+                    selectedSpace={selectedSpace}
+                    spaceOptions={newThreadSpaceOptions}
+                    onSpaceSelect={(space) => setSelectedSpaceId(space.id)}
+                    selectedWorkspaces={selectedWorkspaces}
+                    onRemoveWorkspace={(id) =>
+                      setSelectedWorkspaces((prev) =>
+                        prev.filter((w) => w.id !== id),
+                      )
+                    }
+                  />
+                </View>
               </View>
-            }
-            contentContainerStyle={
-              filteredThreads.length === 0
-                ? { flexGrow: 1, justifyContent: "center" }
-                : { paddingTop: 8 }
-            }
-          />
-        </WebContent>
-      </View>
-
-      <View>
-        <MessageInputFooter
-          ref={messageInputRef}
-          value={newThreadText}
-          onChangeText={setNewThreadText}
-          onSubmit={() => handleCreateThread()}
-          placeholder={
-            noAssignedComputer
-              ? "Ask an operator to assign a Computer"
-              : "Start a new thread..."
-          }
-          disabled={noAssignedComputer}
-          colors={colors}
-          isDark={isDark}
-          onAttach={handleNewThreadAttach}
-          attachedImageUri={newThreadImageUri}
-          onRemoveAttachment={() => {
-            setNewThreadImage(null);
-            setNewThreadImageUri(null);
+            );
           }}
-          agentEnabled={effectiveNewThreadAgentEnabled}
-          onToggleAgent={() => {
-            newThreadAgentOverriddenRef.current = true;
-            setNewThreadAgentEnabled((v) => !v);
-          }}
-          mentionCandidates={newThreadMentionCandidates}
-          selectedMentions={newThreadMentions}
-          onMentionsChange={setNewThreadMentions}
-          selectedSpace={selectedSpace}
-          spaceOptions={newThreadSpaceOptions}
-          onSpaceSelect={(space) => setSelectedSpaceId(space.id)}
-          selectedWorkspaces={selectedWorkspaces}
-          onRemoveWorkspace={(id) =>
-            setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))
-          }
         />
       </View>
 

@@ -1,4 +1,4 @@
-import type { SendMessageGoalMode } from "../../../packages/react-native-sdk/src/send-message-options";
+import type { SendMessageGoalMode } from "@thinkwork/react-native-sdk";
 
 export interface GoalIntentDraft {
   doneLooksLike: string;

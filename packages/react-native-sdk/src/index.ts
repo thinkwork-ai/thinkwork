@@ -22,6 +22,7 @@ export {
   type SendMessageGoalMode,
   type SendMessageOptions,
 } from "./hooks/use-messages";
+export { buildSendMessageMutationVariables } from "./send-message-options";
 export {
   ComposerCapabilities,
   type ComposerCapability,
