@@ -44,7 +44,14 @@ export function GeneratedArtifactCard({
     </>
   );
 
-  if (onOpenArtifact) {
+  // Promoted GenUI snapshots always deep-link to the full artifact page —
+  // the intermediate side panel has no inline preview to offer, so the
+  // extra hop is pure friction. Other DATA_VIEWs (e.g. research_dashboard)
+  // keep the panel flow. The Canvas surface will supersede this entirely.
+  const isGenUiSnapshot =
+    artifact.type === "DATA_VIEW" &&
+    artifact.metadata?.kind === "json_render_snapshot";
+  if (onOpenArtifact && !isGenUiSnapshot) {
     return (
       <button
         type="button"
