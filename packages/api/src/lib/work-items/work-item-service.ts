@@ -39,6 +39,7 @@ import {
   normalizeWorkItemStatusCategory,
 } from "./status-service.js";
 import { normalizeOpenEngineQueueKey } from "./open-engine-queue-service.js";
+import { sendWorkItemPush } from "../push-notifications.js";
 
 export type WorkItemPriority = "low" | "normal" | "high" | "urgent";
 export type WorkItemDocumentKind =
@@ -346,8 +347,14 @@ export async function updateWorkItem(
     updates,
     labelChangeRequested,
   });
+  const assignedOwnerUserId =
+    input.ownerUserId !== undefined ? optionalTrim(input.ownerUserId) : null;
+  const shouldSendAssignedPush =
+    Boolean(assignedOwnerUserId) &&
+    assignedOwnerUserId !== item.owner_user_id &&
+    assignedOwnerUserId !== callerUserId;
 
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(workItems)
       .set(updates)
@@ -378,6 +385,19 @@ export async function updateWorkItem(
     });
     return updated;
   });
+
+  if (shouldSendAssignedPush && assignedOwnerUserId) {
+    void sendWorkItemPush({
+      userId: assignedOwnerUserId,
+      tenantId,
+      workItemId: item.id,
+      kind: "assigned",
+      title: "Work item assigned",
+      body: item.title,
+    });
+  }
+
+  return updated;
 }
 
 export async function listWorkItemLabels(
@@ -829,8 +849,9 @@ export async function updateWorkItemStatus(
   const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
   const item = await loadAuthorizedWorkItem(ctx, tenantId, input.workItemId);
   const callerUserId = await resolveCallerUserId(ctx).catch(() => null);
+  let blockedStatusSelected = false;
 
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const status = await findStatusForWorkItemUpdate({
       tenantId,
       spaceId: item.space_id,
@@ -838,6 +859,7 @@ export async function updateWorkItemStatus(
       statusCategory: input.statusCategory,
       tx: tx as unknown as typeof db,
     });
+    blockedStatusSelected = status.category === "blocked";
     const now = new Date();
     const [updated] = await tx
       .update(workItems)
@@ -878,6 +900,19 @@ export async function updateWorkItemStatus(
 
     return updated;
   });
+
+  if (blockedStatusSelected && item.owner_user_id) {
+    void sendWorkItemPush({
+      userId: item.owner_user_id,
+      tenantId,
+      workItemId: item.id,
+      kind: "blocked",
+      title: "Work item blocked",
+      body: `${item.title} is blocked.`,
+    });
+  }
+
+  return updated;
 }
 
 export async function recordOpenEngineHumanAction(

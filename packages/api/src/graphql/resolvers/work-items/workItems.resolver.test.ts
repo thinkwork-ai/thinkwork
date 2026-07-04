@@ -8,6 +8,7 @@ const {
   mockHasSpaceMemberAccess,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
+  mockSendWorkItemPush,
   mockS3Send,
   tables,
 } = vi.hoisted(() => {
@@ -186,6 +187,7 @@ const {
     mockHasSpaceMemberAccess: vi.fn(async () => true),
     mockResolveCallerTenantId: vi.fn(async () => "tenant-1"),
     mockResolveCallerUserId: vi.fn(async () => "user-1"),
+    mockSendWorkItemPush: vi.fn(async () => undefined),
     mockS3Send: vi.fn(),
     tables,
   };
@@ -247,6 +249,10 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
 }));
 
+vi.mock("../../../lib/push-notifications.js", () => ({
+  sendWorkItemPush: mockSendWorkItemPush,
+}));
+
 import { workItems } from "./workItems.query.js";
 import { workItemLabels } from "./workItemLabels.query.js";
 import { createWorkItemLabel } from "./createWorkItemLabel.mutation.js";
@@ -274,6 +280,7 @@ beforeEach(() => {
   mockHasSpaceMemberAccess.mockReset().mockResolvedValue(true);
   mockResolveCallerTenantId.mockReset().mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockReset().mockResolvedValue("user-1");
+  mockSendWorkItemPush.mockReset().mockResolvedValue(undefined);
   mockS3Send.mockReset().mockResolvedValue({
     Body: { transformToString: async () => "# Plan\n\nDo the thing." },
   });
@@ -460,6 +467,67 @@ describe("work item resolvers", () => {
         }),
       }),
     );
+    expect(mockSendWorkItemPush).toHaveBeenCalledWith({
+      userId: "user-eric",
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      kind: "assigned",
+      title: "Work item assigned",
+      body: "Send DocuSign package",
+    });
+  });
+
+  it("does not push assignment notifications for self-assignment or unchanged owners", async () => {
+    const selfAssignedItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      title: "Send DocuSign package",
+      priority: "normal",
+      owner_user_id: null,
+      blocked: false,
+      required: true,
+      applicable: true,
+      archived_at: null,
+    };
+    captures.selectQueue.push([selfAssignedItem]);
+    captures.updateReturningQueue.push([
+      { ...selfAssignedItem, owner_user_id: "user-1" },
+    ]);
+
+    await updateWorkItem(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          ownerUserId: "user-1",
+        },
+      },
+      ctx,
+    );
+
+    const unchangedItem = {
+      ...selfAssignedItem,
+      id: "work-item-2",
+      owner_user_id: "user-eric",
+    };
+    captures.selectQueue.push([unchangedItem]);
+    captures.updateReturningQueue.push([unchangedItem]);
+
+    await updateWorkItem(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-2",
+          ownerUserId: "user-eric",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockSendWorkItemPush).not.toHaveBeenCalled();
   });
 
   it("creates Work Item labels with normalized slugs", async () => {
@@ -875,6 +943,108 @@ describe("work item resolvers", () => {
     expect(result).toEqual(
       expect.objectContaining({ id: "work-item-1", statusId: "status-done" }),
     );
+    expect(mockSendWorkItemPush).not.toHaveBeenCalled();
+  });
+
+  it("pushes the owner when a Work Item transitions into blocked", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      status_id: "status-active",
+      title: "Collect tax exemption",
+      priority: "normal",
+      owner_user_id: "user-owner",
+    };
+    const blockedStatus = {
+      id: "status-blocked",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      name: "Blocked",
+      category: "blocked",
+      is_final: false,
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [{ id: "status-active" }],
+      [blockedStatus],
+    );
+    captures.updateReturningQueue.push([
+      {
+        ...existingItem,
+        status_id: "status-blocked",
+        blocked: true,
+      },
+    ]);
+
+    await updateWorkItemStatus(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          workItemId: "work-item-1",
+          statusCategory: "BLOCKED",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockSendWorkItemPush).toHaveBeenCalledWith({
+      userId: "user-owner",
+      tenantId: "tenant-1",
+      workItemId: "work-item-1",
+      kind: "blocked",
+      title: "Work item blocked",
+      body: "Collect tax exemption is blocked.",
+    });
+  });
+
+  it("does not push blocked notifications when the item has no owner", async () => {
+    const existingItem = {
+      id: "work-item-1",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      status_id: "status-active",
+      title: "Collect tax exemption",
+      priority: "normal",
+      owner_user_id: null,
+    };
+    const blockedStatus = {
+      id: "status-blocked",
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      name: "Blocked",
+      category: "blocked",
+      is_final: false,
+    };
+    captures.selectQueue.push(
+      [existingItem],
+      [{ id: "status-active" }],
+      [blockedStatus],
+    );
+    captures.updateReturningQueue.push([
+      {
+        ...existingItem,
+        status_id: "status-blocked",
+        blocked: true,
+      },
+    ]);
+
+    await expect(
+      updateWorkItemStatus(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            workItemId: "work-item-1",
+            statusCategory: "BLOCKED",
+          },
+        },
+        ctx,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ id: "work-item-1" }));
+
+    expect(mockSendWorkItemPush).not.toHaveBeenCalled();
   });
 
   it("records a human OpenEngine blocker answer and releases the item for pickup", async () => {
