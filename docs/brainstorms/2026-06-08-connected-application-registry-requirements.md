@@ -8,7 +8,7 @@ topic: connected-application-registry
 ## Problem Frame
 
 ThinkWork's managed applications are becoming more than infrastructure add-ons.
-Cognee can hold and enrich knowledge. Twenty CRM can hold account and pipeline
+the retired graph substrate can hold and enrich knowledge. Twenty CRM can hold account and pipeline
 state. Future apps may add workflows, documents, analytics, support, or finance.
 Today ThinkWork can deploy apps and expose some MCP tools, but the apps do not
 publish a shared capability surface that agents, automations, and operators can
@@ -29,13 +29,13 @@ sequenceDiagram
     participant Twenty as "Twenty CRM"
     participant Hub as "ThinkWork Connected Registry"
     participant Policy as "Policy/Auth/Audit"
-    participant Cognee as "Cognee Knowledge Graph"
+    participant the retired graph substrate as "the retired graph substrate Knowledge Graph"
     participant Flow as "Capability Flow"
 
     Twenty->>Hub: "opportunity.updated webhook"
     Hub->>Policy: "verify signature, tenant, idempotency, route"
-    Hub->>Cognee: "write/enrich opportunity knowledge"
-    Cognee-->>Hub: "enrichment result"
+    Hub->>the retired graph substrate: "write/enrich opportunity knowledge"
+    the retired graph substrate-->>Hub: "enrichment result"
     Hub->>Flow: "trace spans, logs, status, evidence"
 ```
 
@@ -78,25 +78,25 @@ ThinkWork composes those capabilities safely.
     reading app-specific deployment code or MCP wiring.
   - **Covered by:** R1, R2, R3, R4, R5, R6
 
-- F2. Twenty opportunity update enriches Cognee
+- F2. Twenty opportunity update enriches the retired graph substrate
   - **Trigger:** Twenty emits an `opportunity.updated` webhook.
   - **Actors:** A3, A5, A6
   - **Steps:** ThinkWork receives the webhook, validates Twenty's signature and
     timestamp, identifies the tenant and managed app instance, normalizes the
     event into the registry, applies idempotency, checks the configured binding,
-    and invokes the Cognee knowledge write/enrichment capability. The flow
+    and invokes the the retired graph substrate knowledge write/enrichment capability. The flow
     records trace spans, logs, status, and audit evidence.
-  - **Outcome:** A CRM opportunity change becomes updated knowledge in Cognee
+  - **Outcome:** A CRM opportunity change becomes updated knowledge in the retired graph substrate
     through ThinkWork-controlled routing, not direct app-to-app coupling.
   - **Covered by:** R7, R8, R9, R10, R11, R12, R13
 
 - F3. Operator inspects the capability waterfall
-  - **Trigger:** An operator investigates whether a CRM update enriched Cognee
+  - **Trigger:** An operator investigates whether a CRM update enriched the retired graph substrate
     correctly, failed, or was skipped.
   - **Actors:** A1, A5
   - **Steps:** The operator opens the capability flow for a trace, sees each
     step in order, including Twenty webhook receipt, signature validation,
-    registry route decision, Cognee write/enrichment, retries or skips, timing,
+    registry route decision, the retired graph substrate write/enrichment, retries or skips, timing,
     redacted metadata, and audit/evidence links.
   - **Outcome:** Cross-app behavior is explainable without searching CloudWatch,
     reconstructing Lambda paths, or inspecting raw payloads.
@@ -146,21 +146,21 @@ ThinkWork composes those capabilities safely.
 - R8. The registry must allow app capabilities to be hidden, disabled, or
   policy-blocked without changing the app deployment state.
 
-**V1 Twenty to Cognee automation**
+**V1 Twenty to the retired graph substrate automation**
 
 - R9. V1 must use Twenty's real `opportunity.updated` webhook as the trigger for
   the first cross-app automation.
 - R10. ThinkWork must validate Twenty webhook authenticity using the signed
   webhook headers and reject stale, malformed, or unverifiable webhook requests.
 - R11. ThinkWork must apply idempotency to Twenty webhook handling so repeated
-  delivery does not create duplicate Cognee writes or duplicate audit records.
+  delivery does not create duplicate the retired graph substrate writes or duplicate audit records.
 - R12. The normalized Twenty opportunity event must route through a
-  ThinkWork-controlled binding to a Cognee knowledge write or enrichment
+  ThinkWork-controlled binding to a the retired graph substrate knowledge write or enrichment
   capability.
-- R13. The Cognee write/enrichment result must be associated back to the source
+- R13. The the retired graph substrate write/enrichment result must be associated back to the source
   Twenty opportunity event so the flow is explainable and retry-safe.
 - R14. Failure handling must distinguish at least: invalid webhook, duplicate
-  webhook, missing route, Cognee unavailable, policy blocked, and enrichment
+  webhook, missing route, the retired graph substrate unavailable, policy blocked, and enrichment
   failed.
 
 **Capability observability**
@@ -193,7 +193,7 @@ ThinkWork composes those capabilities safely.
 
 ## Acceptance Examples
 
-- AE1. **Covers R1, R2, R5.** Given Twenty and Cognee are managed apps, when
+- AE1. **Covers R1, R2, R5.** Given Twenty and the retired graph substrate are managed apps, when
   their capabilities are inspected, then ThinkWork shows their functions,
   triggers, events, auth requirements, and health through the registry rather
   than app-to-app wiring.
@@ -203,9 +203,9 @@ ThinkWork composes those capabilities safely.
   or unverifiable, then ThinkWork records the appropriate skipped or rejected
   state.
 - AE3. **Covers R12, R13, R14.** Given a valid Twenty opportunity update has a
-  configured Cognee binding, when Cognee is available, then ThinkWork writes or
+  configured the retired graph substrate binding, when the retired graph substrate is available, then ThinkWork writes or
   enriches the corresponding knowledge record and links the result to the
-  source event; when Cognee is unavailable, then the flow records a retryable or
+  source event; when the retired graph substrate is unavailable, then the flow records a retryable or
   blocked status.
 - AE4. **Covers R15, R16, R17.** Given a cross-app flow completes, when an
   operator opens its waterfall, then they can see each step, timing, owner,
@@ -219,7 +219,7 @@ ThinkWork composes those capabilities safely.
 
 ## Success Criteria
 
-- A real Twenty `opportunity.updated` event can drive a Cognee knowledge
+- A real Twenty `opportunity.updated` event can drive a the retired graph substrate knowledge
   enrichment/write through ThinkWork-controlled routing.
 - Operators can inspect a capability waterfall for the cross-app flow and
   understand what happened without searching raw logs.
@@ -262,7 +262,7 @@ ThinkWork composes those capabilities safely.
 ## Key Decisions
 
 - **V1 proof:** Use a real Twenty `opportunity.updated` webhook to trigger
-  Cognee enrichment/write through ThinkWork.
+  the retired graph substrate enrichment/write through ThinkWork.
 - **Control model:** Keep ThinkWork as the hub for policy, routing, audit, and
   observability; avoid direct app-to-app calls.
 - **Product proof surface:** The operator-visible proof is the capability
@@ -282,7 +282,7 @@ ThinkWork composes those capabilities safely.
   and signs webhook requests.
 - The managed Twenty deployment can be configured with a ThinkWork-owned webhook
   URL for the relevant tenant/app instance.
-- Cognee exposes or can be given a knowledge write/enrichment capability
+- the retired graph substrate exposes or can be given a knowledge write/enrichment capability
   suitable for opportunity/account intelligence.
 - ThinkWork can persist safe trace/capability-flow metadata without storing raw
   secrets or unbounded CRM payloads.
@@ -303,7 +303,7 @@ ThinkWork composes those capabilities safely.
   app capability contracts and capability-flow records?
 - [Affects R10][Needs research] How should Twenty webhook signing secrets be
   provisioned, rotated, and associated with a tenant/app instance?
-- [Affects R12, R13][Technical] What exact Cognee operation should v1 invoke:
+- [Affects R12, R13][Technical] What exact the retired graph substrate operation should v1 invoke:
   entity upsert, memory write, graph enrichment job, or another existing
   capability?
 - [Affects R15][Technical] Which existing ThinkWork trace/activity/audit tables

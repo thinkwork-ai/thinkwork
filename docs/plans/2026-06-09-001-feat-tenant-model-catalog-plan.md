@@ -621,7 +621,7 @@ List without bloating Lambda env vars or relying on browser-side credentials.
 **Patterns to follow:**
 
 - `terraform/modules/app/lambda-api/main.tf` managed policies for Bedrock KB and
-  Cognee health where inline size is a concern.
+  the retired graph substrate health where inline size is a concern.
 - `scripts/build-lambdas.sh` bundled-SDK allowlist comments.
 
 **Test scenarios:**

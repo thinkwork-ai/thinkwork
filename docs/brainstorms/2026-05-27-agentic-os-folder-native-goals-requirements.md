@@ -9,7 +9,7 @@ topic: agentic-os-folder-native-goals
 
 ThinkWork has the right substrate for an agentic operating system: one tenant
 platform agent, Spaces as contextual workrooms, user-scoped context, Threads as
-durable collaboration records, S3-backed workspace files, and Company Brain.
+durable collaboration records, S3-backed workspace files, and ThinkWork Brain.
 But users and builders still lack a crisp decision grammar for how work should
 run. The current Customer Onboarding Space proves the opportunity: an agent can
 coordinate a team around a checklist, progress panel, and Thread, but the
@@ -43,8 +43,8 @@ Agent acts in a Space on behalf of a User toward a Goal.
 - A4. Coordinator agent: reads Goal folders, drives progress, asks for human
   input, records decisions, prepares handoffs, and recommends completion.
 - A5. Product/engineering team: uses the model to decide what belongs in Agent,
-  Space, User, Thread, Goal, markdown, Aurora, and Company Brain.
-- A6. Company Brain: distills durable learning from completed Goal folders,
+  Space, User, Thread, Goal, markdown, Aurora, and ThinkWork Brain.
+- A6. ThinkWork Brain: distills durable learning from completed Goal folders,
   decisions, handoffs, artifacts, and final outcomes.
 - A7. External/local agent runner: a future Codex, Claude Code, or other local
   agent environment that can consume exported ThinkWork folders with graceful
@@ -91,7 +91,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
     information, records decisions and handoffs, and prepares artifacts or
     artifact summaries as work moves between stages.
   - **Outcome:** The team gets accountable workflow execution, not just chat
-    suggestions. Company Brain receives higher-quality source material than raw
+    suggestions. ThinkWork Brain receives higher-quality source material than raw
     transcript inference alone.
   - **Covered by:** R8, R9, R10, R11, R12, R15, R16
 
@@ -99,7 +99,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
   - **Trigger:** A Goal reaches its completion rule and review policy.
   - **Actors:** A3, A4, A6
   - **Steps:** ThinkWork finalizes the Goal folder, preserving the outcome,
-    progress, decisions, handoffs, artifacts, and final review. Company Brain
+    progress, decisions, handoffs, artifacts, and final review. ThinkWork Brain
     can distill these files into durable knowledge, process improvements,
     customer/account memory, and future template refinements.
   - **Outcome:** Finished work leaves behind both an audit-friendly case file
@@ -122,7 +122,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
   Collaborate means the user and agent work live in the Thread.
 - R4. ThinkWork must teach a maturity ladder from chat to durable operating
   system: ask in a Space, use context/tools, promote repeated work into Goals,
-  add reusable templates, then compound completed work into Company Brain.
+  add reusable templates, then compound completed work into ThinkWork Brain.
 
 **Goal contract**
 
@@ -163,7 +163,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
 - R15. `PROGRESS.md` must remain a rendered operational briefing for agent
   turns, not a second source of truth for structured task state.
 - R16. `DECISIONS.md`, `HANDOFFS.md`, and `ARTIFACTS.md` must be designed as
-  high-signal inputs to Company Brain, so completed Goals compound into better
+  high-signal inputs to ThinkWork Brain, so completed Goals compound into better
   reusable knowledge than transcript-only memory.
 
 **Doctrine and audience guidance**
@@ -195,7 +195,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
 - AE4. **Covers R14, R16.** Given a Goal produces a pricing decision and a
   customer handoff artifact, when the Goal completes, then `DECISIONS.md`,
   `HANDOFFS.md`, and `ARTIFACTS.md` preserve the rationale and outputs in a
-  form Company Brain can later distill.
+  form ThinkWork Brain can later distill.
 - AE5. **Covers R1, R2, R4, R17.** Given a new operator reads the Agentic OS
   guidance, when they decide whether to create a Space, a Goal, an automation,
   or a folder specialist, then the docs give placement rules without requiring
@@ -214,7 +214,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
   in Aurora, or what Thread folders should contain.
 - A future export feature could be added without re-architecting Goal, Space,
   Agent, or User context storage.
-- Completed Goals become better Company Brain source material than raw chat
+- Completed Goals become better ThinkWork Brain source material than raw chat
   transcripts alone.
 
 ---
@@ -307,7 +307,7 @@ Agent acts in a Space on behalf of a User toward a Goal.
 - [Affects R13-R15][Technical] Define which structured state changes trigger
   markdown refreshes and how refresh failures are surfaced without blocking
   canonical writes.
-- [Affects R14, R16][Technical] Define how Company Brain ingests completed Goal
+- [Affects R14, R16][Technical] Define how ThinkWork Brain ingests completed Goal
   folders and distinguishes durable decisions from transient notes.
 - [Affects R5, R9][Design] Define the right panel language and hierarchy:
   whether the current Progress panel becomes a Goal panel, and how much of

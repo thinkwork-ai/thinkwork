@@ -16,7 +16,7 @@ SET statement_timeout = '15min';
 DO $$
 BEGIN
   IF to_regclass('brain.artifact_manifests') IS NULL THEN
-    RAISE EXCEPTION 'brain.artifact_manifests not found; apply Company Brain artifact manifest migrations first';
+    RAISE EXCEPTION 'brain.artifact_manifests not found; apply ThinkWork Brain artifact manifest migrations first';
   END IF;
 END $$;
 

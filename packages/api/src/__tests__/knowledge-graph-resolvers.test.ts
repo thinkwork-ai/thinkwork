@@ -75,7 +75,7 @@ function ingestRun(overrides: Record<string, unknown> = {}) {
     diagnostic_count: 0,
     message_count: 3,
     input: { threadId: "thread-1" },
-    metrics: { cogneeMs: 900 },
+    metrics: { graphMs: 900 },
     metadata: { mode: "remember" },
     created_at: now,
     updated_at: now,

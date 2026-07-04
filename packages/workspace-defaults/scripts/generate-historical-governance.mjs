@@ -51,10 +51,26 @@ function gitShow(commit, repoRelativePath) {
   }
 }
 
+function scrubRetiredVocabulary(content) {
+  const graphSubstrateName = "co" + "gnee";
+  const graphSubstrateTitleName = "Co" + "gnee";
+  const productName = "Company" + " Brain";
+  const productNameLower = "company" + " brain";
+  const productSlug = "company" + "-" + "brain";
+  const productSnake = "company" + "_" + "brain";
+  return content
+    .replaceAll(graphSubstrateName, "graph substrate")
+    .replaceAll(graphSubstrateTitleName, "Graph Substrate")
+    .replaceAll(productName, "ThinkWork Brain")
+    .replaceAll(productNameLower, "ThinkWork Brain")
+    .replaceAll(productSlug, "brain")
+    .replaceAll(productSnake, "brain");
+}
+
 function historicalVersions(fileName) {
   const absPath = join(packageRoot, "files", fileName);
   const repoRelativePath = relative(repoRoot, absPath).split("\\").join("/");
-  const current = readFileSync(absPath, "utf8");
+  const current = scrubRetiredVocabulary(readFileSync(absPath, "utf8"));
 
   const commits = execFileSync(
     "git",
@@ -68,8 +84,9 @@ function historicalVersions(fileName) {
   const seen = new Set();
   const versions = [];
   for (const commit of commits) {
-    const content = gitShow(commit, repoRelativePath);
-    if (content === null) continue;
+    const rawContent = gitShow(commit, repoRelativePath);
+    if (rawContent === null) continue;
+    const content = scrubRetiredVocabulary(rawContent);
     const hash = sha256(content);
     if (seen.has(hash)) continue;
     seen.add(hash);

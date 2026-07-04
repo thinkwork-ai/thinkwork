@@ -11,7 +11,7 @@ The Memory page is the operator view for retained Hindsight records. It reports 
 **Route wrapper:** `apps/web/src/routes/_authed/settings.memory.tsx`
 **Page implementation:** `apps/web/src/components/settings/SettingsMemory.tsx`
 
-The Knowledge Graph subview remains available at `/settings/memory/knowledge-graph` when ThinkWork Brain graph infrastructure or legacy Cognee evidence is present.
+The Knowledge Graph subview remains available at `/settings/memory/knowledge-graph` when ThinkWork Brain graph evidence is present.
 
 ## Layout
 
@@ -41,11 +41,11 @@ Clicking a row opens a detail sheet with full content, bank/scope metadata, and 
 - **Hindsight memory** — canonical user and Space memory for this pass.
 - **Brain Sources** — retained Space documents in Hindsight, not a separate Bedrock KB default.
 - **AgentCore managed memory** — an explicit low-cost/development compatibility mode.
-- **ThinkWork Brain/Cognee graph infrastructure** — optional ontology/graph/warehouse diagnostics, not the user or Space memory provider.
+- **ThinkWork Brain graph infrastructure** — ontology and graph diagnostics, not the user or Space memory provider.
 
 ## Graph View
 
-When graph infrastructure is enabled, the graph view renders entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). Treat it as ThinkWork Brain graph diagnostics, not proof that user or Space memory is backed by Cognee.
+When graph infrastructure is enabled, the graph view renders entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). Treat it as ThinkWork Brain graph diagnostics, not proof that user or Space memory changed providers.
 
 <Aside type="note">
   The graph view is a Brain infrastructure inspection tool. It is not the full
@@ -83,7 +83,7 @@ Cross-bank delete is disabled in the operator table for this pass. For bulk reda
 - **Hindsight Space memory** — Hindsight memory keyed to the current Space. It stays with the Space and is available to authorized members and agents.
 - **Brain Sources** — Hindsight-retained Space documents with stable document ids, source context, tags, and observation scopes.
 - **AgentCore managed memory** — compatibility records from the managed-memory path when a deployment explicitly opts out of Hindsight.
-- **ThinkWork Brain graph diagnostics** — optional graph infrastructure evidence surfaced when the Brain substrate is installed or legacy Cognee is available.
+- **ThinkWork Brain graph diagnostics** — graph evidence surfaced when compiled Brain data is available.
 - **Namespaces** — records are namespaced by strategy and agent; prefixes such as `semantic_`, `preferences_`, and `episodes_` identify the retention strategy.
 
 ## Known Limits

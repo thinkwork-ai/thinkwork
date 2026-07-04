@@ -117,7 +117,7 @@ are required.
   semantics: a customer-visible premium plugin with ThinkWork-provided install
   key gating and a persistent entitlement after successful redemption.
 - R8. The skill must distinguish customer-facing product copy from internal
-  implementation names, following the Company Brain precedent where the plugin
+  implementation names, following the ThinkWork Brain precedent where the plugin
   name is the product and substrate/tool names can remain internal.
 - R9. The skill must reject or flag source projects whose shape cannot fit the
   current catalog model without platform changes, instead of silently inventing
@@ -185,7 +185,7 @@ are required.
 - The McPherson Lakehouse POC has a clear path to becoming a premium catalog
   plugin, including visible gaps where platform adapter work is still needed.
 - The generated contribution follows the same product model as LastMile, Twenty,
-  and Company Brain rather than adding another distribution path.
+  and ThinkWork Brain rather than adding another distribution path.
 - Planning can proceed without re-deciding whether this is a skill, a new CLI, a
   plugin marketplace, or a separate licensing system.
 
@@ -226,7 +226,7 @@ are required.
 - Application Plugin requirements are captured in
   `docs/brainstorms/2026-06-12-application-plugins-requirements.md`.
 - Premium plugin precedent is captured in
-  `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`.
+  `docs/brainstorms/2026-06-13-brain-premium-plugin-requirements.md`.
 - Current plugin manifest types and validation live in
   `packages/plugin-catalog/src/contracts.ts`; examples live under root
   `plugins/<plugin-key>/` packages.

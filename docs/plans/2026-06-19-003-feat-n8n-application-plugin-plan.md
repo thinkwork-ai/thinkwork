@@ -194,7 +194,7 @@ destructive impact.
   rejects per-user activation.
 - `apps/web/src/components/settings/plugins/PluginDetail.tsx` is the shared
   plugin detail host. It already contains plugin-specific operator sections for
-  Company Brain, Twenty, Twenty CRM credentials, and email-channel settings, so an
+  ThinkWork Brain, Twenty, Twenty CRM credentials, and email-channel settings, so an
   `N8nSettings` panel can be introduced without turning the generic detail page
   into a full schema renderer.
 - `packages/database-pg/graphql/types/plugins.graphql`,

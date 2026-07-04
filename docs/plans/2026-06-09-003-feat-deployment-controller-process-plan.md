@@ -142,7 +142,7 @@ New requirements for this corrective plan:
   surface so local dev can iterate on UX. CLI commands remain support and
   recovery tools.
 - **Optional apps stay optional.** Base install creates ThinkWork foundation
-  only. Cognee, Twenty, Slack, Stripe, and later apps are selected after the
+  only. the retired graph substrate, Twenty, Slack, Stripe, and later apps are selected after the
   environment is reachable unless the release/runbook explicitly marks them as
   required.
 
@@ -483,7 +483,7 @@ selection.
 - Keep Slack and Stripe out of base install; expose them later as optional
   integrations only when descriptors exist.
 - Make managed-app UI reuse the same job/evidence language as full environment
-  updates so Cognee/Twenty feel like part of the same system.
+  updates so the retired graph substrate/Twenty feel like part of the same system.
 
 **Tests:**
 
@@ -505,19 +505,19 @@ selection.
 
 ### U7. Route Managed Applications Through The Same Controller
 
-**Goal:** Cognee and Twenty deploy, update, park/destroy, and report evidence
+**Goal:** the retired graph substrate and Twenty deploy, update, park/destroy, and report evidence
 through customer AWS controller jobs using the selected release manifest.
 
 **Files:**
 
 - `packages/deployment-runner/src/apps/registry.ts`
-- `packages/deployment-runner/src/apps/cognee.ts`
+- `packages/deployment-runner/src/apps/retired_graph_substrate.ts`
 - `packages/deployment-runner/src/apps/twenty.ts`
 - `packages/deployment-runner/src/plan.ts`
 - `packages/deployment-runner/src/apply.ts`
 - `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
 - `packages/api/src/graphql/resolvers/deployments/*`
-- `terraform/modules/app/cognee/*`
+- `terraform/modules/app/retired_graph_substrate/*`
 - `terraform/modules/app/twenty/*`
 - `docs/src/content/docs/deploy/managed-applications.mdx`
 
@@ -525,7 +525,7 @@ through customer AWS controller jobs using the selected release manifest.
 
 - Make managed-app plan/apply input match the full environment controller's
   manifest and evidence contract.
-- Ensure Cognee and Twenty pull required artifacts/images from the verified
+- Ensure the retired graph substrate and Twenty pull required artifacts/images from the verified
   manifest/bundle.
 - Record app-specific data impact, resource summary, logs, endpoints, and smoke
   result.
@@ -539,12 +539,12 @@ through customer AWS controller jobs using the selected release manifest.
   - destructive operations require expected confirmation path.
   - missing manifest artifact/image blocks app deploy.
 - API resolver tests for plan/approve/reject/idempotency.
-- Existing Cognee/Twenty smoke scripts continue to work against controller
+- Existing the retired graph substrate/Twenty smoke scripts continue to work against controller
   evidence.
 
 **Acceptance:**
 
-- In a controller-managed environment, Cognee and Twenty can be planned,
+- In a controller-managed environment, the retired graph substrate and Twenty can be planned,
   approved, deployed, smoked, and destroyed without GitHub Actions.
 
 ### U8. Harden Deployment Profile And Client Binding
@@ -604,7 +604,7 @@ docs so the next environment is repeatable.
 - `docs/src/content/docs/deploy/managed-applications.mdx`
 - `docs/src/content/docs/deploy/deployment-profiles.mdx`
 - `scripts/smoke/foundation-bootstrap-smoke.mjs`
-- `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- `plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs`
 - `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 
 **Work:**
@@ -620,7 +620,7 @@ docs so the next environment is repeatable.
 **Tests:**
 
 - Foundation smoke succeeds against the TEI deployment.
-- Optional Cognee/Twenty smoke succeeds only after those apps are selected.
+- Optional the retired graph substrate/Twenty smoke succeeds only after those apps are selected.
 - Teardown evidence proves no `tei-e2e` resources remain except deliberately
   retained evidence, if retention is selected.
 
@@ -706,7 +706,7 @@ revoked and audited.
   AWS, deletes the lease, and shows a resumable timeline.
 - Customer-owned controller can install, update, and tear down the ThinkWork
   foundation from release manifest input.
-- Cognee and Twenty can be managed through Spaces using the same controller and
+- the retired graph substrate and Twenty can be managed through Spaces using the same controller and
   evidence contract.
 - Web/desktop/mobile profiles bind to the selected deployment without stale
   cross-environment redirects.

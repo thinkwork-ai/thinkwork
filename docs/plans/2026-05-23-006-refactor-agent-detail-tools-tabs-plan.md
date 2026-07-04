@@ -71,5 +71,5 @@ Move the existing Built-in Tools and MCP Servers tabs into the Agent detail rout
 ## Out of Scope
 
 - Backend deletion of built-in tool or MCP APIs.
-- Changing tenant policy semantics for Code Sandbox, email, browser, web search, or Company Brain.
+- Changing tenant policy semantics for Code Sandbox, email, browser, web search, or ThinkWork Brain.
 - Redesigning Space pages beyond keeping Space focused on memory/context.

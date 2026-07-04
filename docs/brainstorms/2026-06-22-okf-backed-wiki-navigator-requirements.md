@@ -10,13 +10,13 @@ linear: THNK-63
 
 ThinkWork already has three useful but differently shaped memory surfaces:
 raw Hindsight/managed memory, compiled wiki pages in Postgres, and
-ontology-shaped Company Brain pages plus graph/provenance state behind Context
+ontology-shaped ThinkWork Brain pages plus graph/provenance state behind Context
 Engine. The next step is not to replace those governed stores with markdown.
 It is to generate an inspectable, agent-native OKF markdown projection from the
 same canonical state, then let a bounded Wiki Navigator source-agent traverse
 that projection with filesystem-like operations.
 
-This should make Company Brain feel more like a durable, navigable knowledge
+This should make ThinkWork Brain feel more like a durable, navigable knowledge
 workspace without weakening the governance model. Canonical memory, ontology,
 graph state, provenance, ACLs, and operational indexes remain platform-owned.
 The OKF bundle is a rebuildable projection optimized for human inspection,
@@ -45,7 +45,7 @@ The direction also resolves current vocabulary drift:
   the OKF projection and returns cited evidence.
 - A3. Context Engine: remains the runtime policy boundary, provider router, and
   normalized result surface.
-- A4. Company Brain materializer: generates Postgres wiki/brain indexes and the
+- A4. ThinkWork Brain materializer: generates Postgres wiki/brain indexes and the
   OKF markdown bundle from canonical memory, ontology, graph, and provenance.
 - A5. Tenant administrator / ThinkWork operator: inspects bundle status,
   freshness, provenance, redaction, and retrieval comparisons.
@@ -78,7 +78,7 @@ The direction also resolves current vocabulary drift:
     the current authorized OKF bundle, follows links/backlinks when useful, and
     returns cited pages, snippets, provenance, and traversal trace.
   - **Outcome:** Pi receives bounded source data through Context Engine without
-    direct EFS, S3, Cognee, Neptune, or ontology-admin access.
+    direct EFS, S3, the retired graph substrate, Neptune, or ontology-admin access.
   - **Covered by:** R5, R6, R7, R10, R11, R12
 
 - F3. Retrieval comparison and cutover decision
@@ -148,7 +148,7 @@ The direction also resolves current vocabulary drift:
   override system/developer instructions, or cause backend access outside the
   approved traversal tools.
 - R12. Pi access must stay behind Context Engine. Pi must not mount EFS, read
-  S3 directly, call raw Cognee/Neptune/ontology admin APIs, or receive storage
+  S3 directly, call raw the retired graph substrate/Neptune/ontology admin APIs, or receive storage
   credentials. The initial model-facing surface should preserve existing
   `query_wiki_context` / `query_brain_context` compatibility unless planning
   proves a separate explicit navigation tool is needed.
@@ -177,9 +177,9 @@ legal; `x-thinkwork` is the stable namespace for platform metadata.
 ---
 type: ThinkWorkEntity
 title: Acme Corp
-description: Tenant-shared customer page compiled from approved Company Brain state.
+description: Tenant-shared customer page compiled from approved ThinkWork Brain state.
 resource: thinkwork://brain/entity/customer/acme-corp
-tags: [customer, company-brain]
+tags: [customer, brain]
 timestamp: 2026-06-22T14:30:00Z
 x-thinkwork:
   version: 1
@@ -221,19 +221,19 @@ Recommended path conventions for the first implementation:
 
 ## Retrieval Evaluation Matrix
 
-| Retrieval path | Best at | Main risk | Evidence needed before defaulting |
-|---|---|---|---|
-| DB-only wiki/Brain retrieval | Fast indexed lookup, deterministic GraphQL/admin behavior, metrics and joins | Can feel like search rather than exploration; may miss multi-hop page context | Baseline hit quality, latency, and citation coverage |
-| OKF navigator only | Progressive discovery through files, links, backlinks, and page bodies | Latency and drift if bundle freshness is weak; markdown can over-impress without better answers | Navigation trace quality, bundle freshness, no source leakage |
-| Hybrid DB entrypoint + OKF traversal | Uses DB ranking to choose promising pages, then lets navigator explore context | More moving parts and harder attribution | Clear quality lift over DB-only with acceptable latency |
-| Raw memory retrieval | Episodic recall and recent user-specific facts | Re-summarizes scattered memories and can miss governed tenant context | Cases where raw memory beats projections, especially freshness |
-| Knowledge graph retrieval | Entity/relationship questions over raw graph edges | Sparse snippets by design; less narrative explanation | Relationship-question wins and typed-edge coverage |
+| Retrieval path                       | Best at                                                                        | Main risk                                                                                       | Evidence needed before defaulting                              |
+| ------------------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| DB-only wiki/Brain retrieval         | Fast indexed lookup, deterministic GraphQL/admin behavior, metrics and joins   | Can feel like search rather than exploration; may miss multi-hop page context                   | Baseline hit quality, latency, and citation coverage           |
+| OKF navigator only                   | Progressive discovery through files, links, backlinks, and page bodies         | Latency and drift if bundle freshness is weak; markdown can over-impress without better answers | Navigation trace quality, bundle freshness, no source leakage  |
+| Hybrid DB entrypoint + OKF traversal | Uses DB ranking to choose promising pages, then lets navigator explore context | More moving parts and harder attribution                                                        | Clear quality lift over DB-only with acceptable latency        |
+| Raw memory retrieval                 | Episodic recall and recent user-specific facts                                 | Re-summarizes scattered memories and can miss governed tenant context                           | Cases where raw memory beats projections, especially freshness |
+| Knowledge graph retrieval            | Entity/relationship questions over raw graph edges                             | Sparse snippets by design; less narrative explanation                                           | Relationship-question wins and typed-edge coverage             |
 
 ---
 
 ## Acceptance Examples
 
-- AE1. **Covers R1-R4.** Given a tenant has an active Company Brain customer
+- AE1. **Covers R1-R4.** Given a tenant has an active ThinkWork Brain customer
   page with cited provenance, when the OKF materializer runs, then the generated
   file has OKF frontmatter, `x-thinkwork` metadata, body sections, markdown
   links, and redacted provenance references.
@@ -273,7 +273,7 @@ Recommended path conventions for the first implementation:
 
 ## Scope Boundaries
 
-- No direct Pi filesystem mounts, S3 reads, Cognee reads, Neptune reads, or
+- No direct Pi filesystem mounts, S3 reads, the retired graph substrate reads, Neptune reads, or
   ontology admin API access.
 - No markdown-as-canonical-storage model. OKF is a generated projection.
 - No user-authored Obsidian/Notion clone. Human editing of OKF pages is outside
@@ -309,7 +309,7 @@ Recommended path conventions for the first implementation:
 
 ## Dependencies / Assumptions
 
-- The Company Brain plugin remains the customer-facing product. Cognee and
+- The ThinkWork Brain plugin remains the customer-facing product. the retired graph substrate and
   other substrate internals stay operator/internal details.
 - `brain.artifact_manifests` or successor projection metadata can represent
   OKF bundle versions without exposing raw S3 keys to tenant-visible callers.
@@ -354,12 +354,12 @@ Repo context reviewed:
 - `docs/src/content/docs/concepts/knowledge/business-ontology.mdx`
 - `docs/src/content/docs/concepts/knowledge/knowledge-graph.mdx`
 - `docs/brainstorms/2026-04-20-thinkwork-memory-wiki-mcp-requirements.md`
-- `docs/brainstorms/2026-04-29-company-brain-v0-requirements.md`
-- `docs/brainstorms/2026-06-09-cognee-centric-memory-pipeline-requirements.md`
-- `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`
-- `docs/plans/2026-06-14-001-feat-company-brain-artifact-manifests-plan.md`
+- `docs/brainstorms/2026-04-29-brain-v0-requirements.md`
+- `docs/brainstorms/2026-06-09-retired_graph_substrate-centric-memory-pipeline-requirements.md`
+- `docs/brainstorms/2026-06-13-brain-premium-plugin-requirements.md`
+- `docs/plans/2026-06-14-001-feat-brain-artifact-manifests-plan.md`
 - `docs/plans/2026-06-14-002-feat-context-engine-brain-reads-plan.md`
-- `docs/plans/2026-06-14-005-feat-company-brain-first-party-tool-plan.md`
+- `docs/plans/2026-06-14-005-feat-brain-first-party-tool-plan.md`
 - `packages/api/src/handlers/wiki-export.ts`
 - `packages/api/src/handlers/mcp-context-engine.ts`
 - `packages/api/src/lib/context-engine/providers/wiki.ts`
@@ -367,7 +367,7 @@ Repo context reviewed:
 - `packages/api/src/lib/context-engine/providers/wiki-source-agent-tools.ts`
 - `packages/database-pg/src/schema/wiki.ts`
 - `packages/database-pg/src/schema/brain.ts`
-- `plugins/company-brain/src/api/context-engine-provider.ts`
+- `plugins/brain/src/api/context-engine-provider.ts`
 - `packages/pi-extensions/src/knowledge-graph.ts`
 - `packages/agentcore-pi/agent-container/src/runtime/providers/knowledge-graph-provider.ts`
 

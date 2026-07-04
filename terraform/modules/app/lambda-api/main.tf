@@ -162,11 +162,6 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-moved {
-  from = aws_iam_role_policy_attachment.lambda_cognee_worker_vpc_access[0]
-  to   = aws_iam_role_policy_attachment.lambda_vpc_access[0]
-}
-
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #

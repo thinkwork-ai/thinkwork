@@ -98,7 +98,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     service/log defaults, retained database/storage metadata, and native MCP
     readiness messaging.
   - Widened the managed-app settings row helper so n8n and Twenty CRM route to their
-    own Plugin Detail pages instead of being coerced to Company Brain.
+    own Plugin Detail pages instead of being coerced to ThinkWork Brain.
 - Verification:
   - `pnpm --filter @thinkwork/plugin-n8n test` passed.
   - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
@@ -389,7 +389,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     `http://localhost:5175/settings/plugins`; in-app browser automation was
     blocked by enterprise localhost policy, but the generated signed catalog
     now contains nine plugins ordered
-    `company-brain,lakehouse,lastmile,n8n,twenty,email-channel,sendgrid,twenty,workos-auth`.
+    `brain,lakehouse,lastmile,n8n,twenty,email-channel,sendgrid,twenty,workos-auth`.
 - Local verification:
   - `pnpm install` completed; optional `canvas@2.11.2` native fallback reported
     missing local `pkg-config`, but package installation completed and the
@@ -480,7 +480,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     values to empty strings. Terraform therefore failed Twenty CRM configuration
     preconditions during the unrelated n8n plan.
   - Root cause: `terraform/modules/app/deployment-control-twenty/runner.py`
-    preserved Cognee and Twenty guardrails but not Twenty CRM guardrails, and it had
+    preserved the retired graph substrate and Twenty guardrails but not Twenty CRM guardrails, and it had
     no Python-side n8n override generation for managed-app plan payloads.
 - Runner fix in this U8 branch:
   - Added Python n8n managed-app override generation for `ENABLE`, `PARK`,

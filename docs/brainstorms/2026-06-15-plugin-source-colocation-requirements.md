@@ -20,13 +20,13 @@ The desired ownership boundary is stronger than "move the manifest": root-level
 should be able to open one plugin folder and find the plugin-specific behavior,
 UI surfaces, substrate assets, deployment/runtime hooks, docs, tests, and
 operations material. Shared packages should retain only generic platform
-infrastructure that is not specific to Twenty CRM, Twenty, LastMile, Company Brain,
-Cognee, or any future plugin.
+infrastructure that is not specific to Twenty CRM, Twenty, LastMile, ThinkWork Brain,
+the retired graph substrate, or any future plugin.
 
 This revision tightens the original THNK-31 scope after implementation revealed
 that manifests, smokes, and parity tests could move while important plugin
 behavior still remained scattered across `apps/web`, `packages/api`,
-`packages/cognee`, `packages/deployment-runner`, `terraform/modules/app`, and
+`packages/retired_graph_substrate`, `packages/deployment-runner`, `terraform/modules/app`, and
 CLI/CI fixtures.
 
 ---
@@ -68,12 +68,12 @@ CLI/CI fixtures.
 
 - F3. Plugin-owned operator UI
   - **Trigger:** A tenant/operator user opens a plugin detail page such as
-    Company Brain.
+    ThinkWork Brain.
   - **Actors:** A2, A4
   - **Steps:** The shared web shell loads the plugin detail frame and renders
     plugin-declared UI surfaces from the owning plugin package. For Company
     Brain, ontology and knowledge-graph administration appear inside the
-    Company Brain plugin context rather than as standalone settings screens
+    ThinkWork Brain plugin context rather than as standalone settings screens
     owned by `apps/web`.
   - **Outcome:** Users experience plugin-specific operations as part of the
     plugin, and developers review those screens from the plugin folder.
@@ -132,18 +132,18 @@ CLI/CI fixtures.
 - R10. Plugin detail must be able to render plugin-declared UI surfaces. For
   this migration, rendering inside the plugin detail screen is sufficient; a
   more general marketplace/app-shell surface can be deferred.
-- R11. Company Brain ontology, knowledge graph, migration, operations, and
-  substrate evidence UI must move into `plugins/company-brain/` and render from
-  the Company Brain plugin context. Legacy settings routes may redirect or host
+- R11. ThinkWork Brain ontology, knowledge graph, migration, operations, and
+  substrate evidence UI must move into `plugins/brain/` and render from
+  the ThinkWork Brain plugin context. Legacy settings routes may redirect or host
   compatibility shims during migration, but they must not be the owning source.
 
 **Substrate and infrastructure ownership**
 
-- R12. Cognee is treated as the internal Company Brain substrate unless a
+- R12. the retired graph substrate is treated as the internal ThinkWork Brain substrate unless a
   future requirements decision promotes it to a standalone shared platform
   service. Its Dockerfile/image wrapper, Terraform module source, deployment
   adapter, smoke tests, and customer-facing copy must therefore be owned by
-  `plugins/company-brain/` or explicitly marked as temporary migration debt.
+  `plugins/brain/` or explicitly marked as temporary migration debt.
 - R13. Twenty CRM and Twenty managed-app Terraform modules and deployment adapters
   must move behind plugin-owned source while preserving current deployment
   behavior.
@@ -173,8 +173,8 @@ CLI/CI fixtures.
 - R20. Migrate Twenty CRM first as the full-shape proof plugin.
 - R21. Migrate Twenty while preserving install, infrastructure deployment, MCP
   registration, and user activation behavior.
-- R22. Migrate Company Brain/Cognee infrastructure and UI source without leaking
-  Cognee implementation vocabulary into customer-facing plugin package copy.
+- R22. Migrate ThinkWork Brain/the retired graph substrate infrastructure and UI source without leaking
+  the retired graph substrate implementation vocabulary into customer-facing plugin package copy.
 - R23. Migrate LastMile and skill/MCP-only content without changing endpoint,
   OAuth, or dispatch behavior.
 
@@ -201,13 +201,13 @@ CLI/CI fixtures.
   Terraform, adapter, smokes, tests, and operations notes.
 - AE2. **Covers R5-R8.** `packages/plugin-catalog` exposes only generic plugin
   contracts/catalog infrastructure and does not own first-party plugin behavior.
-- AE3. **Covers R9-R12, R22.** Company Brain ontology and knowledge-graph
-  administration render inside the Company Brain plugin detail context, with
-  source owned by `plugins/company-brain/`, while legacy settings routes are
+- AE3. **Covers R9-R12, R22.** ThinkWork Brain ontology and knowledge-graph
+  administration render inside the ThinkWork Brain plugin detail context, with
+  source owned by `plugins/brain/`, while legacy settings routes are
   compatibility redirects or generic hosts only.
-- AE4. **Covers R12, R22.** Cognee image/runtime wrapper source is owned by
-  `plugins/company-brain/` unless a future requirements decision explicitly
-  promotes Cognee to a shared platform service.
+- AE4. **Covers R12, R22.** the retired graph substrate image/runtime wrapper source is owned by
+  `plugins/brain/` unless a future requirements decision explicitly
+  promotes the retired graph substrate to a shared platform service.
 - AE5. **Covers R21.** Twenty still installs/upgrades with the same
   infrastructure deployment, MCP registration, and user activation behavior
   after migration.
@@ -226,11 +226,11 @@ CLI/CI fixtures.
   imports.
 - `packages/plugin-catalog` no longer reads as the owner of first-party plugin
   source; it is generic infrastructure only, renamed or split if needed.
-- Company Brain's ontology/knowledge-graph UI and Cognee substrate assets are
-  owned by `plugins/company-brain/`.
+- ThinkWork Brain's ontology/knowledge-graph UI and the retired graph substrate substrate assets are
+  owned by `plugins/brain/`.
 - A canonical plugin spec/README exists and is good enough for a new plugin
   author to know what belongs in a plugin package.
-- Existing product behavior for Twenty CRM, Twenty, LastMile, and Company Brain
+- Existing product behavior for Twenty CRM, Twenty, LastMile, and ThinkWork Brain
   remains unchanged through migration.
 - Repository checks make the new boundary durable and report any remaining
   plugin-specific migration debt.
@@ -241,7 +241,7 @@ CLI/CI fixtures.
 
 - Do not change the plugin install/activation product behavior while moving
   source.
-- Do not use this migration to redesign Company Brain ontology workflows; the
+- Do not use this migration to redesign ThinkWork Brain ontology workflows; the
   requirement is source ownership and rendering context, not new ontology
   behavior.
 - Do not introduce local-only, Kubernetes, Docker Compose, GCP, or Azure paths.
@@ -261,8 +261,8 @@ CLI/CI fixtures.
   plugin-specific behavior.
 - Plugin ownership includes UI surfaces and operational/admin product surfaces,
   not only manifests, tests, and smoke scripts.
-- Company Brain owns Cognee as an internal substrate unless a future
-  requirements pass explicitly promotes Cognee to shared platform infrastructure.
+- ThinkWork Brain owns the retired graph substrate as an internal substrate unless a future
+  requirements pass explicitly promotes the retired graph substrate to shared platform infrastructure.
 - `packages/plugin-catalog` is allowed only as generic platform infrastructure;
   it must not be treated as a first-party plugin source folder.
 - Twenty CRM is the first proof plugin because it exercises manifest, skills,
@@ -277,8 +277,8 @@ CLI/CI fixtures.
 - Existing merged THNK-31 PRs moved manifests, smokes, and parity tests, but did
   not complete full plugin ownership.
 - The current migration allowlist still identifies plugin-specific source
-  outside plugin folders, including web screens, API Company Brain helpers,
-  `packages/cognee`, deployment-runner adapters, Terraform modules, and CLI/CI
+  outside plugin folders, including web screens, API ThinkWork Brain helpers,
+  `packages/retired_graph_substrate`, deployment-runner adapters, Terraform modules, and CLI/CI
   fixtures.
 - Historical database migration tests may remain outside plugins if they verify
   immutable schema history rather than active plugin source.
@@ -295,8 +295,8 @@ CLI/CI fixtures.
 - [Affects R9-R11][Technical] What exact UI surface contract should let plugin
   packages render inside shared plugin detail without coupling the web shell to
   plugin-specific screens?
-- [Affects R12][Technical] How should moving `packages/cognee/Dockerfile` into
-  `plugins/company-brain/` preserve current CI/release image names and Terraform
+- [Affects R12][Technical] How should moving `packages/retired_graph_substrate/Dockerfile` into
+  `plugins/brain/` preserve current CI/release image names and Terraform
   wiring?
 - [Affects R24-R26][Technical] What migration allowlist categories should remain
   permanently for historical artifacts, and which entries must be removed before
@@ -317,8 +317,8 @@ CLI/CI fixtures.
 - Current remaining migration allowlist in
   `scripts/plugin-source-boundary-allowlist.mjs`.
 - User clarification on 2026-06-16: plugin folders should colocate all
-  plugin-specific resources, Company Brain ontology UI should be plugin-owned
-  and rendered from plugin detail, `packages/cognee` should move under Company
+  plugin-specific resources, ThinkWork Brain ontology UI should be plugin-owned
+  and rendered from plugin detail, `packages/retired_graph_substrate` should move under Company
   Brain unless explicitly justified, and a standard plugin spec/README is
   required.
 

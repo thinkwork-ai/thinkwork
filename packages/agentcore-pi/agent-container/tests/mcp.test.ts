@@ -862,8 +862,8 @@ describe("buildMcpTools — fail-closed validation", () => {
     const tools = await buildMcpTools({
       mcpConfigs: [
         {
-          serverName: "company-brain--brain",
-          url: "http://internal-cognee.example.local/mcp-server/http",
+          serverName: "brain--graph",
+          url: "http://internal-graph.example.local/mcp-server/http",
           trustedInternal: true,
         },
       ],

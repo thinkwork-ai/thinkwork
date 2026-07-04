@@ -21,7 +21,7 @@ the top-right header slot.
 
 This plan builds on the Hindsight canonical-memory foundation rather than
 reopening provider selection. Hindsight remains the user and Space memory source
-of truth for this slice; Cognee and AgentCore managed memory stay out of the
+of truth for this slice; the retired graph substrate and AgentCore managed memory stay out of the
 normal user/Space memory path.
 
 ---
@@ -99,7 +99,7 @@ refresh icon reloads and spins.
 - Do not reopen the THNK-83 provider decision; Hindsight remains canonical for
   user and Space memory.
 - Do not build a customer-facing memory backend picker.
-- Do not make Cognee or AgentCore managed memory part of the normal user/Space
+- Do not make the retired graph substrate or AgentCore managed memory part of the normal user/Space
   retain/recall path for this issue.
 - Do not implement the full requester idle-learning markdown product from the
   May 18 requirements; idle learning may remain a supplement.

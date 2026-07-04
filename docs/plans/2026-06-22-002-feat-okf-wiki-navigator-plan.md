@@ -32,7 +32,7 @@ plan: U3 mounts, U4-U5 browse, and U7 evaluates.
 
 ThinkWork already has several governed knowledge stores and retrieval surfaces:
 Hindsight or AgentCore Memory for raw memory, compiled wiki pages in Postgres,
-Company Brain pages and artifact manifests, a knowledge graph search extension,
+ThinkWork Brain pages and artifact manifests, a knowledge graph search extension,
 and Context Engine as the policy facade for runtime queries. What is missing is
 an agent-native, inspectable filesystem projection that lets an agent browse
 the same governed knowledge as linked markdown files without treating markdown
@@ -47,7 +47,7 @@ operators can compare retrieval quality before any default routing changes.
 One requirement document line says "No direct Pi filesystem mounts." Linear
 THNK-63 and the folded THNK-64 context supersede that line for v1: Pi AgentCore
 should mount the OKF EFS view directly, read-only. The model-facing boundary is
-unchanged: no raw S3, database, Cognee, Neptune, ontology admin, or write tools
+unchanged: no raw S3, database, the retired graph substrate, Neptune, ontology admin, or write tools
 are exposed to the model.
 
 ---
@@ -70,7 +70,7 @@ are exposed to the model.
   diagnostics.
 
 **Origin actors:** A1 Pi agent, A2 Wiki Navigator/source-agent, A3 Context
-Engine, A4 Company Brain materializer, A5 tenant admin/operator, A6 planner or
+Engine, A4 ThinkWork Brain materializer, A5 tenant admin/operator, A6 planner or
 implementer.
 
 **Origin flows:** F1 OKF bundle materialization, F2 progressive wiki navigation,
@@ -107,11 +107,11 @@ default OKF routing, richer mobile trace cards, or broader OKF distribution.
 
 - Making OKF markdown canonical storage or editable source of truth.
 - Agent or user write-back into OKF/EFS.
-- Exposing S3, database, Cognee, Neptune, ontology admin, EFS admin, or Brain
+- Exposing S3, database, the retired graph substrate, Neptune, ontology admin, EFS admin, or Brain
   artifact APIs as model tools.
 - Changing default `query_context` or `query_wiki_context` routing before the
   eval report proves quality and safety.
-- Replacing Company Brain, Compounding Wiki, Hindsight, AgentCore Memory, or the
+- Replacing ThinkWork Brain, Compounding Wiki, Hindsight, AgentCore Memory, or the
   knowledge graph.
 - Per-service managed runtime dependencies; this feature should add
   EFS/cache surface only where needed for OKF.
@@ -187,13 +187,13 @@ default OKF routing, richer mobile trace cards, or broader OKF distribution.
 - `docs/solutions/architecture-patterns/first-party-provider-tools-stay-behind-policy-facades-2026-06-14.md`:
   provider-specific model affordances are useful, but raw storage/admin systems
   stay behind a policy facade with provider-local status and provenance.
-- `docs/solutions/architecture-patterns/company-brain-active-substrate-reads-through-context-engine-2026-06-15.md`:
+- `docs/solutions/architecture-patterns/brain-active-substrate-reads-through-context-engine-2026-06-15.md`:
   source text must be marked as untrusted, provenance redacted, and provider
   failures visible rather than silently falling back to another source.
 - `docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md`:
   operators need provider status, latency, no-hit/degraded reasons, and source
   family evidence when provider-routed context changes.
-- `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`:
+- `docs/solutions/best-practices/retired_graph_substrate-thread-ingest-explorer-2026-06-04.md`:
   cross-layer knowledge features need deployed smoke that proves real backend
   participation, not only a green unit test or successful invocation metadata.
 - `docs/solutions/design-patterns/replay-recorded-agent-conversations-write-safe.md`:
@@ -829,9 +829,9 @@ ThinkWork stage:
   `docs/src/content/docs/concepts/knowledge/business-ontology.mdx`,
   `docs/src/content/docs/concepts/knowledge/knowledge-graph.mdx`.
 - Related plans:
-  `docs/plans/2026-06-14-001-feat-company-brain-artifact-manifests-plan.md`,
+  `docs/plans/2026-06-14-001-feat-brain-artifact-manifests-plan.md`,
   `docs/plans/2026-06-14-002-feat-context-engine-brain-reads-plan.md`,
-  `docs/plans/2026-06-14-005-feat-company-brain-first-party-tool-plan.md`,
+  `docs/plans/2026-06-14-005-feat-brain-first-party-tool-plan.md`,
   `docs/plans/2026-06-12-003-feat-evaluations-trust-core-plan.md`.
 - Relevant code:
   `packages/api/src/handlers/wiki-export.ts`,

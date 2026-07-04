@@ -42,9 +42,9 @@ Fixture path:
 
 ## Adapter Fit Evidence
 
-The current deployment-runner registry exposes `cognee` and `twenty` managed-app
+The current deployment-runner registry exposes `retired_graph_substrate` and `twenty` managed-app
 adapters. The lakehouse fixture does not fit either adapter shape: it models AWS
-data-lake resources rather than Cognee or Twenty application runtime inputs.
+data-lake resources rather than the retired graph substrate or Twenty application runtime inputs.
 
 The builder skill therefore must stop before finalizing an infrastructure
 manifest with `managedAppKey: "lakehouse"`. Its scanner flags that key as

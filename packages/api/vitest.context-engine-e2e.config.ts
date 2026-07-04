@@ -1,5 +1,5 @@
 /**
- * Separate Vitest config for live Company Brain / Context Engine E2E checks.
+ * Separate Vitest config for live ThinkWork Brain / Context Engine E2E checks.
  *
  * Runs against deployed API infrastructure when API_URL, API_AUTH_SECRET,
  * TENANT_ID, and USER_ID are supplied. Without those env vars, the tests

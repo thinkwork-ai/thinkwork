@@ -28,8 +28,8 @@ or operator UI beyond a declared settings surface.
 ## Problem Frame
 
 THNK-67 frames Company Data as the governed operational-facts substrate beside
-Company Brain: Company Data holds detailed operational facts and current state,
-while Company Brain holds meaning, ontology-shaped summaries, relationships,
+ThinkWork Brain: Company Data holds detailed operational facts and current state,
+while ThinkWork Brain holds meaning, ontology-shaped summaries, relationships,
 and durable business context. The origin requirements explicitly decide that
 Company Data must be its own first-party ThinkWork plugin, not a mode hidden
 inside Data Integrations (see origin:
@@ -50,7 +50,7 @@ capability before later THNK-67 implementation units exist.
   new plugin starts as an inert shell with empty OAuth scopes, empty
   capabilities, and one declared settings surface.
 - R3. Give the shell customer-facing copy that reflects THNK-67: governed
-  operational facts for agents and UI, distinct from Company Brain meaning and
+  operational facts for agents and UI, distinct from ThinkWork Brain meaning and
   Data Integrations extraction plumbing.
 - R4. Publish the shell through the generated first-party plugin catalog so it
   participates in catalog tests, signed catalog builds, and the normal install
@@ -95,7 +95,7 @@ identity from origin R4a.
 
 ### Outside this product's identity
 
-- Company Brain as the warehouse for every operational fact.
+- ThinkWork Brain as the warehouse for every operational fact.
 - Neptune as the primary detail-data warehouse.
 - Replacing source systems of record with ThinkWork-owned operational writes.
 - Fetching routine operational facts live from MCP/source APIs on every agent
@@ -287,7 +287,7 @@ Data Integrations assertions, then make the shell pass them.
   credentials, secrets, Terraform, managed app endpoints, MCP server
   declarations, skills, or runtime handler promises.
 - Error path: customer-facing copy does not claim that Company Data stores
-  every operational row in Company Brain, provides BI/dashboard/lakehouse query
+  every operational row in ThinkWork Brain, provides BI/dashboard/lakehouse query
   UI, deploys ELT jobs, or replaces source systems of record.
 - Integration: README assertions prove deferred-resource language covers
   extraction runner, projection database/schema, mapping workflow, MCP,
@@ -329,7 +329,7 @@ signed catalog build path through the existing generator and tests.
   existing registry generator after the new package metadata exists.
 - Update catalog tests that assert deterministic plugin ordering. Because the
   generator sorts package keys and the signed catalog sorts manifest display
-  names, tests should expect `company-data` near `company-brain` by key and
+  names, tests should expect `company-data` near `brain` by key and
   `Company Data` near other display-name-sorted manifests.
 - Do not hand-edit any runtime install behavior. The generated catalog should
   be the only shared publication change needed for this shell.
@@ -434,7 +434,7 @@ plugin key whose plugin-specific source belongs under `plugins/company-data/`.
   Integrations: root export and `./manifest` export only.
 - **Integration coverage:** Package-local, catalog, signed catalog, and
   source-boundary tests together cover the cross-package publication path.
-- **Unchanged invariants:** Company Data remains distinct from Company Brain
+- **Unchanged invariants:** Company Data remains distinct from ThinkWork Brain
   and Data Integrations; this shell does not create runtime data flows,
   credentials, MCP tools, or database tables.
 

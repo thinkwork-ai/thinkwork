@@ -77,7 +77,7 @@ deployment substrate.
 
 - F3. Deploy or tear down managed applications
   - **Trigger:** A ThinkWork operator opens Settings -> Managed Applications and
-    enables or tears down Cognee, Twenty CRM, or another managed application.
+    enables or tears down the retired graph substrate, Twenty CRM, or another managed application.
   - **Actors:** A3, A4, A5
   - **Steps:** Spaces records the desired change, starts a plan job in the
     customer AWS deployment control plane, shows resource/data-impact summary
@@ -143,7 +143,7 @@ deployment substrate.
 
 - R11. Spaces Settings -> Managed Applications is the normal operator surface
   for managed application lifecycle after bootstrap.
-- R12. V1 success requires at least Cognee and Twenty CRM to deploy and tear
+- R12. V1 success requires at least the retired graph substrate and Twenty CRM to deploy and tear
   down through the GitHub-free customer AWS deployment system.
 - R13. Managed application enablement and teardown must run through plan
   preview and explicit operator approval before apply or destroy.
@@ -195,9 +195,9 @@ deployment substrate.
   OIDC provider, when that user signs in with a verified matching email, then
   ThinkWork grants the first admin role.
 - AE3. **Covers R11, R12, R13, R16.** Given the first admin opens Managed
-  Applications, when they enable Cognee, then Spaces shows a plan preview,
+  Applications, when they enable the retired graph substrate, then Spaces shows a plan preview,
   requires approval, starts the customer AWS deployment job, and later shows
-  Cognee status and endpoint details.
+  the retired graph substrate status and endpoint details.
 - AE4. **Covers R14, R15, R17.** Given Twenty CRM has been deployed, when an
   operator tears it down, then Spaces warns that CRM data/resources will be
   destroyed, requires explicit approval, and runs a customer AWS destroy job.
@@ -217,7 +217,7 @@ deployment substrate.
 - A customer without GitHub can deploy a minimal ThinkWork environment into
   their AWS account and log into Spaces without a source fork or customer CI
   repository.
-- Operators can enable and tear down Cognee and Twenty from Spaces using
+- Operators can enable and tear down the retired graph substrate and Twenty from Spaces using
   customer-AWS deployment jobs with plan preview and approval.
 - Desktop and mobile users can connect one universal app distribution to a
   customer deployment through a deployment profile.
@@ -237,7 +237,7 @@ deployment substrate.
   use deployment profiles first.
 - Customer-specific branded desktop/mobile builds.
 - Non-AWS deployment targets. ThinkWork remains AWS-native.
-- A full generic app marketplace. V1 proves the lifecycle with Cognee and
+- A full generic app marketplace. V1 proves the lifecycle with the retired graph substrate and
   Twenty CRM.
 - Rich policy automation for low-risk immediate applies. V1 uses plan preview
   and approval for managed-app changes.
@@ -310,7 +310,7 @@ deployment substrate.
 - [Affects R10][Technical] Which identity-provider inputs are required for
   OIDC versus SAML bootstrap, and what presets should the CLI offer?
 - [Affects R14, R15][Technical] Which managed-app resources/data are destroyed
-  for Cognee and Twenty, and what confirmation language/evidence is required?
+  for the retired graph substrate and Twenty, and what confirmation language/evidence is required?
 - [Affects R20, R21][Technical] What exact deployment profile format and import
   mechanisms should desktop and mobile support first?
 - [Affects R25][Technical] What smoke checks and deploy evidence should be

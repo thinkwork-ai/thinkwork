@@ -1,5 +1,5 @@
 ---
-title: 'feat: Computer dreaming memory maintenance'
+title: "feat: Computer dreaming memory maintenance"
 type: feat
 status: active
 date: 2026-05-09
@@ -11,7 +11,7 @@ deepened: 2026-05-09
 
 ## Overview
 
-Add a per-Computer dreaming maintenance pipeline that reviews recent Computer work, cleans up allowed local EFS memory markdown files, records auditable diffs and rollback pointers, and emits selected downstream memory/wiki signals. The plan keeps EFS markdown as the editable source of truth while treating Hindsight and Company Brain wiki as downstream consumers.
+Add a per-Computer dreaming maintenance pipeline that reviews recent Computer work, cleans up allowed local EFS memory markdown files, records auditable diffs and rollback pointers, and emits selected downstream memory/wiki signals. The plan keeps EFS markdown as the editable source of truth while treating Hindsight and ThinkWork Brain wiki as downstream consumers.
 
 This is deliberately stronger than a report-only feature: the dream process may rewrite approved memory files automatically. The implementation therefore starts with the control plane, snapshots, diff records, rollback, source trust classification, and poisoning filters before any automatic rewrite path can run live.
 
@@ -28,7 +28,7 @@ The current repo already has the core seams to build on: Computer tasks/events i
 ## Requirements Trace
 
 - R1. Treat the Computer's local EFS workspace memory markdown as the primary editable memory surface.
-- R2. Keep Hindsight, AgentCore managed memory, and Company Brain wiki as downstream consumers, not primary dream write targets.
+- R2. Keep Hindsight, AgentCore managed memory, and ThinkWork Brain wiki as downstream consumers, not primary dream write targets.
 - R3. Restrict automatic rewrite to memory markdown and dream-owned metadata; protect instruction, identity, capability, platform, guardrail, agent, user, and tools files.
 - R4. Support full automatic maintenance of allowed memory markdown: dedupe, compact, reorganize, stale removal, contradiction reconciliation, and clearer summaries.
 - R5. Use staged phases; only the final maintenance phase may rewrite durable memory files.
@@ -51,7 +51,7 @@ The current repo already has the core seams to build on: Computer tasks/events i
 - R22. Emit structured events for the dream lifecycle.
 - R23. Enforce bounded budgets and produce partial reports on budget exhaustion.
 
-**Origin actors:** A1 Computer owner, A2 ThinkWork Computer, A3 dream process, A4 operator/admin, A5 Hindsight and Company Brain wiki, A6 planner/implementer.
+**Origin actors:** A1 Computer owner, A2 ThinkWork Computer, A3 dream process, A4 operator/admin, A5 Hindsight and ThinkWork Brain wiki, A6 planner/implementer.
 
 **Origin flows:** F1 nightly full-maintenance sweep, F2 bad dream rollback, F3 dream outputs feed retrieval systems, F4 poison-resistant promotion.
 
@@ -61,13 +61,13 @@ The current repo already has the core seams to build on: Computer tasks/events i
 
 ## Scope Boundaries
 
-- Do not replace AgentCore managed memory, Hindsight, or Company Brain wiki.
+- Do not replace AgentCore managed memory, Hindsight, or ThinkWork Brain wiki.
 - Do not make Hindsight or wiki the primary editing surface for dream maintenance.
 - Do not automatically rewrite core instruction, identity, platform, capability, user, tools, agent, or guardrail files.
 - Do not build cross-user or tenant-wide dreaming. v1 is per Computer/per owner.
 - Do not use dream reports as promotion sources.
 - Do not claim automatic truth maintenance is perfect. Rollback, provenance, and dry-run are part of the contract.
-- Do not add a new generalized knowledge graph outside the existing Company Brain path.
+- Do not add a new generalized knowledge graph outside the existing ThinkWork Brain path.
 - Do not implement a large end-user settings surface in v1. Operator/admin controls, dry-run, status, and rollback are enough.
 
 ### Deferred to Follow-Up Work
@@ -185,7 +185,7 @@ The tree is a target shape, not a constraint. The implementer may split or merge
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -241,6 +241,7 @@ flowchart TD
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `packages/database-pg/src/schema/computers.ts`
 - Modify: `packages/database-pg/graphql/types/computers.graphql`
 - Create: `packages/database-pg/drizzle/00NN_computer_dreaming.sql`
@@ -254,6 +255,7 @@ flowchart TD
 - Create: `packages/api/src/graphql/resolvers/computers/computerDreamRun.query.ts`
 
 **Approach:**
+
 - Add tables for dream runs and per-file dream changes. Minimum run fields: tenant/computer/task, mode (`dry_run` or `live`), status, source lookback, budgets, report path, machine-state path or payload, started/completed timestamps, error, summary counts.
 - Add file-change rows keyed to a run: relative path, pre-change snapshot pointer/content hash, post-change hash, diff, evidence refs, score/reasons, action (`rewrite`, `delete_section`, `compact`, `unchanged`, `skipped`), rollback status.
 - Keep run rows tenant/computer scoped and aligned with existing `computer_events` access rules.
@@ -263,17 +265,20 @@ flowchart TD
 **Execution note:** Start with schema and resolver tests before wiring runtime behavior.
 
 **Patterns to follow:**
+
 - `packages/database-pg/src/schema/computers.ts` for Computer-owned table naming, status checks, tenant/computer indexes.
 - `packages/api/src/lib/computers/events.ts` for tenant-scoped Computer read patterns.
 - `packages/api/src/graphql/resolvers/computers/computerEvents.query.ts` for resolver access control shape.
 
 **Test scenarios:**
+
 - Happy path: inserting a dream run and two file-change rows returns them through the GraphQL detail query with tenant/computer scoping preserved.
 - Edge case: a Computer with no dream runs returns an empty list, not an error.
 - Error path: querying a dream run for another tenant's Computer returns not found or unauthorized without leaking IDs.
 - Integration: `ComputerTaskType.MEMORY_DREAM` is representable in schema/codegen, but backend task normalization and live execution remain inert until runtime/control units land.
 
 **Verification:**
+
 - Dream run records can be created/read in tests and are addressable from Computer GraphQL surfaces.
 
 ---
@@ -287,6 +292,7 @@ flowchart TD
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `packages/computer-runtime/src/dreaming/allowlist.ts`
 - Create: `packages/computer-runtime/src/dreaming/snapshots.ts`
 - Create: `packages/computer-runtime/src/dreaming/types.ts`
@@ -296,6 +302,7 @@ flowchart TD
 - Modify: `packages/computer-runtime/test/workspace.test.ts`
 
 **Approach:**
+
 - Define a strict dream-write allowlist independent of generic workspace writes. Initial allowlist: `memory/lessons.md`, `memory/preferences.md`, `memory/contacts.md`, and optionally `memory/daily/YYYY-MM-DD.md`.
 - Reject top-level instruction/personality files explicitly, even if a future broad path pattern might accidentally match them.
 - Snapshot affected files under a dream-owned runtime directory such as `.thinkwork/dreams/snapshots/<run-id>/...`, with hashes and original relative paths.
@@ -306,16 +313,19 @@ flowchart TD
 **Execution note:** Characterize current path validation first, then add stricter dream-specific validation.
 
 **Patterns to follow:**
+
 - `packages/computer-runtime/src/workspace.ts` for safe relative path validation and runtime-hidden `.thinkwork/` conventions.
 - `packages/agentcore-strands/agent-container/container-sources/write_memory_tool.py` for the narrow memory-write security posture.
 
 **Test scenarios:**
+
 - Happy path: `memory/lessons.md` and `memory/preferences.md` pass the dream allowlist and can be snapshotted/restored.
 - Edge case: missing allowed memory file produces a skipped/missing source result rather than a failed run.
 - Error path: `GUARDRAILS.md`, `USER.md`, `AGENTS.md`, `.thinkwork/dreams/state.json`, absolute paths, traversal paths, and nested non-memory files are rejected before file I/O.
 - Integration: writing a replacement creates a snapshot first, stores pre/post hashes, and rollback restores the exact previous bytes.
 
 **Verification:**
+
 - Runtime primitives can prove safe rewrite and rollback against a temporary workspace without touching disallowed files.
 
 ---
@@ -329,6 +339,7 @@ flowchart TD
 **Dependencies:** U1, U2
 
 **Files:**
+
 - Create: `packages/computer-runtime/src/dreaming/sources.ts`
 - Create: `packages/computer-runtime/src/dreaming/classifier.ts`
 - Create: `packages/computer-runtime/src/dreaming/planner.ts`
@@ -340,6 +351,7 @@ flowchart TD
 - Test: `packages/api/src/handlers/computer-runtime.test.ts`
 
 **Approach:**
+
 - Add a runtime/API source bundle for dream tasks: recent Computer events, task outcomes, thread snippets or references, existing allowed memory file contents, workpaper paths/metadata, and approval responses.
 - Assign source trust labels before LLM processing: direct user instruction, approval response, existing memory, assistant output, workpaper, connector content, web content, tool output.
 - Add deterministic filters for prompt-control language, tool/policy instructions, credential-like strings, and external-content instructions. These candidates are skipped/quarantined with reasons and never reach the maintenance rewrite set.
@@ -348,21 +360,23 @@ flowchart TD
 
 **Technical design:** Directional source decision matrix:
 
-| Source type | Can support facts/preferences? | Can alter future instructions? | Default action |
-|---|---:|---:|---|
-| Direct user instruction | Yes | Only through existing explicit profile/memory tools | Candidate with high trust |
-| Approval response | Yes | No | Candidate with high trust |
-| Existing memory | Yes | No | Candidate with preservation bias |
-| Assistant output | Maybe | No | Candidate only with corroboration |
-| Tool result | Maybe | No | Candidate with source metadata |
-| Web/connector content | Facts only | No | Low-trust; filter injection |
-| Workpaper | Maybe | No | Candidate with provenance |
+| Source type             | Can support facts/preferences? |                      Can alter future instructions? | Default action                    |
+| ----------------------- | -----------------------------: | --------------------------------------------------: | --------------------------------- |
+| Direct user instruction |                            Yes | Only through existing explicit profile/memory tools | Candidate with high trust         |
+| Approval response       |                            Yes |                                                  No | Candidate with high trust         |
+| Existing memory         |                            Yes |                                                  No | Candidate with preservation bias  |
+| Assistant output        |                          Maybe |                                                  No | Candidate only with corroboration |
+| Tool result             |                          Maybe |                                                  No | Candidate with source metadata    |
+| Web/connector content   |                     Facts only |                                                  No | Low-trust; filter injection       |
+| Workpaper               |                          Maybe |                                                  No | Candidate with provenance         |
 
 **Patterns to follow:**
+
 - `memory-retain.ts` logging hygiene: log identifiers and counts, never raw user content.
 - `docs/solutions/workflow-issues/agentcore-completion-callback-env-shadowing-2026-04-25.md` for snapshotting identity/config at task entry.
 
 **Test scenarios:**
+
 - Happy path: explicit user correction plus matching workpaper evidence becomes an eligible maintenance candidate.
 - Edge case: assistant-only speculation without supporting evidence is report-only and not eligible for rewrite.
 - Error path: web/workpaper text containing "ignore previous instructions", "send email without approval", credential-like strings, or policy changes is rejected/quarantined.
@@ -370,6 +384,7 @@ flowchart TD
 - Integration: task source collection respects tenant/computer ownership and never fetches another Computer's events or threads.
 
 **Verification:**
+
 - Unsafe candidates cannot reach the rewrite planner in tests, and skipped reasons are available for reports/events.
 
 ---
@@ -383,6 +398,7 @@ flowchart TD
 **Dependencies:** U1, U2, U3
 
 **Files:**
+
 - Create: `packages/computer-runtime/src/dreaming/runner.ts`
 - Create: `packages/computer-runtime/src/dreaming/reports.ts`
 - Modify: `packages/computer-runtime/src/task-loop.ts`
@@ -392,6 +408,7 @@ flowchart TD
 - Modify: `packages/computer-runtime/test/task-loop.test.ts`
 
 **Approach:**
+
 - Add `memory_dream` handling to the runtime task loop.
 - Implement staged phases:
   - Light/staging: collect sources, classify trust, dedupe obvious repeats, emit candidates.
@@ -406,11 +423,13 @@ flowchart TD
 **Execution note:** Land dry-run behavior first; enable live rewrite only after dry-run tests and U2 rollback tests pass.
 
 **Patterns to follow:**
+
 - `packages/computer-runtime/src/task-loop.ts` task dispatch structure.
 - OpenClaw's separation between human-readable diary/report output and promotion-eligible grounded snippets.
 - `packages/api/src/lib/computers/tasks.ts` idempotency behavior for duplicate task requests.
 
 **Test scenarios:**
+
 - Happy path: dry-run against duplicated `memory/lessons.md` produces a proposed compacted version and no file changes.
 - Happy path: live run snapshots `memory/preferences.md`, rewrites it, records diff metadata, and writes a report.
 - Edge case: budget limit reached after source collection produces a partial report and no live rewrite for unprocessed files.
@@ -420,6 +439,7 @@ flowchart TD
 - Covers AE5. Dry-run preview shows estimated edits and leaves memory files unchanged.
 
 **Verification:**
+
 - A local runtime test can execute dry-run and live dream tasks against a temp workspace and inspect report/diff/snapshot output.
 
 ---
@@ -433,6 +453,7 @@ flowchart TD
 **Dependencies:** U1, U4
 
 **Files:**
+
 - Create: `packages/api/src/lib/computers/dreaming/rollback.ts`
 - Modify: `packages/api/src/lib/computers/dreaming/runs.ts`
 - Modify: `packages/api/src/lib/computers/tasks.ts`
@@ -446,6 +467,7 @@ flowchart TD
 - Test: `packages/api/src/graphql/resolvers/computers/computerDreamRun.mutation.test.ts`
 
 **Approach:**
+
 - Add GraphQL mutations for operator/admin users: start dry-run, start live run, rollback a file change.
 - Store opt-in policy in `computers.runtime_config` for v1 unless implementation finds an existing tenant policy surface that is a better fit. Keep the config explicit: enabled flag, cadence, max files, max source age, max spend/time.
 - Add service-auth runtime endpoints for the runtime to create/update dream runs, submit file-change records, and mark rollback completion if rollback needs runtime EFS access.
@@ -456,11 +478,13 @@ flowchart TD
 - Emit structured events for start, preview, live write, rollback, and failure.
 
 **Patterns to follow:**
+
 - `packages/api/src/graphql/resolvers/computers/updateComputer.mutation.ts` for admin-only Computer mutations.
 - `packages/api/src/lib/computers/tasks.ts` for task idempotency and input normalization.
 - `packages/api/src/handlers/computer-runtime.ts` for service-auth runtime routes.
 
 **Test scenarios:**
+
 - Happy path: admin starts a dry-run and receives a queued `memory_dream` task with idempotency key.
 - Happy path: admin starts a live run only when dreaming is enabled for the Computer.
 - Edge case: disabled dreaming rejects scheduled/live run but allows explicit dry-run preview.
@@ -470,6 +494,7 @@ flowchart TD
 - Integration: rollback conflict is reported when the current file hash differs from the recorded post-change hash, and the later file content remains unchanged.
 
 **Verification:**
+
 - Operator-facing GraphQL mutations can enqueue dream work and roll back file changes in tests without bypassing Computer ownership checks.
 
 ---
@@ -483,6 +508,7 @@ flowchart TD
 **Dependencies:** U1, U4, U5
 
 **Files:**
+
 - Modify: `packages/api/src/handlers/memory-retain.ts`
 - Modify: `packages/api/src/handlers/memory-retain.test.ts`
 - Modify: `packages/api/src/lib/memory/types.ts`
@@ -495,6 +521,7 @@ flowchart TD
 - Modify: `packages/api/src/lib/wiki/enqueue.test.ts`
 
 **Approach:**
+
 - Extend `memory-retain` with a dream-maintained workspace memory payload shape, separate from conversation and daily memory.
 - Use stable document identity. Recommended pattern: `computer_dream_memory:<ownerUserId>:<computerId>:<memoryPathHash>` for per-file maintained memory, with metadata carrying `dreamRunId`, `computerId`, `memoryPath`, changed hashes, and source `"thinkwork_computer_dream"`.
 - Use `update_mode="replace"` for the active maintained memory document so repeated dreams update rather than append duplicates.
@@ -503,10 +530,12 @@ flowchart TD
 - Ensure recall/wiki results can surface provenance as dream-maintained local memory via metadata.
 
 **Patterns to follow:**
+
 - `retainConversation` and `retainDailyMemory` in `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`.
 - `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`.
 
 **Test scenarios:**
+
 - Happy path: successful live dream emits a Hindsight item with stable document ID and dream metadata.
 - Edge case: dry-run emits no downstream retain.
 - Error path: downstream retain failure records a warning/error event but does not revert already-written local EFS memory.
@@ -514,6 +543,7 @@ flowchart TD
 - Integration: duplicate bridge call for the same file/run replaces the same Hindsight document and enqueues at most one wiki compile in the dedupe bucket.
 
 **Verification:**
+
 - Tests prove dream bridge documents are stable, distinguishable from raw transcripts/daily memory, and eligible for wiki compile enqueue.
 
 ---
@@ -527,6 +557,7 @@ flowchart TD
 **Dependencies:** U1, U5
 
 **Files:**
+
 - Modify: `apps/admin/src/routes/_authed/_tenant/computers/$computerId.tsx`
 - Create: `apps/admin/src/routes/_authed/_tenant/computers/-components/ComputerDreamingPanel.tsx`
 - Create: `apps/admin/src/routes/_authed/_tenant/computers/-components/ComputerDreamRunDetail.tsx`
@@ -536,6 +567,7 @@ flowchart TD
 - Test: `apps/admin/src/routes/_authed/_tenant/computers/-components/ComputerDreamingPanel.test.tsx`
 
 **Approach:**
+
 - Add a Computer detail panel/tab for dreaming, near runtime/tasks/events.
 - Show enabled state, last run status, next/scheduled status if configured, recent runs, report summary counts, and file-change rows.
 - Provide actions for dry-run preview, live run, and rollback. Require confirmation for live run and rollback.
@@ -543,10 +575,12 @@ flowchart TD
 - Surface skipped/quarantined candidates and budget hits in the report detail so safety behavior is visible, not hidden.
 
 **Patterns to follow:**
+
 - `ComputerEventsPanel.tsx` for Computer-scoped timeline data loading.
 - Admin UI `StatusBadge`, `PageHeader`, `MetricCard`, and dialog components for consistent operator UI.
 
 **Test scenarios:**
+
 - Happy path: panel renders no-runs empty state, then renders a completed dream run with changed files and skipped candidates.
 - Happy path: clicking dry-run calls the GraphQL mutation and shows queued/running status.
 - Edge case: live run button is disabled or confirmation-gated when dreaming is disabled.
@@ -555,6 +589,7 @@ flowchart TD
 - Covers AE5. Dry-run preview displays estimated edits and no changed-file committed state.
 
 **Verification:**
+
 - Admin tests cover status, dry-run, live confirmation, diff rendering, and rollback states.
 
 ---
@@ -568,6 +603,7 @@ flowchart TD
 **Dependencies:** U1-U7
 
 **Files:**
+
 - Modify: `packages/workspace-defaults/files/MEMORY_GUIDE.md`
 - Modify: `packages/workspace-defaults/src/index.ts`
 - Modify: `packages/workspace-defaults/src/__tests__/parity.test.ts`
@@ -579,6 +615,7 @@ flowchart TD
 - Create: `docs/solutions/best-practices/computer-dreaming-efs-memory-maintenance-2026-05-09.md`
 
 **Approach:**
+
 - Update `MEMORY_GUIDE.md` to explain that normal agents should still use explicit memory tools sparingly; dreaming is a background Computer maintenance process, not an invitation to journal every turn.
 - Preserve workspace-default markdown/source parity.
 - Add scheduling support only after manual/dry-run/live/rollback works. Prefer scheduling by enqueuing `memory_dream` Computer tasks through existing scheduled-job infrastructure rather than inventing a new scheduler.
@@ -586,11 +623,13 @@ flowchart TD
 - Extend deployed Computer smoke to cover: seed duplicate memory, run dry-run, run live dream, verify protected file unchanged, verify Hindsight bridge metadata when the dev stack has a memory engine enabled or an explicit skipped-bridge status when it does not, perform rollback.
 
 **Patterns to follow:**
+
 - `packages/lambda/job-trigger.ts` for scheduled Computer thread-turn enqueue behavior.
 - `docs/src/content/docs/api/compounding-memory.mdx` and Computer docs for style and scope.
 - `docs/solutions/workflow-issues/workspace-defaults-md-byte-parity-needs-ts-test-2026-04-25.md` for parity requirements.
 
 **Test scenarios:**
+
 - Happy path: scheduled dream job enqueues one `memory_dream` task for the target Computer and respects idempotency.
 - Edge case: disabled dreaming skips scheduled live run and records a visible event/status.
 - Error path: missing Computer for a scheduled dream does not fall back to legacy Agent wakeups.
@@ -598,6 +637,7 @@ flowchart TD
 - Integration: smoke creates duplicate memory, performs dry/live run, confirms report/diff, confirms protected file unchanged, and rolls back.
 
 **Verification:**
+
 - Documentation and smoke coverage make the feature operable on dev without reading implementation code.
 
 ---
@@ -625,17 +665,17 @@ flowchart TD
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Memory poisoning becomes persistent because dreaming trusts web/tool/workpaper text | U3 deterministic trust classification and filters block instruction-like, credential-like, and policy-changing candidates before rewrite. |
-| In-place maintenance deletes useful memory | U2/U5 snapshots and file-level rollback are required before live rewrite; R12 preservation bias is encoded in U3/U4 scoring. |
-| Dream reports become a promotion feedback loop | U4 writes reports under dream-owned paths and U6 explicitly excludes reports from retain/promotion. |
-| Concurrent dream tasks corrupt markdown | U4 adds per-Computer locking/serialization and U1 records idempotency state. |
-| Hindsight/wiki duplicate dream facts | U6 uses stable replace-style document IDs and compile dedupe. |
-| Current TS runtime is replaced by Strands during implementation | Keep dream runtime logic modular under `packages/computer-runtime/src/dreaming/`; if Strands lands first, port the module boundary rather than the task/API contracts. |
-| Schema migration conflicts with parallel plans | Use next migration number at implementation time and avoid hardcoding `00NN`. |
-| Operator UI encourages live runs before confidence | U7 confirmation gates live runs; U8 scheduling lands only after manual/dry-run/rollback paths are tested. |
-| Rollback overwrites newer user edits | Compare current file hash with the recorded post-change hash and require a conflict path instead of silent restore. |
+| Risk                                                                                | Mitigation                                                                                                                                                             |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory poisoning becomes persistent because dreaming trusts web/tool/workpaper text | U3 deterministic trust classification and filters block instruction-like, credential-like, and policy-changing candidates before rewrite.                              |
+| In-place maintenance deletes useful memory                                          | U2/U5 snapshots and file-level rollback are required before live rewrite; R12 preservation bias is encoded in U3/U4 scoring.                                           |
+| Dream reports become a promotion feedback loop                                      | U4 writes reports under dream-owned paths and U6 explicitly excludes reports from retain/promotion.                                                                    |
+| Concurrent dream tasks corrupt markdown                                             | U4 adds per-Computer locking/serialization and U1 records idempotency state.                                                                                           |
+| Hindsight/wiki duplicate dream facts                                                | U6 uses stable replace-style document IDs and compile dedupe.                                                                                                          |
+| Current TS runtime is replaced by Strands during implementation                     | Keep dream runtime logic modular under `packages/computer-runtime/src/dreaming/`; if Strands lands first, port the module boundary rather than the task/API contracts. |
+| Schema migration conflicts with parallel plans                                      | Use next migration number at implementation time and avoid hardcoding `00NN`.                                                                                          |
+| Operator UI encourages live runs before confidence                                  | U7 confirmation gates live runs; U8 scheduling lands only after manual/dry-run/rollback paths are tested.                                                              |
+| Rollback overwrites newer user edits                                                | Compare current file hash with the recorded post-change hash and require a conflict path instead of silent restore.                                                    |
 
 ---
 

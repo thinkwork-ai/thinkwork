@@ -68,7 +68,7 @@ Out of scope:
 - Passive Slack/channel learning outside persisted Threads.
 - Rewriting `USER.md`, skills, tools, identities, guardrails, or shared Computer workspace files.
 - Making Dream Diary or reports future promotion sources.
-- Replacing Hindsight, AgentCore Memory, or Company Brain.
+- Replacing Hindsight, AgentCore Memory, or ThinkWork Brain.
 
 ## Existing Patterns
 
@@ -242,4 +242,3 @@ Keeping Dream Diary under `memory/` makes it visible in the new Admin User conte
 - **Prompt injection:** Reuse and extend existing safety classifiers; reports record rejection counts.
 - **Cost:** Sweep has per-user and per-run limits plus deterministic fallback.
 - **Env size:** Common Lambda env is already large. Add only short flag/model/cron values and avoid extra URLs.
-

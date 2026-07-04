@@ -46,7 +46,7 @@ didn't know about:
   shared loop with its own ~1,345-line driver. `packages/pi-runtime-core` already
   exists with a shared `agent-loop.ts`, `types.ts`, `history.ts`, `tool-costs.ts`,
   `finalize-client.ts`, and `desktop-session.ts` — but only one of the four
-  *provider interfaces* the brainstorm references exists (`DelegationProvider`); the
+  _provider interfaces_ the brainstorm references exists (`DelegationProvider`); the
   loop wrapper hardcodes Bedrock rather than going through a Model/Workspace/Memory
   seam.
 - The contract is snake_case with camelCase islands, unversioned, emits two
@@ -96,7 +96,7 @@ acceptance-example IDs referenced as `AE<N>` are defined in the origin brainstor
 
 - **Phase-gate the Strands removal; each phase boundary is a deploy boundary, not
   just a commit.** The destructive cuts (DROP COLUMN, Terraform module delete,
-  Strands source delete) each depend on a prior change being merged *and deployed*.
+  Strands source delete) each depend on a prior change being merged _and deployed_.
   Sequencing follows the established staged-collapse precedent
   (`docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`)
   and the migration-ordering rule (see origin; `feedback_migration_deploy_ordering`).
@@ -120,7 +120,7 @@ acceptance-example IDs referenced as `AE<N>` are defined in the origin brainstor
   mode.** Both hosts consume the framework's intended embedding surface — the cloud
   runtime migrates off the lower-level `pi-agent-core` `Agent` it calls today; the
   desktop sidecar already uses this surface. Do the package swap and a `Usage`-type
-  adapter in `pi-runtime-core` as one unit *before* the contract redesign, so the
+  adapter in `pi-runtime-core` as one unit _before_ the contract redesign, so the
   redesign churns one stable type surface (audit S7).
 
 - **Wrap the framework behind our own provider interfaces; do not own the loop.**
@@ -158,8 +158,8 @@ acceptance-example IDs referenced as `AE<N>` are defined in the origin brainstor
 
 - **Keep `runtime_type` on `thread_turns` / `cost_events` as recording-only.** Drop
   the `agents.runtime` column and the whole selection surface, but retain the
-  historical provenance columns — confirm nothing reads them back to *route*, only
-  to *record*.
+  historical provenance columns — confirm nothing reads them back to _route_, only
+  to _record_.
 
 ## High-Level Technical Design
 
@@ -333,8 +333,8 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   Dockerfile COPY+build `@thinkwork/pi-runtime-core` into the image, so the
   `@mariozechner`→`@earendil` swap must keep that in-image build green too.
 - Tool inventory drift (survey current main, not canary.55): since the plan was
-  written, `web_search` and Company Brain/`context-engine` tools were added to the
-  cloud runtime (#1813) and Company Brain + Send Email to the desktop sidecar
+  written, `web_search` and ThinkWork Brain/`context-engine` tools were added to the
+  cloud runtime (#1813) and ThinkWork Brain + Send Email to the desktop sidecar
   (#1814). The "platform tools injected" set is therefore larger than the plan's
   basis — re-grep `packages/agentcore-pi/agent-container/src/runtime/tools/` for the
   live set; all of it must route through `createAgentSession()` and be covered by
@@ -355,7 +355,7 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   tarball (or a private-registry mirror) so a yank/unpublish can't break deploys,
   and record the explicit trigger + rough cost for the deferred "own the loop"
   fallback. The build-time signature assertion catches type drift only; the tarball
-  + written fallback trigger cover unpublish and author-abandonment.
+  - written fallback trigger cover unpublish and author-abandonment.
 - Test scenarios:
   - Covers R6, R7. A cloud turn runs through `createAgentSession()` and returns
     non-empty content + non-zero tokens (call-count assertion that the SDK session
@@ -489,7 +489,7 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   resolve-then-ValidationException (missing `us.` prefix) case and surface it
   rather than recording zero tokens.
 - Tool-routing note (new surface since basis): the cloud `assembleTools` now also
-  registers `web_search`, Company Brain/`context_engine`, and `send_email` (added
+  registers `web_search`, ThinkWork Brain/`context_engine`, and `send_email` (added
   #1813/#1814). These platform tools must keep registering and routing through the
   `createAgentSession()` session after the U4 swap — re-grep
   `packages/agentcore-pi/agent-container/src/runtime/tools/` for the live set; don't
@@ -604,7 +604,7 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   before stacking this (else it's double state surgery).
 - Execution note: Run `terraform plan` and assert **zero `aws_ecr_repository`
   destroy/create** before apply. Empirically check `terraform state list | grep
-  agentcore` on dev first.
+agentcore` on dev first.
 - Test scenarios:
   - Covers origin AE2. `terraform plan` after the state-move shows the ECR repo and
     DLQ moved (not destroyed/created); the Pi runtime still pulls its image from the
@@ -699,7 +699,7 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
     (`module.agentcore`) and output passthroughs in
     `terraform/modules/thinkwork/main.tf`; remove `AGENTCORE_FUNCTION_NAME` wiring
   - `.github/workflows/deploy.yml` (remove Strands build/push/`check_runtime
-    strands`/`update --runtime strands`/`runtime-id-strands` SSM/`strands_*_sha`
+strands`/`update --runtime strands`/`runtime-id-strands` SSM/`strands_*_sha`
     verify), `.github/workflows/release.yml` (remove strands amd64/arm64 + manifest
     entries)
   - `scripts/post-deploy.sh` (default RUNTIME→pi; drop `strands` validation),
@@ -780,23 +780,23 @@ that involves a destructive cut (U2 db half, U10, U11) requires the prior unit
   implementation as a security parameter, not during it.
 - Approach (trust boundary): enumerate which process holds which secret — main
   holds the refresh secret + PKCE verifier; the sidecar process holds the STS creds
-  + finalize token; the renderer holds none. The renderer↔main IPC surface is an
-  explicit allowlist with no credential-returning handler; brokered creds reach the
-  sidecar via a channel the renderer cannot observe.
+  - finalize token; the renderer holds none. The renderer↔main IPC surface is an
+    explicit allowlist with no credential-returning handler; brokered creds reach the
+    sidecar via a channel the renderer cannot observe.
 - Approach (two desktop credential surfaces — reconcile, don't duplicate): the
   desktop now has TWO brokered-credential mechanisms, and U14 owns reconciling them.
   (1) This unit's STS broker for Bedrock/S3 (model + workspace). (2) An ALREADY-
   MERGED per-turn `dps_` token path (#1814, `finalize-auth.ts` +
   `createContextEngineTools`/`createSendEmailTools` in `local-turn-runner.ts`) that
-  authorizes API-backed tools — finalize AND Send Email AND Company Brain recall.
+  authorizes API-backed tools — finalize AND Send Email AND ThinkWork Brain recall.
   Decide explicitly whether the STS broker supersedes the scoped-token path for
   API tools or they coexist; if they coexist, classify the scoped-token path as
   in-scope-retained (not superseded), and U15's broker-failure terminal-state
   handling + the IPC-no-credential-material assertion apply to BOTH.
 - Approach (per-turn token is a MULTI-capability bearer — replay gap): the single-use
   CAS already on main (`claim-turn.ts`, `UPDATE … WHERE finalized_at IS NULL`)
-  protects only the *finalize* call. The same `dps_` token also authorizes Send
-  Email and Company Brain reads via the capability endpoints, which have NO
+  protects only the _finalize_ call. The same `dps_` token also authorizes Send
+  Email and ThinkWork Brain reads via the capability endpoints, which have NO
   consumption gate — a captured token can call them repeatedly for the token's TTL.
   Enumerate every action the per-turn token authorizes and, for each, state the
   server-side scope binding (tenant/user/turn) and abuse limit. Treat **Send Email
@@ -952,7 +952,7 @@ portability proof.
   baseline, not a concurrent race.** Plan `2026-05-28-003` (desktop local Pi
   sidecar) is **already merged** to main (PRs #1798–#1802), and follow-on desktop
   work continues to land (#1810 turn-model/prompt-capture, #1813 web_search +
-  Company Brain cloud tools, #1814 Company Brain + Send Email on desktop +
+  ThinkWork Brain cloud tools, #1814 ThinkWork Brain + Send Email on desktop +
   `finalize-auth.ts`, #1815/#1816 turn-surface + tool-args rendering). So this is
   not a freeze-the-other-plan situation — that code is the substrate U4/U6/U14/U15
   build on. The decision: **005 is the architectural firming and owns the shared
@@ -1021,7 +1021,7 @@ Before each destructive unit lands, confirm its specific gate:
   binding/verify/expiry (`packages/api/src/lib/desktop-runtime/finalize-auth.ts`),
   single-use/replay CAS (`packages/api/src/lib/chat-finalize/claim-turn.ts`,
   `UPDATE … WHERE finalized_at IS NULL`), and new tools — `web_search` +
-  Company Brain/`context-engine` (cloud, #1813), Company Brain + Send Email
+  ThinkWork Brain/`context-engine` (cloud, #1813), ThinkWork Brain + Send Email
   (desktop, #1814).
 - Origin: `docs/brainstorms/2026-05-28-pi-runtime-firming-requirements.md`
 - Build-time coupling: `terraform/modules/app/agentcore-code-interpreter/Dockerfile.sandbox-base:50`
@@ -1032,7 +1032,7 @@ Before each destructive unit lands, confirm its specific gate:
   Flue→Pi `moved` blocks)
 - Selection surface: `packages/api/src/lib/resolve-runtime-function-name.ts` + 9
   consumers; `packages/database-pg/graphql/types/agents.graphql` (non-null `runtime`
-  + `AgentRuntime { STRANDS, FLUE }`)
+  - `AgentRuntime { STRANDS, FLUE }`)
 - Core state: `packages/pi-runtime-core/src/` already has `agent-loop.ts`,
   `types.ts`, `history.ts`, `tool-costs.ts`, `finalize-client.ts`,
   `desktop-session.ts`, `delegation.ts` — but `DelegationProvider` is the only

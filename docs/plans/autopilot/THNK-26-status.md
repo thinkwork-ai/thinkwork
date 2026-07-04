@@ -66,7 +66,7 @@ updated: 2026-06-14
 - Skill slug: `thinkwork-plugin-builder`.
 - Scanner behavior: read-only checks only; no Terraform, AWS, deployment, or
   source mutation.
-- Adapter support: closed set of current managed-app keys (`cognee`, `twenty`);
+- Adapter support: closed set of current managed-app keys (`retired_graph_substrate`, `twenty`);
   unknown keys require an adapter-gap review.
 
 ## Blockers

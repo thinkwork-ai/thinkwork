@@ -168,8 +168,9 @@ describe("snapshotRuntimeEnv", () => {
 
   it("falls back to hindsight when MEMORY_ENGINE is retired", () => {
     expect(
-      snapshotRuntimeEnv({ MEMORY_ENGINE: "Cognee" } as NodeJS.ProcessEnv)
-        .memoryEngine,
+      snapshotRuntimeEnv({
+        MEMORY_ENGINE: "retired_graph",
+      } as NodeJS.ProcessEnv).memoryEngine,
     ).toBe("hindsight");
   });
 
@@ -275,12 +276,12 @@ describe("validateMcpUrl", () => {
   it("allows trusted plugin-owned internal HTTP MCP endpoints", () => {
     expect(
       validateMcpUrl(
-        "http://internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com/mcp-server/http",
+        "http://internal-tw-dev-graph-411251360.us-east-1.elb.amazonaws.com/mcp-server/http",
         { trustedInternal: true },
       ),
     ).toEqual({
       ok: true,
-      host: "internal-tw-dev-cognee-411251360.us-east-1.elb.amazonaws.com",
+      host: "internal-tw-dev-graph-411251360.us-east-1.elb.amazonaws.com",
     });
     expect(
       validateMcpUrl("http://10.0.2.38:8000/mcp-server/http", {

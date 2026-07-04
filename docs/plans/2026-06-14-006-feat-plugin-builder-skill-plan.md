@@ -42,7 +42,7 @@ artifacts without inventing unsupported manifest fields.
 - R7. Use existing premium plugin semantics: ThinkWork install-key gate and
   persistent entitlement after redemption.
 - R8. Distinguish customer-facing product copy from internal implementation
-  names, following the Company Brain precedent.
+  names, following the ThinkWork Brain precedent.
 - R9. Reject or flag projects that do not fit current catalog contracts instead
   of inventing unsupported fields.
 - R10. Produce a maintainer-reviewable contribution plan before changing files.
@@ -80,7 +80,7 @@ artifacts without inventing unsupported manifest fields.
 ### Deferred to Follow-Up Work
 
 - New managed-app/deployment-runner adapter for McPherson Lakehouse, if existing
-  `cognee`/`twenty` adapter paths do not fit.
+  `retired_graph_substrate`/`twenty` adapter paths do not fit.
 - Actual McPherson Lakehouse catalog plugin implementation beyond the builder
   skill's proof run and review evidence.
 - Full automated skill eval integration.
@@ -92,17 +92,17 @@ artifacts without inventing unsupported manifest fields.
 - `packages/plugin-catalog/src/contracts.ts` defines pure TypeScript validation
   for plugin manifests, premium metadata, component keys, skill slugs,
   supporting files, infrastructure input specs, and component types.
-- `packages/plugin-catalog/src/plugins/company-brain/manifest.ts` is the premium
+- `packages/plugin-catalog/src/plugins/brain/manifest.ts` is the premium
   product boundary precedent: customer-facing product name, internal substrate
   adapter, ThinkWork install-key prompt, and no exposed internal product naming.
 - `packages/plugin-catalog/src/plugins/twenty/manifest.ts` shows an
   infrastructure-bundling plugin that mirrors deployment-runner required inputs
   and uses `endpointFrom` for per-tenant MCP endpoints.
 - `packages/plugin-catalog/src/__tests__/contracts.test.ts`,
-  `company-brain-manifest.test.ts`, and `twenty-manifest.test.ts` are validation
+  `brain-manifest.test.ts`, and `twenty-manifest.test.ts` are validation
   patterns a generated contribution should imitate.
 - `packages/deployment-runner/src/apps/registry.ts` currently exposes only
-  `cognee` and `twenty` managed-app adapters; infrastructure plugin components
+  `retired_graph_substrate` and `twenty` managed-app adapters; infrastructure plugin components
   must name one of those supported adapter keys.
 - `packages/api/src/lib/plugins/handlers/infra.ts` maps infrastructure
   components onto existing deployment-job machinery and records handler
@@ -122,7 +122,7 @@ artifacts without inventing unsupported manifest fields.
 - Do not add a broad `packages/plugin-catalog` scaffold generator in v1.
 - Treat current infrastructure support as a closed set backed by
   `packages/deployment-runner/src/apps/registry.ts`; if McPherson Lakehouse
-  cannot fit `cognee` or `twenty`, record an adapter gap instead of emitting an
+  cannot fit `retired_graph_substrate` or `twenty`, record an adapter gap instead of emitting an
   invalid `managedAppKey`.
 - Teach `premium.entitlementProductKey`, `installKeyRequired: true`, and
   customer-facing `installKeyPrompt`; never ask for or store a separate license
@@ -250,7 +250,7 @@ first slice.
 - Origin requirements: `docs/brainstorms/2026-06-14-plugin-builder-skill-requirements.md`
 - Application Plugin requirements:
   `docs/brainstorms/2026-06-12-application-plugins-requirements.md`
-- Company Brain premium precedent:
-  `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`
+- ThinkWork Brain premium precedent:
+  `docs/brainstorms/2026-06-13-brain-premium-plugin-requirements.md`
 - Plugin contracts: `packages/plugin-catalog/src/contracts.ts`
 - Managed-app adapters: `packages/deployment-runner/src/apps/registry.ts`

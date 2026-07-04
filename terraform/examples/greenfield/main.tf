@@ -415,9 +415,9 @@ variable "requester_memory_dreaming_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
-variable "company_brain_source_agent_model_id" {
+variable "brain_source_agent_model_id" {
   description = <<-EOT
-    Bedrock model id the GraphQL Company Brain source-agent runtime uses
+    Bedrock model id the GraphQL Brain source-agent runtime uses
     for JSON tool/action turns. Defaults to Claude Haiku 4.5 for reliable
     action JSON while wiki compile can stay on gpt-oss for throughput.
   EOT
@@ -809,7 +809,7 @@ module "thinkwork" {
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
   wiki_compile_model_id                         = var.wiki_compile_model_id
-  company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
+  brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled

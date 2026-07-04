@@ -53,7 +53,7 @@ describe("loadMemoryConfig", () => {
   it("rejects the retired memory engine value", () => {
     expect(() =>
       loadMemoryConfig({
-        MEMORY_ENGINE: "cognee",
+        MEMORY_ENGINE: "retired_graph",
       }),
     ).toThrow('MEMORY_ENGINE must be "hindsight" or "agentcore"');
   });

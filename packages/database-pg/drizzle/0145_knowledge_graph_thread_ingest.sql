@@ -1,5 +1,5 @@
 -- Purpose: add Knowledge Graph thread ingest run ledger and normalized graph snapshot tables.
--- Plan: docs/plans/2026-06-04-003-feat-cognee-thread-ingest-explorer-plan.md (U1)
+-- Plan: 2026-06-04-003 U1
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0145_knowledge_graph_thread_ingest.sql
 -- creates: public.knowledge_graph_ingest_runs
 -- creates: public.knowledge_graph_entities

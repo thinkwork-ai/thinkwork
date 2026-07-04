@@ -516,7 +516,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       pluginRow("brain", {
         slug: "brain--brain",
         name: "ThinkWork Brain",
-        url: "http://internal-cognee.example.local/mcp-server/http",
+        url: "http://internal-graph.example.local/mcp-server/http",
         auth_type: "none",
         auth_config: null,
       }),
@@ -532,7 +532,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     expect(configs).toEqual([
       {
         name: "brain--brain",
-        url: "http://internal-cognee.example.local/mcp-server/http",
+        url: "http://internal-graph.example.local/mcp-server/http",
         transport: "streamable-http",
         trustedInternal: true,
       },

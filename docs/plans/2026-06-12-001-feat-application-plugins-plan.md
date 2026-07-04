@@ -17,7 +17,7 @@ Build the Application Plugin system: a versioned manifest format bundling MCP se
 
 ## Problem Frame
 
-Adding an application today is bespoke wiring across three subsystems — managed-app deployment adapters, managed-MCP registration with per-server user OAuth, and the tenant skill catalog — with no package format, no install surface, no versioning, and no per-user gating of workspace contents. TEI needs LastMile (CRM/Task/Routing MCPs + skills) now; Company Brain and LakeHouse plugins follow. The brainstorm (see origin) settled the model: plugins are the universal package, the plugin engine is the source of truth, and existing machinery becomes component handlers.
+Adding an application today is bespoke wiring across three subsystems — managed-app deployment adapters, managed-MCP registration with per-server user OAuth, and the tenant skill catalog — with no package format, no install surface, no versioning, and no per-user gating of workspace contents. TEI needs LastMile (CRM/Task/Routing MCPs + skills) now; ThinkWork Brain and LakeHouse plugins follow. The brainstorm (see origin) settled the model: plugins are the universal package, the plugin engine is the source of truth, and existing machinery becomes component handlers.
 
 ---
 
@@ -52,7 +52,7 @@ From origin `docs/brainstorms/2026-06-12-application-plugins-requirements.md`:
 
 ### Deferred for later (from origin)
 
-- Company Brain and LakeHouse plugin migrations.
+- ThinkWork Brain and LakeHouse plugin migrations.
 - Premium plugin entitlements and billing.
 - Rendering UI surface components.
 - Zip/bundle sideload for custom plugins.
@@ -80,7 +80,7 @@ From origin `docs/brainstorms/2026-06-12-application-plugins-requirements.md`:
 
 ### Relevant code and patterns
 
-- `packages/deployment-runner/src/apps/registry.ts` — `ManagedAppAdapter` interface and the closed `cognee|kestra|twenty` key union (duplicated in `packages/deployment-runner/src/shared.ts` and `packages/api/src/graphql/resolvers/core/managedApplications.ts`). The infra component handler builds on this seam.
+- `packages/deployment-runner/src/apps/registry.ts` — `ManagedAppAdapter` interface and the closed `retired_graph_substrate|kestra|twenty` key union (duplicated in `packages/deployment-runner/src/shared.ts` and `packages/api/src/graphql/resolvers/core/managedApplications.ts`). The infra component handler builds on this seam.
 - `packages/database-pg/src/schema/deployments.ts` — `managed_applications`, deployment jobs (idempotency keys, plan-digest-pinned approvals, data-impact disclosure), deployment events. The lifecycle invariants to preserve.
 - `packages/api/src/lib/managed-mcp-applications.ts` — per-app hardcoded reconcilers (Twenty/Kestra) that the MCP component handler generalizes; includes full destroy cleanup (tokens, secrets, assignments).
 - `packages/database-pg/src/schema/mcp-servers.ts` — `tenant_mcp_servers` (`management_source` + `managed_application_key` ownership columns), `user_mcp_tokens` (per-user × per-server, Secrets Manager refs).
@@ -548,21 +548,21 @@ apps/web/src/routes/_authed/settings.plugins.*.tsx
 
 - Create: `packages/plugin-catalog/src/plugins/twenty/manifest.ts` (infrastructure component → existing `twenty` adapter + Terraform inputs; MCP + skills components)
 - Modify: `packages/api/src/graphql/resolvers/core/managedApplications.ts` (drop env-var status reads for Twenty; serve from engine state), `packages/api/src/lib/managed-mcp-applications.ts` (retire the Twenty reconciler in favor of the plugin MCP handler)
-- Modify: `apps/web` — Twenty leaves the Managed Applications surface; the Applications nav item **remains for Cognee only** with its description updated, and the Twenty row/`SettingsCrm.tsx` wiring is removed or folded into `PluginDetail`; update the `managedAppKey: 'twenty'` guard in `settings-nav.tsx` (it would otherwise go permanently false and hide the crm route silently)
+- Modify: `apps/web` — Twenty leaves the Managed Applications surface; the Applications nav item **remains for the retired graph substrate only** with its description updated, and the Twenty row/`SettingsCrm.tsx` wiring is removed or folded into `PluginDetail`; update the `managedAppKey: 'twenty'` guard in `settings-nav.tsx` (it would otherwise go permanently false and hide the crm route silently)
 - Modify: `terraform/modules/app/lambda-api/handlers.tf` (remove Twenty status env injection)
-- Test: cutover tests; regression tests for Cognee's unchanged managed-app path
+- Test: cutover tests; regression tests for the retired graph substrate's unchanged managed-app path
 
-**Approach:** **Pre-implementation verification step:** on the test deployment, confirm that an UPGRADE job created by the plugin infra handler against the existing (tenant, `twenty`) `managed_applications` row produces a no-change Terraform plan (state adoption works). If it does not, define the fallback before proceeding: an explicit adoption job type, or an accepted destroy/re-provision with data-impact disclosure. Then: install the Twenty plugin adopting existing state, migrate the managed MCP row to plugin ownership (`management_source: 'plugin'`, set `plugin_install_id`), and invalidate per-server user tokens so users re-activate at the app level. The cutover relies on the U8 reconnect affordance with no proactive notification — accepted because the affected population is the test-server cohort; coordinate a heads-up to those users. Cognee stays on the legacy managed-app path until the Company Brain plugin (deferred); the legacy path shrinks but is not deleted in this plan.
+**Approach:** **Pre-implementation verification step:** on the test deployment, confirm that an UPGRADE job created by the plugin infra handler against the existing (tenant, `twenty`) `managed_applications` row produces a no-change Terraform plan (state adoption works). If it does not, define the fallback before proceeding: an explicit adoption job type, or an accepted destroy/re-provision with data-impact disclosure. Then: install the Twenty plugin adopting existing state, migrate the managed MCP row to plugin ownership (`management_source: 'plugin'`, set `plugin_install_id`), and invalidate per-server user tokens so users re-activate at the app level. The cutover relies on the U8 reconnect affordance with no proactive notification — accepted because the affected population is the test-server cohort; coordinate a heads-up to those users. the retired graph substrate stays on the legacy managed-app path until the ThinkWork Brain plugin (deferred); the legacy path shrinks but is not deleted in this plan.
 
 **Test scenarios:**
 
 - Covers AE3. Happy path: Twenty plugin install provisions through the same handler path LastMile used, plus an infra component with approval.
 - Edge case: pre-cutover per-server tokens no longer resolve; users see the reconnect affordance, and one app-level activation restores tools.
-- Edge case: Cognee's managed-application queries, nav entry, and lifecycle actions behave unchanged; the Applications page renders Cognee-only.
+- Edge case: the retired graph substrate's managed-application queries, nav entry, and lifecycle actions behave unchanged; the Applications page renders the retired graph substrate-only.
 - Error path: infra adoption failure leaves the install `partially_installed` with the existing deployment evidence linked, not a half-migrated MCP row.
 - Integration: managed-application status for Twenty is served from engine/DB state with the env vars removed.
 
-**Verification:** Twenty operates as a plugin on the test deployment; env-var entries removed from the Lambda config; users re-authenticated once; Cognee untouched; no orphaned nav guards.
+**Verification:** Twenty operates as a plugin on the test deployment; env-var entries removed from the Lambda config; users re-authenticated once; the retired graph substrate untouched; no orphaned nav guards.
 
 ---
 

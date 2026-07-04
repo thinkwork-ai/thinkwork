@@ -28,7 +28,7 @@ deeply instead of using a fraction of several overlapping systems. Hosted
 ThinkWork should get better quality, performance, maintainability, and
 debuggability by leaning into Hindsight's full bank, document, observation,
 recall, reflect, and evidence model rather than splitting durable memory across
-Cognee, Wiki, AgentCore Memory, AWS Knowledge Bases, and adapter glue.
+the retired graph substrate, Wiki, AgentCore Memory, AWS Knowledge Bases, and adapter glue.
 
 ---
 
@@ -96,14 +96,14 @@ data shape is flowing.
   and evidence is preserved.
 - R11. Preserve the current Hindsight user/Space memory pivot: Space memory
   capture, search, direct agent Brain recall/reflect, and retain-field tagging
-  must use isolated Hindsight Space banks rather than Cognee-only or Context
+  must use isolated Hindsight Space banks rather than the retired graph substrate-only or Context
   Engine-mediated branches.
 - R12. Productize Space document memory ingest on Hindsight's document/file
   model so uploaded or imported Space documents can be chunked, retained,
   tracked, updated, deleted, and recalled with source evidence from the
   `space_<spaceId>` bank.
 - R13. Simplify Brain to a single Hindsight-backed substrate by retiring AWS
-  Knowledge Base/Cognee as first-class Brain providers in hosted ThinkWork.
+  Knowledge Base/the retired graph substrate as first-class Brain providers in hosted ThinkWork.
   The Memory KB tab should become a Hindsight Brain Sources surface, with any
   existing AWS KB records migrated, hidden behind temporary compatibility, or
   removed according to rollout needs.
@@ -131,7 +131,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   default hosted Brain.
 - This plan intentionally collapses the hosted Brain foundation onto Hindsight.
   Wiki remains an optional compiled projection of Hindsight memory, not a
-  competing runtime substrate. AWS KB/Cognee should not remain default Brain
+  competing runtime substrate. AWS KB/the retired graph substrate should not remain default Brain
   providers after this work.
 - This plan does not expose raw Hindsight service internals as normal runtime
   APIs. It exposes Hindsight memory-domain concepts through ThinkWork-owned APIs
@@ -181,13 +181,13 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   `source_fact_ids`, but it does not preserve the full `source_facts` envelope.
 - `packages/api/src/lib/memory/adapters/hindsight-adapter.ts` now resolves
   user banks as `user_<id>` and Space banks as `space_<id>`; Space memory should
-  therefore be treated as a first-class Hindsight owner, not as a Cognee-only
+  therefore be treated as a first-class Hindsight owner, not as a the retired graph substrate-only
   team-memory concern.
 - `packages/api/src/lib/user-storage.ts` currently passes
   `fact_type_override: "preference"` or `"semantic"` for activation seeds, while
   the adapter only honors `world`, `experience`, `opinion`, and `observation`.
 - `packages/api/src/lib/context-engine/providers/memory.ts` still gates
-  team/auto Space memory on `services.adapter.kind === "cognee"`. The direct
+  team/auto Space memory on `services.adapter.kind === "retired_graph_substrate"`. The direct
   Hindsight Brain path should bypass this branch for normal agent recall/reflect
   and leave Context Engine as compatibility/diagnostic surface only.
 - `packages/api/src/graphql/resolvers/memory/captureSpaceMemory.mutation.ts`,
@@ -204,7 +204,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
 - `docs/src/content/docs/concepts/knowledge/memory.mdx`,
   `docs/src/content/docs/api/context-engine.mdx`, and
   `docs/src/content/docs/applications/admin/memory.mdx` still contain
-  adapter-agnostic, legacy, or Cognee-first framing that conflicts with the new
+  adapter-agnostic, legacy, or the retired graph substrate-first framing that conflicts with the new
   Hindsight-first thesis.
 - `docs/src/content/docs/architecture.mdx`,
   `docs/src/content/docs/deploy/greenfield.mdx`,
@@ -215,7 +215,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   `packages/workspace-defaults/src/index.ts`,
   `packages/workspace-defaults/files/MEMORY_GUIDE.md`, and
   `packages/workspace-defaults/files/AGENTS.md` should be scanned for stale
-  optional-Hindsight, legacy-Hindsight, or Cognee-first operator language.
+  optional-Hindsight, legacy-Hindsight, or the retired graph substrate-first operator language.
 - `packages/api/scripts/hindsight-memory-foundation-audit.ts` is the new
   aggregate-only evidence collector and should stay redaction-safe.
 
@@ -224,7 +224,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
 - `docs/plans/2026-06-27-001-feat-thinkwork-brain-hindsight-memory-plan.md`
   already established the product pivot: Hindsight is canonical for user and
   Space memory. This plan sharpens that pivot by making Hindsight the single
-  hosted Brain substrate and treating Cognee/AWS KB as retirement or migration
+  hosted Brain substrate and treating the retired graph substrate/AWS KB as retirement or migration
   targets, not ongoing default providers.
 - `packages/api/src/graphql/resolvers/memory/captureSpaceMemory.mutation.ts`
   captures Space memory into a Hindsight `ownerType: "space"` bank with Space
@@ -245,12 +245,12 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   diagnostics and external-context orchestration, but the default Brain should
   not require a multi-provider routing abstraction when the product has
   committed to Hindsight.
-- `docs/solutions/architecture-patterns/company-brain-active-substrate-reads-through-context-engine-2026-06-15.md`:
+- `docs/solutions/architecture-patterns/brain-active-substrate-reads-through-context-engine-2026-06-15.md`:
   provider boundaries should carry provenance, policy, and redaction for
   external or legacy sources rather than leaking raw substrate APIs. Hindsight
   is different because its memory-domain concepts are now first-class, but its
   raw HTTP/database internals should still stay encapsulated.
-- `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`:
+- `docs/solutions/best-practices/retired_graph_substrate-thread-ingest-explorer-2026-06-04.md`:
   cross-layer memory/knowledge features need deployed smoke evidence, because
   green unit tests do not prove operator-visible substrate behavior.
 
@@ -288,7 +288,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   risky wholesale deletion of existing memory services.
 - **Maximize one memory substrate before adding more.** The default posture is
   to use Hindsight more fully, not to compensate for shallow usage by adding
-  Cognee, Wiki, AgentCore Memory, AWS KBs, or more adapter layers. This should
+  the retired graph substrate, Wiki, AgentCore Memory, AWS KBs, or more adapter layers. This should
   reduce operational ambiguity: one place to tune extraction, one place to
   debug recall quality, one evidence model, and one primary performance path.
 - **Make Hindsight the direct Brain path.** Agents should query Hindsight
@@ -304,7 +304,7 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
   worth remembering.
 - **Treat Space memory as Hindsight-native.** Space memory capture, search, and
   agent Brain recall/reflect should use Hindsight Space banks when the current
-  runtime identity has a Space. Do not leave Space memory behind Cognee-only or
+  runtime identity has a Space. Do not leave Space memory behind the retired graph substrate-only or
   Context Engine-mediated branches while user memory moves to Hindsight-native
   primitives.
 - **Add Space document memory as a Hindsight document flow.** Space quick
@@ -367,9 +367,9 @@ evidence, AE3 foundation capability roadmap, AE4 auditable evidence chain.
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for
+> _This illustrates the intended approach and is directional guidance for
 > review, not implementation specification. The implementing agent should treat
-> it as context, not code to reproduce.*
+> it as context, not code to reproduce._
 
 ```mermaid
 flowchart LR
@@ -421,12 +421,12 @@ The direction is a Hindsight-native foundation module/API that:
 Use this as the starting point for tests and fixtures. Implementation may adjust
 exact spellings, but it should preserve the dimensions.
 
-| Dimension | Examples | Purpose |
-|---|---|---|
-| Owner | `user:<userId>`, `space:<spaceId>` | Future filtering and operator display; bank isolation remains primary. |
-| Source | `source:thread`, `source:daily`, `source:requester-memory`, `source:requester-thread-digest`, `source:mobile-capture`, `source:space-memory`, `source:mcp-user-memory`, `source:activation`, `source:journal-import` | Source-family grouping and document tag coverage. |
-| Surface | `surface:pi`, `surface:web`, `surface:graphql`, `surface:mobile`, `surface:mcp`, `surface:requester`, `surface:import` | Operator/debug filtering by origin surface. |
-| Scope | `scope:personal`, `scope:space`, `scope:thread`, `scope:requester`, `scope:imported-history`, `scope:explicit-memory` | Conservative visibility and observation grouping vocabulary. |
+| Dimension | Examples                                                                                                                                                                                                             | Purpose                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Owner     | `user:<userId>`, `space:<spaceId>`                                                                                                                                                                                   | Future filtering and operator display; bank isolation remains primary. |
+| Source    | `source:thread`, `source:daily`, `source:requester-memory`, `source:requester-thread-digest`, `source:mobile-capture`, `source:space-memory`, `source:mcp-user-memory`, `source:activation`, `source:journal-import` | Source-family grouping and document tag coverage.                      |
+| Surface   | `surface:pi`, `surface:web`, `surface:graphql`, `surface:mobile`, `surface:mcp`, `surface:requester`, `surface:import`                                                                                               | Operator/debug filtering by origin surface.                            |
+| Scope     | `scope:personal`, `scope:space`, `scope:thread`, `scope:requester`, `scope:imported-history`, `scope:explicit-memory`                                                                                                | Conservative visibility and observation grouping vocabulary.           |
 
 Initial `observation_scopes` should be explicit and low-cardinality:
 
@@ -453,12 +453,14 @@ through generic metadata.
 **Dependencies:** None.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/memory/types.ts`
 - Modify: `packages/api/src/lib/memory/adapter.ts`
 - Modify: `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
 - Test: `packages/api/src/lib/memory/adapters/hindsight-adapter.test.ts`
 
 **Approach:**
+
 - Introduce Hindsight-native retain option and evidence/result shapes in the
   memory package rather than generic untyped metadata. These should cover
   `timestamp`, `tags`, `documentTags`, `observationScopes`, recall
@@ -475,12 +477,14 @@ request/response mapping, then add failing tests for the new Hindsight-native
 fields.
 
 **Patterns to follow:**
+
 - Existing defensive response parsing in
   `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`.
 - Current Hindsight option namespace in `RecallRequest.hindsight`, extending it
   rather than adding unrelated option bags.
 
 **Test scenarios:**
+
 - Happy path: a Hindsight retain request with native retain options maps to a
   Hindsight item containing first-class fields, while owner/source metadata
   remains in `metadata`.
@@ -495,6 +499,7 @@ fields.
   default fields added in later units.
 
 **Verification:**
+
 - Adapter tests prove Hindsight-native fields are represented explicitly and
   legacy generic recall/retain callers remain compatible.
 
@@ -511,6 +516,7 @@ source context.
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
 - Modify: `packages/api/src/handlers/memory-retain.ts`
 - Modify: `packages/api/src/graphql/resolvers/memory/captureSpaceMemory.mutation.ts`
@@ -528,6 +534,7 @@ source context.
 - Test: `packages/api/src/__tests__/wiki-journal-import.test.ts`
 
 **Approach:**
+
 - Centralize retain item construction so thread, daily, requester, Space,
   mobile, MCP, activation, and import paths derive tags/scopes consistently.
 - Preserve stable document IDs and full-content retain for conversation,
@@ -546,12 +553,14 @@ source context.
 can silently change recall/consolidation behavior.
 
 **Patterns to follow:**
+
 - Existing stable document construction in `retainConversation`,
   `retainDailyMemory`, and `upsertMarkdownMemoryDocument`.
 - Current MCP tag pass-through in `retain` as proof that the service accepts
   caller tags.
 
 **Test scenarios:**
+
 - Happy path: thread retain sends full transcript, stable `document_id`, source
   context, first-class timestamp, document tags, item tags, and observation
   scopes.
@@ -575,6 +584,7 @@ can silently change recall/consolidation behavior.
   read paths do not switch to strict tag filtering in this unit.
 
 **Verification:**
+
 - Tests prove every active write path produces the intended Hindsight retain
   params without trusting runtime clients to construct raw service payloads.
 
@@ -590,12 +600,14 @@ Hindsight fact types and silently fall back to `world`.
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/user-storage.ts`
 - Modify: `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
 - Create: `packages/api/src/lib/user-storage.test.ts`
 - Test: `packages/api/src/lib/memory/adapters/hindsight-adapter.test.ts`
 
 **Approach:**
+
 - Replace activation seed overrides such as `preference` and `semantic` with
   legal Hindsight fact types or an explicit no-override path.
 - Decide whether preference-like friction seeds should map to `opinion`,
@@ -605,11 +617,13 @@ Hindsight fact types and silently fall back to `world`.
   observable in tests rather than silently becoming accidental `world` facts.
 
 **Patterns to follow:**
+
 - Existing `LEGAL_FACT_TYPE_OVERRIDES` handling in
   `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`.
 - Current activation seed metadata in `packages/api/src/lib/user-storage.ts`.
 
 **Test scenarios:**
+
 - Happy path: a friction activation seed uses the selected legal Hindsight fact
   type and preserves activation/layer metadata.
 - Happy path: a non-friction activation seed uses the selected legal fact type
@@ -619,6 +633,7 @@ Hindsight fact types and silently fall back to `world`.
   through to Hindsight and are handled intentionally.
 
 **Verification:**
+
 - Activation seeds no longer depend on a silent fallback to `world`.
 
 ---
@@ -634,6 +649,7 @@ hidden by default.
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
 - Modify: `packages/api/src/graphql/resolvers/memory/spaceMemorySearch.query.ts`
 - Modify: `packages/api/src/lib/knowledge-graph/observations-source.ts`
@@ -647,6 +663,7 @@ hidden by default.
 - Test: `packages/agentcore-pi/agent-container/tests/hindsight-memory-provider.test.ts`
 
 **Approach:**
+
 - Add recall options for `include.source_facts` and carry Hindsight's top-level
   `source_facts` dictionary into a structured evidence envelope.
 - Preserve observation `source_fact_ids`, proof count, source fact type,
@@ -673,18 +690,20 @@ hidden by default.
 redaction boundary is explicit.
 
 **Patterns to follow:**
+
 - Direct Hindsight provider path in
   `packages/agentcore-pi/agent-container/src/runtime/providers/hindsight-memory-provider.ts`.
 - Existing Space owner bank resolution in
   `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`.
 
 **Test scenarios:**
+
 - Happy path: observation recall with source facts preserves source IDs and
   redacted source metadata in Hindsight evidence.
 - Happy path: direct Brain recall with a current `spaceId` queries the
   `space_<spaceId>` bank and labels the result as Space Brain memory.
 - Happy path: direct Brain recall can include both user and Space Hindsight
-  records without using Context Engine or the Cognee-only branch.
+  records without using Context Engine or the the retired graph substrate-only branch.
 - Happy path: reflect with `include.facts` preserves `based_on` IDs and usage
   in Hindsight evidence.
 - Edge case: observation recall without `include.source_facts` still preserves
@@ -696,6 +715,7 @@ redaction boundary is explicit.
   envelope.
 
 **Verification:**
+
 - Tests prove evidence IDs survive through adapter and runtime Brain paths, and
   default results do not dump raw source text.
 
@@ -711,6 +731,7 @@ context without agents constructing raw Hindsight payloads.
 **Dependencies:** U1, U4.
 
 **Files:**
+
 - Modify: `packages/pi-runtime-core/src/memory-provider.ts`
 - Modify: `packages/pi-extensions/src/memory.ts`
 - Modify: `packages/agentcore-pi/agent-container/src/runtime/providers/hindsight-memory-provider.ts`
@@ -718,6 +739,7 @@ context without agents constructing raw Hindsight payloads.
 - Test: `packages/agentcore-pi/agent-container/tests/hindsight-memory-provider.test.ts`
 
 **Approach:**
+
 - Extend the provider request shapes to support optional query timestamp,
   include-facts/evidence intent, and reflect context where the host already has
   turn context.
@@ -729,11 +751,13 @@ context without agents constructing raw Hindsight payloads.
   reflect, not learn Hindsight's raw HTTP schema.
 
 **Patterns to follow:**
+
 - Existing abort-signal and retry handling in
   `packages/agentcore-pi/agent-container/src/runtime/providers/hindsight-memory-provider.ts`.
 - Existing recall/reflect chain wording in `packages/pi-extensions/src/memory.ts`.
 
 **Test scenarios:**
+
 - Happy path: provider recall sends `query_timestamp` only when supplied.
 - Happy path: provider reflect includes surrounding context in the selected
   Hindsight-compatible shape.
@@ -743,6 +767,7 @@ context without agents constructing raw Hindsight payloads.
   treats proactive grounding as best-effort.
 
 **Verification:**
+
 - Runtime provider tests prove added query options are passed without regressing
   existing retry, timeout, and abort behavior.
 
@@ -752,7 +777,7 @@ context without agents constructing raw Hindsight payloads.
 
 **Goal:** Align docs with the new architecture: Hindsight is the canonical
 hosted Brain and memory substrate; Context Engine is for external lazy-loaded
-context, diagnostics, and compatibility; AgentCore/AWS KB/Cognee are no longer
+context, diagnostics, and compatibility; AgentCore/AWS KB/the retired graph substrate are no longer
 the hosted Brain design center; Wiki remains an optional compiled projection.
 
 **Requirements:** R1, R6, R9.
@@ -760,6 +785,7 @@ the hosted Brain design center; Wiki remains an optional compiled projection.
 **Dependencies:** U1 through U5.
 
 **Files:**
+
 - Modify: `docs/src/content/docs/concepts/knowledge/memory.mdx`
 - Modify: `docs/src/content/docs/concepts/knowledge/retrieval-and-context.mdx`
 - Modify: `docs/src/content/docs/api/context-engine.mdx`
@@ -776,6 +802,7 @@ the hosted Brain design center; Wiki remains an optional compiled projection.
 - Modify: `packages/workspace-defaults/files/AGENTS.md`
 
 **Approach:**
+
 - Replace "adapter-agnostic retained-memory layer" wording with
   Hindsight-first hosted memory wording that still explains compatibility and
   deployment alternatives honestly.
@@ -788,15 +815,18 @@ the hosted Brain design center; Wiki remains an optional compiled projection.
   evidence IDs, source facts, and provider status as inspection concepts.
 
 **Patterns to follow:**
+
 - Existing docs distinction between retained Memory, external context, and Wiki
   projection in `docs/src/content/docs/api/context-engine.mdx`.
 - Product boundary language from the audit's Architecture Boundary section.
 
 **Test scenarios:**
+
 - Test expectation: none -- documentation-only changes. Use docs preview or
   content lint if the implementation branch already runs docs checks.
 
 **Verification:**
+
 - Docs no longer describe hosted Hindsight as legacy or merely
   interchangeable, and they preserve the Brain-vs-external-context boundary.
 
@@ -813,18 +843,20 @@ memory content.
 **Dependencies:** U2, U4.
 
 **Files:**
+
 - Modify: `packages/api/scripts/hindsight-memory-foundation-audit.ts`
 - Modify: `packages/api/scripts/hindsight-memory-foundation-audit.test.ts`
 - Modify: `docs/audits/hindsight-memory-foundation-audit-2026-06-27.md`
 
 **Approach:**
+
 - Add aggregate checks for first-class `timestamp`, `tags`, `document_tags`,
   and `observation_scopes` coverage by source/context family.
 - Add Space-memory regression checks that prove captured Space memories are
   retained with Space-bank ownership, source/scope tags, and searchable evidence
   without blending into user banks.
 - Add direct Brain regression checks for Hindsight-backed user and Space memory
-  recall so the old Cognee-only or Context Engine-mediated branch cannot
+  recall so the old the retired graph substrate-only or Context Engine-mediated branch cannot
   silently reappear as the default runtime path.
 - Add aggregate checks for evidence availability: observations with source fact
   IDs, source fact fetch availability, proof/source mismatch count, and
@@ -835,12 +867,14 @@ memory content.
   content samples.
 
 **Patterns to follow:**
+
 - Current redaction and aggregate-only fixture tests in
   `packages/api/scripts/hindsight-memory-foundation-audit.test.ts`.
 - Deployed smoke discipline from
-  `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`.
+  `docs/solutions/best-practices/retired_graph_substrate-thread-ingest-explorer-2026-06-04.md`.
 
 **Test scenarios:**
+
 - Happy path: fixture documents with retain params produce nonzero aggregate
   coverage and source-family breakdowns.
 - Happy path: fixture observations with source fact IDs produce evidence
@@ -852,6 +886,7 @@ memory content.
   text, and sensitive metadata values.
 
 **Verification:**
+
 - Collector tests stay green and a dev run emits aggregate/structural evidence
   suitable for future regression checks.
 
@@ -868,6 +903,7 @@ model rather than the short Space capture path.
 **Dependencies:** U1, U2, U4.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/memory/adapter.ts`
 - Modify: `packages/api/src/lib/memory/types.ts`
 - Modify: `packages/api/src/lib/memory/adapters/hindsight-adapter.ts`
@@ -880,6 +916,7 @@ model rather than the short Space capture path.
 - Test: `packages/api/src/graphql/resolvers/memory/spaceMemory.resolver.test.ts`
 
 **Approach:**
+
 - Add a memory-layer operation for Space document retain that can target
   `ownerType: "space"` and produce the `space_<spaceId>` bank without callers
   constructing raw Hindsight URLs.
@@ -897,12 +934,14 @@ model rather than the short Space capture path.
   chunk expansion behind explicit detail/operator flows.
 
 **Patterns to follow:**
+
 - Existing `upsertMarkdownMemoryDocument` helper for stable document upserts.
 - Hindsight Retain Files docs for async file retain and operation tracking.
 - Existing Bedrock Knowledge Base document-status UX only as a legacy
   interaction reference; do not preserve its retrieval backend semantics.
 
 **Test scenarios:**
+
 - Happy path: a Space Markdown document upsert sends `ownerType: "space"`,
   stable `document_id`, Space/source/surface tags, document tags, and Space
   observation scopes to the `space_<spaceId>` bank.
@@ -919,6 +958,7 @@ model rather than the short Space capture path.
   without deleting the Space document record or hiding retry affordances.
 
 **Verification:**
+
 - Unit tests prove request construction, bank ownership, operation tracking, and
   redacted evidence mapping. A dev smoke should retain one Space Markdown
   document and one file-backed document, poll operation status, recall a
@@ -926,10 +966,10 @@ model rather than the short Space capture path.
 
 ---
 
-- U9. **Retire AWS KB/Cognee as default Brain providers**
+- U9. **Retire AWS KB/the retired graph substrate as default Brain providers**
 
 **Goal:** Simplify hosted Brain to Hindsight by turning the existing KB surface
-into Hindsight Brain Sources and removing AWS Knowledge Base/Cognee from the
+into Hindsight Brain Sources and removing AWS Knowledge Base/the retired graph substrate from the
 default runtime retrieval path.
 
 **Requirements:** R1, R6, R12, R13, R14.
@@ -937,6 +977,7 @@ default runtime retrieval path.
 **Dependencies:** U4, U8.
 
 **Files:**
+
 - Modify: `apps/web/src/components/settings/SettingsMemoryHome.tsx`
 - Modify: `apps/web/src/components/settings/SettingsKnowledgeBases.tsx`
 - Modify: `apps/web/src/components/settings/KnowledgeBaseFormDialog.tsx`
@@ -950,6 +991,7 @@ default runtime retrieval path.
 - Test: `packages/api/src/graphql/resolvers/knowledge/*.test.ts`
 
 **Approach:**
+
 - Reframe the Memory `KBs` tab as Brain Sources: a source library for Hindsight
   Space document memory rather than an AWS Bedrock Knowledge Base management UI.
 - Stop creating new AWS KB resources from the hosted default path. Existing AWS
@@ -969,11 +1011,13 @@ default runtime retrieval path.
   pruned in a follow-up.
 
 **Patterns to follow:**
+
 - Existing Memory tab consolidation in `SettingsMemoryHome.tsx`.
 - Existing Space KB binding semantics as a UX pattern only.
 - Existing Hindsight Space bank resolution in the memory adapter.
 
 **Test scenarios:**
+
 - Happy path: creating a Brain Source routes to Hindsight Space document ingest,
   not AWS KB provisioning.
 - Happy path: binding a Brain Source to a Space results in documents being
@@ -986,6 +1030,7 @@ default runtime retrieval path.
   migration-needed status, not silently dropped.
 
 **Verification:**
+
 - Unit tests prove the KB tab no longer creates AWS KBs on the default path and
   runtime tests prove default Brain recall uses Hindsight user/Space banks.
   A staged migration smoke should import one legacy KB source into a Space
@@ -1040,7 +1085,7 @@ default runtime retrieval path.
 - **Make Context Engine the canonical memory model.** Rejected because Context
   Engine is now scoped to external lazy-loaded context and diagnostics. It
   should not define retained-memory semantics or sit in the default Brain path.
-- **Keep AWS KB/Cognee as peer Brain providers.** Rejected because the product
+- **Keep AWS KB/the retired graph substrate as peer Brain providers.** Rejected because the product
   goal is maximum simplification around one Brain substrate. Hindsight document
   memory should replace the hosted default KB/Brain substrate; any exact
   reference retrieval gap should be handled later as a specialized add-on.
@@ -1061,7 +1106,7 @@ default runtime retrieval path.
 
 - U5, U8, U9. This phase lets agent/runtime calls use temporal and reflect
   context without exposing raw Hindsight payload construction to the agent, adds
-  a first-class Space document memory ingest path, and retires AWS KB/Cognee as
+  a first-class Space document memory ingest path, and retires AWS KB/the retired graph substrate as
   hosted default Brain providers.
 
 ### Phase 3: Docs And Verification
@@ -1073,19 +1118,19 @@ default runtime retrieval path.
 
 ## Risk Analysis & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---:|---:|---|
-| Tags accidentally narrow recall coverage | Medium | High | Add tags on writes first; do not switch to strict tag filters in this plan; verify aggregate tag coverage before tightening reads. |
-| Observation scopes create noisy or fragmented observations | Medium | Medium | Use low-cardinality explicit scopes; avoid `all_combinations`; defer broad backfill until active writes are validated. |
-| Evidence plumbing leaks raw user memory text | Medium | High | Preserve IDs and redacted descriptors by default; add tests that default Brain responses omit raw source/chunk text. |
-| Adapter compatibility paths break during native-type introduction | Medium | Medium | Add characterization tests before changing adapter mapping; keep generic caller behavior stable unless explicitly changed. |
-| Deployed Hindsight version differs from docs/examples | Medium | Medium | Keep request construction defensive; verify against dev with the aggregate collector and targeted smoke after code lands. |
-| Space memory remains GraphQL-only or routed through old provider branches | Medium | High | Add explicit direct Brain Hindsight Space memory tests and remove the `adapter.kind === "cognee"` assumption from default runtime behavior. |
-| Space document ingest is confused with legacy Knowledge Base retrieval | Medium | Medium | Rename/reframe the KB tab as Brain Sources and make Hindsight document memory the default backing path. |
-| File retain async operations fail silently | Medium | High | Store or expose Hindsight operation IDs and add status/retry paths before broad rollout. |
-| External live context is accidentally retained as durable Brain | Medium | Medium | Route external lazy-loaded data through Context Engine with explicit source labels and require an intentional retain policy/action before writing to Hindsight. |
-| Hindsight lock-in makes future self-hosted alternatives harder | Low | Medium | Be explicit that hosted ThinkWork commits to Hindsight while alternate adapters remain compatibility paths, not design center. |
-| Docs drift from THINK-83 provider-pivot work | Medium | Medium | Cross-reference the existing provider pivot plan during implementation and keep this plan focused on foundation primitives. |
+| Risk                                                                      | Likelihood | Impact | Mitigation                                                                                                                                                      |
+| ------------------------------------------------------------------------- | ---------: | -----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tags accidentally narrow recall coverage                                  |     Medium |   High | Add tags on writes first; do not switch to strict tag filters in this plan; verify aggregate tag coverage before tightening reads.                              |
+| Observation scopes create noisy or fragmented observations                |     Medium | Medium | Use low-cardinality explicit scopes; avoid `all_combinations`; defer broad backfill until active writes are validated.                                          |
+| Evidence plumbing leaks raw user memory text                              |     Medium |   High | Preserve IDs and redacted descriptors by default; add tests that default Brain responses omit raw source/chunk text.                                            |
+| Adapter compatibility paths break during native-type introduction         |     Medium | Medium | Add characterization tests before changing adapter mapping; keep generic caller behavior stable unless explicitly changed.                                      |
+| Deployed Hindsight version differs from docs/examples                     |     Medium | Medium | Keep request construction defensive; verify against dev with the aggregate collector and targeted smoke after code lands.                                       |
+| Space memory remains GraphQL-only or routed through old provider branches |     Medium |   High | Add explicit direct Brain Hindsight Space memory tests and remove the `adapter.kind === "retired_graph_substrate"` assumption from default runtime behavior.    |
+| Space document ingest is confused with legacy Knowledge Base retrieval    |     Medium | Medium | Rename/reframe the KB tab as Brain Sources and make Hindsight document memory the default backing path.                                                         |
+| File retain async operations fail silently                                |     Medium |   High | Store or expose Hindsight operation IDs and add status/retry paths before broad rollout.                                                                        |
+| External live context is accidentally retained as durable Brain           |     Medium | Medium | Route external lazy-loaded data through Context Engine with explicit source labels and require an intentional retain policy/action before writing to Hindsight. |
+| Hindsight lock-in makes future self-hosted alternatives harder            |        Low | Medium | Be explicit that hosted ThinkWork commits to Hindsight while alternate adapters remain compatibility paths, not design center.                                  |
+| Docs drift from THINK-83 provider-pivot work                              |     Medium | Medium | Cross-reference the existing provider pivot plan during implementation and keep this plan focused on foundation primitives.                                     |
 
 ---
 
@@ -1113,7 +1158,7 @@ default runtime retrieval path.
 - Recall/reflect tests prove source-fact IDs, `based_on`, usage, and redacted
   evidence metadata survive through the adapter and direct Brain runtime path.
 - Runtime tests prove default Brain recall/reflect uses Hindsight user and Space
-  banks directly, without AWS KB, Cognee, or Context Engine as required
+  banks directly, without AWS KB, the retired graph substrate, or Context Engine as required
   intermediaries.
 - Brain Source UI/tests prove the former KB tab creates Hindsight-backed Brain
   Sources rather than provisioning AWS Knowledge Bases on the default path.
@@ -1147,5 +1192,5 @@ default runtime retrieval path.
 - `packages/pi-extensions/src/memory.ts`
 - `packages/api/src/lib/user-storage.ts`
 - `docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md`
-- `docs/solutions/architecture-patterns/company-brain-active-substrate-reads-through-context-engine-2026-06-15.md`
-- `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`
+- `docs/solutions/architecture-patterns/brain-active-substrate-reads-through-context-engine-2026-06-15.md`
+- `docs/solutions/best-practices/retired_graph_substrate-thread-ingest-explorer-2026-06-04.md`

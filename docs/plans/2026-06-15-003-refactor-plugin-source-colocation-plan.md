@@ -20,11 +20,11 @@ smokes, docs, tests, and operational evidence. Shared packages remain generic
 plugin platform infrastructure.
 
 The repo already has root plugin packages and has moved manifests, package
-tests, and smoke scripts for Twenty CRM, Twenty, Company Brain, and LastMile. The
+tests, and smoke scripts for Twenty CRM, Twenty, ThinkWork Brain, and LastMile. The
 remaining work is the stronger ownership pass: remove first-party plugin source
 ownership from `packages/plugin-catalog`, move managed-app adapters and
 Terraform source behind plugin packages, render plugin-specific operator UI from
-plugin detail, treat Cognee as Company Brain substrate, and drive the migration
+plugin detail, treat the retired graph substrate as ThinkWork Brain substrate, and drive the migration
 allowlist down to only historical or generic-platform exceptions.
 
 ---
@@ -34,8 +34,8 @@ allowlist down to only historical or generic-platform exceptions.
 TEI ThinkWork's plugin model should let a maintainer or future plugin author
 open `plugins/<plugin-key>/` and understand the plugin as one
 submission-shaped package. Today, important plugin behavior is still scattered:
-web Company Brain/Cognee settings screens, API Company Brain and LastMile
-helpers, the Cognee Dockerfile, managed-app deployment adapters, Terraform
+web ThinkWork Brain/the retired graph substrate settings screens, API ThinkWork Brain and LastMile
+helpers, the the retired graph substrate Dockerfile, managed-app deployment adapters, Terraform
 modules, CLI fixture tests, and release/build references remain outside plugin
 packages. That makes review, future submissions, and repository enforcement
 ambiguous even though the first package migration slices have landed.
@@ -51,15 +51,15 @@ ambiguous even though the first package migration slices have landed.
   generic plugin infrastructure and must discover plugin packages rather than
   manually owning first-party plugin source.
 - R9-R11: Plugin-specific web/operator screens are owned by plugin packages and
-  rendered from plugin detail for this migration, with Company Brain ontology
-  and knowledge-graph operations moving under `plugins/company-brain/`.
-- R12-R14: Cognee is Company Brain's internal substrate; Twenty CRM and Twenty
+  rendered from plugin detail for this migration, with ThinkWork Brain ontology
+  and knowledge-graph operations moving under `plugins/brain/`.
+- R12-R14: the retired graph substrate is ThinkWork Brain's internal substrate; Twenty CRM and Twenty
   managed-app infrastructure moves behind plugin-owned source; LastMile remains
   package-local for skill/MCP-only content.
 - R15-R19: A canonical plugin spec plus per-plugin README contracts define what
   plugin authors own and what remains platform code; plugin-builder emits that
   shape.
-- R20-R23: Twenty CRM, Twenty, Company Brain/Cognee, and LastMile preserve existing
+- R20-R23: Twenty CRM, Twenty, ThinkWork Brain/the retired graph substrate, and LastMile preserve existing
   product behavior through migration.
 - R24-R27: Tooling lists, validates, builds, tests, and enforces plugins from
   the folder source of truth; compatibility paths are removed after a full
@@ -72,8 +72,8 @@ operator, A4 Tenant/operator user.
 Plugin-owned operator UI, F4 Future plugin submission.
 
 **Origin acceptance examples:** AE1 Twenty CRM full-shape review, AE2 generic
-`packages/plugin-catalog`, AE3 Company Brain plugin-owned UI, AE4 Cognee as
-Company Brain substrate, AE5 Twenty behavior parity, AE6 plugin-builder output,
+`packages/plugin-catalog`, AE3 ThinkWork Brain plugin-owned UI, AE4 the retired graph substrate as
+ThinkWork Brain substrate, AE5 Twenty behavior parity, AE6 plugin-builder output,
 AE7 source-boundary enforcement.
 
 ---
@@ -82,7 +82,7 @@ AE7 source-boundary enforcement.
 
 - Do not change plugin install, activation, deployment, MCP registration,
   dispatch, or user activation behavior while moving source.
-- Do not redesign Company Brain ontology workflows; this plan changes source
+- Do not redesign ThinkWork Brain ontology workflows; this plan changes source
   ownership and rendering context, not the ontology product behavior.
 - Do not move generic database schema, GraphQL transport, authentication,
   install state machines, deployment-runner core, shared UI shell code, or
@@ -97,7 +97,7 @@ AE7 source-boundary enforcement.
 
 - A broader marketplace/app-shell UI surface beyond plugin detail is deferred;
   plugin detail rendering is sufficient for THNK-31.
-- Promoting Cognee to a standalone shared platform service is deferred unless a
+- Promoting the retired graph substrate to a standalone shared platform service is deferred unless a
   future requirements pass explicitly changes the product framing.
 
 ---
@@ -106,24 +106,24 @@ AE7 source-boundary enforcement.
 
 ### Relevant Code and Patterns
 
-- `plugins/{twenty,twenty,company-brain,lastmile}/` already define first-party
+- `plugins/{twenty,twenty,brain,lastmile}/` already define first-party
   plugin package roots, manifests, package tests, and package-local smokes.
 - `packages/plugin-catalog/src/plugin-package.ts` defines the current first
   party package contract; `packages/plugin-catalog/src/plugins/index.ts` still
   manually imports first-party plugin packages.
 - `packages/deployment-runner/src/apps/registry.ts` owns the current managed
-  app adapter registry, while `packages/deployment-runner/src/apps/{twenty,twenty,cognee}.ts`
+  app adapter registry, while `packages/deployment-runner/src/apps/{twenty,twenty,retired_graph_substrate}.ts`
   remain plugin-specific implementation files.
 - `apps/web/src/components/settings/plugins/PluginDetail.tsx` is the generic
   plugin detail route and is the correct first host for plugin-declared UI
   surfaces.
-- `apps/web/src/components/settings/SettingsCogneeApplication.tsx` and
-  `apps/web/src/routes/_authed/settings.applications.cognee.tsx` are current
-  legacy Cognee settings paths. The route already redirects to
-  `/settings/plugins/company-brain`, but the source ownership is still outside
-  the Company Brain plugin package.
-- `packages/api/src/lib/company-brain/`, `packages/api/src/lib/knowledge-graph/cognee-client.ts`,
-  `packages/api/src/lib/context-engine/providers/company-brain.ts`,
+- `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.tsx` and
+  `apps/web/src/routes/_authed/settings.applications.retired_graph_substrate.tsx` are current
+  legacy the retired graph substrate settings paths. The route already redirects to
+  `/settings/plugins/brain`, but the source ownership is still outside
+  the ThinkWork Brain plugin package.
+- `packages/api/src/lib/brain/`, `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.ts`,
+  `packages/api/src/lib/context-engine/providers/brain.ts`,
   `packages/api/src/lib/lastmile/tasks-adapter.ts`, and
   `packages/api/src/lib/plugins/twenty-cutover.ts` are remaining plugin-specific
   API/runtime paths.
@@ -136,16 +136,16 @@ AE7 source-boundary enforcement.
 - `docs/solutions/architecture-patterns/terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md`
   establishes that Terraform plugin-builder workflows must stop at managed-app
   adapter gaps instead of generating unsupported infrastructure claims.
-- `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`
-  frames Company Brain as the customer-facing premium plugin and Cognee as the
-  internal substrate adapter. Customer-facing copy should say Company Brain
-  except where deployment evidence or implementation notes require Cognee.
+- `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`
+  frames ThinkWork Brain as the customer-facing premium plugin and the retired graph substrate as the
+  internal substrate adapter. Customer-facing copy should say ThinkWork Brain
+  except where deployment evidence or implementation notes require the retired graph substrate.
 
 ### External References
 
 - Not used. The repo already has current local patterns for plugin packages,
   managed-app adapters, plugin detail UI, source-boundary enforcement, and
-  Company Brain operations.
+  ThinkWork Brain operations.
 
 ---
 
@@ -169,9 +169,9 @@ AE7 source-boundary enforcement.
 - Host plugin-owned UI inside the existing plugin detail page first. The shared
   web app owns routing, auth, layout, GraphQL transport, and the extension host;
   plugin packages own the plugin-specific panels rendered inside that host.
-- Treat Cognee as Company Brain substrate. Move Cognee runtime, Dockerfile,
+- Treat the retired graph substrate as ThinkWork Brain substrate. Move the retired graph substrate runtime, Dockerfile,
   Terraform, adapter, smoke, and operations source under
-  `plugins/company-brain/`, while preserving current image names, Terraform
+  `plugins/brain/`, while preserving current image names, Terraform
   variable names, managed-app keys, and deployment evidence labels for behavior
   compatibility.
 - Preserve historical DB migration tests outside plugin packages. They verify
@@ -189,13 +189,13 @@ AE7 source-boundary enforcement.
   continues to hide first-party ownership after manual registries are removed.
 - What UI surface contract is sufficient? A plugin-detail extension slot is
   sufficient for THNK-31. Broader marketplace/app-shell surfaces are deferred.
-- How should Cognee image and Terraform wiring survive the move? Move source
-  under `plugins/company-brain/`, but keep release/build aliases, managed-app
+- How should the retired graph substrate image and Terraform wiring survive the move? Move source
+  under `plugins/brain/`, but keep release/build aliases, managed-app
   key strings, Terraform variables, outputs, and deployed resource semantics
   compatible until a separate migration explicitly changes them.
 - Which allowlist categories may remain? Historical immutable DB migration tests
   and documented shared false positives may remain. Plugin-specific web, API,
-  Cognee runtime, deployment-runner adapter, Terraform module, CLI fixture, and
+  the retired graph substrate runtime, deployment-runner adapter, Terraform module, CLI fixture, and
   compatibility wrapper entries must be removed or converted to generic
   platform paths before THNK-31 moves to Verification.
 
@@ -205,7 +205,7 @@ AE7 source-boundary enforcement.
   smallest form that keeps package builds and Lambda bundling deterministic.
 - Exact file split for plugin-owned web panels: preserve current component
   behavior and tests, but let implementation choose whether to expose one
-  Company Brain panel module or several smaller panel descriptors.
+  ThinkWork Brain panel module or several smaller panel descriptors.
 - Exact Terraform source relocation mechanics: implementation may use temporary
   compatibility wrappers if release packaging or module publishing requires one
   migration pass, but wrappers must be named in the allowlist with removal
@@ -221,16 +221,16 @@ may adjust names while preserving the ownership boundary.
 ```text
 plugins/
   README.md
-  company-brain/
+  brain/
     README.md
     src/
       manifest.ts
       api/
       deployment/
       web/
-    runtime/cognee/
+    runtime/retired_graph_substrate/
       Dockerfile
-    terraform/cognee/
+    terraform/retired_graph_substrate/
     smoke/
     test/
   lastmile/
@@ -300,7 +300,7 @@ temporary compatibility links.
 - Create: `plugins/README.md`
 - Modify: `plugins/twenty/README.md`
 - Modify: `plugins/twenty/README.md`
-- Modify: `plugins/company-brain/README.md`
+- Modify: `plugins/brain/README.md`
 - Modify: `plugins/lastmile/README.md`
 - Modify: `packages/plugin-catalog/src/plugin-package.ts`
 - Test: `packages/plugin-catalog/src/__tests__/plugin-package.test.ts`
@@ -313,15 +313,15 @@ temporary compatibility links.
   ownership metadata, such as optional UI, API, deployment, runtime, Terraform,
   or docs descriptors.
 - Keep customer-facing plugin copy separate from internal substrate names, with
-  Company Brain as the customer-facing name and Cognee as substrate evidence.
+  ThinkWork Brain as the customer-facing name and the retired graph substrate as substrate evidence.
 
 **Patterns to follow:**
 
 - Existing `defineFirstPartyPluginPackage` validation in
   `packages/plugin-catalog/src/plugin-package.ts`.
 - Current package README style in `plugins/twenty/README.md`.
-- Company Brain operational language from
-  `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`.
+- ThinkWork Brain operational language from
+  `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`.
 
 **Test scenarios:**
 
@@ -399,7 +399,7 @@ metadata.
 
 - U3. **Move managed-app deployment adapters behind plugins**
 
-**Goal:** Let plugin packages own Twenty CRM, Twenty, and Company Brain/Cognee
+**Goal:** Let plugin packages own Twenty CRM, Twenty, and ThinkWork Brain/the retired graph substrate
 managed-app adapter definitions while `packages/deployment-runner` keeps only
 generic managed-app planning/apply orchestration.
 
@@ -414,15 +414,15 @@ generic managed-app planning/apply orchestration.
   `plugins/twenty/src/deployment/managed-app.ts`
 - Move: `packages/deployment-runner/src/apps/twenty.ts` to
   `plugins/twenty/src/deployment/managed-app.ts`
-- Move: `packages/deployment-runner/src/apps/cognee.ts` to
-  `plugins/company-brain/src/deployment/cognee-managed-app.ts`
+- Move: `packages/deployment-runner/src/apps/retired_graph_substrate.ts` to
+  `plugins/brain/src/deployment/retired_graph_substrate-managed-app.ts`
 - Modify: `packages/deployment-runner/src/apps/utils.ts`
-- Modify: `plugins/{twenty,twenty,company-brain}/src/index.ts`
+- Modify: `plugins/{twenty,twenty,brain}/src/index.ts`
 - Test: `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
 - Test: `packages/deployment-runner/test/deployment-runner.test.ts`
 - Test: `plugins/twenty/test/manifest.test.ts`
 - Test: `plugins/twenty/test/manifest.test.ts`
-- Test: `plugins/company-brain/test/manifest.test.ts`
+- Test: `plugins/brain/test/manifest.test.ts`
 
 **Approach:**
 
@@ -443,11 +443,11 @@ generic managed-app planning/apply orchestration.
 
 - Happy path: `buildManagedAppPlan` still returns the same Terraform variables,
   smoke contracts, status outputs, and data impact for Twenty CRM, Twenty, and
-  Cognee after adapters move.
+  the retired graph substrate after adapters move.
 - Error path: unknown managed-app keys still fail through the generic registry.
-- Integration: Company Brain install/adoption still maps its substrate component
-  to managed app key `cognee` with unchanged evidence labels.
-- Covers AE1, AE4, AE5. Twenty CRM, Twenty, and Company Brain/Cognee behavior stays
+- Integration: ThinkWork Brain install/adoption still maps its substrate component
+  to managed app key `retired_graph_substrate` with unchanged evidence labels.
+- Covers AE1, AE4, AE5. Twenty CRM, Twenty, and ThinkWork Brain/the retired graph substrate behavior stays
   stable while source ownership moves.
 
 **Verification:**
@@ -457,9 +457,9 @@ generic managed-app planning/apply orchestration.
 
 ---
 
-- U4. **Move Terraform and Cognee runtime source under plugin ownership**
+- U4. **Move Terraform and the retired graph substrate runtime source under plugin ownership**
 
-**Goal:** Relocate first-party managed-app Terraform modules and Cognee runtime
+**Goal:** Relocate first-party managed-app Terraform modules and the retired graph substrate runtime
 source into owning plugin packages while preserving current release and
 deployment compatibility.
 
@@ -471,13 +471,13 @@ deployment compatibility.
 
 - Move: `plugins/twenty/terraform/twenty/**` to `plugins/twenty/terraform/twenty/**`
 - Move: `terraform/modules/app/twenty/**` to `plugins/twenty/terraform/twenty/**`
-- Move: `terraform/modules/app/cognee/**` to
-  `plugins/company-brain/terraform/cognee/**`
-- Move: `packages/cognee/Dockerfile` to
-  `plugins/company-brain/runtime/cognee/Dockerfile`
+- Move: `terraform/modules/app/retired_graph_substrate/**` to
+  `plugins/brain/terraform/retired_graph_substrate/**`
+- Move: `packages/retired_graph_substrate/Dockerfile` to
+  `plugins/brain/runtime/retired_graph_substrate/Dockerfile`
 - Modify: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
 - Modify: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
-- Modify: `apps/cli/__tests__/terraform-cognee-fixture.test.ts`
+- Modify: `apps/cli/__tests__/terraform-retired_graph_substrate-fixture.test.ts`
 - Modify: release/build packaging references under `scripts/release/**`
 - Test: relevant CLI Terraform fixture tests
 - Test: relevant release manifest tests under `scripts/release/__tests__/`
@@ -489,7 +489,7 @@ deployment compatibility.
   release packaging still expects legacy paths.
 - Keep deployed Terraform variable names, outputs, image aliases, and managed
   app keys stable.
-- Make the Company Brain README and operations docs describe Cognee only as
+- Make the ThinkWork Brain README and operations docs describe the retired graph substrate only as
   internal substrate/deployment evidence.
 
 **Patterns to follow:**
@@ -500,18 +500,18 @@ deployment compatibility.
 
 **Test scenarios:**
 
-- Happy path: CLI fixture tests find Twenty CRM, Twenty, and Cognee Terraform source
+- Happy path: CLI fixture tests find Twenty CRM, Twenty, and the retired graph substrate Terraform source
   from plugin-owned paths.
 - Integration: release manifest/build packaging includes plugin-owned Terraform
-  and Cognee runtime source while preserving existing artifact names.
+  and the retired graph substrate runtime source while preserving existing artifact names.
 - Error path: stale legacy Terraform or Dockerfile paths in the allowlist fail
   after the source has moved.
-- Covers AE4. Cognee Dockerfile/runtime source is owned by Company Brain unless
+- Covers AE4. the retired graph substrate Dockerfile/runtime source is owned by ThinkWork Brain unless
   a future requirements pass promotes it.
 
 **Verification:**
 
-- `terraform/modules/app/{twenty,twenty,cognee}` and `packages/cognee` no longer
+- `terraform/modules/app/{twenty,twenty,retired_graph_substrate}` and `packages/retired_graph_substrate` no longer
   contain first-party plugin source, except temporary wrappers with documented
   removal gates.
 
@@ -519,8 +519,8 @@ deployment compatibility.
 
 - U5. **Render plugin-owned UI from plugin detail**
 
-**Goal:** Move Company Brain/Cognee operator UI ownership into
-`plugins/company-brain/` and render it inside the shared plugin detail page.
+**Goal:** Move ThinkWork Brain/the retired graph substrate operator UI ownership into
+`plugins/brain/` and render it inside the shared plugin detail page.
 
 **Requirements:** R9-R11, R16-R18, R22, F3, AE3.
 
@@ -531,51 +531,51 @@ deployment compatibility.
 - Modify: `apps/web/src/components/settings/plugins/PluginDetail.tsx`
 - Create: generic web extension host/registry under
   `apps/web/src/components/settings/plugins/`
-- Move: `apps/web/src/components/settings/SettingsCogneeApplication.tsx` to
-  `plugins/company-brain/src/web/`
-- Move or wrap Company Brain ontology/knowledge graph operations UI currently
+- Move: `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.tsx` to
+  `plugins/brain/src/web/`
+- Move or wrap ThinkWork Brain ontology/knowledge graph operations UI currently
   under `apps/web/src/components/settings/brain/**` and
   `apps/web/src/components/settings/knowledge-graph/**` as plugin-owned panels
-  where the UI is Company Brain-specific.
-- Modify: `apps/web/src/routes/_authed/settings.applications.cognee.tsx`
-- Modify: `plugins/company-brain/src/index.ts`
+  where the UI is ThinkWork Brain-specific.
+- Modify: `apps/web/src/routes/_authed/settings.applications.retired_graph_substrate.tsx`
+- Modify: `plugins/brain/src/index.ts`
 - Test: `apps/web/src/components/settings/plugins/PluginDetail.test.tsx`
-- Test: `apps/web/src/components/settings/SettingsCogneeApplication.test.tsx`
+- Test: `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.test.tsx`
   or its plugin-owned replacement
 
 **Approach:**
 
 - Add a generic plugin-detail extension point that can render plugin-declared
   panels from package-owned source.
-- Move Company Brain ontology, knowledge graph, migration, operations, and
-  substrate evidence panels into `plugins/company-brain/` while keeping the
+- Move ThinkWork Brain ontology, knowledge graph, migration, operations, and
+  substrate evidence panels into `plugins/brain/` while keeping the
   plugin detail route as the user-facing entry point.
-- Leave legacy Cognee settings routes as redirects or thin compatibility hosts
+- Leave legacy the retired graph substrate settings routes as redirects or thin compatibility hosts
   during migration; they must not own the plugin-specific screen source.
 
 **Patterns to follow:**
 
-- Current route redirect from `settings.applications.cognee` to
-  `/settings/plugins/company-brain`.
+- Current route redirect from `settings.applications.retired_graph_substrate` to
+  `/settings/plugins/brain`.
 - Existing `PluginDetail.test.tsx` coverage for plugin status, install, retry,
   and activation behavior.
 
 **Test scenarios:**
 
-- Happy path: opening `/settings/plugins/company-brain` renders Company
+- Happy path: opening `/settings/plugins/brain` renders Company
   Brain-owned ontology/knowledge graph or substrate operations panels from
   plugin package source.
-- Edge case: non-Company Brain plugin detail pages continue rendering generic
+- Edge case: non-ThinkWork Brain plugin detail pages continue rendering generic
   catalog/install/activation UI without requiring plugin-owned panels.
-- Compatibility: legacy Cognee application route redirects or hosts the shared
+- Compatibility: legacy the retired graph substrate application route redirects or hosts the shared
   plugin detail panel without becoming the owning source.
-- Covers AE3. Company Brain UI is reviewed from `plugins/company-brain/` and
+- Covers AE3. ThinkWork Brain UI is reviewed from `plugins/brain/` and
   rendered from plugin detail.
 
 **Verification:**
 
 - `apps/web` owns only the generic plugin detail frame, routing, auth/data
-  hooks, and extension host for Company Brain plugin-specific UI.
+  hooks, and extension host for ThinkWork Brain plugin-specific UI.
 
 ---
 
@@ -591,22 +591,22 @@ GraphQL/plugin engine infrastructure.
 
 **Files:**
 
-- Move: `packages/api/src/lib/company-brain/migration.ts` to
-  `plugins/company-brain/src/api/migration.ts`
-- Move: `packages/api/src/lib/context-engine/providers/company-brain.ts` to
-  `plugins/company-brain/src/api/context-engine-provider.ts`
-- Move: `packages/api/src/lib/knowledge-graph/cognee-client.ts` to
-  `plugins/company-brain/src/api/cognee-client.ts`
-- Move: `packages/api/src/graphql/resolvers/core/cogneeClusterIdentity.ts` to a
+- Move: `packages/api/src/lib/brain/migration.ts` to
+  `plugins/brain/src/api/migration.ts`
+- Move: `packages/api/src/lib/context-engine/providers/brain.ts` to
+  `plugins/brain/src/api/context-engine-provider.ts`
+- Move: `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.ts` to
+  `plugins/brain/src/api/retired_graph_substrate-client.ts`
+- Move: `packages/api/src/graphql/resolvers/core/retired_graph_substrateClusterIdentity.ts` to a
   generic resolver plus plugin-owned substrate descriptor, or to
-  `plugins/company-brain/src/api/` if it remains Company Brain-specific.
+  `plugins/brain/src/api/` if it remains ThinkWork Brain-specific.
 - Move: `packages/api/src/lib/lastmile/tasks-adapter.ts` to
   `plugins/lastmile/src/api/tasks-adapter.ts`
 - Move: `packages/api/src/lib/plugins/twenty-cutover.ts` to
   `plugins/twenty/src/api/cutover.ts`
 - Modify: generic API plugin/runtime registries under `packages/api/src/lib/plugins/`
 - Test: matching moved unit tests under each plugin package
-- Test: `packages/api/test/integration/context-engine/company-brain-context.e2e.test.ts`
+- Test: `packages/api/test/integration/context-engine/brain-context.e2e.test.ts`
 
 **Approach:**
 
@@ -624,12 +624,12 @@ GraphQL/plugin engine infrastructure.
 
 **Test scenarios:**
 
-- Happy path: Company Brain context-engine provider, migration helper, Cognee
+- Happy path: ThinkWork Brain context-engine provider, migration helper, the retired graph substrate
   client, LastMile tasks adapter, and Twenty cutover behavior remain unchanged
   after moving source.
 - Error path: API errors still surface through the same resolver/plugin engine
   paths after plugin-owned hooks fail.
-- Integration: Company Brain context integration coverage still proves the
+- Integration: ThinkWork Brain context integration coverage still proves the
   graph/context flow with plugin-owned provider source.
 - Covers AE7. New plugin-specific API source outside `plugins/<plugin-key>/`
   fails enforcement unless explicitly generic.
@@ -637,7 +637,7 @@ GraphQL/plugin engine infrastructure.
 **Verification:**
 
 - `packages/api` no longer owns active first-party plugin behavior for Company
-  Brain, Cognee, LastMile, or Twenty.
+  Brain, the retired graph substrate, LastMile, or Twenty.
 
 ---
 
@@ -709,7 +709,7 @@ and deleting compatibility wrappers after the full migration pass.
 - Modify: `scripts/verify-plugin-source-boundary.mjs`
 - Modify: `scripts/__tests__/verify-plugin-source-boundary.test.mjs`
 - Remove: migrated compatibility wrappers under `packages/plugin-catalog`,
-  `packages/deployment-runner`, `packages/api`, `apps/web`, `packages/cognee`,
+  `packages/deployment-runner`, `packages/api`, `apps/web`, `packages/retired_graph_substrate`,
   and `terraform/modules/app`
 - Modify: `docs/plans/autopilot/THNK-31-status.md`
 
@@ -772,14 +772,14 @@ and deleting compatibility wrappers after the full migration pass.
 
 ## Risks & Dependencies
 
-| Risk                                                                                              | Mitigation                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Moving source breaks package builds or static bundling because TypeScript needs explicit imports. | Use generated aggregate files sourced from `plugins/*` metadata when dynamic discovery is not viable; test generated output rather than hand-owning plugin lists. |
-| Terraform module relocation breaks release packaging or published module expectations.            | Move source first, preserve compatibility wrappers or build-copy steps for one release pass, and remove wrappers only after release evidence exists.              |
-| Company Brain UI move accidentally changes ontology UX.                                           | Treat UI move as source/rendering-context migration only; keep existing component behavior and tests.                                                             |
-| Cognee substrate names leak into customer-facing plugin copy.                                     | Follow Company Brain runbook language: Company Brain is customer-facing; Cognee appears only in deployment evidence, logs, and implementation notes.              |
-| Enforcement creates noisy false positives for generic platform files.                             | Keep a separate shared false-positive allowlist with reasons; do not mix shared terms with temporary migration debt.                                              |
-| The plan becomes too large for one PR.                                                            | Use one implementation PR per unit or smaller coherent slice; update status evidence after each merged PR before advancing THNK-31.                               |
+| Risk                                                                                              | Mitigation                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Moving source breaks package builds or static bundling because TypeScript needs explicit imports. | Use generated aggregate files sourced from `plugins/*` metadata when dynamic discovery is not viable; test generated output rather than hand-owning plugin lists.             |
+| Terraform module relocation breaks release packaging or published module expectations.            | Move source first, preserve compatibility wrappers or build-copy steps for one release pass, and remove wrappers only after release evidence exists.                          |
+| ThinkWork Brain UI move accidentally changes ontology UX.                                         | Treat UI move as source/rendering-context migration only; keep existing component behavior and tests.                                                                         |
+| the retired graph substrate substrate names leak into customer-facing plugin copy.                | Follow ThinkWork Brain runbook language: ThinkWork Brain is customer-facing; the retired graph substrate appears only in deployment evidence, logs, and implementation notes. |
+| Enforcement creates noisy false positives for generic platform files.                             | Keep a separate shared false-positive allowlist with reasons; do not mix shared terms with temporary migration debt.                                                          |
+| The plan becomes too large for one PR.                                                            | Use one implementation PR per unit or smaller coherent slice; update status evidence after each merged PR before advancing THNK-31.                                           |
 
 ---
 
@@ -806,7 +806,7 @@ and deleting compatibility wrappers after the full migration pass.
 - Related brainstorm: [docs/brainstorms/2026-06-14-twenty-application-plugin-requirements.md](../brainstorms/2026-06-14-twenty-application-plugin-requirements.md)
 - Related brainstorm: [docs/brainstorms/2026-06-14-plugin-builder-skill-requirements.md](../brainstorms/2026-06-14-plugin-builder-skill-requirements.md)
 - Plugin packages: `plugins/twenty/`, `plugins/n8n/`,
-  `plugins/company-brain/`, `plugins/lastmile/`
+  `plugins/brain/`, `plugins/lastmile/`
 - Catalog contracts: `packages/plugin-catalog/src/plugin-package.ts`,
   `packages/plugin-catalog/src/plugins/index.ts`
 - Managed-app registry: `packages/deployment-runner/src/apps/registry.ts`
@@ -816,4 +816,4 @@ and deleting compatibility wrappers after the full migration pass.
 - Institutional learning:
   `docs/solutions/architecture-patterns/terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md`
 - Runbook:
-  `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`
+  `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`

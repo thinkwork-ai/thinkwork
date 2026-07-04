@@ -45,8 +45,8 @@ orchestrates deployment jobs, CodeBuild owns Terraform execution, customer AWS
 stores configuration and secrets, Spaces becomes the operator surface, and
 desktop/mobile clients bind to a customer environment with deployment profiles.
 
-Session history confirmed two important rejected paths. The old Cognee path
-patched GitHub Actions variables such as `COGNEE_ENABLED` and dispatched
+Session history confirmed two important rejected paths. The old the retired graph substrate path
+patched GitHub Actions variables such as `GRAPH_ENABLED` and dispatched
 `.github/workflows/deploy.yml`. An earlier idea treated the new runner like
 another Lambda path, but the final plan corrected that so CodeBuild owns
 Terraform execution while Lambda/API code handles control-plane callbacks and
@@ -90,7 +90,7 @@ The implemented sequence landed as reviewable slices:
   first-admin Cognito claims and Google/OIDC/SAML bootstrap validation.
 - [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) added durable
   managed-app deployment jobs, APIs, approvals, and evidence.
-- [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) added Cognee and
+- [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) added the retired graph substrate and
   Twenty runner adapters, destructive-impact summaries, and smoke contracts.
 - [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) moved managed
   app lifecycle into Spaces.
@@ -187,7 +187,7 @@ Operational guardrails from the rollout:
 - [`docs/src/content/docs/deploy/github-free-customer-deployments.mdx`](../../src/content/docs/deploy/github-free-customer-deployments.mdx)
   - operator runbook for the new deployment path.
 - [`docs/src/content/docs/deploy/managed-applications.mdx`](../../src/content/docs/deploy/managed-applications.mdx)
-  - Cognee and Twenty lifecycle operations.
+  - the retired graph substrate and Twenty lifecycle operations.
 - [`docs/src/content/docs/deploy/deployment-profiles.mdx`](../../src/content/docs/deploy/deployment-profiles.mdx)
   - universal client binding.
 - [`docs/src/content/docs/deploy/release-manifests.mdx`](../../src/content/docs/deploy/release-manifests.mdx)

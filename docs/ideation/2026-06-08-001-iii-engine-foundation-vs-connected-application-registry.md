@@ -12,7 +12,7 @@ source_prompt: "Revisit whether ThinkWork should adopt iii Engine as the foundat
 
 The reopened question is sharper than the earlier worker-contract discussion:
 ThinkWork's managed applications are currently hub-and-spoke. ThinkWork deploys
-and manages apps such as Cognee and Twenty, and it can expose their MCP tools to
+and manages apps such as the retired graph substrate and Twenty, and it can expose their MCP tools to
 agents, but the applications do not form a shared capability graph. iii Engine
 is impressive because it makes every capability visible and callable through a
 live Worker / Function / Trigger registry, so workers can discover and compose
@@ -100,7 +100,7 @@ surfaces. iii shows the missing abstraction: a live or queryable registry of
 functions, triggers, and workers.
 
 **Why it matters:** This lets ThinkWork answer questions like "what can Twenty
-do?", "what events can Cognee consume?", "what agent skills become available
+do?", "what events can the retired graph substrate consume?", "what agent skills become available
 when this app is installed?", and "what cross-app automations are possible?"
 without hard-coding app-specific hub logic.
 
@@ -244,7 +244,7 @@ application-capability waterfall.
 
 **Why it matters:** This is the feature that makes the registry feel alive. An
 operator should be able to click a ThinkWork turn or automation and see:
-`agent::run -> twenty::opportunity.search -> cognee::memory.enrich ->
+`agent::run -> twenty::opportunity.search -> retired_graph_substrate::memory.enrich ->
 workspace::reconcile -> audit::record`, with timings, user/auth context,
 redacted payload summaries, errors, retries, and evidence links.
 
@@ -374,7 +374,7 @@ Use `ce-brainstorm` on:
 The brainstorm should answer:
 
 - What is the app capability manifest shape?
-- Which v1 app proves the model: Twenty, Cognee, or both?
+- Which v1 app proves the model: Twenty, the retired graph substrate, or both?
 - How does the registry model user-specific readiness, not just tenant-level
   installation?
 - What event/trigger contracts are needed before this becomes useful?

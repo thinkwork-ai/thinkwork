@@ -100,7 +100,7 @@ function makeFakeProvider() {
         path: request.path,
         links: [{ path: "decisions/wiki-shape.md", label: "wiki shape" }],
         backlinks: request.includeBacklinks
-          ? [{ path: "entities/company-brain.md", title: "ThinkWork Brain" }]
+          ? [{ path: "entities/brain.md", title: "ThinkWork Brain" }]
           : [],
         bounds: {
           maxResults: 25,

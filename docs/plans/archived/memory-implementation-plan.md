@@ -4,6 +4,7 @@
 **Owner:** Eric Odom
 **Last updated:** 2026-04-13
 **Depends on:**
+
 - `.prds/harness-owned-memory-positioning.md`
 - `.prds/memory-contract-and-runtime.md`
 - `.prds/memory-api-and-mcp.md`
@@ -25,6 +26,7 @@ The core implementation decision is:
 - **Self-hosted/serverless-friendly users may choose AgentCore Memory instead**
 
 That gives ThinkWork:
+
 - a clean product truth,
 - a stable Memory API / MCP surface,
 - a real open memory engine story,
@@ -37,6 +39,7 @@ That gives ThinkWork:
 The current memory implementation is too muddy.
 
 Today, ThinkWork memory behavior is spread across:
+
 - thread history in Aurora,
 - AgentCore auto-retention and strategy extraction,
 - Hindsight recall and richer inspectability,
@@ -44,6 +47,7 @@ Today, ThinkWork memory behavior is spread across:
 - and partially overlapping runtime paths.
 
 This creates predictable problems:
+
 - duplicate writes,
 - unclear recall source of truth,
 - hard-to-explain inspectability,
@@ -90,6 +94,7 @@ ThinkWork should keep this model clean:
 - **The harness assembles context for the next turn**
 
 That means:
+
 - thread DB is the short-term/session source,
 - the selected memory engine is the long-term memory plane,
 - and ThinkWork owns the contract above both.
@@ -114,7 +119,7 @@ ThinkWork Memory Layer
 Selected long-term memory engine
   - hindsight adapter
   - agentcore adapter
-  - future adapters (graphiti, cognee, etc.)
+  - future adapters (graphiti, retired_graph_substrate, etc.)
 ```
 
 Key rule:
@@ -130,12 +135,14 @@ Key rule:
 Exactly one long-term memory engine should be active for canonical recall per deployment.
 
 Initial supported values:
+
 - `hindsight`
 - `agentcore`
 
 Future values:
+
 - `graphiti`
-- `cognee`
+- `retired_graph_substrate`
 - others
 
 ## 7.2 Product defaults
@@ -148,30 +155,31 @@ Future values:
 Suggested config:
 
 ```ts
-type MemoryEngineType = "hindsight" | "agentcore"
+type MemoryEngineType = "hindsight" | "agentcore";
 
 type MemoryConfig = {
-  enabled: boolean
-  engine: MemoryEngineType
-  sessionSource: "thread_db"
-  apiEnabled: boolean
-  mcpEnabled: boolean
+  enabled: boolean;
+  engine: MemoryEngineType;
+  sessionSource: "thread_db";
+  apiEnabled: boolean;
+  mcpEnabled: boolean;
   recall: {
-    defaultLimit: number
-    tokenBudget: number
-  }
+    defaultLimit: number;
+    tokenBudget: number;
+  };
   retain: {
-    autoRetainTurns: boolean
-    explicitRememberEnabled: boolean
-  }
+    autoRetainTurns: boolean;
+    explicitRememberEnabled: boolean;
+  };
   inspect: {
-    graphEnabled: boolean
-    exportEnabled: boolean
-  }
-}
+    graphEnabled: boolean;
+    exportEnabled: boolean;
+  };
+};
 ```
 
 Important rule:
+
 - `sessionSource` should remain `thread_db` in v1
 - do not let long-term engines masquerade as the short-term history source
 
@@ -185,47 +193,53 @@ Suggested shape:
 
 ```ts
 type MemoryOwnerRef = {
-  tenantId: string
-  ownerType: "agent"
-  ownerId: string
-  threadId?: string
-}
+  tenantId: string;
+  ownerType: "agent";
+  ownerId: string;
+  threadId?: string;
+};
 
 type RecallRequest = MemoryOwnerRef & {
-  query: string
-  limit?: number
-  tokenBudget?: number
-  strategies?: string[]
-}
+  query: string;
+  limit?: number;
+  tokenBudget?: number;
+  strategies?: string[];
+};
 
 type RetainRequest = MemoryOwnerRef & {
-  sourceType: "thread_turn" | "explicit_remember" | "connector_event" | "system_reflection" | "import"
-  content: string
-  role?: "user" | "assistant" | "system"
-  metadata?: Record<string, unknown>
-}
+  sourceType:
+    | "thread_turn"
+    | "explicit_remember"
+    | "connector_event"
+    | "system_reflection"
+    | "import";
+  content: string;
+  role?: "user" | "assistant" | "system";
+  metadata?: Record<string, unknown>;
+};
 
 type InspectRequest = MemoryOwnerRef & {
-  kinds?: string[]
-  cursor?: string
-  limit?: number
-}
+  kinds?: string[];
+  cursor?: string;
+  limit?: number;
+};
 
 type ExportRequest = MemoryOwnerRef & {
-  includeArchived?: boolean
-}
+  includeArchived?: boolean;
+};
 
 type MemoryAdapter = {
-  kind: "hindsight" | "agentcore" | string
-  capabilities(): Promise<MemoryCapabilities>
-  retain(request: RetainRequest): Promise<RetainResult>
-  recall(request: RecallRequest): Promise<RecallResult[]>
-  inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>
-  export(request: ExportRequest): Promise<MemoryExportBundle>
-}
+  kind: "hindsight" | "agentcore" | string;
+  capabilities(): Promise<MemoryCapabilities>;
+  retain(request: RetainRequest): Promise<RetainResult>;
+  recall(request: RecallRequest): Promise<RecallResult[]>;
+  inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+  export(request: ExportRequest): Promise<MemoryExportBundle>;
+};
 ```
 
 Optional later methods:
+
 - `reflect`
 - `compact`
 - `forget` / archive / delete
@@ -239,70 +253,76 @@ Optional later methods:
 
 ```ts
 type ThinkWorkMemoryRecord = {
-  id: string
-  tenantId: string
-  ownerType: "agent"
-  ownerId: string
-  threadId?: string
-  kind: "event" | "unit" | "reflection"
-  sourceType: "thread_turn" | "explicit_remember" | "connector_event" | "system_reflection" | "import"
-  strategy?: "semantic" | "preferences" | "summaries" | "episodes" | "graph" | "custom"
-  status: "active" | "archived" | "deleted" | "superseded"
+  id: string;
+  tenantId: string;
+  ownerType: "agent";
+  ownerId: string;
+  threadId?: string;
+  kind: "event" | "unit" | "reflection";
+  sourceType:
+    | "thread_turn"
+    | "explicit_remember"
+    | "connector_event"
+    | "system_reflection"
+    | "import";
+  strategy?:
+    "semantic" | "preferences" | "summaries" | "episodes" | "graph" | "custom";
+  status: "active" | "archived" | "deleted" | "superseded";
   content: {
-    text: string
-    summary?: string
-  }
+    text: string;
+    summary?: string;
+  };
   provenance?: {
-    threadMessageIds?: string[]
-    turnIds?: string[]
-    sourceEventIds?: string[]
-  }
+    threadMessageIds?: string[];
+    turnIds?: string[];
+    sourceEventIds?: string[];
+  };
   backendRefs: Array<{
-    backend: "hindsight" | "agentcore" | string
-    ref: string
-  }>
-  createdAt: string
-  updatedAt?: string
-  metadata?: Record<string, unknown>
-}
+    backend: "hindsight" | "agentcore" | string;
+    ref: string;
+  }>;
+  createdAt: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+};
 ```
 
 ## 9.2 Recall result
 
 ```ts
 type RecallResult = {
-  record: ThinkWorkMemoryRecord
-  score: number
-  whyRecalled?: string
-  backend: string
-}
+  record: ThinkWorkMemoryRecord;
+  score: number;
+  whyRecalled?: string;
+  backend: string;
+};
 ```
 
 ## 9.3 Capabilities
 
 ```ts
 type MemoryCapabilities = {
-  retain: boolean
-  recall: boolean
-  inspectRecords: boolean
-  inspectGraph: boolean
-  export: boolean
-  reflect: boolean
-  compact: boolean
-}
+  retain: boolean;
+  recall: boolean;
+  inspectRecords: boolean;
+  inspectGraph: boolean;
+  export: boolean;
+  reflect: boolean;
+  compact: boolean;
+};
 ```
 
 ## 9.4 Export bundle
 
 ```ts
 type MemoryExportBundle = {
-  version: "v1"
-  exportedAt: string
-  engine: string
-  owner: MemoryOwnerRef
-  capabilities: MemoryCapabilities
-  records: ThinkWorkMemoryRecord[]
-}
+  version: "v1";
+  exportedAt: string;
+  engine: string;
+  owner: MemoryOwnerRef;
+  capabilities: MemoryCapabilities;
+  records: ThinkWorkMemoryRecord[];
+};
 ```
 
 Important rule:
@@ -319,11 +339,12 @@ Suggested API:
 
 ```ts
 type NormalizedRecallService = {
-  recall(request: RecallRequest): Promise<RecallResult[]>
-}
+  recall(request: RecallRequest): Promise<RecallResult[]>;
+};
 ```
 
 Responsibilities:
+
 - resolve configured engine
 - call the selected adapter
 - normalize results into ThinkWork types
@@ -331,6 +352,7 @@ Responsibilities:
 - return one stable recall shape
 
 This service becomes the canonical read path for:
+
 - Memory API
 - Memory MCP tools
 - admin inspectability helpers
@@ -348,6 +370,7 @@ It should not merge multiple engines in steady state.
 Keep this on the thread DB path.
 
 Current reality already supports this:
+
 - API handler loads recent thread messages from Aurora
 - runtime passes them to Strands as `messages_history`
 
@@ -356,6 +379,7 @@ This should remain the default session-history path.
 ## 11.2 Long-term memory injection
 
 The runtime should gradually move toward:
+
 - calling the normalized recall service
 - receiving normalized recall results
 - formatting those into a bounded memory context block for the turn
@@ -376,12 +400,14 @@ Long-term carry-forward -> selected memory engine through ThinkWork recall servi
 ## 12.1 Hindsight adapter
 
 Responsibilities:
+
 - map ThinkWork owner refs to Hindsight bank/entity concepts
 - normalize Hindsight memory units into ThinkWork records
 - provide canonical recall / inspect / export behavior in hosted product
 - support graph/reflection capabilities when available
 
 Hosted default because:
+
 - richer long-term memory plane
 - stronger inspectability story
 - better fit for future graph/reflection direction
@@ -389,12 +415,14 @@ Hosted default because:
 ## 12.2 AgentCore adapter
 
 Responsibilities:
+
 - map ThinkWork owner refs to AgentCore namespaces / actor/session IDs
 - retain turns or explicit facts using AgentCore-supported APIs
 - normalize extracted records into ThinkWork records
 - support a serverless-first option for users who do not want Hindsight infra
 
 Important constraint:
+
 - AgentCore adapter may have weaker inspect/export/graph parity than Hindsight
 - that must be surfaced through capabilities, not hidden
 
@@ -403,6 +431,7 @@ Important constraint:
 ## 13. Migration notes for current overlap
 
 Current overlap to clean up:
+
 - thread history in Aurora
 - AgentCore auto-retain after response
 - Hindsight-backed `search_memories()` recall
@@ -415,12 +444,14 @@ During migration, dual-write is acceptable.
 Dual-read is not acceptable as a permanent product behavior.
 
 So:
+
 - temporary dual-write for safety or backfill is fine
 - canonical recall path must still resolve through one selected engine
 
 ## 13.2 Migration phases
 
 ### Phase 1: Introduce contract and config
+
 - add engine selection config
 - add normalized types
 - add adapter interface
@@ -428,22 +459,26 @@ So:
 - implement AgentCore adapter
 
 ### Phase 2: Introduce single recall service
+
 - build normalized recall service
 - point Memory API at it
 - point admin inspectability at it
 - point export at it
 
 ### Phase 3: Clarify explicit memory tools
+
 - make `remember()` route through ThinkWork memory layer, not backend-specific custom logic
 - make `recall()` route through normalized recall service
 - stop duplicating backend recall behavior in tool code
 
 ### Phase 4: Runtime alignment
+
 - keep thread history from Aurora
 - replace backend-specific implicit recall path with normalized recall service
 - make runtime memory injection use ThinkWork-formatted recall results
 
 ### Phase 5: Reduce overlap
+
 - remove or isolate duplicate direct backend writes where no longer needed
 - keep AgentCore auto-retain only if it materially helps the selected adapter path
 - stop presenting overlapping backend truths to users/admins
@@ -451,6 +486,7 @@ So:
 ## 13.3 Transitional rules
 
 Until migration is complete:
+
 - thread history still comes from Aurora
 - Hindsight and AgentCore adapters may both exist in code
 - only the configured engine should answer canonical recall requests
@@ -461,10 +497,12 @@ Until migration is complete:
 ## 14. API and MCP implications
 
 The implementation plan assumes:
+
 - Memory API sits above the recall service
 - MCP sits above the Memory API or same normalized service layer
 
 That means both surfaces automatically inherit:
+
 - engine selection
 - normalized records
 - stable IDs
@@ -531,12 +569,14 @@ This plan is successful when:
 ThinkWork should not try to make two first-class long-term memory truths coexist.
 
 It should:
+
 - keep thread history in Aurora,
 - ship both Hindsight and AgentCore adapters,
 - select exactly one active long-term engine per deployment,
 - and make the ThinkWork memory contract the stable layer above both.
 
 That is the cleanest path to:
+
 - an open memory engine story,
 - hosted product defaults,
 - self-hosted/serverless flexibility,

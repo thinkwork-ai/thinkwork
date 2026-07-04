@@ -93,7 +93,7 @@ create and operate Kestra flows through a curated, audited interface.
 **Managed application lifecycle**
 
 - R1. Applications includes Kestra as an operator-managed application alongside
-  Cognee and Twenty CRM.
+  the retired graph substrate and Twenty CRM.
 - R2. Kestra deploy, park, redeploy, and destroy actions use the same
   deployment-job, approval, evidence, and smoke-check lifecycle as other
   managed applications.

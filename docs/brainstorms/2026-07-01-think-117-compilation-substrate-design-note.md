@@ -59,7 +59,7 @@ self-assessment.
 
 **Layer C — labeled LLM synthesis slots.** Exactly three: (1) narrative
 explanation of the ranked blocker set; (2) summarization of free-text evidence
-(`accountSetupBlockers` is prose, as are Work Item notes); (3) Company Brain /
+(`accountSetupBlockers` is prose, as are Work Item notes); (3) ThinkWork Brain /
 Hindsight `reflect` output — `reflect` is LLM read-synthesis (it runs its own
 model per `packages/api/src/lib/hindsight-cost.ts`; the memory provider
 exposes `recall` vs `reflect` in

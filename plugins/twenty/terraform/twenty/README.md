@@ -1,7 +1,7 @@
 # Twenty CRM App Module
 
 This module provisions the optional Twenty CRM managed application substrate for
-ThinkWork. It follows the Cognee optional-app shape but uses a public HTTPS ALB,
+ThinkWork. It follows the managed optional-app shape but uses a public HTTPS ALB,
 separate ECS services for the Twenty server and worker, a dedicated PostgreSQL
 database URL injected from Secrets Manager, EFS for local server storage, and
 ElastiCache for Valkey/Redis OSS.

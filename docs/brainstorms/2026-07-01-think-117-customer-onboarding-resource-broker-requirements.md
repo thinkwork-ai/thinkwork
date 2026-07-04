@@ -13,7 +13,7 @@ ThinkWork should prove the External Agent Resource Broker thesis through two
 concrete customer-facing use cases:
 
 1. Customer onboarding: fragmented onboarding truth across calls, emails,
-   waiting on people, Work Items, Company Brain, Epicor P21, and workflow
+   waiting on people, Work Items, ThinkWork Brain, Epicor P21, and workflow
    status.
 2. Dispatch: operational routing decisions that need driver, vehicle, and
    order data from the approved dispatch source map, then need a delegated
@@ -125,7 +125,7 @@ workflow control.
 - A5. ThinkWork Resource Broker: Authenticates the caller, gathers permitted
   source data, compiles use-case-specific truth, renders the work surface,
   validates actions, and records evidence.
-- A6. Company Brain: Provides shared customer and operational context, prior
+- A6. ThinkWork Brain: Provides shared customer and operational context, prior
   decisions, commitments, memories, and source evidence.
 - A7. Source systems: ThinkWork Work Items, Epicor P21, n8n workflow status,
   FleetIO, LastMile MCP, and other approved internal systems.
@@ -142,7 +142,7 @@ workflow control.
   - **Actors:** A3, A4, A5, A6, A7.
   - **Steps:** The external agent calls ThinkWork. ThinkWork resolves the
     caller, tenant, Space, customer, and policy context. ThinkWork gathers
-    permitted data from Work Items, Company Brain, P21, and n8n. ThinkWork
+    permitted data from Work Items, ThinkWork Brain, P21, and n8n. ThinkWork
     compiles a ranked blocker set led by the most critical blocker plus
     supporting evidence and returns both a concise model-readable answer and a
     rendered command center.
@@ -174,7 +174,7 @@ workflow control.
   - **Covered by:** R17, R18, R21, R32, R35, R36, R37, R41.
 
 - F4. Source data changes after a prior onboarding view
-  - **Trigger:** P21, n8n, Work Items, or Company Brain state changes after a
+  - **Trigger:** P21, n8n, Work Items, or ThinkWork Brain state changes after a
     prior onboarding command center was viewed.
   - **Actors:** A1, A3, A5, A6, A7.
   - **Steps:** A later query or refresh causes ThinkWork to recompute the
@@ -253,14 +253,14 @@ workflow control.
 
 **Source set and truth compilation**
 
-- R5. The onboarding source set is ThinkWork Work Items, Company Brain, Epicor
+- R5. The onboarding source set is ThinkWork Work Items, ThinkWork Brain, Epicor
   P21, and n8n workflow status.
 - R6. The dispatch source set must support driver, vehicle, and order
   information from approved systems such as P21, FleetIO, LastMile, and only
   the internal records explicitly included in the use-case source map.
 - R7. ThinkWork must show source freshness and provenance for the data used to
   select an onboarding blocker or dispatch route recommendation.
-- R8. ThinkWork must use Company Brain to provide the shared aggregated
+- R8. ThinkWork must use ThinkWork Brain to provide the shared aggregated
   customer and operational picture: customer context, prior decisions,
   commitments, memories, route preferences, constraints, and source-backed
   notes relevant to the task.
@@ -320,7 +320,7 @@ workflow control.
   decision, confidence/conflict state, optimization request/response references,
   approval state, and accepted actions or writebacks.
 - R24. The MVP should make the sticky layer visible: normalization maps, render
-  templates, source policies, Company Brain context, Work Item history, route
+  templates, source policies, ThinkWork Brain context, Work Item history, route
   constraints, approvals, writeback rules, and audit evidence accumulate in
   ThinkWork rather than in the external agent harness.
 
@@ -465,7 +465,7 @@ workflow control.
   remember-outcome, plus policy explanation and structured denials) with
   progressive discovery for larger schemas, rather than one tool per source
   system or capability (per the origin ideation doc's Resource Broker MVP).
-- R57. Company Brain retrieval is subject to the same task-scoped,
+- R57. ThinkWork Brain retrieval is subject to the same task-scoped,
   data-class-governed filtering as external source pulls (R28, R35):
   aggregated memories are filtered by the calling user's permissions and data
   class before inclusion in any compiled view.
@@ -480,12 +480,12 @@ workflow control.
 - AE1. **Covers R1, R2, R5, R9, R12.** Given a coordinator asks Claude
   "what is blocking Acme onboarding?", when Claude calls ThinkWork, then
   ThinkWork returns a concise answer naming the current blocker and a rendered
-  command center assembled from Work Items, Company Brain, P21, and n8n status.
+  command center assembled from Work Items, ThinkWork Brain, P21, and n8n status.
 - AE2. **Covers R7, R10, R11, R13.** Given Work Items say onboarding is waiting
   on credit approval but P21 shows the account is ready, when ThinkWork renders
   the command center, then the view shows the conflict, lowers confidence, and
   shows both source facts instead of declaring certainty.
-- AE3. **Covers R8, R22, R24.** Given Company Brain contains a prior decision
+- AE3. **Covers R8, R22, R24.** Given ThinkWork Brain contains a prior decision
   that this customer requires special tax handling, when ThinkWork compiles the
   onboarding view, then that decision appears as relevant context with
   provenance and can affect the blocker explanation when policy allows.
@@ -635,7 +635,7 @@ workflow control.
   second-tranche partner (FleetIO, LastMile MCP).
 - **Delivery phasing (decided 2026-07-01):** The broker expands along two
   orthogonal axes. Data axis: Phase 1 serves ThinkWork-native sources (Work
-  Items, Company Brain/memory, n8n and Twenty plugin status), evolving
+  Items, ThinkWork Brain/memory, n8n and Twenty plugin status), evolving
   `/mcp/context-engine` into the broker surface; the onboarding command
   center ships at Phase 1 with P21 disclosed as a missing canonical source
   per R29/R30. Phase 2 adds external sources (Epicor P21 via a pre-warmed
@@ -647,7 +647,7 @@ workflow control.
 - **Primary pain:** Fragmented cross-system operational truth, not connector
   absence.
 - **Primary actors:** Customer onboarding coordinator and dispatcher.
-- **Onboarding source set:** ThinkWork Work Items, Company Brain, Epicor P21,
+- **Onboarding source set:** ThinkWork Work Items, ThinkWork Brain, Epicor P21,
   and n8n workflow status.
 - **Dispatch source set:** Driver, vehicle, and order data from approved
   systems such as P21, FleetIO, LastMile, and source-map-approved internal
@@ -691,7 +691,7 @@ workflow control.
   normalized dispatch inputs and return a route solution suitable for rendering.
 - A safe P21 sandbox, fixture, or mock writeback path exists for validating
   dispatch update behavior before any real customer environment is touched.
-- Company Brain has or can receive enough customer onboarding and dispatch
+- ThinkWork Brain has or can receive enough customer onboarding and dispatch
   context to make the shared picture useful.
 - Existing MCP App work is host-side (ThinkWork rendering external apps inside
   its own web app) and `data-json-render` is consumed by ThinkWork's own

@@ -24,8 +24,8 @@ System Workflows shipped late April 2026 wrapping three platform processes (Wiki
 
 ## Requirements
 
-- R3. Activation feature is removed: resolver, runtime invocation, all four `activation_*` tables (`activation_sessions`, `activation_session_turns`, `activation_apply_outbox`, `activation_automation_candidates`). The in-flight `codex/activation-deploy-smoke-plan` branch is closed without merging. *(see origin: R3)*
-- R4. All multi-step orchestration infrastructure removed: Step Functions state machines, adapter Lambdas, the seven `system_workflow_*` tables, multi-step admin UI routes. The separate `workflow_configs` table (per-tenant Routines orchestration config) is **not** in scope. *(see origin: R4)*
+- R3. Activation feature is removed: resolver, runtime invocation, all four `activation_*` tables (`activation_sessions`, `activation_session_turns`, `activation_apply_outbox`, `activation_automation_candidates`). The in-flight `codex/activation-deploy-smoke-plan` branch is closed without merging. _(see origin: R3)_
+- R4. All multi-step orchestration infrastructure removed: Step Functions state machines, adapter Lambdas, the seven `system_workflow_*` tables, multi-step admin UI routes. The separate `workflow_configs` table (per-tenant Routines orchestration config) is **not** in scope. _(see origin: R4)_
 
 **Origin actors:** A1 (Tenant admin, no Compliance UI yet — Phase 3), A3 (Platform services).
 **Origin flows:** F2 (Remove multi-step orchestration entirely) — covered end-to-end by this plan.
@@ -96,7 +96,7 @@ External research skipped — internal cleanup with strong local patterns and pr
 
 ### Resolve Before Work
 
-*Surfaced from doc-review (2026-05-06) — must be resolved before `/ce-work` begins each affected unit.*
+_Surfaced from doc-review (2026-05-06) — must be resolved before `/ce-work` begins each affected unit._
 
 - [P1][Affects U3] **Phase 1 plan document not cited.** U3 hard-depends on Phase 1 having merged + deployed (the 20 SW recorder call sites in `wiki-compile.ts` + `eval-runner.ts` must be stripped). Either cite `docs/plans/<phase-1-plan>.md` here, or note that Phase 1 doesn't yet have a plan document and must be authored first via a separate `/ce-plan` for R1+R2.
 - [P1][Affects U6] **Deploy gate ordering for the forward-drop migration.** `db:migrate-manual` runs after `terraform-apply` and **blocks** deploys on missing-object failures. The plan calls forward-drop a "post-deploy `psql -f`" but doesn't pin order. Decide: (a) apply migration via `psql` BEFORE merging the U6 PR (out-of-band ops), (b) add the migration to the deploy pipeline before the `db:migrate-manual` gate, or (c) use the existing manual track with proper `-- creates:` markers so the gate accepts it as already-applied.
@@ -129,7 +129,7 @@ External research skipped — internal cleanup with strong local patterns and pr
 
 ## High-Level Technical Design
 
-> *This illustrates the intended dependency ordering and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended dependency ordering and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```
                        Phase 1 (separate scope) — must merge + deploy first
@@ -195,11 +195,12 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** None — independent file moves, ships first.
 
 **Files:**
+
 - Move (off `codex/activation-deploy-smoke-plan`, target = a fresh worktree off `origin/main`):
   - `docs/plans/2026-05-03-003-feat-routine-visual-workflow-ux-plan.md`
   - `docs/plans/2026-05-03-004-feat-flue-fr9a-integration-spike-plan.md`
   - `docs/plans/2026-05-03-005-feat-flue-runtime-production-wiring-plan.md`
-  - `docs/plans/2026-05-04-001-refactor-company-brain-sources-table-plan.md`
+  - `docs/plans/2026-05-04-001-refactor-brain-sources-table-plan.md`
   - `docs/plans/2026-05-05-001-feat-thinkwork-connector-data-model-plan.md`
   - `docs/plans/2026-05-06-001-feat-flue-auto-retain-end-of-turn-plan.md` (if present at impl time)
   - `docs/brainstorms/2026-05-03-flue-framework-pi-parallel-reframe-requirements.md`
@@ -213,19 +214,23 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - Test: none — file-move operation only.
 
 **Approach:**
+
 - Per `feedback_diff_against_origin_before_patching`: `git fetch && git diff origin/main -- <path>` for each file before moving. If a file already exists upstream and matches, skip; if it differs, surface the diff for the user to resolve before moving.
 - Create a fresh worktree (`.claude/worktrees/rescue-from-activation-smoke/`) off `origin/main` per `feedback_worktree_isolation`.
 - Cherry-pick or copy each non-activation file into the rescue worktree; commit per logical group (Flue plans, Routine UX, Connector data model, etc.); open separate small PRs to `main`.
 - After all rescued files are merged to `main`, close `codex/activation-deploy-smoke-plan` (no merge — `gh pr close` or branch delete).
 
 **Patterns to follow:**
+
 - Worktree creation per `feedback_worktree_isolation` and `feedback_cleanup_worktrees_when_done`.
 - Diff-against-origin per `feedback_diff_against_origin_before_patching`.
 
 **Test scenarios:**
-- *Test expectation: none — file-move operation with no behavioral change. Verification is qualitative: each rescued file lands on `main`, branch closes cleanly.*
+
+- _Test expectation: none — file-move operation with no behavioral change. Verification is qualitative: each rescued file lands on `main`, branch closes cleanly._
 
 **Verification:**
+
 - `git log origin/main -- <each rescued path>` shows the file present after merge.
 - `git branch -a | grep codex/activation-deploy-smoke-plan` returns nothing (branch deleted).
 - The activation-revert branch (whatever it's named for U2-U6) inherits only `docs/brainstorms/2026-05-06-system-workflows-revert-compliance-reframe-requirements.md` and this plan from the closed branch.
@@ -241,6 +246,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** None on other units; can ship in parallel with U1 in time but logically lands after U1.
 
 **Files:**
+
 - Delete:
   - `packages/database-pg/graphql/types/system-workflows.graphql`
   - `packages/database-pg/graphql/types/activation.graphql`
@@ -265,6 +271,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   - `packages/api/src/__tests__/graphql-contract.test.ts` — drop assertions referencing SW + activation types
 
 **Approach:**
+
 - Run consumer survey first per learning `survey-before-applying-parent-plan-destructive-work-2026-04-24.md`: `grep -r "SystemWorkflow\|activation" --include="*.ts" --include="*.tsx" --include="*.graphql"` across all packages + apps to confirm no missed callers.
 - Delete GraphQL type files first, then resolver directories, then run `pnpm schema:build` to regenerate `terraform/schema.graphql`.
 - Run codegen across all consumers (`apps/admin`, `apps/mobile`, `apps/cli`, `packages/api`).
@@ -274,17 +281,20 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - Run `pnpm test -r --if-present` to confirm nothing relies on deleted types.
 
 **Patterns to follow:**
+
 - Consumer survey at execution time per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`.
 - Codegen pipeline per CLAUDE.md ("After editing GraphQL types, regenerate codegen in every consumer").
 
 **Test scenarios:**
-- *Happy path:* After deletion + codegen, `pnpm typecheck` passes across the workspace with zero references to `SystemWorkflow*` or `Activation*` types.
-- *Happy path:* `pnpm test -r --if-present` passes — no test depends on deleted resolvers.
-- *Edge case:* Run `pnpm schema:build` and inspect `terraform/schema.graphql` — confirm `onActivationSessionUpdated` subscription is absent.
-- *Integration:* `grep -r "SystemWorkflow\|onActivationSessionUpdated\|startActivation\|notifyActivationSessionUpdate" packages/ apps/ --include="*.ts" --include="*.tsx" --include="*.graphql"` returns zero non-comment matches.
-- *Edge case:* AppSync schema regeneration handles the dropped subscription cleanly (no orphan `@aws_subscribe` references in `terraform/schema.graphql`).
+
+- _Happy path:_ After deletion + codegen, `pnpm typecheck` passes across the workspace with zero references to `SystemWorkflow*` or `Activation*` types.
+- _Happy path:_ `pnpm test -r --if-present` passes — no test depends on deleted resolvers.
+- _Edge case:_ Run `pnpm schema:build` and inspect `terraform/schema.graphql` — confirm `onActivationSessionUpdated` subscription is absent.
+- _Integration:_ `grep -r "SystemWorkflow\|onActivationSessionUpdated\|startActivation\|notifyActivationSessionUpdate" packages/ apps/ --include="*.ts" --include="*.tsx" --include="*.graphql"` returns zero non-comment matches.
+- _Edge case:_ AppSync schema regeneration handles the dropped subscription cleanly (no orphan `@aws_subscribe` references in `terraform/schema.graphql`).
 
 **Verification:**
+
 - All typecheck and tests pass in CI.
 - `pnpm format:check` passes.
 - Manual smoke: open admin SPA on a deployed `dev` stage; confirm Sidebar has no "System Workflows" entry and no broken routes.
@@ -301,6 +311,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** **U2** (resolvers must be gone before lib deletion — they import the launcher and recorders); **Phase 1 must merge + deploy to `dev`** (`wiki-compile.ts` and `eval-runner.ts` must already have stripped their 20 recorder call sites).
 
 **Files:**
+
 - Delete (entire directory):
   - `packages/api/src/lib/system-workflows/` — all 11 files plus 4 test files
 - Delete (handlers + their tests):
@@ -314,6 +325,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   - `terraform/modules/app/lambda-api/handlers.tf` — remove blocks at lines 203-204 (activation), 204 (activation-apply-worker), 272-274 (SW callbacks + activation-workflow-adapter), 538-543 (activation REST routes), 609-612 (SW callback routes). Each removed `aws_lambda_function` resource also has matching `aws_lambda_permission` and API Gateway integration / route blocks — remove all symmetrically per `feedback_lambda_zip_build_entry_required` (inverted for removal).
 
 **Approach:**
+
 - **Verify Phase 1 merged + deployed** before opening this PR. Run `git log origin/main --oneline -- packages/api/src/handlers/wiki-compile.ts packages/api/src/handlers/eval-runner.ts` to confirm the recorder-strip commit is present. Run `pnpm typecheck` against `main` to confirm `lib/system-workflows/wiki-build.ts` and `evaluation-runs.ts` have zero importers in handler code.
 - Delete the lib directory.
 - Delete each handler file + its test (if present).
@@ -323,17 +335,20 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - Run `terraform -chdir=terraform/examples/greenfield plan -var-file=terraform.tfvars` — expect a destroy diff for the 5 Lambdas (and only those Lambdas; if any other resource shows up as destroy, stop and investigate).
 
 **Patterns to follow:**
+
 - Symmetric Terraform + build-script cleanup per `feedback_lambda_zip_build_entry_required` (inverted for deletion: removal must touch both `handlers.tf` and `scripts/build-lambdas.sh`).
 - "Ship inert" inverted: don't delete a library while consumers still import it. Verify Phase 1 importers are gone first.
 
 **Test scenarios:**
-- *Happy path:* `pnpm typecheck` passes across the workspace post-deletion.
-- *Happy path:* `pnpm build:lambdas` exits cleanly — no missing handler entry-point errors.
-- *Integration:* `terraform plan` shows exactly 5 Lambda destroys + their permissions/routes; no other unexpected destroys.
-- *Edge case:* `grep -r "system-workflows\|SystemWorkflow" packages/api/src/lib packages/api/src/handlers` returns zero matches (excluding deleted files).
-- *Integration:* Wiki Build and Evaluation Runs continue to work end-to-end on `dev` post-merge (they were on direct Lambda after Phase 1; this unit doesn't touch them, but verify no regression).
+
+- _Happy path:_ `pnpm typecheck` passes across the workspace post-deletion.
+- _Happy path:_ `pnpm build:lambdas` exits cleanly — no missing handler entry-point errors.
+- _Integration:_ `terraform plan` shows exactly 5 Lambda destroys + their permissions/routes; no other unexpected destroys.
+- _Edge case:_ `grep -r "system-workflows\|SystemWorkflow" packages/api/src/lib packages/api/src/handlers` returns zero matches (excluding deleted files).
+- _Integration:_ Wiki Build and Evaluation Runs continue to work end-to-end on `dev` post-merge (they were on direct Lambda after Phase 1; this unit doesn't touch them, but verify no regression).
 
 **Verification:**
+
 - CI green: typecheck + tests + build + lint.
 - `terraform plan` diff matches expected destroy set.
 - Post-deploy smoke: trigger Wiki Build and Eval Run via GraphQL on `dev`; both succeed; no log entries in CloudWatch reference deleted handlers.
@@ -349,6 +364,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** U2 (Activation GraphQL surface gone, no caller invokes the runtime); U3 (`activation-apply-worker` Lambda gone).
 
 **Files:**
+
 - Delete (path confirmed at impl time per learning `activation-runtime-narrow-tool-surface-2026-04-26.md`):
   - `packages/agentcore-activation/` — entire directory (Python source, Dockerfile, `pyproject.toml`, tests)
 - Modify:
@@ -356,6 +372,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   - GitHub Actions / CI workflows — if any workflow specifically builds, tests, or pushes `agentcore-activation`, remove the workflow file or scope the activation-specific job/triggers (audit at impl time: `grep -r agentcore-activation .github/`).
 
 **Approach:**
+
 - The activation runtime is built by `packages/agentcore-activation/scripts/build-and-push.sh` directly to ECR; there is no Terraform to plan/apply. Cleanup is direct AWS API calls per stage (`dev`, then `staging`, then `prod`).
 - Find the runtime: `aws bedrock-agentcore list-agent-runtimes --query 'agentRuntimes[?contains(agentRuntimeName, \`activation\`)].{name:agentRuntimeName,id:agentRuntimeId,arn:agentRuntimeArn}'`. Capture the runtime ID(s) per stage.
 - Confirm no live invocations: once U3's Lambdas are gone, no caller invokes the runtime. Verify CloudWatch invocation count is zero in the last 24 hours before deletion.
@@ -368,18 +385,21 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - Audit CI workflows: `grep -r "agentcore-activation" .github/` — if any workflow file references the runtime, remove or scope.
 
 **Patterns to follow:**
+
 - AgentCore runtime decommission: mirror the shape used when other AgentCore runtimes have been retired (search git log for prior runtime removals if any).
 - Per memory `project_agentcore_default_endpoint_no_flush`, AgentCore DEFAULT endpoint can't be flushed via API — the runtime decommission destroys the resource entirely, which is fine for this case.
 
 **Test scenarios:**
-- *Happy path:* Per stage, `aws bedrock-agentcore list-agent-runtimes --query 'agentRuntimes[?contains(agentRuntimeName, \`activation\`)]'` returns empty after `delete-agent-runtime`.
-- *Happy path:* Per stage, `aws ecr describe-repositories --query 'repositories[?contains(repositoryName, \`activation\`)]'` returns empty after `delete-repository --force`.
-- *Edge case:* `uv sync` succeeds with `agentcore-activation` no longer in the source tree (workspace was always clean — the package was never registered).
-- *Edge case:* `pnpm typecheck` passes — no TS imports reference the Python runtime directly.
-- *Integration:* CloudWatch metrics for the activation runtime show zero invocations in the 24 hours before deletion (confirms Phase 1 + U3 already silenced it).
-- *Test expectation: none for code paths — runtime deletion is AWS-API-only after Phase 1+U3 strip the callers.*
+
+- _Happy path:_ Per stage, `aws bedrock-agentcore list-agent-runtimes --query 'agentRuntimes[?contains(agentRuntimeName, \`activation\`)]'`returns empty after`delete-agent-runtime`.
+- _Happy path:_ Per stage, `aws ecr describe-repositories --query 'repositories[?contains(repositoryName, \`activation\`)]'`returns empty after`delete-repository --force`.
+- _Edge case:_ `uv sync` succeeds with `agentcore-activation` no longer in the source tree (workspace was always clean — the package was never registered).
+- _Edge case:_ `pnpm typecheck` passes — no TS imports reference the Python runtime directly.
+- _Integration:_ CloudWatch metrics for the activation runtime show zero invocations in the 24 hours before deletion (confirms Phase 1 + U3 already silenced it).
+- _Test expectation: none for code paths — runtime deletion is AWS-API-only after Phase 1+U3 strip the callers._
 
 **Verification:**
+
 - CI green (typecheck, tests, lint).
 - Per stage: AWS Console / CLI shows no activation AgentCore runtime, no activation-named ECR repo.
 - `grep -r agentcore-activation packages/ apps/ terraform/ .github/` returns zero matches.
@@ -395,6 +415,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** U3 (Lambda handlers gone, so SFN can't invoke them anyway), U4 (activation runtime gone). Should not run before U2/U3 because terraform-apply destroying SFN before handlers are gone leaves orphaned Lambda integrations.
 
 **Files:**
+
 - Delete (entire directories):
   - `terraform/modules/app/system-workflows-stepfunctions/` — entire 263-line module + `asl/*.json` templates
 - Modify:
@@ -402,6 +423,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   - `terraform/modules/app/lambda-api/main.tf` — remove `aws_iam_role_policy.lambda_system_workflows_stepfunctions` at lines 636-658
 
 **Approach:**
+
 - **IAM preflight.** Before drain, verify the deploying principal has `states:StopExecution` on `system-*` ARNs: `aws iam simulate-principal-policy --policy-source-arn <role-arn> --action-names states:StopExecution --resource-arns 'arn:aws:states:<region>:<account>:execution:thinkwork-<stage>-system-*:*'`. The Lambda role policy at lines 636-658 of `lambda-api/main.tf` grants only `Start/Describe/GetExecutionHistory` — not `Stop`. If the simulation returns `denied`, attach a temporary policy or run drain via an admin role with the permission. Same audit applies to the broader `RoutineExecution` Sid (lines 558-573) — confirm it does not grant `states:StartExecution` against `system-*` ARN patterns via wildcard expansion before relying on policy removal alone.
 - **Disable EventBridge before drain.** Disable the `sfn_state_change` EventBridge rule per stage to prevent state-change events from spawning callback Lambda invocations during the drain window: `aws events disable-rule --name <rule-name>` per stage. (The rule fires on SFN state changes; with the callback Lambda already deleted in U3, every fire would surface as an alarm. Disabling first makes the drain window quiet.)
 - **Drain before destroy.** For each stage (`dev`, then `staging`, then `prod` if applicable) and each state machine ARN (3 per stage):
@@ -417,17 +439,20 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - Merge → CI runs `terraform apply` → resources destroyed.
 
 **Patterns to follow:**
+
 - Drain pattern per `docs/solutions/logic-errors/eval-runner-ignored-system-workflow-test-case-selection-2026-05-03.md` (calling out that `cancelEvalRun` doesn't actually `StopExecution`).
 - Terraform destroy ordering — module-level deletion handles internal ordering; outer instantiation goes last.
 
 **Test scenarios:**
-- *Happy path:* After drain, `aws stepfunctions list-executions --status-filter RUNNING` returns empty for all 3 state machines per stage.
-- *Edge case:* `terraform plan` on `dev` shows exactly the expected destroy set; no unrelated resources affected.
-- *Edge case:* If S3 bucket has objects, plan fails with `BucketNotEmpty`; resolve with `force_destroy = true` precursor commit.
-- *Integration:* Post-`terraform apply`, AWS Console shows: no SFN state machines named `thinkwork-<stage>-system-*`; no EventBridge rule named `*sfn-state-change*` for SW; the `system-workflow-output` S3 bucket is gone.
-- *Edge case:* If a new SFN execution is started during the drain window (race with a slow caller), the Lambda integration fails (handlers already gone in U3) and the execution self-terminates as failed; no orphan rows because no callback handler exists.
+
+- _Happy path:_ After drain, `aws stepfunctions list-executions --status-filter RUNNING` returns empty for all 3 state machines per stage.
+- _Edge case:_ `terraform plan` on `dev` shows exactly the expected destroy set; no unrelated resources affected.
+- _Edge case:_ If S3 bucket has objects, plan fails with `BucketNotEmpty`; resolve with `force_destroy = true` precursor commit.
+- _Integration:_ Post-`terraform apply`, AWS Console shows: no SFN state machines named `thinkwork-<stage>-system-*`; no EventBridge rule named `*sfn-state-change*` for SW; the `system-workflow-output` S3 bucket is gone.
+- _Edge case:_ If a new SFN execution is started during the drain window (race with a slow caller), the Lambda integration fails (handlers already gone in U3) and the execution self-terminates as failed; no orphan rows because no callback handler exists.
 
 **Verification:**
+
 - `aws stepfunctions list-state-machines | grep system-workflow` returns nothing per stage.
 - `terraform apply` exits 0; CloudWatch alarms (if any tied to these resources) clean up automatically.
 - `grep -r system_workflows_stepfunctions terraform/` returns zero matches outside `.terraform/` cache.
@@ -443,6 +468,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 **Dependencies:** U2 (resolvers gone), U3 (recorder writers gone), U4 (runtime gone), U5 (SFN gone). All write paths must be removed before schema drop.
 
 **Files:**
+
 - Create (new rollback migrations for activation — none exist):
   - `packages/database-pg/drizzle/0038_activation_sessions_rollback.sql` — `DROP TABLE activation_session_turns; DROP TABLE activation_sessions;` with proper header (`-- creates: public.activation_sessions, public.activation_session_turns` markers reference what's being dropped) and `to_regclass` pre-flight checks
   - `packages/database-pg/drizzle/0039_activation_apply_outbox_rollback.sql` — `DROP TABLE activation_apply_outbox;`
@@ -458,6 +484,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   - `packages/database-pg/drizzle/0060_system_workflow_run_domain_ref_dedup_rollback.sql`
 
 **Approach:**
+
 - **Final consumer survey before authoring drops** per learning `survey-before-applying-parent-plan-destructive-work-2026-04-24.md`:
   ```
   grep -rn "system_workflow_\|activation_" packages/ apps/ --include="*.ts" --include="*.sql"
@@ -485,7 +512,7 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
   DROP TABLE IF EXISTS public.activation_sessions;
   COMMIT;
   ```
-  (Note: pseudo-SQL above is *directional guidance for review only* — the actual migration follows the manual-track header template exactly.)
+  (Note: pseudo-SQL above is _directional guidance for review only_ — the actual migration follows the manual-track header template exactly.)
 - Delete the Drizzle schema source files (`system-workflows.ts`, `activation.ts`).
 - Run `pnpm --filter @thinkwork/database-pg build` — Drizzle codegen should reflect the deletions cleanly.
 - Apply via `psql "$DATABASE_URL" -f packages/database-pg/drizzle/0062_drop_system_workflows_and_activation.sql` per stage post-deploy.
@@ -493,19 +520,22 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 - The `deploy.yml` workflow's `db:migrate-manual` gate will fail if any expected object is missing; this confirms the drop succeeded.
 
 **Patterns to follow:**
+
 - Manual-track migration headers per `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md`.
 - Drop ordering per the existing rollback files (SW: change_events → evidence → step_events → runs → extension_bindings → configs → definitions; activation: candidates → outbox → turns → sessions).
 - `to_regclass` idempotency pre-flight in each rollback file.
 
 **Test scenarios:**
-- *Happy path:* `pnpm --filter @thinkwork/database-pg build` succeeds with the schema source files deleted.
-- *Happy path (per stage):* `psql -f 0062_drop_*.sql` exits 0; `\dt public.system_workflow_*` and `\dt public.activation_*` return empty.
-- *Edge case (idempotency):* Re-running the drop migration on an already-dropped database exits 0 (the `IF EXISTS` clauses + `to_regclass` checks make it idempotent).
-- *Edge case (rollback):* Running `0059_system_workflows_rollback.sql` then `0059_system_workflows.sql` on a fresh DB recreates the tables identically (sanity-check the rollback file's drop order matches forward order — already exists, just verify).
-- *Integration:* `pnpm db:migrate-manual` post-apply reports zero missing objects across the dropped set; `deploy.yml` gate passes.
-- *Integration:* Cross-stage progression (`dev` → `staging` → `prod`): apply migration on `dev`, verify a week of `dev` operation, then promote.
+
+- _Happy path:_ `pnpm --filter @thinkwork/database-pg build` succeeds with the schema source files deleted.
+- _Happy path (per stage):_ `psql -f 0062_drop_*.sql` exits 0; `\dt public.system_workflow_*` and `\dt public.activation_*` return empty.
+- _Edge case (idempotency):_ Re-running the drop migration on an already-dropped database exits 0 (the `IF EXISTS` clauses + `to_regclass` checks make it idempotent).
+- _Edge case (rollback):_ Running `0059_system_workflows_rollback.sql` then `0059_system_workflows.sql` on a fresh DB recreates the tables identically (sanity-check the rollback file's drop order matches forward order — already exists, just verify).
+- _Integration:_ `pnpm db:migrate-manual` post-apply reports zero missing objects across the dropped set; `deploy.yml` gate passes.
+- _Integration:_ Cross-stage progression (`dev` → `staging` → `prod`): apply migration on `dev`, verify a week of `dev` operation, then promote.
 
 **Verification:**
+
 - Per stage: `psql "$DATABASE_URL" -c "\dt public.system_workflow_* public.activation_*"` returns zero rows.
 - Per stage: `pnpm db:migrate-manual --stage <stage>` reports clean.
 - `grep -r "system_workflow\|activation_" packages/database-pg/src/` returns zero non-comment matches outside historical migrations and rollback files.
@@ -526,16 +556,16 @@ The arrows are hard dependencies; reordering breaks build (U2 before U3) or brea
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Phase 1 not deployed when U3 starts; library deletion fails typecheck because handler imports remain | Verify Phase 1 merged + deployed to `dev` before opening U3 PR. Run `git log origin/main` to confirm; run `pnpm typecheck` against current `main` to confirm zero importers. |
-| In-flight SFN executions write to `system_workflow_step_events` after U6 schema drop, causing 500s | Drain explicitly in U5 (`stop-execution` per running execution) before Terraform destroy. By U6, all SFN state machines are gone — no possible new executions. |
-| `cancelEvalRun` / similar admin actions don't `StopExecution`, leaving zombies | Per learning `eval-runner-ignored-system-workflow-test-case-selection-2026-05-03.md` — drain pattern in U5 explicitly handles this; admin "cancel" rows on `dev` may exist but their SFN counterparts get stopped at drain time. |
-| Codegen regen leaves stale generated files in worktree, causing typecheck false-positives | Per `feedback_worktree_tsbuildinfo_bootstrap`: after `pnpm install` on a fresh checkout, `find . -name tsconfig.tsbuildinfo -not -path '*/node_modules/*' -delete && pnpm --filter @thinkwork/database-pg build` BEFORE typecheck. |
-| `system_workflow_output` S3 bucket has objects, blocking Terraform destroy | Check at U5 impl time with `aws s3 ls`; if non-empty, add `force_destroy = true` in a precursor commit, deploy, then proceed with destroy. Revert flag after. |
-| Branch-rescue diff conflicts: a non-activation file on `codex/activation-deploy-smoke-plan` differs from a sibling already merged to `main` by another session | `git fetch && git diff origin/main -- <path>` per file before move (per `feedback_diff_against_origin_before_patching`). Surface conflicts to user; do not silently overwrite. |
-| `db:migrate-manual` deploy gate fails because new rollback file headers are malformed | Author rollback files locally first; run `pnpm db:migrate-manual --stage dev` against a synced dev DB; iterate on header format until clean before opening U6 PR. |
-| Non-trivial rollback path: re-creating dropped infrastructure if Phase 3 is delayed and a stakeholder demands the SW substrate back | Rollback files re-create tables, but full restoration is multi-day work: replay 5 migrations on a database that may have drifted post-drop, rebuild the activation AgentCore runtime container + re-push to ECR (image is GC-able once the repo is deleted), `git revert` Lambda handlers + lib code, re-deploy SFN module + IAM. Re-running consumed migration sequence numbers may collide with later migrations applied between drop and revert. **Time-to-restore: 2-3 days, not 1.** |
+| Risk                                                                                                                                                           | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1 not deployed when U3 starts; library deletion fails typecheck because handler imports remain                                                           | Verify Phase 1 merged + deployed to `dev` before opening U3 PR. Run `git log origin/main` to confirm; run `pnpm typecheck` against current `main` to confirm zero importers.                                                                                                                                                                                                                                                                                                              |
+| In-flight SFN executions write to `system_workflow_step_events` after U6 schema drop, causing 500s                                                             | Drain explicitly in U5 (`stop-execution` per running execution) before Terraform destroy. By U6, all SFN state machines are gone — no possible new executions.                                                                                                                                                                                                                                                                                                                            |
+| `cancelEvalRun` / similar admin actions don't `StopExecution`, leaving zombies                                                                                 | Per learning `eval-runner-ignored-system-workflow-test-case-selection-2026-05-03.md` — drain pattern in U5 explicitly handles this; admin "cancel" rows on `dev` may exist but their SFN counterparts get stopped at drain time.                                                                                                                                                                                                                                                          |
+| Codegen regen leaves stale generated files in worktree, causing typecheck false-positives                                                                      | Per `feedback_worktree_tsbuildinfo_bootstrap`: after `pnpm install` on a fresh checkout, `find . -name tsconfig.tsbuildinfo -not -path '*/node_modules/*' -delete && pnpm --filter @thinkwork/database-pg build` BEFORE typecheck.                                                                                                                                                                                                                                                        |
+| `system_workflow_output` S3 bucket has objects, blocking Terraform destroy                                                                                     | Check at U5 impl time with `aws s3 ls`; if non-empty, add `force_destroy = true` in a precursor commit, deploy, then proceed with destroy. Revert flag after.                                                                                                                                                                                                                                                                                                                             |
+| Branch-rescue diff conflicts: a non-activation file on `codex/activation-deploy-smoke-plan` differs from a sibling already merged to `main` by another session | `git fetch && git diff origin/main -- <path>` per file before move (per `feedback_diff_against_origin_before_patching`). Surface conflicts to user; do not silently overwrite.                                                                                                                                                                                                                                                                                                            |
+| `db:migrate-manual` deploy gate fails because new rollback file headers are malformed                                                                          | Author rollback files locally first; run `pnpm db:migrate-manual --stage dev` against a synced dev DB; iterate on header format until clean before opening U6 PR.                                                                                                                                                                                                                                                                                                                         |
+| Non-trivial rollback path: re-creating dropped infrastructure if Phase 3 is delayed and a stakeholder demands the SW substrate back                            | Rollback files re-create tables, but full restoration is multi-day work: replay 5 migrations on a database that may have drifted post-drop, rebuild the activation AgentCore runtime container + re-push to ECR (image is GC-able once the repo is deleted), `git revert` Lambda handlers + lib code, re-deploy SFN module + IAM. Re-running consumed migration sequence numbers may collide with later migrations applied between drop and revert. **Time-to-restore: 2-3 days, not 1.** |
 
 ---
 

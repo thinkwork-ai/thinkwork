@@ -7,7 +7,7 @@
 --          Purely additive: nothing drops, no data changes. User-scoped
 --          pages keep their owner_id; the U11 cutover archive pass is a
 --          separate, later migration.
--- Plan: docs/plans/2026-06-09-004-feat-cognee-centric-memory-pipeline-plan.md (U9)
+-- Plan: 2026-06-09-004 U9
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0158_wiki_tenant_scope.sql
 -- creates: wiki.uq_pages_tenant_type_slug_tenant_scope
 -- Note: the two ALTER COLUMN ... DROP NOT NULL statements (wiki.pages.owner_id,

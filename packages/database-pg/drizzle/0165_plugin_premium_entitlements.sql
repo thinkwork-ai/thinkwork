@@ -1,5 +1,5 @@
 -- Purpose: add generic premium plugin entitlement and one-time install-key
---   storage for Company Brain and future premium plugins. Entitlements are
+--   storage for ThinkWork Brain and future premium plugins. Entitlements are
 --   persistent tenant/plugin grants independent of install state; install keys
 --   store digests only and can be redeemed once into an entitlement.
 -- Plan: docs/plans/2026-06-13-002-feat-brain-premium-plugin-plan.md U2

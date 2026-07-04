@@ -29,7 +29,7 @@ Rebuild the memory-to-wiki path around a lightweight knowledge graph in plain Po
 
 ### Problem Frame
 
-Two prior architectures were built and pulled back: the ontology-gated wiki (entity promotion through tenant ontologies proved confusing and brittle) and the Cognee-first ladder (overlapped Hindsight; THINK-83 pivoted user/Space memory back to Hindsight as canonical). What remains has two visible failures. First, memory is barely leveraged — the agent rarely uses what it has retained. Second, the banks are noisy: the operator memory view shows eight coexisting contradictory summaries of the same fact, junk meta-memories ("no contradictions have been observed"), eval-test residue polluting real banks, and 18 dead-lettered retains. Nothing in the platform's own pipeline consolidates, deduplicates, or forgets. The multi-tier promotion ladder (user → space → team → company) added fragile ingestion hops without fixing either failure.
+Two prior architectures were built and pulled back: the ontology-gated wiki (entity promotion through tenant ontologies proved confusing and brittle) and the the retired graph substrate-first ladder (overlapped Hindsight; THINK-83 pivoted user/Space memory back to Hindsight as canonical). What remains has two visible failures. First, memory is barely leveraged — the agent rarely uses what it has retained. Second, the banks are noisy: the operator memory view shows eight coexisting contradictory summaries of the same fact, junk meta-memories ("no contradictions have been observed"), eval-test residue polluting real banks, and 18 dead-lettered retains. Nothing in the platform's own pipeline consolidates, deduplicates, or forgets. The multi-tier promotion ladder (user → space → team → company) added fragile ingestion hops without fixing either failure.
 
 ### Key Decisions
 
@@ -125,12 +125,12 @@ R1–R3 are satisfied by the pre-existing `knowledge-graph` schema and ingest la
 
 - External-source ingest connectors (Drive, Slack, GitHub) — architecture accommodates them (R13); v1 ingests ThinkWork-native memory only.
 - MCP exposure of the new KG query tools — `mcp-context-engine.ts` already exposes `query_brain_context` with a `brain` provider family; extending it with the KG surface follows once that surface stabilizes (R11 keeps the shape ready; U6 verifies the parity constraint).
-- Any dedicated graph engine (Cognee re-elevation or otherwise) — remains a projection target if graph analytics ever justify it.
+- Any dedicated graph engine (the retired graph substrate re-elevation or otherwise) — remains a projection target if graph analytics ever justify it.
 - Dream-state approval/rollback UX — the run ledger and its operator query (U4) are the v1 control; interactive review UX only if the ledger proves insufficient.
 
 **Outside this product's identity**
 
-- Human knowledge-product UX: search bar product, scheduled digests, verification/ownership loops, Slack bot (the Slite "Company Brain" surface). The agent is the interface; the wiki is a window.
+- Human knowledge-product UX: search bar product, scheduled digests, verification/ownership loops, Slack bot (the Slite "ThinkWork Brain" surface). The agent is the interface; the wiki is a window.
 - Additional storage tiers (team brain, per-space brains) — scope filters, not stores.
 
 ### Dependencies / Assumptions
@@ -288,15 +288,15 @@ The plan→apply split is the crash-safety boundary: staging is re-runnable, app
 
 ## Verification Contract
 
-| Gate | Command / evidence | Applies to |
-|---|---|---|
-| Package suites | `pnpm --filter @thinkwork/api test`, `pnpm --filter @thinkwork/database-pg test`, pi packages' suites | U1, U3–U7, U9 |
-| Typecheck (separate from vitest) | `pnpm -r --if-present typecheck` | all units |
-| Migration drift gate | `pnpm db:migrate-manual` against dev; hand-rolled SQL applied via psql before merge | U3, U4 |
-| Dev smoke | retain→recall runbook; seeded dream run producing AE1; live-thread KG tool use (AE3) | U1, U2, U4, U6, U7 |
-| Eval gate | Brain eval dataset pass rate; data-loss pack green | U9 |
-| Cutover evidence | planner-vs-graph comparison on dev (page set + link density) before default flip | U8 |
-| Scope guard (R12) | PR-review check: no standalone knowledge-product UX surfaces added (search product, digests, verification loops) | all units |
+| Gate                             | Command / evidence                                                                                               | Applies to         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Package suites                   | `pnpm --filter @thinkwork/api test`, `pnpm --filter @thinkwork/database-pg test`, pi packages' suites            | U1, U3–U7, U9      |
+| Typecheck (separate from vitest) | `pnpm -r --if-present typecheck`                                                                                 | all units          |
+| Migration drift gate             | `pnpm db:migrate-manual` against dev; hand-rolled SQL applied via psql before merge                              | U3, U4             |
+| Dev smoke                        | retain→recall runbook; seeded dream run producing AE1; live-thread KG tool use (AE3)                             | U1, U2, U4, U6, U7 |
+| Eval gate                        | Brain eval dataset pass rate; data-loss pack green                                                               | U9                 |
+| Cutover evidence                 | planner-vs-graph comparison on dev (page set + link density) before default flip                                 | U8                 |
+| Scope guard (R12)                | PR-review check: no standalone knowledge-product UX surfaces added (search product, digests, verification loops) | all units          |
 
 Full package suites before each PR, not just new tests. Watch the post-merge Deploy run on main for every merge.
 
@@ -322,5 +322,5 @@ Full package suites before each PR, not just new tests. Watch the post-merge Dep
 - `packages/pi-extensions/src/knowledge-graph.ts`, `packages/pi-runtime-core/src/knowledge-graph-provider.ts`, `packages/agentcore-pi/agent-container/src/server.ts` — shipped `knowledge_graph_search` extension and the allowlist gotcha.
 - `packages/api/src/handlers/mcp-context-engine.ts` — live `query_brain_context` + `brain` provider family (R11 landing pad).
 - Hindsight docs (deployed 0.5.0, docs through 0.5.6): observation-layer consolidation, contradiction reconciliation, decay trends; no per-memory delete/update; document-replace upsert; type/document/bank-scoped deletes.
-- docs/solutions: `logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md` (idempotency buckets), `runtime-errors/lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md` (awaited dispatch), `architecture-patterns/generated-knowledge-projections-need-read-only-agent-traversal-gates-2026-06-24.md` (validated cutover, read-only tool gates), `best-practices/business-ontology-change-set-loop-2026-05-17.md` (evidence-ledgered mutation loops), `architecture-patterns/company-brain-migrations-keep-active-read-path-2026-06-15.md` (shadow-validated backend cutover).
-- `docs/plans/2026-06-27-001-feat-thinkwork-brain-hindsight-memory-plan.md` (THINK-83 pivot), `docs/plans/2026-06-28-001-fix-memory-retain-recall-reliability-plan.md` (THINK-103), `docs/brainstorms/2026-06-26-thnk-79-cognee-first-memory-ladder-requirements.md` (the "too many layers" diagnosis).
+- docs/solutions: `logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md` (idempotency buckets), `runtime-errors/lambda-web-adapter-in-flight-promise-lifecycle-2026-05-06.md` (awaited dispatch), `architecture-patterns/generated-knowledge-projections-need-read-only-agent-traversal-gates-2026-06-24.md` (validated cutover, read-only tool gates), `best-practices/business-ontology-change-set-loop-2026-05-17.md` (evidence-ledgered mutation loops), `architecture-patterns/brain-migrations-keep-active-read-path-2026-06-15.md` (shadow-validated backend cutover).
+- `docs/plans/2026-06-27-001-feat-thinkwork-brain-hindsight-memory-plan.md` (THINK-83 pivot), `docs/plans/2026-06-28-001-fix-memory-retain-recall-reliability-plan.md` (THINK-103), `docs/brainstorms/2026-06-26-thnk-79-retired_graph_substrate-first-memory-ladder-requirements.md` (the "too many layers" diagnosis).

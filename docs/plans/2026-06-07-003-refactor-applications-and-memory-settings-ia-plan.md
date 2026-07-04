@@ -13,7 +13,7 @@ area: apps/web settings
 A settings-navigation and information-architecture cleanup in `apps/web`. Three threads:
 
 1. **Applications surface** — rename "Managed Applications" → "Applications", swap its icon to `IconApps`, and turn its header Refresh into an icon-only spinning button matching other header icons.
-2. **Managed-app drill-in** — make the Applications page the single entry point for the two managed apps. Cognee's deployment/config view (today the Knowledge Graph "Info" toggle) becomes a standalone **Cognee Application** page; Twenty's view is the existing CRM page. Both are reached by drilling in from Applications, with breadcrumbs `Applications > Cognee` and `Applications > Twenty CRM`. Their standalone sidebar entries are removed.
+2. **Managed-app drill-in** — make the Applications page the single entry point for the two managed apps. the retired graph substrate's deployment/config view (today the Knowledge Graph "Info" toggle) becomes a standalone **the retired graph substrate Application** page; Twenty's view is the existing CRM page. Both are reached by drilling in from Applications, with breadcrumbs `Applications > the retired graph substrate` and `Applications > Twenty CRM`. Their standalone sidebar entries are removed.
 3. **Memory consolidation** — collapse the four memory-family pages (Memory, Knowledge Bases, Wiki, Knowledge Graph **explorer**) into one tabbed **Memory** page; old routes redirect in; the sidebar shows a single Memory entry.
 
 Plus two standalone nav removals: the **Managed Applications** section in General Settings, and the **Billing** nav entry (route kept, hidden from nav).
@@ -24,7 +24,7 @@ All work is in `apps/web` (React 19 + TanStack Router + urql). No GraphQL/schema
 
 ## Problem Frame
 
-The settings sidebar has grown to ~22 operator items, several of which are facets of the same concept. "Managed Applications" lists Cognee and Twenty, yet each also has its own separate sidebar item (Knowledge Graph, CRM), and Cognee's deployment info is buried behind an "Info" toggle on the Knowledge Graph page rather than presented as the application it is. Separately, four memory-adjacent inspectors (Memory, Knowledge Bases, Wiki, Knowledge Graph) each occupy a sidebar row despite being a single conceptual area. General Settings also duplicates managed-app status that now lives on the Applications page, and Billing is in the nav but unimplemented.
+The settings sidebar has grown to ~22 operator items, several of which are facets of the same concept. "Managed Applications" lists the retired graph substrate and Twenty, yet each also has its own separate sidebar item (Knowledge Graph, CRM), and the retired graph substrate's deployment info is buried behind an "Info" toggle on the Knowledge Graph page rather than presented as the application it is. Separately, four memory-adjacent inspectors (Memory, Knowledge Bases, Wiki, Knowledge Graph) each occupy a sidebar row despite being a single conceptual area. General Settings also duplicates managed-app status that now lives on the Applications page, and Billing is in the nav but unimplemented.
 
 The goal is a sidebar where each top-level concept appears once: **Applications** is the home for managed apps (drill in for detail), and **Memory** is the home for the memory family (tab across facets).
 
@@ -32,32 +32,32 @@ The goal is a sidebar where each top-level concept appears once: **Applications*
 
 The original request described "remove CRM and the info tab from Knowledge Graph." In the current code there is **no CRM tab** inside Knowledge Graph — Twenty CRM is already a separate route (`/settings/crm`), and Knowledge Graph has a `showConfig` toggle (the "Info" button) that swaps between a **graph/data explorer** and a **deployment config panel**. This plan maps the intent onto reality:
 
-- "Remove the info tab from Knowledge Graph" → remove the `showConfig` toggle; the config panel moves to the new Cognee Application page.
+- "Remove the info tab from Knowledge Graph" → remove the `showConfig` toggle; the config panel moves to the new the retired graph substrate Application page.
 - "CRM reachable from Applications → Twenty" → drill-in + breadcrumb change; the CRM page itself is unchanged.
-- "Knowledge Graph → Info becomes Cognee Application under Applications → Cognee" → the `KnowledgeGraphConfigPanel` becomes the body of the Cognee Application page.
+- "Knowledge Graph → Info becomes the retired graph substrate Application under Applications → the retired graph substrate" → the `KnowledgeGraphConfigPanel` becomes the body of the the retired graph substrate Application page.
 - The Knowledge Graph **explorer** survives as a tab in the combined Memory page.
 
 ---
 
 ## Requirements
 
-| ID  | Requirement                                                                                                                                    | Source                     |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| R1  | Sidebar + page label "Managed Applications" reads "Applications"                                                                               | Req #1                     |
-| R2  | Applications nav icon is `IconApps` (tabler)                                                                                                   | Req #2                     |
-| R3  | Applications page Refresh is an icon-only button (matching other header icon buttons) that spins while refreshing                              | Req #3                     |
-| R4  | Cognee's config/info view is a standalone "Cognee Application" page reached from Applications; breadcrumb `Applications > Cognee`              | Req #4                     |
-| R5  | Twenty CRM is reached from Applications; breadcrumb `Applications > Twenty CRM`                                                                | Req #4                     |
-| R6  | The Knowledge Graph `showConfig`/Info toggle is removed (explorer-only); config lives only on the Cognee Application page                      | Req #4                     |
-| R7  | Standalone CRM and Knowledge Graph sidebar entries are removed (drill-in / tab only)                                                           | Req #4 + scoping Q1/Q2     |
-| R8  | The "Managed Applications" section is removed from General Settings                                                                            | Req #5                     |
-| R9  | Memory, Knowledge Bases, Wiki, and Knowledge Graph explorer are unified into one tabbed Memory page; old routes redirect in; one sidebar entry | Req #6 + scoping Q3        |
-| R10 | Billing is removed from the settings navigation (route/component left intact)                                                                  | Req #7 (follow-up message) |
+| ID  | Requirement                                                                                                                                                                                      | Source                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
+| R1  | Sidebar + page label "Managed Applications" reads "Applications"                                                                                                                                 | Req #1                     |
+| R2  | Applications nav icon is `IconApps` (tabler)                                                                                                                                                     | Req #2                     |
+| R3  | Applications page Refresh is an icon-only button (matching other header icon buttons) that spins while refreshing                                                                                | Req #3                     |
+| R4  | the retired graph substrate's config/info view is a standalone "the retired graph substrate Application" page reached from Applications; breadcrumb `Applications > the retired graph substrate` | Req #4                     |
+| R5  | Twenty CRM is reached from Applications; breadcrumb `Applications > Twenty CRM`                                                                                                                  | Req #4                     |
+| R6  | The Knowledge Graph `showConfig`/Info toggle is removed (explorer-only); config lives only on the the retired graph substrate Application page                                                   | Req #4                     |
+| R7  | Standalone CRM and Knowledge Graph sidebar entries are removed (drill-in / tab only)                                                                                                             | Req #4 + scoping Q1/Q2     |
+| R8  | The "Managed Applications" section is removed from General Settings                                                                                                                              | Req #5                     |
+| R9  | Memory, Knowledge Bases, Wiki, and Knowledge Graph explorer are unified into one tabbed Memory page; old routes redirect in; one sidebar entry                                                   | Req #6 + scoping Q3        |
+| R10 | Billing is removed from the settings navigation (route/component left intact)                                                                                                                    | Req #7 (follow-up message) |
 
 ### Confirmed scoping decisions
 
-- **Q1 — Sidebar treatment:** Remove standalone CRM / Cognee-config entries; drill-in only.
-- **Q2 — Knowledge Graph split:** Config/Info panel → Cognee Application page; graph/data explorer → Memory tab.
+- **Q1 — Sidebar treatment:** Remove standalone CRM / the retired graph substrate-config entries; drill-in only.
+- **Q2 — Knowledge Graph split:** Config/Info panel → the retired graph substrate Application page; graph/data explorer → Memory tab.
 - **Q3 — Memory combine:** All four into one page; old routes redirect (tab state is local, not deep-linked).
 
 ---
@@ -67,11 +67,11 @@ The original request described "remove CRM and the info tab from Knowledge Graph
 **KTD-1 — Keep existing route paths; change labels and breadcrumbs, not URLs.**
 The Applications route stays `/settings/managed-applications` and CRM stays `/settings/crm`. Only the _display label_ (nav + header) and _breadcrumbs_ change. Rationale: renaming routes churns the file-based route tree and every `<Link>`, with no user-visible benefit since the sidebar label is what's read. The breadcrumb label is derived from the nav item label (`settingsCrumbForPath`), so renaming the nav label to "Applications" automatically yields `Applications` as the crumb root. Detail pages publish their own nested crumbs via `usePageHeaderActions`.
 
-**KTD-2 — Cognee Application is a new thin wrapper around the existing `KnowledgeGraphConfigPanel`.**
-The config panel (`knowledge-graph/KnowledgeGraphConfigPanel.tsx`) is already a self-contained component. The new `SettingsCogneeApplication` page wraps it, publishes the `Applications > Cognee` breadcrumb, and is guarded by `ManagedApplicationRouteGuard appKey="cognee"`. No logic moves into a new place — only composition changes. New route path: `/settings/applications/cognee` (nested under the Applications concept, even though the Applications list route keeps its legacy `managed-applications` path).
+**KTD-2 — the retired graph substrate Application is a new thin wrapper around the existing `KnowledgeGraphConfigPanel`.**
+The config panel (`knowledge-graph/KnowledgeGraphConfigPanel.tsx`) is already a self-contained component. The new `Settingsthe retired graph substrateApplication` page wraps it, publishes the `Applications > the retired graph substrate` breadcrumb, and is guarded by `ManagedApplicationRouteGuard appKey="retired_graph_substrate"`. No logic moves into a new place — only composition changes. New route path: `/settings/applications/retired_graph_substrate` (nested under the Applications concept, even though the Applications list route keeps its legacy `managed-applications` path).
 
 **KTD-3 — The Knowledge Graph page is decomposed, not relocated wholesale.**
-`SettingsKnowledgeGraph.tsx` (the wrapper with the `showConfig` toggle) is dismantled: its config branch → Cognee Application page (KTD-2), its explorer branch → Memory tab (R9). The reusable children (`KnowledgeGraphExplorer`, `KnowledgeGraphConfigPanel`) are untouched internally and consumed in their new homes. The old `/settings/knowledge-graph` route redirects to `/settings/memory`.
+`SettingsKnowledgeGraph.tsx` (the wrapper with the `showConfig` toggle) is dismantled: its config branch → the retired graph substrate Application page (KTD-2), its explorer branch → Memory tab (R9). The reusable children (`KnowledgeGraphExplorer`, `KnowledgeGraphConfigPanel`) are untouched internally and consumed in their new homes. The old `/settings/knowledge-graph` route redirects to `/settings/memory`.
 
 **KTD-4 — Combined Memory page owns the page header; tab bodies render chrome-free.**
 Today each of the four pages calls `usePageHeaderActions({ title, breadcrumbs })` and renders its own `SettingsPageTitle`. If hosted naively in tabs, four `usePageHeaderActions` calls would race for the single page header. The combined page publishes one header (`Memory` breadcrumb) and renders the active tab's **body**. Each source component is refactored to split its header-publishing shell from its body: the parent renders the body, and any per-tab title/toolbar (e.g., the Knowledge Graph Data/Definitions toggle, the Memory table/graph toggle) renders inside the tab content area, not via the global page header. Tab selection is local React state (per Q3, not URL-synced).
@@ -93,7 +93,7 @@ BEFORE (operator nav, abbreviated)        AFTER
   Billing            ← remove (R10)          (Billing hidden)
   Managed Applications (Layers3)  ─┐         Applications (IconApps)   ← R1,R2
   CRM (twenty-gated)               │ collapse  Memory (single entry)   ← R9
-  Knowledge Graph (cognee-gated)   │ into    ...
+  Knowledge Graph (retired_graph_substrate-gated)   │ into    ...
   Knowledge Bases                  │
   Memory                           │
   Wiki Memory                     ─┘
@@ -103,8 +103,8 @@ BEFORE (operator nav, abbreviated)        AFTER
 
 ```
 Applications (/settings/managed-applications)
-  ├─ row: Cognee  ──drill──▶ Cognee Application (/settings/applications/cognee)
-  │                            breadcrumb: Applications > Cognee
+  ├─ row: the retired graph substrate  ──drill──▶ the retired graph substrate Application (/settings/applications/retired_graph_substrate)
+  │                            breadcrumb: Applications > the retired graph substrate
   │                            body: KnowledgeGraphConfigPanel
   └─ row: Twenty  ──drill──▶ Twenty CRM (/settings/crm)
                                breadcrumb: Applications > Twenty CRM
@@ -162,9 +162,9 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 ---
 
-### U2. Cognee Application page (from KnowledgeGraphConfigPanel)
+### U2. the retired graph substrate Application page (from KnowledgeGraphConfigPanel)
 
-**Goal:** Stand up a dedicated Cognee Application page that renders the existing config panel under the `Applications > Cognee` breadcrumb (R4).
+**Goal:** Stand up a dedicated the retired graph substrate Application page that renders the existing config panel under the `Applications > the retired graph substrate` breadcrumb (R4).
 
 **Requirements:** R4
 
@@ -172,33 +172,33 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 **Files:**
 
-- `apps/web/src/components/settings/SettingsCogneeApplication.tsx` (new)
-- `apps/web/src/routes/_authed/settings.applications.cognee.tsx` (new route)
-- `apps/web/src/components/settings/SettingsCogneeApplication.test.tsx` (new)
+- `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.tsx` (new)
+- `apps/web/src/routes/_authed/settings.applications.retired_graph_substrate.tsx` (new route)
+- `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.test.tsx` (new)
 
 **Approach:**
 
-- New `SettingsCogneeApplication` component: render a page shell (mirror the padding/structure of `SettingsKnowledgeGraph`'s `showConfig` branch — `<div className="flex h-full min-h-0 w-full flex-col p-6">` with `SettingsPageTitle title="Cognee" description="Cognee infrastructure for ontology and graph retrieval."`) hosting `<KnowledgeGraphConfigPanel />`.
-- Publish breadcrumb via `usePageHeaderActions({ title: "Cognee", breadcrumbs: [{ label: "Applications", href: "/settings/managed-applications" }, { label: "Cognee" }] })`.
-- Route file: guard with `<ManagedApplicationRouteGuard appKey="cognee">` (matching the old knowledge-graph route guard) and render the page.
+- New `Settingsthe retired graph substrateApplication` component: render a page shell (mirror the padding/structure of `SettingsKnowledgeGraph`'s `showConfig` branch — `<div className="flex h-full min-h-0 w-full flex-col p-6">` with `SettingsPageTitle title="the retired graph substrate" description="the retired graph substrate infrastructure for ontology and graph retrieval."`) hosting `<KnowledgeGraphConfigPanel />`.
+- Publish breadcrumb via `usePageHeaderActions({ title: "the retired graph substrate", breadcrumbs: [{ label: "Applications", href: "/settings/managed-applications" }, { label: "the retired graph substrate" }] })`.
+- Route file: guard with `<ManagedApplicationRouteGuard appKey="retired_graph_substrate">` (matching the old knowledge-graph route guard) and render the page.
 
 **Patterns to follow:** `settings.crm.tsx` route guard composition; `SettingsKnowledgeGraph.tsx` `showConfig` branch markup; breadcrumb shape with `href` from `SettingsCrumb` (`settings-nav.tsx` `SettingsCrumb` interface).
 
-**Test scenarios** (`SettingsCogneeApplication.test.tsx`):
+**Test scenarios** (`Settingsthe retired graph substrateApplication.test.tsx`):
 
 - Renders `KnowledgeGraphConfigPanel` (assert a stable element/text the panel renders).
-- Publishes a breadcrumb whose first crumb is `Applications` (with href `/settings/managed-applications`) and second is `Cognee`. Covers R4.
-- (If guard is exercised in the route test) blocks render when `cognee` is not runtime-enabled — mirror `ManagedApplicationRouteGuard.test.tsx` setup.
+- Publishes a breadcrumb whose first crumb is `Applications` (with href `/settings/managed-applications`) and second is `the retired graph substrate`. Covers R4.
+- (If guard is exercised in the route test) blocks render when `retired_graph_substrate` is not runtime-enabled — mirror `ManagedApplicationRouteGuard.test.tsx` setup.
 
 ---
 
-### U3. Applications page drill-in to Cognee / Twenty
+### U3. Applications page drill-in to the retired graph substrate / Twenty
 
 **Goal:** Make each Applications row navigate to its detail page (R4, R5).
 
 **Requirements:** R4, R5
 
-**Dependencies:** U2 (Cognee Application page must exist)
+**Dependencies:** U2 (the retired graph substrate Application page must exist)
 
 **Files:**
 
@@ -208,14 +208,14 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 **Approach:**
 
-- Add an "Open" affordance to each managed-app row that navigates to the app's detail page: `cognee → /settings/applications/cognee`, `twenty → /settings/crm`. Implement as a `<Link>` (TanStack) styled as an icon button (e.g., chevron / arrow-right) or make the row title a link — match how other settings rows expose drill-in. Keep the existing plan/lifecycle controls (`onStartPlan`, `onOpenPlan`) intact; this is an _additional_ affordance, not a replacement.
+- Add an "Open" affordance to each managed-app row that navigates to the app's detail page: `retired_graph_substrate → /settings/applications/retired_graph_substrate`, `twenty → /settings/crm`. Implement as a `<Link>` (TanStack) styled as an icon button (e.g., chevron / arrow-right) or make the row title a link — match how other settings rows expose drill-in. Keep the existing plan/lifecycle controls (`onStartPlan`, `onOpenPlan`) intact; this is an _additional_ affordance, not a replacement.
 - Derive the destination from `app.key` via a small map; gate the link's enabled state on `runtime`/`provisioned` the same way the external-link button is gated today, or always allow navigation and let the route guard handle the not-provisioned case (prefer the latter — simpler, and the guard already renders an explanatory state).
 
 **Patterns to follow:** `ManagedApplicationsSection.tsx` `<Button asChild><Link to=…>` pattern; existing external-link button in `ManagedApplicationRow`.
 
 **Test scenarios:**
 
-- Cognee row exposes a link to `/settings/applications/cognee`. Covers R4.
+- the retired graph substrate row exposes a link to `/settings/applications/retired_graph_substrate`. Covers R4.
 - Twenty row exposes a link to `/settings/crm`. Covers R5.
 - Existing plan/lifecycle buttons still render (no regression).
 
@@ -297,7 +297,7 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 **Requirements:** R6, R7, R9
 
-**Dependencies:** U5 (Memory shell), U2 (config already rehomed to Cognee Application)
+**Dependencies:** U5 (Memory shell), U2 (config already rehomed to the retired graph substrate Application)
 
 **Files:**
 
@@ -310,8 +310,8 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 **Approach:**
 
-- Add a `knowledge-graph` tab whose `TabsContent` renders `KnowledgeGraphExplorer`. Move the Data/Definitions `ToggleGroup` and the thread-ingest button (the `IconMessages` toggle) into the tab's local toolbar, with the `explorerMode` / `threadSheetOpen` state owned by the container (or a small KG-tab wrapper). The `showConfig` toggle is **not** carried over (R6) — config lives only on the Cognee Application page.
-- Redirect `/settings/knowledge-graph` → `/settings/memory` (KTD-5). Guard consideration: the old route was `ManagedApplicationRouteGuard appKey="cognee"`. The Memory page itself is operator-gated but not cognee-gated; the KG tab should degrade gracefully when Cognee isn't runtime-enabled (show the explorer's existing empty/unavailable state, or hide the KG tab when `cognee` isn't runtime-enabled — prefer hiding the tab, consistent with the old `managedAppKey` gating). Resolve which during implementation; hiding the tab keeps parity with prior gating.
+- Add a `knowledge-graph` tab whose `TabsContent` renders `KnowledgeGraphExplorer`. Move the Data/Definitions `ToggleGroup` and the thread-ingest button (the `IconMessages` toggle) into the tab's local toolbar, with the `explorerMode` / `threadSheetOpen` state owned by the container (or a small KG-tab wrapper). The `showConfig` toggle is **not** carried over (R6) — config lives only on the the retired graph substrate Application page.
+- Redirect `/settings/knowledge-graph` → `/settings/memory` (KTD-5). Guard consideration: the old route was `ManagedApplicationRouteGuard appKey="retired_graph_substrate"`. The Memory page itself is operator-gated but not retired_graph_substrate-gated; the KG tab should degrade gracefully when the retired graph substrate isn't runtime-enabled (show the explorer's existing empty/unavailable state, or hide the KG tab when `retired_graph_substrate` isn't runtime-enabled — prefer hiding the tab, consistent with the old `managedAppKey` gating). Resolve which during implementation; hiding the tab keeps parity with prior gating.
 - Delete `SettingsKnowledgeGraph.tsx` once nothing imports it (grep first). Keep `KnowledgeGraphExplorer` and `KnowledgeGraphConfigPanel`.
 - Remove the `Knowledge Graph` item from `RAW_SETTINGS_NAV_ITEMS` (drop the now-unused `IconTopologyStar3` import if unused elsewhere).
 
@@ -321,7 +321,7 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 - Renders a Knowledge Graph tab; selecting it shows the explorer.
 - KG tab has Data/Definitions toggle; no Info/config toggle present. Covers R6.
-- (gating) when `cognee` is not runtime-enabled, the KG tab is hidden (or shows unavailable) — matches chosen approach.
+- (gating) when `retired_graph_substrate` is not runtime-enabled, the KG tab is hidden (or shows unavailable) — matches chosen approach.
 - (nav test) no nav item for `/settings/knowledge-graph`. Covers R7.
 - (route) `/settings/knowledge-graph` redirects to `/settings/memory`.
 - No remaining import of `SettingsKnowledgeGraph` (dead-code check).
@@ -381,11 +381,11 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 ## Scope Boundaries
 
-**In scope:** sidebar labels/icons/entries, breadcrumbs, the Applications drill-in affordance, the new Cognee Application page, the combined Memory tabbed page, route redirects, and the two nav removals — all in `apps/web`.
+**In scope:** sidebar labels/icons/entries, breadcrumbs, the Applications drill-in affordance, the new the retired graph substrate Application page, the combined Memory tabbed page, route redirects, and the two nav removals — all in `apps/web`.
 
 **Out of scope / non-goals:**
 
-- No GraphQL schema, resolver, or backend changes. The managed-app queries (`SettingsDeploymentStatusQuery`, etc.) and the CRM/Cognee panels are reused as-is.
+- No GraphQL schema, resolver, or backend changes. The managed-app queries (`SettingsDeploymentStatusQuery`, etc.) and the CRM/the retired graph substrate panels are reused as-is.
 - No renaming of route _paths_ (`/settings/managed-applications`, `/settings/crm` stay) — KTD-1.
 - No removal of the Billing route/component — nav-only (R10).
 - No deep-linkable per-tab URLs for the Memory page (Q3 chose local tab state + redirects).
@@ -401,14 +401,14 @@ For the Refresh button, a component test is optional given it's presentational; 
 
 ## Risks & Dependencies
 
-| Risk                                                                                                                       | Impact                                    | Mitigation                                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Four `usePageHeaderActions` calls racing in the combined Memory page                                                       | Flickering/incorrect breadcrumb           | KTD-4: parent owns the header; facet bodies are chrome-free                                  |
-| `knowledge-bases` has child routes (detail/new) that a blanket redirect would break                                        | Broken KB detail navigation               | U5: redirect only the index; audit `settings.knowledge-bases.*` route files first            |
-| Mounting all four tab bodies fires all data queries at once                                                                | Wasteful network / slow tab page          | U5: lazy-mount inactive tabs for data-heavy facets                                           |
-| KG tab when Cognee not runtime-enabled                                                                                     | Empty/erroring tab for non-Cognee tenants | U6: hide the KG tab (or show unavailable state) consistent with prior `managedAppKey` gating |
-| Removing standalone CRM/KG nav strands existing bookmarks                                                                  | Operators' saved links 404 or hit guard   | CRM route kept (reachable via drill-in); KG route redirects to Memory                        |
-| Dropping shared lucide imports (`Layers3`, `BriefcaseBusiness`, `IconTopologyStar3`, `CreditCard`) that are used elsewhere | Build break                               | Grep each import before removing; only drop if unused                                        |
+| Risk                                                                                                                       | Impact                                                         | Mitigation                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Four `usePageHeaderActions` calls racing in the combined Memory page                                                       | Flickering/incorrect breadcrumb                                | KTD-4: parent owns the header; facet bodies are chrome-free                                  |
+| `knowledge-bases` has child routes (detail/new) that a blanket redirect would break                                        | Broken KB detail navigation                                    | U5: redirect only the index; audit `settings.knowledge-bases.*` route files first            |
+| Mounting all four tab bodies fires all data queries at once                                                                | Wasteful network / slow tab page                               | U5: lazy-mount inactive tabs for data-heavy facets                                           |
+| KG tab when the retired graph substrate not runtime-enabled                                                                | Empty/erroring tab for non-the retired graph substrate tenants | U6: hide the KG tab (or show unavailable state) consistent with prior `managedAppKey` gating |
+| Removing standalone CRM/KG nav strands existing bookmarks                                                                  | Operators' saved links 404 or hit guard                        | CRM route kept (reachable via drill-in); KG route redirects to Memory                        |
+| Dropping shared lucide imports (`Layers3`, `BriefcaseBusiness`, `IconTopologyStar3`, `CreditCard`) that are used elsewhere | Build break                                                    | Grep each import before removing; only drop if unused                                        |
 
 **External dependency:** none. `@thinkwork/ui` Tabs and `@tabler/icons-react` (IconApps, IconRefresh) are already available.
 
@@ -419,7 +419,7 @@ For the Refresh button, a component test is optional given it's presentational; 
 - `pnpm --filter @thinkwork/web typecheck` clean (catches dropped-import and dead-import issues).
 - `pnpm --filter @thinkwork/web test` — full suite green, including the new/extended `settings-nav` and `SettingsMemoryHome` tests.
 - `pnpm --filter @thinkwork/web lint` and `pnpm format:check` clean.
-- Manual pass on the running dev server (operator login): sidebar shows **Applications** (with apps icon) and a single **Memory** entry; no CRM, Knowledge Graph, Wiki Memory, Knowledge Bases, or Billing rows. Applications page Refresh is icon-only and spins on click. Drilling into Cognee → `Applications > Cognee` (config panel); into Twenty → `Applications > Twenty CRM`. Memory page tabs switch across Memory / Knowledge Bases / Wiki / Knowledge Graph. Visiting `/settings/wiki`, `/settings/knowledge-bases`, `/settings/knowledge-graph` redirects to `/settings/memory`. General Settings no longer shows the Managed Applications section.
+- Manual pass on the running dev server (operator login): sidebar shows **Applications** (with apps icon) and a single **Memory** entry; no CRM, Knowledge Graph, Wiki Memory, Knowledge Bases, or Billing rows. Applications page Refresh is icon-only and spins on click. Drilling into the retired graph substrate → `Applications > the retired graph substrate` (config panel); into Twenty → `Applications > Twenty CRM`. Memory page tabs switch across Memory / Knowledge Bases / Wiki / Knowledge Graph. Visiting `/settings/wiki`, `/settings/knowledge-bases`, `/settings/knowledge-graph` redirects to `/settings/memory`. General Settings no longer shows the Managed Applications section.
 
 ---
 
