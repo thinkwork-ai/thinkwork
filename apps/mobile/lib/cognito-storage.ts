@@ -11,6 +11,9 @@ import * as SecureStore from "expo-secure-store";
 import { getPlatformConfig } from "./platform-config";
 
 const PREFIX = "CognitoIdentityServiceProvider";
+const KEYCHAIN_ACCESSIBLE_OPTIONS = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+};
 
 // In-memory cache so synchronous reads work (Cognito SDK calls getItem synchronously)
 const memoryCache = new Map<string, string>();
@@ -41,6 +44,8 @@ async function hydrate() {
     // where a reload — e.g. Updates.reloadAsync() after an OTA install —
     // killed the debounced manifest write before it could flush.
     const lastUserKey = `${PREFIX}.${clientId}.LastAuthUser`;
+    const migrationKey = `${PREFIX}.${clientId}.__after_first_unlock_migrated__`;
+    const migrationDone = await SecureStore.getItemAsync(migrationKey);
     const username = await SecureStore.getItemAsync(lastUserKey);
     console.log(
       "[auth-boot] hydrate LastAuthUser:",
@@ -71,15 +76,29 @@ async function hydrate() {
     }
 
     let foundCount = 0;
+    const loadedEntries: Array<[string, string]> = [];
     await Promise.all(
       [...keysToLoad].map(async (key) => {
         const value = await SecureStore.getItemAsync(key);
         if (value !== null) {
           memoryCache.set(key, value);
+          loadedEntries.push([key, value]);
           foundCount += 1;
         }
       }),
     );
+    if (!migrationDone && loadedEntries.length > 0) {
+      await Promise.all(
+        loadedEntries.map(([key, value]) =>
+          SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS),
+        ),
+      );
+      await SecureStore.setItemAsync(
+        migrationKey,
+        "true",
+        KEYCHAIN_ACCESSIBLE_OPTIONS,
+      );
+    }
     console.log(
       `[auth-boot] hydrate done in ${Date.now() - t0}ms, queried=${keysToLoad.size}, found=${foundCount}, cacheSize=${memoryCache.size}`,
     );
@@ -118,6 +137,7 @@ function updateManifest() {
     SecureStore.setItemAsync(
       `${PREFIX}.__manifest__`,
       JSON.stringify(keys),
+      KEYCHAIN_ACCESSIBLE_OPTIONS,
     ).catch((e) => console.warn("[CognitoStorage] manifest write error:", e));
   }, 100);
 }
@@ -135,7 +155,7 @@ export const CognitoSecureStorage = {
       return value;
     }
     memoryCache.set(key, value);
-    SecureStore.setItemAsync(key, value).catch((e) =>
+    SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS).catch((e) =>
       console.warn("[CognitoStorage] setItem error:", e),
     );
     updateManifest();

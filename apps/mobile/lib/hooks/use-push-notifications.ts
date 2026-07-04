@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Linking, Platform } from "react-native";
+import { Platform } from "react-native";
 import { router } from "expo-router";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
@@ -17,22 +17,49 @@ import {
   UnregisterPushTokenMutation,
 } from "@/lib/graphql-queries";
 import { pushNavigationTarget } from "@/lib/push-navigation";
+import { useAuth } from "@/lib/auth-context";
+import {
+  handleComputerApprovalActionResponse,
+  isComputerApprovalAction,
+  registerComputerApprovalActions,
+} from "@/lib/notification-actions";
 
 // Show notifications even when the app is in the foreground
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
+  handleNotification: async (notification) => {
+    const contentData = notification.request.content.data ?? {};
+    const trigger = notification.request.trigger as any;
+    const rawTier =
+      (contentData as Record<string, unknown>).tier ??
+      (trigger?.payload as Record<string, unknown> | undefined)?.tier;
+    return resolvePresentationForTier(
+      typeof rawTier === "string" ? rawTier : undefined,
+    ) as any;
+  },
+});
+
+export function resolvePresentationForTier(tier: string | undefined) {
+  if (tier === "chart") {
+    return {
+      shouldShowAlert: false,
+      shouldPlaySound: false,
+      shouldSetBadge: true,
+    };
+  }
+  return {
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
-  }),
-});
+  };
+}
 
 export function usePushNotifications(isAuthenticated: boolean) {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const notificationListener = useRef<Notifications.Subscription | null>(null);
+  const responseListener = useRef<Notifications.Subscription | null>(null);
   const [, executeRegister] = useMutation(RegisterPushTokenMutation);
   const [, executeUnregister] = useMutation(UnregisterPushTokenMutation);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Skip on web and non-device environments (simulators may work with limitations)
@@ -45,7 +72,8 @@ export function usePushNotifications(isAuthenticated: boolean) {
       Platform.OS,
     );
 
-    registerForPushNotificationsAsync()
+    registerComputerApprovalActions()
+      .then(() => registerForPushNotificationsAsync())
       .then(async (token) => {
         console.log(
           "[push-notifications] registerForPushNotificationsAsync returned:",
@@ -83,23 +111,39 @@ export function usePushNotifications(isAuthenticated: boolean) {
       });
 
     // Listen for notification taps — navigate to thread
+    const routeToApproval = (approvalId: string) => {
+      if (!user?.tenantId) {
+        console.warn(
+          "[push-notifications] Cannot route approval without tenantId",
+        );
+        return;
+      }
+      router.push(
+        `/fleet/${user.tenantId}/inbox?approvalId=${encodeURIComponent(approvalId)}`,
+      );
+    };
+
     const handleNotificationResponse = (
       response: Notifications.NotificationResponse,
     ) => {
+      if (
+        response.actionIdentifier !==
+          Notifications.DEFAULT_ACTION_IDENTIFIER &&
+        isComputerApprovalAction(response.actionIdentifier)
+      ) {
+        void handleComputerApprovalActionResponse(response, {
+          routeToApproval,
+        });
+        return;
+      }
+
       const content = response.notification.request.content;
       const trigger = response.notification.request.trigger as any;
 
       // content.data for Expo push, trigger.payload for raw APNs/simctl.
       const target = pushNavigationTarget(content.data, trigger?.payload);
       if (target?.kind === "computer_approval") {
-        setTimeout(() => {
-          Linking.openURL(target.url).catch((err) => {
-            console.error(
-              "[push-notifications] Failed to open approval URL:",
-              err,
-            );
-          });
-        }, 500);
+        setTimeout(() => routeToApproval(target.approvalId), 500);
       } else if (target?.kind === "thread") {
         setTimeout(() => router.push(`/thread/${target.threadId}`), 500);
       }
@@ -121,7 +165,7 @@ export function usePushNotifications(isAuthenticated: boolean) {
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.tenantId]);
 
   const unregisterToken = async () => {
     if (!expoPushToken) return;
