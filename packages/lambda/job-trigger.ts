@@ -18,6 +18,7 @@ import {
   continueAgentLoopDispatch,
   isRepairableHalfBuiltStart,
   normalizeRoutineActionsSpec,
+  resolveDispatchableVersion,
   type RoutineActionResult,
   dispatchAgentLoop,
   workerAgentId,
@@ -405,9 +406,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -505,9 +505,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -551,9 +550,8 @@ type JobTriggerDb = ReturnType<typeof getDb>;
 const runRoutineActionHook: NonNullable<
   AgentLoopDispatchLedger["runRoutineAction"]
 > = async (input) => {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "ROUTINE_EXEC_GIT_FUNCTION_NAME",
@@ -621,7 +619,9 @@ const runRoutineActionHook: NonNullable<
 };
 
 function createAgentLoopLedger(db: JobTriggerDb): AgentLoopDispatchLedger {
-  return createDbAgentLoopLedger(db, { runRoutineAction: runRoutineActionHook });
+  return createDbAgentLoopLedger(db, {
+    runRoutineAction: runRoutineActionHook,
+  });
 }
 
 /**
@@ -673,6 +673,7 @@ async function handleAgentLoopContinueDispatch(input: {
       judge_spec: agentLoopVersions.judge_spec,
       loop_policy: agentLoopVersions.loop_policy,
       routine_actions_spec: agentLoopVersions.routine_actions_spec,
+      target_spec: agentLoopVersions.target_spec,
     })
     .from(agentLoopVersions)
     .where(eq(agentLoopVersions.id, loop.current_version_id))
@@ -693,17 +694,7 @@ async function handleAgentLoopContinueDispatch(input: {
         enabled: loop.enabled,
         lifecycleStatus: loop.lifecycle_status,
       },
-      version: {
-        id: version.id,
-        versionStatus: version.version_status,
-        goalSpec: version.goal_spec,
-        workerSpec: version.worker_spec,
-        judgeSpec: version.judge_spec,
-        loopPolicy: version.loop_policy,
-        routineActionsSpec: normalizeRoutineActionsSpec(
-          version.routine_actions_spec,
-        ),
-      },
+      version: resolveDispatchableVersion(version),
       trigger: {
         family: "manual",
         source: "manual_run",
@@ -814,6 +805,7 @@ async function handleAgentLoopSchedule(input: {
             judge_spec: agentLoopVersions.judge_spec,
             loop_policy: agentLoopVersions.loop_policy,
             routine_actions_spec: agentLoopVersions.routine_actions_spec,
+            target_spec: agentLoopVersions.target_spec,
           })
           .from(agentLoopVersions)
           .where(eq(agentLoopVersions.id, loop.current_version_id))
@@ -821,19 +813,9 @@ async function handleAgentLoopSchedule(input: {
       )[0]
     : null;
   const idempotencyKey = scheduledAgentLoopIdempotencyKey(event);
-  const dispatchVersion = version
-    ? {
-        id: version.id,
-        versionStatus: version.version_status,
-        goalSpec: version.goal_spec,
-        workerSpec: version.worker_spec,
-        judgeSpec: version.judge_spec,
-        loopPolicy: version.loop_policy,
-        routineActionsSpec: normalizeRoutineActionsSpec(
-          version.routine_actions_spec,
-        ),
-      }
-    : null;
+  // Single-sourced target resolution (THINK-137 U3): target_spec authoritative,
+  // legacy blobs the read-fallback.
+  const dispatchVersion = version ? resolveDispatchableVersion(version) : null;
 
   // Idempotency (THINK-137 U2). A run already exists for this fire when
   // EventBridge redelivers or overlapping fires race. A *complete* run is
@@ -868,7 +850,7 @@ async function handleAgentLoopSchedule(input: {
     return;
   }
 
-  const workerId = workerAgentId(version?.worker_spec ?? null);
+  const workerId = workerAgentId(dispatchVersion?.workerSpec ?? null);
   const configuredSpaceId = loop.space_id
     ? await loadActiveSpaceId(db, tenantId, loop.space_id)
     : job.space_id
@@ -881,7 +863,9 @@ async function handleAgentLoopSchedule(input: {
   // token-free and complete with no agent turn — creating an execution
   // thread here leaves an empty "Working…" thread hung forever. A repair
   // reuses the existing run/iteration, so it needs no new thread either.
-  const routineOnly = isRoutineOnlyVersion(version?.routine_actions_spec);
+  const routineOnly = isRoutineOnlyVersion(
+    dispatchVersion?.routineActionsSpec ?? null,
+  );
   const executionThread =
     !willRepairExisting &&
     workerId &&
@@ -1277,9 +1261,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -1690,9 +1673,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

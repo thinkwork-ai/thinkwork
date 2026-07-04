@@ -1,13 +1,16 @@
 import {
   DEFAULT_LOOP_POLICY,
   normalizeGoalSpec,
-  normalizeJudgeSpec,
   normalizeLoopPolicy,
   normalizeRoutineActionsSpec,
+  normalizeTargetSpec,
   normalizeTriggerSpec,
   normalizeWorkerSpec,
+  targetSpecFromLegacy,
   type EvidencePolicy,
+  type JudgeSpec,
   type RoutineActionsSpec,
+  type TargetSpec,
 } from "@thinkwork/agent-loops-core";
 import { and, desc, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
@@ -44,15 +47,27 @@ type SaveAgentLoopInput = {
   enabled?: boolean | null;
   ownerUserId?: string | null;
   ownerAgentId?: string | null;
+  runAsUserId?: string | null;
   spaceId?: string | null;
   triggerSpec: unknown;
   goalSpec: unknown;
   workerSpec: unknown;
-  judgeSpec: unknown;
+  targetSpec?: unknown;
+  // Judge / loop-policy / evidence are off the product surface (R11) —
+  // accepted and ignored.
+  judgeSpec?: unknown;
   loopPolicy?: unknown;
   evidencePolicy?: unknown;
   routineActionsSpec?: unknown;
   sourceMetadata?: unknown;
+};
+
+// R11: judge mode is off the product surface. The judge_spec column is still
+// NOT NULL, so every version is written with this fixed default.
+const DEFAULT_JUDGE_SPEC: JudgeSpec = {
+  mode: "self_check",
+  criteria: [],
+  config: {},
 };
 
 export async function saveAgentLoop(
@@ -93,6 +108,7 @@ async function createAgentLoop(
       enabled: input.enabled ?? true,
       owner_user_id: input.ownerUserId ?? actorId,
       owner_agent_id: input.ownerAgentId ?? null,
+      run_as_user_id: input.runAsUserId ?? actorId,
       space_id: spaceId,
       primary_trigger_family: normalized.triggerSpec.family,
     })
@@ -108,6 +124,7 @@ async function createAgentLoop(
       trigger_spec: normalized.triggerSpec,
       goal_spec: normalized.goalSpec,
       worker_spec: normalized.workerSpec,
+      target_spec: normalized.targetSpec,
       judge_spec: normalized.judgeSpec,
       loop_policy: normalized.loopPolicy,
       evidence_policy: normalized.evidencePolicy,
@@ -184,6 +201,7 @@ async function updateAgentLoop(
         trigger_spec: normalized.triggerSpec,
         goal_spec: normalized.goalSpec,
         worker_spec: normalized.workerSpec,
+        target_spec: normalized.targetSpec,
         judge_spec: normalized.judgeSpec,
         loop_policy: normalized.loopPolicy,
         evidence_policy: normalized.evidencePolicy,
@@ -224,6 +242,9 @@ async function updateAgentLoop(
         input.ownerAgentId === undefined
           ? existing.owner_agent_id
           : input.ownerAgentId,
+      // R1: default run-as identity to the existing value, else the caller —
+      // any save backfills run_as_user_id on pre-U3 loops.
+      run_as_user_id: input.runAsUserId ?? existing.run_as_user_id ?? actorId,
       space_id: spaceId === undefined ? existing.space_id : spaceId,
       primary_trigger_family: normalized.triggerSpec.family,
       current_version_id: currentVersionId,
@@ -305,7 +326,8 @@ interface NormalizedAgentLoopSpecs {
   triggerSpec: ReturnType<typeof normalizeTriggerSpec>;
   goalSpec: ReturnType<typeof normalizeGoalSpec>;
   workerSpec: ReturnType<typeof normalizeWorkerSpec>;
-  judgeSpec: ReturnType<typeof normalizeJudgeSpec>;
+  targetSpec: TargetSpec;
+  judgeSpec: JudgeSpec;
   loopPolicy: ReturnType<typeof normalizeLoopPolicy>;
   evidencePolicy: EvidencePolicy;
   routineActionsSpec: RoutineActionsSpec | null;
@@ -318,7 +340,6 @@ async function normalizeSpecs(
   const triggerSpec = parseAwsJsonObject(input.triggerSpec);
   const goalSpec = parseAwsJsonObject(input.goalSpec);
   const workerSpec = parseAwsJsonObject(input.workerSpec);
-  const judgeSpec = parseAwsJsonObject(input.judgeSpec);
   const sourceMetadata = parseAwsJsonObject(input.sourceMetadata);
   const defaultWorker = promptFirstDraftNeedsDefaultWorker({
     workerSpec,
@@ -329,7 +350,9 @@ async function normalizeSpecs(
   const draft = normalizeAutomationDraft({
     goalSpec,
     workerSpec,
-    judgeSpec,
+    // Judge is off the product surface (R11); pass an empty spec so the draft
+    // helper's goal/worker inference still runs without judge inference.
+    judgeSpec: {},
     sourceMetadata,
     defaultWorker,
   });
@@ -341,11 +364,27 @@ async function normalizeSpecs(
     await assertRoutineActionsValid(input.tenantId, routineActionsSpec);
   }
 
+  const normalizedGoal = normalizeGoalSpec(draft.goalSpec);
+  const normalizedWorker = normalizeWorkerSpec(draft.workerSpec);
+
+  // R3: target_spec is authoritative. When the caller sends one, validate +
+  // write it; otherwise derive it from the (still-written) legacy inputs so no
+  // version row is ever created with a NULL target_spec.
+  const targetSpec =
+    input.targetSpec != null
+      ? normalizeTargetSpec(parseAwsJsonObject(input.targetSpec))
+      : targetSpecFromLegacy({
+          goalSpec: normalizedGoal,
+          workerSpec: normalizedWorker,
+          routineActionsSpec,
+        });
+
   return {
     triggerSpec: normalizeTriggerSpec(triggerSpec),
-    goalSpec: normalizeGoalSpec(draft.goalSpec),
-    workerSpec: normalizeWorkerSpec(draft.workerSpec),
-    judgeSpec: normalizeJudgeSpec(draft.judgeSpec),
+    goalSpec: normalizedGoal,
+    workerSpec: normalizedWorker,
+    targetSpec,
+    judgeSpec: DEFAULT_JUDGE_SPEC,
     loopPolicy: input.loopPolicy
       ? normalizeLoopPolicy(parseAwsJsonObject(input.loopPolicy))
       : DEFAULT_LOOP_POLICY,
@@ -465,6 +504,7 @@ function versionSpecsEqual(
     trigger_spec: unknown;
     goal_spec: unknown;
     worker_spec: unknown;
+    target_spec?: unknown;
     judge_spec: unknown;
     loop_policy: unknown;
     evidence_policy: unknown;
@@ -477,6 +517,8 @@ function versionSpecsEqual(
     stableJson(version.trigger_spec) === stableJson(normalized.triggerSpec) &&
     stableJson(version.goal_spec) === stableJson(normalized.goalSpec) &&
     stableJson(version.worker_spec) === stableJson(normalized.workerSpec) &&
+    stableJson(version.target_spec ?? null) ===
+      stableJson(normalized.targetSpec) &&
     stableJson(version.judge_spec) === stableJson(normalized.judgeSpec) &&
     stableJson(version.loop_policy) === stableJson(normalized.loopPolicy) &&
     stableJson(version.evidence_policy) ===

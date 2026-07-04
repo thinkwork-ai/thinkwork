@@ -224,6 +224,8 @@ describe("saveAgentLoop", () => {
       1,
       expect.objectContaining({
         space_id: "space-1",
+        // R1: run-as identity defaults to the caller when absent.
+        run_as_user_id: "user-1",
       }),
     );
     expect(mocks.insertValues).toHaveBeenNthCalledWith(
@@ -241,17 +243,25 @@ describe("saveAgentLoop", () => {
           id: "agent-1",
           label: "ThinkWork Agent",
         }),
-        judge_spec: expect.objectContaining({
-          mode: "self_check",
-          criteria: expect.arrayContaining([
-            "The response addresses the automation prompt.",
-          ]),
-        }),
+        // R3: target_spec derived from the legacy inputs (never NULL).
+        target_spec: {
+          kind: "agent_thread",
+          agentThread: {
+            instructions: "Review support escalations every morning.",
+            completionCriteria: [
+              "The agent produces a useful response or next step for the automation prompt.",
+            ],
+            workerId: "agent-1",
+            workerType: "agent",
+            threadMode: "new_per_run",
+          },
+        },
+        // R11: judge is off the product surface — written as a fixed default.
+        judge_spec: { mode: "self_check", criteria: [], config: {} },
         source_metadata: expect.objectContaining({
           createdFrom: "settings.automations.easy",
           goalInference: "runtime_inferred",
           workerInference: "tenant_default_agent",
-          judgeInference: "default_self_check",
         }),
       }),
     );
@@ -260,6 +270,94 @@ describe("saveAgentLoop", () => {
         workerAgentId: "agent-1",
         spaceId: "space-1",
         goalObjective: "Review support escalations every morning.",
+      }),
+    );
+  });
+
+  it("writes a caller-supplied targetSpec verbatim (wins over legacy derivation) and honors an explicit runAsUserId", async () => {
+    mocks.selectRows.mockImplementation(async (call: number) => {
+      if (call === 1) return [{ id: "space-1" }]; // resolveAgentLoopSpaceId
+      if (call === 2) {
+        return [
+          {
+            id: "loop-1",
+            tenant_id: "tenant-1",
+            name: "Scheduled brief",
+            slug: "scheduled-brief",
+            lifecycle_status: "active",
+            enabled: true,
+            primary_trigger_family: "schedule",
+            current_version_id: "version-1",
+            current_version_number: 1,
+            created_at: new Date("2026-06-23T00:00:00Z"),
+            updated_at: new Date("2026-06-23T00:00:00Z"),
+          },
+        ];
+      }
+      return [];
+    });
+
+    await saveAgentLoop(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          name: "Scheduled brief",
+          spaceId: "space-1",
+          lifecycleStatus: "active",
+          enabled: true,
+          runAsUserId: "user-42",
+          triggerSpec: {
+            family: "schedule",
+            enabled: true,
+            config: { expression: "rate(1 day)" },
+          },
+          goalSpec: {
+            objective: "Legacy objective that must be overridden",
+            completionCriteria: ["legacy"],
+          },
+          workerSpec: {
+            type: "agent",
+            id: "agent-9",
+            toolHints: [],
+            config: {},
+          },
+          targetSpec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Authoritative instructions",
+              completionCriteria: ["A brief exists."],
+              workerId: "agent-9",
+              workerType: "agent",
+              threadMode: "new_per_run",
+            },
+          },
+          // sourceMetadata omitted → not prompt-first → no default-worker load.
+        },
+      },
+      ctx(),
+    );
+
+    expect(mocks.insertValues).toHaveBeenNthCalledWith(
+      1,
+      1,
+      expect.objectContaining({ run_as_user_id: "user-42" }),
+    );
+    expect(mocks.insertValues).toHaveBeenNthCalledWith(
+      2,
+      2,
+      expect.objectContaining({
+        target_spec: {
+          kind: "agent_thread",
+          agentThread: {
+            instructions: "Authoritative instructions",
+            completionCriteria: ["A brief exists."],
+            workerId: "agent-9",
+            workerType: "agent",
+            threadMode: "new_per_run",
+          },
+        },
+        judge_spec: { mode: "self_check", criteria: [], config: {} },
       }),
     );
   });

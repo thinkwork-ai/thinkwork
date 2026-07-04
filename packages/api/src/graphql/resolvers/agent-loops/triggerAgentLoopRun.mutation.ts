@@ -1,6 +1,6 @@
 import {
   dispatchAgentLoop,
-  normalizeRoutineActionsSpec,
+  resolveDispatchableVersion,
   workerAgentId,
 } from "@thinkwork/agent-loops-core";
 import {
@@ -72,13 +72,15 @@ export async function triggerAgentLoopRun(
     return agentLoopRowToGraphql(run);
   }
 
+  // Single-sourced target resolution (THINK-137 U3): resolve the dispatchable
+  // version from target_spec (or the legacy read-fallback) once, then derive
+  // routine/thread decisions from it.
+  const dispatchVersion = version ? resolveDispatchableVersion(version) : null;
   // Routine-bearing Automations defer their continuation to job-trigger
   // (KTD-3): graphql-http never invokes the routine executor inline — the
   // run/iteration rows are created here, then job-trigger executes the
   // actions and enqueues (or skips) the wakeup.
-  const routineActionsSpec = normalizeRoutineActionsSpec(
-    version?.routine_actions_spec ?? null,
-  );
+  const routineActionsSpec = dispatchVersion?.routineActionsSpec ?? null;
   const hasRoutineActions = (routineActionsSpec?.actions.length ?? 0) > 0;
   // Routine-only Automations complete with no agent turn — creating an
   // execution thread would leave an empty "Working…" thread hung forever
@@ -86,7 +88,7 @@ export async function triggerAgentLoopRun(
   const routineOnly =
     hasRoutineActions && routineActionsSpec?.agentTurn === false;
 
-  const workerId = workerAgentId(version?.worker_spec ?? null);
+  const workerId = workerAgentId(dispatchVersion?.workerSpec ?? null);
   const configuredSpaceId = loop.space_id
     ? await loadActiveSpaceId(db, loop.tenant_id, loop.space_id)
     : null;
@@ -117,17 +119,7 @@ export async function triggerAgentLoopRun(
         enabled: loop.enabled,
         lifecycleStatus: loop.lifecycle_status,
       },
-      version: version
-        ? {
-            id: version.id,
-            versionStatus: version.version_status,
-            goalSpec: version.goal_spec,
-            workerSpec: version.worker_spec,
-            judgeSpec: version.judge_spec,
-            loopPolicy: version.loop_policy,
-            routineActionsSpec,
-          }
-        : null,
+      version: dispatchVersion,
       trigger: {
         family: "manual",
         source: "manual_run",
@@ -188,9 +180,8 @@ async function invokeAgentLoopContinueDispatch(input: {
   threadId: string | null;
   spaceId: string | null;
 }): Promise<void> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const stage = process.env.STAGE;
   const fnName =

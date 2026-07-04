@@ -7,6 +7,11 @@ import type {
   RoutineActionsSpec,
   WorkerSpec,
 } from "./contracts";
+import {
+  normalizeRoutineActionsSpec,
+  normalizeTargetSpec,
+  targetSpecFromLegacy,
+} from "./contracts";
 
 export const AGENT_LOOP_WAKEUP_SOURCE = "agent_loop";
 export const AGENT_LOOP_SCHEDULE_TRIGGER_TYPE = "agent_loop_schedule";
@@ -347,4 +352,109 @@ export function buildAgentLoopWakeupPayload(input: {
 
 export function workerAgentId(workerSpec: WorkerSpec | null | undefined) {
   return workerSpec?.type === "agent" ? workerSpec.id : null;
+}
+
+/**
+ * Raw agent_loop_versions row (snake_case columns) as both dispatch call
+ * sites already select it. `target_spec` is the authoritative target after
+ * THINK-137 U3; the legacy blobs are the read-fallback for pre-U3 rows.
+ */
+export interface RawAgentLoopVersionRow {
+  id: string;
+  version_status: string;
+  goal_spec: unknown;
+  worker_spec: unknown;
+  judge_spec: unknown;
+  loop_policy: unknown;
+  routine_actions_spec?: unknown;
+  target_spec?: unknown;
+}
+
+/**
+ * Single-sourced dispatch resolution (THINK-137 U3). Turns a raw version row
+ * into the `DispatchableAgentLoopVersion` the dispatcher consumes, resolving
+ * the target from `target_spec` when present, else `targetSpecFromLegacy`.
+ * Both call sites (job-trigger's handleAgentLoopSchedule and the
+ * triggerAgentLoopRun mutation) call this so the target→dispatch translation
+ * is never duplicated.
+ *
+ * Behavior-preserving: a `routine`/`workflow` target reconstructs the
+ * token-free `agentTurn:false` routineActionsSpec so it dispatches exactly
+ * like today's routine-only path; an `agent_thread` target reconstructs the
+ * goal/worker shapes so it dispatches exactly like today's goal/worker wakeup
+ * path. Judge + loop-policy always come from the (still-written) legacy
+ * columns — they are off the product surface (R11) and not carried by
+ * target_spec.
+ */
+export function resolveDispatchableVersion(
+  row: RawAgentLoopVersionRow,
+): DispatchableAgentLoopVersion {
+  const targetSpec =
+    row.target_spec !== undefined && row.target_spec !== null
+      ? normalizeTargetSpec(row.target_spec)
+      : targetSpecFromLegacy({
+          goalSpec: row.goal_spec,
+          workerSpec: row.worker_spec,
+          routineActionsSpec: row.routine_actions_spec,
+        });
+
+  const legacyGoal = (row.goal_spec ?? {}) as GoalSpec;
+  const legacyWorker = (row.worker_spec ?? {
+    type: "agent",
+    id: "",
+    toolHints: [],
+    config: {},
+  }) as WorkerSpec;
+
+  let goalSpec = legacyGoal;
+  let workerSpec = legacyWorker;
+  let routineActionsSpec: RoutineActionsSpec | null;
+
+  if (targetSpec.kind === "routine" || targetSpec.kind === "workflow") {
+    // Token-free target: dispatch exactly like the agentTurn:false path.
+    const ref =
+      targetSpec.kind === "routine" ? targetSpec.routine : targetSpec.workflow;
+    const actions: RoutineActionSpec[] = ref
+      ? [
+          {
+            routineId: ref.routineId,
+            ...(ref.input != null ? { input: ref.input } : {}),
+            ...(ref.label != null ? { label: ref.label } : {}),
+          },
+          ...(ref.additionalActions ?? []),
+        ]
+      : [];
+    routineActionsSpec = { actions, agentTurn: false };
+  } else {
+    // agent_thread — target_spec is authoritative for objective + worker
+    // identity; its orthogonal bolt-on routine actions stay in the legacy
+    // routine_actions_spec column (mixed Automations).
+    const at = targetSpec.agentThread;
+    if (at) {
+      goalSpec = {
+        ...legacyGoal,
+        objective: at.instructions,
+        completionCriteria:
+          at.completionCriteria ?? legacyGoal.completionCriteria ?? [],
+      };
+      if (at.workerId) {
+        workerSpec = {
+          ...legacyWorker,
+          type: at.workerType ?? legacyWorker.type ?? "agent",
+          id: at.workerId,
+        };
+      }
+    }
+    routineActionsSpec = normalizeRoutineActionsSpec(row.routine_actions_spec);
+  }
+
+  return {
+    id: row.id,
+    versionStatus: row.version_status,
+    goalSpec,
+    workerSpec,
+    judgeSpec: row.judge_spec as JudgeSpec,
+    loopPolicy: row.loop_policy as LoopPolicy,
+    routineActionsSpec,
+  };
 }

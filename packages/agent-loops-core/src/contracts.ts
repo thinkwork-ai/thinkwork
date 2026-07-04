@@ -12,6 +12,18 @@ export const AGENT_LOOP_PHASE1_TRIGGER_FAMILIES = [
   "schedule",
 ] as const;
 
+/**
+ * Trigger families acceptable on a SAVED Automation (THINK-137 U3, R2).
+ * `schedule` and `webhook` are the real trigger families; `manual` stays valid
+ * as the "no automatic trigger, run by hand" family (and as a run trigger
+ * source). The dead families api/app_event/n8n are rejected at save time.
+ */
+export const AGENT_LOOP_SAVEABLE_TRIGGER_FAMILIES = [
+  "manual",
+  "schedule",
+  "webhook",
+] as const;
+
 export const AGENT_LOOP_JUDGE_MODES = [
   "self_check",
   "human_approval",
@@ -119,9 +131,10 @@ const MAX_LABEL_LENGTH = 200;
 export function normalizeTriggerSpec(input: unknown): TriggerSpec {
   const source = record(input);
   const family = source.family;
-  if (!isEnumValue(family, AGENT_LOOP_PHASE1_TRIGGER_FAMILIES)) {
+  if (!isEnumValue(family, AGENT_LOOP_SAVEABLE_TRIGGER_FAMILIES)) {
     throw new Error(
-      `Unsupported AgentLoop trigger family '${String(family)}' for Phase 1`,
+      `Unsupported AgentLoop trigger family '${String(family)}'. ` +
+        `Trigger families are ${AGENT_LOOP_SAVEABLE_TRIGGER_FAMILIES.join(", ")}.`,
     );
   }
 
@@ -454,5 +467,299 @@ export function normalizeRoutineActionsSpec(
   return {
     actions,
     agentTurn: record.agentTurn !== false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Target spec (THINK-137 Automations U3 — plan 2026-07-03-006)
+// ---------------------------------------------------------------------------
+//
+// `target_spec` is the authoritative version spec: it names WHAT a run does
+// (its target) — an agent thread, a routine, or a workflow. The legacy
+// goal/worker/routineActions blobs become read-fallbacks (targetSpecFromLegacy)
+// for pre-U3 rows and are still written for column compatibility. Judge /
+// loop-policy are off the product surface (R11) and are NOT represented here.
+
+export const AGENT_LOOP_TARGET_KINDS = [
+  "agent_thread",
+  "routine",
+  "workflow",
+] as const;
+
+export type AgentLoopTargetKind = (typeof AGENT_LOOP_TARGET_KINDS)[number];
+
+/** agent_thread target — a goal-mode agent turn. `instructions` is the
+ * objective the run pursues; `completionCriteria` is carried so the mapping
+ * from a legacy goalSpec is lossless. `workerId`/`workerType` name the agent
+ * that runs. `threadMode` selects a fresh thread per run or a fixed thread. */
+export interface TargetAgentThreadSpec {
+  instructions: string;
+  completionCriteria?: string[];
+  workerId?: string;
+  workerType?: "agent" | "agent_profile";
+  threadMode: "new_per_run" | "fixed";
+  fixedThreadId?: string;
+}
+
+/** routine / workflow target — a deterministic git_python routine (routine
+ * kind) or a step_functions workflow (workflow kind, D4). `additionalActions`
+ * carries the tail of a legacy multi-action routine-only spec so the
+ * round-trip through a single-routine target is lossless (see
+ * targetSpecFromLegacy). */
+export interface TargetRoutineRef {
+  routineId: string;
+  input?: Record<string, unknown> | null;
+  label?: string | null;
+  additionalActions?: RoutineActionSpec[];
+}
+
+export interface TargetGuards {
+  monthlyCostCapUsd?: number;
+  maxConcurrentRuns?: number;
+}
+
+export interface TargetSpec {
+  kind: AgentLoopTargetKind;
+  agentThread?: TargetAgentThreadSpec;
+  routine?: TargetRoutineRef;
+  workflow?: TargetRoutineRef;
+  guards?: TargetGuards;
+}
+
+/**
+ * Validates + normalizes a raw target_spec value (object or JSON string).
+ * Rejects unknown kinds and mixed kinds (config for a kind other than the
+ * declared one) with actionable errors.
+ */
+export function normalizeTargetSpec(value: unknown): TargetSpec {
+  const source = typeof value === "string" ? JSON.parse(value) : value;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new Error("targetSpec must be an object");
+  }
+  const rec = source as Record<string, unknown>;
+  const kind = rec.kind;
+  if (!isEnumValue(kind, AGENT_LOOP_TARGET_KINDS)) {
+    throw new Error(
+      `targetSpec.kind '${String(kind)}' is not one of ${AGENT_LOOP_TARGET_KINDS.join(", ")}`,
+    );
+  }
+
+  // Reject config blocks that belong to a different kind (mixed kinds). The
+  // agent_thread kind's config key is `agentThread`; routine/workflow match
+  // their kind name directly.
+  const configKeyForKind: Record<AgentLoopTargetKind, string> = {
+    agent_thread: "agentThread",
+    routine: "routine",
+    workflow: "workflow",
+  };
+  const ownKey = configKeyForKind[kind];
+  const foreignKeys = (["agentThread", "routine", "workflow"] as const).filter(
+    (key) => key !== ownKey && rec[key] !== undefined && rec[key] !== null,
+  );
+  if (foreignKeys.length > 0) {
+    throw new Error(
+      `targetSpec.kind '${kind}' must not carry ${foreignKeys.join(", ")} config`,
+    );
+  }
+
+  const guards = normalizeTargetGuards(rec.guards);
+  if (kind === "agent_thread") {
+    return compact({
+      kind,
+      agentThread: normalizeTargetAgentThread(rec.agentThread),
+      guards,
+    });
+  }
+  if (kind === "routine") {
+    return compact({
+      kind,
+      routine: normalizeTargetRoutineRef(rec.routine, "routine"),
+      guards,
+    });
+  }
+  return compact({
+    kind,
+    workflow: normalizeTargetRoutineRef(rec.workflow, "workflow"),
+    guards,
+  });
+}
+
+function normalizeTargetAgentThread(value: unknown): TargetAgentThreadSpec {
+  const rec = record(value);
+  const instructions = requiredString(
+    rec.instructions,
+    "targetSpec.agentThread.instructions",
+    {
+      maxLength: MAX_OBJECTIVE_LENGTH,
+    },
+  );
+  const threadModeRaw = rec.threadMode ?? "new_per_run";
+  if (!isEnumValue(threadModeRaw, ["new_per_run", "fixed"] as const)) {
+    throw new Error(
+      "targetSpec.agentThread.threadMode must be 'new_per_run' or 'fixed'",
+    );
+  }
+  const workerType = rec.workerType;
+  if (
+    workerType !== undefined &&
+    workerType !== null &&
+    !isEnumValue(workerType, ["agent", "agent_profile"] as const)
+  ) {
+    throw new Error(
+      "targetSpec.agentThread.workerType must be 'agent' or 'agent_profile'",
+    );
+  }
+  const fixedThreadId = optionalString(rec.fixedThreadId, { maxLength: 200 });
+  if (threadModeRaw === "fixed" && !fixedThreadId) {
+    throw new Error(
+      "targetSpec.agentThread.fixedThreadId is required when threadMode is 'fixed'",
+    );
+  }
+  const completionCriteria = Array.isArray(rec.completionCriteria)
+    ? stringArray(
+        rec.completionCriteria,
+        "targetSpec.agentThread.completionCriteria",
+        {
+          allowEmpty: true,
+          maxItems: MAX_CRITERIA,
+          maxLength: MAX_CRITERION_LENGTH,
+        },
+      )
+    : undefined;
+  return compact({
+    instructions,
+    completionCriteria,
+    workerId: optionalString(rec.workerId, { maxLength: 200 }),
+    workerType: isEnumValue(workerType, ["agent", "agent_profile"] as const)
+      ? workerType
+      : undefined,
+    threadMode: threadModeRaw,
+    fixedThreadId,
+  });
+}
+
+function normalizeTargetRoutineRef(
+  value: unknown,
+  label: string,
+): TargetRoutineRef {
+  const rec = record(value);
+  const routineId = rec.routineId;
+  if (typeof routineId !== "string" || !UUID_VALUE_RE.test(routineId)) {
+    throw new Error(`targetSpec.${label}.routineId must be a routine id`);
+  }
+  const input = rec.input;
+  if (
+    input !== undefined &&
+    input !== null &&
+    (typeof input !== "object" || Array.isArray(input))
+  ) {
+    throw new Error(`targetSpec.${label}.input must be an object`);
+  }
+  const additional = rec.additionalActions;
+  let additionalActions: RoutineActionSpec[] | undefined;
+  if (additional !== undefined && additional !== null) {
+    if (!Array.isArray(additional)) {
+      throw new Error(`targetSpec.${label}.additionalActions must be an array`);
+    }
+    const wrapped = normalizeRoutineActionsSpec({
+      actions: additional,
+      agentTurn: false,
+    });
+    additionalActions = wrapped?.actions;
+  }
+  return compact({
+    routineId,
+    input: (input as Record<string, unknown> | null | undefined) ?? undefined,
+    label:
+      typeof rec.label === "string" && rec.label.trim()
+        ? rec.label.trim().slice(0, 120)
+        : undefined,
+    additionalActions,
+  });
+}
+
+function normalizeTargetGuards(value: unknown): TargetGuards | undefined {
+  if (value === undefined || value === null) return undefined;
+  const rec = record(value);
+  const guards = compact({
+    monthlyCostCapUsd: optionalPositiveNumber(
+      rec.monthlyCostCapUsd,
+      "targetSpec.guards.monthlyCostCapUsd",
+    ),
+    maxConcurrentRuns: optionalPositiveInt(
+      rec.maxConcurrentRuns,
+      "targetSpec.guards.maxConcurrentRuns",
+    ),
+  });
+  return Object.keys(guards).length > 0 ? guards : undefined;
+}
+
+/** Legacy-blob shape read from an agent_loop_versions row. */
+export interface LegacyVersionSpecs {
+  goalSpec?: unknown;
+  workerSpec?: unknown;
+  routineActionsSpec?: unknown;
+}
+
+/**
+ * Maps legacy goal/worker/routineActions blobs to an equivalent TargetSpec.
+ * Used to backfill pre-U3 rows and as the dispatch read-fallback when a row
+ * has no target_spec.
+ *
+ *   - routineActionsSpec with agentTurn:false  → kind 'routine'. A single
+ *     action maps to routine {routineId, input, label}. Multiple actions map
+ *     the FIRST action to the primary routine ref and preserve the remainder
+ *     under routine.additionalActions so the mapping is lossless and dispatch
+ *     reconstructs the exact original action list.
+ *   - everything else (agent-turn or mixed agentTurn:true) → kind
+ *     'agent_thread' from goalSpec.objective + workerSpec. A mixed
+ *     Automation's bolt-on routine actions stay in the orthogonal
+ *     routine_actions_spec column (they are pre-steps of the agent-thread
+ *     target, not the target itself) and are read from there at dispatch.
+ */
+export function targetSpecFromLegacy(version: LegacyVersionSpecs): TargetSpec {
+  const routineActions = normalizeRoutineActionsSpec(
+    version.routineActionsSpec,
+  );
+  if (
+    routineActions &&
+    routineActions.actions.length > 0 &&
+    !routineActions.agentTurn
+  ) {
+    const [primary, ...rest] = routineActions.actions;
+    return {
+      kind: "routine",
+      routine: compact({
+        routineId: primary.routineId,
+        input: primary.input ?? undefined,
+        label: primary.label ?? undefined,
+        additionalActions: rest.length > 0 ? rest : undefined,
+      }),
+    };
+  }
+
+  const goal = record(version.goalSpec);
+  const worker = record(version.workerSpec);
+  const workerType = isEnumValue(worker.type, [
+    "agent",
+    "agent_profile",
+  ] as const)
+    ? worker.type
+    : undefined;
+  const completionCriteria = Array.isArray(goal.completionCriteria)
+    ? goal.completionCriteria.filter((c): c is string => typeof c === "string")
+    : undefined;
+  return {
+    kind: "agent_thread",
+    agentThread: compact({
+      instructions: typeof goal.objective === "string" ? goal.objective : "",
+      completionCriteria:
+        completionCriteria && completionCriteria.length > 0
+          ? completionCriteria
+          : undefined,
+      workerId: typeof worker.id === "string" ? worker.id : undefined,
+      workerType,
+      threadMode: "new_per_run" as const,
+    }),
   };
 }
