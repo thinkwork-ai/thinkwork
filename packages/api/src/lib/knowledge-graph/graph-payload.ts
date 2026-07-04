@@ -3,11 +3,9 @@
  *
  * This is the contract between any extraction engine and the normalizer:
  * a flat node/edge payload the normalizer grounds against the approved
- * ontology. Historically these types lived in the Cognee client
- * (`plugin-company-brain`); they are relocated here so the ingest path has
- * no imports from the retired plugin. The shapes are structurally identical
- * to the old `CogneeGraph*` types on purpose — the normalizer's behavior is
- * frozen (THINK-133 read-contract decision).
+ * ontology. The shapes remain structurally identical to the retired graph
+ * client payloads on purpose — the normalizer's behavior is frozen
+ * (THINK-133 read-contract decision).
  */
 
 export interface GraphExtractionNode {
