@@ -423,13 +423,16 @@ function SchedulePopover({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
+        {/* Mirrors exactly what GhostSelect's SelectTrigger renders as (base
+            trigger pill + the ghost overrides) so this row's value chip is
+            indistinguishable from the other detail rows. */}
         <button
           type="button"
           aria-label="Schedule"
-          className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex h-8 w-fit select-none items-center justify-end gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-muted/50 dark:bg-input/30 dark:hover:bg-input/50"
         >
           {scheduleValueLabel(draft)}
-          <ChevronDown className="size-4 opacity-60" />
+          <ChevronDown className="pointer-events-none size-4 shrink-0 text-muted-foreground opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 gap-3 p-3">
