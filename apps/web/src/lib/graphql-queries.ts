@@ -586,6 +586,28 @@ export const SettingsAgentLoopQuery = gql`
       escalatedRunCount
       totalCostUsdCents
       costPerAcceptedRunUsdCents
+      webhookEndpoint {
+        webhookId
+        token
+        path
+        enabled
+      }
+      webhookDeliveries(limit: 25) {
+        id
+        receivedAt
+        resolutionStatus
+        signatureStatus
+        statusCode
+        providerName
+        providerEventId
+        normalizedKind
+        threadId
+        threadCreated
+        isReplay
+        retryCount
+        durationMs
+        errorMessage
+      }
       currentVersion {
         id
         versionNumber
@@ -2537,6 +2559,7 @@ export const ArtifactDetailForRouteQuery = gql`
       type
       status
       content
+      renderHtml
       summary
       sourceMessageId
       metadata

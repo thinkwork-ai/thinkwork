@@ -10,7 +10,6 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   Users,
-  Webhook,
   Wrench,
 } from "lucide-react";
 import {
@@ -116,12 +115,9 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: IconBrandStackshare,
     operatorOnly: true,
   },
-  {
-    label: "Webhooks",
-    to: "/settings/webhooks",
-    icon: Webhook,
-    operatorOnly: true,
-  },
+  // THINK-137 U8 (R8): Webhooks retired from the nav. Every webhook is now an
+  // Automation with a `webhook` trigger, managed under Automations. The
+  // `/settings/webhooks*` routes remain as redirects for old links.
   // Agent page (THINK-132 U7): the single agent-configuration surface — the
   // Composer merged in.
   {

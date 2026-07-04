@@ -17,7 +17,9 @@ import {
   eq,
   snakeToCamel,
 } from "../../utils.js";
+import { isDocumentMetadata } from "../../../lib/artifacts/document-emission.js";
 import {
+  artifactRenderKey,
   isArtifactPayloadS3Key,
   readArtifactPayloadFromS3,
 } from "../../../lib/artifacts/payload-storage.js";
@@ -27,6 +29,29 @@ function resolveTenantId(parent: any): string | null {
 }
 
 export const artifactTypeResolvers = {
+  /**
+   * HTML Document Artifacts (THINK-147 U5): the single-file HTML render body
+   * for document-kind artifacts, read from the render head key. Lazy — runs
+   * only when selected — and served exclusively through this resolver behind
+   * the parent query's access gate; presigned render URLs are prohibited
+   * (agent-authored HTML must never be served from a raw origin).
+   */
+  renderHtml: async (parent: any) => {
+    const tenantId = resolveTenantId(parent);
+    if (!parent?.id || !tenantId) return null;
+    if (!isDocumentMetadata(parent.metadata)) return null;
+    const key = artifactRenderKey({ tenantId, artifactId: parent.id });
+    try {
+      return await readArtifactPayloadFromS3({ tenantId, key });
+    } catch (err) {
+      console.error(
+        `[artifact.renderHtml] read failed for ${parent.id}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  },
+
   versions: async (parent: any) => {
     const tenantId = resolveTenantId(parent);
     if (!parent?.id || !tenantId) return [];

@@ -11,6 +11,8 @@ import {
   db,
   snakeToCamel,
   threadTurns,
+  webhookDeliveries,
+  webhooks,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
@@ -145,6 +147,79 @@ export const agentLoopTypeResolvers = {
       .limit(clampAgentLoopQueryLimit(args.limit));
     return rows.map(agentLoopRowToGraphql);
   },
+
+  // R6 UI seam: the bound inbound webhook endpoint (webhook-trigger automations).
+  webhookEndpoint: async (loop: AgentLoopParent) => {
+    if (!loop.id) return null;
+    const [row] = await db
+      .select({
+        id: webhooks.id,
+        token: webhooks.token,
+        enabled: webhooks.enabled,
+      })
+      .from(webhooks)
+      .where(
+        and(
+          eq(webhooks.agent_loop_id, loop.id),
+          eq(webhooks.target_type, "automation"),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    return {
+      webhookId: row.id,
+      token: row.token,
+      path: `/webhooks/${row.token}`,
+      enabled: row.enabled,
+    };
+  },
+
+  // R8 (THINK-137 U8): metadata-only delivery history for the Automation's
+  // bound webhook endpoint. The parent AgentLoop was already tenant-gated by
+  // requireAdminOrServiceCaller at query time (resolveAgentLoopTenantId), so no
+  // extra auth probe here — but the SELECT deliberately omits body_preview /
+  // body_sha256 / body_size_bytes / source_ip so the raw request body can never
+  // reach this surface (defense-in-depth over the retired Settings page).
+  webhookDeliveries: async (
+    loop: AgentLoopParent,
+    args: { limit?: number | null },
+  ) => {
+    if (!loop.id) return [];
+    const [endpoint] = await db
+      .select({ id: webhooks.id })
+      .from(webhooks)
+      .where(
+        and(
+          eq(webhooks.agent_loop_id, loop.id),
+          eq(webhooks.target_type, "automation"),
+        ),
+      )
+      .limit(1);
+    if (!endpoint) return [];
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+    const rows = await db
+      .select({
+        id: webhookDeliveries.id,
+        received_at: webhookDeliveries.received_at,
+        resolution_status: webhookDeliveries.resolution_status,
+        signature_status: webhookDeliveries.signature_status,
+        status_code: webhookDeliveries.status_code,
+        provider_name: webhookDeliveries.provider_name,
+        provider_event_id: webhookDeliveries.provider_event_id,
+        normalized_kind: webhookDeliveries.normalized_kind,
+        thread_id: webhookDeliveries.thread_id,
+        thread_created: webhookDeliveries.thread_created,
+        is_replay: webhookDeliveries.is_replay,
+        retry_count: webhookDeliveries.retry_count,
+        duration_ms: webhookDeliveries.duration_ms,
+        error_message: webhookDeliveries.error_message,
+      })
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhook_id, endpoint.id))
+      .orderBy(desc(webhookDeliveries.received_at))
+      .limit(limit);
+    return rows.map(snakeToCamel);
+  },
 };
 
 export const agentLoopVersionTypeResolvers = {
@@ -260,7 +335,9 @@ export const agentLoopIterationTypeResolvers = {
   },
 };
 
-async function resolveAgentLoopRunThreadId(runId: string): Promise<string | null> {
+async function resolveAgentLoopRunThreadId(
+  runId: string,
+): Promise<string | null> {
   const [iteration] = await db
     .select({
       tenantId: agentLoopIterations.tenant_id,
@@ -282,7 +359,8 @@ async function resolveAgentLoopIterationThreadId(input: {
 }): Promise<string | null> {
   if (input.threadTurnId) {
     const conditions = [eq(threadTurns.id, input.threadTurnId)];
-    if (input.tenantId) conditions.push(eq(threadTurns.tenant_id, input.tenantId));
+    if (input.tenantId)
+      conditions.push(eq(threadTurns.tenant_id, input.tenantId));
     const [turn] = await db
       .select({ threadId: threadTurns.thread_id })
       .from(threadTurns)

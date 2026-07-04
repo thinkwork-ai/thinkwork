@@ -2,6 +2,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, randomUUID, artifacts } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
+import { isDocumentMetadata } from "../../../lib/artifacts/document-emission.js";
 import {
   artifactContentBelongsInPayloadStore,
   artifactToCamelWithPayload,
@@ -25,6 +26,19 @@ export const updateArtifact = async (
   await assertCanvasAccess(ctx, existing, "write");
   if (i.s3Key !== undefined && i.s3Key !== null) {
     throw new Error("Artifact s3Key is server-managed");
+  }
+  // HTML Document Artifacts (THINK-147 U5): document bodies and lifecycle
+  // change only through emission (emit_document → document.emit). The one
+  // client-editable field is the favorite flag.
+  if (isDocumentMetadata(existing.metadata)) {
+    const disallowed = Object.keys(i).filter(
+      (key) => key !== "favoritedAt" && i[key] !== undefined,
+    );
+    if (disallowed.length > 0) {
+      throw new Error(
+        `Document artifacts change only via emission; updateArtifact cannot set: ${disallowed.join(", ")}`,
+      );
+    }
   }
 
   const nextType = i.type?.toLowerCase() ?? existing.type;

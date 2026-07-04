@@ -135,6 +135,23 @@ function buildRuntimeToolPolicy(
         "- After calling `ask_user_question` the turn ends; the user's answer arrives in your next turn.",
       ]
     : [];
+  const canvasParityAvailable =
+    tools.has("load_canvas") ||
+    tools.has("save_canvas") ||
+    tools.has("list_canvases") ||
+    tools.has("refresh_canvas_data");
+  const canvasParityPolicy = canvasParityAvailable
+    ? [
+        "",
+        "### Saved canvases",
+        "- Emitted canvases can be SAVED to a Space and reopened later. Four tools manage them; each is a strict-payload tool, so match the parameter names exactly.",
+        '- `save_canvas` — persist the current thread\'s canvas. Use when the user says "save this", "keep this dashboard", or "save it to <space>". Pass `title`; pass `spaceName` only when they name a different Space (default is this thread\'s Space). No confirmation step — saving is cheap and reversible. Example call: `{ "title": "Q3 Cost Dashboard" }`.',
+        '- `load_canvas` — open a saved canvas by name into this thread. Use for "open my cost dashboard" / "pull up the <name> canvas". Example call: `{ "name": "cost dashboard" }`. If it returns multiple candidates, ASK the user which one (use `ask_user_question`); never guess. If it returns not-found with near-matches, tell the user and offer those names.',
+        '- `refresh_canvas_data` — re-fetch the live data behind an open or named canvas without redrawing it (no tokens, no new chart). Example call: `{ "name": "current" }`. Widgets on a per-user connector return "needs you" — relay that the owner must refresh them.',
+        "- `list_canvases` — list saved canvases in this Space (name, id, version). Use it when unsure of an exact name before `load_canvas`. Takes no arguments: `{}`.",
+        "- A passive canvas manifest in the workspace lists saved canvases too — but after a mid-thread save, `list_canvases` is the fresh truth.",
+      ]
+    : [];
   const jsonRenderPolicy = jsonRenderAvailable
     ? [
         "",
@@ -153,7 +170,7 @@ function buildRuntimeToolPolicy(
         "- If approval, review, form, or result-list UI uses a component action reference such as `task.review.primaryActionId`, `form.action.submitActionId`, or `result.list` item action ids, include a matching `durableActions` descriptor with the same id.",
         '- For Work Item approval actions, use durable action params `target: "work_item_status"`, `workItemId`, and either `statusCategory` or `statusId`; the button label/kind does not decide the status by itself.',
         "- Display-only generated UI can omit `durableActions`; do not add action descriptors unless a user click should perform a bounded ThinkWork action.",
-        '- When the generated UI presents the data from ONE earlier tool call in this turn (e.g. charting rows an MCP tool returned), pass that call\'s id as `sourceToolCallId` so the canvas records a refreshable data-source binding. Example call shape: `{ "sourceToolCallId": "call_abc123", "spec": { … }, "mobileFallback": { … } }`. Omit `sourceToolCallId` for UI not derived from a single tool result.',
+        '- When the generated UI presents the data from ONE earlier tool call in this turn (e.g. charting rows an MCP tool returned), pass that call\'s real id as `sourceToolCallId` so the canvas records a refreshable data-source binding. Tool call ids are shaped like `functions.mcp_<server>_<tool>:<n>` (e.g. `functions.mcp_twenty--crm_execute_tool:15`) — use the exact id, not a placeholder. Example call shape: `{ "sourceToolCallId": "functions.mcp_<server>_<tool>:<n>", "spec": { … }, "mobileFallback": { … } }`. If you omit it and a bindable tool call exists, the emit result lists the candidate ids — re-emit with the SAME part id plus the right `sourceToolCallId`. Omit `sourceToolCallId` for UI not derived from a single tool result.',
         "- If the generated UI would need unsupported components or open-ended custom behavior, answer in normal prose instead of emitting UI.",
         `- ThinkWork domain components (match each example's prop shape exactly — prop schemas are strict and unknown keys are rejected):`,
         ...jsonRenderDomainComponentUsage,
@@ -185,6 +202,7 @@ function buildRuntimeToolPolicy(
     '- Do not treat vague phrases like "send me", "share with me", or "give me" as email permission by themselves; answer in chat unless the user specifically requests email.',
     ...askUserQuestionPolicy,
     ...jsonRenderPolicy,
+    ...canvasParityPolicy,
     "",
     "### Memory",
     memoryAvailable

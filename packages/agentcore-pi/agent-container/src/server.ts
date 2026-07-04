@@ -46,9 +46,11 @@ import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createArtifactsExtension,
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createDelegationExtension,
+  createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createKnowledgeGraphExtension,
   createSkillsExtension,
@@ -164,6 +166,7 @@ import {
   directMemoryGroundingQuery,
   explicitMemoryTurn,
 } from "./runtime/memory-question.js";
+import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
@@ -1446,6 +1449,33 @@ export async function buildInvocationResources(
     );
   }
 
+  // Living Artifacts agent parity — save/load/refresh/list canvases (THINK-145
+  // U9). Gated exactly like task-status/ask-user-question (never in eval mode;
+  // requires identity + API wiring) PLUS the acting user id: the canvas
+  // mutations assert R15 space-membership against that user (KTD8), so a
+  // userless turn (system channel) has no one to gate against and the tools
+  // must not register. `addExtension` folds the four tool names into the
+  // allowlist — omit that and they register but are silently gated from the
+  // model (the dark-tool failure mode; a guard test enumerates them).
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.userId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret)
+  ) {
+    addExtension(createArtifactsExtension(), {
+      canvas: createApiCanvasProvider({
+        apiUrl: asString(args.payload.thinkwork_api_url),
+        apiSecret: asString(args.payload.thinkwork_api_secret),
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        actingUserId: args.identity.userId,
+      }),
+    });
+  }
+
   // fetch_workspace_source — mid-turn read-only workspace navigation (plan
   // 2026-06-12-002 U5). Gated on the dispatch payload flag (U1 parity lib
   // emits it on all three builders) AND the task-status-style wiring gate
@@ -1476,6 +1506,34 @@ export async function buildInvocationResources(
           ),
         },
         host: args.fetchWorkspaceSourceHost,
+      }),
+    );
+  }
+
+  // emit_document — HTML Document Artifacts (THINK-147 U4). Registration is
+  // unconditional (no dispatch-payload flag; R6 satisfied a fortiori) gated
+  // only on the standard wiring fields and never in eval mode. The tool posts
+  // the dual-body document to the activity endpoint's document.emit branch
+  // over the callback fetch (no HTTP egress). `addExtension` folds the tool
+  // name into the allowlist — omit that and it never reaches the model.
+  if (
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret) &&
+    asString(args.payload.thread_turn_id)
+  ) {
+    addExtension(
+      createDocumentComposerExtension({
+        documentComposerConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+          agentId: args.identity.agentId ?? undefined,
+        },
       }),
     );
   }

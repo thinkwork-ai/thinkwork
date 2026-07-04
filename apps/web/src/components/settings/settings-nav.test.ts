@@ -100,6 +100,15 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.some((i) => i.to === AGENTS)).toBe(false);
   });
 
+  it("no longer lists a standalone Webhooks nav entry (THINK-137 U8)", () => {
+    // Every webhook is now an Automation with a `webhook` trigger, managed
+    // under Automations. The /settings/webhooks routes remain as redirects.
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/webhooks")).toBe(
+      false,
+    );
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Webhooks")).toBe(false);
+  });
+
   it("uses the flask icon for Evaluations", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === EVALUATIONS);
     expect(item).toBeDefined();

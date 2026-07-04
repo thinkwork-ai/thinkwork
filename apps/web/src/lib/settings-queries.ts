@@ -1715,93 +1715,13 @@ export const SettingsCostTimeSeriesQuery = graphql(`
   }
 `);
 
-// ─── Webhooks (operator-only) ────────────────────────────────────────────
-
-export const SettingsWebhooksQuery = graphql(`
-  query SettingsWebhooks($tenantId: ID!) {
-    webhooks(tenantId: $tenantId) {
-      id
-      name
-      description
-      targetType
-      enabled
-      invocationCount
-      lastInvokedAt
-      createdAt
-    }
-  }
-`);
-
-export const SettingsWebhookQuery = graphql(`
-  query SettingsWebhook($id: ID!) {
-    webhook(id: $id) {
-      id
-      tenantId
-      name
-      description
-      token
-      targetType
-      spaceId
-      prompt
-      enabled
-      rateLimit
-      invocationCount
-      lastInvokedAt
-      createdAt
-    }
-  }
-`);
-
-export const SettingsWebhookDeliveriesQuery = graphql(`
-  query SettingsWebhookDeliveries($webhookId: ID!, $limit: Int) {
-    webhookDeliveries(webhookId: $webhookId, limit: $limit) {
-      id
-      receivedAt
-      providerName
-      normalizedKind
-      signatureStatus
-      resolutionStatus
-      statusCode
-      threadId
-      threadCreated
-      bodyPreview
-      bodySizeBytes
-      bodySha256
-      sourceIp
-      errorMessage
-      durationMs
-    }
-  }
-`);
-
-export const SettingsUpdateWebhookMutation = graphql(`
-  mutation SettingsUpdateWebhook($id: ID!, $input: UpdateWebhookInput!) {
-    updateWebhook(id: $id, input: $input) {
-      id
-      name
-      description
-      spaceId
-      prompt
-      enabled
-      rateLimit
-    }
-  }
-`);
-
-export const SettingsDeleteWebhookMutation = graphql(`
-  mutation SettingsDeleteWebhook($id: ID!) {
-    deleteWebhook(id: $id)
-  }
-`);
-
-export const SettingsRegenerateWebhookTokenMutation = graphql(`
-  mutation SettingsRegenerateWebhookToken($id: ID!) {
-    regenerateWebhookToken(id: $id) {
-      id
-      token
-    }
-  }
-`);
+// ─── Webhooks ────────────────────────────────────────────────────────────
+// THINK-137 U8 (R8): the standalone Webhooks settings surface retired — every
+// webhook is now an Automation with a `webhook` trigger. The former webhook
+// list/detail queries + update/delete/regenerate mutations moved out with the
+// deleted SettingsWebhooks / SettingsWebhookDetail components. The
+// `/settings/webhooks/$webhookId` redirect route owns the only remaining
+// webhook read (its owning Automation), inline in the route file.
 
 // ─── Plugins (plan 2026-06-12-001 U8) ───────────────────────────────────
 

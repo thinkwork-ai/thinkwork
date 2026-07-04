@@ -26,6 +26,7 @@ import {
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
+import { syncAgentLoopWebhookBinding } from "../../../lib/agent-loops/webhook-binding.js";
 import {
   agentLoopRowToGraphql,
   parseAwsJsonObject,
@@ -162,6 +163,16 @@ async function createAgentLoop(
     actorId,
   });
 
+  // R6: a webhook-trigger automation mints/links its inbound endpoint row.
+  await syncAgentLoopWebhookBinding({
+    tenantId: input.tenantId,
+    agentLoopId: loop.id,
+    name: input.name.trim(),
+    triggerFamily: normalized.triggerSpec.family,
+    loopEnabled: input.enabled ?? true,
+    actorId,
+  });
+
   return loadAgentLoop(loop.id);
 }
 
@@ -271,6 +282,16 @@ async function updateAgentLoop(
     workerAgentId: workerAgentId(normalized.workerSpec),
     spaceId: spaceId === undefined ? existing.space_id : spaceId,
     triggerSpec: normalized.triggerSpec,
+    loopEnabled: input.enabled ?? existing.enabled,
+    actorId,
+  });
+
+  // R6: mint/link (or disable, on family switch) the inbound webhook endpoint.
+  await syncAgentLoopWebhookBinding({
+    tenantId: input.tenantId,
+    agentLoopId: existing.id,
+    name: input.name.trim(),
+    triggerFamily: normalized.triggerSpec.family,
     loopEnabled: input.enabled ?? existing.enabled,
     actorId,
   });

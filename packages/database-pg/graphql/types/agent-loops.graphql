@@ -102,8 +102,52 @@ type AgentLoop {
   costPerAcceptedRunUsdCents: Int
   versions: [AgentLoopVersion!]!
   runs(limit: Int, cursor: String, status: AgentLoopRunStatus): [AgentLoopRun!]!
+  # THINK-137 U6 (R6): the inbound webhook endpoint minted for a webhook-trigger
+  # automation. Null when the automation has no bound webhook row (non-webhook
+  # triggers, or pre-U6 rows). The UI renders the endpoint URL as
+  # `<api-base><path>` and copies the token.
+  webhookEndpoint: AgentLoopWebhookEndpoint
+  # THINK-137 U8 (R8): recent inbound webhook deliveries for this Automation's
+  # bound endpoint. METADATA-ONLY — no request body, sha, size, or source IP is
+  # ever exposed here. The Settings → Webhooks surface (which showed raw bodies
+  # behind requireAdminOrServiceCaller) retires; the Automation detail is the
+  # successor surface, so this field deliberately narrows to non-PII metadata as
+  # defense-in-depth even though both surfaces share the same admin auth gate.
+  # Newest first; hard cap 200, default 50. Empty when there is no bound webhook.
+  webhookDeliveries(limit: Int): [AutomationWebhookDelivery!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
+}
+
+# The inbound webhook endpoint bound to a webhook-trigger Automation (R6).
+type AgentLoopWebhookEndpoint {
+  webhookId: ID!
+  token: String!
+  # Path to POST deliveries to, relative to the webhooks API host: `/webhooks/<token>`.
+  path: String!
+  # Mirrors the automation's enabled state — a disabled endpoint 404s inbound.
+  enabled: Boolean!
+}
+
+# Metadata-only view of a webhook_deliveries row for the Automation detail
+# (THINK-137 U8, R8). Intentionally OMITS bodyPreview / bodySha256 /
+# bodySizeBytes / sourceIp / headers — the raw body is never selected by the
+# AgentLoop.webhookDeliveries resolver, so it can never reach this surface.
+type AutomationWebhookDelivery {
+  id: ID!
+  receivedAt: AWSDateTime!
+  resolutionStatus: String!
+  signatureStatus: String!
+  statusCode: Int
+  providerName: String
+  providerEventId: String
+  normalizedKind: String
+  threadId: ID
+  threadCreated: Boolean
+  isReplay: Boolean!
+  retryCount: Int!
+  durationMs: Int
+  errorMessage: String
 }
 
 type AgentLoopVersion {

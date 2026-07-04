@@ -24,8 +24,10 @@ import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   buildCanvasDataBinding,
   extractEmitJsonRenderToolPart,
+  listMcpBindingCandidates,
   threadJsonRenderActivityEvent,
   threadJsonRenderStateSnapshotActivityEvent,
+  wrapEmitToolWithBindingFeedback,
 } from "./json-render-runtime.js";
 import {
   extractMcpAppPartsFromToolResult,
@@ -772,7 +774,17 @@ export async function runAgentLoop(
   // asking turn's finalize runs normally and the thread parks AWAITING_USER.
   let askEndTurnSeen = false;
 
-  const customTools = args.tools.map(toToolDefinition);
+  // Binding feedback loop (Living Artifacts, THINK-145): the emit tool is built
+  // context-free by the Pi server; this loop is the only holder of the live
+  // per-turn invocation registry, so wire the getter here so the emit's result
+  // content can confirm a recorded binding or hand back the candidate ids.
+  const customTools = args.tools.map((tool) =>
+    tool.name === EMIT_JSON_RENDER_UI_TOOL_NAME
+      ? toToolDefinition(
+          wrapEmitToolWithBindingFeedback(tool, () => toolInvocations),
+        )
+      : toToolDefinition(tool),
+  );
   const toolAllowlist = buildToolAllowlist(
     customTools,
     args.extensionToolNames,
@@ -952,6 +964,24 @@ export async function runAgentLoop(
             sourceToolCallId,
             toolInvocations,
           });
+          // Observability (THINK-145): the previously silent unbound path. When
+          // an emit records no binding but bindable MCP calls exist this turn,
+          // the model likely omitted/mis-referenced sourceToolCallId — surface
+          // it so unbound rates are countable. The emit tool result already
+          // hands the model the candidate ids to self-correct.
+          if (!binding) {
+            const candidateCount =
+              listMcpBindingCandidates(toolInvocations).length;
+            if (candidateCount > 0) {
+              deps.log?.({
+                level: "warn",
+                event: "json_render_unbound_emit",
+                threadId: args.threadId,
+                partId: jsonRenderPart.id,
+                candidateCount,
+              });
+            }
+          }
           // Additive AG-UI emission (Living Artifacts U3, KTD1/R1): keep the
           // legacy ui_message_chunk event flowing untouched AND emit a
           // per-part STATE_SNAPSHOT event. The web fold handles both kinds and

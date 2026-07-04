@@ -68,6 +68,28 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     );
   });
 
+  it("includes canvas parity guidance only when a canvas tool is available", async () => {
+    const withCanvas = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["load_canvas", "save_canvas"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+    expect(withCanvas).toContain("### Saved canvases");
+    expect(withCanvas).toContain("`load_canvas`");
+    expect(withCanvas).toContain("open my cost dashboard");
+
+    const withoutCanvas = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["execute_code"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+    expect(withoutCanvas).not.toContain("### Saved canvases");
+  });
+
   it("omits USER.md when there is no user id", async () => {
     const prompt = await composeSystemPrompt({
       payload: {},
@@ -229,6 +251,13 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).toContain("`workItemId`");
     expect(prompt).toContain("either `statusCategory` or `statusId`");
     expect(prompt).toContain("Display-only generated UI can omit");
+    // sourceToolCallId guidance uses pi's real tool-call id shape, not a
+    // placeholder (THINK-145 — "call_abc123" mislead the model live).
+    expect(prompt).toContain("pass that call's real id as `sourceToolCallId`");
+    expect(prompt).toContain("`functions.mcp_<server>_<tool>:<n>`");
+    expect(prompt).toContain("functions.mcp_twenty--crm_execute_tool:15");
+    expect(prompt).toContain("the emit result lists the candidate ids");
+    expect(prompt).not.toContain("call_abc123");
     expect(prompt).toContain("ThinkWork domain components");
     expect(prompt).toContain("prop schemas are strict");
     expect(prompt).toContain("task.review");
@@ -297,9 +326,7 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
 
     expect(prompt).toContain("## Agent Profile Delegation");
     expect(prompt).toContain("`delegate_to_agent_profile` tool is available");
-    expect(prompt).toContain(
-      "Memory tools are available in the parent agent",
-    );
+    expect(prompt).toContain("Memory tools are available in the parent agent");
     expect(prompt).toContain(
       "Do not delegate explicit user memory, Space memory, or long-term-memory retrieval tasks.",
     );

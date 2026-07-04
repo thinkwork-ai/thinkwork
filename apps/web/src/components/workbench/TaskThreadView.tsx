@@ -33,6 +33,7 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
+import { DocumentCard } from "@/components/workbench/DocumentCard";
 import { useTenant } from "@/context/TenantContext";
 import {
   Children,
@@ -4700,11 +4701,49 @@ function formatTimingMs(value: number) {
     : `${(value / 1000).toFixed(1)}s`;
 }
 
-function actionRowForEvent(event: TaskThreadEvent) {
+function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
   const eventType = stringValue(event.eventType);
   if (!eventType) return null;
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
+
+  // HTML Document Artifacts (THINK-147 U6): the compact document card (R4).
+  // Full bodies never ride the event pipeline; this renders the pointer card
+  // linking to the reader.
+  if (
+    eventType === "ui_message_chunk" &&
+    stringValue(payload.kind) === "document.card"
+  ) {
+    const card = parseRecord(payload.card);
+    const artifactId = stringValue(card.artifactId);
+    const title = stringValue(card.title) || "Document";
+    if (!artifactId) {
+      return {
+        title: `Document: ${title}`,
+        detail,
+        kind: "source",
+      } satisfies ActionRowData;
+    }
+    return {
+      title: `Document: ${title}`,
+      detail: stringValue(card.abstract) || detail,
+      kind: "source",
+      hideIcon: true,
+      content: (
+        <DocumentCard
+          card={{
+            artifactId,
+            title,
+            genre: stringValue(card.genre) || undefined,
+            abstract: stringValue(card.abstract) || undefined,
+            status: stringValue(card.status) || undefined,
+            headVersion:
+              typeof card.headVersion === "number" ? card.headVersion : undefined,
+          }}
+        />
+      ),
+    };
+  }
 
   if (
     eventType === "agent_profile_run" ||

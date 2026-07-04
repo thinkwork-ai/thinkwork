@@ -1,11 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsWebhooks } from "@/components/settings/SettingsWebhooks";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// THINK-137 U8 (R8): the standalone Webhooks surface retired — every webhook is
+// now an Automation with a `webhook` trigger. The list route redirects to
+// Automations; old bookmarks keep working.
 export const Route = createFileRoute("/_authed/settings/webhooks/")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsWebhooks />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/automations", replace: true });
+  },
 });
