@@ -842,6 +842,7 @@ export type Artifact = {
   headVersion: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  renderHtml?: Maybe<Scalars['String']['output']>;
   s3Key?: Maybe<Scalars['String']['output']>;
   sourceMessageId?: Maybe<Scalars['ID']['output']>;
   spaceId?: Maybe<Scalars['ID']['output']>;
@@ -897,9 +898,11 @@ export enum ArtifactStatus {
 export enum ArtifactType {
   Applet = 'APPLET',
   AppletState = 'APPLET_STATE',
+  Brief = 'BRIEF',
   DataView = 'DATA_VIEW',
   Digest = 'DIGEST',
   Draft = 'DRAFT',
+  Ideation = 'IDEATION',
   Note = 'NOTE',
   Plan = 'PLAN',
   Report = 'REPORT'
