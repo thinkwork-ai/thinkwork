@@ -406,6 +406,7 @@ describe("commitRoutine", () => {
     expect(invokeExecutor).toHaveBeenCalledWith({
       routineId: ROUTINE_ID,
       mode: "gate",
+      sha: "new-commit-sha",
     });
     expect(octokit.created.commits[0].message).toContain(
       "Repairs-Execution: exec-1",
