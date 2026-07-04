@@ -463,7 +463,7 @@ accidentally grow side-effecting components in this slice.
 
 - `plugins/email-channel/test/manifest.test.ts`
 - `plugins/sendgrid/test/manifest.test.ts`
-- `plugins/company-brain/test/manifest.test.ts`
+- `plugins/brain/test/manifest.test.ts`
 
 **Test scenarios:**
 

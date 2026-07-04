@@ -107,7 +107,7 @@ locals {
         Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
         Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
       },
-      # Canonical Company Brain artifacts: durable source artifacts,
+      # Canonical ThinkWork Brain artifacts: durable source artifacts,
       # ingestion manifests, migration snapshots, vault projections, and
       # exports, and OKF Wiki Navigator bundles/current manifests.
       # Tenant-visible APIs redact object keys; Lambdas need object read/write

@@ -109,7 +109,7 @@ Local code already supports the final-token shape we want:
 
 Institutional guidance:
 
-- `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`
+- `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`
   demonstrates plugin install/admin workflows, install-key secrecy, and smoke
   evidence expectations.
 - `docs/solutions/best-practices/oauth-client-credentials-in-secrets-manager-2026-04-21.md`
@@ -395,7 +395,7 @@ health.
   invalid, retry, rotation, disabling, and uninstalling states.
 - Hosted customer admin flow requires no Cognito/AWS-console fields.
 - Normal plugin install/uninstall behavior remains unchanged for existing
-  Twenty, Company Brain, SendGrid, and email-channel manifests.
+  Twenty, ThinkWork Brain, SendGrid, and email-channel manifests.
 
 ### U3. Provision the Cognito-to-WorkOS Bridge
 
@@ -935,7 +935,7 @@ THNK-43 is ready to pass Verification only when all of these are true:
   `packages/database-pg/graphql/types/plugins.graphql`,
   `docs/src/content/docs/applications/mobile/authentication.mdx`
 - **Institutional learnings:**
-  `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`,
+  `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`,
   `docs/solutions/best-practices/oauth-client-credentials-in-secrets-manager-2026-04-21.md`,
   `docs/solutions/best-practices/service-endpoint-vs-widening-resolvecaller-auth-2026-04-21.md`
 - **External docs:**

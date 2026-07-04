@@ -83,7 +83,7 @@ The origin document defines the product posture: Web is tenant/client opt-in and
 
 - `docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md`: `web_search` is an injected built-in, not a workspace skill. This plan keeps Web Search credentials/policy in platform configuration and does not add a workspace skill.
 - `docs/plans/2026-04-29-001-feat-admin-memory-knowledge-center-plan.md`: tenant adapter configuration is separate from runtime providers; Context Engine resolves effective provider selection at query time.
-- `docs/plans/2026-04-30-001-refactor-company-brain-nav-docs-plan.md`: user-facing Admin copy should prefer Company Brain/Sources language, while `Context Engine` remains the internal API/service name.
+- `docs/plans/2026-04-30-001-refactor-brain-nav-docs-plan.md`: user-facing Admin copy should prefer ThinkWork Brain/Sources language, while `Context Engine` remains the internal API/service name.
 
 ### External References
 
@@ -120,7 +120,7 @@ The origin document defines the product posture: Web is tenant/client opt-in and
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -160,6 +160,7 @@ sequenceDiagram
 **Dependencies:** None.
 
 **Files:**
+
 - Create: `packages/api/src/lib/builtin-tools/web-search.ts`
 - Create: `packages/api/src/lib/context-engine/providers/web-search.ts`
 - Modify: `packages/api/src/handlers/skills.ts`
@@ -170,6 +171,7 @@ sequenceDiagram
 - Test: `packages/api/src/lib/context-engine/source-families.test.ts`
 
 **Approach:**
+
 - Factor Web Search provider/key resolution and provider API calls out of `packages/api/src/handlers/skills.ts` into a shared API library under `packages/api/src/lib/builtin-tools/`.
 - Keep `skills.ts` behavior intact by calling the factored helper from existing built-in tool list/test/runtime-injection code.
 - Add a Context Engine provider factory that:
@@ -184,11 +186,13 @@ sequenceDiagram
 **Execution note:** Start with tests around disabled/no-secret/enabled-provider behavior before wiring registration.
 
 **Patterns to follow:**
+
 - `packages/api/src/lib/context-engine/providers/mcp-tool.ts` for normalized provider construction.
 - `packages/api/src/handlers/skills.ts` existing Exa/SerpAPI test logic for API shape.
 - `packages/agentcore-strands/agent-container/container-sources/web_search_tool.py` for provider behavior parity.
 
 **Test scenarios:**
+
 - Happy path: enabled Exa row with resolvable secret produces a provider with `sourceFamily: "web"`, `defaultEnabled: false`, and normalized URL-cited hits.
 - Happy path: enabled SerpAPI row with resolvable secret maps `organic_results` to URL-cited hits.
 - Edge case: tenant has no `web-search` row; provider registration returns no Web provider.
@@ -198,6 +202,7 @@ sequenceDiagram
 - Integration: `list_context_providers` for an opted-in tenant includes Web with `defaultEnabled=false`; a default `query_context` call omits it unless explicitly selected.
 
 **Verification:**
+
 - Tenants without Web Search config do not see a Web Context Engine provider.
 - Tenants with Web Search config can explicitly select the Web provider and receive normalized web hits with URL citations.
 - Existing agent runtime Web Search injection continues to work through the built-in tool path.
@@ -213,6 +218,7 @@ sequenceDiagram
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `packages/database-pg/graphql/types/brain.graphql`
 - Modify: `packages/api/src/graphql/resolvers/brain/index.ts`
 - Modify: `packages/api/src/lib/brain/enrichment-service.ts`
@@ -224,6 +230,7 @@ sequenceDiagram
 - Test: `packages/api/src/graphql/resolvers/brain/enrichment-sources.test.ts`
 
 **Approach:**
+
 - Add a lightweight GraphQL query for available Brain enrichment sources for a tenant/page context. It should return source family, label, availability/default-selected state, and any unavailable reason that is safe to show.
 - Use Context Engine `listProviders({ caller })` and `sourceFamilyForProvider` to compute availability:
   - Brain is available when memory/wiki/page-family providers are enabled.
@@ -234,11 +241,13 @@ sequenceDiagram
 - Update mobile source picker to render dynamic sources, with Web visible but unselected when available.
 
 **Patterns to follow:**
+
 - `packages/api/src/handlers/mcp-context-engine.ts` `list_context_providers` structured response.
 - `apps/mobile/components/brain/BrainProviderStatusSheet.tsx` status label conventions.
 - Existing GraphQL codegen workflow described in `AGENTS.md`.
 
 **Test scenarios:**
+
 - Covers AE1. Tenant without Web provider receives Brain/KB source options only; Web is absent.
 - Covers AE2. Tenant with Web provider receives Web option with `selectedByDefault=false`.
 - Happy path: Brain and KB available sources preserve existing labels and run behavior.
@@ -247,6 +256,7 @@ sequenceDiagram
 - Integration: mobile SDK query shape includes availability fields needed by the sheet without requiring a full enrichment run.
 
 **Verification:**
+
 - Enrich Page does not show Web for tenants that have not opted into Web Search.
 - Enrich Page shows Web unselected after tenant opt-in.
 - Running enrichment without selecting Web never calls the Web provider.
@@ -262,6 +272,7 @@ sequenceDiagram
 **Dependencies:** U1, U2.
 
 **Files:**
+
 - Create: `packages/api/src/lib/brain/enrichment-candidate-synthesis.ts`
 - Modify: `packages/api/src/lib/brain/enrichment-service.ts`
 - Modify: `packages/api/src/lib/brain/enrichment-apply.ts`
@@ -270,6 +281,7 @@ sequenceDiagram
 - Test: `packages/api/src/lib/brain/enrichment-apply.test.ts`
 
 **Approach:**
+
 - Add a dedicated synthesis module that accepts target page context, requested source families, normalized hits, and provider statuses, and returns `BrainEnrichmentCandidate[]`.
 - Use deterministic validation and fallback behavior around synthesis:
   - candidate title and summary are required;
@@ -284,11 +296,13 @@ sequenceDiagram
 **Execution note:** Add characterization coverage for current Brain/KB candidate behavior before changing synthesis.
 
 **Patterns to follow:**
+
 - `packages/api/src/lib/wiki/bedrock.ts` for Bedrock Converse invocation and JSON parsing if using model synthesis.
 - `packages/api/src/lib/context-engine/router.ts` dedupe/ranking normalization.
 - Existing `dedupeBrainEnrichmentCandidates` behavior in `apps/mobile/app/thread/[threadId]/index.tsx`, moving the authoritative dedupe earlier into backend proposal generation.
 
 **Test scenarios:**
+
 - Covers AE4. Web hits with title/snippet/URL produce concise candidate updates with URL citation and `sourceFamily: "WEB"`.
 - Happy path: Brain and KB hits still produce candidates when no Web source is selected.
 - Happy path: mixed Brain/KB/Web hits with near-duplicate facts produce one candidate with preserved useful citation metadata.
@@ -297,6 +311,7 @@ sequenceDiagram
 - Error path: model synthesis timeout or provider error does not prevent review creation; provider status and candidate count make the degraded state visible.
 
 **Verification:**
+
 - Web-backed enrichment proposals read like proposed page updates, not raw search result rows.
 - Approved Web suggestions append with visible source/citation language.
 - Deselecting all candidates in either review surface does not accidentally apply all candidates.
@@ -312,6 +327,7 @@ sequenceDiagram
 **Dependencies:** U2, U3.
 
 **Files:**
+
 - Create: `apps/mobile/lib/brain-enrichment-review.ts`
 - Create: `apps/mobile/components/brain/BrainEnrichmentReviewPanel.tsx`
 - Create: `apps/mobile/vitest.config.ts`
@@ -321,6 +337,7 @@ sequenceDiagram
 - Test: `apps/mobile/lib/__tests__/brain-enrichment-review.test.ts`
 
 **Approach:**
+
 - Extract pure helpers for:
   - parsing review payloads;
   - deduping/grouping candidates for display;
@@ -332,11 +349,13 @@ sequenceDiagram
 - Add a minimal mobile Vitest setup for pure TypeScript helper coverage only. Do not attempt React Native component rendering tests in this PR; keep component layout verification manual/Expo-based.
 
 **Patterns to follow:**
+
 - Existing thread HITL selection JSON in `apps/mobile/app/thread/[threadId]/index.tsx`.
 - `apps/mobile/components/brain/BrainProviderStatusStrip.tsx` and `BrainProviderStatusSheet.tsx` for status display language.
 - SDK GraphQL helper style in `packages/react-native-sdk/src/brain.ts`.
 
 **Test scenarios:**
+
 - Covers AE5. Given the same proposal payload, helper output returns the same candidate IDs and serialized response for inline and thread callers.
 - Happy path: selecting a subset serializes `kind: "brain_enrichment_selection"`, selected IDs, and note.
 - Edge case: selecting zero candidates serializes an empty selected ID list, not null.
@@ -344,6 +363,7 @@ sequenceDiagram
 - Error path: malformed/non-enrichment payload returns a non-review state instead of throwing in UI helpers.
 
 **Verification:**
+
 - Both mobile surfaces consume the same helper output for candidate selection and response serialization.
 - SDK exposes enough review-decision helpers for inline review without duplicating low-level GraphQL documents in the sheet.
 
@@ -358,6 +378,7 @@ sequenceDiagram
 **Dependencies:** U2, U3, U4.
 
 **Files:**
+
 - Modify: `apps/mobile/components/brain/BrainEnrichmentSheet.tsx`
 - Modify: `apps/mobile/components/brain/BrainSourcePicker.tsx`
 - Modify: `apps/mobile/components/brain/BrainEnrichmentCandidateList.tsx`
@@ -365,6 +386,7 @@ sequenceDiagram
 - Test: `apps/mobile/lib/__tests__/brain-enrichment-review.test.ts`
 
 **Approach:**
+
 - Load source availability when the sheet opens; initialize selected sources from backend defaults, which exclude Web.
 - Disable the run button if no source is selected or source availability is still loading.
 - After a proposal is created, render the shared `BrainEnrichmentReviewPanel` inline instead of the current passive candidate list.
@@ -374,11 +396,13 @@ sequenceDiagram
 - Preserve compact mobile layout: no nested cards; fixed footer/buttons should not overlap candidate list or note field.
 
 **Patterns to follow:**
+
 - Current `BrainEnrichmentSheet.tsx` modal structure and toast behavior.
 - `apps/mobile/app/thread/[threadId]/index.tsx` decision handling and refresh behavior.
 - Existing design constraint from AGENTS.md: tool surfaces should be ergonomic and avoid explanatory in-app prose.
 
 **Test scenarios:**
+
 - Covers AE2. Source initialization for an opted-in tenant leaves Web unselected until the user toggles it.
 - Covers AE3. Proposal with Web error status renders provider status and still shows any Brain/KB candidates.
 - Covers AE5. Inline approving selected candidates sends the same selection JSON as thread review helper.
@@ -386,6 +410,7 @@ sequenceDiagram
 - Error path: accept/reject mutation failure leaves the proposal visible and shows an error toast.
 
 **Verification:**
+
 - A user can run enrichment, select/deselect candidates, add a note, approve, or reject without leaving the page.
 - A user can still open the generated review thread.
 - Web is visible only when available and unselected by default.
@@ -401,11 +426,13 @@ sequenceDiagram
 **Dependencies:** U3, U4.
 
 **Files:**
+
 - Modify: `apps/mobile/app/thread/[threadId]/index.tsx`
 - Modify: `apps/mobile/components/brain/BrainEnrichmentReviewPanel.tsx`
 - Test: `apps/mobile/lib/__tests__/brain-enrichment-review.test.ts`
 
 **Approach:**
+
 - Replace local thread-only candidate parsing/dedupe/serialization with helpers from U4.
 - Render provider statuses, source labels, and Web lower-trust/citation treatment consistently with inline review.
 - Keep the existing Review/Thread segmented control and sticky approve/reject footer; only swap the enrichment-specific review body.
@@ -413,16 +440,19 @@ sequenceDiagram
 - Preserve current thread cleanup behavior (`clearThreadActive` for completed enrichment review) after accept/cancel.
 
 **Patterns to follow:**
+
 - Current `ThreadHitlPrompt` separation of enrichment vs generic workspace review behavior.
 - Existing workspace review state helpers in `apps/mobile/lib/workspace-review-state.ts`.
 
 **Test scenarios:**
+
 - Covers AE5. Thread review and inline review helpers produce identical selected-candidate JSON for the same candidate set and note.
 - Happy path: thread review renders Web candidates with external/source citation label.
 - Edge case: reopening a different review run resets selected candidates from that run's payload.
 - Error path: malformed enrichment payload falls back to generic review display rather than crashing.
 
 **Verification:**
+
 - Thread review still approves/rejects Brain enrichment proposals.
 - Candidate grouping, labels, note semantics, and empty/error states match the inline sheet.
 
@@ -441,20 +471,20 @@ sequenceDiagram
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Duplicate Web Search credential paths diverge | Reuse `tenant_builtin_tools` and factor existing helpers instead of adding a new secret/config store. |
-| Web accidentally becomes a default source | Set Context Engine Web provider `defaultEnabled: false`; add tests for default query omission and mobile default selection. |
-| Inline review applies all candidates when none selected | Tighten `selectApprovedCandidates` semantics and test explicit empty selection. |
-| Candidate synthesis introduces flaky model output | Validate structured output, drop invalid candidates, and preserve deterministic fallback for Brain/KB. |
-| Mobile shared component becomes awkward in one surface | Share model/helpers and reusable subcomponents first; allow sheet/thread layout wrappers to differ. |
-| Provider API docs drift | Keep provider request/response parsing isolated in one TypeScript helper so Exa/SerpAPI updates do not scatter across Context Engine and runtime code. |
+| Risk                                                    | Mitigation                                                                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Duplicate Web Search credential paths diverge           | Reuse `tenant_builtin_tools` and factor existing helpers instead of adding a new secret/config store.                                                  |
+| Web accidentally becomes a default source               | Set Context Engine Web provider `defaultEnabled: false`; add tests for default query omission and mobile default selection.                            |
+| Inline review applies all candidates when none selected | Tighten `selectApprovedCandidates` semantics and test explicit empty selection.                                                                        |
+| Candidate synthesis introduces flaky model output       | Validate structured output, drop invalid candidates, and preserve deterministic fallback for Brain/KB.                                                 |
+| Mobile shared component becomes awkward in one surface  | Share model/helpers and reusable subcomponents first; allow sheet/thread layout wrappers to differ.                                                    |
+| Provider API docs drift                                 | Keep provider request/response parsing isolated in one TypeScript helper so Exa/SerpAPI updates do not scatter across Context Engine and runtime code. |
 
 ---
 
 ## Documentation / Operational Notes
 
-- Update Admin/Web Search operator copy only if needed to clarify that enabling Web Search also makes Web available as an explicit Company Brain enrichment source.
+- Update Admin/Web Search operator copy only if needed to clarify that enabling Web Search also makes Web available as an explicit ThinkWork Brain enrichment source.
 - Update docs under `docs/src/content/docs/applications/admin/builtin-tools.mdx` or `docs/src/content/docs/applications/admin/agent-templates.mdx` if the operator-visible Web Search behavior changes.
 - No database migration is expected unless implementation discovers that `tenant_builtin_tools` is insufficient for the provider bridge.
 
@@ -463,7 +493,7 @@ sequenceDiagram
 ## Sources & References
 
 - **Origin document:** `docs/brainstorms/2026-05-01-enrich-page-web-and-review-ux-requirements.md`
-- Related requirements: `docs/brainstorms/2026-04-28-context-engine-requirements.md`, `docs/brainstorms/2026-04-29-company-brain-v0-requirements.md`
-- Related plans: `docs/plans/2026-04-29-001-feat-admin-memory-knowledge-center-plan.md`, `docs/plans/2026-04-30-001-refactor-company-brain-nav-docs-plan.md`
+- Related requirements: `docs/brainstorms/2026-04-28-context-engine-requirements.md`, `docs/brainstorms/2026-04-29-brain-v0-requirements.md`
+- Related plans: `docs/plans/2026-04-29-001-feat-admin-memory-knowledge-center-plan.md`, `docs/plans/2026-04-30-001-refactor-brain-nav-docs-plan.md`
 - Institutional learning: `docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md`
 - External docs: `https://exa.ai/docs/reference/search`, `https://serpapi.com/search-api`, `https://serpapi.com/organic-results`

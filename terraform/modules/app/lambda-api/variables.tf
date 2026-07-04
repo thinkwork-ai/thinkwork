@@ -86,7 +86,7 @@ variable "plugin_catalog_github_token_secret_arn" {
 }
 
 variable "brain_artifacts_kms_key_arn" {
-  description = "Optional KMS key ARN used to encrypt canonical Company Brain artifacts. AES256 encryption is used when unset."
+  description = "Optional KMS key ARN used to encrypt canonical ThinkWork Brain artifacts. AES256 encryption is used when unset."
   type        = string
   default     = ""
 }
@@ -464,22 +464,10 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
-variable "company_brain_source_agent_model_id" {
-  description = "Bedrock model id the GraphQL context-engine Company Brain source-agent runtime uses for JSON tool/action turns. Kept separate from the high-throughput wiki compiler model so source agents can use a model tuned for reliable action JSON."
+variable "brain_source_agent_model_id" {
+  description = "Bedrock model id the GraphQL context-engine Brain source-agent runtime uses for JSON tool/action turns. Kept separate from the high-throughput wiki compiler model so source agents can use a model tuned for reliable action JSON."
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "company_brain_backdoor_install_key_secret_arn" {
-  description = "Optional Secrets Manager ARN containing the temporary Company Brain backdoor install key. Empty disables the backdoor. The raw key is never stored in tfvars or the runtime-config document."
-  type        = string
-  default     = ""
-}
-
-variable "company_brain_backdoor_install_key_stages" {
-  description = "Comma-separated stage allowlist for the temporary Company Brain backdoor install key. Both this value and company_brain_backdoor_install_key_secret_arn must be set for deployed backdoor redemption."
-  type        = string
-  default     = ""
 }
 
 variable "kg_obs_max_candidates_per_run" {

@@ -12,7 +12,7 @@ Thinkwork already uses Hindsight as the richer retained-memory engine, but the p
 The audit should optimize for a balanced foundation:
 
 - agent answers are grounded and useful during turns;
-- Hindsight produces clean observations and evidence chains for downstream Wiki/Cognee;
+- Hindsight produces clean observations and evidence chains for downstream Wiki/the retired graph substrate;
 - operators can inspect, tune, backfill, and prove memory quality.
 
 Initial code and dev evidence shows the current implementation is substantially beyond the old "vector store only" critique: dev Hindsight has 17,332 memory units, including 8,089 observations; auto-consolidation is enabled; per-bank effective config enables observations; and observation-only recall returns `source_fact_ids` plus retrievable source facts. The remaining opportunity is to make the foundation more intentional, observable, and complete across all write/read paths.
@@ -25,7 +25,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 - A2. Thinkwork agent runtime: writes post-turn memory and reads Hindsight through recall/reflect/context tools.
 - A3. Operator/admin: inspects memory quality, source routing, graph posture, backfills, and configuration.
 - A4. Memory platform engineer: tunes Hindsight integration, validates Hindsight-doc compliance, and plans changes.
-- A5. Downstream memory consumers: Wiki, Company Brain/Cognee, Context Engine, mobile/web memory surfaces, and MCP memory clients.
+- A5. Downstream memory consumers: Wiki, ThinkWork Brain/the retired graph substrate, Context Engine, mobile/web memory surfaces, and MCP memory clients.
 
 ---
 
@@ -60,7 +60,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 
 - R1. The audit MUST use Hindsight docs as the normative baseline, especially best practices for missions, retain content shape, `context`, `document_id`, `timestamp`, tags, observation scopes, recall/reflect selection, mental models, and anti-patterns.
 - R2. The audit MUST enumerate every live Thinkwork Hindsight write path: post-turn thread retain, legacy turn retain compatibility, daily memory, requester memory documents, requester thread digests, mobile quick capture, MCP `retain`, activation/user seeds, and journal/import reloads.
-- R3. The audit MUST enumerate every live Hindsight read/consumer path: Pi recall/reflect tools, proactive grounding recall, Context Engine memory provider, admin/mobile search/list/detail surfaces, memory graph, MCP recall, Wiki compile, ontology suggestions, and Cognee observation promotion.
+- R3. The audit MUST enumerate every live Hindsight read/consumer path: Pi recall/reflect tools, proactive grounding recall, Context Engine memory provider, admin/mobile search/list/detail surfaces, memory graph, MCP recall, Wiki compile, ontology suggestions, and the retired graph substrate observation promotion.
 
 **Live Evidence**
 
@@ -78,7 +78,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 **Architecture Thesis**
 
 - R11. The audit MUST restate Hindsight's intended role in the broader memory foundation: personal/episodic retained memory and observation formation, not the sole governed tenant business graph.
-- R12. The audit MUST distinguish Hindsight Memory from Company Brain/Cognee and Wiki consumers: Hindsight remains the source of retained observations; Cognee/Brain governs tenant-shared entity/relationship knowledge; Wiki materializes reviewable projections.
+- R12. The audit MUST distinguish Hindsight Memory from ThinkWork Brain/the retired graph substrate and Wiki consumers: Hindsight remains the source of retained observations; the retired graph substrate/Brain governs tenant-shared entity/relationship knowledge; Wiki materializes reviewable projections.
 - R13. The audit MUST evaluate what it means to commit to Hindsight as hosted Thinkwork's canonical retained-memory substrate. Recommendations should reduce lowest-common-denominator adapter friction and make Hindsight-native memory concepts first-class where they improve foundation quality.
 
 **Output**
@@ -93,7 +93,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 - AE1. **Covers R1, R7.** Given a Hindsight best-practice item such as "set `timestamp` whenever temporal context exists," when the audit reviews Thinkwork's retain paths, then it records whether Thinkwork sends the first-class Hindsight field, embeds the signal in content, or omits it entirely, and recommends a path based on Hindsight docs plus dev evidence.
 - AE2. **Covers R4, R6.** Given dev Hindsight contains sensitive memory content, when the audit inspects corpus quality, then it reports aggregate evidence such as fact-type counts, context distribution, tag coverage, proof/source coverage, and operation state without copying memory text.
 - AE3. **Covers R8, R9.** Given Hindsight supports bank missions, dispositions, entity labels, directives, and mental models, when the audit compares live dev banks, then it identifies which capabilities are unset by design versus untapped improvements and assigns them to the roadmap.
-- AE4. **Covers R10, R15.** Given an observation recall can return source facts, when an operator investigates a memory-derived Wiki/Cognee claim, then the recommended foundation should make the supporting Hindsight evidence reachable through an auditable path.
+- AE4. **Covers R10, R15.** Given an observation recall can return source facts, when an operator investigates a memory-derived Wiki/the retired graph substrate claim, then the recommended foundation should make the supporting Hindsight evidence reachable through an auditable path.
 
 ---
 
@@ -109,7 +109,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 ## Scope Boundaries
 
 - The audit does not replace Hindsight as the retained-memory substrate.
-- The audit does not collapse Hindsight, Wiki, and Company Brain/Cognee into one undifferentiated store.
+- The audit does not collapse Hindsight, Wiki, and ThinkWork Brain/the retired graph substrate into one undifferentiated store.
 - The audit does not expose raw sensitive memory content in docs or final summaries.
 - The audit does not implement code changes; it produces requirements and a planning-ready improvement roadmap.
 - The audit does not require prod content inspection. Dev evidence is in scope; prod-safe aggregate metrics can be a later follow-up.
@@ -119,7 +119,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 
 ## Key Decisions
 
-- **Use a fresh audit doc rather than updating the June 9 Cognee-centric requirements.** The June 9 doc remains prior art, but this review focuses on Hindsight foundation quality across current implementation and live dev behavior.
+- **Use a fresh audit doc rather than updating the June 9 the retired graph substrate-centric requirements.** The June 9 doc remains prior art, but this review focuses on Hindsight foundation quality across current implementation and live dev behavior.
 - **Optimize for balanced foundation.** The review should cover agent answers, memory substrate, and operator control together.
 - **Include dev evidence.** Code/config review alone is insufficient because Hindsight behavior depends on live service config, bank config, corpus state, and operation health.
 - **Ground on Hindsight docs.** Findings should be framed as compliance, intentional divergence, or opportunity relative to Hindsight's documented model.
@@ -156,7 +156,7 @@ Initial code and dev evidence shows the current implementation is substantially 
 - [Affects R7][Technical] Which tags and observation scopes should exist if banks remain per-user: source-type tags, user tags, team/tenant tags, topic tags, memory-shape entity labels, or custom observation scopes?
 - [Affects R8][Product/technical] Should Hindsight bank missions/dispositions differ for personal agent memory, requester memory, imported journal memory, and business/domain memory, or should Thinkwork keep one conservative global mission?
 - [Affects R9][Product/technical] Which mental models are worth creating first: user profile, current projects, communication style, technical preferences, active commitments, or operator-reviewed summaries?
-- [Affects R10][Technical] Which product surfaces should expose source-fact evidence chains: admin memory detail, Context Engine source detail, Wiki page provenance, Cognee promotion evidence, or all of them progressively?
+- [Affects R10][Technical] Which product surfaces should expose source-fact evidence chains: admin memory detail, Context Engine source detail, Wiki page provenance, the retired graph substrate promotion evidence, or all of them progressively?
 - [Affects R15][Needs research] Which Hindsight metrics are available from the deployed `/metrics` endpoint or logs, and which additional Thinkwork-side metrics are needed for operator dashboards?
 
 ---

@@ -193,12 +193,12 @@ output "hindsight_endpoint" {
 }
 
 output "brain_artifacts_bucket_name" {
-  description = "Canonical Company Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
+  description = "Canonical ThinkWork Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
   value       = module.api.brain_artifacts_bucket_name
 }
 
 output "brain_artifacts_bucket_arn" {
-  description = "ARN of the canonical Company Brain artifact bucket."
+  description = "ARN of the canonical ThinkWork Brain artifact bucket."
   value       = module.api.brain_artifacts_bucket_arn
 }
 

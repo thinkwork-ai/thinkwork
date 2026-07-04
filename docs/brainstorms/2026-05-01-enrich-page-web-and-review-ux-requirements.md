@@ -4,8 +4,8 @@ topic: enrich-page-web-and-review-ux
 status: ready-for-planning
 related:
   - docs/brainstorms/2026-04-28-context-engine-requirements.md
-  - docs/brainstorms/2026-04-29-company-brain-v0-requirements.md
-  - docs/brainstorms/2026-04-30-mobile-company-brain-search-requirements.md
+  - docs/brainstorms/2026-04-29-brain-v0-requirements.md
+  - docs/brainstorms/2026-04-30-mobile-brain-search-requirements.md
 ---
 
 # Enrich Page Web Search and Review UX
@@ -57,6 +57,7 @@ Second, enrichment review is split across the inline Enrich Page sheet and the t
 ## Requirements
 
 **Web Search adapter and trust posture**
+
 - R1. Enrich Page must only offer Web as a source when the tenant/client has explicitly opted into a Web Search Context Engine adapter.
 - R2. Web Search must not be part of the default adapter set for tenants that have not opted in.
 - R3. Even after tenant opt-in, Web must not be selected by default for each Enrich Page run; the mobile user must explicitly select it.
@@ -64,11 +65,13 @@ Second, enrichment review is split across the inline Enrich Page sheet and the t
 - R5. Web suggestions must be visibly labeled as external/lower-trust and must carry citations with URL or source identity when available.
 
 **Suggestion quality**
+
 - R6. Enrichment proposals must contain candidate page updates, not raw search/result dumps. Each candidate should state the proposed update in human-reviewable form.
 - R7. Web enrichment should synthesize current public information into concise, page-worthy suggestions with enough context for the user to judge whether the page should change.
 - R8. Duplicate or near-duplicate candidates across Brain, KB, and Web should collapse into one review item where possible, preserving the best citation/source metadata.
 
 **Two review surfaces, one proposal**
+
 - R9. Inline review and thread review must operate on the same pending enrichment proposal: same candidates, same source statuses, same selected-candidate semantics, same note semantics, and same apply/reject outcomes.
 - R10. Inline review must remain a complete review path, not just a preview: users can approve selected suggestions or reject directly from the Enrich Page sheet.
 - R11. Thread review must remain available for users who prefer the durable workspace review flow or need to return later.

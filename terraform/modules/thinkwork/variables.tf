@@ -1228,22 +1228,10 @@ variable "wiki_compile_model_id" {
   default     = "openai.gpt-oss-120b-1:0"
 }
 
-variable "company_brain_source_agent_model_id" {
-  description = "Bedrock model id used by GraphQL Company Brain source agents for JSON tool/action turns. Defaults to Claude Haiku for reliable action output while the wiki compiler can remain on gpt-oss for throughput."
+variable "brain_source_agent_model_id" {
+  description = "Bedrock model id used by GraphQL Brain source agents for JSON tool/action turns. Defaults to Claude Haiku for reliable action output while the wiki compiler can remain on gpt-oss for throughput."
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "company_brain_backdoor_install_key_secret_arn" {
-  description = "Optional Secrets Manager ARN containing the temporary Company Brain backdoor install key. Empty disables the backdoor; the raw key is never stored in tfvars or runtime-config."
-  type        = string
-  default     = ""
-}
-
-variable "company_brain_backdoor_install_key_stages" {
-  description = "Comma-separated stage allowlist for the temporary Company Brain backdoor install key. Empty disables deployed backdoor redemption."
-  type        = string
-  default     = ""
 }
 
 variable "knowledge_graph_observations_ingest_enabled" {

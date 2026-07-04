@@ -10,12 +10,12 @@ source_prompt: "Deliver a custom executive dashboard application that registers 
 
 ## Status
 
-Parked 2026-06-10. Prove the registry spine first (Twenty -> Cognee tracer
+Parked 2026-06-10. Prove the registry spine first (Twenty -> the retired graph substrate tracer
 bullet, `docs/plans/2026-06-08-003-feat-connected-application-registry-plan.md`),
 then revisit adding analytics/dashboard managed applications.
 
 **Revisit trigger:** registry Phase 1 deployed and proven — a signed Twenty
-`opportunity.updated` event produces a Cognee-backed result through an enabled
+`opportunity.updated` event produces a the retired graph substrate-backed result through an enabled
 binding with an operator-visible flow waterfall.
 
 ## Framing
@@ -26,7 +26,7 @@ policy-approved bindings, and connected information surfaces in an executive
 UI. There is existing external interest in this shape of connected application.
 
 Assessment against the merged registry plan: the data plane is enabled as
-designed — a dashboard route is structurally identical to the Twenty -> Cognee
+designed — a dashboard route is structurally identical to the Twenty -> the retired graph substrate
 tracer bullet (signed ingress, deny-by-default binding with data-class
 allowlist, idempotent dispatch, flow observability). The one genuinely new
 registry pattern required is an **HTTP target adapter**: v1's only target

@@ -36,9 +36,9 @@ The requirements doc calls for practical documentation first: explain what to do
 - R4. Avoid contradictory Spaces explanations by cross-linking and repositioning existing pages.
 - R5. Use plain sections, examples, checklists, and "when to use this" guidance.
 - R6. Teach the canonical model: Agent acts in a Space on behalf of a User toward a Goal.
-- R7. Explain Agents, Spaces, Users, Threads, Goals, workspace files, and Company Brain in everyday language.
+- R7. Explain Agents, Spaces, Users, Threads, Goals, workspace files, and ThinkWork Brain in everyday language.
 - R8. Preserve the Spaces vs. folder-specialists distinction.
-- R9. Teach the maturity ladder from Space chat to Goal workflow to Company Brain learning.
+- R9. Teach the maturity ladder from Space chat to Goal workflow to ThinkWork Brain learning.
 - R10. Teach Delegate vs Collaborate as a top-level responsibility model.
 - R11. Show operators when a Space is warranted.
 - R12. Show what belongs in Space workspace files.
@@ -187,22 +187,26 @@ Configure
 **Dependencies:** None
 
 **Files:**
+
 - Create: `docs/src/content/docs/guides/spaces/index.mdx`
 - Modify: `docs/astro.config.mjs`
 
 **Approach:**
+
 - Add a hub-style overview page following `docs/STYLE.md`.
 - Open with the canonical Agent/Space/User/Goal model.
 - Explain the reader path: first build the Space, then work in it, then promote repeated work into Goals, then refine best practices.
-- Include a simple responsibility table for Agents, Spaces, Users, Threads, Goals, workspace files, and Company Brain.
+- Include a simple responsibility table for Agents, Spaces, Users, Threads, Goals, workspace files, and ThinkWork Brain.
 - Add the new guide group under Configure > Authoring Guides in `docs/astro.config.mjs`.
 
 **Test scenarios:**
+
 - The guide overview appears in the Starlight sidebar.
 - The overview links to every child page with correct site paths.
 - The overview does not duplicate the full concept reference text from `concepts/spaces.mdx`.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/docs build`
 
 ---
@@ -216,11 +220,13 @@ Configure
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `docs/src/content/docs/guides/spaces/build-a-space.mdx`
 - Modify: `docs/src/content/docs/applications/admin/spaces.mdx`
 - Modify: `docs/src/content/docs/applications/admin/spaces/workspace.mdx`
 
 **Approach:**
+
 - Explain when a Space is warranted: team, customer, project, workflow, inbox, channel, or context boundary.
 - Provide a "what belongs in Space files" checklist: operating context, source links, intake questions, examples, local rules, workflow templates, and known exclusions.
 - Explain Spaces vs folder specialists without re-litigating agent architecture.
@@ -228,11 +234,13 @@ Configure
 - Cross-link Admin Space Workspace docs so operators can move from the guide to UI reference.
 
 **Test scenarios:**
+
 - A reader can decide whether to create a Space or use an existing Space.
 - The page tells operators what to put in `CONTEXT.md` and related workspace files without promising export UI.
 - Existing Admin Spaces pages link to the practical guide without losing their reference-page focus.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/docs build`
 
 ---
@@ -246,11 +254,13 @@ Configure
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `docs/src/content/docs/guides/spaces/work-in-a-space.mdx`
 - Modify: `docs/src/content/docs/applications/desktop/index.mdx`
 - Modify: `docs/src/content/docs/applications/mobile/threads-and-chat.mdx`
 
 **Approach:**
+
 - Walk through choosing the right Space, starting a normal chat, and starting a Space-specific workflow such as Customer Onboarding.
 - Explain Threads as collaboration records and Goals as structured outcome contracts.
 - Explain the right-side info panel in user language: outcome, owner, mode, review, progress, task status, and metadata.
@@ -259,11 +269,13 @@ Configure
 - Add desktop and mobile expectations: Desktop uses the shared Spaces app, while mobile is mainly a thread/chat participation surface.
 
 **Test scenarios:**
+
 - A new end user can answer "which Space should I use?" and "what does this panel mean?"
 - The Files mode explanation distinguishes thread-local Goal Folder from parent Space Workspace.
 - Review action copy matches the current UI labels `Confirm` and `Changes`.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/docs build`
 
 ---
@@ -277,6 +289,7 @@ Configure
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `docs/src/content/docs/guides/spaces/goals-and-files.mdx`
 - Create: `docs/src/content/docs/guides/spaces/best-practices.mdx`
 - Modify: `docs/src/content/docs/concepts/goals.mdx`
@@ -285,6 +298,7 @@ Configure
 - Modify: `docs/src/content/docs/concepts/agents/folder-is-the-agent.mdx`
 
 **Approach:**
+
 - Reuse the Goals concept page as the authoritative definition and write a practical companion page for operators/users.
 - Explain Goal contract fields, Delegate vs Collaborate, maturity ladder, Goal folders, and structured-vs-narrative state.
 - Use a concise table for `GOAL.md`, `PROGRESS.md`, `DECISIONS.md`, `ARTIFACTS.md`, and `HANDOFFS.md`.
@@ -298,11 +312,13 @@ Configure
 - Cross-link the guide from existing concept pages as "how to use this in practice."
 
 **Test scenarios:**
+
 - A support teammate can point a confused user to the best-practices page for poor result diagnosis.
 - A reader understands files as agent-readable operating context, not decorative exports.
 - Existing concept pages continue to define the model while the guide handles practical usage.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/docs build`
 
 ---
@@ -316,20 +332,24 @@ Configure
 **Dependencies:** U1, U2, U3, U4
 
 **Files:**
+
 - Modify as needed based on build/link findings in the files above.
 
 **Approach:**
+
 - Run the docs build.
 - Search for stale or contradictory text such as "Goal Files" if the final guide explains Files mode differently.
 - Search for broken or missing guide links.
 - Keep "Under the hood" sections minimal or absent on user-guide pages unless a high-level technical pointer is genuinely useful.
 
 **Test scenarios:**
+
 - `pnpm --filter @thinkwork/docs build` succeeds.
 - `rg "/guides/spaces" docs/src/content/docs` shows cross-links from relevant concept/application pages.
 - `rg "North Star|Current behavior" docs/src/content/docs/guides/spaces` shows callouts are labeled consistently.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/docs build`
 - `rg "/guides/spaces" docs/src/content/docs`
 - `rg "Current behavior|North Star" docs/src/content/docs/guides/spaces`

@@ -27,7 +27,7 @@ Out of scope:
 
 - Changing suggestion scan semantics.
 - Changing change-set approval/reprocess behavior.
-- Reworking the broader Company Brain materialization pipeline.
+- Reworking the broader ThinkWork Brain materialization pipeline.
 - Adding agent-work ontology surfaces.
 
 ## Existing Patterns

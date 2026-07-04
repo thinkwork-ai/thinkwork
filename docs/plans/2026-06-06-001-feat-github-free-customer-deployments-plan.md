@@ -21,7 +21,7 @@ and operate the environment. After that, steady-state deployment authority moves
 into the customer AWS account through Step Functions, CodeBuild, customer-owned
 configuration, Secrets Manager, S3 artifacts, and the deployed ThinkWork API.
 
-Managed applications such as Cognee and Twenty become Spaces-first lifecycle
+Managed applications such as the retired graph substrate and Twenty become Spaces-first lifecycle
 objects. Operators see a plan preview, approve deploy or destroy, watch progress,
 and inspect logs/evidence without relying on a source repo CI run. Desktop and
 mobile clients become universal distributions that bind to a deployment profile
@@ -75,7 +75,7 @@ bind to customer deployment profiles (see origin:
 ### Managed Applications
 
 - R11. Spaces Settings -> Managed Applications is the normal operator surface.
-- R12. V1 proves the lifecycle with Cognee and Twenty CRM deploy/teardown.
+- R12. V1 proves the lifecycle with the retired graph substrate and Twenty CRM deploy/teardown.
 - R13. Managed-app deploy/teardown runs through plan preview and explicit
   approval before apply or destroy.
 - R14. Managed-app teardown defaults to destructive destroy of app resources and
@@ -117,7 +117,7 @@ admin and finish setup), F3 (deploy or tear down managed applications), F4 (bind
 universal desktop/mobile apps to a customer deployment)
 
 **Origin acceptance examples:** AE1 (GitHub-free bootstrap), AE2 (first admin
-claim), AE3 (Cognee deploy through Managed Applications), AE4 (Twenty destructive
+claim), AE3 (the retired graph substrate deploy through Managed Applications), AE4 (Twenty destructive
 teardown), AE5 (desktop deployment profile import), AE6 (release upgrade through
 manifest/artifacts)
 
@@ -137,7 +137,7 @@ first GitHub-free deployment path.
   use deployment profiles first.
 - Customer-specific branded desktop/mobile builds.
 - Non-AWS deployment targets. ThinkWork remains AWS-native.
-- A full generic app marketplace. V1 proves the lifecycle with Cognee and
+- A full generic app marketplace. V1 proves the lifecycle with the retired graph substrate and
   Twenty CRM.
 - Rich policy automation for low-risk immediate applies. V1 uses plan preview
   and approval for managed-app changes.
@@ -192,7 +192,7 @@ first GitHub-free deployment path.
   into Settings from Lambda environment variables. The new model needs durable
   job/application status while preserving compact Lambda env usage.
 - `apps/spaces/src/components/settings/SettingsKnowledgeGraph.tsx` and
-  `apps/spaces/src/lib/settings-queries.ts` are the current Cognee operator UI
+  `apps/spaces/src/lib/settings-queries.ts` are the current the retired graph substrate operator UI
   and typed query surface. Replace the single toggle/workflow result with a
   Managed Applications surface that handles plan, approval, progress, and
   app-specific teardown warnings.
@@ -200,8 +200,8 @@ first GitHub-free deployment path.
   has the pending-owner-email claim path used by paid signup. Extend this for
   bootstrap first-admin claim rather than introducing passwords or setup tokens.
 - `terraform/modules/thinkwork/variables.tf`,
-  `terraform/modules/thinkwork/main.tf`, and `terraform/modules/app/cognee/*`
-  show the current optional Cognee module wiring and guardrail style.
+  `terraform/modules/thinkwork/main.tf`, and `terraform/modules/app/retired_graph_substrate/*`
+  show the current optional the retired graph substrate module wiring and guardrail style.
 - `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md` defines the
   Twenty AWS shape. This plan supersedes its GitHub Actions and data-retention
   assumptions for the new GitHub-free lifecycle.
@@ -235,8 +235,8 @@ first GitHub-free deployment path.
   successful infrastructure apply.
 - `docs/solutions/build-errors/aws-security-group-description-rejects-non-ascii-2026-05-13.md`
   is a reminder to keep generated Terraform names/descriptions ASCII-safe.
-- `docs/plans/cognee-terraform-infrastructure-autopilot-status.md` captures
-  Cognee rollout failures: Lambda env size pressure, EFS mount target issues,
+- `docs/plans/retired_graph_substrate-terraform-infrastructure-autopilot-status.md` captures
+  the retired graph substrate rollout failures: Lambda env size pressure, EFS mount target issues,
   startup failures, and health smoke value.
 
 ### External References
@@ -283,10 +283,10 @@ first GitHub-free deployment path.
   the minimal foundation and control plane from bundled/published artifacts
   because nothing exists yet. After bootstrap, deploy, destroy, and upgrade work
   runs through the customer AWS control plane.
-- **Replace GitHub-specific Cognee mutation with generic managed-app jobs.**
+- **Replace GitHub-specific the retired graph substrate mutation with generic managed-app jobs.**
   `setKnowledgeGraphDeployment` should be deprecated or implemented as a thin
   compatibility wrapper over a new managed-app deployment API.
-- **Managed-app destroy means destructive destroy in v1.** Cognee and Twenty
+- **Managed-app destroy means destructive destroy in v1.** the retired graph substrate and Twenty
   teardown plans must include app-specific resource and data deletion effects:
   runtime resources, persistent storage, generated secrets, dedicated database
   users/databases, and app-owned buckets or cache resources where applicable.
@@ -315,7 +315,7 @@ first GitHub-free deployment path.
   release version, compatibility bounds, artifact URLs and SHA-256 hashes,
   Terraform module versions or bundle URLs, deployment runner/build image
   references, Spaces/admin/mobile/desktop profile contract versions, managed-app
-  descriptors for Cognee and Twenty, smoke contracts, and a detached signature.
+  descriptors for the retired graph substrate and Twenty, smoke contracts, and a detached signature.
 - **How does AWS verify artifact integrity?** Runner verifies the manifest
   signature with a pinned ThinkWork public key, verifies artifact hashes before
   use, records the manifest digest on every deployment job, and fails closed on
@@ -391,9 +391,9 @@ docs/src/content/docs/deploy/
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for
+> _This illustrates the intended approach and is directional guidance for
 > review, not implementation specification. The implementing agent should treat
-> it as context, not code to reproduce.*
+> it as context, not code to reproduce._
 
 ```mermaid
 flowchart TB
@@ -409,7 +409,7 @@ flowchart TB
   SFN["Step Functions deployment workflows"]
   CodeBuild["CodeBuild Terraform runner"]
   S3["S3 artifacts and evidence"]
-  Apps["Cognee / Twenty resources"]
+  Apps["the retired graph substrate / Twenty resources"]
   Clients["Desktop / mobile apps"]
   Profile["Deployment profile"]
 
@@ -493,6 +493,7 @@ source checkout.
 **Dependencies:** None
 
 **Files:**
+
 - Create: `scripts/release/build-release-manifest.mjs`
 - Create: `scripts/release/verify-release-manifest.mjs`
 - Create: `packages/release-manifest/package.json`
@@ -505,6 +506,7 @@ source checkout.
 - Test: `apps/cli/__tests__/enterprise-release.test.ts`
 
 **Approach:**
+
 - Define a manifest schema that includes release version, compatibility bounds,
   artifact URLs, artifact SHA-256 digests, Terraform module/bundle references,
   deployment runner image or bundle reference, managed-app descriptors, smoke
@@ -520,20 +522,22 @@ source checkout.
   must test old-key, new-key, expired-key, and revoked-key manifests.
 - Keep the current `resolveEnterpriseReleasePin` API compatible where useful,
   but remove the `CHANGE_ME` posture for production bootstrap.
-- Include app descriptors for Cognee and Twenty so the runtime can plan and
+- Include app descriptors for the retired graph substrate and Twenty so the runtime can plan and
   smoke each app using the selected release's known artifact/image digests.
 
 **Execution note:** Implement the manifest parser/validator test-first; this is
 an external contract consumed by CLI, CodeBuild, and later clients.
 
 **Patterns to follow:**
+
 - `apps/cli/src/commands/enterprise/release.ts` for current release pin shape.
 - `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md` for Twenty
   artifact needs.
 
 **Test scenarios:**
+
 - Covers AE6. Happy path: a manifest with valid signature and matching artifact
-  hashes resolves release version, Terraform module version, and Cognee/Twenty
+  hashes resolves release version, Terraform module version, and the retired graph substrate/Twenty
   descriptors.
 - Error path: invalid signature is rejected before artifact metadata is trusted.
 - Error path: artifact hash mismatch fails with a message naming the artifact
@@ -545,6 +549,7 @@ an external contract consumed by CLI, CodeBuild, and later clients.
   manifest is not usable for managed-app deployment.
 
 **Verification:**
+
 - Release manifest tooling can generate, validate, and verify a manifest in CI.
 - CLI release resolution can no longer silently proceed with `CHANGE_ME`.
 
@@ -561,6 +566,7 @@ AE1
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `terraform/modules/app/deployment-control-plane/main.tf`
 - Create: `terraform/modules/app/deployment-control-plane/variables.tf`
 - Create: `terraform/modules/app/deployment-control-plane/outputs.tf`
@@ -577,6 +583,7 @@ AE1
 - Test: `apps/cli/__tests__/terraform-deployment-control-plane-fixture.test.ts`
 
 **Approach:**
+
 - Add a Terraform module that creates the deployment state machine(s), CodeBuild
   project(s), runner IAM role, artifact/evidence bucket or prefix, CloudWatch
   log groups, SSM parameter prefix, AppConfig application/environment/profile,
@@ -598,6 +605,7 @@ AE1
   stub buildspec first, then U4/U5 swap in live orchestration.
 
 **Patterns to follow:**
+
 - `terraform/modules/app/routines-stepfunctions/main.tf` for Step Functions
   IAM/logging conventions.
 - `apps/cli/src/commands/enterprise/aws-bootstrap.ts` for AWS bootstrap client
@@ -605,6 +613,7 @@ AE1
 - `docs/solutions/architecture-patterns/inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`.
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: bootstrap plan without a GitHub repository produces
   AWS state bucket/lock table, control-plane resources, AppConfig/SSM/Secrets
   targets, release pin, and generated URLs.
@@ -620,6 +629,7 @@ AE1
   mode remains inert.
 
 **Verification:**
+
 - A new customer bootstrap can be planned without GitHub inputs.
 - Terraform fixture tests prove the substrate renders with scoped outputs and
   ASCII-safe names/descriptions.
@@ -637,6 +647,7 @@ setup tokens.
 **Dependencies:** U2
 
 **Files:**
+
 - Modify: `terraform/modules/foundation/cognito/main.tf`
 - Modify: `terraform/modules/foundation/cognito/variables.tf`
 - Modify: `terraform/modules/foundation/cognito/outputs.tf`
@@ -652,6 +663,7 @@ setup tokens.
 - Test: `apps/cli/__tests__/enterprise-identity-provider.test.ts`
 
 **Approach:**
+
 - Extend bootstrap inputs to support Google preset, generic OIDC, and generic
   SAML.
 - For OIDC, collect provider name, issuer/discovery URL or explicit endpoints,
@@ -679,11 +691,13 @@ setup tokens.
 `bootstrapUser` pending-owner path before changing it.
 
 **Patterns to follow:**
+
 - Existing pending-owner claim logic in
   `packages/api/src/graphql/resolvers/core/bootstrapUser.mutation.ts`.
 - Cognito callback URL wiring in `terraform/modules/thinkwork/main.tf`.
 
 **Test scenarios:**
+
 - Covers AE2. Happy path: pending first-admin email matches a verified Cognito
   email and grants owner/admin membership to the pre-provisioned tenant.
 - Edge case: email comparison is case-insensitive and clears the pending claim
@@ -702,6 +716,7 @@ setup tokens.
   and callback URLs for generated Spaces URL and app redirect schemes.
 
 **Verification:**
+
 - First admin can claim a bootstrap-created tenant through Cognito sign-in.
 - Bootstrap supports Google, generic OIDC, and generic SAML input paths without
   exposing secrets in CLI metadata or browser payloads.
@@ -720,6 +735,7 @@ AE4, AE6
 **Dependencies:** U2, U3
 
 **Files:**
+
 - Create: `packages/database-pg/src/schema/deployments.ts`
 - Modify: `packages/database-pg/src/schema/index.ts`
 - Create: `packages/database-pg/drizzle/<generated>_managed_deployments.sql`
@@ -748,6 +764,7 @@ AE4, AE6
 - Test: `packages/deployment-runner/test/deployment-runner.test.ts`
 
 **Approach:**
+
 - Add deployment domain tables for managed apps, desired state, deployment jobs,
   job events, plan artifacts, approvals, selected release manifest digest, and
   evidence links.
@@ -787,13 +804,14 @@ AE4, AE6
   caller-supplied tenant/app fields for authorization, and use idempotency keys
   for event writes with retry/backoff behavior.
 - Deprecate `setKnowledgeGraphDeployment` as a GitHub-specific mutation. For
-  compatibility, have it call the new managed-app plan path for Cognee or mark
+  compatibility, have it call the new managed-app plan path for the retired graph substrate or mark
   it legacy once Spaces has moved.
 - Do not rely on Lambda environment variables for all app status. Keep compact
   environment-derived deployment status for foundation details, but make
   managed-app status job-backed.
 
 **Patterns to follow:**
+
 - `packages/api/src/graphql/resolvers/routines/triggerRoutineRun.mutation.ts`
   for `StartExecution` patterns.
 - `docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md`.
@@ -801,7 +819,8 @@ AE4, AE6
   for matching existing approval/status models before inventing new shapes.
 
 **Test scenarios:**
-- Covers AE3. Happy path: enabling Cognee creates a plan job, starts Step
+
+- Covers AE3. Happy path: enabling the retired graph substrate creates a plan job, starts Step
   Functions, records manifest digest, and returns plan status to Spaces.
 - Covers AE4. Happy path: destroying Twenty records a destructive data-impact
   summary and waits for explicit approval before CodeBuild destroy.
@@ -823,15 +842,16 @@ AE4, AE6
   applying, succeeded/failed with event ordering intact.
 
 **Verification:**
+
 - Managed-app lifecycle no longer requires GitHub token, GitHub variables, or
   workflow dispatch.
 - Operators can inspect job, plan, approval, and evidence state through GraphQL.
 
 ---
 
-- U5. **Cognee and Twenty Managed-App Adapters**
+- U5. **the retired graph substrate and Twenty Managed-App Adapters**
 
-**Goal:** Make Cognee and Twenty first-class managed apps that deploy and tear
+**Goal:** Make the retired graph substrate and Twenty first-class managed apps that deploy and tear
 down through the new deployment job system, including destructive resource/data
 semantics.
 
@@ -840,9 +860,10 @@ semantics.
 **Dependencies:** U1, U2, U4
 
 **Files:**
-- Modify: `terraform/modules/app/cognee/main.tf`
-- Modify: `terraform/modules/app/cognee/variables.tf`
-- Modify: `terraform/modules/app/cognee/outputs.tf`
+
+- Modify: `terraform/modules/app/retired_graph_substrate/main.tf`
+- Modify: `terraform/modules/app/retired_graph_substrate/variables.tf`
+- Modify: `terraform/modules/app/retired_graph_substrate/outputs.tf`
 - Create: `terraform/modules/app/twenty/main.tf`
 - Create: `terraform/modules/app/twenty/variables.tf`
 - Create: `terraform/modules/app/twenty/outputs.tf`
@@ -850,21 +871,22 @@ semantics.
 - Modify: `terraform/modules/thinkwork/main.tf`
 - Modify: `terraform/modules/thinkwork/variables.tf`
 - Modify: `terraform/modules/thinkwork/outputs.tf`
-- Create: `packages/deployment-runner/src/apps/cognee.ts`
+- Create: `packages/deployment-runner/src/apps/retired_graph_substrate.ts`
 - Create: `packages/deployment-runner/src/apps/twenty.ts`
 - Create: `packages/deployment-runner/src/apps/registry.ts`
-- Create: `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- Create: `plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs`
 - Create: `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
-- Test: `apps/cli/__tests__/terraform-cognee-fixture.test.ts`
+- Test: `apps/cli/__tests__/terraform-retired_graph_substrate-fixture.test.ts`
 - Test: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
 - Test: `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
 
 **Approach:**
+
 - Create a small first-party managed-app registry, not a marketplace. Each
   adapter provides app id, display metadata, Terraform variable mapping,
   required secrets, plan summary interpretation, destructive impact text,
   smoke contract, and endpoint/status extraction.
-- Keep Cognee's existing guardrails: immutable image digest, dedicated database
+- Keep the retired graph substrate's existing guardrails: immutable image digest, dedicated database
   credentials, no all-network internal CIDRs, Bedrock model resource ARNs, and
   compact status.
 - Add Twenty's AWS module from the prior plan but change lifecycle semantics:
@@ -887,29 +909,32 @@ semantics.
   smoke contracts for both apps.
 
 **Patterns to follow:**
-- `terraform/modules/app/cognee/*` for optional app guardrails.
+
+- `terraform/modules/app/retired_graph_substrate/*` for optional app guardrails.
 - `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md` for Twenty
   AWS topology, adjusted for this plan's destructive teardown requirement.
-- `docs/plans/cognee-terraform-infrastructure-autopilot-status.md` for Cognee
+- `docs/plans/retired_graph_substrate-terraform-infrastructure-autopilot-status.md` for the retired graph substrate
   rollout pitfalls and smoke expectations.
 
 **Test scenarios:**
-- Covers AE3. Happy path: Cognee deploy plan maps selected release artifact
+
+- Covers AE3. Happy path: the retired graph substrate deploy plan maps selected release artifact
   values into Terraform variables and produces endpoint/log/status evidence.
 - Covers AE4. Happy path: Twenty destroy plan lists CRM data/resource deletion,
   requires approval, and runs destroy through the runner.
 - Happy path: Twenty module provisions server, worker, dedicated database/user,
   cache, storage, ALB, logs, and compact status outputs when enabled.
-- Edge case: Cognee/Twenty disabled mode creates no optional app resources.
+- Edge case: the retired graph substrate/Twenty disabled mode creates no optional app resources.
 - Error path: enabling an app without required image digest or secret fails at
   plan time with actionable missing inputs.
 - Error path: destroy plan refuses to proceed when the runner cannot generate a
   data-impact summary.
-- Integration: Cognee and Twenty smoke scripts skip clearly when not deployed
+- Integration: the retired graph substrate and Twenty smoke scripts skip clearly when not deployed
   and fail loudly when endpoints/status are unhealthy.
 
 **Verification:**
-- Cognee and Twenty can both be planned, approved, deployed, destroyed, smoked,
+
+- the retired graph substrate and Twenty can both be planned, approved, deployed, destroyed, smoked,
   and status-reported without GitHub Actions.
 - App-specific destructive impact is visible before approval.
 
@@ -926,6 +951,7 @@ release versions, and destructive teardown warnings.
 **Dependencies:** U3, U4, U5
 
 **Files:**
+
 - Create: `apps/spaces/src/components/settings/managed-applications/ManagedApplicationsPage.tsx`
 - Create: `apps/spaces/src/components/settings/managed-applications/ManagedApplicationRow.tsx`
 - Create: `apps/spaces/src/components/settings/managed-applications/ManagedApplicationPlanDialog.tsx`
@@ -941,22 +967,23 @@ release versions, and destructive teardown warnings.
 - Test: `apps/spaces/src/lib/graphql-queries.schema.test.ts`
 
 **Approach:**
+
 - Add Settings -> Managed Applications as the primary lifecycle surface for
-  Cognee and Twenty. Keep direct Knowledge Graph/CRM pages as details that only
+  the retired graph substrate and Twenty. Keep direct Knowledge Graph/CRM pages as details that only
   appear when the app status supports them.
 - For each app, show desired state, deployed state, selected release, latest
   job, health/smoke status, endpoint/log links, and next action.
 - Actions are not raw switches. A deploy/destroy action starts plan generation
   and opens a plan dialog when ready. Apply/destroy requires explicit approval
   from the plan dialog.
-- Destructive teardown copy is app-specific. Cognee warns about knowledge graph
+- Destructive teardown copy is app-specific. the retired graph substrate warns about knowledge graph
   metadata/storage/database deletion. Twenty warns about CRM database, files,
   cache/runtime, and generated secrets.
 - The plan dialog shows affected data categories, selected app, operation,
   release/manifest digest, plan digest, and plan timestamp. Destroy remains
   disabled until the deliberate confirmation control is satisfied, and the
   final action labels distinguish `Deploy application` from `Destroy
-  application and data`. Approval is invalidated when the plan digest or
+application and data`. Approval is invalidated when the plan digest or
   destructive scope changes.
 - Show job progress from durable events rather than optimistic pending state
   alone. Polling is acceptable for v1; subscriptions can follow if needed.
@@ -973,19 +1000,21 @@ release versions, and destructive teardown warnings.
     evidence unavailable, and evidence link expired.
 
 **Patterns to follow:**
+
 - `apps/spaces/src/components/settings/SettingsKnowledgeGraph.tsx` for current
   operator settings composition.
 - `apps/spaces/src/components/approvals/*` for approval/readability patterns.
 - `apps/spaces/src/components/settings/SettingsContent.tsx` for Settings layout.
 
 **Test scenarios:**
-- Covers AE3. Happy path: enabling Cognee starts a plan, shows plan preview,
+
+- Covers AE3. Happy path: enabling the retired graph substrate starts a plan, shows plan preview,
   requires approval, then shows progress and final endpoint/status.
 - Covers AE4. Happy path: destroying Twenty shows destructive CRM data warning,
   requires approval, and then shows destroy progress.
 - Covers AE6. Happy path: release upgrade plan shows old/new release versions
   and evidence links.
-- Edge case: direct Knowledge Graph route while Cognee is not deployed redirects
+- Edge case: direct Knowledge Graph route while the retired graph substrate is not deployed redirects
   or shows a clear not-deployed state.
 - Edge case: latest job failed shows failure message, log/evidence link, and a
   retry/replan path.
@@ -997,7 +1026,8 @@ release versions, and destructive teardown warnings.
   job detail, plan, approve, reject, and status fields.
 
 **Verification:**
-- Operators can manage Cognee and Twenty from Spaces without CLI or GitHub.
+
+- Operators can manage the retired graph substrate and Twenty from Spaces without CLI or GitHub.
 - UI makes destructive data impact clear before approval.
 
 ---
@@ -1016,6 +1046,7 @@ binding can be reviewed and rolled back independently.
 ### U7a. Profile Contract, Export, and Trust
 
 **Files:**
+
 - Create: `packages/deployment-profile/package.json`
 - Create: `packages/deployment-profile/tsconfig.json`
 - Create: `packages/deployment-profile/src/index.ts`
@@ -1025,6 +1056,7 @@ binding can be reviewed and rolled back independently.
 - Modify: `apps/spaces/src/routes/-sign-in.test.tsx`
 
 **Approach:**
+
 - Define deployment profile JSON schema v1 in a shared package. Required fields:
   schema version, deployment id, display name, stage, region, issued-at,
   Spaces URL, API URL, GraphQL HTTP URL, AppSync HTTP/WS URLs, Cognito domain,
@@ -1046,6 +1078,7 @@ binding can be reviewed and rolled back independently.
 ### U7b. Desktop Profile Binding
 
 **Files:**
+
 - Modify: `packages/desktop-ipc/src/schemas.ts`
 - Modify: `packages/desktop-ipc/test/schemas.test.ts`
 - Modify: `apps/desktop/src/main/env.ts`
@@ -1054,6 +1087,7 @@ binding can be reviewed and rolled back independently.
 - Modify: `apps/desktop/src/preload/index.ts`
 
 **Approach:**
+
 - Desktop profile import paths: custom deep link, file picker/JSON paste, and
   build-time env fallback for development. Store active profile in Electron
   user data with safe parsing and expose it through `getDesktopConfig`.
@@ -1068,6 +1102,7 @@ binding can be reviewed and rolled back independently.
 ### U7c. Mobile Profile Binding
 
 **Files:**
+
 - Modify: `apps/mobile/lib/auth.ts`
 - Modify: `apps/mobile/lib/graphql/client.ts`
 - Create: `apps/mobile/lib/platform-config.ts`
@@ -1077,6 +1112,7 @@ binding can be reviewed and rolled back independently.
 - Test: `apps/mobile/lib/deployment-profile.test.ts`
 
 **Approach:**
+
 - Mobile profile import paths: link/QR to profile, JSON paste, and build-time
   env fallback for development. Store active profile in secure/local storage
   before auth modules initialize.
@@ -1095,6 +1131,7 @@ binding can be reviewed and rolled back independently.
 initialization; stale env constants are easy to miss.
 
 **Patterns to follow:**
+
 - `packages/desktop-ipc/src/schemas.ts` for zod IPC contract validation.
 - `apps/desktop/src/main/ipc-handlers.ts` for desktop config response.
 - `apps/spaces/src/routes/sign-in.tsx` for incomplete config messaging.
@@ -1102,6 +1139,7 @@ initialization; stale env constants are easy to miss.
   env-based auth/API config.
 
 **Test scenarios:**
+
 - Covers AE5. Happy path: desktop imports a valid profile, stores it, shows
   connected customer/stage, and starts OAuth against that Cognito domain.
 - Covers AE5. Happy path: mobile imports a valid profile before sign-in and
@@ -1121,6 +1159,7 @@ initialization; stale env constants are easy to miss.
   missing-field diagnostics compatible with existing Spaces sign-in behavior.
 
 **Verification:**
+
 - Desktop and mobile no longer require customer-specific endpoint builds for
   production use.
 - Users can see and trust which customer deployment they are about to sign into.
@@ -1138,22 +1177,24 @@ GitHub-dependent path.
 **Dependencies:** U1, U2, U4, U5, U6, U7a, U7b, U7c
 
 **Files:**
+
 - Create: `docs/src/content/docs/deploy/github-free-customer-deployments.mdx`
 - Create: `docs/src/content/docs/deploy/managed-applications.mdx`
 - Create: `docs/src/content/docs/deploy/deployment-profiles.mdx`
 - Create: `docs/src/content/docs/deploy/release-manifests.mdx`
 - Modify: `apps/cli/src/commands/enterprise/templates/deploy-repo/docs/runbook.md`
 - Create: `scripts/smoke/foundation-bootstrap-smoke.mjs`
-- Modify: `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- Modify: `plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs`
 - Modify: `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 
 **Approach:**
+
 - Document the operator path: CLI bootstrap, generated URL login, first admin
   claim, Managed Applications, release upgrade, and deployment profile import.
 - Document recovery CLI usage separately from normal operation so the default
   posture remains Spaces-first.
 - Add mandatory smoke contracts that write evidence to S3 and surface links in
-  Spaces: foundation bootstrap, Cognee deploy/destroy, Twenty deploy/destroy,
+  Spaces: foundation bootstrap, the retired graph substrate deploy/destroy, Twenty deploy/destroy,
   and release upgrade.
 - Evidence should include manifest digest, Step Functions execution ARN,
   CodeBuild build ARN/id, Terraform plan/apply artifact keys, smoke result,
@@ -1165,15 +1206,17 @@ GitHub-dependent path.
   stuck job, manifest verification failure, and first-admin claim mismatch.
 
 **Patterns to follow:**
+
 - `docs/solutions/workflow-issues/deploy-silent-arch-mismatch-took-a-week-to-surface-2026-04-24.md`
   for smoke expectations.
 - `apps/cli/src/commands/enterprise/templates/deploy-repo/scripts/smoke.mjs`
   for existing enterprise smoke intent.
 
 **Test scenarios:**
+
 - Covers AE1. Happy path: foundation smoke proves generated Spaces/API/Auth
   outputs are usable after bootstrap.
-- Covers AE3. Happy path: Cognee smoke records health/status evidence after
+- Covers AE3. Happy path: the retired graph substrate smoke records health/status evidence after
   deploy.
 - Covers AE4. Happy path: Twenty destroy evidence records destructive operation
   completion and app no-longer-deployed status.
@@ -1185,6 +1228,7 @@ GitHub-dependent path.
   rather than reporting false failure.
 
 **Verification:**
+
 - Customer admins and ThinkWork support can diagnose deployment failures from
   Spaces/docs/evidence without access to a customer source repo CI run.
 - The user-facing docs match the new GitHub-free default.
@@ -1217,13 +1261,13 @@ GitHub-dependent path.
 
 ## Alternative Approaches Considered
 
-| Approach | Why Not Chosen |
-| --- | --- |
-| Keep customer GitHub deployment repos | Fails the primary requirement for customers without GitHub and keeps GitHub as deployment authority. |
-| CLI/local Terraform for every deploy | Violates the requirement that the operator laptop is not steady-state authority and makes browser-managed apps impossible without local handoffs. |
-| ThinkWork-hosted SaaS deployment control plane | Conflicts with customer-owned AWS positioning and creates a cross-account trust/product surface outside this v1 identity. |
+| Approach                                              | Why Not Chosen                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keep customer GitHub deployment repos                 | Fails the primary requirement for customers without GitHub and keeps GitHub as deployment authority.                                                                                                                                                  |
+| CLI/local Terraform for every deploy                  | Violates the requirement that the operator laptop is not steady-state authority and makes browser-managed apps impossible without local handoffs.                                                                                                     |
+| ThinkWork-hosted SaaS deployment control plane        | Conflicts with customer-owned AWS positioning and creates a cross-account trust/product surface outside this v1 identity.                                                                                                                             |
 | CodePipeline instead of Step Functions plus CodeBuild | CodePipeline is good for linear CI/CD, but managed-app deploy/destroy needs product-driven plan, approval, evidence, and per-app lifecycle state. Step Functions maps better to those explicit transitions while still using CodeBuild for Terraform. |
-| Customer-specific desktop/mobile builds | Solves endpoint selection but violates universal distribution requirement and increases release/support burden. |
+| Customer-specific desktop/mobile builds               | Solves endpoint selection but violates universal distribution requirement and increases release/support burden.                                                                                                                                       |
 
 ---
 
@@ -1237,7 +1281,7 @@ GitHub-dependent path.
 - First-admin claim completion rate, number of ThinkWork-assisted steps, and
   support tickets per deployment are tracked so the new model proves adoption
   friction improved, not only technical capability.
-- Cognee and Twenty can each be deployed and destroyed from Spaces with plan
+- the retired graph substrate and Twenty can each be deployed and destroyed from Spaces with plan
   preview, explicit approval, progress, logs, final status, and smoke evidence.
 - A new release can be selected and applied through the customer AWS control
   plane using a signed manifest.
@@ -1264,17 +1308,17 @@ GitHub-dependent path.
 
 ## Risk Analysis & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Runner IAM is too broad | Medium | High | Scope to ThinkWork-managed prefixes/tags where possible, require permissions boundaries for IAM resources, and review with security lens before live apply. |
-| Manifest/artifact tampering | Low | High | Signed manifest, pinned public key, artifact SHA-256 verification, manifest digest recorded on every job, key ids/validity windows, and revoked-key denylist handling. |
-| Partial bootstrap leaves confusing state | Medium | Medium | CLI dry-run, explicit bootstrap phases, SSM/AppConfig writes after verification, and clear recovery docs. |
-| Lambda env size pressure returns | Medium | Medium | Durable app/job status in Aurora and compact env only for foundation outputs. |
-| Destructive app teardown surprises operators | Medium | High | App-specific impact summaries, explicit approval, confirmation language, and evidence of what was destroyed. |
-| Forged deployment profile binds users to hostile endpoints | Low | High | Signed profiles, pinned/trusted verification keys, TLS-only import URLs, trust-state display, OAuth blocking on invalid profiles, and profile/session cache reset on deployment changes. |
-| Desktop/mobile profile import breaks existing dev flows | Medium | Medium | Keep dev-only env fallback and add parser/IPC/mobile tests before changing auth initialization. |
-| CodeBuild plan/apply succeeds but app is unhealthy | Medium | High | Mandatory app smokes and status evidence before marking jobs succeeded. |
-| Existing GitHub enterprise path regresses before replacement is ready | Medium | Medium | Keep legacy path isolated; introduce AWS-native path behind new commands/surfaces before deprecating GitHub dispatch. |
+| Risk                                                                  | Likelihood | Impact | Mitigation                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runner IAM is too broad                                               | Medium     | High   | Scope to ThinkWork-managed prefixes/tags where possible, require permissions boundaries for IAM resources, and review with security lens before live apply.                              |
+| Manifest/artifact tampering                                           | Low        | High   | Signed manifest, pinned public key, artifact SHA-256 verification, manifest digest recorded on every job, key ids/validity windows, and revoked-key denylist handling.                   |
+| Partial bootstrap leaves confusing state                              | Medium     | Medium | CLI dry-run, explicit bootstrap phases, SSM/AppConfig writes after verification, and clear recovery docs.                                                                                |
+| Lambda env size pressure returns                                      | Medium     | Medium | Durable app/job status in Aurora and compact env only for foundation outputs.                                                                                                            |
+| Destructive app teardown surprises operators                          | Medium     | High   | App-specific impact summaries, explicit approval, confirmation language, and evidence of what was destroyed.                                                                             |
+| Forged deployment profile binds users to hostile endpoints            | Low        | High   | Signed profiles, pinned/trusted verification keys, TLS-only import URLs, trust-state display, OAuth blocking on invalid profiles, and profile/session cache reset on deployment changes. |
+| Desktop/mobile profile import breaks existing dev flows               | Medium     | Medium | Keep dev-only env fallback and add parser/IPC/mobile tests before changing auth initialization.                                                                                          |
+| CodeBuild plan/apply succeeds but app is unhealthy                    | Medium     | High   | Mandatory app smokes and status evidence before marking jobs succeeded.                                                                                                                  |
+| Existing GitHub enterprise path regresses before replacement is ready | Medium     | Medium | Keep legacy path isolated; introduce AWS-native path behind new commands/surfaces before deprecating GitHub dispatch.                                                                    |
 
 ---
 
@@ -1289,7 +1333,7 @@ GitHub-dependent path.
 ### Phase 2: Managed-App Lifecycle
 
 - U4 deployment job domain/API/runner orchestration.
-- U5 Cognee and Twenty adapters, Terraform, destructive destroy, and smokes.
+- U5 the retired graph substrate and Twenty adapters, Terraform, destructive destroy, and smokes.
 - U6 Spaces Managed Applications UX.
 
 ### Phase 3: Universal Clients and Supportability
@@ -1304,7 +1348,7 @@ GitHub-dependent path.
 ## Documentation Plan
 
 - Add a new deploy guide for GitHub-free customer bootstrap.
-- Add Managed Applications docs for Cognee and Twenty lifecycle, including
+- Add Managed Applications docs for the retired graph substrate and Twenty lifecycle, including
   destructive teardown semantics.
 - Add release manifest docs for publishers and customer operators.
 - Add deployment profile docs for desktop/mobile user setup and support.
@@ -1318,7 +1362,7 @@ GitHub-dependent path.
 - Roll out inert substrate before live runner to avoid coupling Terraform/IAM
   review with product UI changes.
 - Keep the existing GitHub Actions deployment path available until at least one
-  GitHub-free customer bootstrap and Cognee/Twenty lifecycle completes.
+  GitHub-free customer bootstrap and the retired graph substrate/Twenty lifecycle completes.
 - Treat `setKnowledgeGraphDeployment` as compatibility only after U4/U6; do not
   leave it dispatching GitHub workflows from the new Managed Applications page.
 - Add CloudWatch alarms or dashboard entries for failed deployment runner jobs,
@@ -1334,7 +1378,7 @@ GitHub-dependent path.
 - Related brainstorm: `docs/brainstorms/2026-06-05-twenty-crm-managed-application-requirements.md`
 - Related plan: `docs/plans/2026-06-05-003-feat-twenty-crm-managed-app-plan.md`
 - Related plan: `docs/plans/2026-05-27-002-feat-infrastructure-space-aws-data-lake-plan.md`
-- Related status notes: `docs/plans/cognee-terraform-infrastructure-autopilot-status.md`
+- Related status notes: `docs/plans/retired_graph_substrate-terraform-infrastructure-autopilot-status.md`
 - Current GitHub dispatch seam:
   `packages/api/src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.ts`
 - Current bootstrap claim seam:

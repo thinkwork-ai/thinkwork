@@ -1055,9 +1055,7 @@ module "api" {
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
-  company_brain_source_agent_model_id           = var.company_brain_source_agent_model_id
-  company_brain_backdoor_install_key_secret_arn = var.company_brain_backdoor_install_key_secret_arn
-  company_brain_backdoor_install_key_stages     = var.company_brain_backdoor_install_key_stages
+  brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled

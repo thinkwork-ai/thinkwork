@@ -306,12 +306,12 @@ describe("memory context provider", () => {
               summary: "Brief preference",
               text: "Eric prefers concise launch briefs.",
             },
-            backendRefs: [{ backend: "cognee", ref: "user-dataset" }],
+            backendRefs: [{ backend: "graph", ref: "user-dataset" }],
             createdAt: "2026-06-26T19:00:00.000Z",
             metadata: {},
           },
           score: 0.7,
-          backend: "cognee",
+          backend: "graph",
         },
       ])
       .mockResolvedValueOnce([
@@ -327,12 +327,12 @@ describe("memory context provider", () => {
             content: {
               text: "The sales space uses the enterprise onboarding template.",
             },
-            backendRefs: [{ backend: "cognee", ref: "space-dataset" }],
+            backendRefs: [{ backend: "graph", ref: "space-dataset" }],
             createdAt: "2026-06-26T19:01:00.000Z",
             metadata: {},
           },
           score: 0.9,
-          backend: "cognee",
+          backend: "graph",
         },
       ]);
 

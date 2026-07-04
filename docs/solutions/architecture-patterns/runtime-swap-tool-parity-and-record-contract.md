@@ -39,7 +39,7 @@ user exercised the agent:
    runtime version."_ That was **not a hallucination** — it was a literal string
    from `agentcore-pi/src/mcp-proxy.ts` (an intentional inert seam), and the
    real cause was that the Pi runtime simply **never registered `web_search` or
-   the Company Brain (`query_context`) tools at all**, even though the tenant
+   the ThinkWork Brain (`query_context`) tools at all**, even though the tenant
    tool inventory showed them enabled. Strands had them; Pi did not.
 2. **Empty tool detail.** After the tools were ported, the activity rows
    ("Finding sources", "Using browser automation") still expanded to nothing.
@@ -63,7 +63,7 @@ free:
    and diff against the new runtime's tool assembly (`agentcore-pi`'s
    `assembleTools` in `server.ts`). The product's tenant tool inventory (admin
    Tools tab) is the source of truth for what _should_ be available. On the
-   Strands→Pi swap, `web_search` (Exa) and Company Brain (`query_context` /
+   Strands→Pi swap, `web_search` (Exa) and ThinkWork Brain (`query_context` /
    `query_memory_context` / `query_wiki_context`) were the gaps; browser
    automation, code sandbox, send-email, and memory were already present.
 2. **Treat agent "I don't have tool X" output as literal until disproven.**

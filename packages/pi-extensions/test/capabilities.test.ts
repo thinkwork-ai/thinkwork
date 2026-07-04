@@ -299,7 +299,7 @@ describe("U7 capability extensions", () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
         result: {
-          content: [{ type: "text", text: "company brain result" }],
+          content: [{ type: "text", text: "ThinkWork Brain result" }],
         },
       }),
     );
@@ -353,7 +353,7 @@ describe("U7 capability extensions", () => {
       },
     });
     expect((result.content?.[0] as { text: string }).text).toBe(
-      "company brain result",
+      "ThinkWork Brain result",
     );
 
     await getTool(tools, "query_memory_context").execute(

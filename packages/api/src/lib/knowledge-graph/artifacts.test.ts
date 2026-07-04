@@ -96,7 +96,7 @@ beforeEach(() => {
   delete process.env.BRAIN_VECTOR_DIMENSION;
 });
 
-describe("Company Brain artifact helpers", () => {
+describe("ThinkWork Brain artifact helpers", () => {
   it("writes source artifacts and ingestion manifests with internal provenance", async () => {
     process.env.BRAIN_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0";
     process.env.BRAIN_VECTOR_DIMENSION = "1024";

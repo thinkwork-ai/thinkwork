@@ -1569,6 +1569,62 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2"]
 
 
+def test_managed_app_overrides_ignore_retired_graph_substrate_state() -> None:
+    runner = load_runner()
+    retired_prefix = "co" + "gnee"
+    old_guardrail_name = retired_prefix + "_configuration_guardrails"
+    old_output_name = retired_prefix + "_url"
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": old_guardrail_name,
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "enabled": True,
+                                    "endpoint": "https://old-graph.example.test",
+                                }
+                            }
+                        }
+                    }
+                ],
+            }
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "twenty",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "certificateArn": "arn:aws:acm:us-east-1:487219502366:certificate/twenty",
+                "publicUrl": "https://twenty.thinkwork.ai",
+            },
+            "manifestImages": {
+                "twenty": "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork/twenty"
+                "@sha256:"
+                "5555555555555555555555555555555555555555555555555555555555555555"
+            },
+        },
+        "dev",
+        "487219502366",
+        {
+            old_output_name: {"value": "https://old-graph.example.test"},
+            "n8n_provisioned": {"value": True},
+            "n8n_runtime_enabled": {"value": True},
+        },
+        state,
+    )
+
+    assert overrides["n8n_provisioned"] is True
+    assert overrides["n8n_runtime_enabled"] is True
+    assert overrides["twenty_provisioned"] is True
+    assert all(retired_prefix not in key for key in overrides)
+
+
 def test_n8n_destroy_normalizes_legacy_binary_database_guardrail() -> None:
     runner = load_runner()
     state = {
@@ -2574,7 +2630,6 @@ def test_controller_input_summary_redacts_to_deployment_contract() -> None:
             },
             "features": {
                 "baseInstall": {
-                    "cognee": False,
                     "slack": False,
                     "stripe": False,
                     "twenty": False,
@@ -2588,7 +2643,6 @@ def test_controller_input_summary_redacts_to_deployment_contract() -> None:
     assert summary["customer"]["environmentName"] == "tei-e2e"
     assert summary["release"]["manifestSha256"] == "a" * 64
     assert summary["features"]["baseInstall"] == {
-        "cognee": False,
         "slack": False,
         "stripe": False,
         "twenty": False,

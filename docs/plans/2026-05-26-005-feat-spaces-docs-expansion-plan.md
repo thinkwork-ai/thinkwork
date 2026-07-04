@@ -147,23 +147,28 @@ Sidebar labels are locked as:
 **Dependencies:** U2, U3.
 
 **Files:**
+
 - Modify: `docs/astro.config.mjs`
 
 **Approach:**
+
 - Replace the flat `Components > Spaces` item with a collapsed group whose Overview slug remains `concepts/spaces`.
 - Replace the flat Admin Platform `Spaces` item with a collapsed group whose Overview slug remains `applications/admin/spaces`.
 - Add child sidebar entries for the concept topics and Admin pages created in U2 and U3, using the locked labels and order from Output Structure.
 - Preserve existing unrelated sidebar ordering and labels.
 
 **Patterns to follow:**
+
 - `Components > Agents` in `docs/astro.config.mjs`.
 - `Components > Threads` in `docs/astro.config.mjs` for a smaller grouped section.
 
 **Test scenarios:**
+
 - Happy path: running the docs build with the new sidebar slugs resolves every new page.
 - Edge case: existing links to `/concepts/spaces/` and `/applications/admin/spaces/` continue to resolve because the overview slugs are unchanged.
 
 **Verification:**
+
 - The sidebar contains grouped Spaces sections in both target locations.
 - No stale Admin tab labels appear in the Spaces sidebar entries.
 
@@ -178,6 +183,7 @@ Sidebar labels are locked as:
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `docs/src/content/docs/concepts/spaces.mdx`
 - Create: `docs/src/content/docs/concepts/spaces/workspace-context.mdx`
 - Create: `docs/src/content/docs/concepts/spaces/access-and-membership.mdx`
@@ -188,23 +194,27 @@ Sidebar labels are locked as:
 - Create: `docs/src/content/docs/concepts/spaces/spaces-and-threads.mdx`
 
 **Approach:**
+
 - Rewrite `concepts/spaces.mdx` as the overview hub: hook paragraph, 2-3 mental-model paragraphs, compact relationship table, CardGrid of child pages, and related links.
 - Keep concept pages plain-language first and avoid implementation details unless a short under-the-hood pointer is useful.
 - Make the Space vs folder specialist distinction explicit in the overview and reinforce it where relevant.
-- Use adjacent concept links to Agents, Threads, Tenant Agent, Runtime Configuration, Company Brain, Automations, and Mobile Threads.
+- Use adjacent concept links to Agents, Threads, Tenant Agent, Runtime Configuration, ThinkWork Brain, Automations, and Mobile Threads.
 - Cover Space tools explicitly as a concept page or a clearly named concept section. Keep this concept-level unless the current Admin UI exposes a Tools tab.
 
 **Patterns to follow:**
+
 - `docs/src/content/docs/concepts/knowledge.mdx` for CardGrid hub shape.
 - `docs/src/content/docs/concepts/threads.mdx` for hub prose plus child links.
 - `docs/src/content/docs/concepts/agents.mdx` for tenant platform agent and folder specialist vocabulary.
 
 **Test scenarios:**
+
 - Happy path: a reader opening the overview can identify the child page for workspace context, access, triggers, tools, knowledge, runtime policy, or Threads.
 - Happy path: the concept docs explain Spaces/Agents/Threads without requiring the reader to start in the Agents section.
 - Edge case: the docs do not present a Space as a folder specialist or as a replacement for the tenant platform agent.
 
 **Verification:**
+
 - Every concept page has frontmatter title and description, a strong opening paragraph, and related links.
 - The overview and child pages use canonical names from `docs/STYLE.md`.
 
@@ -219,6 +229,7 @@ Sidebar labels are locked as:
 **Dependencies:** U1.
 
 **Files:**
+
 - Modify: `docs/src/content/docs/applications/admin/spaces.mdx`
 - Create: `docs/src/content/docs/applications/admin/spaces/list.mdx`
 - Create: `docs/src/content/docs/applications/admin/spaces/workspace.mdx`
@@ -228,6 +239,7 @@ Sidebar labels are locked as:
 - Create: `docs/src/content/docs/applications/admin/spaces/members.mdx`
 
 **Approach:**
+
 - Rewrite `applications/admin/spaces.mdx` as the Admin Spaces overview: list route, detail redirect behavior, tab order, and CardGrid/links to child pages.
 - Document the list page separately so creation, table columns, and row navigation do not crowd the overview.
 - Document each Space Studio tab with current names and behavior.
@@ -236,11 +248,13 @@ Sidebar labels are locked as:
 - On Members, state that Members is hidden for Public Spaces, available only for Private Spaces, and direct `/spaces/:spaceId/members` access for a Public Space redirects to Workspace.
 
 **Patterns to follow:**
+
 - Existing `docs/src/content/docs/applications/admin/spaces.mdx` for operator route-style writing, updated to current behavior.
 - `docs/src/content/docs/applications/admin/automations.mdx` for route-oriented Admin docs.
 - Current Admin route/component files listed in Context & Research.
 
 **Test scenarios:**
+
 - Happy path: a tenant admin can map each visible Admin tab to a page with the same label.
 - Happy path: the Admin overview states that `/spaces/:spaceId` lands on Workspace.
 - Edge case: the Settings page does not describe retired Advanced runtime controls as current UI.
@@ -248,6 +262,7 @@ Sidebar labels are locked as:
 - Edge case: the Members page documents the Public Space redirect behavior for direct members-route access.
 
 **Verification:**
+
 - No current Admin Spaces page uses Configuration, Memory, or Automations as active tab names.
 - Related links connect each Admin tab page to the corresponding concept page where useful, and the Admin overview links to Tenant Agent.
 
@@ -262,28 +277,33 @@ Sidebar labels are locked as:
 **Dependencies:** U1, U2, U3.
 
 **Files:**
+
 - Modify: `docs/src/content/docs/concepts/spaces.mdx`
 - Modify: `docs/src/content/docs/applications/admin/spaces.mdx`
 - Modify as needed: adjacent docs under `docs/src/content/docs/concepts/agents.mdx`, `docs/src/content/docs/concepts/threads.mdx`, `docs/src/content/docs/concepts/threads/routing-and-metadata.mdx`, `docs/src/content/docs/applications/admin/agents.mdx`, `docs/src/content/docs/applications/admin/index.mdx`, or `docs/src/content/docs/applications/mobile/threads-and-chat.mdx`
 - Test: docs build for `@thinkwork/docs`
 
 **Approach:**
+
 - Search the touched docs area for stale Spaces tab names and contradictory Space definitions.
 - Replace stale Space email address examples in docs with `space-slug@tenant-slug.thinkwork.ai` when they describe Space cold-contact addresses.
 - Keep adjacent-doc edits minimal and only update cross-links or stale references that would undermine the new section.
 - Run the docs build and fix broken links, invalid imports, frontmatter mistakes, or Starlight component issues.
 
 **Patterns to follow:**
+
 - `docs/STYLE.md` for final editorial checks.
 - Existing Starlight component imports in nearby docs.
 
 **Test scenarios:**
+
 - Happy path: docs build completes with all new pages and sidebar entries.
 - Edge case: existing overview URLs remain valid.
 - Edge case: old Space email examples such as `<tenant-slug>.<space-slug>@agents.thinkwork.ai` no longer appear in docs source.
 - Error path: if the build reports broken links or component import errors, fix the docs source rather than disabling the build check.
 
 **Verification:**
+
 - `@thinkwork/docs` build succeeds.
 - `rg` finds no stale active-tab naming in the expanded Spaces docs or adjacent Admin pages.
 - `rg "agents\\.thinkwork|<tenant-slug>\\.<space-slug>" docs/src/content/docs` no longer finds Space cold-contact address examples that should use the current Space address format.
@@ -304,12 +324,12 @@ Sidebar labels are locked as:
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| New pages duplicate or contradict the overview pages | Convert existing pages into hubs and keep each child page focused on one concern |
-| Docs drift from current Admin UI | Ground tab vocabulary and behavior in `SpaceDetailChrome.tsx` and route files |
-| Broken sidebar slugs or MDX imports | Create pages before wiring final sidebar entries, then run the docs build after implementation |
-| Scope grows into end-user Spaces docs | Keep end-user docs to related links and small consistency corrections only |
+| Risk                                                 | Mitigation                                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| New pages duplicate or contradict the overview pages | Convert existing pages into hubs and keep each child page focused on one concern               |
+| Docs drift from current Admin UI                     | Ground tab vocabulary and behavior in `SpaceDetailChrome.tsx` and route files                  |
+| Broken sidebar slugs or MDX imports                  | Create pages before wiring final sidebar entries, then run the docs build after implementation |
+| Scope grows into end-user Spaces docs                | Keep end-user docs to related links and small consistency corrections only                     |
 
 ---
 

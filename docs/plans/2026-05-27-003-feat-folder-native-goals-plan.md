@@ -57,7 +57,7 @@ folder-native architecture.
 - R3. Add Delegate vs Collaborate as a first-class Goal mode.
 - R4. Support the maturity ladder: ask in a Space, use context/tools, promote
   repeated work into Goals, add templates, then compound completed work into
-  Company Brain.
+  ThinkWork Brain.
 - R5. Persist the minimum Goal contract: outcome, owner, mode, progress model,
   completion rule, and review policy.
 - R6. Support human-confirmed completion for team workflows while allowing
@@ -89,7 +89,7 @@ folder-native architecture.
   v1.
 
 **Origin actors:** A1 tenant operator, A2 end user, A3 Goal owner, A4
-coordinator agent, A5 product/engineering team, A6 Company Brain, A7
+coordinator agent, A5 product/engineering team, A6 ThinkWork Brain, A7
 external/local agent runner.
 
 **Origin flows:** F1 operator defines a Space-owned Goal template, F2 Thread
@@ -99,7 +99,7 @@ decisions, and handoffs, F4 completed Goal compounds into reusable learning.
 **Origin acceptance examples:** AE1 Customer Onboarding creates `GOAL.md` and
 `PROGRESS.md` while checklist rows remain structured state, AE2 Space-owned
 template remains portable, AE3 human review prevents silent closure, AE4
-decisions/handoffs/artifacts feed Company Brain, AE5 guidance teaches placement
+decisions/handoffs/artifacts feed ThinkWork Brain, AE5 guidance teaches placement
 rules.
 
 ---
@@ -275,9 +275,9 @@ rules.
 - Add a Goal-file data policy: do not log raw Goal markdown, preserve existing
   workspace-bucket encryption/access controls, inherit Thread deletion/retention
   semantics unless a later retention policy says otherwise, and redact or hold
-  sensitive credit/pricing/customer data before Company Brain distillation when
+  sensitive credit/pricing/customer data before ThinkWork Brain distillation when
   the source lacks adequate provenance.
-- Treat Company Brain integration as a completion seam in this plan: completed
+- Treat ThinkWork Brain integration as a completion seam in this plan: completed
   Goal folders should become candidates only after an eligibility gate confirms
   source-tagged decisions/handoffs/artifacts or explicit human review. Fully
   automatic template improvement is follow-up work.
@@ -310,7 +310,7 @@ rules.
 - Who can complete a human-reviewed Goal? Tenant admins, Space owners/admins,
   and configured Goal owners/reviewers. Ordinary Space members can participate
   and update tasks, but cannot confirm final review unless explicitly assigned.
-- How should Company Brain treat completed Goal folders? As candidate source
+- How should ThinkWork Brain treat completed Goal folders? As candidate source
   material only after provenance/curation eligibility is met, not as automatic
   high-trust memory just because a folder exists.
 
@@ -388,7 +388,7 @@ flowchart LR
   GoalRow --> SpacesUI["Spaces Goal panel"]
   LinkedTasks --> SpacesUI
   GoalFolder --> SpacesUI
-  GoalFolder --> BrainSeam["Company Brain candidate source\non completion"]
+  GoalFolder --> BrainSeam["ThinkWork Brain candidate source\non completion"]
 ```
 
 Goal lifecycle should start deliberately small:
@@ -895,10 +895,10 @@ Goal-driven workflow, with progress as one section rather than the whole model.
 
 ---
 
-- U7. **Add completion and Company Brain ingestion seam**
+- U7. **Add completion and ThinkWork Brain ingestion seam**
 
 **Goal:** Make completed Goal folders discoverable as high-quality source
-material for Company Brain without overbuilding automatic template refinement.
+material for ThinkWork Brain without overbuilding automatic template refinement.
 
 **Requirements:** R4, R14, R16; F4; AE4.
 
@@ -928,7 +928,7 @@ material for Company Brain without overbuilding automatic template refinement.
 - Add a candidate-source seam that can summarize completed Goal folders for
   Brain enrichment or ontology materialization. Keep it isolated so it can be
   expanded without coupling the Goal runtime to the current wiki compiler.
-- Add an eligibility gate before Company Brain uses a completed Goal folder:
+- Add an eligibility gate before ThinkWork Brain uses a completed Goal folder:
   the Goal must be completed through the review path or declare no-review,
   required files must be present, decision/handoff entries must carry source
   labels where available, and sensitive credit/pricing/customer data should be
@@ -956,13 +956,13 @@ material for Company Brain without overbuilding automatic template refinement.
   metadata from being recorded.
 - Error path: completed folders that fail the Brain eligibility gate are marked
   not-ready for distillation without blocking Goal completion.
-- Integration: Company Brain candidate synthesis can consume a completed Goal
+- Integration: ThinkWork Brain candidate synthesis can consume a completed Goal
   source that passed eligibility without reading raw chat transcripts directly.
 
 **Verification:**
 
 - Completed Customer Onboarding Goals leave a stable folder and metadata trail
-  that Company Brain can distill later.
+  that ThinkWork Brain can distill later.
 
 ---
 
@@ -993,7 +993,7 @@ AE2, AE5.
   to choose each.
 - Explain the maturity ladder from chat to durable operating system.
 - Document the source-of-truth split: Aurora for structured state, S3 markdown
-  for portable narrative execution context, Company Brain for distilled
+  for portable narrative execution context, ThinkWork Brain for distilled
   learning.
 - Make Customer Onboarding the reference example, including the Goal folder
   files and how operators should author Space-owned templates.
@@ -1002,7 +1002,7 @@ AE2, AE5.
   of v1.
 - Keep end-user guidance product-level, not architecture-heavy. End users should
   understand outcome, owner, mode, progress, and review from the UI without
-  reading about Aurora, S3, or Company Brain. Keep the storage/placement doctrine
+  reading about Aurora, S3, or ThinkWork Brain. Keep the storage/placement doctrine
   for operators and product/engineering readers.
 
 **Patterns to follow:**
@@ -1021,7 +1021,7 @@ AE2, AE5.
 **Verification:**
 
 - Docs explain what belongs in Agent, Space, User, Thread, Goal, S3 markdown,
-  Aurora, and Company Brain without requiring a live walkthrough.
+  Aurora, and ThinkWork Brain without requiring a live walkthrough.
 - End-user docs and UI copy explain how to use a Goal without requiring the
   user to understand the implementation storage model.
 
@@ -1031,7 +1031,7 @@ AE2, AE5.
 
 - **Interaction graph:** Customer Onboarding workflow creation, chat update
   parsing, agent finalize, wakeup prompt injection, GraphQL, Spaces UI, and
-  Company Brain candidate generation all touch the new Goal folder or Goal row.
+  ThinkWork Brain candidate generation all touch the new Goal folder or Goal row.
 - **Error propagation:** DB writes for structured state should fail loudly inside
   workflow mutations; S3 markdown refresh failures should log and degrade the
   briefing without rolling back already-committed structured state unless the
@@ -1093,7 +1093,7 @@ AE2, AE5.
 - Agent wakeups receive the Goal contract and progress briefing from the thread
   folder.
 - Completed Customer Onboarding Goals produce decision, handoff, and artifact
-  files that pass the Company Brain eligibility gate before distillation.
+  files that pass the ThinkWork Brain eligibility gate before distillation.
 - A local/offline portability check can read the rendered Customer Onboarding
   Goal folder and identify the outcome, current progress, review policy,
   decisions, handoffs, and artifacts without ThinkWork APIs.
@@ -1120,7 +1120,7 @@ AE2, AE5.
 
 ### Phase 4: Learning and Doctrine
 
-- Land U7 and U8: Company Brain completion seam and operator/user docs.
+- Land U7 and U8: ThinkWork Brain completion seam and operator/user docs.
 
 ---
 
@@ -1135,7 +1135,7 @@ AE2, AE5.
 | Prompt-injected markdown overrides higher-priority instructions       | Medium     | High   | Treat Goal markdown as untrusted data with provenance labels and prompt-wrapper hierarchy tests.                                                     |
 | Sensitive Goal context leaks through logs, GraphQL, prompts, or Brain | Medium     | High   | Forbid raw markdown logging, inherit Thread retention/deletion semantics, and gate/redact Brain candidates.                                          |
 | Human review semantics are bypassed                                   | Medium     | High   | Store review policy in the Goal row, add explicit review mutation authorization, and test completed-task to `in_review` plus forbidden review paths. |
-| Company Brain consumes noisy workflow chatter                         | Medium     | Medium | Prefer curated Goal files as source material; require eligibility/provenance before distillation; keep transcript-only inference out of the v1 seam. |
+| ThinkWork Brain consumes noisy workflow chatter                       | Medium     | Medium | Prefer curated Goal files as source material; require eligibility/provenance before distillation; keep transcript-only inference out of the v1 seam. |
 | Space source templates overwrite operator edits                       | Low        | High   | Preserve existing `overwrite: false` behavior and test skipped files.                                                                                |
 
 ---

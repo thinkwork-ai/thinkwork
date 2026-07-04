@@ -15,7 +15,7 @@ Plugins become ThinkWork's universal packaging model for connected applications.
 
 Adding an application to ThinkWork today is bespoke hand-wiring across three subsystems: managed-application deployment (Terraform adapters in the deployment runner), managed-MCP registration (per-server rows with per-server user OAuth tokens), and the tenant skill catalog. There is no package format, no install surface, and no versioning. Users authenticate per MCP server rather than per application, and an application's skills appear for every user regardless of whether that user has connected the application.
 
-The pressure is concrete: TEI uses LastMile daily and needs its CRM, Task, and Routing MCP servers plus accompanying skills inside ThinkWork. The next applications are already visible — Company Brain (a premium evolution of Cognee with additional lambdas and UI), and a LakeHouse application (AWS Iceberg ETL + Athena with agentic infrastructure monitoring) for another customer. Each would today require another round of scattered wiring.
+The pressure is concrete: TEI uses LastMile daily and needs its CRM, Task, and Routing MCP servers plus accompanying skills inside ThinkWork. The next applications are already visible — ThinkWork Brain (a premium evolution of the retired graph substrate with additional lambdas and UI), and a LakeHouse application (AWS Iceberg ETL + Athena with agentic infrastructure monitoring) for another customer. Each would today require another round of scattered wiring.
 
 This also carries the product positioning from THNK-1: ThinkWork as the centralized hub where agents and applications integrate. The hub needs a stable unit of integration, and the plugin is that unit.
 
@@ -23,9 +23,9 @@ This also carries the product positioning from THNK-1: ThinkWork as the centrali
 
 ## Key Decisions
 
-- **Plugins are the universal application package.** Every connected application — external SaaS (LastMile), ThinkWork-deployed (Twenty), premium extensions (Company Brain), customer solutions (LakeHouse) — is packaged, installed, and activated the same way. Kestra is removed rather than migrated. This collapses THNK-1's separate Application/Plugin concepts: the plugin is the package, and installing it yields the tenant's connected application.
+- **Plugins are the universal application package.** Every connected application — external SaaS (LastMile), ThinkWork-deployed (Twenty), premium extensions (ThinkWork Brain), customer solutions (LakeHouse) — is packaged, installed, and activated the same way. Kestra is removed rather than migrated. This collapses THNK-1's separate Application/Plugin concepts: the plugin is the package, and installing it yields the tenant's connected application.
 
-- **The plugin engine owns canonical state.** Plugin and component records are the source of truth for what is installed, deployed, and activated. Existing machinery — Terraform deployment, OAuth flows, skill materialization — is reused as component handlers invoked by the engine, not as parallel sources of truth. This was chosen over composing/projecting across the existing subsystems because current deployments are greenfield (Twenty exists only on a test server, Cognee is pre-production), so the rebuild is cheap now and the all-plugins end-state never needs a projection layer torn out later.
+- **The plugin engine owns canonical state.** Plugin and component records are the source of truth for what is installed, deployed, and activated. Existing machinery — Terraform deployment, OAuth flows, skill materialization — is reused as component handlers invoked by the engine, not as parallel sources of truth. This was chosen over composing/projecting across the existing subsystems because current deployments are greenfield (Twenty exists only on a test server, the retired graph substrate is pre-production), so the rebuild is cheap now and the all-plugins end-state never needs a projection layer torn out later.
 
 - **The v1 component taxonomy is locked to four types**: MCP servers, skills, infrastructure, and UI surfaces (reserved — declared in manifests but not rendered in v1). No other component types until a real plugin demands one.
 
@@ -39,7 +39,7 @@ This also carries the product positioning from THNK-1: ThinkWork as the centrali
 
 - **The direct MCP-add path remains.** Plugins are the packaging pattern, not the only way to reach an MCP server. The runtime's tool surface merges plugin-installed components with directly-added servers.
 
-- **The connected-application registry plan is paused, not consumed.** `docs/plans/2026-06-08-003-feat-connected-application-registry-plan.md` (capability contracts, Twenty→Cognee webhook automation, capability flows) has no landed code and drops out as a dependency. It may resume later on top of the plugin model.
+- **The connected-application registry plan is paused, not consumed.** `docs/plans/2026-06-08-003-feat-connected-application-registry-plan.md` (capability contracts, Twenty→the retired graph substrate webhook automation, capability flows) has no landed code and drops out as a dependency. It may resume later on top of the plugin model.
 
 ```mermaid
 flowchart TB
@@ -166,7 +166,7 @@ flowchart TB
 
 - TEI end-to-end: admin installs LastMile from the catalog, users activate via one OAuth, activated users' agents work with LastMile CRM/Task/Routing tools, everyone else's workspace stays clean.
 - Both package shapes are proven by shipping plugins (LastMile external-SaaS, Twenty infrastructure-bundling) through the same manifest, install, and activation paths.
-- Adding the next application (Company Brain, LakeHouse) is primarily authoring and publishing a plugin package, not scattering code across API, web, deployment, and database packages.
+- Adding the next application (ThinkWork Brain, LakeHouse) is primarily authoring and publishing a plugin package, not scattering code across API, web, deployment, and database packages.
 
 ---
 
@@ -174,7 +174,7 @@ flowchart TB
 
 ### Deferred for later
 
-- Company Brain and LakeHouse plugin migrations (Company Brain subsumes Cognee and is the premium follow-up).
+- ThinkWork Brain and LakeHouse plugin migrations (ThinkWork Brain subsumes the retired graph substrate and is the premium follow-up).
 - Premium plugin entitlements and billing.
 - Rendering UI surface components (in-ThinkWork application snippets).
 - Zip/bundle sideload for custom or in-development plugins.

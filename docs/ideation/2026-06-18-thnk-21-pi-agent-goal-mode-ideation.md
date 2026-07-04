@@ -25,7 +25,7 @@ The current gap is that these goals are not Codex-like runtime goals. Existing g
 ### Past Learnings
 
 - `docs/solutions/spikes/2026-05-29-pi-extension-loading-agentcore-spike.md` says programmatic `extensionFactories` are the right cloud mechanism for bundled Pi extensions, with path-discovery as fallback only.
-- `docs/plans/2026-06-09-004-feat-cognee-centric-memory-pipeline-plan.md` repeats the important Pi extension gotcha: extension tool names must be folded into the `createAgentSession` allowlist and verified by actual tool calls, not registration logs.
+- `docs/plans/2026-06-09-004-feat-retired_graph_substrate-centric-memory-pipeline-plan.md` repeats the important Pi extension gotcha: extension tool names must be folded into the `createAgentSession` allowlist and verified by actual tool calls, not registration logs.
 - Prior budget work in `docs/brainstorms/2026-06-05-user-cost-attribution-and-budgets-requirements.md` argues that user-owned background work should count against the owning user's budget and pause when budget is exceeded.
 
 ### External Context

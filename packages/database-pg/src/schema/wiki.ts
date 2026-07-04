@@ -39,7 +39,7 @@
  * anchor. See .prds/compounding-memory-v1-build-plan.md for the settled
  * decisions driving this schema (cursor storage, dedupe window, feature flag,
  * search impl, embedding-column-present-but-null in v1), and
- * docs/plans/2026-06-09-004-feat-cognee-centric-memory-pipeline-plan.md for
+ * plan 2026-06-09-004 for
  * the tenant-scope relaxation.
  */
 

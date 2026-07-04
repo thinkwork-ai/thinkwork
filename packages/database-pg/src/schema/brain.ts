@@ -118,7 +118,7 @@ export const BRAIN_ACTIVE_BACKENDS = [
   "none",
   "default",
   "production",
-  "legacy_cognee",
+  "legacy_graph",
 ] as const;
 
 export type BrainActiveBackend = (typeof BRAIN_ACTIVE_BACKENDS)[number];
@@ -174,7 +174,7 @@ export type BrainArtifactManifestStatus =
   (typeof BRAIN_ARTIFACT_MANIFEST_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
-// brain.substrate_states — Company Brain storage/runtime posture
+// brain.substrate_states — ThinkWork Brain storage/runtime posture
 // ---------------------------------------------------------------------------
 
 export const brainSubstrateStates = brain.table(
@@ -197,8 +197,8 @@ export const brainSubstrateStates = brain.table(
     vector_provider: text("vector_provider"),
     embedding_model: text("embedding_model"),
     vector_dimension: integer("vector_dimension"),
-    cognee_version: text("cognee_version"),
-    cognee_endpoint: text("cognee_endpoint"),
+    substrate_version: text("substrate_version"),
+    substrate_endpoint: text("substrate_endpoint"),
     s3_artifact_root: text("s3_artifact_root"),
     s3_manifest_root: text("s3_manifest_root"),
     s3_vault_projection_root: text("s3_vault_projection_root"),
@@ -260,7 +260,7 @@ export const brainSubstrateStates = brain.table(
     ),
     check(
       "brain_substrate_states_backend_allowed",
-      sql`${table.active_backend} IN ('none','default','production','legacy_cognee')`,
+      sql`${table.active_backend} IN ('none','default','production','legacy_graph')`,
     ),
     check(
       "brain_substrate_states_status_allowed",

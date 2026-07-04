@@ -107,7 +107,7 @@ UI:
 - `apps/computer/src/routes/_authed/_shell/spaces.*`, `apps/computer/src/components/ComputerSidebar.tsx`, and `apps/computer/src/lib/graphql-queries.ts` already expose Spaces, but the shape needs to be rewritten around contextual workrooms.
 - The Codex sidebar screenshot provides the preferred information architecture direction: global actions, pinned threads, collapsible Space/work areas, and recent threads.
 - `apps/admin/src/routes/_authed/_tenant/spaces/$spaceId.tsx` is collaboration/workflow-shaped: Threads, Agents, Checklist, Members, Integrations, Config.
-- `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx` contains reusable Template editor affordances: workspace, MCP servers, tool toggles, Company Brain/context settings, model/runtime/guardrail fields.
+- `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx` contains reusable Template editor affordances: workspace, MCP servers, tool toggles, ThinkWork Brain/context settings, model/runtime/guardrail fields.
 
 Institutional learnings:
 
@@ -565,7 +565,7 @@ Reuse Template editor pieces by extracting neutral components:
 - Template Workspace -> Space Workspace
 - Template MCP Servers -> Space MCP Servers
 - Template built-in toggles -> Space Tools
-- Template Company Brain/context setting -> Space Connected Data
+- Template ThinkWork Brain/context setting -> Space Connected Data
 
 **Tests:**
 

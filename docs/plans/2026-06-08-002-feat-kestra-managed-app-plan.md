@@ -50,7 +50,7 @@ The plan therefore has two coupled surfaces:
 ## Requirements Trace
 
 - R1. Applications includes Kestra as an operator-managed application alongside
-  Cognee and Twenty CRM.
+  the retired graph substrate and Twenty CRM.
 - R2. Kestra deploy, park, redeploy, and destroy actions use the same
   deployment-job, approval, evidence, and smoke-check lifecycle as other
   managed applications.
@@ -160,7 +160,7 @@ cleans app data and MCP registration.
 - `packages/deployment-runner/src/apps/registry.ts`,
   `packages/deployment-runner/src/apps/twenty.ts`, and
   `packages/deployment-runner/src/shared.ts` define the managed-app adapter
-  contract and currently restrict app keys to `cognee | twenty`.
+  contract and currently restrict app keys to `retired_graph_substrate | twenty`.
 - `terraform/modules/app/twenty` provides the public HTTPS app-module pattern:
   ECS/Fargate services, ALB, CloudWatch logs, EFS, ElastiCache where needed,
   secret injection, parking via desired count zero, and Terraform outputs.
@@ -169,7 +169,7 @@ cleans app data and MCP registration.
 - `scripts/release/build-release-manifest.ts` lists managed app descriptors and
   release smoke contracts.
 - `packages/api/src/graphql/resolvers/core/managedApplications.ts` reads compact
-  Lambda environment status for Cognee/Twenty and emits the unified
+  Lambda environment status for the retired graph substrate/Twenty and emits the unified
   `managedApplications` list.
 - `packages/api/src/lib/managed-mcp-applications.ts` owns Twenty managed MCP
   state, idempotent reconciliation, parking disablement, destroy cleanup, and
@@ -187,7 +187,7 @@ cleans app data and MCP registration.
   pattern for testing/calling streamable HTTP MCP servers without adding the MCP
   SDK to `packages/api`.
 - `apps/web/src/components/settings/SettingsCrm.tsx`,
-  `apps/web/src/components/settings/SettingsCogneeApplication.tsx`, and
+  `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.tsx`, and
   `apps/web/src/components/settings/managed-applications/*` are the Applications
   and detail-page UI patterns to extend.
 - `plugins/twenty/smoke/twenty-managed-app-smoke.mjs` and
@@ -229,7 +229,7 @@ cleans app data and MCP registration.
 - **Extend the managed-app registry, do not create a Kestra-only deployment
   path:** Kestra should become the third `ManagedAppKey` and use the same
   deployment-runner, release manifest, deploy job, approval, evidence, and
-  status surfaces as Cognee/Twenty.
+  status surfaces as the retired graph substrate/Twenty.
 - **Use a retained/runtime split:** Mirror Twenty with `kestra_provisioned` and
   `kestra_runtime_enabled`, so a park action can stop ECS capacity while keeping
   flow definitions, execution history, storage, credentials, and MCP continuity.
@@ -401,7 +401,7 @@ app key.
 **Patterns to follow:**
 
 - `packages/deployment-runner/src/apps/twenty.ts`
-- `packages/deployment-runner/src/apps/cognee.ts`
+- `packages/deployment-runner/src/apps/retired_graph_substrate.ts`
 - `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
 - `scripts/release/build-release-manifest.ts`
 
@@ -418,7 +418,7 @@ app key.
 - Covers AE6. Destroy maps to both booleans false and reports destructive app
   data plus managed MCP credential cleanup.
 - Integration: release manifest includes the Kestra descriptor and smoke command
-  alongside Cognee and Twenty.
+  alongside the retired graph substrate and Twenty.
 
 **Verification:**
 
@@ -470,7 +470,7 @@ secrets, parking semantics, and outputs.
 **Patterns to follow:**
 
 - `terraform/modules/app/twenty`
-- `terraform/modules/app/cognee`
+- `terraform/modules/app/retired_graph_substrate`
 - `docs/solutions/workflow-issues/deploy-silent-arch-mismatch-took-a-week-to-surface-2026-04-24.md`
 
 **Test scenarios:**
@@ -627,7 +627,7 @@ AE2, AE3, AE5, AE6
 **Patterns to follow:**
 
 - `apps/web/src/components/settings/SettingsCrm.tsx`
-- `apps/web/src/components/settings/SettingsCogneeApplication.tsx`
+- `apps/web/src/components/settings/Settingsthe retired graph substrateApplication.tsx`
 - `apps/web/src/components/settings/ManagedApplicationRouteGuard.tsx`
 - `packages/api/src/graphql/resolvers/core/managedApplications.ts`
 - `packages/api/src/graphql/resolvers/core/managedApplicationHealthCheck.query.ts`

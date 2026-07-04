@@ -7,7 +7,7 @@ topic: twenty-crm-managed-application
 
 ## Problem Frame
 
-ThinkWork now has an operator-managed Cognee deployment for Knowledge Graph
+ThinkWork now has an operator-managed the retired graph substrate deployment for Knowledge Graph
 infrastructure. Twenty CRM should follow the same optional-add-on philosophy:
 operators can turn it on from ThinkWork, Terraform provisions the app, and the
 rest of the product exposes CRM-specific settings only after the app is actually
@@ -84,10 +84,10 @@ later CRM integration work.
 - R1. Settings -> General includes a new operator-only section named **Managed
   Applications**.
 - R2. The Managed Applications section lists optional stage applications as rows,
-  initially Cognee and Twenty CRM.
-- R3. Cognee's current deploy toggle behavior is represented from Managed
+  initially the retired graph substrate and Twenty CRM.
+- R3. the retired graph substrate's current deploy toggle behavior is represented from Managed
   Applications, while its Knowledge Graph settings page remains hidden unless
-  Cognee is enabled.
+  the retired graph substrate is enabled.
 - R4. Twenty CRM has a Managed Applications row with a toggle, concise
   description, status, and confirmation before any deploy or disable action is
   queued.
@@ -126,7 +126,7 @@ later CRM integration work.
 
 - AE1. **Covers R1, R2, R4.** Given an operator opens Settings -> General, when
   the deployment status is available, then they see a Managed Applications
-  section with separate Cognee and Twenty CRM rows.
+  section with separate the retired graph substrate and Twenty CRM rows.
 - AE2. **Covers R5, R6.** Given Twenty CRM is disabled, when an operator turns
   the Twenty toggle on and confirms, then ThinkWork queues deployment and the
   CRM settings page remains hidden until deployed status reports Twenty enabled.
@@ -197,7 +197,7 @@ later CRM integration work.
 
 ## Dependencies / Assumptions
 
-- Cognee's existing pattern for optional Terraform add-ons, deployment status,
+- the retired graph substrate's existing pattern for optional Terraform add-ons, deployment status,
   and settings controls is the starting point for Twenty.
 - ThinkWork's existing public-domain infrastructure can support an additional
   managed subdomain for CRM.
@@ -218,14 +218,14 @@ later CRM integration work.
 ### Deferred to Planning
 
 - [Affects R5, R8][Technical] Should Twenty be deployed with an ECS/Fargate
-  pattern mirroring Cognee, and how should server, worker, Redis, and storage
+  pattern mirroring the retired graph substrate, and how should server, worker, Redis, and storage
   be modeled in Terraform?
 - [Affects R8, R13][Technical] What exact managed subdomain should be used:
   `crm.<domain>`, `twenty.<domain>`, or a stage-qualified variant for non-prod?
 - [Affects R10, R14][Technical] What is the safest Terraform lifecycle model
   for "disabled but retained" database, secrets, Redis data, and file storage?
 - [Affects R14][Technical] How should the dedicated Twenty database and role be
-  created without repeating Cognee's database ownership and migration failures?
+  created without repeating the retired graph substrate's database ownership and migration failures?
 - [Affects R8][Needs research] Which Twenty health endpoint and operational
   checks should the CRM settings page expose?
 - [Affects R12][Technical] What later SSO shape best fits ThinkWork and Twenty:

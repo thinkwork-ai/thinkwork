@@ -47,7 +47,7 @@ A new `SettingsActivityHome` parent component owns the header (title `"Activity"
 `/settings/activity` becomes the Analytics tab. The thread list moves under `/settings/activity/threads`. The thread-detail route stays at its current non-nested path (`settings.activity_.$threadId.tsx` → URL `/settings/activity/<threadId>`). TanStack Router prioritizes the static `threads` segment over the `$threadId` param, so there is no routing conflict. Because the detail route is non-nested (`activity_`), it does **not** mount `SettingsActivityHome` and therefore shows no tab strip — only its own breadcrumb header, which is correct for a drill-in view.
 
 **KTD4 — Tab active-state matching already handles the prefix overlap.**
-`AppTopBar` and `SettingsHeaderBar` compute the active tab with `[...tabs].reverse().find(t => pathname === t.to || pathname.startsWith(\`${t.to}/\`))`. On `/settings/activity/threads`, both `/settings/activity` (Analytics) and `/settings/activity/threads` (Threads) match by prefix; the `reverse()` ensures the deepest (Threads) wins. No changes needed to the matching logic.
+`AppTopBar` and `SettingsHeaderBar` compute the active tab with `[...tabs].reverse().find(t => pathname === t.to || pathname.startsWith(\`${t.to}/\`))`. On `/settings/activity/threads`, both `/settings/activity`(Analytics) and`/settings/activity/threads`(Threads) match by prefix; the`reverse()` ensures the deepest (Threads) wins. No changes needed to the matching logic.
 
 **KTD5 — `/settings/analytics` becomes a redirect route.**
 Convert the existing `settings.analytics.tsx` route into a `beforeLoad`-throwing redirect to `/settings/activity`, mirroring the retired-route redirects already used for the old Memory sub-routes (`/settings/wiki`, `/settings/knowledge-bases`, `/settings/knowledge-graph`). Keeping the file means the generated route tree continues to register the path.
@@ -58,12 +58,12 @@ Convert the existing `settings.analytics.tsx` route into a `beforeLoad`-throwing
 
 Route → component → tab mapping after the change:
 
-| URL | Route file | Renders | Active tab | Notes |
-|-----|-----------|---------|-----------|-------|
-| `/settings/activity` | `settings.activity.tsx` | `SettingsActivityHome` → `SettingsAnalytics embedded` | **Analytics** | Default tab |
-| `/settings/activity/threads` | `settings.activity.threads.tsx` (new) | `SettingsActivityHome` → `SettingsActivity embedded` | **Threads** | `?day=` filter lives here |
-| `/settings/activity/<threadId>` | `settings.activity_.$threadId.tsx` | `SettingsActivityThreadDetail` | none (drill-in) | Non-nested; no tab strip |
-| `/settings/analytics` | `settings.analytics.tsx` | redirect → `/settings/activity` | — | Bookmark preservation |
+| URL                             | Route file                            | Renders                                               | Active tab      | Notes                     |
+| ------------------------------- | ------------------------------------- | ----------------------------------------------------- | --------------- | ------------------------- |
+| `/settings/activity`            | `settings.activity.tsx`               | `SettingsActivityHome` → `SettingsAnalytics embedded` | **Analytics**   | Default tab               |
+| `/settings/activity/threads`    | `settings.activity.threads.tsx` (new) | `SettingsActivityHome` → `SettingsActivity embedded`  | **Threads**     | `?day=` filter lives here |
+| `/settings/activity/<threadId>` | `settings.activity_.$threadId.tsx`    | `SettingsActivityThreadDetail`                        | none (drill-in) | Non-nested; no tab strip  |
+| `/settings/analytics`           | `settings.analytics.tsx`              | redirect → `/settings/activity`                       | —               | Bookmark preservation     |
 
 Tab resolution inside the parent (mirrors `SettingsMemoryHome.tabForPath`):
 
@@ -82,7 +82,7 @@ SettingsActivityHome (rendered by both /settings/activity and .../threads)
   })
 ```
 
-*Directional guidance, not implementation specification.*
+_Directional guidance, not implementation specification._
 
 The `day` search param (used by the Threads chart/filter and carried into thread detail) is read in the parent via `useSearch({ strict: false })` and updated via a route-agnostic `useNavigate()` targeting `/settings/activity/threads`. Only the threads route declares the `day` `validateSearch`.
 
@@ -96,10 +96,12 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Requirements:** R2, R3.
 **Dependencies:** none.
 **Files:**
+
 - `apps/web/src/components/settings/SettingsAnalytics.tsx`
 - `apps/web/src/components/settings/SettingsAnalytics.test.tsx`
 
 **Approach:**
+
 - Add `embedded?: boolean` to the component signature (default-less optional, matching `SettingsMemory`).
 - Replace the two `<SettingsHeader title="Analytics" ... />` usages (loading branch at `:108`-ish and the main `SettingsHeader` at `:108`) so that:
   - the header publisher (`usePageHeaderActions`) is gated behind `{embedded ? null : <AnalyticsHeader />}`, where `AnalyticsHeader` is a small null-rendering child calling `usePageHeaderActions({ title: "Analytics", breadcrumbs: [{ label: "Analytics" }] })` — same shape as `TablePaneHeader` in `SettingsContent.tsx:12`;
@@ -109,6 +111,7 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Patterns to follow:** `SettingsContent.tsx` `TablePaneHeader` (`:12`) + `SettingsPageTitle` (`:48`); `SettingsWiki.tsx` `WikiHeader` null-publisher gate.
 
 **Test scenarios:**
+
 - Renders the cost metrics, "Cost by User", and "Cost by Model" cards as before (regression guard on existing assertions).
 - When rendered with `embedded`, the in-body `Analytics` heading still appears (query the `<h1>`), and no second header breadcrumb is published (assert the page-header context is not driven by this component — e.g. via the existing test harness's header spy if present, otherwise assert the `AnalyticsHeader` child is absent).
 - When rendered without `embedded`, header publish behavior is unchanged.
@@ -121,10 +124,12 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Requirements:** R4, R6.
 **Dependencies:** none.
 **Files:**
+
 - `apps/web/src/components/settings/SettingsActivity.tsx`
 - `apps/web/src/components/settings/SettingsActivity.test.tsx`
 
 **Approach:**
+
 - Add `embedded?: boolean` to `SettingsActivityProps`.
 - Gate the `usePageHeaderActions({ ..., action: <refresh button>, actionKey })` call (currently at `:206`) behind a null-rendering child component (e.g. `ActivityHeader`) that is only rendered when not embedded — same null-publisher pattern. The current top-level `usePageHeaderActions` must move into that child so it can be conditionally mounted without a conditional hook call.
 - Move the refresh `<Button>` (currently the header `action`, `:209`-`:224`) into `ActivityToolbar` (`:287`), placed alongside the search input and item count. Pass `onRefresh` and `fetching` into `ActivityToolbar`. Preserve the spinning icon (`animate-spin` while fetching), `aria-label`/`title`, and disabled-while-fetching behavior.
@@ -134,6 +139,7 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Patterns to follow:** null-publisher gate as in U1; existing `ActivityToolbar` layout for placing controls in a flex row.
 
 **Test scenarios:**
+
 - Day filtering, chart rendering, and search filtering behave as before (regression guard).
 - Clicking a row still navigates to `/settings/activity/$threadId` with the `day` search param preserved.
 - The refresh button now renders inside the toolbar (`data-testid="activity-toolbar"` region), spins while fetching, is disabled while fetching, and triggers a network-only refetch on click.
@@ -148,10 +154,12 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Requirements:** R2, R3, R4.
 **Dependencies:** U1, U2.
 **Files:**
+
 - `apps/web/src/components/settings/SettingsActivityHome.tsx` (new)
 - `apps/web/src/components/settings/SettingsActivityHome.test.tsx` (new — see U5)
 
 **Approach:**
+
 - Define route constants `ACTIVITY = "/settings/activity"` and `THREADS = "/settings/activity/threads"`.
 - `tabForPath(pathname)` → `"threads"` when `pathname.startsWith(THREADS)`, else `"analytics"`.
 - Read pathname via `useLocation({ select: (l) => l.pathname })`.
@@ -170,7 +178,7 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 - Render: `activeTab === "threads" ? <SettingsActivity embedded selectedDay={day ?? null} onSelectedDayChange={...} /> : <SettingsAnalytics embedded />`.
 - Wrap in the same `flex h-full min-h-0 w-full flex-col` container as `SettingsMemoryHome`.
 
-**Patterns to follow:** `SettingsMemoryHome.tsx` in full — the `tabForPath`, `usePageHeaderActions({ tabs })`, and embedded-facet rendering are a direct analogue (minus the Cognee gating, which has no equivalent here).
+**Patterns to follow:** `SettingsMemoryHome.tsx` in full — the `tabForPath`, `usePageHeaderActions({ tabs })`, and embedded-facet rendering are a direct analogue (minus the the retired graph substrate gating, which has no equivalent here).
 
 **Test scenarios:** covered in U5.
 
@@ -182,6 +190,7 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Requirements:** R1, R3, R4, R5.
 **Dependencies:** U3.
 **Files:**
+
 - `apps/web/src/routes/_authed/settings.activity.tsx` (modify)
 - `apps/web/src/routes/_authed/settings.activity.threads.tsx` (new)
 - `apps/web/src/routes/_authed/settings.analytics.tsx` (modify → redirect)
@@ -190,6 +199,7 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 - `apps/web/src/routeTree.gen.ts` (auto-regenerated by the TanStack Router Vite plugin — do not hand-edit)
 
 **Approach:**
+
 - **`settings.activity.tsx`:** render `<OperatorGuard><SettingsActivityHome /></OperatorGuard>`. Remove the `day` `validateSearch` and the `ActivityRouteContent` wrapper from this route (the base path is now the Analytics tab and has no `day` param).
 - **`settings.activity.threads.tsx` (new):** `createFileRoute("/_authed/settings/activity/threads")` with the `day` `validateSearch` (moved from the old base route, using `isActivityDay`), rendering `<OperatorGuard><SettingsActivityHome /></OperatorGuard>`. The parent reads `day` loosely (U3), so this route only needs to declare the param schema.
 - **`settings.analytics.tsx`:** replace the component with a `beforeLoad: () => { throw redirect({ to: "/settings/activity" }) }`. Mirror the existing retired-route redirect pattern used for the old Memory sub-routes (grep `throw redirect` under `apps/web/src/routes/_authed/settings.*` to find the exact shape, e.g. the `/settings/wiki` redirect).
@@ -208,11 +218,13 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 **Requirements:** R1–R5.
 **Dependencies:** U3, U4.
 **Files:**
+
 - `apps/web/src/components/settings/settings-nav.test.ts` (modify)
 - `apps/web/src/components/settings/SettingsActivityHome.test.tsx` (new)
 - `apps/web/src/routes/_authed/-settings.activity-routing.test.ts` (verify still green; extend if it enumerates routes)
 
 **Approach & test scenarios:**
+
 - **`settings-nav.test.ts`:** add an assertion that `Analytics` is no longer present in `visibleSettingsNavItems(...)` / `SETTINGS_NAV_ITEMS`; confirm `Activity` is still present and operator-gated; confirm `settingsCrumbForPath("/settings/activity/threads")` resolves to the `Activity` label (longest-prefix match still works).
 - **`SettingsActivityHome.test.tsx` (new, mirror `SettingsMemoryHome.test.tsx`):**
   - At `/settings/activity`, publishes tabs `["Analytics", "Threads"]` with title "Activity" and renders the Analytics facet (assert a Analytics-only element, e.g. "Cost by User", is present).
@@ -230,9 +242,11 @@ The `day` search param (used by the Threads chart/filter and carried into thread
 In scope: the route/component restructure, tab header, redirect, refresh relocation, nav removal, and test updates described above — all within `apps/web`.
 
 ### Deferred to Follow-Up Work
+
 - None required. (No backend, GraphQL, or schema changes are involved.)
 
 Out of scope (true non-goals):
+
 - Any change to the Analytics data queries or the Activity thread queries/subscriptions.
 - Restyling either dashboard's body content beyond the in-body title relabel and toolbar refresh button.
 - Changes to the thread-detail view content (only its back-navigation breadcrumb target changes).
@@ -250,7 +264,7 @@ Out of scope (true non-goals):
 
 ## Open Questions
 
-- **Nav icon for the merged section.** The `Activity` side-nav entry keeps its `History` icon (`settings-nav.tsx:82`), but the section now *defaults* to the Analytics cost dashboard — a user clicking a History-icon "Activity" entry lands on cost charts. Recommendation: **keep `History`** — the section identity is "Activity" (observability across threads + cost), and History reads as "what's been happening" rather than committing the icon to either tab. Removing the Analytics entry frees `IconChartBar`, so swapping is cheap if preferred; this is a judgment call left to the operator. Not a blocker — does not change any implementation unit.
+- **Nav icon for the merged section.** The `Activity` side-nav entry keeps its `History` icon (`settings-nav.tsx:82`), but the section now _defaults_ to the Analytics cost dashboard — a user clicking a History-icon "Activity" entry lands on cost charts. Recommendation: **keep `History`** — the section identity is "Activity" (observability across threads + cost), and History reads as "what's been happening" rather than committing the icon to either tab. Removing the Analytics entry frees `IconChartBar`, so swapping is cheap if preferred; this is a judgment call left to the operator. Not a blocker — does not change any implementation unit.
 
 ---
 
@@ -265,6 +279,7 @@ Out of scope (true non-goals):
 ## Sources & Research
 
 Codebase patterns referenced (no external research needed — strong local patterns exist):
+
 - `apps/web/src/components/settings/SettingsMemoryHome.tsx` — the parent-owns-tabbed-header pattern this plan mirrors.
 - `apps/web/src/components/settings/SettingsContent.tsx` — `SettingsHeader`, `SettingsPageTitle`, `TablePaneHeader`, and the `embedded` null-publisher pattern.
 - `apps/web/src/components/AppTopBar.tsx` & `SettingsHeaderBar.tsx` — tab active-state matching (deepest-prefix wins).

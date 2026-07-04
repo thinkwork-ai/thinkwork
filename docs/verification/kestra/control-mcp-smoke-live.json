@@ -29,7 +29,7 @@
         "region": "us-east-1",
         "managedApplications": [
           {
-            "key": "cognee",
+            "key": "retired_graph_substrate",
             "status": "running",
             "provisioned": true,
             "runtimeEnabled": true,

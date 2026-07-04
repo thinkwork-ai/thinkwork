@@ -7,11 +7,11 @@
 - At least five `tenant_entity_pages` rows seeded for the rep's book.
 - Push notifications verified on the rep's actual device.
 - `scripts/post-deploy/brain-v0-smoke.sh` passes.
-- Company Brain is installed for the tenant and the plugin detail page links to
+- ThinkWork Brain is installed for the tenant and the plugin detail page links to
   **Brain operations**.
-- `node plugins/company-brain/smoke/company-brain-operations-smoke.mjs` dry-run passes.
-- `node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` dry-run passes.
-- `node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs` dry-run passes.
+- `node plugins/brain/smoke/brain-operations-smoke.mjs` dry-run passes.
+- `node plugins/brain/smoke/brain-context-engine-smoke.mjs` dry-run passes.
+- `node plugins/brain/smoke/retired_graph_substrate-memory-cutover-smoke.mjs` dry-run passes.
 
 ## Substrate Checks
 
@@ -19,14 +19,14 @@ Run the live operations smoke after the deploy pipeline finishes and before
 starting the weekly dogfood cadence:
 
 ```sh
-SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
+SMOKE_ENABLE_BRAIN_OPERATIONS=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_MEMBER_USER_ID=<tenant-member-user-id> \
-  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
+  node plugins/brain/smoke/brain-operations-smoke.mjs
 ```
 
-Passing live mode means `companyBrainStatus` reports the current storage tier,
+Passing live mode means `brainStatus` reports the current storage tier,
 active read backend, health, counters, capabilities, and migration posture.
 When `SMOKE_MEMBER_USER_ID` is set, the same smoke verifies that tenant member
 reads do not expose operator evidence such as raw substrate endpoints, S3
@@ -37,11 +37,11 @@ state-changing operation. Only request it from the smoke when an operator has
 confirmed the tenant is ready for production substrate replay:
 
 ```sh
-SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
-  SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1 \
+SMOKE_ENABLE_BRAIN_OPERATIONS=1 \
+  SMOKE_ENABLE_BRAIN_OPERATIONS_MUTATION=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
+  node plugins/brain/smoke/brain-operations-smoke.mjs
 ```
 
 The mutation path sends no request unless the tenant is ready on the default
@@ -54,35 +54,35 @@ Verify the customer-facing value path through ThinkWork Brain rather than
 through raw substrate APIs:
 
 ```sh
-SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
+SMOKE_ENABLE_BRAIN_CONTEXT=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<tenant-user-id> \
-  SMOKE_COMPANY_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
-  SMOKE_COMPANY_BRAIN_EXPECTED_TERM="procurement" \
-  node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
+  SMOKE_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
+  SMOKE_BRAIN_EXPECTED_TERM="procurement" \
+  node plugins/brain/smoke/brain-context-engine-smoke.mjs
 ```
 
-Passing live mode means `query_brain_context` returns Company Brain context
+Passing live mode means `query_brain_context` returns ThinkWork Brain context
 through the Context Engine boundary, carries untrusted source-data metadata,
-reports provider-local posture, and stays separate from Cognee-backed user and
+reports provider-local posture, and stays separate from the retired graph substrate-backed user and
 space `query_memory_context`.
 
-## Cognee User + Space Memory Cutover Checks
+## the retired graph substrate User + Space Memory Cutover Checks
 
 Prove the session-memory cutover through ThinkWork APIs and Context Engine,
-not raw Cognee endpoints:
+not raw the retired graph substrate endpoints:
 
 ```sh
-SMOKE_ENABLE_COGNEE_MEMORY_CUTOVER=1 \
+SMOKE_ENABLE_GRAPH_MEMORY_CUTOVER=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<user-id> \
   SMOKE_SPACE_ID=<space-id> \
   SMOKE_SPACE_THREAD_ID=<thread-id-in-space> \
   SMOKE_OTHER_SPACE_THREAD_ID=<thread-id-in-other-allowed-space> \
-  node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs
+  node plugins/brain/smoke/retired_graph_substrate-memory-cutover-smoke.mjs
 ```
 
-Passing live mode means `memorySystemConfig` reports Cognee as the active
+Passing live mode means `memorySystemConfig` reports the retired graph substrate as the active
 user + space memory engine, Hindsight is not required for the new path,
 `captureMobileMemory` follows the user across Spaces, and
 `captureSpaceMemory` stays attached to the Space while remaining available to

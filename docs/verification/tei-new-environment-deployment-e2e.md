@@ -18,7 +18,7 @@ Current scope boundary: TEI has proved release update, runtime config, login,
 model catalog, Settings/Agents recovery, strict managed-app deploy readiness,
 and read-only teardown readiness through the controller. Full optional-app
 creation and destructive teardown are intentionally deferred while TEI remains
-live for demo validation. Treat final Cognee/Twenty deploy smoke and final
+live for demo validation. Treat final the retired graph substrate/Twenty deploy smoke and final
 destroy evidence as the remaining U9 proof gaps, not as a reason to mutate the
 demo environment prematurely.
 
@@ -98,14 +98,14 @@ Runtime smoke evidence:
   `/tmp/thinkwork-tei-smoke-proof-150/managed-app-controller-readiness-final.json`:
   - the selected TEI release manifest URL/SHA from SSM matched the downloaded
     `v0.1.0-canary.150` manifest;
-  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - the retired graph substrate and Twenty CRM descriptors exist in `managedApps`;
   - both descriptors point at their Terraform module source/version and required
     smoke command paths;
   - both smoke command paths exist in this checkout;
   - `descriptorReady=true`, `deployReady=true`, and
     `strictDeployReadyRequired=true`;
-  - Cognee resolved
-    `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.150-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
+  - the retired graph substrate resolved
+    `ghcr.io/thinkwork-ai/thinkwork-retired_graph_substrate:v0.1.0-canary.150-retired_graph_substrate-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
   - Twenty resolved
     `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
 
@@ -174,9 +174,9 @@ Runtime smoke evidence:
   - Cognito domain validation passed.
   - Runtime-config-derived deployment profile included all required v1 client
     binding fields.
-- `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` passed with evidence at
-  `/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`; it explicitly
-  skipped live Cognee probing because Cognee is not enabled for this base TEI
+- `node plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs` passed with evidence at
+  `/tmp/thinkwork-tei-smoke-proof-150/retired_graph_substrate-smoke-150.json`; it explicitly
+  skipped live the retired graph substrate probing because the retired graph substrate is not enabled for this base TEI
   stage.
 - `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed with evidence at
   `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`; it explicitly
@@ -218,7 +218,7 @@ Runtime smoke evidence:
 - `platform-artifacts.tar.gz` is recorded in the release manifest with SHA-256
   `b463b44094d60e94ee068881343deab53bb65d6d081b69757dcc04afb181aad8`.
 - The final release manifest includes pinned runtime images for
-  `agentcore-pi-amd64`, `agentcore-pi-arm64`, `cognee`, `kestra`, and `twenty`.
+  `agentcore-pi-amd64`, `agentcore-pi-arm64`, `retired_graph_substrate`, `kestra`, and `twenty`.
 - `node scripts/smoke/foundation-bootstrap-smoke.mjs` passed in live
   runtime-config mode on 2026-06-10 with evidence written to
   `/tmp/thinkwork-tei-smoke-proof/foundation-smoke-149.json`:
@@ -242,14 +242,14 @@ Runtime smoke evidence:
   `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-149-final.json`:
   - the selected TEI release manifest URL/SHA from SSM matched the downloaded
     `v0.1.0-canary.149` manifest;
-  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - the retired graph substrate and Twenty CRM descriptors exist in `managedApps`;
   - both descriptors point at their Terraform module source/version and required
     smoke command paths;
   - both smoke command paths exist in this checkout;
   - `descriptorReady=true`, `deployReady=true`, and
     `strictDeployReadyRequired=true`;
-  - Cognee resolved
-    `ghcr.io/thinkwork-ai/thinkwork-cognee:v0.1.0-canary.149-cognee-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
+  - the retired graph substrate resolved
+    `ghcr.io/thinkwork-ai/thinkwork-retired_graph_substrate:v0.1.0-canary.149-retired_graph_substrate-amd64@sha256:be910a950a31ec6b7e070927f6143b244fbec8b8d66fa3b84f047ee43b996680`;
   - Twenty resolved
     `twentycrm/twenty@sha256:37380b56aa86c6949f6e9f00e21f6e2a2a19bfa94c9e86f5e3202304367c7510`.
 
@@ -328,10 +328,10 @@ Runtime smoke evidence:
     `thinkwork-tei-e2e-deployment-orchestrator`, CodeBuild project
     `thinkwork-tei-e2e-deployment-runner`, and evidence bucket
     `thinkwork-tei-e2e-637423202447-deploy-evidence`.
-- `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` passed in live mode as an
-  explicit skip because Cognee is not enabled for this base TEI stage; local
+- `node plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs` passed in live mode as an
+  explicit skip because the retired graph substrate is not enabled for this base TEI stage; local
   evidence:
-  `/tmp/thinkwork-tei-smoke-proof/cognee-smoke-148.json`.
+  `/tmp/thinkwork-tei-smoke-proof/retired_graph_substrate-smoke-148.json`.
 - `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed in live mode as an
   explicit skip because Twenty CRM is not provisioned for this base TEI stage;
   local evidence:
@@ -341,16 +341,16 @@ Runtime smoke evidence:
   `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json`:
   - the selected TEI release manifest URL/SHA from SSM matched the downloaded
     `v0.1.0-canary.148` manifest;
-  - Cognee and Twenty CRM descriptors exist in `managedApps`;
+  - the retired graph substrate and Twenty CRM descriptors exist in `managedApps`;
   - both descriptors point at their Terraform module source/version and required
     smoke command paths;
   - both smoke command paths exist in this checkout;
   - `descriptorReady=true`, but `deployReady=false` because the `.148`
-    `runtimeImages` list does not include the required `cognee` or `twenty`
+    `runtimeImages` list does not include the required `retired_graph_substrate` or `twenty`
     image entries.
 - Strict deploy-ready mode failed closed as expected:
   `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` reported
-  `cognee: required image cognee is not present in runtimeImages` and
+  `retired_graph_substrate: required image retired_graph_substrate is not present in runtimeImages` and
   `twenty: required image twenty is not present in runtimeImages`.
 - `node scripts/smoke/deployment-teardown-readiness-smoke.mjs` passed in live
   read-only mode on 2026-06-10 with evidence written to
@@ -762,7 +762,7 @@ Use the deployed Spaces UI first:
 1. Open the `app_url` Terraform output.
 2. Sign in as the first admin.
 3. Open Settings -> Managed Applications.
-4. Confirm Cognee and Twenty are visible as optional managed applications.
+4. Confirm the retired graph substrate and Twenty are visible as optional managed applications.
 5. Trigger a plan for one app.
 6. Confirm the UI shows a deployment request, evidence, status, and teardown
    affordance.
@@ -795,8 +795,8 @@ node /Users/ericodom/Projects/thinkwork/scripts/smoke/managed-app-controller-rea
 ```
 
 Current `.148` result: descriptors are ready, but strict mode fails because the
-release manifest does not include `cognee` or `twenty` runtime image entries.
-Publish a release with those required images before treating Cognee/Twenty as
+release manifest does not include `retired_graph_substrate` or `twenty` runtime image entries.
+Publish a release with those required images before treating the retired graph substrate/Twenty as
 deployable through the controller.
 
 Twenty CRM:
@@ -810,13 +810,13 @@ AWS_REGION="$AWS_REGION" \
 node /Users/ericodom/Projects/thinkwork/plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
-Cognee Knowledge Graph, after choosing a tenant and thread:
+the retired graph substrate Knowledge Graph, after choosing a tenant and thread:
 
 ```bash
 SMOKE_ENABLE_KNOWLEDGE_GRAPH=1 \
 SMOKE_TENANT_ID="<tenant-id>" \
 SMOKE_KG_THREAD_ID="<thread-id>" \
-SMOKE_EVIDENCE_FILE="$DEPLOY_ROOT/deploy-artifacts/cognee-smoke.json" \
+SMOKE_EVIDENCE_FILE="$DEPLOY_ROOT/deploy-artifacts/retired_graph_substrate-smoke.json" \
 AWS_PROFILE="$AWS_PROFILE" \
 AWS_REGION="$AWS_REGION" \
 node /Users/ericodom/Projects/thinkwork/scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs
@@ -824,8 +824,8 @@ node /Users/ericodom/Projects/thinkwork/scripts/smoke/knowledge-graph-thread-ing
 
 Base TEI optional-app smoke evidence on 2026-06-10:
 
-- `cognee-managed-app-smoke.mjs` returned `ok:true`, `skippedLive:true`,
-  `reason:"Cognee is not enabled for this stage."`
+- `retired_graph_substrate-managed-app-smoke.mjs` returned `ok:true`, `skippedLive:true`,
+  `reason:"the retired graph substrate is not enabled for this stage."`
 - `twenty-managed-app-smoke.mjs` returned `ok:true`, `skippedLive:true`,
   `reason:"Twenty CRM is not provisioned for this stage."`
 
@@ -833,7 +833,7 @@ Pass criteria:
 
 - Twenty smoke either reports running health or explicitly skips because Twenty
   is unprovisioned/parked.
-- Cognee smoke can start or inspect a graph ingest when tenant/thread
+- the retired graph substrate smoke can start or inspect a graph ingest when tenant/thread
   prerequisites exist.
 - Managed-app UI does not depend on GitHub Actions.
 - Any deployment request routed to Step Functions records the job, plan/apply
@@ -928,25 +928,25 @@ cleanup blocker.
 
 Use this table during the run:
 
-| Gate                                 | Result                 | Evidence                                                                             |
-| ------------------------------------ | ---------------------- | ------------------------------------------------------------------------------------ |
-| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                             |
-| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.150` manifest SHA-256                                                 |
-| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                            |
-| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                     |
-| Controller release update            | PASS on 2026-06-10     | `.150` execution and CodeBuild run succeeded                                         |
-| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                              |
-| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                 |
-| Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile          |
-| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                       |
-| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                               |
-| Managed-app descriptor readiness     | PASS on 2026-06-10     | Cognee/Twenty descriptors and smoke contracts exist in `.150` release manifest       |
-| Managed-app deploy readiness         | PASS on 2026-06-10     | `.150` manifest resolves required `cognee` and `twenty` runtime images               |
-| Managed-app UI smoke                 | Partial                | Cognee/Twenty `.150` skip evidence captured; full optional-app deploy smoke remains  |
-| Desktop profile selection            | Partial                | Profile contract passes; desktop `.150` assets are available for user launch test    |
-| Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                 |
-| Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started |
-| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                    |
+| Gate                                 | Result                 | Evidence                                                                                                 |
+| ------------------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| AWS profile and Bedrock doctor       | PASS on 2026-06-09     | Doctor output for account `637423202447`                                                                 |
+| Release manifest asset and digest    | PASS on 2026-06-10     | `v0.1.0-canary.150` manifest SHA-256                                                                     |
+| GitHub-free bootstrap dry-run        | PASS on 2026-06-09     | CLI dry-run output for top-level and enterprise bootstrap                                                |
+| GitHub-free substrate live bootstrap | PASS on 2026-06-09     | TEI Step Functions + CodeBuild controller exists                                                         |
+| Controller release update            | PASS on 2026-06-10     | `.150` execution and CodeBuild run succeeded                                                             |
+| Controller selected-release status   | PASS on 2026-06-10     | SSM status params + `controller-release-selection.json`                                                  |
+| Foundation runtime smoke             | PASS on 2026-06-10     | `/sign-in` 200 + runtime config release/digest + live smoke evidence                                     |
+| Deployment profile contract smoke    | PASS on 2026-06-10     | Web/desktop/mobile binding snapshots target TEI from runtime config profile                              |
+| First admin login                    | PASS on 2026-06-09     | Browser login to TEI completed                                                                           |
+| Model catalog / Agents UI smoke      | PASS after remediation | Browser proof + GraphQL `ok:true` logs                                                                   |
+| Managed-app descriptor readiness     | PASS on 2026-06-10     | the retired graph substrate/Twenty descriptors and smoke contracts exist in `.150` release manifest      |
+| Managed-app deploy readiness         | PASS on 2026-06-10     | `.150` manifest resolves required `retired_graph_substrate` and `twenty` runtime images                  |
+| Managed-app UI smoke                 | Partial                | the retired graph substrate/Twenty `.150` skip evidence captured; full optional-app deploy smoke remains |
+| Desktop profile selection            | Partial                | Profile contract passes; desktop `.150` assets are available for user launch test                        |
+| Mobile profile selection             | Partial                | Profile contract passes; mobile launch proof remains                                                     |
+| Teardown readiness                   | PASS on 2026-06-10     | Read-only controller/backend/evidence smoke passed; no destroy execution was started                     |
+| Cleanup / teardown                   | Deferred               | TEI kept live for demo; run final destroy after evidence is saved                                        |
 
 The deployment is not fully accepted until every non-stub gate passes or is
 explicitly recorded as a product gap with a follow-up issue.

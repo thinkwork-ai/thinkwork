@@ -11,7 +11,6 @@ Current managed-app adapter support is defined by:
 
 At the time this skill was written, supported adapter keys are:
 
-- `cognee`
 - `n8n`
 - `twenty`
 
@@ -51,7 +50,6 @@ provision or adopt the resources represented by the source project.
 
 | Adapter | Fit            | Evidence |
 | ------- | -------------- | -------- |
-| cognee  | no/partial/yes |          |
 | n8n     | no/partial/yes |          |
 | twenty  | no/partial/yes |          |
 

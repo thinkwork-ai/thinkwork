@@ -17,7 +17,7 @@ afterEach(() => {
 describe("memorySystemConfig", () => {
   it("reports unavailable when the memory engine is retired", async () => {
     vi.stubEnv("MEMORY_ENABLED", "true");
-    vi.stubEnv("MEMORY_ENGINE", "cognee");
+    vi.stubEnv("MEMORY_ENGINE", "retired_graph");
     vi.stubEnv("HINDSIGHT_ENDPOINT", "https://hindsight.legacy.example.com");
     resetMemory();
 

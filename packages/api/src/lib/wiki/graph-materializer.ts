@@ -1,7 +1,7 @@
 /**
  * Graph → wiki materializer (plan 2026-06-09-004 U10).
  *
- * Deterministic, LLM-free: extraction already happened in Cognee. Reads
+ * Deterministic, LLM-free: extraction already happened in the graph pipeline. Reads
  * grounded entities + relationships + observation evidence from the Aurora
  * knowledge_graph_* mirror (source_kind='observations',
  * grounding_status='grounded' only) for one tenant and materializes

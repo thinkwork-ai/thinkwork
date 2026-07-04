@@ -1,6 +1,6 @@
 ---
 issue: THNK-30
-title: Rename Cognee Cluster
+title: Rename the retired graph substrate Cluster
 updated: 2026-06-15
 dispatcher: dispatcher:THNK-30:InProgress:Codex
 ---
@@ -11,7 +11,7 @@ dispatcher: dispatcher:THNK-30:InProgress:Codex
 
 - Started from fresh `origin/main` at
   `08dcda665e14394ad8bc39fac034ca5597fe4016` in branch
-  `codex/thnk-30-rename-cognee-cluster`.
+  `codex/thnk-30-rename-retired_graph_substrate-cluster`.
 - Read Linear issue THNK-30, comments, requirements document, plan document,
   merged requirements artifact, and merged plan artifact before changing code.
 - Moved THNK-30 from `Ready to Work` to `In Progress` when implementation
@@ -27,26 +27,26 @@ dispatcher: dispatcher:THNK-30:InProgress:Codex
 - U1 Terraform cluster identity:
   - Added a dedicated legacy stage-wide ECS cluster local that resolves to
     `thinkwork-${stage}-brain-cluster`.
-  - Kept Cognee-derived service, task family, ALB/TG, EFS, IAM, secret, log,
+  - Kept the retired graph substrate-derived service, task family, ALB/TG, EFS, IAM, secret, log,
     database, resource-short-name, and managed-app identities unchanged.
-  - Preserved the Terraform output name `cognee_cluster_arn` and clarified that
-    it is the Company Brain ECS cluster hosting Cognee.
+  - Preserved the Terraform output name `retired_graph_substrate_cluster_arn` and clarified that
+    it is the ThinkWork Brain ECS cluster hosting the retired graph substrate.
 - U2 API cluster identity:
-  - Added a shared Cognee cluster identity helper.
+  - Added a shared the retired graph substrate cluster identity helper.
   - Updated deployment status, managed application status, and Knowledge Graph
     health probes to use the Brain fallback.
-  - Preserved `COGNEE_CLUSTER_ARN` as an exact optional compatibility override;
+  - Preserved `GRAPH_CLUSTER_ARN` as an exact optional compatibility override;
     no `BRAIN_CLUSTER_ARN` was added.
 - U3 smoke/evidence:
-  - Extended the Cognee managed-app smoke to compare Terraform output, GraphQL
-    deployment status, Cognee managed-app status, and the inferred health-check
+  - Extended the the retired graph substrate managed-app smoke to compare Terraform output, GraphQL
+    deployment status, the retired graph substrate managed-app status, and the inferred health-check
     target cluster.
   - Added Brain-cluster assertions for enabled deployments while keeping disabled
     deployments skippable.
   - Added break-glass owner/reason fields for temporary non-Brain recovery
     evidence.
 - U4 verification artifact:
-  - Added `docs/verification/rename-cognee-cluster-dev-cutover.md` with the
+  - Added `docs/verification/rename-retired_graph_substrate-cluster-dev-cutover.md` with the
     plan allowlist, recovery matrix, non-dev inventory slot, and redacted
     post-CD evidence slots.
 

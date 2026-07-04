@@ -211,7 +211,7 @@ integration model.
 - `docs/brainstorms/2026-06-15-plugin-source-colocation-requirements.md`.
 - `docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md`.
 - `plugins/README.md`.
-- Existing plugin packages under `plugins/company-brain/`,
+- Existing plugin packages under `plugins/brain/`,
   `plugins/lastmile/`, `plugins/n8n/`, and `plugins/twenty/`.
 - Plugin catalog contracts and registry generation under `plugins/catalog/`.
 

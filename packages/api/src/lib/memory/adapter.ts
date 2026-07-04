@@ -2,7 +2,7 @@
  * ThinkWork memory contract — adapter interface.
  *
  * One of these is implemented per long-term memory engine (Hindsight,
- * AgentCore Memory, future: graphiti/cognee). Exactly one adapter is active
+ * AgentCore Memory, future graph adapters). Exactly one adapter is active
  * per deployment, resolved from {@link MemoryConfig.engine}. The recall,
  * inspect, and export services sit above this boundary and never touch
  * backend-native shapes.

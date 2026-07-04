@@ -114,13 +114,11 @@ locals {
     # OAUTH_CALLBACK_URL is the URL registered with Google/Azure OAuth apps.
     # REDIRECT_SUCCESS_URL is the fallback post-OAuth redirect when the
     # caller doesn't pass a per-request returnUrl (mobile passes thinkwork://).
-    GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN          = aws_secretsmanager_secret.oauth_google_productivity.arn
-    OAUTH_CALLBACK_URL                            = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
-    REDIRECT_SUCCESS_URL                          = var.redirect_success_url
-    COMPANY_BRAIN_SOURCE_AGENT_MODEL_ID           = var.company_brain_source_agent_model_id
-    COMPANY_BRAIN_BACKDOOR_INSTALL_KEY_SECRET_ARN = var.company_brain_backdoor_install_key_secret_arn
-    COMPANY_BRAIN_BACKDOOR_INSTALL_KEY_STAGES     = var.company_brain_backdoor_install_key_stages
-    WWW_URL                                       = var.www_url
+    GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN = aws_secretsmanager_secret.oauth_google_productivity.arn
+    OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
+    REDIRECT_SUCCESS_URL                 = var.redirect_success_url
+    BRAIN_SOURCE_AGENT_MODEL_ID          = var.brain_source_agent_model_id
+    WWW_URL                              = var.www_url
     },
     # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
     # the actual keys live in Secrets Manager and are fetched by
@@ -1966,7 +1964,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "wiki_exports" {
   }
 }
 
-# Canonical Company Brain artifact store. Unlike wiki_exports, this bucket
+# Canonical ThinkWork Brain artifact store. Unlike wiki_exports, this bucket
 # is the durable replay/projection substrate for Brain source artifacts,
 # ingestion manifests, migration snapshots, vault projections, and exports.
 resource "aws_s3_bucket" "brain_artifacts" {
@@ -1975,7 +1973,7 @@ resource "aws_s3_bucket" "brain_artifacts" {
 
   tags = {
     Name    = "thinkwork-${var.stage}-brain-artifacts"
-    Purpose = "company-brain-artifacts"
+    Purpose = "brain-artifacts"
   }
 }
 

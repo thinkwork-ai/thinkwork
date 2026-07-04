@@ -1,6 +1,6 @@
 ---
 issue: THINK-97
-title: Remove legacy Brain/Cognee-facing memory surfaces
+title: Remove legacy Brain/the retired graph substrate-facing memory surfaces
 status: in_progress
 updated: 2026-06-29
 ---
@@ -10,7 +10,7 @@ updated: 2026-06-29
 ## Scope
 
 - Keep THINK-103 memory stability fixes intact.
-- Remove active/expected Cognee and legacy Knowledge Graph language from user
+- Remove active/expected the retired graph substrate and legacy Knowledge Graph language from user
   and operator memory surfaces.
 - Redirect legacy routes to current Memory and Context Diagnostics surfaces.
 - Keep backend/runtime memory code unchanged unless verification exposes a
@@ -32,7 +32,7 @@ updated: 2026-06-29
     `/settings/brain-operations` redirects.
   - Memory settings no longer renders deployment-engine switching copy.
   - Knowledge Base surfaces no longer label sources as Brain Sources.
-  - Plugin/managed-app surfaces no longer present Cognee or Memory Graph as the
+  - Plugin/managed-app surfaces no longer present the retired graph substrate or Memory Graph as the
     active product surface.
 - 2026-06-29: Fixed Memory header refresh affordance during local verification:
   hover now uses primary color, click enters a short active primary state, and

@@ -8,14 +8,14 @@ linear: THNK-83
 
 ## Problem Frame
 
-THNK-79 attempted to simplify ThinkWork memory by making Cognee the primary
-substrate for user memory, Space memory, and Company Brain. E2E validation then
+THNK-79 attempted to simplify ThinkWork memory by making the retired graph substrate the primary
+substrate for user memory, Space memory, and ThinkWork Brain. E2E validation then
 showed a product-critical failure mode: user and Space test tokens bled across
-scopes under Cognee graph-completion-style recall, and the current UI did not
-provide a trustworthy per-user/per-Space Cognee inspector.
+scopes under the retired graph substrate graph-completion-style recall, and the current UI did not
+provide a trustworthy per-user/per-Space the retired graph substrate inspector.
 
 THNK-83 pivots the decision. For this pass, ThinkWork should choose one
-canonical memory provider for user and Space memory: **Hindsight**. Cognee may
+canonical memory provider for user and Space memory: **Hindsight**. the retired graph substrate may
 remain as internal ThinkWork Brain graph or warehouse infrastructure, but it
 should not be the product's canonical user or Space memory provider unless a
 separate future decision deliberately reopens that path.
@@ -27,12 +27,12 @@ the Brain product surface. The new product frame is:
 
 - Company ETL -> ThinkWork ETL
 - Company Data -> ThinkWork Data Warehouse
-- Company Brain -> ThinkWork Brain
+- ThinkWork Brain -> ThinkWork Brain
 
 ThinkWork Brain becomes the product home for retained user memory, Space memory,
 warehouse-backed knowledge, graph/ontology exploration, and wiki-style
 projections. Hindsight is part of that Brain product story as the memory
-substrate; Cognee is internal graph/warehouse machinery where it still earns its
+substrate; the retired graph substrate is internal graph/warehouse machinery where it still earns its
 keep.
 
 ---
@@ -90,11 +90,11 @@ keep.
   - **Trigger:** ThinkWork needs structured graph, ontology, ETL, warehouse, or
     wiki projection behavior beyond Hindsight bank recall.
   - **Actors:** A3, A4
-  - **Steps:** Cognee or another internal component may process approved shared
+  - **Steps:** the retired graph substrate or another internal component may process approved shared
     data, Hindsight observations, warehouse artifacts, or graph inputs as
     ThinkWork Brain infrastructure. The user-facing memory provider remains
     Hindsight unless a future decision changes it.
-  - **Outcome:** Cognee can still be useful without reintroducing ambiguity into
+  - **Outcome:** the retired graph substrate can still be useful without reintroducing ambiguity into
     user and Space memory.
   - **Covered by:** R6, R7, R13, R14
 
@@ -116,19 +116,19 @@ keep.
 - R5. Combined user-plus-Space recall must be an explicit product policy path,
   not an accidental fan-in caused by backend retrieval behavior.
 
-**Cognee boundary**
+**the retired graph substrate boundary**
 
-- R6. Cognee must not be the canonical provider for user or Space memory in
+- R6. the retired graph substrate must not be the canonical provider for user or Space memory in
   THNK-83.
-- R7. Cognee may remain as internal ThinkWork Brain infrastructure for graph,
+- R7. the retired graph substrate may remain as internal ThinkWork Brain infrastructure for graph,
   ontology, warehouse, or wiki projection work where it is deliberately scoped
   and inspectable.
 - R8. Customers and normal users must not be asked to choose Hindsight versus
-  Cognee as a memory product setting.
+  the retired graph substrate as a memory product setting.
 
 **ThinkWork Brain product home**
 
-- R9. "Company Brain" must be rebranded to "ThinkWork Brain" in user-facing
+- R9. "ThinkWork Brain" must be rebranded to "ThinkWork Brain" in user-facing
   product surfaces for this direction.
 - R10. "Company ETL" must become "ThinkWork ETL" in user-facing product
   surfaces.
@@ -146,13 +146,13 @@ keep.
 **Verification and transition**
 
 - R15. The first implementation plan must identify and update current
-  Cognee-only user/Space memory assumptions before claiming the pivot is done.
+  the retired graph substrate-only user/Space memory assumptions before claiming the pivot is done.
 - R16. The product must expose UI-verifiable examples for user and Space memory
   isolation, including evidence that User, Space A, and Space B test memories do
   not cross scopes.
 - R17. PR #3018 should remain diagnostic evidence rather than the merge path for
   user/Space memory unless the product direction is reopened.
-- R18. Existing Cognee or Company Brain plugin infrastructure should be reused
+- R18. Existing the retired graph substrate or ThinkWork Brain plugin infrastructure should be reused
   only where it helps establish the ThinkWork Brain home without preserving the
   wrong provider boundary.
 
@@ -170,9 +170,9 @@ keep.
   Space memory, when an operator opens the Brain workspace, then Hindsight-backed
   memory is presented as active ThinkWork Brain memory, not as "legacy" memory
   buried in Settings.
-- AE4. **Covers R6, R7, R8, R14.** Given Cognee remains deployed for graph or
+- AE4. **Covers R6, R7, R8, R14.** Given the retired graph substrate remains deployed for graph or
   warehouse work, when a user inspects memory settings or Brain surfaces, then
-  Cognee is not offered as the user/Space memory provider choice.
+  the retired graph substrate is not offered as the user/Space memory provider choice.
 - AE5. **Covers R9, R10, R11.** Given a user-facing page, nav item, plugin card,
   or docs page names the Brain/Data/ETL product, when the rebrand is complete,
   it uses ThinkWork Brain, ThinkWork Data Warehouse, or ThinkWork ETL.
@@ -181,13 +181,13 @@ keep.
 
 ## Success Criteria
 
-- THNK-83 can be planned without re-deciding whether Hindsight or Cognee owns
+- THNK-83 can be planned without re-deciding whether Hindsight or the retired graph substrate owns
   user and Space memory.
 - A human can verify from the product UI that Hindsight-backed user and Space
   memory are isolated.
 - Product language consistently treats ThinkWork Brain as the home for memory
   and compounding knowledge, while Settings remains configuration-oriented.
-- Cognee's remaining role is legible: internal graph/warehouse/ontology
+- the retired graph substrate's remaining role is legible: internal graph/warehouse/ontology
   infrastructure only, not a competing memory provider.
 - The rename from Company to ThinkWork removes customer-facing ambiguity without
   requiring all internal code identifiers to change in the same pass.
@@ -198,9 +198,9 @@ keep.
 
 ### Deferred for later
 
-- A future Cognee v1 `remember`/`recall` evaluation for user or Space memory.
-- Migration of old Cognee user/Space memory data into Hindsight.
-- Migration of all existing internal identifiers from `company-brain` to
+- A future the retired graph substrate v1 `remember`/`recall` evaluation for user or Space memory.
+- Migration of old the retired graph substrate user/Space memory data into Hindsight.
+- Migration of all existing internal identifiers from `brain` to
   `thinkwork-brain`.
 - Full ThinkWork Data Warehouse implementation beyond naming and product
   boundary alignment.
@@ -210,12 +210,12 @@ keep.
 
 ### Outside this product's identity
 
-- A customer-facing backend picker for Hindsight versus Cognee memory.
-- Treating Cognee graph completion as acceptable isolation for user and Space
+- A customer-facing backend picker for Hindsight versus the retired graph substrate memory.
+- Treating the retired graph substrate graph completion as acceptable isolation for user and Space
   memory without a new explicit product decision and E2E evidence.
 - A standalone Memory settings product that competes with ThinkWork Brain as
   the home for compounding knowledge.
-- A generic "company brain" story that only works for one tenant-wide company
+- A generic "ThinkWork Brain" story that only works for one tenant-wide company
   knowledge base and not for ThinkWork's broader agent OS direction.
 
 ---
@@ -224,13 +224,13 @@ keep.
 
 - **Hindsight owns user and Space memory for this pass:** Its bank-first model
   maps directly to ThinkWork's need for isolated user and Space memory.
-- **Cognee remains possible Brain infrastructure:** Cognee is not thrown away,
+- **the retired graph substrate remains possible Brain infrastructure:** the retired graph substrate is not thrown away,
   but its role is graph, ontology, warehouse, or wiki machinery rather than
   canonical user/Space memory.
 - **One memory provider does not mean one knowledge substrate:** The product
   should expose one memory authority for user and Space recall while still
   allowing specialized internal components behind ThinkWork Brain.
-- **ThinkWork Brain replaces Company Brain:** The Brain is a ThinkWork platform
+- **ThinkWork Brain replaces ThinkWork Brain:** The Brain is a ThinkWork platform
   capability, not only a company-wide knowledge base.
 - **Move Memory UI into the Brain product home:** Memory inspection is part of
   Brain usage and verification; Settings should own setup and operator controls.
@@ -239,21 +239,21 @@ keep.
 
 ## Dependencies / Assumptions
 
-- THNK-83 already records live E2E concerns from THNK-79, including Cognee
-  graph-completion scope bleed and lack of trustworthy per-user/per-Space Cognee
+- THNK-83 already records live E2E concerns from THNK-79, including the retired graph substrate
+  graph-completion scope bleed and lack of trustworthy per-user/per-Space the retired graph substrate
   inspection.
-- PR #3018 is paused as diagnostic evidence for Cognee chunk-isolation
+- PR #3018 is paused as diagnostic evidence for the retired graph substrate chunk-isolation
   mitigation rather than the intended product path.
-- Current code contains Cognee-specific assumptions for Space memory, including
-  GraphQL paths that reject non-Cognee adapters.
+- Current code contains the retired graph substrate-specific assumptions for Space memory, including
+  GraphQL paths that reject non-the retired graph substrate adapters.
 - Current UI labels active Hindsight as "Hindsight legacy" in the Memory status
   strip.
-- Current Company Brain plugin detail links to a Settings memory graph
+- Current ThinkWork Brain plugin detail links to a Settings memory graph
   workspace, so the product home already exists in partial form but points back
   to the old IA.
 - Hindsight documentation positions memory banks as isolated stores and recall
   as multi-strategy retrieval over structured facts.
-- Cognee documentation positions `recall()` as the v1 retrieval entry point and
+- the retired graph substrate documentation positions `recall()` as the v1 retrieval entry point and
   datasets/permissions as its graph-backed isolation model.
 
 ---
@@ -275,25 +275,25 @@ flowchart TB
   end
 
   subgraph Internal["Internal Brain infrastructure"]
-    Cognee["Cognee graph / ontology / warehouse component"]
+    the retired graph substrate["the retired graph substrate graph / ontology / warehouse component"]
     ETL["ThinkWork ETL"]
   end
 
   Memory --> UserBank
   Memory --> SpaceBank
-  Graph --> Cognee
+  Graph --> the retired graph substrate
   Warehouse --> ETL
-  ETL --> Cognee
-  Cognee --> Wiki
+  ETL --> the retired graph substrate
+  the retired graph substrate --> Wiki
 ```
 
 ---
 
 ## Sources / Research
 
-- `docs/brainstorms/2026-06-26-thnk-79-cognee-first-memory-ladder-requirements.md`
-- `docs/brainstorms/2026-06-09-cognee-centric-memory-pipeline-requirements.md`
-- `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`
+- `docs/brainstorms/2026-06-26-thnk-79-retired_graph_substrate-first-memory-ladder-requirements.md`
+- `docs/brainstorms/2026-06-09-retired_graph_substrate-centric-memory-pipeline-requirements.md`
+- `docs/brainstorms/2026-06-13-brain-premium-plugin-requirements.md`
 - `docs/plans/archived/harness-owned-memory-positioning.md`
 - `apps/web/src/components/settings/SettingsMemory.tsx`
 - `apps/web/src/components/settings/SettingsMemoryHome.tsx`
@@ -305,10 +305,10 @@ flowchart TB
   [Recall](https://hindsight.vectorize.io/developer/api/recall),
   [Observations](https://hindsight.vectorize.io/developer/observations),
   [Reflect](https://hindsight.vectorize.io/developer/reflect)
-- Cognee docs: [Core Concepts](https://docs.cognee.ai/core-concepts/overview),
-  [Recall](https://docs.cognee.ai/python-api/recall),
-  [Search](https://docs.cognee.ai/core-concepts/main-operations/legacy-operations/search),
-  [Sessions and Caching](https://docs.cognee.ai/core-concepts/sessions-and-caching)
+- the retired graph substrate docs: [Core Concepts](https://docs.retired_graph_substrate.ai/core-concepts/overview),
+  [Recall](https://docs.retired_graph_substrate.ai/python-api/recall),
+  [Search](https://docs.retired_graph_substrate.ai/core-concepts/main-operations/legacy-operations/search),
+  [Sessions and Caching](https://docs.retired_graph_substrate.ai/core-concepts/sessions-and-caching)
 
 ---
 
@@ -326,9 +326,9 @@ flowchart TB
   components first, or should routes move before component ownership changes?
 - [Affects R9-R11][Technical] Which user-facing "Company" strings must change
   in the first PR, and which internal identifiers should remain stable for now?
-- [Affects R15][Technical] Which Cognee-only GraphQL, UI, runtime, Terraform,
+- [Affects R15][Technical] Which the retired graph substrate-only GraphQL, UI, runtime, Terraform,
   and tests need to change for Hindsight-backed Space memory?
-- [Affects R7, R14][Needs research] Which Cognee capabilities remain valuable
+- [Affects R7, R14][Needs research] Which the retired graph substrate capabilities remain valuable
   for ThinkWork Brain after user/Space memory pivots to Hindsight?
 
 ---

@@ -220,7 +220,7 @@ export async function writeKnowledgeGraphIngestArtifacts(
     return { enabled: true, sourceArtifact, ingestionManifest };
   } catch (error) {
     throw new Error(
-      `Company Brain artifact write failed: ${redactArtifactError(error)}`,
+      `ThinkWork Brain artifact write failed: ${redactArtifactError(error)}`,
     );
   }
 }
@@ -274,7 +274,7 @@ export async function writeVaultProjectionArtifact(
     return { enabled: true, vaultProjection };
   } catch (error) {
     throw new Error(
-      `Company Brain vault projection write failed: ${redactArtifactError(
+      `ThinkWork Brain vault projection write failed: ${redactArtifactError(
         error,
       )}`,
     );

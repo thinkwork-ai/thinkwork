@@ -3,7 +3,7 @@
 ## Objective
 
 Implement THINK-83 end to end: pivot user and Space memory back to Hindsight,
-keep Cognee as optional ThinkWork Brain ontology/graph infrastructure, keep
+keep the retired graph substrate as optional ThinkWork Brain ontology/graph infrastructure, keep
 Memory under `/settings/memory` for this pass, fix the operator Memory table,
 and rebrand customer-facing Company surfaces to ThinkWork names.
 
@@ -27,11 +27,11 @@ and rebrand customer-facing Company surfaces to ThinkWork names.
   - The Linear document is older and still says to move Memory out of Settings.
   - The latest Linear comment and repo-local plan supersede it.
   - Current implementation keeps `/settings/memory` and fixes the data contract.
-- Related issue read: `THINK-79` / "Company Brain".
+- Related issue read: `THINK-79` / "ThinkWork Brain".
 - Related THINK-79 comments and document read:
-  `Plan: Cognee user and space memory cutover`.
+  `Plan: the retired graph substrate user and space memory cutover`.
 - PR #3018 inspected. It is draft/open by design and is diagnostic evidence for
-  Cognee scope bleed, not the merge path for THINK-83.
+  the retired graph substrate scope bleed, not the merge path for THINK-83.
 - No child issues found for THINK-83. Implementation units come from the plan.
 - Repo search for `THNK-83`, `THINK-83`, the plan filename, and the issue title
   found only the new local brainstorm and plan files.
@@ -45,11 +45,11 @@ and rebrand customer-facing Company surfaces to ThinkWork names.
 
 ## Prior Solution Docs Read
 
-- `docs/solutions/architecture-patterns/company-brain-active-substrate-reads-through-context-engine-2026-06-15.md`
-- `docs/solutions/architecture-patterns/company-brain-provisioning-contract-tenant-scoped-2026-06-15.md`
-- `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`
+- `docs/solutions/architecture-patterns/brain-active-substrate-reads-through-context-engine-2026-06-15.md`
+- `docs/solutions/architecture-patterns/brain-provisioning-contract-tenant-scoped-2026-06-15.md`
+- `docs/solutions/runbooks/brain-premium-plugin-operations-2026-06-13.md`
 - `docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md`
-- `docs/solutions/best-practices/cognee-thread-ingest-explorer-2026-06-04.md`
+- `docs/solutions/best-practices/retired_graph_substrate-thread-ingest-explorer-2026-06-04.md`
 - `docs/solutions/logic-errors/admin-graph-dims-measure-ref-2026-04-20.md`
 
 ## Implementation Units
@@ -78,7 +78,7 @@ U5 depends on U4, and U7 depends on U5 and U6.
 ### 2026-06-27 - U0 objective
 
 Make deployment behavior match the product boundary: Hindsight is core memory
-infrastructure, while Cognee is optional ThinkWork Brain ontology/graph
+infrastructure, while the retired graph substrate is optional ThinkWork Brain ontology/graph
 infrastructure deployed through the Brain plugin/managed-app path.
 
 - Moved Linear THINK-83 to `In Progress`.
@@ -91,18 +91,18 @@ infrastructure deployed through the Brain plugin/managed-app path.
     greenfield example, CLI init scaffold, and enterprise deploy template.
   - Empty `memory_engine` now documents Hindsight as the full-install default;
     `agentcore` is the explicit low-cost/development opt-out.
-  - `memory_engine = "cognee"` remains accepted only as legacy diagnostic
+  - `memory_engine = "retired_graph_substrate"` remains accepted only as legacy diagnostic
     compatibility and is no longer described as the user/Space memory path.
-  - Cognee plugin/managed-app copy now frames Cognee as optional Brain
+  - the retired graph substrate plugin/managed-app copy now frames the retired graph substrate as optional Brain
     ontology/knowledge-graph infrastructure.
   - Hindsight README now describes Hindsight as canonical user/Space memory
     for full installs.
 - U0 verification passed:
-  - `pnpm --filter thinkwork-cli test -- __tests__/terraform-cognee-fixture.test.ts`
-  - `pnpm --filter @thinkwork/plugin-company-brain test -- test/manifest.test.ts`
+  - `pnpm --filter thinkwork-cli test -- __tests__/terraform-retired_graph_substrate-fixture.test.ts`
+  - `pnpm --filter @thinkwork/plugin-brain test -- test/manifest.test.ts`
   - `pnpm --filter @thinkwork/deployment-runner test -- test/deployment-runner-managed-apps.test.ts`
   - `pnpm --filter thinkwork-cli typecheck`
-  - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+  - `pnpm --filter @thinkwork/plugin-brain typecheck`
   - `pnpm --filter @thinkwork/deployment-runner typecheck`
   - `pnpm dlx prettier --check ...` for touched TS/MD files
   - `git diff --check`
@@ -157,10 +157,10 @@ and deployed smoke evidence stay in later units.
 
 ### 2026-06-27 - U2 objective
 
-Pivot GraphQL memory semantics from Cognee-only to Hindsight-canonical: Space
+Pivot GraphQL memory semantics from the retired graph substrate-only to Hindsight-canonical: Space
 capture/search should be allowed for active Hindsight when the adapter supports
 the required operation, `memorySystemConfig` should report Hindsight-backed user
-and Space memory as enabled, and Cognee fields/copy should remain compatibility
+and Space memory as enabled, and the retired graph substrate fields/copy should remain compatibility
 diagnostics rather than the canonical memory path.
 
 - Created isolated U2 branch/worktree:
@@ -168,12 +168,12 @@ diagnostics rather than the canonical memory path.
   `/Users/ericodom/.codex/worktrees/think-83-u2`.
 - Implemented U2 GraphQL memory pivot:
   - Added an internal `spaceMemory` adapter capability.
-  - Hindsight and Cognee advertise Space memory support; AgentCore does not.
+  - Hindsight and the retired graph substrate advertise Space memory support; AgentCore does not.
   - `captureSpaceMemory` and `spaceMemorySearch` now gate on provider-neutral
-    capabilities instead of `adapter.kind === "cognee"`.
+    capabilities instead of `adapter.kind === "retired_graph_substrate"`.
   - `memorySystemConfig` derives user/Space memory flags from active adapter
     capabilities and reports Hindsight-backed user/Space memory as enabled.
-  - GraphQL schema descriptions now frame Cognee as compatibility/diagnostic
+  - GraphQL schema descriptions now frame the retired graph substrate as compatibility/diagnostic
     and Hindsight as canonical user/Space memory for this pass.
   - Regenerated AppSync schema and GraphQL codegen for CLI, web, and mobile;
     `packages/api` has no codegen script.
@@ -252,7 +252,7 @@ cross-bank destructive actions should stay disabled for this unit.
 
 Add deterministic isolation evidence for the Hindsight-backed user and Space
 memory path. The canonical smoke should prove user memory, Space A memory, and
-Space B memory remain independently searchable, while the older Cognee cutover
+Space B memory remain independently searchable, while the older the retired graph substrate cutover
 smoke stays available only as a compatibility diagnostic.
 
 - Created isolated U6 branch/worktree:
@@ -267,23 +267,23 @@ smoke stays available only as a compatibility diagnostic.
     `memoryRecords(scope: OPERATOR, query: ...)`.
   - Added optional unauthorized Space-search verification with a separate
     caller token.
-  - Relabeled the Cognee memory cutover smoke as a diagnostic compatibility
+  - Relabeled the the retired graph substrate memory cutover smoke as a diagnostic compatibility
     check and pointed canonical THINK-83 success evidence at the Hindsight
     isolation smoke.
   - Added API resolver coverage for Space A/B search-result isolation.
   - Added web GraphQL query coverage for the `/settings/memory` operator
     inspection/search variables and extended `MemoryRecord` field coverage.
 - U6 verification passed:
-  - `node --check plugins/company-brain/smoke/hindsight-memory-isolation-smoke.mjs`
-  - `node --check plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs`
-  - `node plugins/company-brain/smoke/hindsight-memory-isolation-smoke.mjs`
-  - `node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs`
+  - `node --check plugins/brain/smoke/hindsight-memory-isolation-smoke.mjs`
+  - `node --check plugins/brain/smoke/retired_graph_substrate-memory-cutover-smoke.mjs`
+  - `node plugins/brain/smoke/hindsight-memory-isolation-smoke.mjs`
+  - `node plugins/brain/smoke/retired_graph_substrate-memory-cutover-smoke.mjs`
   - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/memory/spaceMemory.resolver.test.ts src/graphql/resolvers/memory/space-memory-scope.test.ts`
   - `pnpm --filter @thinkwork/web test -- src/lib/graphql-queries.test.ts src/components/settings/SettingsMemory.render.test.tsx src/routes/_authed/_shell/-memory.test.tsx test/memory-layout.test.tsx`
-  - `pnpm --filter @thinkwork/plugin-company-brain test`
+  - `pnpm --filter @thinkwork/plugin-brain test`
   - `pnpm --filter @thinkwork/api typecheck`
   - `pnpm --filter @thinkwork/web typecheck`
-  - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+  - `pnpm --filter @thinkwork/plugin-brain typecheck`
   - `pnpm dlx prettier --check ...` for authored U6 files
   - `git diff --check`
 
@@ -301,30 +301,30 @@ docs/tool copy remains U5.
   - Changed first-party plugin display names to `ThinkWork Brain`,
     `ThinkWork Data Warehouse`, and `ThinkWork ETL`.
   - Updated customer-facing plugin descriptions, install-key prompts, component
-    labels, and manifest tests without changing `company-brain`,
+    labels, and manifest tests without changing `brain`,
     `company-data`, or `company-etl` keys.
   - Regenerated and checked the first-party plugin registry.
   - Updated Settings plugin rows/details, managed-application fallback labels,
     tools copy, and Brain operations copy to use ThinkWork product names.
   - Updated `/settings/memory` status copy so active Hindsight appears as core
-    ThinkWork memory, and Cognee/Brain evidence appears as diagnostic graph
+    ThinkWork memory, and the retired graph substrate/Brain evidence appears as diagnostic graph
     infrastructure rather than the memory provider.
   - Cleaned current non-test web source comments that still referred to Company
     Brain as the product name.
 - U4 verification passed:
-  - `pnpm --filter @thinkwork/plugin-company-brain test -- test/manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-brain test -- test/manifest.test.ts`
   - `pnpm --filter @thinkwork/plugin-company-data test -- test/manifest.test.ts`
   - `pnpm --filter @thinkwork/plugin-company-etl test -- test/manifest.test.ts`
   - `pnpm --filter @thinkwork/plugin-catalog test -- src/__tests__/catalog.test.ts src/__tests__/plugin-registry.test.ts`
   - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/brain/BrainOperationsPage.test.tsx src/components/settings/SettingsMemory.test.tsx`
   - `pnpm --filter @thinkwork/plugin-catalog check:plugins`
   - `pnpm --filter @thinkwork/web typecheck`
-  - `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+  - `pnpm --filter @thinkwork/plugin-brain typecheck`
   - `pnpm --filter @thinkwork/plugin-company-data typecheck`
   - `pnpm --filter @thinkwork/plugin-company-etl typecheck`
   - `pnpm --filter @thinkwork/plugin-catalog typecheck`
   - `pnpm dlx prettier --check ...` for authored U4 files
-  - `rg -n 'Company Brain|Company Data|Company ETL|Hindsight legacy|legacy Hindsight' apps/web/src --glob '!**/*.test.*' --glob '!**/gql/**'` returned no matches.
+  - `rg -n 'ThinkWork Brain|Company Data|Company ETL|Hindsight legacy|legacy Hindsight' apps/web/src --glob '!**/*.test.*' --glob '!**/gql/**'` returned no matches.
   - `git diff --check`
 - U4 PR #3026 initial CI found two missed plugin-catalog order assertions after
   the display-name sort changed. Fixed the expectations and reran:
@@ -348,7 +348,7 @@ docs/tool copy remains U5.
 
 Align docs, runtime tool descriptions, workspace defaults, and Context Engine
 provider labels with the THINK-83 product boundary: Hindsight is canonical user
-and Space memory, ThinkWork Brain is the visible Brain product, and Cognee is
+and Space memory, ThinkWork Brain is the visible Brain product, and the retired graph substrate is
 mentioned only as optional/internal graph infrastructure or legacy diagnostic
 compatibility.
 
@@ -357,18 +357,18 @@ compatibility.
   `/Users/ericodom/.codex/worktrees/think-83-u5`.
 - Implemented U5 docs and tool-copy updates:
   - Updated `mcp-context-engine` and Pi extension tool names/descriptions from
-    Company Brain phrasing to ThinkWork Brain and ThinkWork Context Engine
+    ThinkWork Brain phrasing to ThinkWork Brain and ThinkWork Context Engine
     phrasing.
   - Renamed the compiled wiki Context Engine provider display name to
     `ThinkWork Brain Pages`.
   - Updated Context Engine admin validation, source-agent prompts/tools,
     memory-derived page snippets, workspace defaults, onboarding seed copy, and
     MCP fixture expectations to use ThinkWork Brain product language.
-  - Preserved internal plugin keys/routes/packages such as `company-brain`.
+  - Preserved internal plugin keys/routes/packages such as `brain`.
   - Updated Memory, Context Engine, Space, Goal, deployment, release-manifest,
     and Knowledge Base docs so `/settings/memory` remains the operator Memory
     route and Hindsight remains user/Space memory authority.
-  - Reframed Cognee docs as ThinkWork Brain graph/ontology infrastructure and
+  - Reframed the retired graph substrate docs as ThinkWork Brain graph/ontology infrastructure and
     not as the user or Space memory provider.
 - U5 verification passed:
   - `pnpm --filter @thinkwork/api test -- src/handlers/mcp-context-engine.requester-context.test.ts src/lib/context-engine/__tests__/service.test.ts src/lib/context-engine/providers/source-agent-runtime.test.ts src/lib/context-engine/__tests__/sub-agent-provider-e2e.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/plugins/handlers/mcp.test.ts`
@@ -405,7 +405,7 @@ pivot.
   - Added a rollout evidence table linking U0-U6/U5 PRs, merge commits, and
     proof points.
   - Recorded the final compatibility boundary: Hindsight owns user and Space
-    memory; Cognee remains ThinkWork Brain graph/ontology/warehouse
+    memory; the retired graph substrate remains ThinkWork Brain graph/ontology/warehouse
     infrastructure or legacy diagnostics; internal `company-*` keys stay
     stable; `/settings/memory` remains the operator Memory route for this pass.
   - Corrected stale plan text that implied Memory should move out of Settings

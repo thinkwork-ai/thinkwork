@@ -154,7 +154,7 @@ inspection/write gating, AE6 Fivetran parity report.
   endpoint indirection through managed applications, user-scoped auth, and
   URL/auth hash pinning.
 - `packages/deployment-runner/src/apps/registry.ts` currently admits only
-  `cognee`, `twenty`, and `twenty`; LakeHouse runtime work must not fake an
+  `retired_graph_substrate`, `twenty`, and `twenty`; LakeHouse runtime work must not fake an
   unsupported `managedAppKey` without adding a real adapter or choosing a
   non-infrastructure plugin slice.
 - `packages/database-pg/src/schema/deployments.ts` and deployment resolvers
@@ -943,7 +943,7 @@ define the Verification gate for THNK-48 implementation.
 **Patterns to follow:**
 
 - `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
-- `plugins/company-brain/smoke/company-brain-plugin-smoke.mjs`
+- `plugins/brain/smoke/brain-plugin-smoke.mjs`
 - `docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md`
 - `docs/verification/settings-release-upgrade-safety.md`
 

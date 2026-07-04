@@ -147,7 +147,7 @@ Branch/worktree:
 Planned local verification:
 
 - `pnpm --filter @thinkwork/api test -- src/lib/okf/page-profile.test.ts src/lib/okf/bundle-contract.test.ts src/lib/knowledge-graph/artifacts.test.ts`
-- `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0166-company-brain-substrate.test.ts __tests__/migration-0167-company-brain-artifact-manifests.test.ts __tests__/migration-0183-okf-artifact-manifests.test.ts`
+- `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0166-brain-substrate.test.ts __tests__/migration-0167-brain-artifact-manifests.test.ts __tests__/migration-0183-okf-artifact-manifests.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
 - `pnpm --filter @thinkwork/database-pg typecheck`
 

@@ -29,7 +29,7 @@ The desired outcome is bolder than "report only": the dream process may automati
 - A2. ThinkWork Computer: the long-lived per-user agent that reads memory at run start and writes workpapers, task notes, and memory markdown during work.
 - A3. Dream process: a background maintenance run for one Computer that reviews recent source material, updates local memory markdown, and records audit output.
 - A4. Operator/admin: configures whether dreaming is enabled, inspects dream runs, and recovers from bad memory changes when needed.
-- A5. Hindsight and Company Brain wiki: downstream memory systems that ingest selected dream outputs or memory snapshots for retrieval and graph compilation.
+- A5. Hindsight and ThinkWork Brain wiki: downstream memory systems that ingest selected dream outputs or memory snapshots for retrieval and graph compilation.
 - A6. Planner/implementer: the future agent or engineer who turns this requirements doc into an implementation plan.
 
 ---
@@ -71,7 +71,7 @@ The desired outcome is bolder than "report only": the dream process may automati
 **Source of truth and scope**
 
 - R1. The dream process SHALL treat the Computer's local EFS workspace memory markdown as the primary editable memory surface for this feature.
-- R2. Hindsight, AgentCore managed memory, and Company Brain wiki SHALL be downstream consumers of dream outputs or cleaned memory, not the primary write target for dream maintenance.
+- R2. Hindsight, AgentCore managed memory, and ThinkWork Brain wiki SHALL be downstream consumers of dream outputs or cleaned memory, not the primary write target for dream maintenance.
 - R3. v1 dream maintenance SHALL be scoped to memory markdown and dream-owned metadata only. It SHALL NOT automatically rewrite instruction or identity files such as `GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md`, `IDENTITY.md`, `SOUL.md`, `USER.md`, `AGENTS.md`, or `TOOLS.md`.
 - R4. The dream process SHALL support full automatic maintenance of allowed memory markdown files: dedupe, compact, reorganize, remove stale content, reconcile contradictions, and write clearer durable summaries.
 
@@ -93,7 +93,7 @@ The desired outcome is bolder than "report only": the dream process may automati
 **Downstream memory bridge**
 
 - R14. After a successful dream run, selected durable summaries and changed-file metadata SHALL be eligible for Hindsight ingest using stable document identity so downstream recall does not duplicate dream outputs.
-- R15. Company Brain wiki compilation SHALL be able to cite dream-cleaned local memory with provenance back to the source memory file and dream run.
+- R15. ThinkWork Brain wiki compilation SHALL be able to cite dream-cleaned local memory with provenance back to the source memory file and dream run.
 - R16. Downstream consumers SHALL distinguish dream-maintained memory from raw transcripts, workpapers, and explicit user captures so retrieval/debugging can explain where a fact came from.
 
 **Poisoning and trust boundaries**
@@ -127,21 +127,21 @@ The desired outcome is bolder than "report only": the dream process may automati
 - Local memory markdown becomes more readable and useful over time: fewer duplicates, fewer contradictions, clearer durable sections, and no endless append-only sprawl.
 - A bad dream edit is recoverable in minutes from the product surface or CLI without directly editing EFS.
 - Memory poisoning attempts from transcripts, web content, tool output, or assistant text are rejected or quarantined instead of becoming future instructions.
-- Hindsight and Company Brain recall improve from dream-cleaned local memory while preserving provenance to local files and dream runs.
+- Hindsight and ThinkWork Brain recall improve from dream-cleaned local memory while preserving provenance to local files and dream runs.
 - A downstream `ce-plan` can sequence the work without re-deciding the source-of-truth posture, write authority, rollback bar, poisoning boundary, or downstream bridge relationship.
 
 ---
 
 ## Scope Boundaries
 
-- Not replacing AgentCore managed memory, Hindsight, or Company Brain wiki.
+- Not replacing AgentCore managed memory, Hindsight, or ThinkWork Brain wiki.
 - Not making Hindsight or wiki the primary editing surface for dream maintenance.
 - Not automatically rewriting core instruction, identity, platform, capability, or guardrail files.
 - Not exposing user-facing dream controls as a large settings surface in v1; operator/admin controls plus dry-run/status are enough.
 - Not building cross-user or tenant-wide dreaming. v1 is per Computer/per owner.
 - Not using dream reports themselves as promotion sources. Reports explain changes; source evidence comes from memory files, workpapers, thread outcomes, approvals, and trusted task artifacts.
 - Not guaranteeing perfect autonomous truth maintenance. Rollback, provenance, and dry-run exist because automatic maintenance can be wrong.
-- Not adding a new generalized knowledge graph outside the existing Company Brain path.
+- Not adding a new generalized knowledge graph outside the existing ThinkWork Brain path.
 
 ---
 

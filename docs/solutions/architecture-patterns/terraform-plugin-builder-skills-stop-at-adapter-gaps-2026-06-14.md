@@ -69,7 +69,7 @@ single scaffold generator.
 4. **Treat managed-app adapters as a closed set.** Infrastructure components
    are valid only when `packages/deployment-runner/src/apps/registry.ts` exposes
    an adapter that can provision or adopt the source project. At THNK-26, the
-   supported keys were `cognee` and `twenty`; a lakehouse-shaped Terraform
+   supported keys were `retired_graph_substrate` and `twenty`; a lakehouse-shaped Terraform
    project did not become valid by writing `managedAppKey: "lakehouse"`.
 5. **Stop with evidence when the platform is missing.** If no adapter fits,
    generate an adapter-gap review that names the source resource categories,
@@ -122,7 +122,7 @@ Good outcome for an unsupported lakehouse project:
 ```text
 Source: Terraform inventory shows S3, Glue, Iceberg, Dagster, Athena, IAM.
 Catalog fit: premium Application Plugin candidate.
-Adapter fit: no current cognee/twenty adapter fits.
+Adapter fit: no current retired_graph_substrate/twenty adapter fits.
 Generated result:
 - contribution plan
 - adapter-gap review
@@ -154,7 +154,7 @@ or security boundary.
 - [THNK-26 autopilot status](../../plans/autopilot/THNK-26-status.md)
 - [McPherson Lakehouse plugin-builder proof](../../verification/mcpherson-lakehouse-plugin-builder-proof.md)
 - [Plugin builder skill](../../../.agents/skills/thinkwork-plugin-builder/SKILL.md)
-- [Company Brain premium plugin operations](../runbooks/company-brain-premium-plugin-operations-2026-06-13.md)
+- [ThinkWork Brain premium plugin operations](../runbooks/brain-premium-plugin-operations-2026-06-13.md)
 - [Managed applications should reconcile MCP connectors and keep user OAuth separate](./managed-app-mcp-oauth-lifecycle-2026-06-06.md)
 - [Injected built-in tools are not workspace skills](../best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md)
 - [Skill-catalog slug collisions between execution modes need explicit migration plans](../workflow-issues/skill-catalog-slug-collision-execution-mode-transitions-2026-04-21.md)

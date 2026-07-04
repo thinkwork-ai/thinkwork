@@ -378,7 +378,7 @@ describe("deploymentStatus authz", () => {
   it("ignores the retired TWENTY env projection: no DB state means disabled", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
     // The legacy compact env value must have NO effect — U10 removed the
-    // env-var status path for Twenty (Cognee's stays).
+    // env-var status path for Twenty.
     vi.stubEnv("TWENTY", "1|1|https://crm.example.com");
 
     const result = await deploymentStatusMod.deploymentStatus(

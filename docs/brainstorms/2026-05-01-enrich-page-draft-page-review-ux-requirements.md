@@ -3,8 +3,8 @@ date: 2026-05-01
 topic: enrich-page-draft-page-review-ux
 related:
   - docs/brainstorms/2026-05-01-enrich-page-web-and-review-ux-requirements.md
-  - docs/brainstorms/2026-04-29-company-brain-v0-requirements.md
-  - docs/brainstorms/2026-04-30-mobile-company-brain-search-requirements.md
+  - docs/brainstorms/2026-04-29-brain-v0-requirements.md
+  - docs/brainstorms/2026-04-30-mobile-brain-search-requirements.md
 ---
 
 # Enrich Page Draft-Page Review UX
@@ -17,7 +17,7 @@ Replace the current candidate-card review with an async, thread-delivered draft 
 
 ## Problem Frame
 
-Today's Enrich Page review surfaces candidate facts as cards. Two pains compound: cards often duplicate content the page already covers, and even when a candidate is genuinely new, the user can't tell where it would land or whether it would read coherently next to the prose already there. Approving feels like sending facts into a black box — the apply step today only appends a flat bulleted list under a fresh dated heading, which is why duplicate facts and disconnected snippets accumulate. The user wants to evaluate the *page they would actually have* after applying, not a pile of suggestions that may or may not change the page in useful ways.
+Today's Enrich Page review surfaces candidate facts as cards. Two pains compound: cards often duplicate content the page already covers, and even when a candidate is genuinely new, the user can't tell where it would land or whether it would read coherently next to the prose already there. Approving feels like sending facts into a black box — the apply step today only appends a flat bulleted list under a fresh dated heading, which is why duplicate facts and disconnected snippets accumulate. The user wants to evaluate the _page they would actually have_ after applying, not a pile of suggestions that may or may not change the page in useful ways.
 
 ---
 
@@ -65,6 +65,7 @@ Today's Enrich Page review surfaces candidate facts as cards. Two pains compound
 ## Requirements
 
 **Async compile + thread delivery**
+
 - R1. Triggering enrichment must NOT show a synchronous candidate-card list; the inline sheet only confirms the run was queued and indicates that a thread message will arrive when ready.
 - R2. The wiki compile must run asynchronously with no user-facing latency budget; the existing compile pipeline is the dedup and merge boundary.
 - R3. When the draft compile completes, a thread message must announce the draft is ready and link the user to the thread review surface.
@@ -72,16 +73,19 @@ Today's Enrich Page review surfaces candidate facts as cards. Two pains compound
 - R5. When the draft compile decides nothing in the page should change, the thread must close with an explicit "no enrichment landed" message rather than show an empty diff.
 
 **Compile-time dedup and provenance**
+
 - R10. The compile must dedup candidate facts against the existing page body, not just against each other; client-side candidate-card dedup is no longer sufficient.
 - R11. The compile output must associate each changed region with contributing source family (Brain / Knowledge base / external research) and any citation metadata so provenance survives into the review surface.
 
 **Review surface**
+
 - R6. The thread review screen must render the proposed page in place — readable as a normal Brain page top-to-bottom — with each changed region visually highlighted.
 - R7. Tapping a highlighted region must reveal per-region ✓/✗ controls; the default state for every region is "accepted."
 - R8. The review surface must expose a "show changes" toggle that switches to a stacked before/after block diff covering the same regions, without altering decision state when toggled.
 - R12. Source provenance must be visible at the region level in both the in-place view and the diff view.
 
 **Apply semantics**
+
 - R9. A bulk-accept-all action must apply the proposed page in full as a single decision.
 - R13. Rejecting a region must drop that region from the apply and restore the current page's text in that location; no recompile is triggered.
 - R14. A whole-draft reject action must leave the current Brain page unchanged and mark the thread as discarded.

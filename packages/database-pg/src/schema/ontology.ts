@@ -1,7 +1,7 @@
 /**
  * Business ontology domain tables.
  *
- * Tenant-scoped ontology definitions give the Company Brain an explicit
+ * Tenant-scoped ontology definitions give the ThinkWork Brain an explicit
  * contract for which business entity and relationship types exist, how their
  * wiki/brain facets should be compiled, and which external vocabularies they
  * loosely map to. The change-set tables capture suggested ontology evolution

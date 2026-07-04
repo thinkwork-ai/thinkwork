@@ -1,6 +1,6 @@
 ---
 title: Managed Applications
-description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, and n8n.
+description: Operator controls for optional ThinkWork-managed applications such as Twenty CRM and n8n.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -20,7 +20,6 @@ The first managed applications are:
 
 | Application | Purpose                                      | Settings page appears when                  |
 | ----------- | -------------------------------------------- | ------------------------------------------- |
-| Cognee      | Knowledge Graph substrate for ontology work  | Deployment status reports Cognee running    |
 | Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork | Deployment status reports Twenty running    |
 | n8n         | Self-hosted workflow automation runtime      | Plugin is installed and runtime is deployed |
 
@@ -70,10 +69,6 @@ paths, including the `thinkwork_n8n` database state, storage, queue/cache
 resources, operator and service credential secrets, package image evidence, and
 managed MCP rows. Use it only when workflow automation history is no longer
 needed.
-
-Cognee follows the existing optional Knowledge Graph lifecycle. Its deploy
-control now lives in Managed Applications; the Knowledge Graph settings page is
-for operational details and health once Cognee is running.
 
 ## Twenty CRM V1
 
@@ -262,6 +257,6 @@ publishes, unpublishes, activates, or deactivates production workflows.
 
 - [Admin — Settings](/applications/admin/settings/) — read-only deployment metadata
 - [Desktop App](/applications/desktop/) — installed Spaces app that hosts Settings
-- [Business Ontology Operations](/guides/business-ontology-operations/) — Cognee substrate guidance
+- [Business Ontology Operations](/guides/business-ontology-operations/) — ontology approval and reprocess guidance
 - [Deploy Configuration](/deploy/configuration/) — Terraform configuration reference
 - [MCP Tools](/concepts/mcp-tools/) — managed MCP registration, per-user OAuth, and user-provided header activation

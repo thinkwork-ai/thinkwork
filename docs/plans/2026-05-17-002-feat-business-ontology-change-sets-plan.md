@@ -10,7 +10,7 @@ origin: docs/brainstorms/2026-05-17-business-ontology-change-sets-requirements.m
 
 ## Overview
 
-Add a tenant-scoped business ontology layer that turns Company Brain from an ad hoc wiki compiler output into an ontology-shaped materialized view over Hindsight-backed memory. The v1 feature centers on ontology change sets: ThinkWork detects repeated business patterns, groups proposed type/template/relationship/mapping changes into reviewable bundles, lets tenant admins edit and approve them, and then queues observable reprocessing so existing Brain pages improve retroactively.
+Add a tenant-scoped business ontology layer that turns ThinkWork Brain from an ad hoc wiki compiler output into an ontology-shaped materialized view over Hindsight-backed memory. The v1 feature centers on ontology change sets: ThinkWork detects repeated business patterns, groups proposed type/template/relationship/mapping changes into reviewable bundles, lets tenant admins edit and approve them, and then queues observable reprocessing so existing Brain pages improve retroactively.
 
 The plan keeps Hindsight as the raw memory and provenance substrate. It adds ThinkWork-owned ontology definitions and change-set governance around the current Brain tables, then makes the Brain compiler/materializer use approved page/facet templates instead of rediscovering structure on each run.
 
@@ -18,20 +18,20 @@ The plan keeps Hindsight as the raw memory and provenance substrate. It adds Thi
 
 ## Problem Frame
 
-Company Brain currently mixes durable memory, compiled wiki pages, entity pages, source routing, enrichment, graph links, and admin inspection. Hindsight is doing the memory job, but the compile path still asks LLM-driven planning to choose page identity, page shape, sections, links, summaries, and confidence all at once. That makes the Brain feel like a second memory system rather than a trustworthy materialized view.
+ThinkWork Brain currently mixes durable memory, compiled wiki pages, entity pages, source routing, enrichment, graph links, and admin inspection. Hindsight is doing the memory job, but the compile path still asks LLM-driven planning to choose page identity, page shape, sections, links, summaries, and confidence all at once. That makes the Brain feel like a second memory system rather than a trustworthy materialized view.
 
-The origin document resolves the product boundary: Hindsight is memory, ontology is meaning, and Company Brain is the materialized view. This plan translates that into implementation units that add an ontology domain without porting Maniflow's old Ontology Studio wholesale and without pulling the agent-work ontology into core ThinkWork.
+The origin document resolves the product boundary: Hindsight is memory, ontology is meaning, and ThinkWork Brain is the materialized view. This plan translates that into implementation units that add an ontology domain without porting Maniflow's old Ontology Studio wholesale and without pulling the agent-work ontology into core ThinkWork.
 
 ---
 
 ## Requirements Trace
 
 - R1. Hindsight remains the source substrate for observations, extracted facts, entities, and citations.
-- R2. Company Brain pages/facets become ontology-shaped materialized views rather than a separate memory system.
+- R2. ThinkWork Brain pages/facets become ontology-shaped materialized views rather than a separate memory system.
 - R3. v1 is business/domain ontology only; agent-work ontology waits for Symphony ETL or later substrate work.
 - R4. Tenant admins can manage business entity types through proposed, approved, deprecated, and rejected states.
 - R5. Tenant admins can manage relationship types with lifecycle, aliases, inverse names, guidance, and source/target constraints.
-- R6. Tenant admins can manage entity page/facet templates that determine Company Brain materialization.
+- R6. Tenant admins can manage entity page/facet templates that determine ThinkWork Brain materialization.
 - R7. ThinkWork names stay product-native; standards are optional mappings.
 - R8. The system proposes entity types, relationships, templates, aliases, predicate mappings, and entity-resolution concerns from observed patterns.
 - R9. Related suggestions are grouped into coherent ontology change sets.
@@ -52,7 +52,7 @@ The origin document resolves the product boundary: Hindsight is memory, ontology
 - R24. Standards mappings help interoperability but do not dictate ThinkWork naming/modeling.
 - R25. v1 proves the loop on a small business ontology before vertical packs.
 
-**Origin actors:** A1 tenant admin / business ontology owner, A2 ThinkWork agent, A3 Hindsight memory layer, A4 ontology suggestion engine, A5 Company Brain compiler, A6 ThinkWork operator
+**Origin actors:** A1 tenant admin / business ontology owner, A2 ThinkWork agent, A3 Hindsight memory layer, A4 ontology suggestion engine, A5 ThinkWork Brain compiler, A6 ThinkWork operator
 **Origin flows:** F1 suggest ontology change set, F2 review and approve change set, F3 apply update and reprocess Brain views, F4 agent uses ontology-shaped Brain context
 **Origin acceptance examples:** AE1 customer commitment suggestion, AE2 edited change-set approval queues one job, AE3 risk type/facet reprocessing, AE4 Schema.org mapping stays metadata, AE5 meeting context uses ontology-shaped facets
 
@@ -67,7 +67,7 @@ The origin document resolves the product boundary: Hindsight is memory, ontology
 - Rich vertical packs beyond a small initial business ontology.
 - Cross-tenant ontology sharing or consortium pattern publication.
 - Automatic operational writes back into ERP, CRM, support, or other systems of record.
-- Multi-hop graph query products beyond what is needed to materialize and retrieve Company Brain facets.
+- Multi-hop graph query products beyond what is needed to materialize and retrieve ThinkWork Brain facets.
 - Customer-facing self-service ontology marketplace or external ontology import wizard.
 
 ### Outside this product's identity
@@ -100,7 +100,7 @@ The origin document resolves the product boundary: Hindsight is memory, ontology
 - `packages/api/src/lib/wiki/enqueue.ts`, `packages/api/src/lib/wiki/repository.ts`, and `packages/api/src/handlers/wiki-compile.ts` show durable async job enqueue, dedupe, claim, retry, and status patterns.
 - `packages/api/src/lib/brain/enrichment-service.ts` shows the current async page-enrichment draft job pattern using `wiki_compile_jobs` and `wiki-compile`.
 - `packages/api/src/lib/context-engine/providers/wiki.ts` currently searches owner-scoped wiki pages only; ontology-aware tenant Brain context needs an additive provider or provider update.
-- `apps/admin/src/components/Sidebar.tsx` owns the admin navigation groups. Ontology Studio should appear in the Manage section as an operator governance surface, while still linking conceptually to Company Brain.
+- `apps/admin/src/components/Sidebar.tsx` owns the admin navigation groups. Ontology Studio should appear in the Manage section as an operator governance surface, while still linking conceptually to ThinkWork Brain.
 - `apps/admin/src/routes/_authed/_tenant/knowledge.tsx` owns the Knowledge section tabs for Brain, Pages, KBs, and Search. Those remain read/retrieval surfaces; Ontology Studio belongs under Manage because it changes tenant governance.
 - `apps/mobile/app/wiki/[type]/[slug].tsx`, `apps/mobile/components/brain/BrainSearchSurface.tsx`, and mobile generated GraphQL types prove mobile already consumes Brain/wiki results, but v1 ontology administration should be admin-first.
 - `packages/api/src/__tests__/graphql-contract.test.ts` currently asserts ontology types are absent. This becomes a deliberate contract update when ontology is restored in ThinkWork.
@@ -130,7 +130,7 @@ The origin document resolves the product boundary: Hindsight is memory, ontology
 - **Add an ontology domain beside Brain, not inside Hindsight:** Store approved definitions, mappings, change sets, and reprocess status in ThinkWork tables. Hindsight remains memory and evidence.
 - **Use change sets as the atomic approval unit:** Ontology changes behave like business-schema migrations. The UI can edit line items, but activation and reprocessing are bundled.
 - **Version active ontology definitions:** Approval produces a durable ontology version/change-set application boundary so reprocessing can be retried, audited, and compared.
-- **Make templates authoritative before relationships get fancy:** Page/facet templates solve the current Company Brain hodgepodge first. Typed relationship edges become more valuable once entity types and facets are stable.
+- **Make templates authoritative before relationships get fancy:** Page/facet templates solve the current ThinkWork Brain hodgepodge first. Typed relationship edges become more valuable once entity types and facets are stable.
 - **Seed a small product-native business ontology:** Start with `customer`, `person`, `opportunity`, `order`, `support_case`, `commitment`, `risk`, and `decision` or close equivalents, then let suggestions expand it.
 - **Use standards as mappings, not internal names:** External vocabularies live in mapping rows with mapping kind and URI/term metadata. ThinkWork canonical names stay readable for agents and admins.
 - **Queue ontology reprocessing as its own job family:** Reusing every `wiki_compile_jobs` assumption would force tenant business ontology into owner-scoped wiki semantics. Follow its job-ledger pattern, but use ontology-specific impact/apply rows.
@@ -203,7 +203,7 @@ flowchart TD
   V --> RJ["Ontology reprocess job"]
   RJ --> IMP["Impact set<br/>memories, pages, facets, predicates"]
   IMP --> MAT["Template materializer<br/>Brain page/facet regeneration"]
-  MAT --> B["Company Brain<br/>ontology-shaped materialized views"]
+  MAT --> B["ThinkWork Brain<br/>ontology-shaped materialized views"]
   B --> CE["Context Engine / agents<br/>labels, facets, provenance"]
 ```
 
@@ -527,7 +527,7 @@ stateDiagram-v2
 
 - U6. **Ontology-aware Context Engine and agent retrieval**
 
-**Goal:** Surface ontology labels, templates, relationships, and provenance to agents when they retrieve Company Brain context.
+**Goal:** Surface ontology labels, templates, relationships, and provenance to agents when they retrieve ThinkWork Brain context.
 
 **Requirements:** R19, R20, R21, R22, F4, AE5
 
@@ -668,7 +668,7 @@ stateDiagram-v2
 **Patterns to follow:**
 
 - `docs/src/content/docs/concepts/knowledge/compounding-memory-pipeline.mdx` for current pipeline-level docs.
-- `docs/src/content/docs/api/context-engine.mdx` for internal Company Brain provider contract docs.
+- `docs/src/content/docs/api/context-engine.mdx` for internal ThinkWork Brain provider contract docs.
 - `docs/solutions/best-practices/context-engine-adapters-operator-verification-2026-04-29.md` for operator verification style.
 
 **Test scenarios:**
@@ -766,7 +766,7 @@ stateDiagram-v2
 ## Sources & References
 
 - **Origin document:** [docs/brainstorms/2026-05-17-business-ontology-change-sets-requirements.md](docs/brainstorms/2026-05-17-business-ontology-change-sets-requirements.md)
-- Related brainstorm: [docs/brainstorms/2026-04-29-company-brain-v0-requirements.md](docs/brainstorms/2026-04-29-company-brain-v0-requirements.md)
+- Related brainstorm: [docs/brainstorms/2026-04-29-brain-v0-requirements.md](docs/brainstorms/2026-04-29-brain-v0-requirements.md)
 - Related brainstorm: [docs/brainstorms/2026-05-16-wiki-brain-schema-extraction-requirements.md](docs/brainstorms/2026-05-16-wiki-brain-schema-extraction-requirements.md)
 - Current Brain schema: `packages/database-pg/src/schema/tenant-entity-pages.ts`
 - Current Brain refs schema: `packages/database-pg/src/schema/tenant-entity-external-refs.ts`

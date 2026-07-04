@@ -33,7 +33,7 @@ Hindsight through the approved ontology gate.
 ## Problem Frame
 
 The ontology plan established the product boundary: Hindsight is memory,
-ontology is meaning, and Company Brain/Wiki is the materialized view. The
+ontology is meaning, and ThinkWork Brain/Wiki is the materialized view. The
 current Wiki compiler still asks an LLM planner to choose pages, page types,
 sections, and links, then writes `wiki.pages` and `wiki.page_links` through
 `packages/api/src/lib/wiki/compiler.ts`. It includes ontology-aware prompt

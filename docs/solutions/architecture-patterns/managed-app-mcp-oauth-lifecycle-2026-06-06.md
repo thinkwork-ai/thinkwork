@@ -32,7 +32,7 @@ tags:
 
 ## Context
 
-Twenty CRM started as an optional AWS-managed application, similar to Cognee, but it quickly became clear that a CRM is not just an infrastructure toggle. Operators need to deploy, park, redeploy, and destroy the runtime and data resources, while end users need to connect their own Twenty account before ThinkWork agents can call CRM tools on their behalf.
+Twenty CRM started as an optional AWS-managed application, similar to the retired graph substrate, but it quickly became clear that a CRM is not just an infrastructure toggle. Operators need to deploy, park, redeploy, and destroy the runtime and data resources, while end users need to connect their own Twenty account before ThinkWork agents can call CRM tools on their behalf.
 
 The important product split is:
 
@@ -50,11 +50,11 @@ Treat a managed app and its MCP connector as two coupled but separate state mach
 
 Do not represent a managed app with one boolean. Twenty needed at least these states:
 
-| Provisioned | Runtime enabled | Meaning |
-| ----------- | --------------- | ------- |
-| false | false | Never enabled; no app resources exist |
-| true | true | Runtime is running and app settings are visible |
-| true | false | Runtime is parked; retained data and secrets stay in place |
+| Provisioned | Runtime enabled | Meaning                                                    |
+| ----------- | --------------- | ---------------------------------------------------------- |
+| false       | false           | Never enabled; no app resources exist                      |
+| true        | true            | Runtime is running and app settings are visible            |
+| true        | false           | Runtime is parked; retained data and secrets stay in place |
 
 The deployment runner adapter makes that explicit by mapping operations to Terraform variables:
 
@@ -171,9 +171,15 @@ if (mode === "parked") {
 Destroy should remove the connector and any stored user token material:
 
 ```ts
-await db.delete(userMcpTokens).where(eq(userMcpTokens.mcp_server_id, existing.id));
-await db.delete(agentMcpServers).where(eq(agentMcpServers.mcp_server_id, existing.id));
-await db.delete(spaceMcpServers).where(eq(spaceMcpServers.mcp_server_id, existing.id));
+await db
+  .delete(userMcpTokens)
+  .where(eq(userMcpTokens.mcp_server_id, existing.id));
+await db
+  .delete(agentMcpServers)
+  .where(eq(agentMcpServers.mcp_server_id, existing.id));
+await db
+  .delete(spaceMcpServers)
+  .where(eq(spaceMcpServers.mcp_server_id, existing.id));
 await db.delete(tenantMcpServers).where(eq(tenantMcpServers.id, existing.id));
 ```
 
@@ -288,20 +294,20 @@ Do not apply it when:
 
 ### Correct surface split
 
-| Surface | Correct actions |
-| ------- | --------------- |
-| Settings -> General -> Managed Applications | Show Cognee/Twenty status summary and a single Manage link |
-| Settings -> Managed Applications | Plan, approve, deploy, park, destroy, inspect job evidence |
-| Settings -> CRM | Show app URL, health, infrastructure details, and Install MCP Server repair |
-| Settings -> MCP Servers -> Twenty CRM | Authenticate current user, clear auth, inspect/import tools |
+| Surface                                     | Correct actions                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| Settings -> General -> Managed Applications | Show the retired graph substrate/Twenty status summary and a single Manage link |
+| Settings -> Managed Applications            | Plan, approve, deploy, park, destroy, inspect job evidence                      |
+| Settings -> CRM                             | Show app URL, health, infrastructure details, and Install MCP Server repair     |
+| Settings -> MCP Servers -> Twenty CRM       | Authenticate current user, clear auth, inspect/import tools                     |
 
 ### Managed MCP row lifecycle
 
-| App action | MCP row behavior | User token behavior |
-| ---------- | ---------------- | ------------------- |
-| Deploy/redeploy | Insert or repair managed row, enable assignments | Existing user tokens continue if valid |
-| Park | Disable row and assignments | Keep tokens for reconnect continuity |
-| Destroy | Delete row and assignments | Delete `user_mcp_tokens` rows and Secrets Manager token secrets |
+| App action      | MCP row behavior                                 | User token behavior                                             |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| Deploy/redeploy | Insert or repair managed row, enable assignments | Existing user tokens continue if valid                          |
+| Park            | Disable row and assignments                      | Keep tokens for reconnect continuity                            |
+| Destroy         | Delete row and assignments                       | Delete `user_mcp_tokens` rows and Secrets Manager token secrets |
 
 ### Tool import behavior
 

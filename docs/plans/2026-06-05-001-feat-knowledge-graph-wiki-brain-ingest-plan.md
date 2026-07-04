@@ -4,10 +4,10 @@ type: feat
 status: active
 date: 2026-06-05
 origin:
-  - docs/brainstorms/2026-06-04-cognee-phase-ii-ingest-explorer-requirements.md
+  - docs/brainstorms/2026-06-04-retired_graph_substrate-phase-ii-ingest-explorer-requirements.md
 related:
-  - docs/plans/2026-06-04-003-feat-cognee-thread-ingest-explorer-plan.md
-  - docs/brainstorms/2026-04-29-company-brain-v0-requirements.md
+  - docs/plans/2026-06-04-003-feat-retired_graph_substrate-thread-ingest-explorer-plan.md
+  - docs/brainstorms/2026-04-29-brain-v0-requirements.md
   - docs/brainstorms/2026-05-16-wiki-brain-schema-extraction-requirements.md
   - docs/solutions/best-practices/business-ontology-change-set-loop-2026-05-17.md
 ---
@@ -17,16 +17,16 @@ related:
 ## Overview
 
 Add a Knowledge Graph ingest path for known, already-structured ThinkWork data
-from Compounding Memory wiki pages and Company Brain entity pages. This is a
+from Compounding Memory wiki pages and ThinkWork Brain entity pages. This is a
 follow-up validation source, not a replacement for Phase II thread ingest. The
-goal is to prove Cognee can render useful graph data when the source is closer
+goal is to prove the retired graph substrate can render useful graph data when the source is closer
 to the approved business ontology than raw chat transcripts.
 
 This plan preserves the current ontology-only graph gate. It does not weaken
-normalization or let Cognee-inferred generic entities become trusted graph
+normalization or let the retired graph substrate-inferred generic entities become trusted graph
 output. Instead, it introduces source adapters that emit ontology-shaped
 document packets from existing `wiki` and `brain` records, then runs them
-through the same Cognee + ThinkWork normalization pipeline with source-aware
+through the same the retired graph substrate + ThinkWork normalization pipeline with source-aware
 evidence and diagnostics.
 
 ---
@@ -34,7 +34,7 @@ evidence and diagnostics.
 ## Problem Frame
 
 The thread-ingest path is now observable, but the Bunkhouse smoke showed a bad
-source fit: Cognee returns raw graph data, yet most nodes are Cognee structural
+source fit: the retired graph substrate returns raw graph data, yet most nodes are the retired graph substrate structural
 scaffolding or unapproved generic entities, so the approved graph remains empty.
 That is useful diagnostic evidence, but it is not useful product value.
 
@@ -62,11 +62,11 @@ turning raw message inference into authority.
   anything dropped.
 - R17-R20. Entity detail remains read-only and should show source wiki/brain
   evidence when graph rows originate from wiki/brain packets.
-- R21-R22. Do not route agents through Cognee and do not create a graph or
+- R21-R22. Do not route agents through the retired graph substrate and do not create a graph or
   ontology editing workflow.
 
 **Origin actors:** A1 tenant operator/admin, A3 source data provider, A4
-approved ontology layer, A5 Cognee service.
+approved ontology layer, A5 the retired graph substrate service.
 
 **Origin flows:** F1 manual ingest, F2 explore graph output, F3 inspect entity
 provenance.
@@ -78,10 +78,10 @@ source-selection variant of manual ingest and evidence inspection.
 
 ## Scope Boundaries
 
-- No weakening of the ontology-only gate in `normalizeCogneeGraph`.
-- No use of Cognee output for agent retrieval.
+- No weakening of the ontology-only gate in `normalizethe retired graph substrateGraph`.
+- No use of the retired graph substrate output for agent retrieval.
 - No ontology change-set generation, approval, or schema mutation in this unit.
-- No direct browser calls to Cognee.
+- No direct browser calls to the retired graph substrate.
 - No tenant-wide automatic ingest scheduler.
 - No destructive rebuild of wiki or brain data.
 - No attempt to ingest every source type in Context Engine.
@@ -90,7 +90,7 @@ source-selection variant of manual ingest and evidence inspection.
 
 - Automatic end-of-compile wiki/brain graph refresh.
 - Tenant-wide graph rollups across all users and spaces.
-- Ontology expansion or mapping based on dropped Cognee diagnostics.
+- Ontology expansion or mapping based on dropped the retired graph substrate diagnostics.
 - Agent retrieval backed by validated Knowledge Graph data.
 - A curated demo seed pack if existing dogfood wiki/brain rows are too sparse.
 
@@ -102,13 +102,13 @@ source-selection variant of manual ingest and evidence inspection.
 
 - `packages/api/src/handlers/knowledge-graph-thread-ingest.ts` owns the
   current worker flow: load run, load source data, export ontology, ingest into
-  Cognee, fetch dataset graph, normalize, replace snapshot.
-- `packages/api/src/lib/knowledge-graph/cognee-client.ts` already supports
+  the retired graph substrate, fetch dataset graph, normalize, replace snapshot.
+- `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.ts` already supports
   `remember`, ontology upload, dataset graph retrieval, and transcript form
   upload. Its `add_cognify` path should be treated as legacy compatibility, not
   the target API for this follow-up.
 - `packages/api/src/lib/knowledge-graph/normalizer.ts` is the ontology gate and
-  now captures dropped raw Cognee samples in run metrics.
+  now captures dropped raw the retired graph substrate samples in run metrics.
 - `packages/api/src/lib/knowledge-graph/ontology-export.ts` exports approved
   ontology definitions as both custom prompt and OWL.
 - `packages/database-pg/src/schema/knowledge-graph.ts` stores ingest runs,
@@ -131,31 +131,31 @@ source-selection variant of manual ingest and evidence inspection.
   plan reads approved ontology; it does not write it.
 - `docs/solutions/best-practices/probe-every-pipeline-stage-before-tuning-2026-04-20.md`
   applies directly: the implementation should measure source packet counts,
-  Cognee raw graph counts, normalized counts, and dropped counts separately.
+  the retired graph substrate raw graph counts, normalized counts, and dropped counts separately.
 - `docs/solutions/database-issues/brain-enrichment-approval-must-sync-wiki-sections-2026-05-02.md`
   is relevant to evidence integrity: brain/wiki source rows must stay aligned
   with visible page/facet state.
 
 ### External References
 
-- Cognee API reference documents `/api/v1` endpoints and dataset graph
-  inspection: https://docs.cognee.ai/api-reference/introduction
-- Cognee v1.0's main operations are `remember`, `recall`, `improve`, and
+- the retired graph substrate API reference documents `/api/v1` endpoints and dataset graph
+  inspection: https://docs.retired_graph_substrate.ai/api-reference/introduction
+- the retired graph substrate v1.0's main operations are `remember`, `recall`, `improve`, and
   `forget`; legacy `add`, `cognify`, `memify`, and `search` remain lower-level
   building blocks rather than the preferred workflow:
-  https://docs.cognee.ai/core-concepts/overview
-- Cognee `remember` is the main ingestion entry point in v1.0. In permanent
+  https://docs.retired_graph_substrate.ai/core-concepts/overview
+- the retired graph substrate `remember` is the main ingestion entry point in v1.0. In permanent
   memory mode it normalizes data, builds graph nodes/edges, creates embeddings,
   and can run a follow-up improvement pass:
-  https://docs.cognee.ai/core-concepts/main-operations/remember
-- Cognee `improve` enriches an existing graph after ingestion and can add
+  https://docs.retired_graph_substrate.ai/core-concepts/main-operations/remember
+- the retired graph substrate `improve` enriches an existing graph after ingestion and can add
   derived retrieval structures or bridge session memory into the permanent
   graph. Use it only if the source-shaped `remember` run needs post-ingest
   enrichment:
-  https://docs.cognee.ai/core-concepts/main-operations/improve
-- Cognee ontology guidance emphasizes formal grounding and the `ontology_valid`
+  https://docs.retired_graph_substrate.ai/core-concepts/main-operations/improve
+- the retired graph substrate ontology guidance emphasizes formal grounding and the `ontology_valid`
   flag as downstream trust evidence:
-  https://www.cognee.ai/blog/deep-dives/grounding-ai-memory
+  https://www.retired_graph_substrate.ai/blog/deep-dives/grounding-ai-memory
 
 ---
 
@@ -169,8 +169,8 @@ source-selection variant of manual ingest and evidence inspection.
   each selected page as a compact packet with stable entity id, title, approved
   type/subtype, aliases, summary, sections/facets, relationships, and
   citations. Include prose, but make the structure explicit.
-- **Keep Cognee in the loop.** The purpose is still to test Cognee graph
-  materialization. The adapter should not bypass Cognee by writing normalized
+- **Keep the retired graph substrate in the loop.** The purpose is still to test the retired graph substrate graph
+  materialization. The adapter should not bypass the retired graph substrate by writing normalized
   graph rows directly, except in tests or explicit fallback diagnostics.
 - **Use one dataset namespace per source scope.** Keep thread datasets as-is and
   add names such as `thinkwork:<tenantId>:wiki:<ownerId>:run:<runId>` and
@@ -180,7 +180,7 @@ source-selection variant of manual ingest and evidence inspection.
   whether a graph came from thread, wiki, brain, or a future source, with enough
   input metadata for the UI and smoke scripts to reproduce it.
 - **Evidence should point back to wiki/brain rows.** Use `sourceKind:
-cognee_payload` or add schema/API support for source kinds that can represent
+retired_graph_substrate_payload` or add schema/API support for source kinds that can represent
   `wiki_page`, `wiki_section`, `brain_page`, `brain_section`, and section source
   refs without overloading `messageId`.
 - **Prefer existing approved subtype fields.** Wiki `entity_subtype` and Brain
@@ -200,7 +200,7 @@ cognee_payload` or add schema/API support for source kinds that can represent
   downstream" decision?** Yes, as a follow-up validation source. Thread ingest
   remains the Phase II manual source path, but raw thread messages are proving
   too weak for a useful approved graph. Wiki/brain ingest is explicitly scoped
-  to proving Cognee against already structured, ontology-shaped ThinkWork data.
+  to proving the retired graph substrate against already structured, ontology-shaped ThinkWork data.
 - **Should the ontology gate be weakened to make the graph non-empty?** No. The
   main graph still contains only approved ontology entities and relationships.
   Diagnostics explain drops; source shaping and ontology mapping are the levers.
@@ -211,9 +211,9 @@ cognee_payload` or add schema/API support for source kinds that can represent
   explicit page ids for smoke and UI actions. If the UI needs a fallback, choose
   a small recent active-page sample during implementation based on available
   GraphQL patterns.
-- **Exact Cognee v1 ingestion controls:** Start with `remember` permanent memory
+- **Exact the retired graph substrate v1 ingestion controls:** Start with `remember` permanent memory
   mode, ontology key, source packet metadata, and a structured custom prompt. If
-  Cognee still ignores packet structure, research the current v1 graph-shaping
+  the retired graph substrate still ignores packet structure, research the current v1 graph-shaping
   mechanism during U3 rather than assuming the legacy `cognify`/`graph_model`
   controls are still the right path.
 
@@ -234,10 +234,10 @@ flowchart LR
   Adapter --> Thread["Thread transcript"]
   Adapter --> Wiki["Wiki page packets"]
   Adapter --> Brain["Brain entity packets"]
-  Thread --> Cognee["Cognee remember with ontology"]
-  Wiki --> Cognee
-  Brain --> Cognee
-  Cognee --> RawGraph["Dataset graph"]
+  Thread --> the retired graph substrate["the retired graph substrate remember with ontology"]
+  Wiki --> the retired graph substrate
+  Brain --> the retired graph substrate
+  the retired graph substrate --> RawGraph["Dataset graph"]
   RawGraph --> Normalize["Ontology-only normalizer"]
   Normalize --> Snapshot["Normalized graph + evidence + drop diagnostics"]
   Snapshot --> Explorer["Table/Graph + detail sheets"]
@@ -318,7 +318,7 @@ existing thread ingest behavior.
 - U2. **Create wiki and brain graph source adapters**
 
 **Goal:** Convert selected wiki pages and Brain entity pages into deterministic
-ontology-shaped source packets for Cognee ingestion.
+ontology-shaped source packets for the retired graph substrate ingestion.
 
 **Requirements:** R1-R5, R11-R20
 
@@ -345,7 +345,7 @@ ontology-shaped source packets for Cognee ingestion.
   and section sources for explicit page ids or a bounded tenant selection.
 - Map `entity_subtype` to ontology entity type slug when approved; flag missing
   or unapproved subtypes in packet diagnostics.
-- Render packets as Markdown or JSON-lines text that Cognee can ingest, with
+- Render packets as Markdown or JSON-lines text that the retired graph substrate can ingest, with
   explicit ontology labels and relationship declarations near the prose.
 - Record source row ids in packet metadata so the normalizer can attach
   evidence back to wiki/brain records.
@@ -378,7 +378,7 @@ ontology-shaped source packets for Cognee ingestion.
 
 ---
 
-- U3. **Generalize the ingest worker and Cognee client inputs**
+- U3. **Generalize the ingest worker and the retired graph substrate client inputs**
 
 **Goal:** Reuse the current worker pipeline for thread, wiki, and brain sources,
 with source-aware dataset names, node sets, custom prompts, and metrics.
@@ -390,11 +390,11 @@ with source-aware dataset names, node sets, custom prompts, and metrics.
 **Files:**
 
 - Modify: `packages/api/src/handlers/knowledge-graph-thread-ingest.ts`
-- Modify: `packages/api/src/lib/knowledge-graph/cognee-client.ts`
+- Modify: `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.ts`
 - Modify: `packages/api/src/lib/knowledge-graph/ontology-export.ts`
 - Modify: `packages/api/src/lib/knowledge-graph/repository.ts`
 - Test: `packages/api/src/handlers/knowledge-graph-thread-ingest.test.ts`
-- Test: `packages/api/src/lib/knowledge-graph/cognee-client.test.ts`
+- Test: `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.test.ts`
 - Test: `packages/api/src/lib/knowledge-graph/ontology-export.test.ts`
 - Test: `packages/api/src/lib/knowledge-graph/runs.test.ts`
 
@@ -405,32 +405,32 @@ with source-aware dataset names, node sets, custom prompts, and metrics.
 - For thread runs, preserve current transcript rendering and dataset naming.
 - For wiki/brain runs, load packets through the new adapters and upload one
   synthetic source document containing bounded, structured packet content via
-  Cognee v1 permanent `remember`.
+  the retired graph substrate v1 permanent `remember`.
 - Add source-specific `node_set` values such as `thinkwork_wiki` and
   `thinkwork_brain` alongside tenant and run identifiers.
-- Add a source-specific custom prompt section for `remember` that asks Cognee to
+- Add a source-specific custom prompt section for `remember` that asks the retired graph substrate to
   preserve the declared entity labels, approved type slugs, relationship names,
   and citations from the packet rather than inventing generic entities.
 - Keep the existing `add_cognify` client path only as a guarded legacy fallback
   for older deployments. New implementation and tests should assert the v1
   `remember` path first.
-- Store metrics for source packet count, skipped source count, Cognee raw graph
+- Store metrics for source packet count, skipped source count, the retired graph substrate raw graph
   counts, normalized counts, dropped counts, and sample drop reasons.
 
 **Patterns to follow:**
 
 - `packages/api/src/handlers/knowledge-graph-thread-ingest.ts`
-- `packages/api/src/lib/knowledge-graph/cognee-client.ts`
+- `packages/api/src/lib/knowledge-graph/retired_graph_substrate-client.ts`
 - `packages/api/src/lib/knowledge-graph/repository.ts`
 
 **Test scenarios:**
 
-- Happy path: a wiki run loads packets, calls Cognee with source-specific node
+- Happy path: a wiki run loads packets, calls the retired graph substrate with source-specific node
   sets, fetches graph, normalizes, and marks the run succeeded.
 - Happy path: a brain run does the same and records packet/source metrics.
 - Edge case: zero eligible wiki/brain packets fails the run with a clear error
   and metrics showing skipped source counts.
-- Error path: Cognee remember failure records the source kind, packet count, and
+- Error path: the retired graph substrate remember failure records the source kind, packet count, and
   error without replacing the previous successful snapshot.
 - Integration: existing forced thread ingest smoke behavior is unchanged.
 
@@ -466,11 +466,11 @@ carry useful source evidence and detail-sheet provenance.
 
 - Extend evidence source kinds or evidence metadata so wiki/brain citations do
   not masquerade as thread messages.
-- Teach normalization to match Cognee nodes back to source packet ids, labels,
-  type slugs, aliases, and relationship hints when Cognee preserves that data.
+- Teach normalization to match the retired graph substrate nodes back to source packet ids, labels,
+  type slugs, aliases, and relationship hints when the retired graph substrate preserves that data.
 - Preserve the hard gate: only approved entity types and approved relationship
   endpoint pairs become main graph rows.
-- Keep dropped raw Cognee samples in run metrics when Cognee produces
+- Keep dropped raw the retired graph substrate samples in run metrics when the retired graph substrate produces
   unapproved or structural output.
 - Ensure detail GraphQL returns enough evidence metadata for Spaces to link
   back to source title/section labels in a compact way.
@@ -483,11 +483,11 @@ carry useful source evidence and detail-sheet provenance.
 
 **Test scenarios:**
 
-- Happy path: Cognee output matching packet entity ids and approved type slugs
+- Happy path: the retired graph substrate output matching packet entity ids and approved type slugs
   normalizes to graph rows with wiki/brain evidence.
 - Happy path: approved relationship labels and allowed endpoint types normalize
   to graph edges with section/facet evidence.
-- Edge case: Cognee returns the right labels but wrong relationship endpoint
+- Edge case: the retired graph substrate returns the right labels but wrong relationship endpoint
   types; the edge is dropped with `incompatible_endpoint`.
 - Error path: malformed source metadata does not crash normalization; it falls
   back to dropped diagnostics or missing provenance.
@@ -575,7 +575,7 @@ diagnostics if existing data is not yet ontology-shaped enough.
 
 - Create: `scripts/smoke/knowledge-graph-wiki-ingest-smoke.mjs`
 - Create: `scripts/smoke/knowledge-graph-brain-ingest-smoke.mjs`
-- Modify: `docs/plans/cognee-thread-ingest-explorer-autopilot-status.md`
+- Modify: `docs/plans/retired_graph_substrate-thread-ingest-explorer-autopilot-status.md`
 - Test: `packages/api/src/handlers/knowledge-graph-thread-ingest.test.ts`
 
 **Approach:**
@@ -589,14 +589,14 @@ diagnostics if existing data is not yet ontology-shaped enough.
 - A passing smoke requires either a non-empty approved graph or a clear failure
   explaining that no eligible source packets exist. For release validation, the
   target should be non-empty approved graph rows.
-- Record the exact selected source ids, run id, raw Cognee counts, normalized
+- Record the exact selected source ids, run id, raw the retired graph substrate counts, normalized
   counts, and dropped diagnostics in the status doc.
 
 **Patterns to follow:**
 
 - `scripts/smoke/knowledge-graph-thread-ingest-smoke.mjs`
 - `scripts/post-deploy/brain-v0-smoke.sh`
-- `docs/plans/cognee-thread-ingest-explorer-autopilot-status.md`
+- `docs/plans/retired_graph_substrate-thread-ingest-explorer-autopilot-status.md`
 
 **Test scenarios:**
 
@@ -612,7 +612,7 @@ diagnostics if existing data is not yet ontology-shaped enough.
 **Verification:**
 
 - Deployed smoke can be run after merge/deploy and gives a definitive answer on
-  whether current wiki/brain data produces a useful Cognee graph.
+  whether current wiki/brain data produces a useful the retired graph substrate graph.
 
 ---
 
@@ -620,8 +620,8 @@ diagnostics if existing data is not yet ontology-shaped enough.
 
 - **Interaction graph:** Spaces starts source-aware runs through GraphQL;
   GraphQL records run metadata and invokes the existing worker; the worker calls
-  source adapters, Cognee, normalizer, and repository snapshot replacement.
-- **Error propagation:** Source loading failures, Cognee failures, and
+  source adapters, the retired graph substrate, normalizer, and repository snapshot replacement.
+- **Error propagation:** Source loading failures, the retired graph substrate failures, and
   normalization failures should mark runs failed with metrics rather than
   leaking unhandled Lambda errors to operators.
 - **State lifecycle risks:** Re-ingesting a wiki/brain source scope should
@@ -629,9 +629,9 @@ diagnostics if existing data is not yet ontology-shaped enough.
   rows and not unrelated thread snapshots.
 - **API surface parity:** Existing thread GraphQL fields must keep working while
   new source-aware fields are added.
-- **Integration coverage:** Unit tests alone will not prove Cognee behavior;
+- **Integration coverage:** Unit tests alone will not prove the retired graph substrate behavior;
   deployed smoke is required for at least one wiki or brain source.
-- **Unchanged invariants:** Cognee remains read-only and non-authoritative;
+- **Unchanged invariants:** the retired graph substrate remains read-only and non-authoritative;
   approved ontology definitions remain the only source of trusted graph types.
 
 ---
@@ -641,10 +641,10 @@ diagnostics if existing data is not yet ontology-shaped enough.
 | Risk                                                                                             | Mitigation                                                                                                                                     |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Existing dogfood wiki/brain rows lack approved subtypes or links, producing another empty graph. | Add source eligibility metrics and smoke diagnostics; if no eligible rows exist, seed or select known ontology-shaped pages in a follow-up.    |
-| Cognee still ignores explicit packet structure and returns generic nodes.                        | Use ontology key plus source-specific `remember` prompt and current v1 graph-shaping research; preserve raw-drop diagnostics to guide mapping. |
+| the retired graph substrate still ignores explicit packet structure and returns generic nodes.   | Use ontology key plus source-specific `remember` prompt and current v1 graph-shaping research; preserve raw-drop diagnostics to guide mapping. |
 | Evidence rows become ambiguous when source is not a thread message.                              | Extend evidence source kind/metadata deliberately and test detail resolvers for wiki/brain evidence.                                           |
 | Source-aware run schema creates compatibility churn.                                             | Preserve thread mutation/query behavior and add new fields in an additive way.                                                                 |
-| Ingesting too many pages overloads Cognee or makes debugging impossible.                         | Start with bounded explicit page selection and smoke-targeted small scopes.                                                                    |
+| Ingesting too many pages overloads the retired graph substrate or makes debugging impossible.    | Start with bounded explicit page selection and smoke-targeted small scopes.                                                                    |
 
 ---
 
@@ -655,20 +655,20 @@ diagnostics if existing data is not yet ontology-shaped enough.
   target.
 - Record deployed smoke results in the existing Knowledge Graph autopilot status
   doc so future agents can compare thread, wiki, and brain source quality.
-- If wiki/brain source packets still produce unapproved Cognee output, the next
+- If wiki/brain source packets still produce unapproved the retired graph substrate output, the next
   implementation unit should be ontology expansion/mapping or source packet
-  shaping through current Cognee v1 controls, not weakening the normalizer.
+  shaping through current the retired graph substrate v1 controls, not weakening the normalizer.
 
 ---
 
 ## Sources & References
 
-- Origin document: `docs/brainstorms/2026-06-04-cognee-phase-ii-ingest-explorer-requirements.md`
-- Existing KG plan: `docs/plans/2026-06-04-003-feat-cognee-thread-ingest-explorer-plan.md`
-- Company Brain requirements: `docs/brainstorms/2026-04-29-company-brain-v0-requirements.md`
+- Origin document: `docs/brainstorms/2026-06-04-retired_graph_substrate-phase-ii-ingest-explorer-requirements.md`
+- Existing KG plan: `docs/plans/2026-06-04-003-feat-retired_graph_substrate-thread-ingest-explorer-plan.md`
+- ThinkWork Brain requirements: `docs/brainstorms/2026-04-29-brain-v0-requirements.md`
 - Wiki/Brain schema context: `docs/brainstorms/2026-05-16-wiki-brain-schema-extraction-requirements.md`
 - Ontology governance learning: `docs/solutions/best-practices/business-ontology-change-set-loop-2026-05-17.md`
-- Cognee overview: https://docs.cognee.ai/core-concepts/overview
-- Cognee remember operation: https://docs.cognee.ai/core-concepts/main-operations/remember
-- Cognee improve operation: https://docs.cognee.ai/core-concepts/main-operations/improve
-- Cognee ontology grounding article: https://www.cognee.ai/blog/deep-dives/grounding-ai-memory
+- the retired graph substrate overview: https://docs.retired_graph_substrate.ai/core-concepts/overview
+- the retired graph substrate remember operation: https://docs.retired_graph_substrate.ai/core-concepts/main-operations/remember
+- the retired graph substrate improve operation: https://docs.retired_graph_substrate.ai/core-concepts/main-operations/improve
+- the retired graph substrate ontology grounding article: https://www.retired_graph_substrate.ai/blog/deep-dives/grounding-ai-memory

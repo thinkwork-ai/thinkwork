@@ -125,7 +125,7 @@ Excluded:
 
 - **Skill recipe, not platform plugin.** CRM dashboard generation belongs in
   `artifact-builder` as editable workspace instructions. CRM connectors and
-  Company Brain remain data sources.
+  ThinkWork Brain remain data sources.
 - **Reference file under the skill.** The main `SKILL.md` stays compact and
   points to `references/crm-dashboard.md` for the longer recipe. This matches
   Agent Skill progressive disclosure: metadata and short instructions load

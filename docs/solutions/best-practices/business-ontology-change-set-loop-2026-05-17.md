@@ -10,14 +10,14 @@ applies_when:
   - "A feature turns inferred memory patterns into durable business schema"
   - "Operators need to approve generated types, relationships, mappings, or templates"
   - "A future ontology layer could be built for agent-work, vertical packs, or ETL"
-tags: [ontology, company-brain, hindsight, suggestions, reprocess, admin]
+tags: [ontology, brain, hindsight, suggestions, reprocess, admin]
 ---
 
 # Business ontology changes should flow through evidence-backed change sets
 
 ## Context
 
-The Company Brain wiki was useful but too loose as the durable business layer. Hindsight retained facts, and the wiki compiler summarized them, but there was no governed place to say which business concepts the tenant actually recognizes, which facets belong on those pages, or how external standards should map to product-native names.
+The ThinkWork Brain wiki was useful but too loose as the durable business layer. Hindsight retained facts, and the wiki compiler summarized them, but there was no governed place to say which business concepts the tenant actually recognizes, which facets belong on those pages, or how external standards should map to product-native names.
 
 The tempting fix was to import a large ontology or let the compiler invent typed concepts directly. Both paths make the same mistake: they skip the operator review point. A tenant's real vocabulary emerges from memory, but only approved concepts should change future and historical Brain materialization.
 
@@ -39,7 +39,7 @@ Keep the canonical vocabulary product-native. External standards belong in mappi
 - PROV-O-inspired provenance keeps source kind, source reference, source label, evidence quote, and observation time;
 - Dublin Core-style labels/descriptions are metadata, not a reason to rename tenant concepts.
 
-Do not mix ontology domains too early. The business/domain ontology belongs in core ThinkWork because it shapes Company Brain. Agent-work ontology can come later through Symphony ETL or another vertical-pack flow, but it should reuse the same suggestion/change-set/reprocess pattern.
+Do not mix ontology domains too early. The business/domain ontology belongs in core ThinkWork because it shapes ThinkWork Brain. Agent-work ontology can come later through Symphony ETL or another vertical-pack flow, but it should reuse the same suggestion/change-set/reprocess pattern.
 
 ## Why This Matters
 
@@ -95,5 +95,5 @@ Approve button rewrites pages inline and reports success even if half the pages 
 
 - [Business Ontology concept](../../src/content/docs/concepts/knowledge/business-ontology.mdx)
 - [Business Ontology operations guide](../../src/content/docs/guides/business-ontology-operations.mdx)
-- [Company Brain compile pipeline](../../src/content/docs/concepts/knowledge/compounding-memory-pipeline.mdx)
+- [ThinkWork Brain compile pipeline](../../src/content/docs/concepts/knowledge/compounding-memory-pipeline.mdx)
 - [Context Engine adapters need operator-level verification](./context-engine-adapters-operator-verification-2026-04-29.md)

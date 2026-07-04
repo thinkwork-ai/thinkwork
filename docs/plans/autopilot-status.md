@@ -3317,9 +3317,9 @@ src/__tests__/webhook-task-event.test.ts` (4 files, 19 tests).
 - Blockers: none.
 - Next action: Space webhook thread-start implementation complete; no remaining planned implementation units.
 
-## THNK-15 Company Brain Premium Plugin - 2026-06-13
+## THNK-15 ThinkWork Brain Premium Plugin - 2026-06-13
 
-- Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
+- Plan: `docs/plans/2026-06-13-002-feat-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
 - Current implementation unit: complete.
@@ -3343,21 +3343,21 @@ src/__tests__/webhook-task-event.test.ts` (4 files, 19 tests).
   `260a3677686e51e0525d6a598922b579de423abe`.
 - Status: U1 through U8 completed and merged. THNK-15's planned
   implementation units are complete. U8 added
-  dry-run-by-default Company Brain premium plugin smoke, smoke README coverage,
+  dry-run-by-default ThinkWork Brain premium plugin smoke, smoke README coverage,
   and an operator runbook for key issuance/revocation, backdoor configuration,
   adoption evidence, and live smoke execution. U7 added
-  the legacy `/settings/applications/cognee` route redirecting to Company Brain
-  plugin detail, Managed Applications reducing Company Brain's backing Cognee
-  row once the plugin is installed, transitional Cognee rows pointing at
-  Company Brain with product-facing copy, and Memory/Ontology gating that reads
-  the member-safe plugin catalog's Company Brain substrate state before falling
-  back to legacy Cognee deployment status. U6 added
-  Company Brain premium/key-gated catalog state, plugin detail entitlement
+  the legacy `/settings/applications/retired_graph_substrate` route redirecting to ThinkWork Brain
+  plugin detail, Managed Applications reducing ThinkWork Brain's backing the retired graph substrate
+  row once the plugin is installed, transitional the retired graph substrate rows pointing at
+  ThinkWork Brain with product-facing copy, and Memory/Ontology gating that reads
+  the member-safe plugin catalog's ThinkWork Brain substrate state before falling
+  back to legacy the retired graph substrate deployment status. U6 added
+  ThinkWork Brain premium/key-gated catalog state, plugin detail entitlement
   status, install-key dialog submission through `installPlugin`, adoption
   evidence copy for the Brain substrate, a direct Memory / Ontology workspace
   link, explicit refetches after key/install success, web GraphQL query/codegen
-  updates, and focused UI tests. U5 added Company Brain's Cognee substrate using
-  a plan-backed UPGRADE adoption job against existing Cognee managed-app rows,
+  updates, and focused UI tests. U5 added ThinkWork Brain's the retired graph substrate substrate using
+  a plan-backed UPGRADE adoption job against existing the retired graph substrate managed-app rows,
   a handler_ref marker for no-change adoption evidence, and net-new
   infrastructure installs flowing through the normal managed-app ENABLE plan
   path. U4 added
@@ -3368,7 +3368,7 @@ src/__tests__/webhook-task-event.test.ts` (4 files, 19 tests).
   entitled update paths. Prior U3 added
   digest-only premium install-key issuance, redemption, revocation, in-memory
   failed-redemption throttling, tenant-scoped entitlement grants, temporary
-  Company Brain backdoor-key support gated by configured stages, GraphQL
+  ThinkWork Brain backdoor-key support gated by configured stages, GraphQL
   mutations, compliance event schema/redaction updates, Terraform runtime
   config passthrough, and regenerated GraphQL clients.
 - Verification log: U1 PR #2439 passed required CI (`cla`, `lint`, `verify`,
@@ -3414,14 +3414,14 @@ src/__tests__/webhook-task-event.test.ts` (4 files, 19 tests).
   passed; `pnpm --filter @thinkwork/web typecheck` passed; `git diff --check`
   passed. U6 PR #2445 passed required CI (`cla`, `lint`, `verify`,
   `typecheck`, and `test`) and was squash merged. U7 local checks:
-  `pnpm --filter @thinkwork/web test -- src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/SettingsCogneeApplication.test.tsx src/components/settings/knowledge-graph/KnowledgeGraphConfigPanel.test.ts src/components/settings/SettingsMemoryHome.test.tsx src/components/settings/settings-nav.test.ts`
+  `pnpm --filter @thinkwork/web test -- src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/Settingsthe retired graph substrateApplication.test.tsx src/components/settings/knowledge-graph/KnowledgeGraphConfigPanel.test.ts src/components/settings/SettingsMemoryHome.test.tsx src/components/settings/settings-nav.test.ts`
   passed; `pnpm --filter @thinkwork/web typecheck` passed; `git diff --check`
   passed. U7 `pnpm install` completed with the known local `canvas` native
   build warning under Node 25.6.0 because `pkg-config` is unavailable. U7 PR
   #2446 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`)
   and was squash merged. U8 local checks: `node --check
-plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` passed; `node
-plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and emitted the
+plugins/brain/smoke/brain-plugin-smoke.mjs` passed; `node
+plugins/brain/smoke/brain-plugin-smoke.mjs` dry-run passed and emitted the
   expected evidence envelope. U8 PR #2447 initially passed required CI but was
   behind `main`; after rebasing onto `origin/main`, it passed required CI
   (`cla`, `lint`, `verify`, `typecheck`, and `test`) again and was squash
@@ -3519,9 +3519,9 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
   Strict managed-app controller readiness passed in read-only mode with local
   evidence
   `/tmp/thinkwork-tei-smoke-proof-150/managed-app-controller-readiness-final.json`,
-  confirming Cognee and Twenty are descriptor-ready and deploy-ready for the
+  confirming the retired graph substrate and Twenty are descriptor-ready and deploy-ready for the
   selected release. Remaining deployment-controller proof gates: run a full
-  optional Cognee/Twenty deploy smoke after those apps are selected, capture
+  optional the retired graph substrate/Twenty deploy smoke after those apps are selected, capture
   human desktop/mobile launch proof against the TEI profile, and run final
   teardown/destroy proof when TEI no longer needs to stay live for demo
   testing. Historical notes follow. U9 TEI canary 150 proof PR #2330 passed
@@ -3531,7 +3531,7 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
   currently reports `releaseVersion=v0.1.0-canary.150` and manifest SHA-256
   `dc1bcd1adbb792a00b7b377fe4ce7c6ba7d2235f697f359fa94c50ec2c6ccafb`.
   The remaining deployment-controller proof gates are intentionally explicit:
-  run a full optional Cognee/Twenty deploy smoke after those apps are selected,
+  run a full optional the retired graph substrate/Twenty deploy smoke after those apps are selected,
   capture human desktop/mobile launch proof against the TEI profile, and run
   final teardown/destroy proof when TEI no longer needs to stay live for demo
   testing. Historical notes follow. U10 release finalization hardening merged
@@ -3553,26 +3553,26 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
   returned HTTP 200 after CloudFront invalidation `I4BVXPJJ1KJCO8BQ1ZVUTVIE36`
   completed. Fresh live smokes passed for foundation runtime-config/profile
   binding (`/tmp/thinkwork-tei-smoke-proof-150/foundation-smoke-150-clean.json`)
-  and base-install Cognee/Twenty skip evidence
-  (`/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`,
+  and base-install the retired graph substrate/Twenty skip evidence
+  (`/tmp/thinkwork-tei-smoke-proof-150/retired_graph_substrate-smoke-150.json`,
   `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`). Remaining open
-  deployment-controller gates: full optional-app deploy smoke for Cognee/Twenty
+  deployment-controller gates: full optional-app deploy smoke for the retired graph substrate/Twenty
   after those apps are selected, human desktop/mobile launch proof against TEI,
   and final teardown/destroy proof when TEI can be safely removed. Historical
   notes follow. U9
   managed-app controller
   readiness smoke was added and passed live
   against TEI `v0.1.0-canary.148` on 2026-06-10 in read-only diagnostic mode.
-  It verified the selected release manifest URL/SHA from SSM, confirmed Cognee
+  It verified the selected release manifest URL/SHA from SSM, confirmed the retired graph substrate
   and Twenty CRM descriptors exist in `managedApps`, confirmed their Terraform
   module source/version and smoke command paths, and recorded descriptor
   readiness without creating a managed-app job. The same smoke reported
-  `deployReady=false` because `.148` does not include the required `cognee` or
+  `deployReady=false` because `.148` does not include the required `retired_graph_substrate` or
   `twenty` runtime image entries; strict deploy-ready mode failed closed with
   that exact gap. Local evidence:
   `/tmp/thinkwork-tei-smoke-proof/managed-app-controller-readiness-148.json`.
   Remaining open deployment-controller gates: publish a release whose manifest
-  includes Cognee/Twenty runtime images, run the full optional-app deploy smoke
+  includes the retired graph substrate/Twenty runtime images, run the full optional-app deploy smoke
   after those apps are selected, human desktop and mobile launch proof against
   TEI, and final teardown/destroy proof. Historical notes follow. U9
   teardown-readiness smoke was added and passed live against TEI
@@ -3585,7 +3585,7 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
   This proves teardown readiness without destroying the live demo environment;
   final destroy proof remains deferred until TEI can be safely removed.
   Remaining open deployment-controller gates: full optional-app deploy smoke
-  for Cognee/Twenty after those apps are selected, human desktop and mobile
+  for the retired graph substrate/Twenty after those apps are selected, human desktop and mobile
   launch proof against TEI, and final teardown/destroy proof. Historical notes
   follow. U8/U9 profile-binding proof PR #2323 passed required CI (`cla`,
   `lint`, `verify`, `typecheck`, and `test`) and was squash merged as
@@ -3611,8 +3611,8 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
   profile v1 shape passed with SHA-256
   `03ec3bf5d805cab2fc4f06a60b84a78e43f0392c60d3f4ec7c118e1358bbc2c1`, and
   control-plane validation passed for the TEI state machine, CodeBuild
-  project, and evidence bucket. Cognee/Twenty managed-app smoke scripts also
-  passed as explicit base-install skips: Cognee is not enabled and Twenty is
+  project, and evidence bucket. the retired graph substrate/Twenty managed-app smoke scripts also
+  passed as explicit base-install skips: the retired graph substrate is not enabled and Twenty is
   not provisioned. Historical notes follow. U9 proof-doc reconciliation
   PR #2320 passed required CI and was squash merged as `9e412490`. U21 merged
   and was released as `v0.1.0-canary.148`. TEI's customer
@@ -3987,7 +3987,7 @@ plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and e
 - U7 stores the approved desired config and manifest image hints in managed-app
   plan summaries so apply executions can rebuild the approved Terraform
   variables instead of losing config at approval time.
-- U7 lets the deployment runner hydrate Cognee/Twenty/Kestra `imageUri` from a
+- U7 lets the deployment runner hydrate the retired graph substrate/Twenty/Kestra `imageUri` from a
   digest-pinned manifest image map and fails before Terraform variables are
   produced when the selected release lacks the app image.
 - U7 PR #2293 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
@@ -5661,18 +5661,18 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
 - Current worktree: none.
 - Status: complete.
 
-| Unit                                                      | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
-| --------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1 Release Manifest and Artifact Contract                 | `codex/u1-release-manifest`             | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests.                                    |
-| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate  | `codex/u2-bootstrap-control-plane`      | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                                                    |
-| U3 First-Admin Claim and Cognito Identity Provider Inputs | `codex/u3-first-admin-identity`         | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                                                   |
-| U4 Deployment Job Domain, API, and Runner Orchestration   | `codex/u4-deployment-job-api`           | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                                                          |
-| U5 Cognee and Twenty Managed-App Adapters                 | `codex/u5-managed-app-adapters`         | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.                                       |
-| U6 Spaces Managed Applications UX                         | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
-| U7a Profile Contract, Export, and Trust                   | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
-| U7b Desktop Profile Binding                               | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Merged | Squash merged as `87c30369f35ce999c708539ae268b89ee4c4d8d2`; adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface. |
-| U7c Mobile Profile Binding                                | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Merged | Squash merged as `6d467d24937455a88e44ca7dbdf13a5c076beff3`; adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.    |
-| U8 Operational Evidence, Documentation, and Rollout       | `codex/u8-deployment-docs-smokes`       | [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) | Merged | Squash merged as `134afccc97d5abd8fa9c2a0a2e55295623cd1c71`; adds deployment docs, smoke evidence envelopes, foundation bootstrap smoke, and legacy rollout guidance.                    |
+| Unit                                                           | Branch                                  | PR                                                           | State  | Notes                                                                                                                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1 Release Manifest and Artifact Contract                      | `codex/u1-release-manifest`             | [#2163](https://github.com/thinkwork-ai/thinkwork/pull/2163) | Merged | Adds shared release manifest validation/signature contract, verifier script, CLI digest handling, release asset signature support, and focused tests.                                    |
+| U2 GitHub-Free Bootstrap and AWS Control Plane Substrate       | `codex/u2-bootstrap-control-plane`      | [#2165](https://github.com/thinkwork-ai/thinkwork/pull/2165) | Merged | Adds inert AWS deployment control-plane substrate and GitHub-free bootstrap planning.                                                                                                    |
+| U3 First-Admin Claim and Cognito Identity Provider Inputs      | `codex/u3-first-admin-identity`         | [#2166](https://github.com/thinkwork-ai/thinkwork/pull/2166) | Merged | Hardens pending first-admin claims and adds configurable Cognito IdP bootstrap inputs.                                                                                                   |
+| U4 Deployment Job Domain, API, and Runner Orchestration        | `codex/u4-deployment-job-api`           | [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169) | Merged | Adds durable managed-app deployment jobs, tenant-admin GraphQL orchestration, and the first deployment-runner contract helpers.                                                          |
+| U5 the retired graph substrate and Twenty Managed-App Adapters | `codex/u5-managed-app-adapters`         | [#2172](https://github.com/thinkwork-ai/thinkwork/pull/2172) | Merged | Adds first-party managed-app runner adapters, app-specific Terraform variable mapping, destructive impact, status extraction, and smoke contracts.                                       |
+| U6 Spaces Managed Applications UX                              | `codex/u6-managed-applications-ux`      | [#2174](https://github.com/thinkwork-ai/thinkwork/pull/2174) | Merged | Squash merged as `3167d15d7af8d838b834f991486bdb295a38fa87`; replaces switch-style lifecycle controls with Spaces plan preview, approval, progress, evidence, and destructive impact UX. |
+| U7a Profile Contract, Export, and Trust                        | `codex/u7a-deployment-profile-contract` | [#2177](https://github.com/thinkwork-ai/thinkwork/pull/2177) | Merged | Squash merged as `51ab6151a04a9d3197e0212eb3a69c0d59453f95`; adds the shared deployment profile schema/trust validator and Spaces export/sign-in display surface for universal clients.  |
+| U7b Desktop Profile Binding                                    | `codex/u7b-desktop-profile-binding`     | [#2180](https://github.com/thinkwork-ai/thinkwork/pull/2180) | Merged | Squash merged as `87c30369f35ce999c708539ae268b89ee4c4d8d2`; adds desktop profile import/storage, active-profile OAuth/API binding, and profile controls on the desktop sign-in surface. |
+| U7c Mobile Profile Binding                                     | `codex/u7c-mobile-profile-binding`      | [#2183](https://github.com/thinkwork-ai/thinkwork/pull/2183) | Merged | Squash merged as `6d467d24937455a88e44ca7dbdf13a5c076beff3`; adds mobile profile import/storage, profile-backed auth/API config, sign-in controls, and a public profile import route.    |
+| U8 Operational Evidence, Documentation, and Rollout            | `codex/u8-deployment-docs-smokes`       | [#2187](https://github.com/thinkwork-ai/thinkwork/pull/2187) | Merged | Squash merged as `134afccc97d5abd8fa9c2a0a2e55295623cd1c71`; adds deployment docs, smoke evidence envelopes, foundation bootstrap smoke, and legacy rollout guidance.                    |
 
 ### Progress Log
 
@@ -5786,11 +5786,11 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
   local U3 branch/worktree were removed.
 - Created isolated worktree `.Codex/worktrees/u4-deployment-job-api` from
   `origin/main` at `634d06f1`.
-- Started U4 durable deployment-job schema, GraphQL API, compatibility Cognee
+- Started U4 durable deployment-job schema, GraphQL API, compatibility the retired graph substrate
   plan wrapper, and deployment-runner contract helpers.
 - Implemented U4 local slice: durable managed-app/application deployment
   tables, GraphQL deployment job API, tenant-admin plan/approval/rejection
-  resolvers, Cognee compatibility wrapper over the new job API, generated
+  resolvers, the retired graph substrate compatibility wrapper over the new job API, generated
   GraphQL client types, and the first deployment-runner plan/apply summary
   helpers.
 - Applied scoped dev migration
@@ -5828,14 +5828,14 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
   the merge workflow.
 - Created isolated worktree `.Codex/worktrees/u5-managed-app-adapters` from
   `origin/main` at `ffd70d9c`.
-- Started U5 Cognee/Twenty managed-app adapter work. Confirmed both Terraform
+- Started U5 the retired graph substrate/Twenty managed-app adapter work. Confirmed both Terraform
   app modules and the composite module wiring already exist on `main`, so this
   unit is focused on first-party runner adapters, smoke contracts, release
   descriptor image requirements, and API data-impact reuse.
-- Implemented U5 local slice: runner app registry, Cognee/Twenty adapter
+- Implemented U5 local slice: runner app registry, the retired graph substrate/Twenty adapter
   variable mapping and status extraction, app-specific destructive impact and
   pre-destroy evidence steps, desired-config plan payloads, API reuse of the
-  shared data-impact catalog, release descriptor required images, and a Cognee
+  shared data-impact catalog, release descriptor required images, and a the retired graph substrate
   managed-app smoke script.
 - U4 CI: PR [#2169](https://github.com/thinkwork-ai/thinkwork/pull/2169)
   passed CLA, lint, verify, typecheck, test, and Migration Drift Precheck after
@@ -5857,11 +5857,11 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
   `pnpm test:release && pnpm --filter @thinkwork/release-manifest test`
   passed.
 - U5 local:
-  `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` and
+  `node plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs` and
   `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` both skipped live mode as
   expected in dry-run.
 - U5 local:
-  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-retired_graph_substrate-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
   passed.
 - U5 local: `pnpm --filter @thinkwork/api test` passed (424 files, 3649
   tests; existing live integration fixtures skipped).
@@ -5884,7 +5884,7 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
 - Implemented U6 local slice: added Settings -> Managed Applications as the
   lifecycle surface, replaced General/CRM switch-style deployment controls with
   links into the plan/approval surface, gated direct Knowledge Graph routing on
-  Cognee runtime availability, added plan/evidence/timeline/destructive
+  the retired graph substrate runtime availability, added plan/evidence/timeline/destructive
   confirmation UI, and regenerated Spaces GraphQL/router artifacts.
 - U6 local verification passed:
   `pnpm --filter @thinkwork/spaces codegen`;
@@ -5987,14 +5987,14 @@ U7c files>`; and `git diff --check`.
   `origin/main` at `6d467d249`.
 - Implemented U8 local slice in progress: GitHub-free deployment docs,
   managed-app docs, deployment profile docs, release manifest docs, smoke
-  evidence envelope helper, foundation bootstrap smoke, Cognee/Twenty evidence
+  evidence envelope helper, foundation bootstrap smoke, the retired graph substrate/Twenty evidence
   output, and legacy deployment repo runbook guidance.
 - U8 setup: `pnpm install --frozen-lockfile` passed in the fresh worktree; the
   known optional `canvas` native build warning appeared under Node
   25/pkg-config but did not fail install.
 - U8 local verification passed:
   `node scripts/smoke/foundation-bootstrap-smoke.mjs`;
-  `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`;
+  `node plugins/brain/smoke/retired_graph_substrate-managed-app-smoke.mjs`;
   `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs`;
   `pnpm --filter @thinkwork/docs build`;
   `pnpm dlx prettier --check <touched U8 files>`; and `git diff --check`.
@@ -6449,7 +6449,7 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
   passed with 20 tests; `.github/workflows/deploy.yml` parsed as YAML; `git diff --check`
   passed.
 - DB setup role follow-up verification passed:
-  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+  `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-retired_graph_substrate-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
   passed with 45 tests; `.github/workflows/deploy.yml` parsed as YAML;
   `git diff --check` passed.
 - End-to-end UI lifecycle proof passed on `http://localhost:5175/settings/crm`:
@@ -6596,7 +6596,7 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
 - Implemented one-hop linked target page expansion for trusted Wiki and Brain
   source bundles so ontology-approved relationships have both endpoints
   available before normalization/fallback.
-- Dry-run against dev Company Brain data showed the patched loader would
+- Dry-run against dev ThinkWork Brain data showed the patched loader would
   increase the Brain source bundle to 23 packets and 16 persisted
   ontology-approved relationships after endpoint checks.
 
@@ -11095,13 +11095,13 @@ Target branch: `main`
 
 ### Progress Log
 
-| Date       | Unit | Branch                                         | PR                                                           | Status  | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Date | Unit | Branch | PR | Status | Verification | Notes |
 | ---------- | ---- | ---------------------------------------------- | ------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ---------------- | ----------------------- | ------------------------- | ----------------------- | ------------------------- | -------------------- | ----------- | ----------- | ------------------ | ----------------- | -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-05-22 | U1a  | `codex/plan-b-u1a-schema-overrides`            | [#1570](https://github.com/thinkwork-ai/thinkwork/pull/1570) | Merged  | `pnpm --filter @thinkwork/database-pg test __tests__/schema-agent-runtime.test.ts __tests__/spaces-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; touched-file Prettier check; `git diff --check`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev apply: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; scoped dev drift: `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev column/index/constraint checks confirmed `agents.is_platform_default` as NOT NULL default false, all five Space override columns nullable, `uq_agents_platform_default_per_tenant`, and `spaces_guardrail_id_override_guardrails_id_fk`; GitHub checks passed: Migration Drift Precheck, CLA, lint, test, typecheck, verify.                                               | Squash merged as `1e590989f85e6ec5540ce695516a486500249d92`; remote branch deleted and U1a worktree removed. This unit was intentionally additive: `agents.is_platform_default` plus typed nullable Space runtime override columns. `space_agent_assignments` drop remains deferred to gated U1b after consumer rewrites land.                                                                                                                                                                                                                                      |
-| 2026-05-22 | U2   | `codex/plan-b-u2-collapse-agents-migration`    | [#1572](https://github.com/thinkwork-ai/thinkwork/pull/1572) | Merged  | `pnpm install`; `pnpm --filter @thinkwork/api test scripts/migrate-collapse-agents.test.ts`; `pnpm --filter @thinkwork/api test src/__tests__/compliance-event-type-drift.test.ts scripts/migrate-collapse-agents.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm schema:build`; CLI/admin/mobile codegen; dev dry-run: 1 tenant, 5 non-canonical agents, 149 planned workspace copies, 0 conflicts; dev apply: 5 agents archived, 6 audit events emitted; repair apply repointed 2 `retry_queue.agent_id` rows after FK survey found the missing table; post-apply verification query returned `platform_defaults=1`, `tenants_bad_default_count=0`, `active_nondefault_agents=0`, `thread_missing_agent=0`, `retry_queue_archived_agent_refs=0`; post-apply dry-run returned `noop`; touched-file Prettier check; `git diff --check`; GitHub checks passed: CLA, lint, verify, typecheck, test. | Squash merged as `dfeb6e5546d96c0ae23de435f5c7b9c287e379cc`; remote branch deleted and U2 worktree removed. Implemented the one-time collapse migration script, S3 workspace fold helper, audit event coverage, and focused tests. First dev apply attempt failed inside the DB transaction on `agent_operation_leases` lacking `tenant_id`; fixed the table metadata and reran successfully. A later FK survey found `retry_queue.agent_id`; added it and made already-collapsed tenants repair leftover archived-agent references without duplicate audit events. |
-| 2026-05-22 | U3   | `codex/plan-b-u3-platform-agent-runtime`       | [#1573](https://github.com/thinkwork-ai/thinkwork/pull/1573) | Merged  | `pnpm install`; focused API tests for tenant platform agent, runtime overrides, cold-contact, runtime config, REST runtime-config, and eval payloads; `uv run pytest packages/agentcore-strands/agent-container/test_api_runtime_config.py packages/agentcore-strands/agent-container/test_server_run_skill.py`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; touched-file Prettier check; Python ruff E/F check; `git diff --check`; GitHub checks passed: CLA, lint, verify, typecheck, test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Squash merged as `4e3f621307feba575ca551de5d91f75b5dcb1fae`; remote branch deleted and U3 worktree removed. Implemented the platform-agent resolver, cold-contact rewrite, `resolveAgentRuntimeConfig(spaceId)` override overlay, REST/runtime-config forwarding, and focused tests. PR description notes that the U2 migration has run on dev before U3 deploys.                                                                                                                                                                                                   |
-| 2026-05-22 | U4   | `codex/plan-b-u4-retire-turn-context-renderer` | [#1575](https://github.com/thinkwork-ai/thinkwork/pull/1575) | Merged  | `pnpm --filter @thinkwork/api test src/lib/workspace-renderer/effective-policy-composer.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/handlers/__tests__/workspace-renderer.test.ts src/handlers/chat-agent-invoke.identity.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm dlx prettier@3.8.2 --check ...`; `git diff --check`; `bash scripts/build-lambdas.sh workspace-renderer`; `bash scripts/build-lambdas.sh chat-agent-invoke`; GitHub checks passed: CLA, lint, verify, typecheck, test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Squash merged as `8978789b27421ae35325752dad784cf3c8952e16`; remote branch deleted and U4 worktree removed. Moved structured effective policy into `workspace-renderer`, switched chat setup to consume the renderer Lambda response, and deleted `turn-context-renderer.ts`/`workspace-policy.ts`. Root `pnpm format:check` remains locally blocked because the root `prettier` executable is missing, so formatting was verified with the lockfile Prettier version via `pnpm dlx`.                                                                               |
-| 2026-05-22 | U5   | `codex/plan-b-u5-tenant-agent-graphql`         | none                                                         | Blocked | Consumer survey started with `rg 'space_agent_assignments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | spaceAgentAssignments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | setSpaceAgentAvailability | agentAssignments | claimVanityEmailAddress | releaseVanityEmailAddress | toggleAgentEmailChannel | updateAgentEmailAllowlist | agentEmailCapability | createAgent | deleteAgent | updateAgentRuntime | updateAgentStatus | setAgentBudgetPolicy | setAgentCapabilities | setAgentSkills' packages/api/src packages/lambda apps/cli/src apps/admin/src packages/database-pg/graphql/types`; `pnpm install`; `pnpm --filter @thinkwork/api typecheck`passed after initial edits;`pnpm --filter thinkwork-cli typecheck`passed after CLI stubs;`pnpm schema:build`passed;`pnpm --filter thinkwork-cli codegen` failed on remaining non-agent CLI documents (`dashboard`, `kb`, `wiki`) that still queried removed `agents`/`agent`/`allTenantAgents`; `pnpm --filter @thinkwork/admin codegen`failed with 29 validation errors from deferred admin`/agents`routes/components and`graphql-queries.ts` still referencing removed GraphQL fields. | Started U5 worktree from `origin/main` after U4 merge. Partial local edits currently remove the API agent resolver directory, add `tenantAgent`/`updateTenantAgent` and `setSpaceRuntimeOverrides`, stub CLI agent commands, and rewrite several `space_agent_assignments` consumers. Blocker: U5 deletes the GraphQL surface, but U5 verification requires admin codegen to pass while the admin UI deletion/replacement is scheduled in the following unit. Continuing would require either grouping the admin UI retirement into U5 or keeping the old GraphQL surface, both of which risk violating the plan's unit boundaries/scope. |
+| 2026-05-22 | U1a | `codex/plan-b-u1a-schema-overrides` | [#1570](https://github.com/thinkwork-ai/thinkwork/pull/1570) | Merged | `pnpm --filter @thinkwork/database-pg test __tests__/schema-agent-runtime.test.ts __tests__/spaces-schema.test.ts`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; touched-file Prettier check; `git diff --check`; `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev apply: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; scoped dev drift: `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0123_single_platform_agent_and_overrides.sql`; dev column/index/constraint checks confirmed `agents.is_platform_default` as NOT NULL default false, all five Space override columns nullable, `uq_agents_platform_default_per_tenant`, and `spaces_guardrail_id_override_guardrails_id_fk`; GitHub checks passed: Migration Drift Precheck, CLA, lint, test, typecheck, verify. | Squash merged as `1e590989f85e6ec5540ce695516a486500249d92`; remote branch deleted and U1a worktree removed. This unit was intentionally additive: `agents.is_platform_default` plus typed nullable Space runtime override columns. `space_agent_assignments` drop remains deferred to gated U1b after consumer rewrites land. |
+| 2026-05-22 | U2 | `codex/plan-b-u2-collapse-agents-migration` | [#1572](https://github.com/thinkwork-ai/thinkwork/pull/1572) | Merged | `pnpm install`; `pnpm --filter @thinkwork/api test scripts/migrate-collapse-agents.test.ts`; `pnpm --filter @thinkwork/api test src/__tests__/compliance-event-type-drift.test.ts scripts/migrate-collapse-agents.test.ts`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/database-pg test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/database-pg typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm schema:build`; CLI/admin/mobile codegen; dev dry-run: 1 tenant, 5 non-canonical agents, 149 planned workspace copies, 0 conflicts; dev apply: 5 agents archived, 6 audit events emitted; repair apply repointed 2 `retry_queue.agent_id` rows after FK survey found the missing table; post-apply verification query returned `platform_defaults=1`, `tenants_bad_default_count=0`, `active_nondefault_agents=0`, `thread_missing_agent=0`, `retry_queue_archived_agent_refs=0`; post-apply dry-run returned `noop`; touched-file Prettier check; `git diff --check`; GitHub checks passed: CLA, lint, verify, typecheck, test. | Squash merged as `dfeb6e5546d96c0ae23de435f5c7b9c287e379cc`; remote branch deleted and U2 worktree removed. Implemented the one-time collapse migration script, S3 workspace fold helper, audit event coverage, and focused tests. First dev apply attempt failed inside the DB transaction on `agent_operation_leases` lacking `tenant_id`; fixed the table metadata and reran successfully. A later FK survey found `retry_queue.agent_id`; added it and made already-collapsed tenants repair leftover archived-agent references without duplicate audit events. |
+| 2026-05-22 | U3 | `codex/plan-b-u3-platform-agent-runtime` | [#1573](https://github.com/thinkwork-ai/thinkwork/pull/1573) | Merged | `pnpm install`; focused API tests for tenant platform agent, runtime overrides, cold-contact, runtime config, REST runtime-config, and eval payloads; `uv run pytest packages/agentcore-strands/agent-container/test_api_runtime_config.py packages/agentcore-strands/agent-container/test_server_run_skill.py`; `pnpm --filter @thinkwork/api test`; `pnpm --filter @thinkwork/api typecheck`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; touched-file Prettier check; Python ruff E/F check; `git diff --check`; GitHub checks passed: CLA, lint, verify, typecheck, test. | Squash merged as `4e3f621307feba575ca551de5d91f75b5dcb1fae`; remote branch deleted and U3 worktree removed. Implemented the platform-agent resolver, cold-contact rewrite, `resolveAgentRuntimeConfig(spaceId)` override overlay, REST/runtime-config forwarding, and focused tests. PR description notes that the U2 migration has run on dev before U3 deploys. |
+| 2026-05-22 | U4 | `codex/plan-b-u4-retire-turn-context-renderer` | [#1575](https://github.com/thinkwork-ai/thinkwork/pull/1575) | Merged | `pnpm --filter @thinkwork/api test src/lib/workspace-renderer/effective-policy-composer.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/handlers/__tests__/workspace-renderer.test.ts src/handlers/chat-agent-invoke.identity.test.ts`; `pnpm --filter @thinkwork/api typecheck`; `pnpm --filter @thinkwork/api test`; `pnpm -r --if-present typecheck`; `pnpm -r --if-present lint`; `pnpm dlx prettier@3.8.2 --check ...`; `git diff --check`; `bash scripts/build-lambdas.sh workspace-renderer`; `bash scripts/build-lambdas.sh chat-agent-invoke`; GitHub checks passed: CLA, lint, verify, typecheck, test. | Squash merged as `8978789b27421ae35325752dad784cf3c8952e16`; remote branch deleted and U4 worktree removed. Moved structured effective policy into `workspace-renderer`, switched chat setup to consume the renderer Lambda response, and deleted `turn-context-renderer.ts`/`workspace-policy.ts`. Root `pnpm format:check` remains locally blocked because the root `prettier` executable is missing, so formatting was verified with the lockfile Prettier version via `pnpm dlx`. |
+| 2026-05-22 | U5 | `codex/plan-b-u5-tenant-agent-graphql` | none | Blocked | Consumer survey started with `rg 'space_agent_assignments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | spaceAgentAssignments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | setSpaceAgentAvailability | agentAssignments | claimVanityEmailAddress | releaseVanityEmailAddress | toggleAgentEmailChannel | updateAgentEmailAllowlist | agentEmailCapability | createAgent | deleteAgent | updateAgentRuntime | updateAgentStatus | setAgentBudgetPolicy | setAgentCapabilities | setAgentSkills' packages/api/src packages/lambda apps/cli/src apps/admin/src packages/database-pg/graphql/types`; `pnpm install`; `pnpm --filter @thinkwork/api typecheck`passed after initial edits;`pnpm --filter thinkwork-cli typecheck`passed after CLI stubs;`pnpm schema:build`passed;`pnpm --filter thinkwork-cli codegen` failed on remaining non-agent CLI documents (`dashboard`, `kb`, `wiki`) that still queried removed `agents`/`agent`/`allTenantAgents`; `pnpm --filter @thinkwork/admin codegen`failed with 29 validation errors from deferred admin`/agents`routes/components and`graphql-queries.ts` still referencing removed GraphQL fields. | Started U5 worktree from `origin/main` after U4 merge. Partial local edits currently remove the API agent resolver directory, add `tenantAgent`/`updateTenantAgent` and `setSpaceRuntimeOverrides`, stub CLI agent commands, and rewrite several `space_agent_assignments` consumers. Blocker: U5 deletes the GraphQL surface, but U5 verification requires admin codegen to pass while the admin UI deletion/replacement is scheduled in the following unit. Continuing would require either grouping the admin UI retirement into U5 or keeping the old GraphQL surface, both of which risk violating the plan's unit boundaries/scope. |
 
 ### CI Failures
 
@@ -14142,8 +14142,8 @@ None.
 - 2026-06-05T19:50:40Z: Started U1 on branch
   `codex/twenty-crm-u1-terraform` in worktree
   `.Codex/worktrees/twenty-crm-u1-terraform`.
-- Read `AGENTS.md`, the Twenty CRM plan, Cognee Terraform module patterns,
-  Cognee fixture tests, and prior solution/plan notes referenced by the plan.
+- Read `AGENTS.md`, the Twenty CRM plan, the retired graph substrate Terraform module patterns,
+  the retired graph substrate fixture tests, and prior solution/plan notes referenced by the plan.
 - Copied the untracked Twenty CRM plan and brainstorm requirement docs into the
   U1 branch so the implementation PR carries the source specification forward.
 - Implemented initial `terraform/modules/app/twenty` with public HTTPS ALB,
@@ -14193,7 +14193,7 @@ None.
 - 2026-06-05T21:16:00Z: Started U4 on branch
   `codex/twenty-crm-u4-graphql` in worktree
   `.Codex/worktrees/twenty-crm-u4-graphql`.
-- Implemented managed application GraphQL status, Twenty/Cognee deployment
+- Implemented managed application GraphQL status, Twenty/the retired graph substrate deployment
   controls, Twenty `/healthz` health checks, and managed-app schema contract
   coverage.
 - Opened PR [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) for
@@ -14204,8 +14204,8 @@ None.
 - 2026-06-05T21:36:00Z: Started U5 on branch
   `codex/twenty-crm-u5-ui` in worktree
   `.Codex/worktrees/twenty-crm-u5-ui`.
-- Implemented Settings -> General Managed Applications for Cognee and Twenty,
-  moved Cognee deployment control out of the Knowledge Graph page, added CRM
+- Implemented Settings -> General Managed Applications for the retired graph substrate and Twenty,
+  moved the retired graph substrate deployment control out of the Knowledge Graph page, added CRM
   settings with launch URL/service/health details, gated Knowledge Graph and
   CRM navigation by managed-app runtime status, and guarded direct CRM/KG
   routes.
@@ -14228,7 +14228,7 @@ None.
 - 2026-06-05T22:04:00Z: Started U7 on branch
   `codex/twenty-crm-u7-docs-smoke` in worktree
   `.Codex/worktrees/twenty-crm-u7-docs-smoke`.
-- Implemented Managed Applications docs for Cognee/Twenty, linked the docs
+- Implemented Managed Applications docs for the retired graph substrate/Twenty, linked the docs
   from Desktop/Admin settings surfaces, and added a dry-run-by-default Twenty
   managed-app smoke script.
 - Marked the Twenty CRM managed-app plan complete in the final U7 branch; U7
@@ -14250,7 +14250,7 @@ None.
 | U1 - Twenty Terraform app module                       | `codex/twenty-crm-u1-terraform`  | [#2120](https://github.com/thinkwork-ai/thinkwork/pull/2120) | Merged | `terraform -chdir=terraform/modules/app/twenty fmt -check` passed; `terraform -chdir=terraform/modules/app/twenty init -backend=false && terraform -chdir=terraform/modules/app/twenty validate` passed with AWS provider deprecation warnings for `data.aws_region.current.name`; `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (54 files, 363 tests); `pnpm dlx prettier@3.8.2 --check ...` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `99dd3b3e`. `pnpm install` exited successfully but logged an optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. `pnpm --filter thinkwork-cli test -- --runInBand` failed because that flag is not supported by this package's Vitest command; reran the package's normal `pnpm --filter thinkwork-cli test`, which passed. |
 | U2 - Composite module and public DNS wiring            | `codex/twenty-crm-u2-composite`  | [#2122](https://github.com/thinkwork-ai/thinkwork/pull/2122) | Merged | `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `terraform -chdir=terraform/modules/app/lambda-api init -backend=false && terraform -chdir=terraform/modules/app/lambda-api validate` passed; `terraform -chdir=terraform/modules/app/www-dns init -backend=false && terraform -chdir=terraform/modules/app/www-dns validate` passed; `terraform -chdir=terraform/modules/app/twenty init -backend=false && terraform -chdir=terraform/modules/app/twenty validate` passed with AWS provider deprecation warnings for `data.aws_region.current.name`; `terraform -chdir=terraform/modules/thinkwork init -backend=false && terraform -chdir=terraform/modules/thinkwork validate` passed with existing AWS provider deprecation warnings; `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate` passed; `terraform fmt -check` passed for touched Terraform roots; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (54 files, 368 tests); `pnpm dlx prettier@3.8.2 --check --ignore-unknown ...` passed; `git diff --check` passed; GitHub checks passed after rebasing twice: `cla`, `lint`, `verify`, `typecheck`, and `test`. | Squash merged as `44109597`. `pnpm install` exited successfully but logged the same optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. Prettier cannot infer a parser for Terraform files without `--ignore-unknown`; Terraform files were checked with `terraform fmt -check`.                                                             |
 | U3 - Deploy workflow and generated templates           | `codex/twenty-crm-u3-workflows`  | [#2125](https://github.com/thinkwork-ai/thinkwork/pull/2125) | Merged | `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (56 files, 379 tests); `pnpm dlx prettier@3.8.2 --check --ignore-unknown ...` passed; `terraform -chdir=apps/cli/src/commands/enterprise/templates/deploy-repo/terraform fmt -check` passed; `git diff --check` passed; Ruby YAML parse passed for `.github/workflows/deploy.yml` and `.github/workflows/verify.yml`; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Squash merged as `37854e42`. `pnpm install` exited successfully but logged the same optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. Adds GitHub deploy/verify wiring and generated Terraform template propagation for Twenty.                                                                                                            |
-| U4 - Managed application GraphQL API                   | `codex/twenty-crm-u4-graphql`    | [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; focused API resolver/contract suite passed (143 tests); full `pnpm --filter @thinkwork/api test` passed (419 files, 3621 tests); `pnpm --filter @thinkwork/api typecheck` passed; `pnpm schema:build` passed; codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/mobile`, and `@thinkwork/spaces`; generated GraphQL files were formatted with Prettier; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter @thinkwork/admin build` passed; `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/mobile test` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `c08e5595`. Adds managed app status for Cognee and Twenty, Twenty deploy variable mutation semantics, and Twenty public `/healthz` probe.                                                                                                                                                                                                                                                                |
+| U4 - Managed application GraphQL API                   | `codex/twenty-crm-u4-graphql`    | [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; focused API resolver/contract suite passed (143 tests); full `pnpm --filter @thinkwork/api test` passed (419 files, 3621 tests); `pnpm --filter @thinkwork/api typecheck` passed; `pnpm schema:build` passed; codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/mobile`, and `@thinkwork/spaces`; generated GraphQL files were formatted with Prettier; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter @thinkwork/admin build` passed; `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/mobile test` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `c08e5595`. Adds managed app status for the retired graph substrate and Twenty, Twenty deploy variable mutation semantics, and Twenty public `/healthz` probe.                                                                                                                                                                                                                                           |
 | U5/U6 - Spaces managed apps UI and generated artifacts | `codex/twenty-crm-u5-ui`         | [#2128](https://github.com/thinkwork-ai/thinkwork/pull/2128) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `pnpm --filter @thinkwork/spaces codegen` passed; focused/rebase settings suite passed (6 files, 23 tests); `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/spaces build` passed; full `pnpm --filter @thinkwork/spaces test` passed after rebase (117 files, 842 tests); `git diff --check` passed; `curl -I --max-time 10 http://localhost:5175/settings/general` returned `200 OK`; headless Chrome captured `http://localhost:5175/settings/general` to `/tmp/thinkwork-u5-screens-localhost/settings-general.png` and confirmed the unauthenticated login screen renders without route crash; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Squash merged as `065e2e56`. Groups U6 generated Spaces GraphQL and TanStack route artifacts with U5 because the UI route/query changes require them. Browser verification could not reach operator settings content without an authenticated localhost session; component/source tests cover Managed Applications, CRM, and nav/route gating behavior.                                                                   |
 | U7 - Docs, runbook notes, and deployment smoke         | `codex/twenty-crm-u7-docs-smoke` | [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `node --check plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed; `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` dry-run passed; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TERRAFORM_DIR=/tmp/thinkwork-no-such-terraform node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` skipped unprovisioned state clearly; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TWENTY_URL=http://example.com node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` failed as expected with the HTTPS guard; `pnpm --filter @thinkwork/docs build` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Squash merged as `ee9e4555`. Adds operator docs and read-only post-deploy smoke coverage for Twenty CRM managed-app deployments.                                                                                                                                                                                                                                                                                          |
 
@@ -14459,7 +14459,7 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - TEI post-deploy10 smoke passed for the base application: CloudFront app
   returned HTTP 200, API `/health` returned HTTP 200, authenticated `me`
   returned the first admin user and tenant, and `deploymentStatus` reported
-  Cognee plus Twenty CRM as visible managed applications with
+  the retired graph substrate plus Twenty CRM as visible managed applications with
   `enabled=false`, `provisioned=false`, and `runtimeEnabled=false`.
   `managedApplications` planning rows exist for both with desired status
   `disabled`. Optional Slack and Stripe remain excluded from the base install.

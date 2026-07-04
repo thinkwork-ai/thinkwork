@@ -124,7 +124,7 @@ and bundler compatibility.
 Use the package boundary aggressively for plugin-specific code:
 
 - manifests, skill source, package docs, and package-local tests;
-- managed-app adapters for Twenty, n8n, and Company Brain/Cognee;
+- managed-app adapters for Twenty, n8n, and ThinkWork Brain/the retired graph substrate;
 - plugin-owned Terraform modules and runtime assets;
 - plugin-specific API helpers such as LastMile task normalization or Twenty
   cutover orchestration;

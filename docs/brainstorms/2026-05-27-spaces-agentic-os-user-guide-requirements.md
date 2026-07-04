@@ -129,7 +129,7 @@ concepts such as folder-native Goals, export-readiness, and maturity levels.
 - R6. The guide must teach the canonical model: Agent acts in a Space on behalf
   of a User toward a Goal.
 - R7. The guide must explain the difference between Agents, Spaces, Users,
-  Threads, Goals, workspace files, and Company Brain in everyday language.
+  Threads, Goals, workspace files, and ThinkWork Brain in everyday language.
 - R8. The guide must preserve the existing distinction between Spaces and
   folder specialists: Spaces are workrooms and policy/context boundaries;
   folder specialists are reusable delegated capabilities.

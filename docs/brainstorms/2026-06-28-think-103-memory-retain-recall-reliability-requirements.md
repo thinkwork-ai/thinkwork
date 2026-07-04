@@ -25,7 +25,7 @@ also did not call memory tools for the direct personal-memory question.
 
 This brainstorm inherits the THNK-83 decision: Hindsight is the canonical user
 and Space memory provider for this pass. THINK-103 should not reopen Hindsight
-versus Cognee. It should make ordinary user and Space memory reliable,
+versus the retired graph substrate. It should make ordinary user and Space memory reliable,
 observable, and hard to silently lose.
 
 ---
@@ -112,7 +112,7 @@ flowchart LR
 
 - R1. Hindsight remains the canonical user and Space memory provider for
   THINK-103. Normal user and Space memory capture/recall must not depend on
-  Cognee or AgentCore adapter branching.
+  the retired graph substrate or AgentCore adapter branching.
 - R2. User memory and Space memory must stay separate scopes. Combined
   user-plus-Space recall is allowed only as an explicit scoped policy path, not
   as accidental backend fan-in.
@@ -206,7 +206,7 @@ flowchart LR
   correct answer from a later thread after retain completes.
 - Memory failures are diagnosable from product/operator evidence, not only from
   CloudWatch logs.
-- A planner can proceed without re-deciding Hindsight versus Cognee, whether
+- A planner can proceed without re-deciding Hindsight versus the retired graph substrate, whether
   user and Space memory are separate scopes, or whether direct memory questions
   should call recall before answering unknown.
 - User and Space memory reliability can be verified with automated tests plus a
@@ -216,7 +216,7 @@ flowchart LR
 
 ## Scope Boundaries
 
-- Do not reopen the canonical memory provider decision from THNK-83; Cognee is
+- Do not reopen the canonical memory provider decision from THNK-83; the retired graph substrate is
   not the user/Space memory provider for this pass.
 - Do not implement the full requester idle-learning markdown product from the
   May 18 requirements as part of THINK-103. Idle learning may supplement memory

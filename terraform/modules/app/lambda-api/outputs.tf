@@ -54,12 +54,12 @@ output "okf_efs_refresh_fn_arn" {
 }
 
 output "brain_artifacts_bucket_name" {
-  description = "Canonical Company Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
+  description = "Canonical ThinkWork Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
   value       = aws_s3_bucket.brain_artifacts.bucket
 }
 
 output "brain_artifacts_bucket_arn" {
-  description = "ARN of the canonical Company Brain artifact bucket."
+  description = "ARN of the canonical ThinkWork Brain artifact bucket."
   value       = aws_s3_bucket.brain_artifacts.arn
 }
 

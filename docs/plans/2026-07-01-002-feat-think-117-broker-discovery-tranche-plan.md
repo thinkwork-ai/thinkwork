@@ -80,7 +80,7 @@ Unconfirmed bets this plan proceeds on (scoping confirmation was auto-proceeded)
 
 ### Phased Delivery
 
-Broker delivery expands along two orthogonal axes (recorded in the origin doc's Key Decisions, 2026-07-01). Data axis: **Phase 1 — ThinkWork-native sources** (Work Items, Company Brain/memory via recall, n8n and Twenty plugin status), evolving `/mcp/context-engine` into the broker surface; the onboarding command center ships at Phase 1 with P21 disclosed as a missing canonical source per the origin's coverage requirements, which is an honest, useful v1. **Phase 2 — external sources**: the pre-warmed P21 mirror and LastMile/FleetIO, completing onboarding coverage and enabling dispatch read-only. The capability axis is unchanged (onboarding read → dispatch read → governed writeback). This tranche is Phase 0 on both axes; the spike's fixture rehearses the Phase-1 payload shape.
+Broker delivery expands along two orthogonal axes (recorded in the origin doc's Key Decisions, 2026-07-01). Data axis: **Phase 1 — ThinkWork-native sources** (Work Items, ThinkWork Brain/memory via recall, n8n and Twenty plugin status), evolving `/mcp/context-engine` into the broker surface; the onboarding command center ships at Phase 1 with P21 disclosed as a missing canonical source per the origin's coverage requirements, which is an honest, useful v1. **Phase 2 — external sources**: the pre-warmed P21 mirror and LastMile/FleetIO, completing onboarding coverage and enabling dispatch read-only. The capability axis is unchanged (onboarding read → dispatch read → governed writeback). This tranche is Phase 0 on both axes; the spike's fixture rehearses the Phase-1 payload shape.
 
 ### High-Level Technical Design
 

@@ -186,7 +186,7 @@ trigger mapping, AE5 contributor inspection.
   envelope to serve managed-app events; each domain extends its own envelope.
   Validation reserves namespace prefixes (platform domains `agent` / `memory` /
   `workspace` / `activity` / `audit` vs managed-app keys like `twenty` /
-  `cognee`) so the two catalogs can never claim the same capability ID.
+  `retired_graph_substrate`) so the two catalogs can never claim the same capability ID.
 
 ---
 
@@ -318,7 +318,7 @@ metadata.
   owners, unsupported modes, and state-changing functions without idempotency or
   audit metadata. Support namespace-prefix reservation so downstream catalogs
   (managed-app capabilities from plan 2026-06-08-003 use app keys like `twenty`
-  and `cognee`) register non-colliding ID prefixes alongside the platform
+  and `retired_graph_substrate`) register non-colliding ID prefixes alongside the platform
   domains (`agent`, `memory`, `workspace`, `activity`, `audit`).
 - Avoid runtime discovery, database storage, or network calls in this unit.
 

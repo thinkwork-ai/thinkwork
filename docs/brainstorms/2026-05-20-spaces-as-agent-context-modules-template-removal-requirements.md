@@ -93,7 +93,7 @@ Spaces have two surfaces:
 
 - R7. `apps/computer` must include an end-user Space navigation surface. The preferred shape is a Codex-like sidebar with global actions, pinned threads, and collapsible Space sections containing recent threads.
 - R8. The admin Space configuration surface must be a Space Studio with context-oriented sections. The v1 navigation should include Overview, Workspace, Connected Data, Tools, MCP Servers, Agents, and Settings.
-- R9. Space Studio should reuse and rename existing Template UI where practical: Template Workspace becomes Space Workspace, Template MCP Servers becomes Space MCP Servers, Template skill/workspace handling becomes Space Skills/Workspace, and Template Company Brain/tool toggles become Space Connected Data/Tools.
+- R9. Space Studio should reuse and rename existing Template UI where practical: Template Workspace becomes Space Workspace, Template MCP Servers becomes Space MCP Servers, Template skill/workspace handling becomes Space Skills/Workspace, and Template ThinkWork Brain/tool toggles become Space Connected Data/Tools.
 - R10. Space Studio should borrow Dust's context categories where they fit: Connected Data, Folders/Workspace, Websites or web-connected knowledge, Tools, and MCP-backed resources.
 - R11. Triggers must be supported as a future concept in the data model and architecture, but they must not be a headline v1 Space Studio navigation item. V1 should be trigger-ready, not trigger-led.
 
@@ -115,7 +115,7 @@ Spaces have two surfaces:
 **Template removal and migration**
 
 - R21. Existing Template runtime fields must migrate onto linked Agents.
-- R22. Existing Template context fields must migrate into Spaces, including workspace files, skills, knowledge base assignments, MCP assignments, Company Brain/context provider settings, built-in tool toggles, and related context configuration.
+- R22. Existing Template context fields must migrate into Spaces, including workspace files, skills, knowledge base assignments, MCP assignments, ThinkWork Brain/context provider settings, built-in tool toggles, and related context configuration.
 - R23. Existing default/template default workspace content must fold into the tenant `default` Space where it represents baseline context.
 - R24. Former non-default Templates with meaningful context should become tenant Spaces. Agents that previously referenced those Templates should become available in or compatible with the migrated Spaces where appropriate, without being derived from them.
 - R25. Template-specific sync, linked-agent, pinned-update, create-from-template, and template-management UI/API concepts must be removed or recast as Space rendering/availability impact previews. They must not preserve Template as a named abstraction.
@@ -217,7 +217,7 @@ Rendered turn workspace/context
 
 - Current code confirms that `agent_templates` mix runtime fields with context fields in `packages/database-pg/graphql/types/agent-templates.graphql`.
 - Current Space schema, admin UI, and end-user app routes are collaboration/workflow-shaped in `packages/database-pg/graphql/types/spaces.graphql`, `apps/admin/src/routes/_authed/_tenant/spaces/$spaceId.tsx`, and `apps/computer/src/routes/_authed/_shell/spaces.*`; these surfaces need to be rewritten around contextual workrooms.
-- Current Template UI has reusable Workspace, MCP, tool toggle, and Company Brain sections in `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx`.
+- Current Template UI has reusable Workspace, MCP, tool toggle, and ThinkWork Brain sections in `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx`.
 - Current runtime workspace behavior favors materialized flat sync over read-time template composition, per `packages/api/src/lib/workspace-bootstrap.ts` and `packages/agentcore-flue/agent-container/src/runtime/bootstrap-workspace.ts`.
 - Dust's Space IA supports the context-module half of the model, especially Connected Data, Folders, Websites, Tools, and Triggers in `front/lib/spaces.ts` in the local Dust checkout.
 - The Codex sidebar screenshot is a strong directional reference for `apps/computer`: global actions, pinned threads, collapsible work areas, and recent threads under each area.
