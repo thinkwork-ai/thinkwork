@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import {
   useAgents,
@@ -60,9 +60,10 @@ import {
 } from "@/components/home/SegmentedControl";
 import {
   HOME_SEGMENTS,
+  isHomeSegmentKey,
   type HomeSegmentKey,
 } from "@/components/home/segments";
-import { WikiSegmentPlaceholder } from "@/components/home/WikiSegmentPlaceholder";
+import { WikiSegment } from "@/components/home/WikiSegment";
 import { WorkItemList } from "@/components/work-items/WorkItemList";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
@@ -166,6 +167,7 @@ type HomeComputer = {
 
 export default function ThreadsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ segment?: string }>();
   const { user, refreshCounter, signOut, getToken, isAuthenticated } =
     useAuth();
   const authTenantId = user?.tenantId ?? null;
@@ -319,9 +321,22 @@ export default function ThreadsScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const hasActiveFilters =
     !!filters.spaceId || filters.channels.length > 0 || filters.showArchived;
+  const initialSegmentParam = params.segment;
+  const initialSegment: HomeSegmentKey = isHomeSegmentKey(
+    initialSegmentParam ?? "",
+  )
+    ? (initialSegmentParam as HomeSegmentKey)
+    : "threads";
   const [activeSegment, setActiveSegment] =
-    useState<HomeSegmentKey>("threads");
+    useState<HomeSegmentKey>(initialSegment);
   const [workItemFiltersOpen, setWorkItemFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    const nextSegment = params.segment;
+    if (isHomeSegmentKey(nextSegment ?? "")) {
+      setActiveSegment(nextSegment as HomeSegmentKey);
+    }
+  }, [params.segment]);
 
   // Only apply filters when the filter panel is open
   const appliedFilters = filtersOpen
@@ -1142,7 +1157,7 @@ export default function ThreadsScreen() {
               );
             }
             if (segment.key === "wiki") {
-              return <WikiSegmentPlaceholder />;
+              return <WikiSegment tenantId={tenantId} userId={callerUserId} />;
             }
             return (
               <View className="flex-1">

@@ -90,8 +90,8 @@ export default function AgentConfigScreen() {
               disabled={!activeAgent}
             />
             <NavRow
-              label="Memory"
-              onPress={() => router.push("/memory")}
+              label="Wiki"
+              onPress={() => router.push("/(tabs)?segment=wiki")}
               colors={colors}
               isLast
             />

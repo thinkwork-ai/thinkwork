@@ -1471,6 +1471,36 @@ export const MemoryRecordsQuery = graphql(`
   }
 `);
 
+export const WikiPageSourceMemoryIdsQuery = graphql(`
+  query WikiPageSourceMemoryIds(
+    $tenantId: ID!
+    $userId: ID
+    $type: WikiPageType!
+    $slug: String!
+    $limit: Int
+  ) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
+      id
+      sourceMemoryIds(limit: $limit)
+    }
+  }
+`);
+
+export const MemoryRecordsByIdsQuery = graphql(`
+  query MemoryRecordsByIds($tenantId: ID!, $ids: [ID!]!) {
+    memoryRecordsByIds(tenantId: $tenantId, ids: $ids) {
+      memoryRecordId
+      content {
+        text
+      }
+      createdAt
+      updatedAt
+      factType
+      strategyId
+    }
+  }
+`);
+
 export const DeleteMemoryRecordMutation = graphql(`
   mutation DeleteMemoryRecord($userId: ID!, $memoryRecordId: ID!) {
     deleteMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId)

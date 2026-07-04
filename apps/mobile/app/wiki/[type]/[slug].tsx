@@ -1,9 +1,14 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { useQuery } from "urql";
 import {
   IconAlignLeft,
   IconLayoutRows,
@@ -20,6 +25,16 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { WikiDetailSubgraph } from "@/components/wiki/graph";
+import {
+  MemoryRecordsByIdsQuery,
+  WikiPageSourceMemoryIdsQuery,
+} from "@/lib/graphql-queries";
+import type { WikiPageType as GqlWikiPageType } from "@/lib/gql/graphql";
+import {
+  resolveSourceRows,
+  shouldShowSourcesAffordance,
+  type WikiSourceRecord,
+} from "@/lib/wiki/source-rows";
 
 /**
  * Intercept markdown link taps inside a wiki body. Rollup sections are
@@ -120,6 +135,43 @@ export default function WikiPageScreen() {
   const { backlinks } = useWikiBacklinks(page?.id);
   const { connectedPages } = useWikiConnectedPages(page?.id);
   const [viewMode, setViewMode] = useState<"wiki" | "split" | "graph">("wiki");
+  const [sourcesRequested, setSourcesRequested] = useState(false);
+  const sourcesSheetRef = useRef<BottomSheet>(null);
+  const sourceSnapPoints = useMemo(() => ["58%"], []);
+
+  const [{ data: sourceIdsData, fetching: sourceIdsFetching }] = useQuery({
+    query: WikiPageSourceMemoryIdsQuery,
+    variables: {
+      tenantId: tenantId!,
+      userId,
+      type: type! as GqlWikiPageType,
+      slug: slug!,
+      limit: 10,
+    },
+    pause: !sourcesRequested || !tenantId || !type || !slug,
+    requestPolicy: "cache-and-network",
+  });
+  const sourceMemoryIds =
+    sourceIdsData?.wikiPage?.sourceMemoryIds.filter(Boolean) ?? [];
+  const [{ data: sourceRecordsData, fetching: sourceRecordsFetching }] =
+    useQuery({
+      query: MemoryRecordsByIdsQuery,
+      variables: {
+        tenantId: tenantId!,
+        ids: sourceMemoryIds,
+      },
+      pause: !sourcesRequested || !tenantId || sourceMemoryIds.length === 0,
+      requestPolicy: "cache-and-network",
+    });
+  const sourceRows = useMemo(
+    () =>
+      resolveSourceRows(
+        sourceMemoryIds,
+        (sourceRecordsData?.memoryRecordsByIds ?? []) as WikiSourceRecord[],
+      ),
+    [sourceMemoryIds, sourceRecordsData?.memoryRecordsByIds],
+  );
+  const sourcesLoading = sourceIdsFetching || sourceRecordsFetching;
 
   const markdownStyles = useMemo(
     () => buildMarkdownStyles(colors, isDark),
@@ -183,6 +235,21 @@ export default function WikiPageScreen() {
     tenantId &&
     userId;
   const graphFullscreen = viewMode === "graph";
+  const openSources = useCallback(() => {
+    setSourcesRequested(true);
+    sourcesSheetRef.current?.snapToIndex(0);
+  }, []);
+  const renderSourcesBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.4}
+      />
+    ),
+    [],
+  );
 
   return (
     <DetailLayout title={headerTitle} headerRight={headerRight}>
@@ -216,8 +283,27 @@ export default function WikiPageScreen() {
             <ActivityIndicator color={colors.mutedForeground} />
           </View>
         ) : !page ? (
-          <View className="items-center justify-center py-10 px-6">
-            <Muted>This memory couldn't be loaded.</Muted>
+          <View className="items-center justify-center py-10 px-6 gap-3">
+            <Muted>This wiki page couldn't be loaded.</Muted>
+            <Pressable
+              onPress={() => router.push("/(tabs)?segment=wiki")}
+              style={({ pressed }) => ({
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 999,
+                backgroundColor: pressed ? colors.primary : colors.secondary,
+              })}
+            >
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontSize: 13,
+                  fontWeight: "600",
+                }}
+              >
+                Back to Wiki
+              </Text>
+            </Pressable>
           </View>
         ) : (
           <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 20 }}>
@@ -322,23 +408,30 @@ export default function WikiPageScreen() {
                   {page.summary}
                 </Muted>
               ) : null}
-              {typeof page.sourceMemoryCount === "number" &&
-              page.sourceMemoryCount > 0 ? (
-                <View
-                  style={{
+              {shouldShowSourcesAffordance(page.sourceMemoryCount) ? (
+                <Pressable
+                  onPress={openSources}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${page.sourceMemoryCount} wiki sources`}
+                  style={({ pressed }) => ({
                     paddingHorizontal: 8,
                     paddingVertical: 3,
                     borderRadius: 999,
-                    backgroundColor: colors.secondary,
+                    backgroundColor: pressed ? colors.primary : colors.secondary,
                     alignSelf: "flex-start",
                     marginTop: 4,
-                  }}
+                  })}
                 >
-                  <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>
-                    Based on {page.sourceMemoryCount}{" "}
-                    {page.sourceMemoryCount === 1 ? "memory" : "memories"}
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      fontSize: 11,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Sources ({page.sourceMemoryCount})
                   </Text>
-                </View>
+                </Pressable>
               ) : null}
               {page.aliases.length > 0 ? (
                 <View
@@ -587,8 +680,129 @@ export default function WikiPageScreen() {
           </View>
         )}
       </ScrollView>
+      <BottomSheet
+        ref={sourcesSheetRef}
+        index={-1}
+        snapPoints={sourceSnapPoints}
+        enablePanDownToClose
+        backdropComponent={renderSourcesBackdrop}
+        backgroundStyle={{ backgroundColor: colors.background }}
+        handleIndicatorStyle={{ backgroundColor: colors.mutedForeground }}
+      >
+        <BottomSheetScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 8,
+            paddingBottom: 28,
+            gap: 12,
+          }}
+        >
+          <View style={{ gap: 4 }}>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 18,
+                fontWeight: "700",
+              }}
+            >
+              Sources
+            </Text>
+            <Muted style={{ fontSize: 13 }}>
+              Raw source records for this wiki page.
+            </Muted>
+          </View>
+          {sourcesLoading && sourceRows.length === 0 ? (
+            <View className="items-center justify-center py-8">
+              <ActivityIndicator color={colors.mutedForeground} />
+            </View>
+          ) : sourceRows.length === 0 ? (
+            <Muted>No source records were returned.</Muted>
+          ) : (
+            sourceRows.map((row) =>
+              row.kind === "resolved" ? (
+                <SourceRecordRow
+                  key={row.id}
+                  record={row.record}
+                  colors={colors}
+                />
+              ) : (
+                <UnavailableSourceRow key={row.id} colors={colors} />
+              ),
+            )
+          )}
+        </BottomSheetScrollView>
+      </BottomSheet>
     </DetailLayout>
   );
+}
+
+function SourceRecordRow({
+  record,
+  colors,
+}: {
+  record: WikiSourceRecord;
+  colors: (typeof COLORS)["dark"];
+}) {
+  const text = record.content?.text?.trim() || "No source text available.";
+  const label = record.factType || record.strategyId || "Source";
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 12,
+        padding: 12,
+        gap: 8,
+        backgroundColor: colors.secondary,
+      }}
+    >
+      <Text style={{ color: colors.foreground, fontSize: 14, lineHeight: 20 }}>
+        {text}
+      </Text>
+      <View className="flex-row items-center justify-between gap-3">
+        <Muted style={{ fontSize: 12, textTransform: "capitalize" }}>
+          {label}
+        </Muted>
+        <Muted style={{ fontSize: 12 }}>
+          {formatSourceDate(record.updatedAt || record.createdAt)}
+        </Muted>
+      </View>
+    </View>
+  );
+}
+
+function UnavailableSourceRow({
+  colors,
+}: {
+  colors: (typeof COLORS)["dark"];
+}) {
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 12,
+        padding: 12,
+        backgroundColor: "transparent",
+      }}
+    >
+      <Muted>Source no longer available</Muted>
+    </View>
+  );
+}
+
+function formatSourceDate(iso?: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function buildMarkdownStyles(
