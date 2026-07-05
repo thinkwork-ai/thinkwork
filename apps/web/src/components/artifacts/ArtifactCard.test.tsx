@@ -43,7 +43,33 @@ afterEach(() => {
 });
 
 describe("ArtifactCard", () => {
-  it("renders title, status · vN, and links the card to /artifacts/$id; badge fills the second line when there is no summary", () => {
+  it("renders title + type badge on line 1 and 'status · vN · freshness' on line 2; links to /artifacts/$id", () => {
+    const eightHoursAgo = new Date(
+      Date.now() - 8 * 60 * 60 * 1000,
+    ).toISOString();
+    render(
+      <ArtifactCard
+        artifact={{
+          id: "artifact-1",
+          title: "Q3 pipeline table",
+          type: "DATA_VIEW",
+          status: "FINAL",
+          headVersion: 3,
+          updatedAt: eightHoursAgo,
+        }}
+      />,
+    );
+
+    const card = screen.getByTestId("artifact-card");
+    expect(card.getAttribute("href")).toBe("/artifacts/artifact-1");
+    expect(screen.getByText("Q3 pipeline table")).toBeTruthy();
+    expect(screen.getByText("DATA_VIEW")).toBeTruthy();
+    expect(screen.getByText("Final · v3 · 8h ago")).toBeTruthy();
+    // No footer affordance line (THINK-168 declutter).
+    expect(screen.queryByText(/Open/)).toBeNull();
+  });
+
+  it("omits the freshness segment without updatedAt, and never renders a summary line", () => {
     render(
       <ArtifactCard
         artifact={{
@@ -56,31 +82,8 @@ describe("ArtifactCard", () => {
       />,
     );
 
-    const card = screen.getByTestId("artifact-card");
-    expect(card.getAttribute("href")).toBe("/artifacts/artifact-1");
-    expect(screen.getByText("Q3 pipeline table")).toBeTruthy();
-    expect(screen.getByText("DATA_VIEW")).toBeTruthy();
     expect(screen.getByText("Final · v3")).toBeTruthy();
-    // No footer affordance line (THINK-168 declutter).
-    expect(screen.queryByText(/Open/)).toBeNull();
-  });
-
-  it("shows the summary on the second line (badge stays on the title row) when a description exists", () => {
-    render(
-      <ArtifactCard
-        artifact={{
-          id: "artifact-1",
-          title: "Q3 pipeline table",
-          type: "DATA_VIEW",
-        }}
-        description="Quarterly pipeline broken down by owner."
-      />,
-    );
-
-    expect(
-      screen.getByText("Quarterly pipeline broken down by owner."),
-    ).toBeTruthy();
-    expect(screen.getByText("DATA_VIEW")).toBeTruthy();
+    expect(screen.queryByText(/ago/)).toBeNull();
   });
 
   it("onOpen mode: the card is a button that opens the panel; no full-page footer link (THINK-168)", () => {
@@ -191,7 +194,8 @@ describe("bornCanvasStablePartId", () => {
 });
 
 describe("DocumentCard (delegates to ArtifactCard)", () => {
-  it("keeps the document presentation: genre badge, status label, Open document →", () => {
+  it("keeps the document presentation: genre badge up top, 'status · vN · freshness' meta line, no abstract", () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     render(
       <DocumentCard
         card={{
@@ -201,6 +205,7 @@ describe("DocumentCard (delegates to ArtifactCard)", () => {
           abstract: "How to onboard.",
           status: "final",
           headVersion: 2,
+          updatedAt: twoHoursAgo,
         }}
       />,
     );
@@ -209,8 +214,9 @@ describe("DocumentCard (delegates to ArtifactCard)", () => {
     expect(card.getAttribute("href")).toBe("/artifacts/doc-1");
     expect(screen.getByText("Onboarding guide")).toBeTruthy();
     expect(screen.getByText("guide")).toBeTruthy();
-    expect(screen.getByText("Final · v2")).toBeTruthy();
-    expect(screen.getByText("How to onboard.")).toBeTruthy();
+    expect(screen.getByText("Final · v2 · 2h ago")).toBeTruthy();
+    // The abstract no longer renders on the card (meta line replaced it).
+    expect(screen.queryByText("How to onboard.")).toBeNull();
     // No footer affordance line — the card itself is the link.
     expect(screen.queryByText("Open document →")).toBeNull();
   });

@@ -16,6 +16,8 @@ export interface DocumentCardData {
   abstract?: string;
   status?: string;
   headVersion?: number;
+  /** Emission time of the folded document.card event — the card's freshness. */
+  updatedAt?: string;
 }
 
 export function DocumentCard({
@@ -32,10 +34,13 @@ export function DocumentCard({
       : "Draft";
   return (
     <ArtifactCard
-      artifact={{ id: card.artifactId, title: card.title }}
+      artifact={{
+        id: card.artifactId,
+        title: card.title,
+        updatedAt: card.updatedAt ?? null,
+      }}
       badge={card.genre ?? null}
       statusLabel={statusLabel}
-      description={card.abstract}
       testId="document-card"
       onOpen={onOpen}
     />

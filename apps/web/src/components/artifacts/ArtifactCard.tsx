@@ -17,7 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
-import { cn } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
 
 export interface ArtifactCardData {
   id: string;
@@ -26,13 +26,14 @@ export interface ArtifactCardData {
   type?: string | null;
   status?: string | null;
   headVersion?: number | null;
+  /** Freshness timestamp (created/last refreshed) for the meta line. */
+  updatedAt?: string | null;
 }
 
 export function ArtifactCard({
   artifact,
   badge,
   statusLabel,
-  description,
   testId = "artifact-card",
   onOpen,
 }: {
@@ -44,7 +45,6 @@ export function ArtifactCard({
   badge?: string | null;
   /** Overrides the derived "Status · vN" label. */
   statusLabel?: string | null;
-  description?: string | null;
   testId?: string;
   /**
    * THINK-168: when set, the card's click opens the artifact in the thread's
@@ -61,19 +61,14 @@ export function ArtifactCard({
       ? null
       : (statusLabel ??
         deriveStatusLabel(artifact.status, artifact.headVersion));
-  const summary = description?.trim() || null;
+  const timeLabel = artifact.updatedAt
+    ? relativeTime(artifact.updatedAt)
+    : null;
+  // Line 2 for every card: "Final · v3 · 8h ago" (status · vN · freshness).
+  const metaLine = [resolvedStatus, timeLabel].filter(Boolean).join(" · ");
   const rootClassName =
     "not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40";
 
-  const badgeChip = badgeLabel ? (
-    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-      {badgeLabel}
-    </span>
-  ) : null;
-
-  // Second line under the title: the artifact's summary when it has one
-  // (truncated to one line), otherwise the type badge moves down here so no
-  // card renders a dangling footer or an empty second line (THINK-168).
   const cardBody = (
     <>
       <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground group-hover:text-foreground">
@@ -84,21 +79,16 @@ export function ArtifactCard({
           <span className="truncate text-sm font-medium text-foreground">
             {artifact.title}
           </span>
-          {summary ? badgeChip : null}
-          {resolvedStatus ? (
-            <span className="shrink-0 text-[10px] text-muted-foreground">
-              {resolvedStatus}
+          {badgeLabel ? (
+            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {badgeLabel}
             </span>
           ) : null}
         </div>
-        {summary ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {summary}
+        {metaLine ? (
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {metaLine}
           </p>
-        ) : badgeChip ? (
-          <div className="mt-1 flex min-w-0 items-center gap-2">
-            {badgeChip}
-          </div>
         ) : null}
       </div>
     </>

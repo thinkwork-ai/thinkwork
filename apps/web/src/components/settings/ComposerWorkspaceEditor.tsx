@@ -864,9 +864,7 @@ export function ComposerWorkspaceEditor({
     // Profile files get the dedicated Edit/Delete treatment (U2); the generic
     // "Open agent source" item is suppressed for them by contract (R5).
     const profileSlug = agentProfileSlugForFile(node);
-    const canConfigureProfile = Boolean(
-      profileSlug && onConfigureAgentProfile,
-    );
+    const canConfigureProfile = Boolean(profileSlug && onConfigureAgentProfile);
     const canDeleteProfile = Boolean(
       profileSlug &&
       onDeleteAgentProfile &&
@@ -1346,12 +1344,16 @@ export function ComposerWorkspaceEditor({
         <ResizablePanel
           defaultSize="26%"
           minSize="18%"
-          className="flex min-h-0 flex-col border-r"
+          className="flex min-h-0 flex-col"
         >
           {treePanel}
         </ResizablePanel>
-        {/* Thin draggable divider (col-resize) — no visible grip handle. */}
-        <ResizableHandle />
+        {/* Thin draggable divider (col-resize) — no visible grip handle. The
+            panel's old border-r drew a second line beside the handle, so the
+            grabbable area sat offset from the visible divider; instead the
+            handle is a 10px transparent hit zone with the single 1px line
+            centered in it. */}
+        <ResizableHandle className="w-2.5 bg-transparent after:w-px after:bg-border" />
         <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
           {selectedPath ? (
             (() => {

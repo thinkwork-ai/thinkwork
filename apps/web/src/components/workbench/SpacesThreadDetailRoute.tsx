@@ -231,6 +231,7 @@ interface ThreadResult {
             headVersion?: number | null;
             summary?: string | null;
             metadata?: unknown;
+            updatedAt?: string | null;
           } | null;
         };
       }>;
@@ -517,6 +518,7 @@ export function SpacesThreadDetailRoute({
         status?: string | null;
         headVersion?: number | null;
         stablePartId?: string | null;
+        updatedAt?: string | null;
       }> | null;
     } | null;
   }>({
@@ -2824,6 +2826,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
             headVersion: node.durableArtifact.headVersion,
             summary: node.durableArtifact.summary,
             metadata: metadataObject(node.durableArtifact.metadata),
+            updatedAt: node.durableArtifact.updatedAt ?? null,
           }
         : null,
     })),

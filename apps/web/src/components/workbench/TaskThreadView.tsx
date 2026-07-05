@@ -359,6 +359,7 @@ export interface SavedCanvasSummaryLite {
   status?: string | null;
   headVersion?: number | null;
   stablePartId?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -590,6 +591,7 @@ export function TaskThreadView({
         type: "DATA_VIEW",
         status: canvas.status,
         headVersion: canvas.headVersion,
+        updatedAt: canvas.updatedAt ?? null,
       });
     }
     return map;
@@ -798,8 +800,11 @@ export function TaskThreadView({
             {/* Drag handle: resizes the chat/artifact split. Width persists
                 globally (storeThreadArtifactPanelWidthPx) so it survives
                 sends, remounts, and reloads. Hidden below md alongside the
-                panel itself. */}
-            <ResizableHandle className="hidden md:flex" />
+                panel itself. Widened to a 10px transparent hit zone with the
+                1px divider line centered in it (after:*) so the cursor shows
+                col-resize exactly ON the visible line — the default w-px
+                handle put the grabbable area beside the line it drew. */}
+            <ResizableHandle className="hidden w-2.5 bg-transparent after:w-px after:bg-border md:flex" />
             <ResizablePanel
               defaultSize={`${panelDefaultWidthPx}px`}
               minSize={`${MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX}px`}
@@ -2798,6 +2803,7 @@ function TranscriptMessage({
               type: durableArtifact.type,
               status: durableArtifact.status,
               headVersion: durableArtifact.headVersion,
+              updatedAt: durableArtifact.updatedAt,
             }
           : null);
       if (!resolved) continue;
@@ -2823,6 +2829,7 @@ function TranscriptMessage({
           type: durableArtifact.type,
           status: durableArtifact.status,
           headVersion: durableArtifact.headVersion,
+          updatedAt: durableArtifact.updatedAt,
         },
       });
     }
@@ -4508,6 +4515,7 @@ function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
       status: stringValue(card.status) || undefined,
       headVersion:
         typeof card.headVersion === "number" ? card.headVersion : undefined,
+      updatedAt: event.createdAt ?? undefined,
     });
   }
   return [...byArtifact.values()];
