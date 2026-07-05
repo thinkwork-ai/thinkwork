@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   normalizeMessageSenderType,
-  shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
 } from "./sendMessage.agent-handling.js";
 
@@ -91,9 +90,6 @@ describe("sendMessage mention collaboration path", () => {
     expect(
       source.indexOf("Goal mode requires default agent dispatch"),
     ).toBeLessThan(source.indexOf(".insert(messages)"));
-    expect(source).toContain(
-      "!resolvedGoalMode &&\n    shouldApplyCustomerOnboardingChatUpdate",
-    );
   });
 
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
@@ -302,40 +298,23 @@ describe("sendMessage agent handling", () => {
 
   it("defaults user follow-ups into agent handling", () => {
     expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        hasAgentMentions: false,
-      }),
-    ).toBe(true);
-    expect(
       shouldDispatchDefaultAgentTurn({
         isUserMessage: true,
         senderType: "user",
         hasAgentMentions: false,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(true);
   });
 
   it("suppresses default agent handling when agentRequested is explicitly false", () => {
     expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        agentRequested: false,
-        hasAgentMentions: false,
-      }),
-    ).toBe(false);
-    expect(
       shouldDispatchDefaultAgentTurn({
         isUserMessage: true,
         senderType: "user",
         agentRequested: false,
         hasAgentMentions: false,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(false);
   });
@@ -348,7 +327,6 @@ describe("sendMessage agent handling", () => {
         dispatchMode: "MANAGED_DEFAULT",
         hasAgentMentions: false,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(true);
   });
@@ -361,21 +339,12 @@ describe("sendMessage agent handling", () => {
 
   it("lets explicit agent mentions own dispatch even when default handling is suppressed", () => {
     expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        agentRequested: false,
-        hasAgentMentions: true,
-      }),
-    ).toBe(false);
-    expect(
       shouldDispatchDefaultAgentTurn({
         isUserMessage: true,
         senderType: "user",
         agentRequested: false,
         hasAgentMentions: true,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(false);
   });
@@ -388,19 +357,17 @@ describe("sendMessage agent handling", () => {
         agentRequested: true,
         hasAgentMentions: false,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(true);
   });
 
-  it("keeps non-user senders, computer threads, and handled onboarding out of default dispatch", () => {
+  it("keeps non-user senders and computer threads out of default dispatch", () => {
     expect(
       shouldDispatchDefaultAgentTurn({
         isUserMessage: true,
         senderType: "agent",
         hasAgentMentions: false,
         hasComputerThread: false,
-        customerOnboardingHandled: false,
       }),
     ).toBe(false);
     expect(
@@ -409,16 +376,6 @@ describe("sendMessage agent handling", () => {
         senderType: "user",
         hasAgentMentions: false,
         hasComputerThread: true,
-        customerOnboardingHandled: false,
-      }),
-    ).toBe(false);
-    expect(
-      shouldDispatchDefaultAgentTurn({
-        isUserMessage: true,
-        senderType: "user",
-        hasAgentMentions: false,
-        hasComputerThread: false,
-        customerOnboardingHandled: true,
       }),
     ).toBe(false);
   });

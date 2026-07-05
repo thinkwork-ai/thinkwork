@@ -27,7 +27,6 @@ import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
 import { publishThreadActivity } from "../../../lib/threads/publish-thread-activity.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
-import { applyCustomerOnboardingChatUpdate } from "../../../lib/spaces/customer-onboarding-chat-updates.js";
 import {
   canonicalizeMessageAttachmentMetadata,
   MessageAttachmentRefsError,
@@ -35,7 +34,6 @@ import {
 import {
   normalizeMessageSenderType,
   resolveAgentDispatchRequest,
-  shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
   shouldSuppressAgentMentionDispatch,
 } from "./sendMessage.agent-handling.js";
@@ -267,7 +265,6 @@ export const sendMessage = async (
       hasAgentMentions,
       hasAgentProfileMentions,
       hasComputerThread: Boolean(thread.computer_id),
-      customerOnboardingHandled: false,
       // Pre-transaction check: predict the post-commit mode by unioning the
       // sender and this message's user mentions into the participant set.
       threadMode: await resolveDispatchThreadMode({
@@ -397,67 +394,6 @@ export const sendMessage = async (
     parsedMentions,
     mentionTargets,
   );
-  let customerOnboardingHandled = false;
-  let responseMessage = row;
-  if (
-    !resolvedGoalMode &&
-    shouldApplyCustomerOnboardingChatUpdate({
-      isUserMessage,
-      senderType,
-      agentRequested: i.agentRequested,
-      agentDispatch: i.agentDispatch,
-      dispatchMode: i.dispatchMode,
-      hasAgentMentions,
-    })
-  ) {
-    try {
-      const onboardingUpdate = await applyCustomerOnboardingChatUpdate({
-        tenantId: thread.tenant_id,
-        threadId: i.threadId,
-        content: i.content,
-        senderUserId: senderId,
-      });
-      customerOnboardingHandled =
-        (onboardingUpdate?.handled ?? false) &&
-        !onboardingUpdate?.agentDispatchRequired;
-      if (customerOnboardingHandled) {
-        const handledMetadata = {
-          ...(canonicalMetadata ?? {}),
-          customerOnboardingChatUpdate: {
-            handled: true,
-            agentDispatchRequired: false,
-            statusChanges: onboardingUpdate?.statusChanges ?? [],
-            assignmentChanges: onboardingUpdate?.assignmentChanges ?? [],
-            addedTasks: onboardingUpdate?.addedTasks ?? [],
-            removedTasks: onboardingUpdate?.removedTasks ?? [],
-          },
-        };
-        const [updatedMessage] = await db
-          .update(messages)
-          .set({ metadata: handledMetadata })
-          .where(eq(messages.id, row.id))
-          .returning();
-        if (updatedMessage) {
-          responseMessage = updatedMessage;
-        }
-      }
-      if (onboardingUpdate?.assistantMessageId) {
-        notifyNewMessage({
-          messageId: onboardingUpdate.assistantMessageId,
-          threadId: i.threadId,
-          tenantId: thread.tenant_id,
-          role: "assistant",
-          content: onboardingUpdate.assistantContent,
-          senderType: "system",
-        }).catch(() => {});
-      }
-    } catch (err) {
-      console.warn(
-        "[sendMessage] customer onboarding chat update failed:",
-        err,
-      );
-    }
-  }
   // ask_user_question plain-reply route (plan 2026-06-09-005 U3, R7): ANY
   // user message on the thread CAS-consumes the pending question batch
   // (answeredVia 'reply', answers = a reference to this message — never
@@ -580,7 +516,6 @@ export const sendMessage = async (
       hasAgentMentions,
       hasAgentProfileMentions,
       hasComputerThread: Boolean(thread.computer_id),
-      customerOnboardingHandled,
       threadMode: dispatchThreadMode,
     })
   ) {
@@ -705,7 +640,7 @@ export const sendMessage = async (
     }).catch(() => {});
   }
 
-  return messageToCamel(responseMessage);
+  return messageToCamel(row);
 };
 
 // R7/KTD3: a synchronous dispatch failure is stamped onto
