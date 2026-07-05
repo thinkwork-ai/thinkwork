@@ -58,7 +58,7 @@ export function ArtifactCard({
     <Link
       to="/artifacts/$id"
       params={{ id: artifact.id }}
-      className="not-prose group my-1 flex w-full max-w-xl items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+      className="not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
       data-testid={testId}
     >
       <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground group-hover:text-foreground">
@@ -124,4 +124,18 @@ export function bornCanvasStablePartId(artifact: {
   return typeof stablePartId === "string" && stablePartId.length > 0
     ? stablePartId
     : null;
+}
+
+/**
+ * Stable-part-id prefix the runtime stamps on GFM-table safety-net
+ * conversions (wire contract with `packages/agentcore-pi` server.ts:
+ * `json-render:safety-net:<specHash>`). Safety-net renders are transient
+ * transcript furniture — they keep rendering inline and never collapse to an
+ * artifact card, even though the born-as-artifact upsert mints a draft row
+ * for them (titled by their generic fallback, e.g. "Table").
+ */
+export const SAFETY_NET_PART_ID_PREFIX = "json-render:safety-net:";
+
+export function isSafetyNetPartId(partId: string | null | undefined): boolean {
+  return Boolean(partId?.startsWith(SAFETY_NET_PART_ID_PREFIX));
 }

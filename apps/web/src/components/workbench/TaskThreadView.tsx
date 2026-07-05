@@ -153,6 +153,8 @@ import {
 import {
   ArtifactCard,
   bornCanvasStablePartId,
+  isSafetyNetPartId,
+  type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import {
   SkillDraftStatusCard,
@@ -322,6 +324,23 @@ interface TaskThreadViewProps {
    * server-enforced) and refetches. Absent → no retry control is offered.
    */
   onRetryDispatch?: (messageId: string) => Promise<void> | void;
+  /**
+   * Saved canvases visible to this thread (`threadCanvasContext.savedCanvases`,
+   * THINK-166 U3). Resolves CHECKED-OUT canvas emissions (THINK-145 R13 — the
+   * artifact lives in its home thread, so it never surfaces as this message's
+   * durableArtifact) to their original artifact for the born-as-artifact
+   * collapse. Optional; absent hosts simply skip checkout-routed matching.
+   */
+  savedCanvases?: SavedCanvasSummaryLite[];
+}
+
+/** Lightweight CanvasSummary projection for the transcript collapse. */
+export interface SavedCanvasSummaryLite {
+  artifactId: string;
+  title: string;
+  status?: string | null;
+  headVersion?: number | null;
+  stablePartId?: string | null;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -487,6 +506,7 @@ export function TaskThreadView({
   onFlagTurn,
   onJsonRenderActionSuccess,
   onRetryDispatch,
+  savedCanvases,
 }: TaskThreadViewProps) {
   const { isOperator } = useTenant();
   const composerDockRef = useRef<HTMLDivElement | null>(null);
@@ -537,6 +557,24 @@ export function TaskThreadView({
     () => selectLatestProjection(turns ?? []),
     [turns],
   );
+
+  // stablePartId → artifact for the born-as-artifact collapse (THINK-166 U3).
+  // Sourced from the thread's saved-canvas context so checked-out canvases
+  // (whose artifact row lives in the HOME thread) resolve too.
+  const canvasesByStablePartId = useMemo(() => {
+    const map = new Map<string, ArtifactCardData>();
+    for (const canvas of savedCanvases ?? []) {
+      if (!canvas.stablePartId) continue;
+      map.set(canvas.stablePartId, {
+        id: canvas.artifactId,
+        title: canvas.title,
+        type: "DATA_VIEW",
+        status: canvas.status,
+        headVersion: canvas.headVersion,
+      });
+    }
+    return map;
+  }, [savedCanvases]);
 
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
@@ -634,6 +672,7 @@ export function TaskThreadView({
                       message={message}
                       turn={turn}
                       documentCards={documentCardsByMessageId.get(message.id)}
+                      canvasesByStablePartId={canvasesByStablePartId}
                       threadId={thread.id}
                       latestProjection={latestProjection}
                       isLatestUser={index === latestUserIndex}
@@ -1847,6 +1886,7 @@ function TranscriptSegment({
   message,
   turn,
   documentCards,
+  canvasesByStablePartId,
   threadId,
   latestProjection,
   isLatestUser,
@@ -1868,6 +1908,7 @@ function TranscriptSegment({
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
   documentCards?: DocumentCardData[];
+  canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
   isLatestUser: boolean;
@@ -1906,6 +1947,7 @@ function TranscriptSegment({
       <TranscriptMessage
         message={message}
         documentCards={documentCards}
+        canvasesByStablePartId={canvasesByStablePartId}
         threadId={threadId}
         onOpenArtifact={onOpenArtifact}
         onSendFollowUp={onSendFollowUp}
@@ -2588,6 +2630,7 @@ function CollapsibleUserMessageBody({
 function TranscriptMessage({
   message,
   documentCards,
+  canvasesByStablePartId,
   threadId,
   onOpenArtifact,
   onSendFollowUp,
@@ -2601,6 +2644,7 @@ function TranscriptMessage({
 }: {
   message: TaskThreadMessage;
   documentCards?: DocumentCardData[];
+  canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
   onOpenArtifact?: (artifactId: string) => void;
   onSendFollowUp?: (
@@ -2635,15 +2679,66 @@ function TranscriptMessage({
     currentUser,
     mentionTargets,
   });
-  // Born-as-artifact emission (THINK-166 U3): when the message's durable
-  // artifact is a living GenUI canvas, the matching inline json-render
-  // emission collapses out of the transcript and a compact ArtifactCard
-  // renders at the end of the message instead. Transient GenUI parts (never
-  // saved as an artifact, e.g. safety-net table conversions) are untouched.
-  const bornCanvasPartId =
-    !isUser && message.durableArtifact
-      ? bornCanvasStablePartId(message.durableArtifact)
-      : null;
+  // Born-as-artifact emissions (THINK-166 U3): a json-render part collapses
+  // out of the transcript when it resolves to its artifact — either a saved/
+  // checked-out canvas visible to this thread (stablePartId match; a
+  // checked-out canvas's artifact row lives in its HOME thread per THINK-145
+  // R13, so it never surfaces as this message's durableArtifact) or the
+  // message's own durable draft canvas. A compact ArtifactCard renders at
+  // the end of the message instead. Safety-net table conversions are
+  // transient transcript furniture: they keep rendering inline and never
+  // become cards, even though the born-as-artifact upsert mints a draft row
+  // for them (generic titles like "Table"). Transient GenUI with no artifact
+  // is untouched.
+  const durableArtifact = !isUser ? (message.durableArtifact ?? null) : null;
+  const durableCanvasPartId = durableArtifact
+    ? bornCanvasStablePartId(durableArtifact)
+    : null;
+  const canvasCards: Array<{ partId: string; artifact: ArtifactCardData }> = [];
+  const suppressedPartIds = new Set<string>();
+  if (!isUser) {
+    for (const part of typedParts) {
+      if (part.type !== "data-json-render") continue;
+      const partId = (part as { id?: string }).id;
+      if (!partId || isSafetyNetPartId(partId)) continue;
+      const resolved =
+        canvasesByStablePartId?.get(partId) ??
+        (durableArtifact && durableCanvasPartId === partId
+          ? {
+              id: durableArtifact.id,
+              title: durableArtifact.title,
+              type: durableArtifact.type,
+              status: durableArtifact.status,
+              headVersion: durableArtifact.headVersion,
+            }
+          : null);
+      if (!resolved) continue;
+      suppressedPartIds.add(partId);
+      if (!canvasCards.some((card) => card.artifact.id === resolved.id)) {
+        canvasCards.push({ partId, artifact: resolved });
+      }
+    }
+    // Durable canvas with no matching emission in this message (re-emitted
+    // elsewhere or part trimmed): still surface its card — unless it was born
+    // from a safety-net conversion.
+    if (
+      durableArtifact &&
+      durableCanvasPartId &&
+      !isSafetyNetPartId(durableCanvasPartId) &&
+      !canvasCards.some((card) => card.artifact.id === durableArtifact.id)
+    ) {
+      canvasCards.push({
+        partId: durableCanvasPartId,
+        artifact: {
+          id: durableArtifact.id,
+          title: durableArtifact.title,
+          type: durableArtifact.type,
+          status: durableArtifact.status,
+          headVersion: durableArtifact.headVersion,
+        },
+      });
+    }
+  }
   const renderedTypedParts =
     typedParts.length > 0
       ? renderTypedParts(typedParts, {
@@ -2652,9 +2747,8 @@ function TranscriptMessage({
           threadId,
           userQuestion,
           onJsonRenderActionSuccess,
-          suppressJsonRenderPartIds: bornCanvasPartId
-            ? new Set([bornCanvasPartId])
-            : undefined,
+          suppressJsonRenderPartIds:
+            suppressedPartIds.size > 0 ? suppressedPartIds : undefined,
         }).filter(Boolean)
       : [];
   const transcriptContentClassName =
@@ -2764,30 +2858,38 @@ function TranscriptMessage({
                   onDownloadAttachment={onDownloadAttachment}
                 />
               ) : null}
-              {/* Documents render their own DocumentCard above — the generic
-                  artifact card here would be pure duplication. */}
+              {/* Born-as-artifact canvases: compact shared cards at the end
+                  of the message (title = artifact/canvas title, falling back
+                  to the emission's title arg — never the widget/component
+                  type). Full render: /artifacts/$id. */}
+              {canvasCards.length > 0 ? (
+                <div className="mt-3 grid gap-2">
+                  {canvasCards.map(({ partId, artifact }) => (
+                    <ArtifactCard
+                      key={`msg-canvas-${artifact.id}`}
+                      artifact={{
+                        ...artifact,
+                        title:
+                          artifact.title?.trim() ||
+                          emissionTitleForPart(typedParts, partId) ||
+                          "Canvas",
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {/* Documents render their own DocumentCard above and living
+                  canvases render ArtifactCards above — the generic artifact
+                  card here would be pure duplication (and safety-net-born
+                  drafts must never resurface as "Table" cards). */}
               {!isUser &&
-              message.durableArtifact &&
-              message.durableArtifact.metadata?.kind !== "document" ? (
-                bornCanvasPartId ? (
-                  // Born-as-artifact canvas: one compact shared card at the
-                  // end of the message (title = artifact/canvas title, never
-                  // the widget/component type). Full render: /artifacts/$id.
-                  <ArtifactCard
-                    artifact={{
-                      ...message.durableArtifact,
-                      title:
-                        message.durableArtifact.title?.trim() ||
-                        emissionTitleForPart(typedParts, bornCanvasPartId) ||
-                        "Canvas",
-                    }}
-                  />
-                ) : (
-                  <GeneratedArtifactCard
-                    artifact={message.durableArtifact}
-                    onOpenArtifact={onOpenArtifact}
-                  />
-                )
+              durableArtifact &&
+              durableArtifact.metadata?.kind !== "document" &&
+              !bornCanvasStablePartId(durableArtifact) ? (
+                <GeneratedArtifactCard
+                  artifact={durableArtifact}
+                  onOpenArtifact={onOpenArtifact}
+                />
               ) : null}
             </>
           )}

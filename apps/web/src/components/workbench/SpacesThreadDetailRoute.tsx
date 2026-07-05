@@ -66,6 +66,7 @@ import {
   SendMessageMutation,
   SettingsActivityThreadTurnsQuery,
   ThreadArtifactsQuery,
+  ThreadCanvasContextQuery,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadWorkItemsQuery,
@@ -505,6 +506,26 @@ export function SpacesThreadDetailRoute({
       })),
     [attachedData?.artifacts],
   );
+  // Saved canvases visible to this thread (THINK-166 U3): feeds the
+  // transcript's born-as-artifact collapse so checked-out canvas emissions
+  // (artifact row in the HOME thread, THINK-145 R13) resolve to a card.
+  const [{ data: canvasContextData }] = useQuery<{
+    threadCanvasContext?: {
+      savedCanvases?: Array<{
+        artifactId: string;
+        title: string;
+        status?: string | null;
+        headVersion?: number | null;
+        stablePartId?: string | null;
+      }> | null;
+    } | null;
+  }>({
+    query: ThreadCanvasContextQuery,
+    variables: { threadId },
+    pause: !threadId,
+    requestPolicy: "cache-and-network",
+  });
+  const savedCanvases = canvasContextData?.threadCanvasContext?.savedCanvases;
   const [
     { data: mentionTargetsData, fetching: mentionTargetsFetching },
     reexecuteMentionTargetsQuery,
@@ -1876,6 +1897,7 @@ export function SpacesThreadDetailRoute({
   const threadView = (
     <TaskThreadView
       thread={visibleThread}
+      savedCanvases={savedCanvases ?? undefined}
       isLoading={
         (fetching && !routeThread && !optimisticThreadStart) ||
         hasMismatchedThreadData
