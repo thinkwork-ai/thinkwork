@@ -43,6 +43,34 @@ describe("CognitoSecureStorage", () => {
     );
   });
 
+  it("encodes SecureStore-illegal characters in keys (email usernames)", async () => {
+    const { CognitoSecureStorage, secureStoreKeyFor } = await import(
+      "./cognito-storage"
+    );
+
+    const rawKey =
+      "CognitoIdentityServiceProvider.client-1.user@example.com.idToken";
+    CognitoSecureStorage.setItem(rawKey, "id-token");
+
+    const [persistedKey] = mockSetItemAsync.mock.calls[0];
+    expect(persistedKey).toBe(secureStoreKeyFor(rawKey));
+    expect(persistedKey).not.toBe(rawKey);
+    expect(persistedKey).toMatch(/^[A-Za-z0-9._-]+$/);
+    // Raw key stays visible to the Cognito SDK via the memory cache.
+    expect(CognitoSecureStorage.getItem(rawKey)).toBe("id-token");
+
+    CognitoSecureStorage.removeItem(rawKey);
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith(
+      secureStoreKeyFor(rawKey),
+    );
+  });
+
+  it("leaves SecureStore-safe keys unchanged for existing sessions", async () => {
+    const { secureStoreKeyFor } = await import("./cognito-storage");
+    const safeKey = "CognitoIdentityServiceProvider.client-1.user-1.idToken";
+    expect(secureStoreKeyFor(safeKey)).toBe(safeKey);
+  });
+
   it("writes a client-scoped manifest", async () => {
     vi.useFakeTimers();
     const { CognitoSecureStorage } = await import("./cognito-storage");
