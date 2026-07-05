@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import { Marked, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { parse as parseYaml } from "yaml";
+import { renderDocumentDirective } from "./document-directives.js";
 import type { DocumentGenre } from "./document-emission.js";
 import { GENRE_TEMPLATES, renderDocumentShell } from "./document-templates.js";
 
@@ -62,21 +63,6 @@ export type DirectiveEngine = (input: {
 
 /** Fence info-string prefix that routes a fenced block to the engine. */
 export const DIRECTIVE_FENCE_PREFIX = "tw:";
-
-/**
- * U1 stub — U2 replaces this with the typed registry. Until then any `tw:`
- * fence is a clean compile rejection, never silent passthrough (R2).
- */
-export const rejectAllDirectives: DirectiveEngine = ({ kind }) => ({
-  ok: false,
-  diagnostics: [
-    {
-      code: "UNKNOWN_DIRECTIVE",
-      message: `Directive "tw:${kind}" is not supported. No directive components are available yet — express this content as markdown prose or a table instead.`,
-      location: `tw:${kind}`,
-    },
-  ],
-});
 
 /** Frontmatter keys the compiler defines (KTD7). Everything else is dropped. */
 const FRONTMATTER_KEYS = ["eyebrow", "date", "context"] as const;
@@ -346,7 +332,7 @@ export interface CompileDocumentInput {
  */
 export function compileDocument(
   input: CompileDocumentInput,
-  engine: DirectiveEngine = rejectAllDirectives,
+  engine: DirectiveEngine = renderDocumentDirective,
 ): CompositorResult {
   const { frontmatter, body, warnings } = parseFrontmatter(input.markdownBody);
 
