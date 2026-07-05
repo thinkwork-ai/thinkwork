@@ -34,6 +34,7 @@ export interface DeploymentProfile {
   region: string;
   accountId?: string;
   releaseVersion?: string;
+  graphqlApiKey?: string;
   releaseManifestUrl?: string;
   releaseManifestSha256?: string;
   controller?: DeploymentProfileController;
@@ -69,6 +70,7 @@ export interface DeploymentProfileSourceConfig {
   region?: string | null;
   accountId?: string | null;
   releaseVersion?: string | null;
+  graphqlApiKey?: string | null;
   releaseManifestUrl?: string | null;
   releaseManifestSha256?: string | null;
   controller?: DeploymentProfileController | null;
@@ -163,6 +165,7 @@ export function buildDeploymentProfile(
   };
   copyOptionalString(profile, "accountId", config.accountId);
   copyOptionalString(profile, "releaseVersion", config.releaseVersion);
+  copyOptionalString(profile, "graphqlApiKey", config.graphqlApiKey);
   copyOptionalString(profile, "releaseManifestUrl", config.releaseManifestUrl);
   copyOptionalString(
     profile,
@@ -490,6 +493,7 @@ export function profileToRuntimeConfig(profile: DeploymentProfile) {
     region: validated.region,
     accountId: validated.accountId,
     releaseVersion: validated.releaseVersion,
+    graphqlApiKey: validated.graphqlApiKey,
     releaseManifestUrl: validated.releaseManifestUrl,
     releaseManifestSha256: validated.releaseManifestSha256,
     controller: validated.controller,
