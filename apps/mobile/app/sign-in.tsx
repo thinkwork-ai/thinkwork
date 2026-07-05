@@ -34,7 +34,7 @@ import {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, deploymentConfig } = useAuth();
+  const { signIn, signInWithSSO, deploymentConfig } = useAuth();
   const {
     isSupported: biometricSupported,
     hasStoredCredentials,
@@ -54,6 +54,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
   const [biometricLoading2, setBiometricLoading2] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const authOptions = useAuthOptions(deploymentConfig.apiUrl);
@@ -156,8 +157,41 @@ export default function SignInScreen() {
     }
   };
 
-  const handleSsoPress = () => {
-    console.log("[sign-in] WorkOS SSO is declared but U5 wires the flow.");
+  const handleSsoPress = async (
+    option: Parameters<typeof signInWithSSO>[0],
+  ) => {
+    if (configBlocked) {
+      setError(
+        `Deployment configuration is incomplete: ${deploymentConfig.missing.join(", ")}`,
+      );
+      return;
+    }
+    setSsoLoading(true);
+    setError(null);
+    try {
+      await signInWithSSO(option);
+    } catch (err) {
+      console.error("[sign-in] WorkOS SSO error:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      const lower = message.toLowerCase();
+      if (
+        lower.includes("expired") ||
+        lower.includes("already used") ||
+        lower.includes("bridge")
+      ) {
+        setError("Sign-in link expired or already used. Please try again.");
+      } else if (
+        lower.includes("not configured") ||
+        lower.includes("network") ||
+        lower.includes("fetch")
+      ) {
+        setError("Unable to connect. Please check your connection.");
+      } else {
+        setError(message || "Unable to sign in. Please try again.");
+      }
+    } finally {
+      setSsoLoading(false);
+    }
   };
 
   return (
@@ -193,7 +227,7 @@ export default function SignInScreen() {
               state={authOptions.state}
               onRetry={authOptions.retry}
               onPressSso={handleSsoPress}
-              disabled={configBlocked}
+              disabled={configBlocked || ssoLoading || loading}
             />
 
             {biometricSupported &&

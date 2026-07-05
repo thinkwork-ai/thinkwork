@@ -39,6 +39,13 @@ import {
   importDeploymentProfile as importDeploymentProfileJson,
   removeDeploymentProfile as removeDeploymentProfileJson,
 } from "@/lib/deployment-profile";
+import type { PublicOAuthOption } from "@/lib/auth-options";
+import {
+  buildWorkosAuthorizeUrl,
+  exchangeWorkosBridgeCode,
+  parseWorkosCallbackUrl,
+  WORKOS_MOBILE_REDIRECT_URI,
+} from "@/lib/workos-auth";
 import * as SecureStore from "expo-secure-store";
 
 // Keys for biometric credential storage
@@ -83,6 +90,10 @@ interface AuthContextValue {
   retryBootstrap: () => Promise<boolean>;
   /** Sign in with Google via Cognito hosted UI */
   signInWithGoogle: () => Promise<void>;
+  /** Sign in with WorkOS SSO via the environment's brokered bridge */
+  signInWithSSO: (option: PublicOAuthOption) => Promise<void>;
+  /** Complete a WorkOS SSO bridge code delivered by a deep link fallback */
+  completeSignInWithSSOBridge: (bridgeCode: string) => Promise<void>;
   deploymentConfig: MobilePlatformConfig;
   importDeploymentProfile: (input: string) => Promise<void>;
   removeDeploymentProfile: () => Promise<void>;
@@ -492,6 +503,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const completeWorkosBridgeSignIn = useCallback(
+    async (bridgeCode: string) => {
+      const config = getPlatformConfig();
+      if (!config.configured) {
+        throw new Error(
+          `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+        );
+      }
+
+      const tokens = await exchangeWorkosBridgeCode(bridgeCode, config.apiUrl);
+      let ssoUser = auth.storeOAuthTokens(tokens);
+      setAuthToken(tokens.id_token);
+
+      // Federated WorkOS users can lack custom:tenant_id on first sign-in.
+      // Mirror the Google OAuth bootstrap path so routing has a tenant.
+      if (!ssoUser.tenantId) {
+        const graphqlUrl = getPlatformConfig().graphqlUrl;
+        if (!graphqlUrl) throw new Error("GraphQL URL not configured");
+        const res = await fetch(graphqlUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${tokens.id_token}`,
+          },
+          body: JSON.stringify({
+            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+          }),
+        });
+        const bootstrapResult = await res.json();
+        const bootstrap = bootstrapResult?.data?.bootstrapUser;
+        if (!bootstrap?.tenant?.id) {
+          throw new Error(
+            bootstrapResult?.errors?.[0]?.message ??
+              "Failed to provision workspace",
+          );
+        }
+        ssoUser = { ...ssoUser, tenantId: bootstrap.tenant.id };
+      }
+
+      if (ssoUser.tenantId) {
+        SecureStore.setItemAsync(STORED_TENANT_ID_KEY, ssoUser.tenantId).catch(
+          (e) => {
+            console.warn("[AuthProvider] tenantId persist failed:", e);
+          },
+        );
+      }
+
+      setUser(ssoUser);
+      setHasStoredSession(true);
+      setDidActiveLogin(true);
+    },
+    [],
+  );
+
+  const workosInFlightRef = useRef(false);
+  const handleSignInWithSSO = useCallback(
+    async (option: PublicOAuthOption) => {
+      if (workosInFlightRef.current) {
+        console.warn(
+          "[AuthProvider] WorkOS SSO: already in flight, ignoring re-entry",
+        );
+        return;
+      }
+      workosInFlightRef.current = true;
+      try {
+        if (Platform.OS === "web") {
+          throw new Error("WorkOS SSO is only available in the native app.");
+        }
+
+        const config = getPlatformConfig();
+        if (!config.configured) {
+          throw new Error(
+            `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+          );
+        }
+
+        const authorizeUrl = buildWorkosAuthorizeUrl(option, config.apiUrl);
+        const result = await WebBrowser.openAuthSessionAsync(
+          authorizeUrl,
+          WORKOS_MOBILE_REDIRECT_URI,
+        );
+
+        if (result.type !== "success") return;
+
+        const { bridgeCode } = parseWorkosCallbackUrl(result.url);
+        await completeWorkosBridgeSignIn(bridgeCode);
+      } finally {
+        workosInFlightRef.current = false;
+      }
+    },
+    [completeWorkosBridgeSignIn],
+  );
+
   // ------ Sign up / confirm ------
   const handleSignUp = useCallback(
     async (email: string, password: string, name: string) => {
@@ -584,6 +688,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         restoreWithCredentials,
         retryBootstrap: runBootstrap,
         signInWithGoogle: handleSignInWithGoogle,
+        signInWithSSO: handleSignInWithSSO,
+        completeSignInWithSSOBridge: completeWorkosBridgeSignIn,
         deploymentConfig,
         importDeploymentProfile: handleImportDeploymentProfile,
         removeDeploymentProfile: handleRemoveDeploymentProfile,

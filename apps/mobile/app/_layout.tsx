@@ -228,6 +228,7 @@ function RootLayoutNav() {
       "invite",
       "forgot-password",
       "auth",
+      "oauth",
       "deployment-profile",
       "environment-setup",
     ];
@@ -381,6 +382,10 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/complete" />
                 <Stack.Screen
                   name="auth/callback"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="oauth/callback"
                   options={{ headerShown: false }}
                 />
                 <Stack.Screen
