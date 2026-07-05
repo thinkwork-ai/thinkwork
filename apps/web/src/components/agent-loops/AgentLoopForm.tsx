@@ -168,7 +168,14 @@ export function AgentLoopForm({
         if (!next) onCancel();
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className="sm:max-w-lg"
+        // Radix's mount auto-focus runs focusFirst(..., { select: true }) on the
+        // first focusable node — the borderless title input — which selects the
+        // whole automation name on open. Suppress it so editing an automation
+        // doesn't land with the title pre-selected.
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogTitle className="sr-only">
           {mode === "edit" ? "Edit automation" : "New automation"}
         </DialogTitle>
