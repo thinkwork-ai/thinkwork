@@ -40,7 +40,10 @@ import {
   tenantMcpServers,
   threads,
 } from "../../graphql/utils.js";
-import { deriveCanvasArtifactId } from "./canvas-lifecycle.js";
+import {
+  deriveCanvasArtifactId,
+  findCheckoutRoutedArtifact,
+} from "./canvas-lifecycle.js";
 
 type AuthContext = "tenant_mcp" | "per_user_oauth";
 
@@ -92,11 +95,19 @@ export async function upsertBindingFromActivityEvent(input: {
   const binding = bindingDescriptorFromPayload(input.payload);
   if (!binding) return null;
 
-  const artifactId = deriveCanvasArtifactId(
-    input.tenantId,
-    input.threadId,
-    binding.partId,
-  );
+  // Check-out routing (U8/R13, THINK-165): a re-emission in a thread that
+  // checked out a saved canvas must bind against the ORIGINAL artifact — the
+  // (checkout-thread)-derived id has no artifacts row, so an unrouted capture
+  // dies on the FK (observed live: agent-mediated refreshes from checkout
+  // threads never updated the binding). Mirrors born-artifact's head routing.
+  const routed = await findCheckoutRoutedArtifact({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    stablePartId: binding.partId,
+  });
+  const artifactId =
+    routed?.id ??
+    deriveCanvasArtifactId(input.tenantId, input.threadId, binding.partId);
   const elementId = binding.elementId ?? "";
 
   const authContext = await classifyAuthContext(

@@ -39,6 +39,7 @@ import {
   CANVAS_METADATA_KIND,
   boundedCanvasText,
   deriveCanvasArtifactId,
+  findCheckoutRoutedArtifact,
   loadCanvasHeadContent,
   type CanvasArtifactRow,
 } from "./canvas-lifecycle.js";
@@ -182,46 +183,6 @@ export async function upsertDraftCanvasFromActivityEvent(input: {
     });
 
   return { artifactId };
-}
-
-/**
- * Find the SAVED canvas that `threadId` has checked out under `stablePartId`
- * (U8, R13). Check-out records a `{threadId}` entry in the ORIGINAL artifact's
- * `metadata.checkouts` array (see `checkoutCanvas.mutation.ts`); this lookup
- * matches on that plus the artifact's own `metadata.stablePartId`. Returns null
- * when the thread has no check-out for the part — the caller then takes the
- * ordinary derive path, so an unrelated same-stable-id emission is never routed
- * to another thread's artifact.
- */
-async function findCheckoutRoutedArtifact(input: {
-  tenantId: string;
-  threadId: string;
-  stablePartId: string;
-}): Promise<CanvasArtifactRow | null> {
-  const [row] = await db
-    .select({
-      id: artifacts.id,
-      tenant_id: artifacts.tenant_id,
-      type: artifacts.type,
-      status: artifacts.status,
-      content: artifacts.content,
-      s3_key: artifacts.s3_key,
-      head_version: artifacts.head_version,
-      head_write_seq: artifacts.head_write_seq,
-      metadata: artifacts.metadata,
-    })
-    .from(artifacts)
-    .where(
-      and(
-        eq(artifacts.tenant_id, input.tenantId),
-        sql`${artifacts.metadata}->>'stablePartId' = ${input.stablePartId}`,
-        sql`${artifacts.metadata}->'checkouts' @> ${JSON.stringify([
-          { threadId: input.threadId },
-        ])}::jsonb`,
-      ),
-    )
-    .limit(1);
-  return (row as CanvasArtifactRow | undefined) ?? null;
 }
 
 /**
