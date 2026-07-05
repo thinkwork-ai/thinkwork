@@ -365,6 +365,12 @@ export const COMPLIANCE_EVENT_TYPES = [
   "mcp.detached",
   "agent.extension_granted",
   "agent.extension_detached",
+  // Folder capabilities (THINK-173 U7). agent. prefix is already admitted
+  // by the prefix-based event-type CHECK constraints — no migration.
+  "agent.connection_granted",
+  "agent.connection_detached",
+  "agent.tool_granted",
+  "agent.tool_detached",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

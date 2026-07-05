@@ -36,6 +36,8 @@ const EXPECTED_CLASSES = [
   "Pi extensions (dynamic)",
   "Plugins (apps)",
   "Context / memory",
+  "Connections (folder)",
+  "Tools (folder)",
 ];
 
 function fail(message) {

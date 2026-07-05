@@ -31,6 +31,8 @@ The capability mapping matrix is the product's single contract for **"what does 
 | Pi extensions (dynamic) | Grant — assignment with target `default_agent`  | Grant — assignment with target `agent_profile`                          | Never                                                     | Never                                                             |
 | Plugins (apps)          | Install — tenant-wide                           | Never                                                                   | Never                                                     | Activate per-user — OAuth; activation gates plugin skills/servers |
 | Context / memory        | Carry — agent workspace root                    | Carry — profile instructions                                            | Carry — Space folder (SPACE.md, files)                    | Carry — `users/<slug>/` (USER.md, memory)                         |
+| Connections (folder)    | Grant — signed `connections/<slug>/` sidecar    | Never                                                                   | Never — v1; space-source folders are THINK-174            | Self-serve auth only — per-user OAuth satisfies user-principal    |
+| Tools (folder)          | Grant — signed `tools/<slug>/` sidecar          | Never                                                                   | Never — v1; space-source folders are THINK-174            | Never                                                             |
 
 ## Injection destinations
 
