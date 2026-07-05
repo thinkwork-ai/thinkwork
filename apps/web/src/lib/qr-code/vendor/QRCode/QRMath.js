@@ -41,4 +41,4 @@ for (var i = 0; i < 255; i++) {
 	QRMath.LOG_TABLE[QRMath.EXP_TABLE[i] ] = i;
 }
 
-module.exports = QRMath;
+export default QRMath;

@@ -1,4 +1,4 @@
-var QRMode = require('./QRMode');
+import QRMode from "./QRMode.js";
 
 function QR8bitByte(data) {
 	this.mode = QRMode.MODE_8BIT_BYTE;
@@ -19,4 +19,4 @@ QR8bitByte.prototype = {
 	}
 };
 
-module.exports = QR8bitByte;
+export default QR8bitByte;

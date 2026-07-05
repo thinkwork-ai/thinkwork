@@ -1,4 +1,4 @@
-var QRMath = require('./QRMath');
+import QRMath from "./QRMath.js";
 
 function QRPolynomial(num, shift) {
 	if (num.length === undefined) {
@@ -63,4 +63,4 @@ QRPolynomial.prototype = {
 	}
 };
 
-module.exports = QRPolynomial;
+export default QRPolynomial;

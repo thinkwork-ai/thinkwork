@@ -16,11 +16,11 @@
 // Modified to work in node for this project (and some refactoring)
 //---------------------------------------------------------------------
 
-var QR8bitByte = require('./QR8bitByte');
-var QRUtil = require('./QRUtil');
-var QRPolynomial = require('./QRPolynomial');
-var QRRSBlock = require('./QRRSBlock');
-var QRBitBuffer = require('./QRBitBuffer');
+import QR8bitByte from "./QR8bitByte.js";
+import QRUtil from "./QRUtil.js";
+import QRPolynomial from "./QRPolynomial.js";
+import QRRSBlock from "./QRRSBlock.js";
+import QRBitBuffer from "./QRBitBuffer.js";
 
 function QRCode(typeNumber, errorCorrectLevel) {
 	this.typeNumber = typeNumber;
@@ -459,4 +459,4 @@ QRCode.createBytes = function(buffer, rsBlocks) {
 
 };
 
-module.exports = QRCode;
+export default QRCode;
