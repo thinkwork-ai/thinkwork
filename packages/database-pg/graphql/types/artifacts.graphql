@@ -11,7 +11,12 @@ type Artifact {
   # Version-chain head pointer. 0 until the canvas has been pinned/checked in.
   headVersion: Int!
   title: String!
-  type: ArtifactType!
+  # Artifact type is an OPEN, plugin-extensible vocabulary — not a closed enum.
+  # Third-party plugins mint artifact types we cannot know in advance, so the
+  # wire type is a plain String. Stored lowercase, served uppercase (see
+  # `artifactToCamel`). Core types today include
+  # data_view/applet/report/plan/brief/ideation, but the set is NOT closed.
+  type: String!
   status: ArtifactStatus!
   content: String
   s3Key: String
@@ -42,6 +47,11 @@ type ArtifactVersion {
   contentHash: String!
   createdBy: ID
   createdAt: AWSDateTime!
+  # Living Artifacts (THINK-145 U10): the pinned revision's canvas payload,
+  # lazily hydrated from S3. Only fetched when selected — the version list
+  # queries without it. Read access is gated by the parent Artifact resolver
+  # (space membership / thread visibility, R15).
+  content: String
 }
 
 # Refresh identity of a data binding.
@@ -80,7 +90,10 @@ enum CanvasRefreshOutcome {
   SKIPPED
 }
 
-# One binding's result inside a CanvasRefreshResult.
+# One binding's result inside a CanvasRefreshResult. `serverName`/`toolName`
+# identify the saved source tool call so a NEEDS_USER outcome is actionable
+# in-turn: the agent (acting for the credential owner) can re-run that tool
+# and re-emit the part instead of just reporting "needs the owner".
 type CanvasRefreshBindingResult {
   bindingId: ID!
   partId: String!
@@ -88,6 +101,8 @@ type CanvasRefreshBindingResult {
   outcome: CanvasRefreshOutcome!
   quality: ArtifactBindingQuality!
   reason: String
+  serverName: String
+  toolName: String
 }
 
 # Result of a refreshCanvasData mutation. `dispatched` is false when the refresh
@@ -126,13 +141,16 @@ type ArtifactDataBinding {
 
 # A saved (or the current thread's draft) canvas summary for agent parity
 # (THINK-145 U9). `status` is draft | final | superseded; `headVersion` is 0
-# until the canvas has been pinned/checked in.
+# until the canvas has been pinned/checked in. `stablePartId` is the canvas's
+# json-render part id — the id the agent must re-emit under to update THIS
+# canvas rather than minting a stray draft (checkout routing keys on it).
 type CanvasSummary {
   artifactId: ID!
   title: String!
   updatedAt: AWSDateTime
   headVersion: Int!
   status: String!
+  stablePartId: String
 }
 
 # A space the acting user may save a canvas into (member-or-above role).
@@ -209,20 +227,6 @@ type AppletState {
   updatedAt: AWSDateTime!
 }
 
-enum ArtifactType {
-  DATA_VIEW
-  APPLET
-  APPLET_STATE
-  NOTE
-  REPORT
-  PLAN
-  DRAFT
-  DIGEST
-  # HTML Document Artifacts (THINK-147): document genres beyond REPORT/PLAN.
-  IDEATION
-  BRIEF
-}
-
 enum ArtifactStatus {
   DRAFT
   FINAL
@@ -234,7 +238,8 @@ input CreateArtifactInput {
   agentId: ID
   threadId: ID
   title: String!
-  type: ArtifactType!
+  # Open, plugin-extensible vocabulary (see Artifact.type). Stored lowercase.
+  type: String!
   status: ArtifactStatus
   content: String
   s3Key: String
@@ -243,17 +248,10 @@ input CreateArtifactInput {
   metadata: AWSJSON
 }
 
-input PromoteGenUIArtifactInput {
-  threadId: ID!
-  sourceMessageId: ID!
-  partId: String!
-  specHash: String!
-  idempotencyKey: String!
-}
-
 input UpdateArtifactInput {
   title: String
-  type: ArtifactType
+  # Open, plugin-extensible vocabulary (see Artifact.type).
+  type: String
   status: ArtifactStatus
   content: String
   s3Key: String
@@ -296,7 +294,7 @@ extend type Query {
     tenantId: ID!
     threadId: ID
     agentId: ID
-    type: ArtifactType
+    type: String
     status: ArtifactStatus
     # When true, return only artifacts with a non-null favoritedAt,
     # ordered favoritedAt DESC. Drives the apps/web sidebar
@@ -306,6 +304,10 @@ extend type Query {
     # canvases. Set true to also return draft-status canvases (unsaved GenUI
     # emissions). Non-canvas artifacts are always returned regardless.
     includeDrafts: Boolean
+    # Living Artifacts (THINK-145 U10/R15): scope the list to one space's
+    # canvases (the space entry point). Combined with the existing membership
+    # visibility gate — a caller still only sees canvases they may access.
+    spaceId: ID
     limit: Int
     cursor: String
   ): [Artifact!]!
@@ -331,10 +333,6 @@ extend type Query {
 
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
-  # DEPRECATED for canvases (Living Artifacts THINK-145, R10): GenUI canvases
-  # are born as draft artifacts and saved via `saveCanvas` (a status flip, not
-  # a promote-copy). This remains only for legacy/non-canvas callers.
-  promoteGenUIArtifact(input: PromoteGenUIArtifactInput!): Artifact!
   # Living Artifacts (THINK-145 U4): save a draft canvas — status flip + naming
   # + space assignment (R10/R12/R15). Re-saving a saved canvas auto-pins the
   # prior head as a version (KTD3 check-in rule).
@@ -365,6 +363,8 @@ extend type Mutation {
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
   promoteDraftApplet(input: PromoteDraftAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
-  adminUpdateAppletSource(input: AdminUpdateAppletSourceInput!): SaveAppletPayload!
+  adminUpdateAppletSource(
+    input: AdminUpdateAppletSourceInput!
+  ): SaveAppletPayload!
   saveAppletState(input: SaveAppletStateInput!): AppletState!
 }

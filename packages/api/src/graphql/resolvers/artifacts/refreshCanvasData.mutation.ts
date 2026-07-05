@@ -19,7 +19,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, artifacts } from "../../utils.js";
-import { requireTenantMember } from "../core/authz.js";
+import { requireActingTenantMember } from "../core/authz.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 
 interface RefreshCanvasDataArgs {
@@ -34,6 +34,9 @@ interface LambdaBindingResult {
   outcome: string;
   quality: string;
   reason: string | null;
+  // Optional for deploy skew: a not-yet-updated Lambda omits them.
+  serverName?: string | null;
+  toolName?: string | null;
 }
 
 interface LambdaResultPayload {
@@ -54,6 +57,8 @@ interface RefreshResult {
     outcome: string;
     quality: string;
     reason: string | null;
+    serverName: string | null;
+    toolName: string | null;
   }>;
 }
 
@@ -74,7 +79,7 @@ export const refreshCanvasData = async (
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantMember(ctx, row.tenant_id);
+  await requireActingTenantMember(ctx, row.tenant_id);
   // Read-side gate: refresh is a freshness action any member may take.
   await assertCanvasAccess(ctx, row, "read");
 
@@ -96,7 +101,8 @@ export const refreshCanvasData = async (
     trigger: "user" as const,
   };
 
-  const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const res = await lambda.send(
     new InvokeCommand({
@@ -150,6 +156,8 @@ export const refreshCanvasData = async (
       outcome: b.outcome.toUpperCase(),
       quality: b.quality.toUpperCase(),
       reason: b.reason,
+      serverName: b.serverName ?? null,
+      toolName: b.toolName ?? null,
     })),
   };
 };

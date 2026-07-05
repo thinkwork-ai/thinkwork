@@ -2,23 +2,37 @@ import type { ReactNode } from "react";
 import { Loader2, Pause, Play, Zap } from "lucide-react";
 import { Badge, Button } from "@thinkwork/ui";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { AgentLoopRow } from "./agent-loop-types";
+import type {
+  AgentLoopMemberOption,
+  AgentLoopRow,
+  AgentLoopSpaceOption,
+} from "./agent-loop-types";
 import {
-  formatCost,
   formatDateTime,
   jsonRecord,
+  readTargetSpec,
   stringValue,
   titleize,
 } from "./agent-loop-utils";
 
+const TARGET_LABELS: Record<string, string> = {
+  agent_thread: "Agent thread",
+  routine: "Routine",
+  workflow: "Workflow",
+};
+
 export function AutomationStatusRail({
   loop,
   pendingAction,
+  spaceOptions = [],
+  memberOptions = [],
   onRun,
   onToggle,
 }: {
   loop: AgentLoopRow;
   pendingAction: string | null;
+  spaceOptions?: AgentLoopSpaceOption[];
+  memberOptions?: AgentLoopMemberOption[];
   onRun: () => void;
   onToggle: () => void;
 }) {
@@ -26,9 +40,16 @@ export function AutomationStatusRail({
   const version = loop.currentVersion;
   const trigger = jsonRecord(version?.triggerSpec);
   const triggerConfig = jsonRecord(trigger.config);
+  const target = readTargetSpec(version);
   const lastRun = loop.runs?.[0] ?? null;
   const lastRunAt = lastRun?.startedAt ?? lastRun?.createdAt ?? loop.lastRunAt;
   const lastRunStatus = lastRun?.status ?? loop.lastRunStatus;
+  const spaceName =
+    spaceOptions.find((space) => space.id === loop.spaceId)?.name ??
+    (loop.spaceId ? loop.spaceId : "-");
+  const runAsName =
+    memberOptions.find((member) => member.id === loop.runAsUserId)?.label ??
+    (loop.runAsUserId ? loop.runAsUserId : "You");
 
   return (
     <aside className="border-l border-border/70 pl-6">
@@ -49,20 +70,20 @@ export function AutomationStatusRail({
             label="Trigger"
             value={titleize(loop.primaryTriggerFamily)}
           />
-          <RailRow
-            label="Schedule"
-            value={stringValue(triggerConfig.scheduleExpression, "-")}
-          />
-          <RailRow
-            label="Timezone"
-            value={stringValue(triggerConfig.timezone, "-")}
-          />
+          {loop.primaryTriggerFamily === "schedule" ? (
+            <RailRow
+              label="Schedule"
+              value={stringValue(triggerConfig.scheduleExpression, "-")}
+            />
+          ) : null}
+          <RailRow label="Target" value={TARGET_LABELS[target.kind]} />
+          <RailRow label="Run as" value={runAsName} />
+          <RailRow label="Space" value={spaceName} />
           <RailRow label="Last ran" value={formatDateTime(lastRunAt)} />
           <RailRow
             label="Last result"
             value={lastRunStatus ? titleize(lastRunStatus) : "-"}
           />
-          <RailRow label="Cost" value={formatCost(loop.totalCostUsdCents)} />
           <RailRow
             label="Last thread"
             value={

@@ -266,20 +266,18 @@ const runsColumns: ColumnDef<RunRow>[] = [
           </Badge>
         );
       }
+      // The legacy scheduled-job detail route was retired when
+      // /settings/automations/$automationId became the AgentLoop detail
+      // (THINK-137 U7); render the badge without a deep link.
       return (
-        <Link
-          to="/settings/automations/$scheduledJobId"
-          params={{ scheduledJobId: scheduledJobId ?? "" }}
-          onClick={(event) => event.stopPropagation()}
+        <Badge
+          variant="secondary"
+          className="gap-1 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400"
+          title={scheduledJobId ? `Scheduled job ${scheduledJobId}` : undefined}
         >
-          <Badge
-            variant="secondary"
-            className="gap-1 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400"
-          >
-            <CalendarClock className="h-3 w-3" />
-            Schedule
-          </Badge>
-        </Link>
+          <CalendarClock className="h-3 w-3" />
+          Schedule
+        </Badge>
       );
     },
   },

@@ -5,12 +5,10 @@ import {
   type DispatchableAgentLoop,
   type DispatchableAgentLoopVersion,
 } from "@thinkwork/agent-loops-core";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  agentLoopEvidence,
   agentLoopIterations,
-  agentLoopJudgments,
   agentLoopRuns,
   agentLoops,
   agentLoopVersions,
@@ -18,9 +16,9 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { FinalizeGoalRunProjection } from "../chat-finalize/types.js";
 import {
-  judgeAgentLoopIteration,
-  type AgentLoopJudgmentDecision,
-} from "./judgment.js";
+  decideAgentLoopCompletion,
+  type AgentLoopCompletionDecision,
+} from "./completion-decision.js";
 
 export interface AgentLoopFinalizeContext {
   runId: string;
@@ -50,8 +48,8 @@ export interface AgentLoopFinalizeLoadedContext {
   iteration: {
     id: string;
     iterationNumber: number;
+    status: string;
   };
-  existingJudgmentId?: number | null;
 }
 
 export interface AgentLoopFinalizeLedger {
@@ -61,35 +59,17 @@ export interface AgentLoopFinalizeLedger {
     iterationId: string;
     threadTurnId: string;
   }): Promise<AgentLoopFinalizeLoadedContext | null>;
-  recordJudgment(input: {
-    tenantId: string;
-    runId: string;
-    iterationId: string;
-    judgeMode: string;
-    decision: AgentLoopJudgmentDecision;
-    now: Date;
-  }): Promise<{ id: number }>;
-  recordEvidence(input: {
-    tenantId: string;
-    loopId: string;
-    runId: string;
-    iterationId: string;
-    judgmentId: number;
-    threadTurnId: string;
-    summary: Record<string, unknown>;
-    now: Date;
-  }): Promise<void>;
   updateIteration(input: {
     tenantId: string;
     iterationId: string;
-    decision: AgentLoopJudgmentDecision;
+    decision: AgentLoopCompletionDecision;
     now: Date;
   }): Promise<void>;
   updateRun(input: {
     tenantId: string;
     loopId: string;
     runId: string;
-    decision: AgentLoopJudgmentDecision;
+    decision: AgentLoopCompletionDecision;
     currentIteration: number;
     outputSummary: Record<string, unknown>;
     now: Date;
@@ -99,7 +79,7 @@ export interface AgentLoopFinalizeLedger {
     runId: string;
     iterationNumber: number;
     previousIterationId: string;
-    decision: AgentLoopJudgmentDecision;
+    decision: AgentLoopCompletionDecision;
     now: Date;
   }): Promise<{ id: string }>;
   enqueueNextWakeup(input: {
@@ -165,7 +145,7 @@ export async function projectAgentLoopFinalize(
   if (!loaded) {
     return { status: "skipped", reason: "agent_loop_context_not_found" };
   }
-  if (loaded.existingJudgmentId) {
+  if (isTerminalIterationStatus(loaded.iteration.status)) {
     return {
       status: "already_projected",
       runId: context.runId,
@@ -174,8 +154,7 @@ export async function projectAgentLoopFinalize(
   }
 
   const now = input.now ?? new Date();
-  const decision = judgeAgentLoopIteration({
-    judgeSpec: loaded.version.judgeSpec,
+  const decision = decideAgentLoopCompletion({
     loopPolicy: loaded.version.loopPolicy,
     iterationNumber: loaded.iteration.iterationNumber,
     goalRun: input.goalRun,
@@ -187,24 +166,6 @@ export async function projectAgentLoopFinalize(
   let nextIterationId: string | undefined;
   let nextWakeupId: string | undefined;
   try {
-    const judgment = await projectionLedger.recordJudgment({
-      tenantId: input.tenantId,
-      runId: loaded.run.id,
-      iterationId: loaded.iteration.id,
-      judgeMode: loaded.version.judgeSpec.mode,
-      decision,
-      now,
-    });
-    await projectionLedger.recordEvidence({
-      tenantId: input.tenantId,
-      loopId: loaded.loop.id,
-      runId: loaded.run.id,
-      iterationId: loaded.iteration.id,
-      judgmentId: judgment.id,
-      threadTurnId: input.threadTurnId,
-      summary: decision.evidenceSummary,
-      now,
-    });
     await projectionLedger.updateIteration({
       tenantId: input.tenantId,
       iterationId: loaded.iteration.id,
@@ -249,7 +210,7 @@ export async function projectAgentLoopFinalize(
       currentIteration: nextIterationId
         ? nextIterationNumber
         : loaded.iteration.iterationNumber,
-      outputSummary: decision.evidenceSummary,
+      outputSummary: decision.outputSummary,
       now,
     });
   } catch (err) {
@@ -274,11 +235,15 @@ export async function projectAgentLoopFinalize(
     status: "projected",
     runId: loaded.run.id,
     iterationId: loaded.iteration.id,
-    outcome: decision.judgment.outcome,
+    outcome: decision.outcome,
     runStatus: decision.runStatus,
     nextIterationId,
     nextWakeupId,
   };
+}
+
+function isTerminalIterationStatus(status: string): boolean {
+  return status !== "queued" && status !== "running";
 }
 
 export function agentLoopContextFromSnapshot(
@@ -300,6 +265,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         .select({
           id: agentLoopIterations.id,
           iteration_number: agentLoopIterations.iteration_number,
+          status: agentLoopIterations.status,
         })
         .from(agentLoopIterations)
         .where(
@@ -356,7 +322,6 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           version_status: agentLoopVersions.version_status,
           goal_spec: agentLoopVersions.goal_spec,
           worker_spec: agentLoopVersions.worker_spec,
-          judge_spec: agentLoopVersions.judge_spec,
           loop_policy: agentLoopVersions.loop_policy,
         })
         .from(agentLoopVersions)
@@ -368,18 +333,6 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         )
         .limit(1);
       if (!version) return null;
-
-      const [existingJudgment] = await db
-        .select({ id: agentLoopJudgments.id })
-        .from(agentLoopJudgments)
-        .where(
-          and(
-            eq(agentLoopJudgments.tenant_id, input.tenantId),
-            eq(agentLoopJudgments.agent_loop_run_id, input.runId),
-            eq(agentLoopJudgments.agent_loop_iteration_id, input.iterationId),
-          ),
-        )
-        .limit(1);
 
       return {
         loop: {
@@ -394,11 +347,10 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           versionStatus: version.version_status,
           goalSpec: version.goal_spec,
           workerSpec: version.worker_spec,
-          judgeSpec: version.judge_spec,
           loopPolicy: version.loop_policy,
           // Finalize only runs after an agent turn, which is always an
           // agent_thread target (routine/workflow targets never enqueue a
-          // wakeup, so never reach the judgment path). THINK-137 U4.
+          // wakeup, so never reach the projection path). THINK-137 U4.
           targetKind: "agent_thread",
         },
         run: {
@@ -410,47 +362,9 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         iteration: {
           id: iteration.id,
           iterationNumber: iteration.iteration_number,
+          status: iteration.status,
         },
-        existingJudgmentId: existingJudgment?.id ?? null,
       };
-    },
-
-    async recordJudgment(input) {
-      const [row] = await db
-        .insert(agentLoopJudgments)
-        .values({
-          tenant_id: input.tenantId,
-          agent_loop_run_id: input.runId,
-          agent_loop_iteration_id: input.iterationId,
-          judge_mode: input.judgeMode,
-          outcome: input.decision.judgment.outcome,
-          confidence:
-            input.decision.judgment.confidence === undefined
-              ? null
-              : Math.round(input.decision.judgment.confidence * 100),
-          rationale: input.decision.judgment.reason ?? null,
-          terminal_reason: input.decision.judgment.terminalReason ?? null,
-          structured_output: input.decision.judgment.structuredOutput,
-          created_at: input.now,
-        })
-        .returning({ id: agentLoopJudgments.id });
-      return { id: row.id };
-    },
-
-    async recordEvidence(input) {
-      await db.insert(agentLoopEvidence).values({
-        tenant_id: input.tenantId,
-        agent_loop_id: input.loopId,
-        agent_loop_run_id: input.runId,
-        agent_loop_iteration_id: input.iterationId,
-        agent_loop_judgment_id: input.judgmentId,
-        evidence_type: "goal_run_summary",
-        source_system: "chat_finalize",
-        source_id: input.threadTurnId,
-        summary: input.summary,
-        redaction_state: "summary_only",
-        created_at: input.now,
-      });
     },
 
     async updateIteration(input) {
@@ -458,7 +372,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         .update(agentLoopIterations)
         .set({
           status: input.decision.iterationStatus,
-          output_summary: input.decision.evidenceSummary,
+          output_summary: input.decision.outputSummary,
           finished_at: input.now,
           error_code: input.decision.errorCode ?? null,
           error_message: input.decision.errorMessage ?? null,
@@ -479,7 +393,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         .set({
           status: input.decision.runStatus,
           current_iteration: input.currentIteration,
-          terminal_reason: input.decision.judgment.terminalReason ?? undefined,
+          terminal_reason: input.decision.terminalReason ?? undefined,
           output_summary: input.outputSummary,
           finished_at: terminal ? input.now : null,
           last_event_at: input.now,
@@ -501,20 +415,6 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           last_run_status: input.decision.runStatus,
           last_run_at: input.now,
           last_run_summary: input.outputSummary,
-          accepted_run_count:
-            input.decision.runStatus === "completed"
-              ? sql`${agentLoops.accepted_run_count} + 1`
-              : undefined,
-          rejected_run_count:
-            input.decision.runStatus === "failed" ||
-            input.decision.runStatus === "budget_stopped"
-              ? sql`${agentLoops.rejected_run_count} + 1`
-              : undefined,
-          escalated_run_count:
-            input.decision.runStatus === "escalated" ||
-            input.decision.runStatus === "waiting_for_human"
-              ? sql`${agentLoops.escalated_run_count} + 1`
-              : undefined,
           updated_at: input.now,
         })
         .where(
@@ -536,7 +436,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           goal_mode_action: "resume",
           input_summary: {
             previousIterationId: input.previousIterationId,
-            previousOutcome: input.decision.judgment.outcome,
+            previousOutcome: input.decision.outcome,
           },
           created_at: input.now,
           updated_at: input.now,
@@ -668,7 +568,6 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           last_run_status: "failed",
           last_run_at: input.now,
           last_run_summary: outputSummary,
-          rejected_run_count: sql`${agentLoops.rejected_run_count} + 1`,
           updated_at: input.now,
         })
         .where(

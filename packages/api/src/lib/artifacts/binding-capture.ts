@@ -20,7 +20,13 @@
  *
  * v1 binds one primary source per part → `element_id = ""`. Idempotent on the
  * (artifact, part, element) unique key: re-capture updates the descriptor in
- * place and never touches refresh state (quality / last_fetched_at / last_good_at).
+ * place AND marks the binding fresh (THINK-165). A descriptor only reaches
+ * this function when the runtime validated `sourceToolCallId` against the
+ * CURRENT turn's completed, non-errored MCP invocations
+ * (`buildCanvasDataBinding`) — so capture is, by construction, evidence that
+ * fresh data was just fetched: quality → `good`, stamp `last_fetched_at` +
+ * `last_good_at`. Without this, an agent-mediated refresh (per-user-OAuth
+ * re-run + same-id re-emit) left the row STALE right after fresh data landed.
  */
 
 import { bindingDescriptorFromPayload } from "@thinkwork/thread-json-render";
@@ -29,6 +35,7 @@ import {
   db,
   eq,
   and,
+  or,
   sql,
   tenantMcpServers,
   threads,
@@ -44,6 +51,13 @@ type AuthContext = "tenant_mcp" | "per_user_oauth";
  * is tenant-scoped and refreshable unattended. An unresolved server name is
  * treated as tenant_mcp — the missing-server case degrades to a terminal BAD
  * state at refresh time (U6), not a mis-scoped credential.
+ *
+ * The runtime identifies a server by its SLUG (the mcp_configs key, e.g.
+ * `twenty--crm`), not its display name ("Twenty CRM"). Matching only on
+ * `name` silently misclassified every slug-named binding as tenant_mcp
+ * (observed live: a Twenty per-user-OAuth chart captured as tenant_mcp with
+ * no owner, THINK-145 U11). Match slug first; keep name as a fallback for
+ * rows registered before slugs were backfilled.
  */
 async function classifyAuthContext(
   tenantId: string,
@@ -55,7 +69,10 @@ async function classifyAuthContext(
     .where(
       and(
         eq(tenantMcpServers.tenant_id, tenantId),
-        eq(tenantMcpServers.name, serverName),
+        or(
+          eq(tenantMcpServers.slug, serverName),
+          eq(tenantMcpServers.name, serverName),
+        ),
       ),
     )
     .limit(1);
@@ -113,6 +130,9 @@ export async function upsertBindingFromActivityEvent(input: {
       result_shape_hash: binding.resultShapeHash,
       auth_context: authContext,
       owner_user_id: ownerUserId,
+      quality: "good",
+      last_fetched_at: sql`now()`,
+      last_good_at: sql`now()`,
     })
     .onConflictDoUpdate({
       target: [
@@ -120,9 +140,9 @@ export async function upsertBindingFromActivityEvent(input: {
         artifactDataBindings.part_id,
         artifactDataBindings.element_id,
       ],
-      // Re-capture refreshes the descriptor (a re-emit with a new/changed
-      // source). Refresh state (quality, last_fetched_at, last_good_at) is
-      // deliberately preserved — a fresh capture does not reset freshness.
+      // Re-capture refreshes the descriptor AND freshness state: the runtime
+      // only stamps a binding when `sourceToolCallId` resolved to a completed
+      // in-turn MCP call, so this row's data was fetched moments ago.
       set: {
         mcp_server_ref: binding.serverRef,
         server_name: binding.serverName,
@@ -131,6 +151,9 @@ export async function upsertBindingFromActivityEvent(input: {
         result_shape_hash: binding.resultShapeHash,
         auth_context: authContext,
         owner_user_id: ownerUserId,
+        quality: "good",
+        last_fetched_at: sql`now()`,
+        last_good_at: sql`now()`,
         updated_at: sql`now()`,
       },
     })

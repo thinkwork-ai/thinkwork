@@ -1,0 +1,66 @@
+---
+title: Artifacts
+description: Durable outputs that outlive their originating thread — Living Canvases and Document Artifacts — and the trust model that keeps rendered HTML safe.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+An artifact is a durable output the agent produces that outlives the thread it was born in. Where a thread reply is conversational and scrolls away, an artifact has an identity, a version history, and a home in a space — it is the deliverable, not the discussion about the deliverable.
+
+ThinkWork ships two artifact kinds on the same living-artifacts substrate:
+
+| Kind                  | Body                                         | Interactivity                                | Typical use                              |
+| --------------------- | -------------------------------------------- | -------------------------------------------- | ---------------------------------------- |
+| **Living Canvas**     | GenUI (json-render) with data bindings       | Interactive components, app-tier when needed | Dashboards, working views over live data |
+| **Document Artifact** | Markdown digest + self-contained HTML render | None (scriptless by design)                  | Reports, plans, briefs, ideation docs    |
+
+Both are **born as artifacts**: they exist from first emission (status `draft`) rather than being promoted from a thread snapshot after the fact. Both belong to a space, not to the thread that created them, and both can be edited across threads via chat.
+
+## Document Artifacts
+
+A Document Artifact is the simplest artifact kind — a formal document with two bodies emitted together in a single `emit_document` call:
+
+- **The markdown digest** — the canonical record. This is what other agents, mobile clients, and memory consolidation consume. It is complete on its own: everything the document says is in the digest.
+- **The HTML render** — the human-facing body. A single self-contained HTML file (inline CSS, system fonts, no external references, no scripts) styled from a genre plate.
+
+The dual-body design means the pretty version and the machine-readable version can never drift: they are produced in the same call, versioned together, and stored under the same artifact identity.
+
+### Genres and plates
+
+v1 ships four document genres, each backed by a **plate** — a complete exemplar HTML document the agent imitates structurally when composing:
+
+- **Ideation** — divergent exploration with options and trade-offs
+- **Plan** — sequenced units of work with dependencies and verification
+- **Report** — findings with evidence, structured for review
+- **Brief** — short-form summary for a decision-maker
+
+Plates are pattern books, not prose style rules: the agent copies the plate's document anatomy (eyebrow, header, section structure, CSS variables, dark-mode handling) and fills it with the content of the current task. Plates ship as assets of the `document-composer` skill, so a tenant can restyle its documents by editing the plates in its skill catalog.
+
+### Where documents appear
+
+- **In the thread** — the emitting turn renders a compact document card inside the agent's reply, next to the summary. The card links to the full document; the agent's chat reply stays to a sentence or two, because the document is the deliverable.
+- **Full-page view** — `/artifacts/<id>` renders the HTML body full-height in a sandboxed frame, with the version history and the markdown digest available alongside.
+- **In the space** — the artifact lists under its owning space like any other living artifact.
+
+### The document tier (trust model)
+
+Document Artifacts render at the **document tier**: a sandboxed iframe with `allow-scripts` stripped. A document can carry arbitrary styling but can never execute code. This is enforced twice:
+
+1. **At emission** — DocSpector, the preflight validator, rejects any HTML that is not fully self-contained: external `src`/`href`/`url()`/`@import` references, `javascript:` URLs, any `<script>` element, oversize bodies, and missing dark-mode support all fail with model-actionable diagnostics, so the agent corrects itself in-turn rather than shipping a broken document.
+2. **At render** — the sandbox attribute set guarantees that even HTML that slipped past validation cannot run scripts or reach the network.
+
+A document that genuinely needs interactivity is not the document tier's job — it graduates deliberately to the app tier (a Living Canvas or MCP app frame), which grants script execution under its own containment rules.
+
+<Aside type="note">
+  Document composition is delivered by the `document-composer` skill, which must
+  be published to the tenant's skill catalog, pass the skill trust pipeline, and
+  be installed on the agent. If documents come back as plain chat text instead
+  of plate-styled artifacts, check the skill's trust status first — see [Skills:
+  trust pipeline](/concepts/agents/skills/#the-trust-pipeline).
+</Aside>
+
+## Related pages
+
+- [Concepts: Skills](/concepts/agents/skills/) — how the `document-composer` skill reaches the agent
+- [Concepts: Spaces](/concepts/spaces/) — where artifacts live
+- [Concepts: Threads](/concepts/threads/) — where artifacts are born

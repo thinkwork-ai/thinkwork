@@ -75,7 +75,12 @@ function compile(overrides: Partial<AgentProfileConfig> = {}) {
     task: "Find current sources",
     parentThreadTurnId: "turn-parent",
     parentModelId: "anthropic/claude-sonnet-4-5",
-    availableToolNames: ["web_search", "web_extract", "read", "workspace_skill"],
+    availableToolNames: [
+      "web_search",
+      "web_extract",
+      "read",
+      "workspace_skill",
+    ],
     availableSkillNames: ["source-review"],
     mcpRegistry: registryWithTwentyTools(),
     idFactory: () => "profile-run-1",
@@ -269,6 +274,49 @@ describe("agent profile adapter", () => {
     });
 
     expect(request.tools).toEqual(["execute_code"]);
+  });
+
+  it("drops config-gated web tools instead of failing when the turn did not register them (THINK-143)", () => {
+    const request = compileAgentProfileRunRequest({
+      profile: researchProfile({
+        toolPolicy: {
+          builtInTools: ["read", "web-search", "web-extract"],
+        },
+      }),
+      task: "Review current sources.",
+      parentThreadTurnId: "turn-parent",
+      parentModelId: "anthropic/claude-sonnet-4-5",
+      // web_search / web_extract not registered this turn (no web_search_config).
+      availableToolNames: ["read"],
+      availableSkillNames: [],
+      mcpRegistry: registryWithTwentyTools(),
+    });
+
+    // Does not throw TOOL_NOT_AVAILABLE; the unavailable web tools are dropped.
+    expect(request.tools).toEqual(["read"]);
+    expect(request.tools).not.toContain("web-search");
+    expect(request.tools).not.toContain("web_search");
+    expect(request.tools).not.toContain("web-extract");
+  });
+
+  it("keeps config-gated web tools when the turn registered them", () => {
+    const request = compileAgentProfileRunRequest({
+      profile: researchProfile({
+        toolPolicy: {
+          builtInTools: ["read", "web-search", "web-extract"],
+        },
+      }),
+      task: "Review current sources.",
+      parentThreadTurnId: "turn-parent",
+      parentModelId: "anthropic/claude-sonnet-4-5",
+      availableToolNames: ["read", "web_search", "web_extract"],
+      availableSkillNames: [],
+      mcpRegistry: registryWithTwentyTools(),
+    });
+
+    // Hyphenated profile names normalize to the registered underscore tools.
+    expect(request.tools).toContain("web_search");
+    expect(request.tools).toContain("web_extract");
   });
 
   it("compiles MCP server grants into operation allowlists", () => {

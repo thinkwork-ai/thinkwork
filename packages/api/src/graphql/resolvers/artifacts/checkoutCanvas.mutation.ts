@@ -18,7 +18,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { and, artifacts, db, eq, sql, threads } from "../../utils.js";
-import { requireTenantMember } from "../core/authz.js";
+import { requireActingTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 import {
@@ -62,7 +62,7 @@ export const checkoutCanvas = async (
       extensions: { code: "NOT_FOUND" },
     });
   }
-  await requireTenantMember(ctx, row.tenant_id);
+  await requireActingTenantMember(ctx, row.tenant_id);
   if (row.tenant_id !== caller.tenantId) {
     throw new GraphQLError("Canvas belongs to a different tenant", {
       extensions: { code: "FORBIDDEN" },
@@ -151,7 +151,9 @@ export const checkoutCanvas = async (
   const [refreshed] = await db
     .select()
     .from(artifacts)
-    .where(and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, row.tenant_id)));
+    .where(
+      and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, row.tenant_id)),
+    );
   return artifactToCamelWithPayload(refreshed ?? row);
 };
 

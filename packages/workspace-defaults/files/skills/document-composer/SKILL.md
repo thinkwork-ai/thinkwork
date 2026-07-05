@@ -1,6 +1,6 @@
 ---
 name: document-composer
-description: Compose beautiful, self-contained HTML document deliverables — ideation docs, plans, reports, and briefs — saved as durable artifacts via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.
+description: 'Compose beautiful, self-contained HTML document deliverables — ideation docs, plans, reports, and briefs — saved as durable artifacts via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.'
 ---
 
 # Document Composer
@@ -72,5 +72,8 @@ re-emit — nothing was saved.
 - When the user declares the document done, re-emit with `status: "final"` —
   this pins an immutable version. Later edits re-open a draft head; the
   pinned version is preserved.
-- Tell the user where the document lives: the card in this thread opens it,
-  and it appears under Artifacts.
+- **After emitting, keep the thread reply to one or two sentences** — e.g.
+  "Done — the report is ready" plus anything the user must decide next. The
+  document card under your reply already shows the title, abstract, and an
+  open link; never recap the document's sections, contents, styling, or
+  document_id in chat. The document is the deliverable, not the reply.

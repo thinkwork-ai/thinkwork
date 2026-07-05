@@ -56,10 +56,6 @@ vi.mock("../../utils.js", () => ({
                     primary_trigger_family: "manual",
                     current_version_id: null,
                     current_version_number: null,
-                    accepted_run_count: 0,
-                    rejected_run_count: 0,
-                    escalated_run_count: 0,
-                    total_cost_usd_cents: 0,
                     created_at: new Date("2026-06-23T00:00:00Z"),
                     updated_at: new Date("2026-06-23T00:00:00Z"),
                   },
@@ -177,10 +173,6 @@ describe("saveAgentLoop", () => {
             primary_trigger_family: "manual",
             current_version_id: "version-1",
             current_version_number: 1,
-            accepted_run_count: 0,
-            rejected_run_count: 0,
-            escalated_run_count: 0,
-            total_cost_usd_cents: 0,
             created_at: new Date("2026-06-23T00:00:00Z"),
             updated_at: new Date("2026-06-23T00:00:00Z"),
           },
@@ -209,7 +201,6 @@ describe("saveAgentLoop", () => {
             completionCriteria: [],
           },
           workerSpec: { type: "agent", id: "", toolHints: [], config: {} },
-          judgeSpec: { mode: "self_check", criteria: [], config: {} },
           sourceMetadata: {
             createdFrom: "settings.automations.easy",
             creationMode: "easy",
@@ -262,8 +253,6 @@ describe("saveAgentLoop", () => {
             threadMode: "new_per_run",
           },
         },
-        // R11: judge is off the product surface — written as a fixed default.
-        judge_spec: { mode: "self_check", criteria: [], config: {} },
         source_metadata: expect.objectContaining({
           createdFrom: "settings.automations.easy",
           goalInference: "runtime_inferred",
@@ -363,7 +352,6 @@ describe("saveAgentLoop", () => {
             threadMode: "new_per_run",
           },
         },
-        judge_spec: { mode: "self_check", criteria: [], config: {} },
       }),
     );
   });

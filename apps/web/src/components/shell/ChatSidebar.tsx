@@ -259,6 +259,9 @@ export function ChatSidebar() {
   const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(
     () => new Set(),
   );
+  // Spaces we've already applied the collapsed-by-default seeding to, so a
+  // user who expands a space isn't force-collapsed again on the next render.
+  const seededSpaceIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -753,6 +756,24 @@ export function ChatSidebar() {
       return next;
     });
   }, [routeSpaceId]);
+  // Collapse spaces by default. Spaces load asynchronously, so seed each one as
+  // collapsed the first time it appears — except the space matching the current
+  // route, which stays open. Seeding is ref-guarded so later user toggles and
+  // expand-all persist rather than being overwritten on subsequent renders.
+  useEffect(() => {
+    const unseen = contextualSpaces.filter(
+      (space) => !seededSpaceIdsRef.current.has(space.id),
+    );
+    if (unseen.length === 0) return;
+    setCollapsedSpaceIds((current) => {
+      const next = new Set(current);
+      for (const space of unseen) {
+        seededSpaceIdsRef.current.add(space.id);
+        if (space.id !== routeSpaceId) next.add(space.id);
+      }
+      return next;
+    });
+  }, [contextualSpaces, routeSpaceId]);
   const openSpaceIds = useMemo(() => {
     const ids = new Set<string>();
     for (const space of contextualSpaces) {
@@ -1239,10 +1260,18 @@ function orderPinnedThreads(
   ];
 }
 
-/** Unread-count chip, rendered immediately after a section's label. */
+/**
+ * Unread count, rendered immediately after a section's label. Just the
+ * primary-accent number (no chip background) — matches the unread thread dot's
+ * blue so the count reads as an unread indicator, not a generic pill.
+ */
 function SectionUnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
-  return <SidebarCountBadge count={count} />;
+  return (
+    <span className="shrink-0 text-xs font-medium tabular-nums text-blue-400">
+      {formatCompactCount(count)}
+    </span>
+  );
 }
 
 function SidebarCountBadge({
@@ -1742,19 +1771,7 @@ function SpacesListSection({
   onPin?: (threadId: string) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
-  if (spacesFetching && !hasLoadedSpaces) {
-    return (
-      <div className="space-y-0.5">
-        <SpacesSectionHeader
-          onExpandAll={onExpandAll}
-          onCollapseAll={onCollapseAll}
-        />
-        <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
-          Loading Spaces...
-        </p>
-      </div>
-    );
-  }
+  if (spacesFetching && !hasLoadedSpaces) return null;
 
   if (spaces.length === 0) return null;
 

@@ -4,16 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import * as schema from "../src/schema";
 import {
-  AGENT_LOOP_EVIDENCE_REDACTION_STATES,
-  AGENT_LOOP_JUDGE_MODES,
-  AGENT_LOOP_JUDGMENT_OUTCOMES,
   AGENT_LOOP_LIFECYCLE_STATUSES,
   AGENT_LOOP_RUN_STATUSES,
   AGENT_LOOP_TRIGGER_FAMILIES,
   AGENT_LOOP_VERSION_STATUSES,
-  agentLoopEvidence,
   agentLoopIterations,
-  agentLoopJudgments,
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
@@ -34,8 +29,6 @@ describe("agent loop schema", () => {
     expect(schema.agentLoopVersions).toBe(agentLoopVersions);
     expect(schema.agentLoopRuns).toBe(agentLoopRuns);
     expect(schema.agentLoopIterations).toBe(agentLoopIterations);
-    expect(schema.agentLoopJudgments).toBe(agentLoopJudgments);
-    expect(schema.agentLoopEvidence).toBe(agentLoopEvidence);
 
     expect(schema.AGENT_LOOP_LIFECYCLE_STATUSES).toBe(
       AGENT_LOOP_LIFECYCLE_STATUSES,
@@ -47,10 +40,6 @@ describe("agent loop schema", () => {
       AGENT_LOOP_TRIGGER_FAMILIES,
     );
     expect(schema.AGENT_LOOP_RUN_STATUSES).toBe(AGENT_LOOP_RUN_STATUSES);
-    expect(schema.AGENT_LOOP_JUDGE_MODES).toBe(AGENT_LOOP_JUDGE_MODES);
-    expect(schema.AGENT_LOOP_JUDGMENT_OUTCOMES).toBe(
-      AGENT_LOOP_JUDGMENT_OUTCOMES,
-    );
   });
 
   it("models AgentLoop identity as a first-class product object", () => {
@@ -65,8 +54,6 @@ describe("agent loop schema", () => {
     expect(columns.primary_trigger_family.default).toBe("manual");
     expect(columns.current_version_id.notNull).toBe(false);
     expect(columns.last_run_summary.notNull).toBe(true);
-    expect(columns.accepted_run_count.default).toBe(0);
-    expect(columns.rejected_run_count.default).toBe(0);
 
     expect(indexNames(agentLoops)).toEqual(
       expect.arrayContaining([
@@ -92,7 +79,6 @@ describe("agent loop schema", () => {
     expect(versionColumns.trigger_spec.notNull).toBe(true);
     expect(versionColumns.goal_spec.notNull).toBe(true);
     expect(versionColumns.worker_spec.notNull).toBe(true);
-    expect(versionColumns.judge_spec.notNull).toBe(true);
     expect(versionColumns.loop_policy.notNull).toBe(true);
     expect(indexNames(agentLoopVersions)).toEqual(
       expect.arrayContaining([
@@ -120,7 +106,7 @@ describe("agent loop schema", () => {
     );
   });
 
-  it("stores iterations, judgments, and redacted evidence without workflow_runs", () => {
+  it("stores iterations without workflow_runs", () => {
     expect(getTableName(agentLoopIterations)).toBe("agent_loop_iterations");
     const iterationColumns = getTableColumns(agentLoopIterations);
     expect(iterationColumns.agent_loop_run_id.notNull).toBe(true);
@@ -130,27 +116,24 @@ describe("agent loop schema", () => {
     expect(indexNames(agentLoopIterations)).toContain(
       "agent_loop_iterations_run_number_uidx",
     );
+  });
 
-    expect(getTableName(agentLoopJudgments)).toBe("agent_loop_judgments");
-    const judgmentColumns = getTableColumns(agentLoopJudgments);
-    expect(judgmentColumns.agent_loop_run_id.notNull).toBe(true);
-    expect(judgmentColumns.agent_loop_iteration_id.notNull).toBe(false);
-    expect(judgmentColumns.judge_mode.notNull).toBe(true);
-    expect(judgmentColumns.outcome.notNull).toBe(true);
-    expect(judgmentColumns.structured_output.notNull).toBe(true);
+  it("no longer defines judge/evidence/ROI schema (THINK-137 U10 PR B)", () => {
+    // Judge tables, evidence tables, and the agent_loops ROI counters were
+    // dropped in migration 0214. Guard against reintroduction.
+    expect("agentLoopJudgments" in schema).toBe(false);
+    expect("agentLoopEvidence" in schema).toBe(false);
 
-    expect(getTableName(agentLoopEvidence)).toBe("agent_loop_evidence");
-    const evidenceColumns = getTableColumns(agentLoopEvidence);
-    expect(evidenceColumns.agent_loop_id.notNull).toBe(true);
-    expect(evidenceColumns.agent_loop_run_id.notNull).toBe(false);
-    expect(evidenceColumns.redaction_state.default).toBe("summary_only");
-    expect(indexNames(agentLoopEvidence)).toEqual(
-      expect.arrayContaining([
-        "agent_loop_evidence_run_idx",
-        "agent_loop_evidence_loop_idx",
-        "agent_loop_evidence_source_idx",
-      ]),
-    );
+    const loopColumns = getTableColumns(agentLoops);
+    expect("accepted_run_count" in loopColumns).toBe(false);
+    expect("rejected_run_count" in loopColumns).toBe(false);
+    expect("escalated_run_count" in loopColumns).toBe(false);
+    expect("total_cost_usd_cents" in loopColumns).toBe(false);
+    expect("cost_per_accepted_run_usd_cents" in loopColumns).toBe(false);
+
+    const versionColumns = getTableColumns(agentLoopVersions);
+    expect("judge_spec" in versionColumns).toBe(false);
+    expect("evidence_policy" in versionColumns).toBe(false);
   });
 
   it("binds scheduled_jobs to AgentLoop without making scheduled_jobs the product table", () => {

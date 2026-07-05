@@ -20,7 +20,6 @@ const baseRow = {
   version_status: "active",
   goal_spec: { objective: "Do it", completionCriteria: ["done"] },
   worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-  judge_spec: { mode: "self_check", criteria: [], config: {} },
   loop_policy: {
     maxIterations: 1,
     failBehavior: "return_blocker",

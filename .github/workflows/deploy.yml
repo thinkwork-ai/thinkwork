@@ -1449,8 +1449,19 @@ jobs:
           TF_TARGET_ARGS=()
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
             echo "No Terraform source changes detected; targeting API Lambda handlers and API IAM recovery resources."
+            # ALL four grouped API IAM policies must be in the recovery target
+            # list. Deploy concurrency cancels superseded runs, so a merge
+            # that changes iam-grouped.tf can have its full apply cancelled by
+            # the next merge — and if that next merge touches no terraform,
+            # this targeted path is the only apply that ever runs. With only
+            # api_data_plane listed, a new invoke grant in api_orchestration
+            # sat unapplied while every deploy reported success (canvas-refresh
+            # AccessDeniedException, THINK-145 U11 live demo, 2026-07-04).
             TF_TARGET_ARGS+=(
               -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
+              -target=module.thinkwork.module.api.aws_iam_policy.api_orchestration
+              -target=module.thinkwork.module.api.aws_iam_policy.api_ai
+              -target=module.thinkwork.module.api.aws_iam_policy.api_observability
               -target=module.thinkwork.module.api.aws_lambda_function.handler
               -target=module.thinkwork.module.cognito.aws_lambda_function.custom_auth
             )

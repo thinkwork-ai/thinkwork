@@ -10,6 +10,7 @@ import { useQuery } from "urql";
 import {
   AlertCircle,
   CalendarClock,
+  LayoutDashboard,
   ListTodo,
   MessageCirclePlus,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   desktopToolbarButtonClassName,
 } from "@/lib/desktop-chrome";
 import {
+  SpaceCanvasesQuery,
   SpaceQuery,
   SpaceThreadsQuery,
   WorkItemsQuery,
@@ -75,6 +77,38 @@ interface SpaceThreadsResult {
 
 interface SpaceWorkItemsResult {
   workItems?: WorkItemSummary[] | null;
+}
+
+interface SpaceCanvasesResult {
+  artifacts?: Array<{
+    id: string;
+    title?: string | null;
+    status?: string | null;
+    headVersion?: number | null;
+    updatedAt?: string | null;
+    metadata?: unknown;
+  }> | null;
+}
+
+function isCanvasMetadata(metadata: unknown): boolean {
+  const record =
+    typeof metadata === "string"
+      ? safeJsonRecord(metadata)
+      : metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? (metadata as Record<string, unknown>)
+        : null;
+  return record?.kind === "json_render_canvas";
+}
+
+function safeJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function SpaceWorkroomPage() {
@@ -146,6 +180,13 @@ function SpaceWorkroomHome() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [{ data: canvasesData, fetching: canvasesFetching }] =
+    useQuery<SpaceCanvasesResult>({
+      query: SpaceCanvasesQuery,
+      variables: { tenantId: tenantId ?? "", spaceId },
+      pause: !tenantId,
+      requestPolicy: "cache-and-network",
+    });
 
   const spaceName =
     spaceData?.space?.name?.trim() || (spaceFetching ? "Space" : "Space");
@@ -183,6 +224,9 @@ function SpaceWorkroomHome() {
 
   const threads = threadsData?.threadsPaged?.items ?? [];
   const workItems = workItemsData?.workItems ?? [];
+  const canvases = (canvasesData?.artifacts ?? []).filter((canvas) =>
+    isCanvasMetadata(canvas.metadata),
+  );
   const workItemSummary = summarizeSpaceWorkItems(workItems);
   const isCustomerOnboardingSpace = shouldShowCustomerOnboardingStart(
     spaceData?.space,
@@ -329,6 +373,47 @@ function SpaceWorkroomHome() {
                       thread.updatedAt ??
                       thread.createdAt,
                   )}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <LayoutDashboard className="size-4" /> Canvases
+        </h2>
+        {canvasesFetching && canvases.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Loading canvases...
+          </div>
+        ) : canvases.length === 0 ? (
+          <div className="rounded-md border p-6 text-sm text-muted-foreground">
+            No saved canvases yet.
+          </div>
+        ) : (
+          <div
+            className="divide-y rounded-md border"
+            data-testid="space-canvases"
+          >
+            {canvases.map((canvas) => (
+              <Link
+                key={canvas.id}
+                to="/artifacts/$id"
+                params={{ id: canvas.id }}
+                className="flex min-w-0 items-center justify-between gap-3 p-3 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid="space-canvas-row"
+              >
+                <span className="min-w-0 truncate text-sm">
+                  {canvas.title?.trim() || "Canvas"}
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  {typeof canvas.headVersion === "number" &&
+                  canvas.headVersion > 0
+                    ? `v${canvas.headVersion}`
+                    : null}
+                  <span>{formatRelativeDate(canvas.updatedAt)}</span>
                 </span>
               </Link>
             ))}

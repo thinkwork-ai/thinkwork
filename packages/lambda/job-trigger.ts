@@ -684,7 +684,6 @@ async function handleAgentLoopContinueDispatch(input: {
       version_status: agentLoopVersions.version_status,
       goal_spec: agentLoopVersions.goal_spec,
       worker_spec: agentLoopVersions.worker_spec,
-      judge_spec: agentLoopVersions.judge_spec,
       loop_policy: agentLoopVersions.loop_policy,
       routine_actions_spec: agentLoopVersions.routine_actions_spec,
       target_spec: agentLoopVersions.target_spec,
@@ -821,7 +820,6 @@ async function handleAgentLoopSchedule(input: {
             version_status: agentLoopVersions.version_status,
             goal_spec: agentLoopVersions.goal_spec,
             worker_spec: agentLoopVersions.worker_spec,
-            judge_spec: agentLoopVersions.judge_spec,
             loop_policy: agentLoopVersions.loop_policy,
             routine_actions_spec: agentLoopVersions.routine_actions_spec,
             target_spec: agentLoopVersions.target_spec,
@@ -1556,10 +1554,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .select({ id: artifacts.id, status: artifacts.status })
         .from(artifacts)
         .where(
-          and(
-            eq(artifacts.id, artifactId),
-            eq(artifacts.tenant_id, tenantId),
-          ),
+          and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, tenantId)),
         );
 
       if (!artifact || artifact.status === "draft") {
@@ -1591,9 +1586,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         process.env.CANVAS_REFRESH_FN_ARN ||
         `thinkwork-${stage}-api-canvas-refresh`;
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const res = await lambda.send(
           new InvokeCommand({

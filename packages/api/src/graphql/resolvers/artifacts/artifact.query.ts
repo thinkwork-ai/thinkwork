@@ -16,9 +16,9 @@ export const artifact = async (
   if (!row) return null;
   await requireTenantMember(ctx, row.tenant_id);
   // Canvas artifacts are space/thread-scoped (R15). Non-canvas artifacts are a
-  // no-op here and keep the tenant-member read path above. This replaces the
-  // dead `metadata.kind === "genui_snapshot"` gate — the writer persists
-  // `json_render_snapshot`, so the old string never matched.
+  // no-op here and keep the tenant-member read path above. This replaced the
+  // dead `metadata.kind === "genui_snapshot"` gate — the retired promote writer
+  // persisted `json_render_snapshot`, so the old string never matched.
   await assertCanvasAccess(ctx, row, "read");
   return artifactToCamelWithPayload(row);
 };

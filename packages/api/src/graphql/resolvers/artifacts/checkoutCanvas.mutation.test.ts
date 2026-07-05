@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   selectQueue: [] as Array<Array<Record<string, unknown>>>,
   updateCalls: [] as Array<{ set: Record<string, unknown> }>,
   resolveCallerFromAuth: vi.fn(),
-  requireTenantMember: vi.fn(),
+  requireActingTenantMember: vi.fn(),
   assertCanvasAccess: vi.fn(),
   materialize: vi.fn(),
   loadCanvasHeadContent: vi.fn(),
@@ -66,7 +66,7 @@ vi.mock("../../utils.js", () => {
 });
 
 vi.mock("../core/authz.js", () => ({
-  requireTenantMember: mocks.requireTenantMember,
+  requireActingTenantMember: mocks.requireActingTenantMember,
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerFromAuth: mocks.resolveCallerFromAuth,
@@ -127,7 +127,7 @@ beforeEach(() => {
     userId: USER_ID,
     tenantId: TENANT_ID,
   });
-  mocks.requireTenantMember.mockResolvedValue("member");
+  mocks.requireActingTenantMember.mockResolvedValue("member");
   mocks.assertCanvasAccess.mockResolvedValue(undefined);
   mocks.materialize.mockResolvedValue({ messageId: "m", eventSeq: 1 });
   mocks.loadCanvasHeadContent.mockResolvedValue(stableStringify(fixture));

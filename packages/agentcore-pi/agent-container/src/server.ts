@@ -221,6 +221,10 @@ import {
   rescueLeakedAskUserQuestion,
   turnAlreadyAskedUserQuestion,
 } from "./ask-user-question-rescue.js";
+import {
+  EMPTY_RESPONSE_CONTINUATION_PROMPT,
+  applyEmptyResponseBackstop,
+} from "./empty-response-backstop.js";
 
 const PORT = Number(process.env.PORT || 8080);
 
@@ -1465,15 +1469,32 @@ export async function buildInvocationResources(
     asString(args.payload.thinkwork_api_url) &&
     asString(args.payload.thinkwork_api_secret)
   ) {
-    addExtension(createArtifactsExtension(), {
-      canvas: createApiCanvasProvider({
-        apiUrl: asString(args.payload.thinkwork_api_url),
-        apiSecret: asString(args.payload.thinkwork_api_secret),
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-        actingUserId: args.identity.userId,
+    addExtension(
+      createArtifactsExtension({
+        // Surface the real ApiCanvasProviderError (with the GraphQL error text)
+        // to CloudWatch. Without this the underlying failure was swallowed and
+        // only the friendly tool message reached the transcript — the reason
+        // the KTD8 "Tenant membership required" root cause was invisible.
+        onError: (error, { phase }) =>
+          logStructured({
+            level: "warn",
+            event: "canvas_tool_error",
+            phase,
+            tenantId: args.identity.tenantId,
+            threadId: args.identity.threadId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
       }),
-    });
+      {
+        canvas: createApiCanvasProvider({
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          actingUserId: args.identity.userId,
+        }),
+      },
+    );
   }
 
   // fetch_workspace_source — mid-turn read-only workspace navigation (plan
@@ -3140,15 +3161,52 @@ export async function handleInvocation(
         },
       );
     }
+    // Silent empty-turn backstop (THINK-145). A completed turn that produced no
+    // user-visible output (no assistant text, no UI part, no question/document
+    // card) is the "dead silence" bug observed live. Force ONE continuation to
+    // coax a final answer; if still empty, fail loudly so the platform marks the
+    // turn failed rather than recording a bare empty success. Runs BEFORE the
+    // safety-net/finalize so a recovered reply flows through the same sinks.
+    runResult = await applyEmptyResponseBackstop({
+      runResult,
+      threadId: identity.threadId,
+      threadTurnId,
+      log: (entry) => logStructured(entry),
+      retry: () =>
+        runLoop(
+          {
+            message: EMPTY_RESPONSE_CONTINUATION_PROMPT,
+            history: parentHistory,
+            tools: bundle.tools,
+            extensionFactories: bundle.extensionFactories,
+            extensionToolNames: bundle.extensionToolNames,
+            modelId: args.payload.model,
+            threadId: identity.threadId,
+            gitSha: env.gitSha,
+            identity,
+            cwd: env.workspaceDir,
+            agentDir: env.piAgentDir,
+            builtinToolNames: bundle.builtinToolNames,
+            sessionStore,
+            sessionDir: "/tmp/pi-sessions",
+          },
+          {
+            log: (entry) => logStructured(entry),
+            emitActivity: activityEmitter.emit,
+          },
+        ),
+    });
     // Deterministic GenUI safety-net backstop (THINK-116 U7, KTD5). Catches
     // structured content the model returned as *markdown* (a GFM table or a
     // clean list of records) and, if it converts + validates through the SAME
     // strict validator the emit tool uses, emits it as an additional
-    // data-json-render part. SHIP-INERT: gated on
-    // `thread_json_render_safety_net_enabled`; default/absent = OFF, so runtime
-    // behavior is byte-for-byte unchanged until a host opts in. The original
-    // assistant prose is always kept intact — this augments, never replaces.
-    if (args.payload.thread_json_render_safety_net_enabled === true) {
+    // data-json-render part. DEFAULT-ON (THINK-145): live dev evidence showed
+    // models return markdown tables despite the advisory trigger policy, so
+    // first-class components must not depend on model compliance. Hosts can
+    // kill-switch per dispatch with
+    // `thread_json_render_safety_net_enabled: false`. The original assistant
+    // prose is always kept intact — this augments, never replaces.
+    if (args.payload.thread_json_render_safety_net_enabled !== false) {
       try {
         const conversion = detectAndConvert(runResult.content);
         if (conversion.matched && conversion.part) {

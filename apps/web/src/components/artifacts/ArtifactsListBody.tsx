@@ -12,15 +12,17 @@ import { useTenant } from "@/context/TenantContext";
 import { AdminAppletsQuery } from "@/lib/applet-admin-queries";
 import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
-import { AppletsQuery } from "@/lib/graphql-queries";
+import { AppletsQuery, TenantArtifactsListQuery } from "@/lib/graphql-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
+  artifactNodeToItem,
   DEFAULT_SORT_BY,
   filterArtifactItems,
   sortArtifactItems,
   toArtifactItem,
   type ArtifactItem,
+  type ArtifactListNode,
 } from "./artifacts-filtering";
 
 interface AppletsResult {
@@ -131,6 +133,8 @@ function LiveArtifactsListBody({
   const operatorReady = roleResolved && isOperator;
 
   const [userIdFilter, setUserIdFilter] = useState("");
+  // R14: canvas rows default to saved-only; the toggle flips includeDrafts.
+  const [includeDrafts, setIncludeDrafts] = useState(false);
   // Debounce the value that drives the query so a typed user ID issues ONE
   // admin request, not one per keystroke. The input itself stays instant.
   const trimmedUserId = useDebouncedValue(userIdFilter.trim(), 250);
@@ -153,18 +157,35 @@ function LiveArtifactsListBody({
     pause: !filterActive,
   });
 
+  // Every artifact kind (living canvases, HTML documents, plugin-minted types)
+  // joins the list via the tenant-wide artifacts query. Suppressed while the
+  // operator user-ID filter is active (that view is applet-scoped by user).
+  const [artifactsResult] = useQuery<{ artifacts?: ArtifactListNode[] | null }>(
+    {
+      query: TenantArtifactsListQuery,
+      variables: { tenantId: tenantId ?? "", includeDrafts },
+      requestPolicy: "cache-and-network",
+      pause: !tenantId || filterActive,
+    },
+  );
+
   const source = filterActive ? adminResult : defaultResult;
   const rawNodes = filterActive
     ? adminResult.data?.adminApplets?.nodes
     : defaultResult.data?.applets?.nodes;
 
-  const items: ArtifactItem[] = useMemo(
-    () =>
-      (rawNodes ?? []).map((node) =>
-        toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
-      ),
-    [rawNodes],
-  );
+  const items: ArtifactItem[] = useMemo(() => {
+    const appletItems = (rawNodes ?? []).map((node) =>
+      toArtifactItem(toAppletPreview(node as AppletPreviewNode)),
+    );
+    if (filterActive) return appletItems;
+    // Map every non-applet artifact row (applet-kind rows return null and are
+    // dropped — they're already covered by the applets query above).
+    const artifactItems = (artifactsResult.data?.artifacts ?? [])
+      .map(artifactNodeToItem)
+      .filter((item): item is ArtifactItem => item !== null);
+    return [...appletItems, ...artifactItems];
+  }, [rawNodes, filterActive, artifactsResult.data?.artifacts]);
 
   return (
     <ArtifactsListBodyView
@@ -175,6 +196,8 @@ function LiveArtifactsListBody({
       userIdFilter={userIdFilter}
       onUserIdFilterChange={setUserIdFilter}
       filterActive={filterActive}
+      includeDrafts={includeDrafts}
+      onIncludeDraftsChange={setIncludeDrafts}
       detailPathFor={detailPathFor}
       headerSlot={headerSlot}
     />
@@ -189,6 +212,8 @@ function ArtifactsListBodyView({
   userIdFilter,
   onUserIdFilterChange,
   filterActive,
+  includeDrafts,
+  onIncludeDraftsChange,
   detailPathFor,
   headerSlot,
 }: {
@@ -199,6 +224,8 @@ function ArtifactsListBodyView({
   userIdFilter: string;
   onUserIdFilterChange: (value: string) => void;
   filterActive: boolean;
+  includeDrafts?: boolean;
+  onIncludeDraftsChange?: (value: boolean) => void;
   detailPathFor: (id: string) => string;
   headerSlot?: ReactNode;
 }) {
@@ -244,6 +271,8 @@ function ArtifactsListBodyView({
         showUserFilter={showUserFilter}
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}
+        includeDrafts={includeDrafts}
+        onIncludeDraftsChange={onIncludeDraftsChange}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4">
         {showLoadingShell ? (

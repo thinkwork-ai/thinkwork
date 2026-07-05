@@ -81,7 +81,7 @@ import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
 import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_authed/settings.evaluations.compare";
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
-import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
+import { Route as AuthedSettingsAutomationsAutomationIdRouteImport } from "./routes/_authed/settings.automations.$automationId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsAgentLoopsAgentLoopIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId";
@@ -96,7 +96,7 @@ import { Route as AuthedShellMemoryKbsRouteImport } from "./routes/_authed/_shel
 import { Route as AuthedShellMemoryBrainRouteImport } from "./routes/_authed/_shell/memory.brain";
 import { Route as AuthedShellCustomizeWorkflowsRouteImport } from "./routes/_authed/_shell/customize.workflows";
 import { Route as AuthedShellCustomizeSkillsRouteImport } from "./routes/_authed/_shell/customize.skills";
-import { Route as AuthedShellAutomationsScheduledJobIdRouteImport } from "./routes/_authed/_shell/automations.$scheduledJobId";
+import { Route as AuthedShellAutomationsAutomationIdRouteImport } from "./routes/_authed/_shell/automations.$automationId";
 import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_shell/artifacts.$id";
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authed/_shell/activity.$threadId";
@@ -520,10 +520,10 @@ const AuthedSettingsEvaluationsRunIdRoute =
     path: "/evaluations/$runId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsAutomationsScheduledJobIdRoute =
-  AuthedSettingsAutomationsScheduledJobIdRouteImport.update({
-    id: "/automations/$scheduledJobId",
-    path: "/automations/$scheduledJobId",
+const AuthedSettingsAutomationsAutomationIdRoute =
+  AuthedSettingsAutomationsAutomationIdRouteImport.update({
+    id: "/automations/$automationId",
+    path: "/automations/$automationId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsArtifactsIdRoute =
@@ -606,10 +606,10 @@ const AuthedShellCustomizeSkillsRoute =
     path: "/skills",
     getParentRoute: () => AuthedShellCustomizeRoute,
   } as any);
-const AuthedShellAutomationsScheduledJobIdRoute =
-  AuthedShellAutomationsScheduledJobIdRouteImport.update({
-    id: "/$scheduledJobId",
-    path: "/$scheduledJobId",
+const AuthedShellAutomationsAutomationIdRoute =
+  AuthedShellAutomationsAutomationIdRouteImport.update({
+    id: "/$automationId",
+    path: "/$automationId",
     getParentRoute: () => AuthedShellAutomationsRoute,
   } as any);
 const AuthedShellArtifactsIdRoute = AuthedShellArtifactsIdRouteImport.update({
@@ -770,7 +770,7 @@ export interface FileRoutesByFullPath {
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
-  "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
+  "/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -785,7 +785,7 @@ export interface FileRoutesByFullPath {
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
-  "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
+  "/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
@@ -874,7 +874,7 @@ export interface FileRoutesByTo {
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
-  "/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
+  "/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -889,7 +889,7 @@ export interface FileRoutesByTo {
   "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
-  "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
+  "/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
@@ -986,7 +986,7 @@ export interface FileRoutesById {
   "/_authed/_shell/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
   "/_authed/_shell/artifacts/$id": typeof AuthedShellArtifactsIdRoute;
-  "/_authed/_shell/automations/$scheduledJobId": typeof AuthedShellAutomationsScheduledJobIdRoute;
+  "/_authed/_shell/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/_authed/_shell/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/_authed/_shell/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
   "/_authed/_shell/memory/brain": typeof AuthedShellMemoryBrainRoute;
@@ -1001,7 +1001,7 @@ export interface FileRoutesById {
   "/_authed/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
-  "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
+  "/_authed/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/_authed/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
@@ -1097,7 +1097,7 @@ export interface FileRouteTypes {
     | "/activity/$threadId"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
-    | "/automations/$scheduledJobId"
+    | "/automations/$automationId"
     | "/customize/skills"
     | "/customize/workflows"
     | "/memory/brain"
@@ -1112,7 +1112,7 @@ export interface FileRouteTypes {
     | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
-    | "/settings/automations/$scheduledJobId"
+    | "/settings/automations/$automationId"
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
@@ -1201,7 +1201,7 @@ export interface FileRouteTypes {
     | "/activity/$threadId"
     | "/approvals/$approvalId"
     | "/artifacts/$id"
-    | "/automations/$scheduledJobId"
+    | "/automations/$automationId"
     | "/customize/skills"
     | "/customize/workflows"
     | "/memory/brain"
@@ -1216,7 +1216,7 @@ export interface FileRouteTypes {
     | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
-    | "/settings/automations/$scheduledJobId"
+    | "/settings/automations/$automationId"
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
@@ -1312,7 +1312,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/activity/$threadId"
     | "/_authed/_shell/approvals/$approvalId"
     | "/_authed/_shell/artifacts/$id"
-    | "/_authed/_shell/automations/$scheduledJobId"
+    | "/_authed/_shell/automations/$automationId"
     | "/_authed/_shell/customize/skills"
     | "/_authed/_shell/customize/workflows"
     | "/_authed/_shell/memory/brain"
@@ -1327,7 +1327,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/agent-loops/$agentLoopId"
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/artifacts/$id"
-    | "/_authed/settings/automations/$scheduledJobId"
+    | "/_authed/settings/automations/$automationId"
     | "/_authed/settings/evaluations/$runId"
     | "/_authed/settings/evaluations/compare"
     | "/_authed/settings/evaluations/profiles"
@@ -1907,11 +1907,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsRunIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/automations/$scheduledJobId": {
-      id: "/_authed/settings/automations/$scheduledJobId";
-      path: "/automations/$scheduledJobId";
-      fullPath: "/settings/automations/$scheduledJobId";
-      preLoaderRoute: typeof AuthedSettingsAutomationsScheduledJobIdRouteImport;
+    "/_authed/settings/automations/$automationId": {
+      id: "/_authed/settings/automations/$automationId";
+      path: "/automations/$automationId";
+      fullPath: "/settings/automations/$automationId";
+      preLoaderRoute: typeof AuthedSettingsAutomationsAutomationIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/artifacts/$id": {
@@ -2012,11 +2012,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellCustomizeSkillsRouteImport;
       parentRoute: typeof AuthedShellCustomizeRoute;
     };
-    "/_authed/_shell/automations/$scheduledJobId": {
-      id: "/_authed/_shell/automations/$scheduledJobId";
-      path: "/$scheduledJobId";
-      fullPath: "/automations/$scheduledJobId";
-      preLoaderRoute: typeof AuthedShellAutomationsScheduledJobIdRouteImport;
+    "/_authed/_shell/automations/$automationId": {
+      id: "/_authed/_shell/automations/$automationId";
+      path: "/$automationId";
+      fullPath: "/automations/$automationId";
+      preLoaderRoute: typeof AuthedShellAutomationsAutomationIdRouteImport;
       parentRoute: typeof AuthedShellAutomationsRoute;
     };
     "/_authed/_shell/artifacts/$id": {
@@ -2170,14 +2170,14 @@ declare module "@tanstack/react-router" {
 }
 
 interface AuthedShellAutomationsRouteChildren {
-  AuthedShellAutomationsScheduledJobIdRoute: typeof AuthedShellAutomationsScheduledJobIdRoute;
+  AuthedShellAutomationsAutomationIdRoute: typeof AuthedShellAutomationsAutomationIdRoute;
   AuthedShellAutomationsIndexRoute: typeof AuthedShellAutomationsIndexRoute;
 }
 
 const AuthedShellAutomationsRouteChildren: AuthedShellAutomationsRouteChildren =
   {
-    AuthedShellAutomationsScheduledJobIdRoute:
-      AuthedShellAutomationsScheduledJobIdRoute,
+    AuthedShellAutomationsAutomationIdRoute:
+      AuthedShellAutomationsAutomationIdRoute,
     AuthedShellAutomationsIndexRoute: AuthedShellAutomationsIndexRoute,
   };
 
@@ -2410,7 +2410,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentLoopsAgentLoopIdRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
-  AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
+  AuthedSettingsAutomationsAutomationIdRoute: typeof AuthedSettingsAutomationsAutomationIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsEvaluationsCompareRoute: typeof AuthedSettingsEvaluationsCompareRoute;
   AuthedSettingsEvaluationsProfilesRoute: typeof AuthedSettingsEvaluationsProfilesRoute;
@@ -2472,8 +2472,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentLoopsAgentLoopIdRoute:
     AuthedSettingsAgentLoopsAgentLoopIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
-  AuthedSettingsAutomationsScheduledJobIdRoute:
-    AuthedSettingsAutomationsScheduledJobIdRoute,
+  AuthedSettingsAutomationsAutomationIdRoute:
+    AuthedSettingsAutomationsAutomationIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,
   AuthedSettingsEvaluationsCompareRoute: AuthedSettingsEvaluationsCompareRoute,
   AuthedSettingsEvaluationsProfilesRoute:

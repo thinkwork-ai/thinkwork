@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  customSchedulePatch,
   defaultAgentLoopDraft,
   draftFromVersion,
   draftToPayload,
+  parseScheduleFromDraft,
+  readTargetSpec,
+  schedulePatch,
+  scheduleValueLabel,
+  spaceFieldError,
   validateDraft,
 } from "./agent-loop-utils";
 import type {
@@ -16,133 +22,281 @@ const workers: AgentLoopWorkerOption[] = [
 const spaces: AgentLoopSpaceOption[] = [
   { id: "space-1", name: "Customer", slug: "customer" },
 ];
+const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
 
 describe("agent-loop-utils", () => {
-  it("defaults new Automation drafts to a schedule trigger", () => {
-    expect(defaultAgentLoopDraft(workers, spaces, "space-1")).toMatchObject({
+  it("defaults new Automation drafts to a schedule trigger + agent_thread target", () => {
+    expect(
+      defaultAgentLoopDraft(workers, spaces, "space-1", "user-1"),
+    ).toMatchObject({
       triggerFamily: "schedule",
-      scheduleType: "rate",
       scheduleExpression: "rate(7 days)",
-      timezone: "UTC",
-    });
-  });
-
-  it("keeps advanced drafts strict about explicit completion criteria", () => {
-    const draft = {
-      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
-      creationMode: "advanced" as const,
-      name: "Advanced loop",
-      objective: "Review escalations",
-      completionCriteriaText: "",
-    };
-
-    expect(validateDraft(draft)).toBe(
-      "At least one completion criterion is required.",
-    );
-  });
-
-  it("allows builder prompt-only drafts and marks goal inference", () => {
-    const draft = {
-      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
-      creationMode: "builder" as const,
-      name: "Escalation review",
-      objective: "Review support escalations every morning.",
-      completionCriteriaText: "",
-      workerId: "",
-      judgeCriteriaText: "",
-    };
-
-    expect(validateDraft(draft)).toBeNull();
-    expect(
-      draftToPayload({ draft, tenantId: "tenant-1", workerOptions: workers }),
-    ).toMatchObject({
-      tenantId: "tenant-1",
+      targetKind: "agent_thread",
+      threadMode: "new_per_run",
+      workerId: "agent-1",
+      runAsUserId: "user-1",
       spaceId: "space-1",
-      name: "Escalation review",
-      goalSpec: {
-        objective: "Review support escalations every morning.",
-        completionCriteria: [],
-      },
-      workerSpec: { type: "agent", id: "" },
-      judgeSpec: { mode: "self_check", criteria: [] },
-      sourceMetadata: {
-        createdFrom: "settings.automations.builder",
-        creationMode: "builder",
-        prompt: "Review support escalations every morning.",
-        goalInference: "runtime_inferred",
-      },
     });
   });
 
-  it("derives an Automation name from prompt-first drafts without an explicit name", () => {
+  it("writes an agent_thread targetSpec from instructions (no Space required error surface)", () => {
     const draft = {
-      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
-      creationMode: "builder" as const,
-      name: "",
-      objective: "Route Linear issues to the right worker.",
+      ...defaultAgentLoopDraft(workers, spaces, "space-1", "user-1"),
+      instructions: "Route Linear issues to the right worker.",
     };
-
-    expect(draft.creationMode).toBe("builder");
-
     expect(validateDraft(draft)).toBeNull();
-    expect(
-      draftToPayload({ draft, tenantId: "tenant-1", workerOptions: workers }),
-    ).toMatchObject({
+    const payload = draftToPayload({
+      draft,
+      tenantId: "tenant-1",
+      workerOptions: workers,
+    });
+    expect(payload).toMatchObject({
+      tenantId: "tenant-1",
       name: "Route Linear issues to the right worker",
-    });
-  });
-
-  it("emits routineActionsSpec only when routines are attached (U5)", () => {
-    const spaces: never[] = [];
-    const base = defaultAgentLoopDraft(workers, spaces, null);
-    const without = draftToPayload({
-      draft: base,
-      tenantId: "tenant-1",
-      workerOptions: workers,
-    });
-    expect(without.routineActionsSpec).toBeNull();
-
-    const withRoutines = draftToPayload({
-      draft: {
-        ...base,
-        routineActionRoutineIds: ["33333333-3333-4333-8333-333333333333"],
-        routineAgentTurn: false,
+      runAsUserId: "user-1",
+      spaceId: "space-1",
+      triggerSpec: {
+        family: "schedule",
+        config: { scheduleExpression: "rate(7 days)" },
       },
-      tenantId: "tenant-1",
-      workerOptions: workers,
+      targetSpec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Route Linear issues to the right worker.",
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
     });
-    expect(withRoutines.routineActionsSpec).toEqual({
-      actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
-      agentTurn: false,
-    });
+    // Legacy inputs are still derived so the API contract is satisfied.
+    expect(payload.goalSpec.objective).toBe(
+      "Route Linear issues to the right worker.",
+    );
+    expect(payload.workerSpec).toMatchObject({ type: "agent", id: "agent-1" });
   });
 
-  it("seeds routine actions back into the draft from a saved version (U5)", () => {
+  it("writes a routine targetSpec and needs no Space", () => {
+    const draft = {
+      ...defaultAgentLoopDraft(workers, [], null, "user-1"),
+      targetKind: "routine" as const,
+      routineId: ROUTINE_ID,
+    };
+    expect(validateDraft(draft)).toBeNull();
+    expect(spaceFieldError(draft)).toBeNull();
+    const payload = draftToPayload({
+      draft,
+      tenantId: "tenant-1",
+      workerOptions: workers,
+      routineLabel: "Nightly digest",
+    });
+    expect(payload.targetSpec).toEqual({
+      kind: "routine",
+      routine: { routineId: ROUTINE_ID },
+    });
+    expect(payload.name).toBe("Nightly digest");
+    expect(payload.spaceId).toBeNull();
+  });
+
+  it("requires a Space the moment agent_thread is selected (inline)", () => {
+    const draft = {
+      ...defaultAgentLoopDraft(workers, [], null, "user-1"),
+      targetKind: "agent_thread" as const,
+      instructions: "Do the thing.",
+      spaceId: "",
+    };
+    expect(spaceFieldError(draft)).toBe(
+      "A Space is required for agent-thread automations.",
+    );
+    expect(validateDraft(draft)).toBe("Choose a Space.");
+  });
+
+  it("round-trips R1 fields from a saved version via targetSpec", () => {
     const draft = draftFromVersion(
       {
-        name: "LastMile check",
+        name: "Linear dispatcher",
+        description: "Route Linear work",
         lifecycleStatus: "active",
         enabled: true,
+        runAsUserId: "user-9",
+        spaceId: "space-1",
         currentVersion: {
           id: "v1",
           versionNumber: 1,
-          triggerSpec: { family: "schedule", enabled: true, config: {} },
-          goalSpec: { objective: "check", completionCriteria: [] },
-          workerSpec: { type: "agent", id: "agent-1" },
-          judgeSpec: { mode: "self_check", criteria: [] },
-          loopPolicy: { maxIterations: 1 },
-          evidencePolicy: { redactionState: "summary_only" },
-          routineActionsSpec: {
-            actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
-            agentTurn: false,
+          triggerSpec: {
+            family: "webhook",
+            enabled: true,
+            config: {},
+          },
+          goalSpec: {},
+          workerSpec: {},
+          loopPolicy: {},
+          targetSpec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Dispatch issues",
+              workerId: "agent-1",
+              workerType: "agent",
+              threadMode: "fixed",
+              fixedThreadId: "thread-77",
+            },
           },
         },
       },
       workers,
+      spaces,
+      "space-1",
+      "user-1",
     );
-    expect(draft.routineActionRoutineIds).toEqual([
-      "33333333-3333-4333-8333-333333333333",
-    ]);
-    expect(draft.routineAgentTurn).toBe(false);
+    expect(draft).toMatchObject({
+      name: "Linear dispatcher",
+      triggerFamily: "webhook",
+      targetKind: "agent_thread",
+      instructions: "Dispatch issues",
+      threadMode: "fixed",
+      fixedThreadId: "thread-77",
+      runAsUserId: "user-9",
+      spaceId: "space-1",
+    });
+  });
+
+  it("falls back to legacy goal/worker blobs when targetSpec is absent", () => {
+    const target = readTargetSpec({
+      id: "v0",
+      versionNumber: 1,
+      triggerSpec: {},
+      goalSpec: { objective: "Legacy objective" },
+      workerSpec: { type: "agent", id: "agent-1" },
+      loopPolicy: {},
+    });
+    expect(target).toMatchObject({
+      kind: "agent_thread",
+      agentThread: { instructions: "Legacy objective", workerId: "agent-1" },
+    });
+  });
+
+  it("falls back to routine kind for a legacy routine-only version", () => {
+    const target = readTargetSpec({
+      id: "v0",
+      versionNumber: 1,
+      triggerSpec: {},
+      goalSpec: {},
+      workerSpec: {},
+      loopPolicy: {},
+      routineActionsSpec: {
+        actions: [{ routineId: ROUTINE_ID }],
+        agentTurn: false,
+      },
+    });
+    expect(target).toEqual({
+      kind: "routine",
+      routine: { routineId: ROUTINE_ID },
+    });
+  });
+});
+
+describe("schedule popover helpers", () => {
+  const draft = defaultAgentLoopDraft(workers, spaces, "space-1", "user-1");
+
+  it("serializes each preset to the EventBridge config shape", () => {
+    expect(schedulePatch({ preset: "manual" })).toEqual({
+      triggerFamily: "manual",
+      scheduleType: "",
+      scheduleExpression: "",
+    });
+    expect(schedulePatch({ preset: "hourly" })).toMatchObject({
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(1 hour)",
+      timezone: "UTC",
+    });
+    expect(
+      schedulePatch({ preset: "daily", minutesOfDay: 9 * 60 }),
+    ).toMatchObject({
+      scheduleType: "cron",
+      scheduleExpression: "cron(0 9 * * ? *)",
+    });
+    expect(
+      schedulePatch({ preset: "weekdays", minutesOfDay: 17 * 60 + 45 }),
+    ).toMatchObject({
+      scheduleExpression: "cron(45 17 ? * MON-FRI *)",
+    });
+    expect(
+      schedulePatch({ preset: "weekly", minutesOfDay: 9 * 60, weekday: "THU" }),
+    ).toMatchObject({
+      scheduleExpression: "cron(0 9 ? * THU *)",
+    });
+  });
+
+  it("passes custom expressions through raw with the type derived from the prefix", () => {
+    expect(customSchedulePatch("rate(30 minutes)")).toEqual({
+      triggerFamily: "schedule",
+      scheduleType: "rate",
+      scheduleExpression: "rate(30 minutes)",
+    });
+    expect(customSchedulePatch("cron(15 6 1 * ? *)")).toEqual({
+      triggerFamily: "schedule",
+      scheduleType: "cron",
+      scheduleExpression: "cron(15 6 1 * ? *)",
+    });
+  });
+
+  it("parses drafts back into the preset model (legacy rate(7 days) → Weekly)", () => {
+    expect(parseScheduleFromDraft(draft).preset).toBe("weekly");
+    expect(
+      parseScheduleFromDraft({
+        ...draft,
+        scheduleExpression: "cron(30 14 ? * FRI *)",
+      }),
+    ).toMatchObject({
+      preset: "weekly",
+      minutesOfDay: 14 * 60 + 30,
+      weekday: "FRI",
+    });
+    expect(
+      parseScheduleFromDraft({ ...draft, scheduleExpression: "rate(1 hour)" })
+        .preset,
+    ).toBe("hourly");
+    expect(
+      parseScheduleFromDraft({
+        ...draft,
+        scheduleExpression: "rate(30 minutes)",
+      }).preset,
+    ).toBe("custom");
+    expect(
+      parseScheduleFromDraft({ ...draft, triggerFamily: "manual" as const })
+        .preset,
+    ).toBe("manual");
+  });
+
+  it("renders the closed Schedule row value text", () => {
+    expect(scheduleValueLabel(draft)).toBe("Weekly");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "cron(0 9 ? * MON-FRI *)",
+      }),
+    ).toBe("Weekdays at 9:00 AM");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "cron(30 14 ? * FRI *)",
+      }),
+    ).toBe("Weekly on Friday at 2:30 PM");
+    expect(
+      scheduleValueLabel({ ...draft, scheduleExpression: "cron(0 9 * * ? *)" }),
+    ).toBe("Daily at 9:00 AM");
+    expect(
+      scheduleValueLabel({ ...draft, scheduleExpression: "rate(1 hour)" }),
+    ).toBe("Hourly");
+    expect(
+      scheduleValueLabel({
+        ...draft,
+        scheduleExpression: "rate(30 minutes)",
+      }),
+    ).toBe("Custom");
+    expect(
+      scheduleValueLabel({ ...draft, triggerFamily: "manual" as const }),
+    ).toBe("Manual");
   });
 });

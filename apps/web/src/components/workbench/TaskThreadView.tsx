@@ -33,7 +33,10 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
-import { DocumentCard } from "@/components/workbench/DocumentCard";
+import {
+  DocumentCard,
+  type DocumentCardData,
+} from "@/components/workbench/DocumentCard";
 import { useTenant } from "@/context/TenantContext";
 import {
   Children,
@@ -559,6 +562,21 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
+  // Document cards (THINK-147) render inside the agent's reply message, next
+  // to the byline — not as a floating block under the turn header. While the
+  // reply hasn't landed yet (turn still streaming), the card anchors to the
+  // triggering user message's segment so the emit is visible immediately.
+  const documentCardsByMessageId = new Map<string, DocumentCardData[]>();
+  transcriptMessages.forEach((message, index) => {
+    const turn = turnByUserMessageId.get(message.id);
+    if (!turn) return;
+    const cards = documentCardsForTurn(turn);
+    if (cards.length === 0) return;
+    const reply = transcriptMessages
+      .slice(index + 1)
+      .find((candidate) => candidate.role.toUpperCase() !== "USER");
+    documentCardsByMessageId.set(reply?.id ?? message.id, cards);
+  });
   const selectedArtifact =
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
@@ -611,6 +629,7 @@ export function TaskThreadView({
                       key={message.id}
                       message={message}
                       turn={turn}
+                      documentCards={documentCardsByMessageId.get(message.id)}
                       threadId={thread.id}
                       latestProjection={latestProjection}
                       isLatestUser={index === latestUserIndex}
@@ -1823,6 +1842,7 @@ function skillDraftStatusFromMessage(
 function TranscriptSegment({
   message,
   turn,
+  documentCards,
   threadId,
   latestProjection,
   isLatestUser,
@@ -1843,6 +1863,7 @@ function TranscriptSegment({
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
+  documentCards?: DocumentCardData[];
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
   isLatestUser: boolean;
@@ -1880,6 +1901,7 @@ function TranscriptSegment({
     <>
       <TranscriptMessage
         message={message}
+        documentCards={documentCards}
         threadId={threadId}
         onOpenArtifact={onOpenArtifact}
         onSendFollowUp={onSendFollowUp}
@@ -1907,6 +1929,13 @@ function TranscriptSegment({
           onSendFollowUp={onSendFollowUp}
         />
       ) : null}
+      {/* Emitted-document fallback: the reply message hasn't landed yet, so
+          the card anchors here until it can move into the reply block. */}
+      {message.role.toUpperCase() === "USER" && documentCards?.length
+        ? documentCards.map((card) => (
+            <DocumentCard key={`turn-doc-${card.artifactId}`} card={card} />
+          ))
+        : null}
       <DispatchIndicator
         message={message}
         turn={turn}
@@ -2554,6 +2583,7 @@ function CollapsibleUserMessageBody({
 
 function TranscriptMessage({
   message,
+  documentCards,
   threadId,
   onOpenArtifact,
   onSendFollowUp,
@@ -2566,6 +2596,7 @@ function TranscriptMessage({
   onJsonRenderActionSuccess,
 }: {
   message: TaskThreadMessage;
+  documentCards?: DocumentCardData[];
   threadId?: string;
   onOpenArtifact?: (artifactId: string) => void;
   onSendFollowUp?: (
@@ -2701,13 +2732,27 @@ function TranscriptMessage({
                   (No message content)
                 </p>
               )}
+              {documentCards?.length ? (
+                <div className="mt-3 grid gap-2">
+                  {documentCards.map((card) => (
+                    <DocumentCard
+                      key={`msg-doc-${card.artifactId}`}
+                      card={card}
+                    />
+                  ))}
+                </div>
+              ) : null}
               {attachments.length > 0 ? (
                 <MessageAttachmentList
                   attachments={attachments}
                   onDownloadAttachment={onDownloadAttachment}
                 />
               ) : null}
-              {!isUser && message.durableArtifact ? (
+              {/* Documents render their own DocumentCard above — the generic
+                  artifact card here would be pure duplication. */}
+              {!isUser &&
+              message.durableArtifact &&
+              message.durableArtifact.metadata?.kind !== "document" ? (
                 <GeneratedArtifactCard
                   artifact={message.durableArtifact}
                   onOpenArtifact={onOpenArtifact}
@@ -4184,6 +4229,38 @@ function actionRowsForMessage(message: TaskThreadMessage) {
   return rows;
 }
 
+// HTML Document Artifacts (THINK-147 U6): document cards are the turn's
+// deliverable, so they render inline in the transcript rather than inside the
+// collapsed turn-activity disclosure. Multiple emits for the same artifact in
+// one turn (draft → final) collapse to the latest card.
+function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
+  const byArtifact = new Map<string, DocumentCardData>();
+  const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {
+    const ta = parseEventTimestamp(a.createdAt);
+    const tb = parseEventTimestamp(b.createdAt);
+    if (ta !== tb) return ta - tb;
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+  for (const event of sortedEvents) {
+    if (stringValue(event.eventType) !== "ui_message_chunk") continue;
+    const payload = parseRecord(event.payload);
+    if (stringValue(payload.kind) !== "document.card") continue;
+    const card = parseRecord(payload.card);
+    const artifactId = stringValue(card.artifactId);
+    if (!artifactId) continue;
+    byArtifact.set(artifactId, {
+      artifactId,
+      title: stringValue(card.title) || "Document",
+      genre: stringValue(card.genre) || undefined,
+      abstract: stringValue(card.abstract) || undefined,
+      status: stringValue(card.status) || undefined,
+      headVersion:
+        typeof card.headVersion === "number" ? card.headVersion : undefined,
+    });
+  }
+  return [...byArtifact.values()];
+}
+
 function questionCardsForMessage(
   message: TaskThreadMessage,
 ): QuestionCardPayload[] {
@@ -4707,42 +4784,15 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
-  // HTML Document Artifacts (THINK-147 U6): the compact document card (R4).
-  // Full bodies never ride the event pipeline; this renders the pointer card
-  // linking to the reader.
+  // HTML Document Artifacts (THINK-147 U6): document.card events render as an
+  // always-visible inline card at the turn level (documentCardsForTurn), never
+  // as a collapsed activity row — burying the deliverable behind two
+  // disclosures made it invisible in live E2E.
   if (
     eventType === "ui_message_chunk" &&
     stringValue(payload.kind) === "document.card"
   ) {
-    const card = parseRecord(payload.card);
-    const artifactId = stringValue(card.artifactId);
-    const title = stringValue(card.title) || "Document";
-    if (!artifactId) {
-      return {
-        title: `Document: ${title}`,
-        detail,
-        kind: "source",
-      } satisfies ActionRowData;
-    }
-    return {
-      title: `Document: ${title}`,
-      detail: stringValue(card.abstract) || detail,
-      kind: "source",
-      hideIcon: true,
-      content: (
-        <DocumentCard
-          card={{
-            artifactId,
-            title,
-            genre: stringValue(card.genre) || undefined,
-            abstract: stringValue(card.abstract) || undefined,
-            status: stringValue(card.status) || undefined,
-            headVersion:
-              typeof card.headVersion === "number" ? card.headVersion : undefined,
-          }}
-        />
-      ),
-    };
+    return null;
   }
 
   if (
@@ -4853,11 +4903,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 

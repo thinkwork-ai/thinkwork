@@ -19,11 +19,12 @@ describe("main Automations shell routes", () => {
 
   it("renders user-facing Automation detail in main navigation", () => {
     const route = source(
-      "src/routes/_authed/_shell/automations.$scheduledJobId.tsx",
+      "src/routes/_authed/_shell/automations.$automationId.tsx",
     );
 
     expect(route).toContain("AgentLoopDetail");
     expect(route).toContain('routeScope="main"');
-    expect(route).not.toContain('to: "/settings/automations/$scheduledJobId"');
+    expect(route).toContain("automationId");
+    expect(route).not.toContain("$scheduledJobId");
   });
 });

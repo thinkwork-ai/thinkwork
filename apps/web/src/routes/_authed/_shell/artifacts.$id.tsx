@@ -23,8 +23,12 @@ import {
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
+import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
+import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
+import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionHistory";
+import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
+import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
 import { DocumentFrame } from "@/components/workbench/DocumentFrame";
-import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
@@ -69,6 +73,8 @@ interface ArtifactRouteNode {
   favoritedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  bindings?: CanvasBinding[] | null;
+  versions?: CanvasVersion[] | null;
 }
 
 /** HTML Document Artifacts (THINK-147): dual-body document detection. */
@@ -115,6 +121,7 @@ export function AppletRouteContent({
 }) {
   const [
     { data: artifactData, fetching: artifactFetching, error: artifactError },
+    reexecuteArtifactQuery,
   ] = useQuery<ArtifactDetailResult>({
     query: ArtifactDetailForRouteQuery,
     variables: { id: appId },
@@ -251,6 +258,9 @@ export function AppletRouteContent({
         artifact={artifact}
         backHref={backHref}
         breadcrumbRoot={breadcrumbRoot}
+        onChanged={() =>
+          reexecuteArtifactQuery({ requestPolicy: "network-only" })
+        }
       />
     );
   }
@@ -487,20 +497,45 @@ function DataViewArtifactContent({
   artifact,
   backHref,
   breadcrumbRoot,
+  onChanged,
 }: {
   artifact: ArtifactRouteNode;
   backHref: string;
   breadcrumbRoot?: { label: string; href: string };
+  onChanged: () => void;
 }) {
-  const snapshot = parseJsonRenderSnapshot(artifact.content);
+  const isCanvas = isLivingCanvasMetadata(artifact.metadata);
+  const hasBindings = (artifact.bindings ?? []).length > 0;
+  // Canvas save/pin/refresh live in the page header as muted icons — the
+  // canvas body itself is chrome-free (THINK-145 declutter).
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
-      <ArtifactDetailActions
-        artifactId={artifact.id}
-        artifactTitle={artifact.title}
-      />
+      <div className="flex items-center gap-1">
+        {isCanvas ? (
+          <CanvasHeaderActions
+            artifact={{
+              id: artifact.id,
+              title: artifact.title,
+              status: artifact.status,
+            }}
+            hasBindings={hasBindings}
+            onChanged={onChanged}
+          />
+        ) : null}
+        <ArtifactDetailActions
+          artifactId={artifact.id}
+          artifactTitle={artifact.title}
+        />
+      </div>
     ),
-    [artifact.id, artifact.title],
+    [
+      artifact.id,
+      artifact.status,
+      artifact.title,
+      hasBindings,
+      isCanvas,
+      onChanged,
+    ],
   );
   const titleTrailing = useMemo<ReactNode>(
     () => (
@@ -525,6 +560,29 @@ function DataViewArtifactContent({
     actionKey: `artifact-actions:${artifact.id}:${artifact.favoritedAt ?? "_"}`,
   });
 
+  // Living Artifacts (THINK-145): living canvases are the only GenUI artifact
+  // kind. The body renders just the canvas + version history; save/pin/
+  // refresh are header icons composed above. The legacy promote-copy snapshot
+  // render path was retired when the living canvas became the single GenUI
+  // artifact system.
+  if (isCanvas) {
+    return (
+      <CanvasArtifactView
+        artifact={{
+          id: artifact.id,
+          title: artifact.title,
+          status: artifact.status,
+          spaceId: artifact.spaceId ?? null,
+          headVersion: artifact.headVersion ?? 0,
+          content: artifact.content ?? null,
+          summary: artifact.summary ?? null,
+          bindings: artifact.bindings ?? [],
+          versions: artifact.versions ?? [],
+        }}
+      />
+    );
+  }
+
   return (
     <main className="mx-auto grid w-full max-w-5xl gap-4 p-4 sm:p-6">
       <section className="grid gap-1">
@@ -535,78 +593,11 @@ function DataViewArtifactContent({
           <p className="text-sm text-muted-foreground">{artifact.summary}</p>
         ) : null}
       </section>
-      {snapshot ? (
-        <section className="grid gap-3">
-          <div className="rounded-md border border-border/70 bg-card p-3 text-xs text-muted-foreground">
-            <span>Source message </span>
-            <span className="font-mono">{snapshot.source.sourceMessageId}</span>
-            <span> · Part </span>
-            <span className="font-mono">{snapshot.source.partId}</span>
-          </div>
-          <ThreadJsonRenderRenderer
-            data={snapshot.jsonRender.data}
-            partId={snapshot.jsonRender.id}
-            sourceMessageId={snapshot.source.sourceMessageId}
-            threadId={snapshot.source.threadId}
-          />
-        </section>
-      ) : (
-        <AppletFailure>
-          This data-view artifact does not include a readable json-render
-          snapshot.
-        </AppletFailure>
-      )}
+      <AppletFailure>
+        This data-view artifact cannot be opened here.
+      </AppletFailure>
     </main>
   );
-}
-
-interface JsonRenderSnapshotArtifactPayload {
-  schemaVersion: "thread-json-render-artifact-snapshot/v1";
-  kind: "json_render_snapshot";
-  source: {
-    threadId: string;
-    sourceMessageId: string;
-    partId: string;
-    specHash: string;
-    promotedAt: string;
-    promotedByUserId: string;
-  };
-  jsonRender: { type: "data-json-render"; id: string; data: unknown };
-}
-
-function parseJsonRenderSnapshot(
-  content: string | null | undefined,
-): JsonRenderSnapshotArtifactPayload | null {
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(
-      content,
-    ) as Partial<JsonRenderSnapshotArtifactPayload>;
-    if (
-      parsed.schemaVersion !== "thread-json-render-artifact-snapshot/v1" ||
-      parsed.kind !== "json_render_snapshot" ||
-      !isRecord(parsed.source) ||
-      !isRecord(parsed.jsonRender) ||
-      parsed.jsonRender.type !== "data-json-render" ||
-      typeof parsed.jsonRender.id !== "string"
-    ) {
-      return null;
-    }
-    const source = parsed.source;
-    if (
-      typeof source.threadId !== "string" ||
-      typeof source.sourceMessageId !== "string" ||
-      typeof source.partId !== "string" ||
-      typeof source.specHash !== "string" ||
-      typeof source.promotedAt !== "string" ||
-      typeof source.promotedByUserId !== "string"
-    ) {
-      return null;
-    }
-    return parsed as JsonRenderSnapshotArtifactPayload;
-  } catch {
-    return null;
-  }
 }
 
 const APPLET_TABS = [
@@ -828,10 +819,6 @@ function formatJson(value: unknown): string {
     }
   }
   return JSON.stringify(value ?? {}, null, 2);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 // Re-export AppletMount for any external consumers that imported it from this

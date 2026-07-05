@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { logStructured } from "./handler-context.js";
 
 import type { ToolInvocationRecord } from "@thinkwork/pi-runtime-core";
 import type { McpToolRegistry } from "./mcp-registry.js";
@@ -345,6 +346,27 @@ const SECRET_KEY_PATTERN =
   /(?:authorization|bearer|token|secret|password|api[_-]?key|access[_-]?token|refresh[_-]?token)/i;
 const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const OPTIONAL_EPHEMERAL_TOOL_NAMES = new Set(["file_read"]);
+// Config-gated runtime tools register only when the invocation payload carries
+// their config (web_search_config / web_extract_config / send_email_config —
+// see server.ts). A profile may legitimately declare them in builtInTools on a
+// turn that did not provision that config (wakeup turns without web-search
+// keys, policy-filtered skills, eval_mode). Treat them as optional: drop them
+// from the allowlist (and warn) instead of hard-failing the whole turn with
+// TOOL_NOT_AVAILABLE (THINK-143). Both name forms are listed because an
+// unregistered tool keeps its hyphenated profile spelling (normalizeToolName
+// only maps to the underscore form when that form is actually available).
+const OPTIONAL_CONFIG_GATED_TOOL_NAMES = new Set([
+  "web-search",
+  "web_search",
+  "web-extract",
+  "web_extract",
+  "send-email",
+  "send_email",
+]);
+const OPTIONAL_UNAVAILABLE_TOOL_NAMES = new Set([
+  ...OPTIONAL_EPHEMERAL_TOOL_NAMES,
+  ...OPTIONAL_CONFIG_GATED_TOOL_NAMES,
+]);
 const WORKSPACE_SKILL_TOOL_NAME = "workspace_skill";
 
 function cleanString(value: unknown): string {
@@ -431,13 +453,28 @@ function compileToolAllowlist(input: {
   assertKnownValues({
     values: tools,
     available: input.availableToolNames,
-    optionalUnavailable: OPTIONAL_EPHEMERAL_TOOL_NAMES,
+    optionalUnavailable: OPTIONAL_UNAVAILABLE_TOOL_NAMES,
     code: "TOOL_NOT_AVAILABLE",
     noun: "tools",
   });
   const available = new Set(input.availableToolNames);
+  // Warn (but do not fail) when a config-gated tool the profile declared was
+  // not registered for this turn, so a silently degraded capability is
+  // observable in CloudWatch. file_read drops stay silent — an absent turn
+  // attachment is the normal case, not a signal worth logging.
+  const droppedConfigGated = tools.filter(
+    (tool) =>
+      !available.has(tool) && OPTIONAL_CONFIG_GATED_TOOL_NAMES.has(tool),
+  );
+  if (droppedConfigGated.length > 0) {
+    logStructured({
+      level: "warn",
+      event: "agent_profile_config_gated_tool_unavailable",
+      droppedTools: droppedConfigGated,
+    });
+  }
   return tools.filter(
-    (tool) => available.has(tool) || !OPTIONAL_EPHEMERAL_TOOL_NAMES.has(tool),
+    (tool) => available.has(tool) || !OPTIONAL_UNAVAILABLE_TOOL_NAMES.has(tool),
   );
 }
 

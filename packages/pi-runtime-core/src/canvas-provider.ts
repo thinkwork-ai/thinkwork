@@ -36,6 +36,12 @@ export interface CanvasSummaryItem {
   headVersion: number;
   /** Artifact status — "draft" | "final" | "superseded". */
   status: string;
+  /**
+   * The canvas's json-render stable part id — the id the agent must re-emit
+   * under to update THIS canvas rather than minting a stray draft. Null for
+   * legacy rows written before the id was recorded.
+   */
+  stablePartId: string | null;
 }
 
 /** A space the acting user may save a canvas into (member-or-above). */
@@ -100,6 +106,10 @@ export interface CanvasRefreshBindingOutcome {
   quality: string;
   /** Human-readable reason for a non-GOOD outcome (e.g. "refresh needs you"). */
   reason: string | null;
+  /** MCP server name of the saved source tool call (empty when unknown). */
+  serverName: string;
+  /** Tool name of the saved source tool call (empty when unknown). */
+  toolName: string;
 }
 
 export interface CanvasRefreshResult {

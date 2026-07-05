@@ -22,7 +22,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-  Badge,
   Button,
   Tabs,
   TabsContent,
@@ -45,23 +44,32 @@ import {
   SpacesQuery,
   SettingsAgentLoopQuery,
   SettingsDeleteAgentLoopMutation,
+  SettingsGitRoutinesQuery,
   SettingsSaveAgentLoopMutation,
   SettingsTriggerAgentLoopRunMutation,
 } from "@/lib/graphql-queries";
 import {
   SettingsAgentProfilesQuery,
   SettingsTenantAgentQuery,
+  SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
 import { AgentLoopForm } from "./AgentLoopForm";
-import { buildWorkerOptions } from "./AgentLoopInventory";
 import {
   AutomationWebhookDeliveriesPanel,
   AutomationWebhookEndpointPanel,
 } from "./AutomationWebhookPanel";
-import { AutomationDetailAdvancedInspector } from "./AutomationDetailAdvancedInspector";
+import {
+  buildMemberOptions,
+  buildRoutineOptions,
+  buildWorkerOptions,
+  buildWorkflowOptions,
+  type RoutineRow,
+  type TenantMemberRow,
+} from "./agent-loop-options";
 import { AutomationRunsList } from "./AutomationRunsList";
 import { AutomationStatusRail } from "./AutomationStatusRail";
 import type {
+  AgentLoopMemberOption,
   AgentLoopRow,
   AgentLoopRunSummary,
   AgentLoopSpaceOption,
@@ -72,15 +80,11 @@ import {
   defaultSpaceIdFromAgentRuntimeConfig,
   draftFromVersion,
   draftToPayload,
-  jsonRecord,
+  readTargetSpec,
   stringValue,
-  titleize,
 } from "./agent-loop-utils";
 
-type AgentLoopDetailData = {
-  agentLoop?: AgentLoopRow | null;
-};
-
+type AgentLoopDetailData = { agentLoop?: AgentLoopRow | null };
 type AgentProfilesData = {
   agentProfiles?: Array<{
     id: string;
@@ -89,18 +93,12 @@ type AgentProfilesData = {
     enabled: boolean;
   }>;
 };
-
-type SpacesData = {
-  spaces?: AgentLoopSpaceOption[];
-};
-
+type SpacesData = { spaces?: AgentLoopSpaceOption[] };
 type TenantAgentData = {
-  agent?: {
-    id: string;
-    name?: string | null;
-    runtimeConfig?: unknown;
-  } | null;
+  agent?: { id: string; name?: string | null; runtimeConfig?: unknown } | null;
 };
+type RoutinesData = { routines?: RoutineRow[] };
+type MembersData = { tenantMembers?: TenantMemberRow[] };
 
 export function AgentLoopDetail({
   agentLoopId,
@@ -109,13 +107,12 @@ export function AgentLoopDetail({
   agentLoopId: string;
   routeScope?: "main" | "settings";
 }) {
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [pendingAction, setPendingAction] = useState<
     "run" | "pause" | "archive" | "refresh" | null
   >(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [loopResult, refetchLoop] = useQuery<AgentLoopDetailData>({
@@ -138,6 +135,16 @@ export function AgentLoopDetail({
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [routinesResult] = useQuery<RoutinesData>({
+    query: SettingsGitRoutinesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const [membersResult] = useQuery<MembersData>({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
   const [, saveAgentLoop] = useMutation(SettingsSaveAgentLoopMutation);
   const [, deleteAgentLoop] = useMutation(SettingsDeleteAgentLoopMutation);
   const [, triggerRun] = useMutation(SettingsTriggerAgentLoopRunMutation);
@@ -154,6 +161,22 @@ export function AgentLoopDetail({
   const spaceOptions = useMemo(
     () => spacesResult.data?.spaces ?? [],
     [spacesResult.data?.spaces],
+  );
+  const routineOptions = useMemo(
+    () => buildRoutineOptions(routinesResult.data?.routines ?? []),
+    [routinesResult.data?.routines],
+  );
+  const workflowOptions = useMemo(
+    () => buildWorkflowOptions(routinesResult.data?.routines ?? []),
+    [routinesResult.data?.routines],
+  );
+  const memberOptions = useMemo(
+    () =>
+      buildMemberOptions(
+        membersResult.data?.tenantMembers ?? [],
+        userId ? { id: userId, label: "You" } : null,
+      ),
+    [membersResult.data?.tenantMembers, userId],
   );
   const defaultSpaceId = useMemo(
     () =>
@@ -215,15 +238,12 @@ export function AgentLoopDetail({
           triggerAgentLoopRun?: { id?: string; threadId?: string | null };
         }
       )?.triggerAgentLoopRun;
-      const runId = triggeredRun?.id;
       const threadId = triggeredRun?.threadId;
+      const runId = triggeredRun?.id;
       toast.success("Automation run queued");
       if (threadId) {
-        navigate({
-          to: "/threads/$id",
-          params: { id: threadId },
-        });
-      } else if (runId) {
+        navigate({ to: "/threads/$id", params: { id: threadId } });
+      } else if (runId && routeScope === "settings") {
         navigate({
           to: "/settings/agent-loops/$agentLoopId/runs/$runId",
           params: { agentLoopId: row.id, runId },
@@ -251,6 +271,7 @@ export function AgentLoopDetail({
         options,
         spaceOptions,
         defaultSpaceId,
+        userId ?? "",
       );
       const nextActive = row.lifecycleStatus !== "active" || !row.enabled;
       const payload = draftToPayload({
@@ -313,39 +334,44 @@ export function AgentLoopDetail({
     );
   }
 
-  if (editing && tenantId) {
-    return (
-      <SettingsPane className="max-w-none">
+  return (
+    <>
+      {editing && tenantId ? (
         <AgentLoopForm
           mode="edit"
           tenantId={tenantId}
           initialLoop={loop}
           workerOptions={workerOptions}
           spaceOptions={spaceOptions}
+          routineOptions={routineOptions}
+          workflowOptions={workflowOptions}
+          memberOptions={memberOptions}
           defaultSpaceId={defaultSpaceId}
+          currentUserId={userId}
           onSubmit={saveLoop}
           onCancel={() => setEditing(false)}
         />
-      </SettingsPane>
-    );
-  }
-
-  return (
-    <AgentLoopDetailContent
-      loop={loop}
-      pendingAction={pendingAction}
-      actionError={actionError}
-      advancedOpen={advancedOpen}
-      onAdvancedOpenChange={setAdvancedOpen}
-      onRun={() => void runNow(loop)}
-      onToggle={() => void toggleActive(loop, workerOptions)}
-      onOpenRun={(run) =>
-        navigate({
-          to: "/settings/agent-loops/$agentLoopId/runs/$runId",
-          params: { agentLoopId: loop.id, runId: run.id },
-        })
-      }
-    />
+      ) : null}
+      <AgentLoopDetailContent
+        loop={loop}
+        pendingAction={pendingAction}
+        actionError={actionError}
+        spaceOptions={spaceOptions}
+        memberOptions={memberOptions}
+        onRun={() => void runNow(loop)}
+        onToggle={() => void toggleActive(loop, workerOptions)}
+        onOpenRun={(run) =>
+          routeScope === "settings"
+            ? navigate({
+                to: "/settings/agent-loops/$agentLoopId/runs/$runId",
+                params: { agentLoopId: loop.id, runId: run.id },
+              })
+            : run.threadId
+              ? navigate({ to: "/threads/$id", params: { id: run.threadId } })
+              : undefined
+        }
+      />
+    </>
   );
 }
 
@@ -353,8 +379,8 @@ export function AgentLoopDetailContent({
   loop,
   pendingAction,
   actionError,
-  advancedOpen,
-  onAdvancedOpenChange,
+  spaceOptions = [],
+  memberOptions = [],
   onRun,
   onToggle,
   onOpenRun,
@@ -362,20 +388,16 @@ export function AgentLoopDetailContent({
   loop: AgentLoopRow;
   pendingAction: string | null;
   actionError?: string | null;
-  advancedOpen: boolean;
-  onAdvancedOpenChange: (open: boolean) => void;
+  spaceOptions?: AgentLoopSpaceOption[];
+  memberOptions?: AgentLoopMemberOption[];
   onRun: () => void;
   onToggle: () => void;
   onOpenRun: (run: AgentLoopRunSummary) => void;
 }) {
   const version = loop.currentVersion;
-  const goal = jsonRecord(version?.goalSpec);
-  const sourceMetadata = jsonRecord(version?.sourceMetadata);
+  const target = readTargetSpec(version);
+  const sourceMetadata = jsonRecordSafe(version?.sourceMetadata);
   const builderThreadId = stringValue(sourceMetadata.builderThreadId);
-  const prompt = stringValue(goal.objective, loop.description ?? "");
-  const criteria = Array.isArray(goal.completionCriteria)
-    ? goal.completionCriteria.filter((entry) => typeof entry === "string")
-    : [];
   const webhookEndpoint = loop.webhookEndpoint ?? null;
   const webhookDeliveries = loop.webhookDeliveries ?? [];
 
@@ -384,16 +406,6 @@ export function AgentLoopDetailContent({
       <SettingsPageTitle
         title={loop.name}
         description={loop.description ?? undefined}
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onAdvancedOpenChange(true)}
-          >
-            Advanced details
-          </Button>
-        }
       />
 
       {actionError ? (
@@ -418,7 +430,7 @@ export function AgentLoopDetailContent({
               <section>
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-muted-foreground">
-                    Prompt
+                    {target.kind === "agent_thread" ? "Instructions" : "Target"}
                   </h2>
                   {builderThreadId ? (
                     <a
@@ -430,31 +442,8 @@ export function AgentLoopDetailContent({
                   ) : null}
                 </div>
                 <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
-                  {prompt || "No prompt captured for this Automation."}
+                  {targetSummary(target)}
                 </div>
-              </section>
-
-              <section>
-                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-                  Done Means
-                </h2>
-                {criteria.length > 0 ? (
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    {criteria.map((criterion) => (
-                      <li
-                        key={criterion}
-                        className="rounded-md border border-border/70 px-3 py-2"
-                      >
-                        {criterion}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="rounded-md border border-border/70 px-3 py-2 text-sm text-muted-foreground">
-                    The worker should satisfy the prompt and record evidence in
-                    the run thread.
-                  </div>
-                )}
               </section>
 
               {webhookEndpoint ? (
@@ -465,6 +454,8 @@ export function AgentLoopDetailContent({
             <AutomationStatusRail
               loop={loop}
               pendingAction={pendingAction}
+              spaceOptions={spaceOptions}
+              memberOptions={memberOptions}
               onRun={onRun}
               onToggle={onToggle}
             />
@@ -484,14 +475,27 @@ export function AgentLoopDetailContent({
           ) : null}
         </TabsContent>
       </Tabs>
-
-      <AutomationDetailAdvancedInspector
-        open={advancedOpen}
-        onOpenChange={onAdvancedOpenChange}
-        loop={loop}
-      />
     </div>
   );
+}
+
+function targetSummary(target: ReturnType<typeof readTargetSpec>): string {
+  if (target.kind === "agent_thread") {
+    return (
+      target.agentThread?.instructions ||
+      "No instructions captured for this Automation."
+    );
+  }
+  if (target.kind === "routine") {
+    return `Runs routine ${target.routine?.routineId ?? ""}`.trim();
+  }
+  return `Runs workflow ${target.workflow?.routineId ?? ""}`.trim();
+}
+
+function jsonRecordSafe(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function HeaderActions({
@@ -574,8 +578,8 @@ function HeaderActions({
             <AlertDialogHeader>
               <AlertDialogTitle>Archive this automation?</AlertDialogTitle>
               <AlertDialogDescription>
-                Archived loops stop firing schedules and disappear from the
-                active inventory. Run history is preserved.
+                Archived automations stop firing and disappear from the active
+                inventory. Run history is preserved.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

@@ -2,9 +2,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import {
   agentWakeupRequests,
-  agentLoopEvidence,
   agentLoopIterations,
-  agentLoopJudgments,
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
@@ -43,11 +41,6 @@ type AgentLoopIterationParent = TenantScoped & {
   agentLoopRunId?: string | null;
   agentWakeupRequestId?: string | null;
   threadTurnId?: string | null;
-};
-
-type AgentLoopJudgmentParent = TenantScoped & {
-  agentLoopRunId?: string | null;
-  agentLoopIterationId?: string | null;
 };
 
 export async function resolveAgentLoopTenantId(
@@ -270,28 +263,6 @@ export const agentLoopRunTypeResolvers = {
       .limit(1_000);
     return rows.map(agentLoopRowToGraphql);
   },
-
-  judgments: async (run: AgentLoopRunParent) => {
-    if (!run.id) return [];
-    const rows = await db
-      .select()
-      .from(agentLoopJudgments)
-      .where(eq(agentLoopJudgments.agent_loop_run_id, run.id))
-      .orderBy(desc(agentLoopJudgments.created_at))
-      .limit(1_000);
-    return rows.map(agentLoopRowToGraphql);
-  },
-
-  evidence: async (run: AgentLoopRunParent) => {
-    if (!run.id) return [];
-    const rows = await db
-      .select()
-      .from(agentLoopEvidence)
-      .where(eq(agentLoopEvidence.agent_loop_run_id, run.id))
-      .orderBy(desc(agentLoopEvidence.created_at))
-      .limit(1_000);
-    return rows.map(agentLoopRowToGraphql);
-  },
 };
 
 export const agentLoopIterationTypeResolvers = {
@@ -311,28 +282,6 @@ export const agentLoopIterationTypeResolvers = {
       threadTurnId: iteration.threadTurnId ?? null,
       wakeupId: iteration.agentWakeupRequestId ?? null,
     }),
-
-  judgments: async (iteration: AgentLoopIterationParent) => {
-    if (!iteration.id) return [];
-    const rows = await db
-      .select()
-      .from(agentLoopJudgments)
-      .where(eq(agentLoopJudgments.agent_loop_iteration_id, iteration.id))
-      .orderBy(desc(agentLoopJudgments.created_at))
-      .limit(1_000);
-    return rows.map(agentLoopRowToGraphql);
-  },
-
-  evidence: async (iteration: AgentLoopIterationParent) => {
-    if (!iteration.id) return [];
-    const rows = await db
-      .select()
-      .from(agentLoopEvidence)
-      .where(eq(agentLoopEvidence.agent_loop_iteration_id, iteration.id))
-      .orderBy(desc(agentLoopEvidence.created_at))
-      .limit(1_000);
-    return rows.map(agentLoopRowToGraphql);
-  },
 };
 
 async function resolveAgentLoopRunThreadId(
@@ -388,15 +337,3 @@ async function resolveAgentLoopIterationThreadId(input: {
     ? threadId.trim()
     : null;
 }
-
-export const agentLoopJudgmentTypeResolvers = {
-  agentLoopRun: async (judgment: AgentLoopJudgmentParent) => {
-    if (!judgment.agentLoopRunId) return null;
-    const [row] = await db
-      .select()
-      .from(agentLoopRuns)
-      .where(eq(agentLoopRuns.id, judgment.agentLoopRunId))
-      .limit(1);
-    return row ? agentLoopRowToGraphql(row) : null;
-  },
-};

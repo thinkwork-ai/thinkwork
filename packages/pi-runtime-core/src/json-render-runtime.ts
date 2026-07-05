@@ -84,41 +84,75 @@ export function listMcpBindingCandidates(
   return candidates;
 }
 
-export interface EmitBindingFeedback {
-  /** True when a valid, refreshable binding was recorded for this emit. */
-  bound: boolean;
-  /** Count of bindable MCP invocations present in the turn so far. */
-  candidateCount: number;
-  /** Model-facing feedback line to append to the emit result, or null when
-   *  there is nothing actionable to say (unbound with no MCP candidates). */
-  text: string | null;
-  /** The recorded binding when bound; null otherwise. */
-  binding: ThreadJsonRenderDataBindingDescriptor | null;
+/** Literal opt-out the model passes as `sourceToolCallId` to declare a UI is
+ *  static/derived and presents NO tool-call data — accepted unbound with no
+ *  rejection. */
+export const EMIT_BINDING_NONE_SENTINEL = "none" as const;
+
+/**
+ * The enforcement outcome for one `emit_json_render_ui` call (Living Artifacts
+ * U5 follow-up, THINK-145). `accept` lets the emit proceed to persistence/
+ * display; `reject` turns the emit into an error-shaped tool result so the
+ * model — which reliably complies with validation rejections but ignores polite
+ * success-footnotes (observed live) — re-emits with a binding or the explicit
+ * `"none"` opt-out.
+ */
+export type EmitBindingEnforcement =
+  | {
+      decision: "accept";
+      reason: "bound";
+      binding: ThreadJsonRenderDataBindingDescriptor;
+      /** Confirmation appended to the accepted emit's content. */
+      confirmText: string;
+    }
+  | { decision: "accept"; reason: "no_candidates" }
+  | { decision: "accept"; reason: "explicit_none"; candidateCount: number }
+  | { decision: "accept"; reason: "post_rejection"; candidateCount: number }
+  | {
+      decision: "reject";
+      reason: "unbound";
+      candidateCount: number;
+      /** Error-shaped, model-facing rejection text (candidate ids inline). */
+      text: string;
+    };
+
+function candidateListText(candidates: readonly McpBindingCandidate[]): string {
+  return candidates
+    .map(
+      (candidate) => `${candidate.id} — ${candidate.server}/${candidate.tool}`,
+    )
+    .join("\n");
 }
 
 /**
- * Compute the model-facing binding feedback for one `emit_json_render_ui` call
- * (Living Artifacts U5 follow-up, THINK-145 — the model-actionable-diagnostics
- * lesson applied to the *silent* unbound path observed live).
+ * Decide whether an `emit_json_render_ui` call is accepted or must be rejected
+ * for want of a data-source binding (THINK-145 — the model-actionable-
+ * diagnostics lesson applied to the *silent* unbound path observed live; a
+ * post-success nudge was ignored while validation rejections in the SAME turn
+ * were complied with).
  *
- * - Bound (valid `sourceToolCallId` → refreshable MCP source): confirm it so
- *   the model knows the widget is now refreshable.
- * - Unbound but ≥1 completed MCP invocation exists this turn: hand the model the
- *   real candidate ids and tell it to re-emit with the SAME part id plus
- *   `sourceToolCallId`. Re-emission with a stable id merges idempotently, so the
- *   correction costs a single tool call.
- * - Unbound with no MCP invocations: nothing is bindable → no nudge.
- *
- * The candidate ids are pi's actual tool-call ids (shape
- * `functions.mcp_<server>_<tool>:<n>`), which the model does not reliably recall
- * verbatim — handing them back is the robust fix, not prompt wording alone.
+ * - Valid `sourceToolCallId` → refreshable MCP source: ACCEPT (`bound`) and
+ *   confirm it.
+ * - No completed MCP invocation exists this turn: ACCEPT (`no_candidates`) —
+ *   nothing is bindable, so a static/derived UI must not be enforced.
+ * - `sourceToolCallId === "none"`: ACCEPT (`explicit_none`) — the model has
+ *   explicitly declared the UI presents no tool-call data.
+ * - Unbound with ≥1 bindable candidate AND not yet rejected this turn: REJECT.
+ *   The rejection hands back pi's real candidate ids (shape
+ *   `functions.mcp_<server>_<tool>:<n>`, which the model does not recall
+ *   verbatim) and instructs a same-id re-emit with `sourceToolCallId` or the
+ *   `"none"` opt-out.
+ * - Unbound with candidates but ALREADY rejected once this turn: ACCEPT
+ *   (`post_rejection`) — the loop guard. At most one rejection per stable part
+ *   id per turn so the UI is never lost to a ping-pong.
  */
-export function buildEmitBindingFeedback(input: {
+export function decideEmitBinding(input: {
   partId: string;
   sourceToolCallId: unknown;
   toolInvocations: readonly CanvasBindingSourceInvocation[];
-}): EmitBindingFeedback {
-  const { partId, sourceToolCallId, toolInvocations } = input;
+  alreadyRejected: boolean;
+}): EmitBindingEnforcement {
+  const { partId, sourceToolCallId, toolInvocations, alreadyRejected } = input;
   const binding = buildCanvasDataBinding({
     partId,
     sourceToolCallId,
@@ -126,48 +160,89 @@ export function buildEmitBindingFeedback(input: {
   });
   if (binding) {
     return {
-      bound: true,
-      candidateCount: 0,
+      decision: "accept",
+      reason: "bound",
       binding,
-      text: `Data-source binding recorded: ${binding.serverName}/${binding.toolName}.`,
+      confirmText: `Data-source binding recorded: ${binding.serverName}/${binding.toolName}.`,
     };
   }
 
   const candidates = listMcpBindingCandidates(toolInvocations);
   if (candidates.length === 0) {
-    return { bound: false, candidateCount: 0, binding: null, text: null };
+    return { decision: "accept", reason: "no_candidates" };
   }
 
-  const candidateLines = candidates
-    .map(
-      (candidate) => `${candidate.id} — ${candidate.server}/${candidate.tool}`,
-    )
-    .join("\n");
+  const explicitNone =
+    typeof sourceToolCallId === "string" &&
+    sourceToolCallId.trim().toLowerCase() === EMIT_BINDING_NONE_SENTINEL;
+  if (explicitNone) {
+    return {
+      decision: "accept",
+      reason: "explicit_none",
+      candidateCount: candidates.length,
+    };
+  }
+
+  if (alreadyRejected) {
+    return {
+      decision: "accept",
+      reason: "post_rejection",
+      candidateCount: candidates.length,
+    };
+  }
+
   return {
-    bound: false,
+    decision: "reject",
+    reason: "unbound",
     candidateCount: candidates.length,
-    binding: null,
     text:
-      "No data-source binding was recorded. If this UI presents data returned " +
-      "by one of these tool calls, immediately re-emit with the SAME id plus " +
-      `sourceToolCallId:\n${candidateLines}`,
+      "This generated UI was NOT accepted: it presents data but recorded no " +
+      "data-source binding, so it cannot be refreshed later. Re-emit the SAME " +
+      "id to fix it:\n" +
+      "- If this UI presents data returned by one of the tool calls below, " +
+      "pass that call's id as sourceToolCallId.\n" +
+      `- If this UI does NOT present data from any tool call, pass sourceToolCallId: "${EMIT_BINDING_NONE_SENTINEL}".\n` +
+      `Candidate tool calls:\n${candidateListText(candidates)}`,
   };
+}
+
+/** Structured observability line the emit wrapper hands to its host logger. */
+export interface EmitBindingLogEntry {
+  level: "warn";
+  event: "json_render_unbound_emit";
+  partId: string;
+  reason: "rejected" | "explicit_none" | "post_rejection";
+  candidateCount: number;
+}
+
+export interface WrapEmitToolOptions {
+  /** Best-effort structured logger for unbound-emit observability (rejected,
+   *  explicit_none, post_rejection). The host binds `threadId` etc. */
+  log?: (entry: EmitBindingLogEntry) => void;
 }
 
 /**
  * Wire an already-built `emit_json_render_ui` tool with a live view of the
- * turn's recorded tool invocations so its *result content* carries the binding
- * feedback loop (see {@link buildEmitBindingFeedback}). This is the chosen
- * injection seam: the tool is constructed context-free (in the Pi server), and
- * the agent loop — the only holder of the live `toolInvocations` registry —
- * wraps it at wiring time, passing a getter. The wrapper only augments a
- * successful emit's content; rejected emits pass through untouched so the strict
- * validator's repair loop is not polluted.
+ * turn's recorded tool invocations and ENFORCE the data-source binding
+ * (THINK-145). This is the chosen enforcement seam: the tool result the wrapper
+ * returns is exactly what the model sees AND exactly the `event.result` the
+ * agent loop later reads for its side effects (persist part, STATE_SNAPSHOT /
+ * ui_message_chunk emission). By reshaping an unbound emit into an error-shaped
+ * result HERE — before the loop extracts a part — a rejected emit provably
+ * persists/displays nothing (`extractEmitJsonRenderToolPart` returns null for a
+ * result whose `details` carries no `thread_json_render_part`).
+ *
+ * The wrapper owns a per-turn (per-wrapper-instance) set of rejected part ids so
+ * the loop guard holds: at most ONE rejection per stable part id per turn; a
+ * re-emit of the same still-unbound id is accepted (`post_rejection`).
  */
 export function wrapEmitToolWithBindingFeedback(
   tool: AgentTool<any>,
   getTurnInvocations: () => readonly CanvasBindingSourceInvocation[],
+  options: WrapEmitToolOptions = {},
 ): AgentTool<any> {
+  const rejectedPartIds = new Set<string>();
+  const log = options.log;
   return {
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
@@ -176,20 +251,63 @@ export function wrapEmitToolWithBindingFeedback(
       // Only a successful emit produces a part; a rejected emit returns its
       // validator diagnostics untouched.
       if (!part) return result;
-      const feedback = buildEmitBindingFeedback({
+
+      const enforcement = decideEmitBinding({
         partId: part.id,
         sourceToolCallId: recordValue(params)?.sourceToolCallId,
         toolInvocations: getTurnInvocations(),
+        alreadyRejected: rejectedPartIds.has(part.id),
       });
-      if (!feedback.text) return result;
-      const resultRecord = recordValue(result) ?? {};
-      const existingContent = Array.isArray(resultRecord.content)
-        ? resultRecord.content
-        : [];
-      return {
-        ...resultRecord,
-        content: [...existingContent, { type: "text", text: feedback.text }],
-      } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+
+      if (enforcement.decision === "reject") {
+        rejectedPartIds.add(part.id);
+        log?.({
+          level: "warn",
+          event: "json_render_unbound_emit",
+          partId: part.id,
+          reason: "rejected",
+          candidateCount: enforcement.candidateCount,
+        });
+        // Error-shaped result (matches the strict validator's rejection shape
+        // the model already complies with): no `thread_json_render_part`, so
+        // the loop skips ALL side effects for this call.
+        return {
+          content: [{ type: "text", text: enforcement.text }],
+          details: { ok: false, binding_enforcement: "unbound_rejected" },
+        } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+      }
+
+      if (enforcement.reason === "explicit_none") {
+        log?.({
+          level: "warn",
+          event: "json_render_unbound_emit",
+          partId: part.id,
+          reason: "explicit_none",
+          candidateCount: enforcement.candidateCount,
+        });
+      } else if (enforcement.reason === "post_rejection") {
+        log?.({
+          level: "warn",
+          event: "json_render_unbound_emit",
+          partId: part.id,
+          reason: "post_rejection",
+          candidateCount: enforcement.candidateCount,
+        });
+      } else if (enforcement.reason === "bound") {
+        const resultRecord = recordValue(result) ?? {};
+        const existingContent = Array.isArray(resultRecord.content)
+          ? resultRecord.content
+          : [];
+        return {
+          ...resultRecord,
+          content: [
+            ...existingContent,
+            { type: "text", text: enforcement.confirmText },
+          ],
+        } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+      }
+
+      return result;
     },
   } as AgentTool<any>;
 }
@@ -212,9 +330,12 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
       "matching durableActions descriptors; result.list item action ids must " +
       "also reference matching durableActions descriptors. Work Item approval actions should " +
       'use params target "work_item_status", workItemId, and statusCategory or statusId. ' +
-      "When this UI charts or tabulates the data returned by an earlier tool call " +
-      "in THIS turn, pass that call's id as sourceToolCallId so the canvas can be " +
-      "refreshed later without re-running the whole turn.",
+      "sourceToolCallId is REQUIRED whenever this UI presents data returned by a " +
+      "tool call in this conversation: pass that call's id so the canvas records " +
+      'a refreshable binding. Pass sourceToolCallId "none" only for static or ' +
+      "derived UIs that present no tool-call data. An unbound emit while a " +
+      "bindable tool call exists this turn is rejected until you re-emit with a " +
+      'sourceToolCallId or "none".',
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -228,14 +349,14 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
         sourceToolCallId: {
           type: "string",
           description:
-            "Optional. The id of the tool call in this turn whose result this UI " +
-            "presents (e.g. the MCP tool that returned the rows/metrics being " +
+            "REQUIRED when this UI presents data returned by a tool call in this " +
+            "turn (e.g. the MCP tool that returned the rows/metrics being " +
             "charted). Use the tool call's real id, shaped like " +
-            "`functions.mcp_<server>_<tool>:<n>`. Pass it so the widget records a " +
+            "`functions.mcp_<server>_<tool>:<n>`, so the widget records a " +
             "refreshable data-source binding. If you omit it while such a tool " +
-            "call exists this turn, the emit result lists the candidate ids so " +
-            "you can re-emit with the SAME part id plus sourceToolCallId. Omit " +
-            "when the UI is not derived from a single tool result.",
+            "call exists this turn, the emit is REJECTED and lists the candidate " +
+            "ids so you re-emit with the SAME part id plus sourceToolCallId. Pass " +
+            '"none" for a static or derived UI that presents no tool-call data.',
         },
         spec: {
           type: "object",

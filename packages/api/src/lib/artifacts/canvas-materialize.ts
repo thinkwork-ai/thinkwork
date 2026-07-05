@@ -7,7 +7,7 @@
  *  1. A durable `messages` row (role `assistant`) carrying the canvas head as a
  *     `data-json-render` part under its ORIGINAL stable part id — so a fresh
  *     load of the thread renders the canvas exactly like an agent-authored one
- *     (same `messages.parts` path `promoteGenUIArtifact` reads).
+ *     (same `messages.parts` path the born-as-artifact writer reads).
  *  2. A best-effort `state_snapshot` thread-turn event on the thread's most
  *     recent turn (KTD1 AG-UI vocabulary) so clients already watching the
  *     thread converge without a reload. `thread_turn_events.run_id` is a NOT
@@ -31,7 +31,10 @@ import {
   randomUUID,
   threadTurns,
 } from "../../graphql/utils.js";
-import { notifyNewMessage, notifyThreadTurnStep } from "../../graphql/notify.js";
+import {
+  notifyNewMessage,
+  notifyThreadTurnStep,
+} from "../../graphql/notify.js";
 import {
   appendThreadTurnEvent,
   drizzleThreadTurnEventStore,

@@ -283,15 +283,12 @@ export type AgentKnowledgeBaseInput = {
 
 export type AgentLoop = {
   __typename?: 'AgentLoop';
-  acceptedRunCount: Scalars['Int']['output'];
-  costPerAcceptedRunUsdCents?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   currentVersion?: Maybe<AgentLoopVersion>;
   currentVersionId?: Maybe<Scalars['ID']['output']>;
   currentVersionNumber?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
   enabled: Scalars['Boolean']['output'];
-  escalatedRunCount: Scalars['Int']['output'];
   id: Scalars['ID']['output'];
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastRunId?: Maybe<Scalars['ID']['output']>;
@@ -302,13 +299,11 @@ export type AgentLoop = {
   ownerAgentId?: Maybe<Scalars['ID']['output']>;
   ownerUserId?: Maybe<Scalars['ID']['output']>;
   primaryTriggerFamily: AgentLoopTriggerFamily;
-  rejectedRunCount: Scalars['Int']['output'];
   runAsUserId?: Maybe<Scalars['ID']['output']>;
   runs: Array<AgentLoopRun>;
   slug: Scalars['String']['output'];
   spaceId?: Maybe<Scalars['ID']['output']>;
   tenantId: Scalars['ID']['output'];
-  totalCostUsdCents: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<AgentLoopVersion>;
   webhookDeliveries: Array<AutomationWebhookDelivery>;
@@ -327,32 +322,6 @@ export type AgentLoopWebhookDeliveriesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
-export type AgentLoopEvidence = {
-  __typename?: 'AgentLoopEvidence';
-  agentLoopId: Scalars['ID']['output'];
-  agentLoopIterationId?: Maybe<Scalars['ID']['output']>;
-  agentLoopJudgmentId?: Maybe<Scalars['ID']['output']>;
-  agentLoopRunId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  evidenceType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  redactionState: AgentLoopEvidenceRedactionState;
-  retentionExpiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  sensitivity?: Maybe<Scalars['String']['output']>;
-  sourceId?: Maybe<Scalars['String']['output']>;
-  sourceSystem: Scalars['String']['output'];
-  summary: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  uri?: Maybe<Scalars['String']['output']>;
-};
-
-export enum AgentLoopEvidenceRedactionState {
-  Offloaded = 'offloaded',
-  RawAllowed = 'raw_allowed',
-  Redacted = 'redacted',
-  SummaryOnly = 'summary_only'
-}
-
 export type AgentLoopIteration = {
   __typename?: 'AgentLoopIteration';
   agentLoopRun?: Maybe<AgentLoopRun>;
@@ -361,13 +330,11 @@ export type AgentLoopIteration = {
   createdAt: Scalars['AWSDateTime']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
-  evidence: Array<AgentLoopEvidence>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   goalModeAction?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   inputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   iterationNumber: Scalars['Int']['output'];
-  judgments: Array<AgentLoopJudgment>;
   outputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: AgentLoopIterationStatus;
@@ -386,40 +353,6 @@ export enum AgentLoopIterationStatus {
   Queued = 'queued',
   Running = 'running',
   WaitingForHuman = 'waiting_for_human'
-}
-
-export enum AgentLoopJudgeMode {
-  EvalThreshold = 'eval_threshold',
-  ExternalCallback = 'external_callback',
-  HumanApproval = 'human_approval',
-  ModelJudge = 'model_judge',
-  ReviewerAgent = 'reviewer_agent',
-  SelfCheck = 'self_check'
-}
-
-export type AgentLoopJudgment = {
-  __typename?: 'AgentLoopJudgment';
-  agentLoopIterationId?: Maybe<Scalars['ID']['output']>;
-  agentLoopRun?: Maybe<AgentLoopRun>;
-  agentLoopRunId: Scalars['ID']['output'];
-  confidence?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  judgeMode: AgentLoopJudgeMode;
-  outcome: AgentLoopJudgmentOutcome;
-  rationale?: Maybe<Scalars['String']['output']>;
-  structuredOutput: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  terminalReason?: Maybe<Scalars['String']['output']>;
-};
-
-export enum AgentLoopJudgmentOutcome {
-  BudgetStopped = 'budget_stopped',
-  Complete = 'complete',
-  Continue = 'continue',
-  Escalated = 'escalated',
-  Failed = 'failed',
-  NeedsHumanApproval = 'needs_human_approval'
 }
 
 export enum AgentLoopLifecycleStatus {
@@ -442,13 +375,11 @@ export type AgentLoopRun = {
   currentIteration: Scalars['Int']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
-  evidence: Array<AgentLoopEvidence>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   idempotencyKey?: Maybe<Scalars['String']['output']>;
   inputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   iterations: Array<AgentLoopIteration>;
-  judgments: Array<AgentLoopJudgment>;
   lastEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
   outputSummary?: Maybe<Scalars['AWSJSON']['output']>;
   policySnapshot: Scalars['AWSJSON']['output'];
@@ -489,10 +420,8 @@ export type AgentLoopVersion = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdByActorId?: Maybe<Scalars['ID']['output']>;
   createdByActorType?: Maybe<Scalars['String']['output']>;
-  evidencePolicy: Scalars['AWSJSON']['output'];
   goalSpec: Scalars['AWSJSON']['output'];
   id: Scalars['ID']['output'];
-  judgeSpec: Scalars['AWSJSON']['output'];
   loopPolicy: Scalars['AWSJSON']['output'];
   publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   routineActionsSpec?: Maybe<Scalars['AWSJSON']['output']>;
@@ -866,7 +795,7 @@ export type Artifact = {
   tenantId: Scalars['ID']['output'];
   threadId?: Maybe<Scalars['ID']['output']>;
   title: Scalars['String']['output'];
-  type: ArtifactType;
+  type: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<ArtifactVersion>;
 };
@@ -910,22 +839,10 @@ export enum ArtifactStatus {
   Superseded = 'SUPERSEDED'
 }
 
-export enum ArtifactType {
-  Applet = 'APPLET',
-  AppletState = 'APPLET_STATE',
-  Brief = 'BRIEF',
-  DataView = 'DATA_VIEW',
-  Digest = 'DIGEST',
-  Draft = 'DRAFT',
-  Ideation = 'IDEATION',
-  Note = 'NOTE',
-  Plan = 'PLAN',
-  Report = 'REPORT'
-}
-
 export type ArtifactVersion = {
   __typename?: 'ArtifactVersion';
   artifactId: Scalars['ID']['output'];
+  content?: Maybe<Scalars['String']['output']>;
   contentHash: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
   createdBy?: Maybe<Scalars['ID']['output']>;
@@ -1102,6 +1019,8 @@ export type CanvasRefreshBindingResult = {
   partId: Scalars['String']['output'];
   quality: ArtifactBindingQuality;
   reason?: Maybe<Scalars['String']['output']>;
+  serverName?: Maybe<Scalars['String']['output']>;
+  toolName?: Maybe<Scalars['String']['output']>;
 };
 
 export enum CanvasRefreshOutcome {
@@ -1131,6 +1050,7 @@ export type CanvasSummary = {
   __typename?: 'CanvasSummary';
   artifactId: Scalars['ID']['output'];
   headVersion: Scalars['Int']['output'];
+  stablePartId?: Maybe<Scalars['String']['output']>;
   status: Scalars['String']['output'];
   title: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
@@ -1524,7 +1444,7 @@ export type CreateArtifactInput = {
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
   title: Scalars['String']['input'];
-  type: ArtifactType;
+  type: Scalars['String']['input'];
 };
 
 export type CreateEvalDatasetInput = {
@@ -3836,7 +3756,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteGenUIArtifact: Artifact;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4813,11 +4732,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-
-export type MutationPromoteGenUiArtifactArgs = {
-  input: PromoteGenUiArtifactInput;
 };
 
 
@@ -6415,14 +6329,6 @@ export type PromoteDraftAppletInput = {
   threadId: Scalars['ID']['input'];
 };
 
-export type PromoteGenUiArtifactInput = {
-  idempotencyKey: Scalars['String']['input'];
-  partId: Scalars['String']['input'];
-  sourceMessageId: Scalars['ID']['input'];
-  specHash: Scalars['String']['input'];
-  threadId: Scalars['ID']['input'];
-};
-
 export type PublishRoutineVersionInput = {
   asl: Scalars['AWSJSON']['input'];
   markdownSummary: Scalars['String']['input'];
@@ -6930,10 +6836,11 @@ export type QueryArtifactsArgs = {
   favoritedOnly?: InputMaybe<Scalars['Boolean']['input']>;
   includeDrafts?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<ArtifactStatus>;
   tenantId: Scalars['ID']['input'];
   threadId?: InputMaybe<Scalars['ID']['input']>;
-  type?: InputMaybe<ArtifactType>;
+  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -8520,10 +8427,8 @@ export type RuntimeManifest = {
 export type SaveAgentLoopInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  evidencePolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   goalSpec: Scalars['AWSJSON']['input'];
   id?: InputMaybe<Scalars['ID']['input']>;
-  judgeSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   lifecycleStatus?: InputMaybe<AgentLoopLifecycleStatus>;
   loopPolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
@@ -10130,7 +10035,7 @@ export type UpdateArtifactInput = {
   status?: InputMaybe<ArtifactStatus>;
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<ArtifactType>;
+  type?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateEmailReadinessCheckInput = {
@@ -11805,7 +11710,7 @@ export type MessagesQueryVariables = Exact<{
 }>;
 
 
-export type MessagesQuery = { __typename?: 'Query', messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', cursor: string, node: { __typename?: 'Message', id: string, threadId: string, tenantId: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, toolCalls?: any | null, toolResults?: any | null, parts?: any | null, metadata?: any | null, tokenCount?: number | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus, content?: string | null, summary?: string | null } | null } }>, pageInfo: { __typename?: 'PageInfo', hasNextPage: boolean, endCursor?: string | null } } };
+export type MessagesQuery = { __typename?: 'Query', messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', cursor: string, node: { __typename?: 'Message', id: string, threadId: string, tenantId: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, toolCalls?: any | null, toolResults?: any | null, parts?: any | null, metadata?: any | null, tokenCount?: number | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus, content?: string | null, summary?: string | null } | null } }>, pageInfo: { __typename?: 'PageInfo', hasNextPage: boolean, endCursor?: string | null } } };
 
 export type RoutinesQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -12063,7 +11968,7 @@ export type ThreadQueryVariables = Exact<{
 }>;
 
 
-export type ThreadQuery = { __typename?: 'Query', thread?: { __typename?: 'Thread', id: string, tenantId: string, agentId?: string | null, spaceId: string, number: number, identifier?: string | null, title: string, status: ThreadStatus, lifecycleStatus?: ThreadLifecycleStatus | null, channel: ThreadChannel, assigneeType?: string | null, assigneeId?: string | null, reporterId?: string | null, labels?: any | null, metadata?: any | null, dueAt?: any | null, closedAt?: any | null, createdAt: any, updatedAt: any, space?: { __typename?: 'Space', id: string, name: string, slug: string } | null, messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', node: { __typename?: 'Message', id: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus } | null } }> }, attachments: Array<{ __typename?: 'ThreadAttachment', id: string, name?: string | null, mimeType?: string | null, sizeBytes?: number | null, createdAt: any }> } | null };
+export type ThreadQuery = { __typename?: 'Query', thread?: { __typename?: 'Thread', id: string, tenantId: string, agentId?: string | null, spaceId: string, number: number, identifier?: string | null, title: string, status: ThreadStatus, lifecycleStatus?: ThreadLifecycleStatus | null, channel: ThreadChannel, assigneeType?: string | null, assigneeId?: string | null, reporterId?: string | null, labels?: any | null, metadata?: any | null, dueAt?: any | null, closedAt?: any | null, createdAt: any, updatedAt: any, space?: { __typename?: 'Space', id: string, name: string, slug: string } | null, messages: { __typename?: 'MessageConnection', edges: Array<{ __typename?: 'MessageEdge', node: { __typename?: 'Message', id: string, role: MessageRole, content?: string | null, senderType?: string | null, senderId?: string | null, createdAt: any, sender?: { __typename?: 'MessageSender', type: string, id?: string | null, displayName: string, avatarUrl?: string | null } | null, durableArtifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus } | null } }> }, attachments: Array<{ __typename?: 'ThreadAttachment', id: string, name?: string | null, mimeType?: string | null, sizeBytes?: number | null, createdAt: any }> } | null };
 
 export type CreateThreadMutationVariables = Exact<{
   input: CreateThreadInput;
@@ -12207,14 +12112,14 @@ export type ArtifactsForThreadQueryVariables = Exact<{
 }>;
 
 
-export type ArtifactsForThreadQuery = { __typename?: 'Query', artifacts: Array<{ __typename?: 'Artifact', id: string, tenantId: string, agentId?: string | null, threadId?: string | null, title: string, type: ArtifactType, status: ArtifactStatus, summary?: string | null, createdAt: any, updatedAt: any }> };
+export type ArtifactsForThreadQuery = { __typename?: 'Query', artifacts: Array<{ __typename?: 'Artifact', id: string, tenantId: string, agentId?: string | null, threadId?: string | null, title: string, type: string, status: ArtifactStatus, summary?: string | null, createdAt: any, updatedAt: any }> };
 
 export type ArtifactDetailQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type ArtifactDetailQuery = { __typename?: 'Query', artifact?: { __typename?: 'Artifact', id: string, title: string, type: ArtifactType, status: ArtifactStatus, content?: string | null, summary?: string | null, createdAt: any } | null };
+export type ArtifactDetailQuery = { __typename?: 'Query', artifact?: { __typename?: 'Artifact', id: string, title: string, type: string, status: ArtifactStatus, content?: string | null, summary?: string | null, createdAt: any } | null };
 
 export type MemoryRecordsQueryVariables = Exact<{
   userId: Scalars['ID']['input'];
