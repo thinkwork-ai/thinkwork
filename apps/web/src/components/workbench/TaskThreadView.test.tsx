@@ -302,9 +302,15 @@ describe("TaskThreadView", () => {
     // …the full inline widget does NOT…
     expect(screen.queryByTestId("genui-task-review")).toBeNull();
     // …and a single compact card renders, titled by the artifact (never the
-    // widget/component type), linking to the artifact page.
+    // widget/component type). In a thread the card's primary click opens the
+    // docked panel (THINK-168); the full page stays one explicit link away.
     const card = screen.getByTestId("artifact-card");
-    expect(card.getAttribute("href")).toBe("/artifacts/artifact-canvas-1");
+    expect(
+      within(card).getByTestId("artifact-card-panel-trigger"),
+    ).toBeTruthy();
+    expect(
+      within(card).getByTestId("artifact-card-full-page").getAttribute("href"),
+    ).toBe("/artifacts/artifact-canvas-1");
     expect(screen.getByText("Onboarding review canvas")).toBeTruthy();
     expect(screen.getByText("Draft")).toBeTruthy();
     // The old generic artifact card (button/side-panel variant) is gone.
@@ -437,9 +443,11 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("genui-task-review")).toBeNull();
     const cards = screen.getAllByTestId("artifact-card");
     expect(cards).toHaveLength(1);
-    expect(cards[0].getAttribute("href")).toBe(
-      "/artifacts/artifact-checked-out",
-    );
+    expect(
+      within(cards[0])
+        .getByTestId("artifact-card-full-page")
+        .getAttribute("href"),
+    ).toBe("/artifacts/artifact-checked-out");
     expect(screen.getByText("CRM Tasks by Status")).toBeTruthy();
     expect(screen.getByText("Final · v3")).toBeTruthy();
     // …the safety-net conversion keeps rendering inline…

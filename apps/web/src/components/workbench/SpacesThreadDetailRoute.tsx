@@ -795,6 +795,13 @@ export function SpacesThreadDetailRoute({
   const [liveStreamStateByRun, setLiveStreamStateByRun] = useState<
     Map<string, UIMessageStreamState>
   >(new Map());
+  // THINK-168: partId → bump counter for live json-render (re-)emissions.
+  // The docked artifact panel watches its artifact's stablePartId here and
+  // refetches when the agent re-emits the canvas in this thread — event-
+  // driven via the same onThreadTurnStep fold, no polling.
+  const [jsonRenderPartVersions, setJsonRenderPartVersions] = useState<
+    Map<string, number>
+  >(new Map());
   const liveStepSeqByRun = useRef<Map<string, Set<number>>>(new Map());
   const [{ data: stepUpdate }] = useSubscription<{
     onThreadTurnStep?: {
@@ -815,6 +822,7 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     setLiveStepsByRun(new Map());
     setLiveStreamStateByRun(new Map());
+    setJsonRenderPartVersions(new Map());
     liveStepSeqByRun.current = new Map();
   }, [threadId]);
 
@@ -846,6 +854,16 @@ export function SpacesThreadDetailRoute({
         );
         return next;
       });
+      // THINK-168: signal the docked artifact panel that this stable part id
+      // just (re-)landed so it can refetch the artifact's persisted head.
+      const jsonRenderPartId = jsonRenderPartIdFromChunk(uiChunk);
+      if (jsonRenderPartId) {
+        setJsonRenderPartVersions((prev) => {
+          const next = new Map(prev);
+          next.set(jsonRenderPartId, (next.get(jsonRenderPartId) ?? 0) + 1);
+          return next;
+        });
+      }
       return;
     }
     const event: TaskThreadEvent = {
@@ -1898,6 +1916,7 @@ export function SpacesThreadDetailRoute({
     <TaskThreadView
       thread={visibleThread}
       savedCanvases={savedCanvases ?? undefined}
+      jsonRenderPartVersions={jsonRenderPartVersions}
       isLoading={
         (fetching && !routeThread && !optimisticThreadStart) ||
         hasMismatchedThreadData
@@ -3007,6 +3026,20 @@ export function uiMessageChunkFromThreadTurnPayload(
     return null;
   }
   return record.chunk ?? null;
+}
+
+/**
+ * THINK-168: stable part id of a live json-render (re-)emission chunk. Both
+ * wire shapes — the AG-UI STATE_SNAPSHOT unwrap and the legacy
+ * thread_json_render.ui_message_chunk — carry the persisted part
+ * `{ type: "data-json-render", id, data }`, so one check covers both.
+ */
+export function jsonRenderPartIdFromChunk(chunk: unknown): string | null {
+  const record = metadataObject(chunk);
+  if (!record || record.type !== "data-json-render") return null;
+  return typeof record.id === "string" && record.id.length > 0
+    ? record.id
+    : null;
 }
 
 function taskThreadEventDedupeKey(event: TaskThreadEvent): string {

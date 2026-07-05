@@ -64,6 +64,29 @@ describe("ArtifactCard", () => {
     expect(screen.getByText("Open →")).toBeTruthy();
   });
 
+  it("onOpen mode: primary click opens the panel; full page stays an explicit link (THINK-168)", () => {
+    const onOpen = vi.fn();
+    render(
+      <ArtifactCard
+        artifact={{
+          id: "artifact-1",
+          title: "Q3 pipeline table",
+          type: "DATA_VIEW",
+        }}
+        onOpen={onOpen}
+      />,
+    );
+
+    const card = screen.getByTestId("artifact-card");
+    // Not a link root anymore — a cover button owns the primary click.
+    expect(card.getAttribute("href")).toBeNull();
+    screen.getByTestId("artifact-card-panel-trigger").click();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByTestId("artifact-card-full-page").getAttribute("href"),
+    ).toBe("/artifacts/artifact-1");
+  });
+
   it("renders unknown plugin type strings verbatim (open string, no enum switch)", () => {
     render(
       <ArtifactCard

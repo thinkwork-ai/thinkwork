@@ -17,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
+import { cn } from "@/lib/utils";
 
 export interface ArtifactCardData {
   id: string;
@@ -34,6 +35,7 @@ export function ArtifactCard({
   description,
   openLabel = "Open →",
   testId = "artifact-card",
+  onOpen,
 }: {
   artifact: ArtifactCardData;
   /**
@@ -46,6 +48,14 @@ export function ArtifactCard({
   description?: string | null;
   openLabel?: string;
   testId?: string;
+  /**
+   * THINK-168: when set, the card's PRIMARY click opens the artifact in the
+   * thread's docked panel (via this callback) instead of navigating; the
+   * full-page route stays reachable through an explicit "Open full page →"
+   * link at the card's foot. Omitted (list surfaces, hosts without a panel)
+   * → the whole card stays a /artifacts/$id link.
+   */
+  onOpen?: () => void;
 }) {
   const badgeLabel =
     badge === null ? null : (badge ?? artifact.type ?? "Artifact");
@@ -54,13 +64,11 @@ export function ArtifactCard({
       ? null
       : (statusLabel ??
         deriveStatusLabel(artifact.status, artifact.headVersion));
-  return (
-    <Link
-      to="/artifacts/$id"
-      params={{ id: artifact.id }}
-      className="not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
-      data-testid={testId}
-    >
+  const rootClassName =
+    "not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40";
+
+  const cardBody = (
+    <>
       <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground group-hover:text-foreground">
         <FileText className="h-4 w-4" />
       </div>
@@ -85,10 +93,49 @@ export function ArtifactCard({
             {description}
           </p>
         ) : null}
-        <span className="mt-1 inline-block text-xs font-medium text-primary">
-          {openLabel}
-        </span>
+        {onOpen ? (
+          <Link
+            to="/artifacts/$id"
+            params={{ id: artifact.id }}
+            className="relative z-10 mt-1 inline-block text-xs font-medium text-primary hover:underline"
+            data-testid={`${testId}-full-page`}
+          >
+            Open full page →
+          </Link>
+        ) : (
+          <span className="mt-1 inline-block text-xs font-medium text-primary">
+            {openLabel}
+          </span>
+        )}
       </div>
+    </>
+  );
+
+  if (onOpen) {
+    // A cover button (not a wrapping <button>) keeps the nested full-page
+    // Link valid HTML while the rest of the card surface opens the panel.
+    return (
+      <div className={cn(rootClassName, "relative")} data-testid={testId}>
+        <button
+          type="button"
+          aria-label={`Open ${artifact.title || "artifact"}`}
+          className="absolute inset-0 z-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={onOpen}
+          data-testid={`${testId}-panel-trigger`}
+        />
+        {cardBody}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to="/artifacts/$id"
+      params={{ id: artifact.id }}
+      className={rootClassName}
+      data-testid={testId}
+    >
+      {cardBody}
     </Link>
   );
 }

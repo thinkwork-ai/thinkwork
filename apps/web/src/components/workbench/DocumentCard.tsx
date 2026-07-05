@@ -18,7 +18,14 @@ export interface DocumentCardData {
   headVersion?: number;
 }
 
-export function DocumentCard({ card }: { card: DocumentCardData }) {
+export function DocumentCard({
+  card,
+  onOpen,
+}: {
+  card: DocumentCardData;
+  /** THINK-168: open in the thread's docked panel (primary click). */
+  onOpen?: () => void;
+}) {
   const statusLabel =
     card.status === "final"
       ? `Final${card.headVersion ? ` · v${card.headVersion}` : ""}`
@@ -31,6 +38,7 @@ export function DocumentCard({ card }: { card: DocumentCardData }) {
       description={card.abstract}
       openLabel="Open document →"
       testId="document-card"
+      onOpen={onOpen}
     />
   );
 }

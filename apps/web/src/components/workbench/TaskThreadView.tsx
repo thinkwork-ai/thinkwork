@@ -156,6 +156,8 @@ import {
   isSafetyNetPartId,
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
+import { ThreadArtifactPanel } from "@/components/artifacts/ThreadArtifactPanel";
+import { useThreadArtifactPanel } from "@/components/artifacts/thread-artifact-panel-store";
 import {
   SkillDraftStatusCard,
   type SkillDraftStatusData,
@@ -332,6 +334,13 @@ interface TaskThreadViewProps {
    * collapse. Optional; absent hosts simply skip checkout-routed matching.
    */
   savedCanvases?: SavedCanvasSummaryLite[];
+  /**
+   * THINK-168: partId → bump counter, incremented by the host whenever a
+   * json-render part with that stable id lands on the thread's live event
+   * stream (onThreadTurnStep fold). The docked artifact panel refetches its
+   * artifact when the counter for its stablePartId changes.
+   */
+  jsonRenderPartVersions?: ReadonlyMap<string, number>;
 }
 
 /** Lightweight CanvasSummary projection for the transcript collapse. */
@@ -507,6 +516,7 @@ export function TaskThreadView({
   onJsonRenderActionSuccess,
   onRetryDispatch,
   savedCanvases,
+  jsonRenderPartVersions,
 }: TaskThreadViewProps) {
   const { isOperator } = useTenant();
   const composerDockRef = useRef<HTMLDivElement | null>(null);
@@ -575,6 +585,10 @@ export function TaskThreadView({
     }
     return map;
   }, [savedCanvases]);
+
+  // Docked artifact panel (THINK-168): per-thread selection in a module
+  // store, so it survives message sends / refetch-driven remounts.
+  const canvasPanel = useThreadArtifactPanel(thread?.id ?? null);
 
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
@@ -687,6 +701,7 @@ export function TaskThreadView({
                           : undefined
                       }
                       onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                      onOpenArtifactPanel={canvasPanel.open}
                       onSendFollowUp={onSendFollowUp}
                       isSending={isSending}
                       threadAttachments={infoPanelState?.attachments ?? []}
@@ -747,11 +762,21 @@ export function TaskThreadView({
         </div>
       </section>
 
+      {/* Docked artifact panel wins the right edge when open — the legacy
+          generated-artifact side panel yields rather than double-docking. */}
       <ArtifactSidePanel
         artifact={selectedArtifact}
-        open={artifactPanelOpen}
+        open={artifactPanelOpen && !canvasPanel.artifactId}
         fullscreen={artifactPanelState?.isFullscreen ?? false}
       />
+      {canvasPanel.artifactId ? (
+        <ThreadArtifactPanel
+          key={canvasPanel.artifactId}
+          artifactId={canvasPanel.artifactId}
+          onClose={canvasPanel.close}
+          jsonRenderPartVersions={jsonRenderPartVersions}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1893,6 +1918,7 @@ function TranscriptSegment({
   streamingChunks,
   streamState,
   onOpenArtifact,
+  onOpenArtifactPanel,
   onSendFollowUp,
   isSending,
   threadAttachments,
@@ -1915,6 +1941,8 @@ function TranscriptSegment({
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
   onOpenArtifact?: (artifactId: string) => void;
+  /** THINK-168: open an artifact in the thread's docked panel. */
+  onOpenArtifactPanel?: (artifactId: string) => void;
   onSendFollowUp?: (
     content: string,
     files?: File[],
@@ -1950,6 +1978,7 @@ function TranscriptSegment({
         canvasesByStablePartId={canvasesByStablePartId}
         threadId={threadId}
         onOpenArtifact={onOpenArtifact}
+        onOpenArtifactPanel={onOpenArtifactPanel}
         onSendFollowUp={onSendFollowUp}
         isSending={isSending}
         threadAttachments={threadAttachments}
@@ -1979,7 +2008,15 @@ function TranscriptSegment({
           the card anchors here until it can move into the reply block. */}
       {message.role.toUpperCase() === "USER" && documentCards?.length
         ? documentCards.map((card) => (
-            <DocumentCard key={`turn-doc-${card.artifactId}`} card={card} />
+            <DocumentCard
+              key={`turn-doc-${card.artifactId}`}
+              card={card}
+              onOpen={
+                onOpenArtifactPanel
+                  ? () => onOpenArtifactPanel(card.artifactId)
+                  : undefined
+              }
+            />
           ))
         : null}
       <DispatchIndicator
@@ -2633,6 +2670,7 @@ function TranscriptMessage({
   canvasesByStablePartId,
   threadId,
   onOpenArtifact,
+  onOpenArtifactPanel,
   onSendFollowUp,
   isSending,
   threadAttachments,
@@ -2647,6 +2685,8 @@ function TranscriptMessage({
   canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
   onOpenArtifact?: (artifactId: string) => void;
+  /** THINK-168: open an artifact in the thread's docked panel. */
+  onOpenArtifactPanel?: (artifactId: string) => void;
   onSendFollowUp?: (
     content: string,
     files?: File[],
@@ -2837,7 +2877,7 @@ function TranscriptMessage({
                 <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
                   {body}
                 </Response>
-              ) : (
+              ) : canvasCards.length > 0 || documentCards?.length ? null : ( // A collapsed emission's ArtifactCard IS the message content (THINK-168) — no placeholder above it.
                 <p className="text-sm leading-5 text-foreground">
                   (No message content)
                 </p>
@@ -2848,6 +2888,11 @@ function TranscriptMessage({
                     <DocumentCard
                       key={`msg-doc-${card.artifactId}`}
                       card={card}
+                      onOpen={
+                        onOpenArtifactPanel
+                          ? () => onOpenArtifactPanel(card.artifactId)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -2874,6 +2919,11 @@ function TranscriptMessage({
                           emissionTitleForPart(typedParts, partId) ||
                           "Canvas",
                       }}
+                      onOpen={
+                        onOpenArtifactPanel
+                          ? () => onOpenArtifactPanel(artifact.id)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>

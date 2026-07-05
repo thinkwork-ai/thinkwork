@@ -31,6 +31,7 @@ import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
   deriveThreadArtifacts,
+  jsonRenderPartIdFromChunk,
   resolveThreadArtifactSelection,
 } from "./SpacesThreadDetailRoute";
 import {
@@ -1891,6 +1892,32 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     expect(screen.queryByText(/Managed delegation/)).toBeNull();
+  });
+});
+
+describe("jsonRenderPartIdFromChunk (THINK-168 live panel refresh)", () => {
+  it("returns the stable part id for a persisted json-render part chunk", () => {
+    expect(
+      jsonRenderPartIdFromChunk({
+        type: "data-json-render",
+        id: "json-render:abc123",
+        data: { component: "table" },
+      }),
+    ).toBe("json-render:abc123");
+  });
+
+  it("ignores non-json-render chunks, missing ids, and non-objects", () => {
+    expect(
+      jsonRenderPartIdFromChunk({ type: "text-delta", delta: "hi" }),
+    ).toBeNull();
+    expect(
+      jsonRenderPartIdFromChunk({ type: "data-json-render", data: {} }),
+    ).toBeNull();
+    expect(
+      jsonRenderPartIdFromChunk({ type: "data-json-render", id: "" }),
+    ).toBeNull();
+    expect(jsonRenderPartIdFromChunk(null)).toBeNull();
+    expect(jsonRenderPartIdFromChunk("chunk")).toBeNull();
   });
 });
 
