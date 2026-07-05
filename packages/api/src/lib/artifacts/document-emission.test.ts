@@ -8,7 +8,11 @@ import {
   type DocumentEmissionDeps,
   type DocumentRow,
 } from "./document-emission.js";
-import { DOCUMENT_CARD_MAX_BYTES } from "./document-preflight.js";
+import { compileDocument } from "./document-compositor.js";
+import {
+  DOCUMENT_CARD_MAX_BYTES,
+  runDocumentPreflight,
+} from "./document-preflight.js";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const THREAD_ID = "22222222-2222-2222-2222-222222222222";
@@ -31,6 +35,7 @@ const VALID_DOCUMENT = {
 
 interface Recorded {
   s3Writes: Array<{ key: string; contentType: string; bytes: number }>;
+  renderBodies: string[];
   upserts: Array<Record<string, unknown>>;
   pins: Array<Record<string, unknown>>;
   cards: Array<Record<string, unknown>>;
@@ -40,7 +45,13 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
   deps: DocumentEmissionDeps;
   recorded: Recorded;
 } {
-  const recorded: Recorded = { s3Writes: [], upserts: [], pins: [], cards: [] };
+  const recorded: Recorded = {
+    s3Writes: [],
+    renderBodies: [],
+    upserts: [],
+    pins: [],
+    cards: [],
+  };
   const row: DocumentRow = {
     id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
     tenant_id: TENANT_ID,
@@ -53,12 +64,16 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
   };
   const deps: DocumentEmissionDeps = {
     preflight: vi.fn(() => ({ ok: true }) as const),
+    compile: compileDocument,
     writePayload: vi.fn(async (args) => {
       recorded.s3Writes.push({
         key: args.key,
         contentType: (args as { contentType: string }).contentType,
         bytes: Buffer.byteLength((args as { body: string }).body, "utf8"),
       });
+      if (args.key.includes("render")) {
+        recorded.renderBodies.push((args as { body: string }).body);
+      }
     }),
     resolveActingUserId: vi.fn(async ({ triggeringMessageId }) =>
       triggeringMessageId ? USER_ID : null,
@@ -255,5 +270,159 @@ describe("buildDocumentCard", () => {
 
   it("uses the payload kind the web fold matches on", () => {
     expect(DOCUMENT_CARD_PAYLOAD_KIND).toBe("document.card");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-154 U4: dual-shape emission — markdown-only compiles via the
+// compositor (PLATE gate skipped); legacy dual-body is byte-for-byte the
+// current validation path including PLATE.
+// ---------------------------------------------------------------------------
+
+const V2_DOCUMENT = {
+  documentId: "doc-1",
+  genre: "report",
+  title: "Q3 Report",
+  abstract: "Numbers are up.",
+  digestMarkdown: "## Summary\n\nNumbers are up 18% this quarter.\n",
+  status: "draft",
+};
+
+describe("dual-shape emission (THINK-154 U4)", () => {
+  it("markdown-only emission compiles, persists both bodies, upserts, and emits the card", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(V2_DOCUMENT, deps);
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body.ok).toBe(true);
+
+    expect(recorded.s3Writes).toHaveLength(2);
+    expect(recorded.s3Writes[0].key).toContain("/content.md");
+    expect(recorded.s3Writes[1].key).toContain("/render.html");
+    // The render is compiler output, not an agent body.
+    expect(recorded.renderBodies[0]).toContain(
+      '<meta name="tw-plate" content="report">',
+    );
+    expect(recorded.renderBodies[0]).toContain("Numbers are up 18%");
+    expect(recorded.upserts).toHaveLength(1);
+    expect(recorded.cards).toHaveLength(1);
+  });
+
+  it("markdown-only path skips the PLATE gate but runs the rest of preflight (R6/R10)", async () => {
+    const preflight = vi.fn<DocumentEmissionDeps["preflight"]>(() => ({
+      ok: true,
+    }));
+    const { deps } = makeDeps({ preflight });
+    await emit(V2_DOCUMENT, deps);
+    expect(preflight).toHaveBeenCalledTimes(1);
+    const arg = preflight.mock.calls[0][0];
+    expect(arg.genre).toBe("report");
+    expect(arg.skipPlateGate).toBe(true);
+    expect(arg.renderHtml).toContain("tw-plate");
+  });
+
+  it("legacy dual-body with off-plate HTML still rejects via PLATE exactly as today (AE3/F2)", async () => {
+    const { deps, recorded } = makeDeps({ preflight: runDocumentPreflight });
+    const offPlate = {
+      ...VALID_DOCUMENT,
+      renderHtml:
+        '<!DOCTYPE html><html><head><title>Q3</title><style>@media (prefers-color-scheme: dark){:root{--bg:#000}}</style></head><body><h1 id="t">Q3</h1></body></html>',
+    };
+    const result = await emit(offPlate, deps);
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("PREFLIGHT_REJECTED");
+    const codes = (result.body.diagnostics as Array<{ code: string }>).map(
+      (d) => d.code,
+    );
+    expect(codes).toContain("PLATE");
+    expect(recorded.s3Writes).toHaveLength(0);
+  });
+
+  it("legacy dual-body never invokes the compiler", async () => {
+    const compile = vi.fn();
+    const { deps } = makeDeps({
+      compile: compile as unknown as DocumentEmissionDeps["compile"],
+    });
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body.ok).toBe(true);
+    expect(compile).not.toHaveBeenCalled();
+  });
+
+  it("compile rejection (unknown directive) persists nothing and returns diagnostics in-turn", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(
+      {
+        ...V2_DOCUMENT,
+        digestMarkdown: "## Body\n\n```tw:hologram\nfoo: 1\n```\n",
+      },
+      deps,
+    );
+    expect(result.statusCode).toBe(200);
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("COMPILE_REJECTED");
+    const diagnostics = result.body.diagnostics as Array<{
+      code: string;
+      message: string;
+    }>;
+    expect(diagnostics[0].code).toBe("UNKNOWN_DIRECTIVE");
+    expect(diagnostics[0].message).toContain("tw:stats");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.cards).toHaveLength(0);
+  });
+
+  it("preflight failure on compiled output is a platform error, not a model retry", async () => {
+    const { deps, recorded } = makeDeps({
+      // A broken compiler slips a defect past its own unit tests…
+      compile: vi.fn(() => ({
+        ok: true as const,
+        renderHtml: "<html>broken</html>",
+        warnings: [],
+      })),
+      // …and the retained runtime preflight catches it (R6).
+      preflight: vi.fn<DocumentEmissionDeps["preflight"]>(() => ({
+        ok: false,
+        diagnostics: [{ code: "SKELETON", message: "x", location: "head" }],
+      })),
+    });
+    const result = await emit(V2_DOCUMENT, deps);
+    expect(result.statusCode).toBe(500);
+    expect(result.body.code).toBe("COMPILER_DEFECT");
+    expect(result.body.diagnostics).toBeUndefined();
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+  });
+
+  it("markdown-only + status final pins a version whose render is the compiled output", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit({ ...V2_DOCUMENT, status: "final" }, deps);
+    expect(result.body.status).toBe("final");
+    expect(recorded.pins).toHaveLength(1);
+    expect(recorded.pins[0].renderHtml).toContain(
+      '<meta name="tw-plate" content="report">',
+    );
+  });
+
+  it("compile warnings surface in the success body", async () => {
+    const { deps } = makeDeps();
+    const result = await emit(
+      {
+        ...V2_DOCUMENT,
+        digestMarkdown: "---\nbanana: split\n---\n\n## Body\n\nText.\n",
+      },
+      deps,
+    );
+    expect(result.body.ok).toBe(true);
+    const warnings = result.body.warnings as Array<{ code: string }>;
+    expect(warnings.some((w) => w.code === "FRONTMATTER_UNKNOWN_KEY")).toBe(
+      true,
+    );
+  });
+
+  it("parse rejects when digestMarkdown is missing regardless of shape", async () => {
+    expect(
+      parseDocumentEmitInput({ ...V2_DOCUMENT, digestMarkdown: undefined }).ok,
+    ).toBe(false);
+    expect(parseDocumentEmitInput(V2_DOCUMENT).ok).toBe(true);
   });
 });

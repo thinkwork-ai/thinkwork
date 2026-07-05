@@ -136,6 +136,12 @@ export function runDocumentPreflight(input: {
    * documents, the same doctrine as the canvas emit-binding gate.
    */
   genre?: string;
+  /**
+   * THINK-154 (R10): compositor-path emissions are plate-conformant by
+   * construction, so the PLATE check is structurally redundant there. Every
+   * other check still runs. Legacy dual-body emissions never set this.
+   */
+  skipPlateGate?: boolean;
 }): DocumentPreflightResult {
   const { renderHtml, digestMarkdown } = input;
   const diagnostics: DocumentPreflightDiagnostic[] = [];
@@ -297,7 +303,7 @@ export function runDocumentPreflight(input: {
   }
 
   // ---- Plate (THINK-177: genre plates are ENFORCED, not suggested) --------
-  if (input.genre) {
+  if (input.genre && !input.skipPlateGate) {
     const plateMeta =
       /<meta\b[^>]*\bname\s*=\s*["']tw-plate["'][^>]*\bcontent\s*=\s*["']([^"']*)["']/i.exec(
         renderHtml,
