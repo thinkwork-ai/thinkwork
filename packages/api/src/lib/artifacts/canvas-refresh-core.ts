@@ -13,7 +13,12 @@
  *
  * Per-binding decision table:
  *   - per_user_oauth binding      → NEEDS_USER: no invoke, quality STALE, a
- *                                    "refresh needs you" affordance (R9/AE1).
+ *                                    "refresh needs you" affordance (R9/AE1) —
+ *                                    UNLESS the verified requesting user IS the
+ *                                    binding owner and an owner-scoped resolver
+ *                                    is wired (THINK-172 U2b): then the refresh
+ *                                    proceeds under the OWNER's credential and
+ *                                    follows the ordinary outcome rows below.
  *   - tenant server unresolved    → SERVER_MISSING: terminal quality BAD (R8).
  *   - tool transport / isError    → FAILED: quality BAD, last-good retained (R8).
  *   - result-shape hash mismatch  → SCHEMA_STALE: head untouched, quality
@@ -52,6 +57,8 @@ export interface CanvasRefreshBinding {
   resultShapeHash: string;
   authContext: "tenant_mcp" | "per_user_oauth";
   quality: string;
+  /** Credential owner of a per-user binding (null for tenant bindings). */
+  ownerUserId?: string | null;
 }
 
 export interface CanvasRefreshBindingResult {
@@ -101,6 +108,21 @@ export interface CanvasRefreshDeps {
   /** Resolve the binding's tenant server to a callable target (headless). */
   resolveServerTarget(input: {
     serverName: string;
+  }): Promise<ResolveServerTargetResult>;
+  /**
+   * The VERIFIED user who initiated this refresh, when it was user-initiated
+   * (THINK-172 U2b). Set only from an authenticated interactive caller —
+   * scheduled/unattended refreshes leave it unset, preserving the R9 posture.
+   */
+  actingUserId?: string | null;
+  /**
+   * Owner-scoped server resolution: resolve the binding's server under the
+   * named user's stored credential (`user_mcp_tokens`). Only consulted when
+   * `actingUserId` matches the binding's `ownerUserId`.
+   */
+  resolveOwnerServerTarget?(input: {
+    serverName: string;
+    userId: string;
   }): Promise<ResolveServerTargetResult>;
   /** Re-invoke the saved tool call under the binding's identity. */
   callTool(input: {
@@ -152,9 +174,21 @@ export async function refreshBinding(
     toolName: binding.toolName,
   };
 
-  // R9 / AE1: per-user OAuth bindings are excluded from unattended refresh.
-  // No invoke; degrade to STALE with a "refresh needs you" affordance.
-  if (binding.authContext === "per_user_oauth") {
+  // R9 / AE1: per-user OAuth bindings are excluded from UNATTENDED refresh.
+  // Owner-eligible exception (THINK-172 U2b): when the verified requesting
+  // user IS the binding's credential owner and an owner-scoped resolver is
+  // wired, refresh proceeds under the owner's credential. Anything less —
+  // no acting user, unknown owner, mismatch, no resolver — degrades to
+  // STALE + NEEDS_USER exactly as before.
+  const ownerEligible =
+    binding.authContext === "per_user_oauth" &&
+    typeof deps.actingUserId === "string" &&
+    deps.actingUserId.length > 0 &&
+    typeof binding.ownerUserId === "string" &&
+    binding.ownerUserId.length > 0 &&
+    deps.actingUserId === binding.ownerUserId &&
+    typeof deps.resolveOwnerServerTarget === "function";
+  if (binding.authContext === "per_user_oauth" && !ownerEligible) {
     await deps.writeBindingQuality({
       bindingId: binding.id,
       quality: "stale",
@@ -171,11 +205,18 @@ export async function refreshBinding(
     };
   }
 
-  // Resolve the tenant server. A vanished / disabled / unresolved server is a
-  // TERMINAL bad state distinct from a transient tool failure (R8).
-  const resolved = await deps.resolveServerTarget({
-    serverName: binding.serverName,
-  });
+  // Resolve the server: under the owner's credential for an owner-eligible
+  // per-user binding, else the tenant identity. A vanished / disabled /
+  // unresolved server is a TERMINAL bad state distinct from a transient tool
+  // failure (R8).
+  const resolved = ownerEligible
+    ? await deps.resolveOwnerServerTarget!({
+        serverName: binding.serverName,
+        userId: deps.actingUserId as string,
+      })
+    : await deps.resolveServerTarget({
+        serverName: binding.serverName,
+      });
   if (resolved.kind === "missing") {
     await deps.writeBindingQuality({
       bindingId: binding.id,

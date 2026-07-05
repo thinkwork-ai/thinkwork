@@ -1574,6 +1574,106 @@ export async function resolveTenantMcpServerTarget(input: {
   };
 }
 
+/**
+ * Resolve ONE tenant MCP server to a ready-to-call target ON BEHALF OF a named
+ * user (THINK-172, U2b): the deliberate R9 widening that lets the canvas-refresh
+ * Lambda exercise the REQUESTING OWNER's stored OAuth token. Callers must have
+ * verified that `userId` is the authenticated principal who initiated the
+ * refresh AND the owner of the binding being refreshed — this function only
+ * resolves credentials, it does not authorize.
+ *
+ * Non-per-user auth types delegate to {@link resolveTenantMcpServerTarget}
+ * (tenant credentials are never user-scoped). Per-user types resolve through
+ * the same `user_mcp_tokens` + Secrets Manager + WorkOS-refresh plumbing the
+ * workspace config builder uses (`resolveUserMcpBearerToken`). A missing or
+ * expired-and-unrefreshable token returns `needs_user` — the caller degrades
+ * to the agent-mediated path exactly as before.
+ */
+export async function resolveTenantMcpServerTargetForUser(input: {
+  tenantId: string;
+  serverName: string;
+  userId: string;
+  logPrefix?: string;
+}): Promise<ResolveTenantMcpServerTargetResult> {
+  const logPrefix = input.logPrefix ?? "[canvas-refresh]";
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: tenantMcpServers.id,
+      slug: tenantMcpServers.slug,
+      name: tenantMcpServers.name,
+      url: tenantMcpServers.url,
+      auth_type: tenantMcpServers.auth_type,
+      auth_config: tenantMcpServers.auth_config,
+      enabled: tenantMcpServers.enabled,
+      status: tenantMcpServers.status,
+    })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, input.tenantId),
+        or(
+          eq(tenantMcpServers.name, input.serverName),
+          eq(tenantMcpServers.slug, input.serverName),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    return { kind: "missing", reason: "MCP server no longer exists" };
+  }
+  if (row.status !== "approved" || row.enabled !== true) {
+    return {
+      kind: "missing",
+      reason: `MCP server is not active (status=${row.status}, enabled=${row.enabled})`,
+    };
+  }
+
+  const authType = row.auth_type ?? "none";
+  if (
+    authType !== "oauth" &&
+    authType !== "per_user_oauth" &&
+    authType !== "user_headers"
+  ) {
+    return resolveTenantMcpServerTarget(input);
+  }
+  if (authType === "user_headers") {
+    // No stored server-side credential exists for user_headers — the user
+    // supplies headers per-session from the client.
+    return {
+      kind: "needs_user",
+      reason: "user_headers auth cannot be resolved server-side",
+    };
+  }
+
+  const label = row.slug ?? row.name;
+  const token = await resolveUserMcpBearerToken({
+    userId: input.userId,
+    mcp: {
+      mcp_server_id: row.id,
+      slug: row.slug,
+      name: row.name,
+      url: row.url,
+      auth_config: row.auth_config,
+    },
+    logPrefix,
+    fallbackLabel: "for owner-initiated canvas refresh",
+  });
+  if (!token) {
+    return {
+      kind: "needs_user",
+      reason:
+        "no active connector token for the requesting owner — reconnect from mobile",
+    };
+  }
+  return {
+    kind: "ok",
+    target: { url: row.url, name: label, token },
+    authType,
+  };
+}
+
 function extractMcpToolNames(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const names = value

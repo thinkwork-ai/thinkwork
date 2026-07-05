@@ -41,6 +41,7 @@ import {
 } from "../graphql/utils.js";
 import {
   resolveTenantMcpServerTarget,
+  resolveTenantMcpServerTargetForUser,
   type ResolveTenantMcpServerTargetResult,
 } from "../lib/mcp-configs.js";
 import { mcpCallTool, type McpServerTarget } from "../lib/mcp-client-call.js";
@@ -85,6 +86,14 @@ export interface CanvasRefreshEvent {
    */
   threadTurnId?: string;
   threadId?: string;
+  /**
+   * The VERIFIED user who initiated this refresh (THINK-172 U2b). Set ONLY by
+   * trusted callers (the refreshCanvasData resolver, after authenticating the
+   * caller) — never by scheduled/job triggers. When set and matching a
+   * binding's owner_user_id, that per-user binding refreshes under the
+   * owner's stored connector token instead of degrading to NEEDS_USER.
+   */
+  actingUserId?: string;
   /** Bearer auth for callers that don't invoke via IAM (defense in depth). */
   authSecret?: string;
 }
@@ -123,7 +132,10 @@ function makeApplyHeadData(
         })
         .from(artifacts)
         .where(
-          and(eq(artifacts.id, artifactRow.id), eq(artifacts.tenant_id, tenantId)),
+          and(
+            eq(artifacts.id, artifactRow.id),
+            eq(artifacts.tenant_id, tenantId),
+          ),
         );
       if (!current) return "stale";
       const observedSeq = current.head_write_seq ?? 0;
@@ -229,7 +241,11 @@ async function resolveServerTarget(
   tenantId: string,
   serverName: string,
 ): Promise<ResolveTenantMcpServerTargetResult> {
-  return resolveTenantMcpServerTarget({ tenantId, serverName, logPrefix: LOG_PREFIX });
+  return resolveTenantMcpServerTarget({
+    tenantId,
+    serverName,
+    logPrefix: LOG_PREFIX,
+  });
 }
 
 /**
@@ -339,7 +355,9 @@ export async function handler(
       metadata: artifacts.metadata,
     })
     .from(artifacts)
-    .where(and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, tenantId)));
+    .where(
+      and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, tenantId)),
+    );
 
   if (!artifactRow) {
     return {
@@ -362,6 +380,7 @@ export async function handler(
       result_shape_hash: artifactDataBindings.result_shape_hash,
       auth_context: artifactDataBindings.auth_context,
       quality: artifactDataBindings.quality,
+      owner_user_id: artifactDataBindings.owner_user_id,
     })
     .from(artifactDataBindings)
     .where(
@@ -384,17 +403,27 @@ export async function handler(
     serverName: row.server_name,
     serverRef: row.mcp_server_ref,
     toolName: row.tool_name,
-    frozenArgs:
-      (row.frozen_args as Record<string, unknown> | null) ?? {},
+    frozenArgs: (row.frozen_args as Record<string, unknown> | null) ?? {},
     resultShapeHash: row.result_shape_hash,
     authContext:
       row.auth_context === "per_user_oauth" ? "per_user_oauth" : "tenant_mcp",
     quality: row.quality,
+    ownerUserId: row.owner_user_id ?? null,
   }));
 
   const deps: CanvasRefreshDeps = {
     resolveServerTarget: ({ serverName }) =>
       resolveServerTarget(tenantId, serverName),
+    // Owner-token path (THINK-172 U2b): only reachable when the core matched
+    // event.actingUserId against a binding's owner_user_id.
+    actingUserId: event.actingUserId ?? null,
+    resolveOwnerServerTarget: ({ serverName, userId }) =>
+      resolveTenantMcpServerTargetForUser({
+        tenantId,
+        serverName,
+        userId,
+        logPrefix: LOG_PREFIX,
+      }),
     callTool: async ({ target, toolName, args }) => {
       const result = await mcpCallTool(
         target as McpServerTarget,
@@ -403,7 +432,10 @@ export async function handler(
       );
       return { isError: result.isError, raw: result.raw };
     },
-    applyHeadData: makeApplyHeadData(tenantId, artifactRow as CanvasArtifactRow),
+    applyHeadData: makeApplyHeadData(
+      tenantId,
+      artifactRow as CanvasArtifactRow,
+    ),
     writeBindingQuality,
     now: () => new Date(),
   };

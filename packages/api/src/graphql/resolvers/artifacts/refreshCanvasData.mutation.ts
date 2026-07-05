@@ -97,11 +97,19 @@ export const refreshCanvasData = async (
   }
   const functionArn = `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-canvas-refresh`;
 
+  // Verified caller identity (THINK-172 U2b): lets the refresh Lambda act
+  // under the REQUESTING OWNER's connector token for per-user bindings the
+  // caller owns. Callers that don't resolve to a users row (rare service
+  // principals) simply get the pre-U2b NEEDS_USER behavior. Resolved BEFORE
+  // the invoke so the same value also feeds the ownership enrichment below.
+  const callerUserId = await resolveCallerUserId(ctx);
+
   const payload = {
     tenantId: row.tenant_id,
     artifactId,
     partId,
     trigger: "user" as const,
+    ...(callerUserId ? { actingUserId: callerUserId } : {}),
   };
 
   const { LambdaClient, InvokeCommand } =
@@ -164,7 +172,6 @@ export const refreshCanvasData = async (
       .where(eq(artifactDataBindings.artifact_id, artifactId));
     for (const r of ownerRows) ownerByBindingId.set(r.id, r.owner_user_id);
   }
-  const callerUserId = await resolveCallerUserId(ctx);
 
   return {
     artifactId,
