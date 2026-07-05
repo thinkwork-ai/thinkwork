@@ -31,7 +31,6 @@ import {
 } from "@tanstack/react-table";
 import {
   Bot,
-  Boxes,
   Info,
   ListChecks,
   Puzzle,
@@ -54,10 +53,7 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
-  DataTableTokenFilter,
-  dataTableTokenFilterFns,
-  type DataTableTokenFilterColumn,
-  type DataTableTokenFilterValue,
+  StaticTokenFilter,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -87,6 +83,7 @@ import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
+import { IconPlanet } from "@tabler/icons-react";
 import { useTenant } from "@/context/TenantContext";
 import { getToolAutomationRefs } from "@/lib/mcp-api";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
@@ -155,11 +152,9 @@ const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
   tool: CapabilityGrantClass.Tool,
 };
 
-const FILTER_COLUMNS = {
-  space: "filterSpace",
-  profile: "filterProfile",
-  user: "filterUser",
-} as const;
+/** Sentinel select values for the static scope bar (THINK-173). */
+const DEFAULT_SPACE_VALUE = "__default__";
+const NONE_AGENT_VALUE = "__none__";
 
 const SYNC_POLL_ATTEMPTS = 4;
 const SYNC_POLL_INTERVAL_MS = 1500;
@@ -269,27 +264,6 @@ function stateChip(item: InspectorItem) {
   );
 }
 
-/** First selected option value of a single-select selection token. */
-function selectedOptionValue(
-  filters: ColumnFiltersState,
-  columnId: string,
-): string | null {
-  const raw = filters.find((filter) => filter.id === columnId)?.value as
-    | DataTableTokenFilterValue
-    | undefined;
-  if (!raw || raw.operator === "is_not" || raw.operator === "is_none_of") {
-    return null;
-  }
-  const value = Array.isArray(raw.value) ? raw.value[0] : raw.value;
-  return typeof value === "string" && value ? value : null;
-}
-
-const FILTER_COLUMN_DEFS: Array<ColumnDef<InspectorItem, unknown>> = [
-  { id: FILTER_COLUMNS.space, accessorFn: () => "", filterFn: () => true },
-  { id: FILTER_COLUMNS.profile, accessorFn: () => "", filterFn: () => true },
-  { id: FILTER_COLUMNS.user, accessorFn: () => "", filterFn: () => true },
-];
-
 export type ComposerSheetId =
   | "config"
   | "profiles"
@@ -319,10 +293,9 @@ export function SettingsCapabilities({
     target?: { profileId?: string | null; focus?: string | null },
   ) => void;
 } = {}) {
-  const { tenant, tenantId } = useTenant();
+  const { tenant, tenantId, userId } = useTenant();
   // No default filters (Agent page merge U12): the empty selection IS the
   // default agent in the default space, and every row state is visible.
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const syncPollCount = useRef(0);
@@ -430,15 +403,21 @@ export function SettingsCapabilities({
     registryExtensionsResult.data?.piExtensions ?? [],
   );
 
-  const spaceId = selectedOptionValue(columnFilters, FILTER_COLUMNS.space);
-  const agentProfileId = selectedOptionValue(
-    columnFilters,
-    FILTER_COLUMNS.profile,
-  );
-  const perspectiveUserId = selectedOptionValue(
-    columnFilters,
-    FILTER_COLUMNS.user,
-  );
+  // THINK-173 static scope bar (Eric 2026-07-05): three pinned,
+  // non-removable filters. Space and User are required — "Default" maps
+  // to the agent-baseline selection (spaceId null on the wire) and User
+  // defaults to the CURRENT user. Sub-Agent (= Agent Profile, per Eric)
+  // defaults to None and drives the existing agentProfileId lens.
+  const [selectedSpaceId, setSelectedSpaceId] =
+    useState<string>(DEFAULT_SPACE_VALUE);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedSubAgent, setSelectedSubAgent] =
+    useState<string>(NONE_AGENT_VALUE);
+  const spaceId =
+    selectedSpaceId === DEFAULT_SPACE_VALUE ? null : selectedSpaceId;
+  const perspectiveUserId = selectedUserId ?? userId ?? null;
+  const agentProfileId =
+    selectedSubAgent === NONE_AGENT_VALUE ? null : selectedSubAgent;
 
   const [inspection, refetchInspection] = useQuery({
     query: SettingsCapabilityInspectorQuery,
@@ -614,57 +593,6 @@ export function SettingsCapabilities({
     [membersResult.data?.tenantMembers],
   );
 
-  const filterTable = useReactTable({
-    data: items,
-    columns: FILTER_COLUMN_DEFS,
-    state: { columnFilters },
-    onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-  });
-
-  const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
-    () => [
-      {
-        id: FILTER_COLUMNS.space,
-        label: "Space",
-        type: "option",
-        singleSelect: true,
-        icon: <Boxes className="size-4" />,
-        options: (spacesResult.data?.spaces ?? []).map((space) => ({
-          value: space.id,
-          label: space.name,
-        })),
-        emptyMessage: "No spaces",
-      },
-      {
-        id: FILTER_COLUMNS.profile,
-        label: "Agent profile",
-        type: "option",
-        singleSelect: true,
-        icon: <Bot className="size-4" />,
-        options: (profilesResult.data?.agentProfiles ?? []).map((profile) => ({
-          value: profile.id,
-          label: profile.name,
-        })),
-        emptyMessage: "No agent profiles",
-      },
-      {
-        id: FILTER_COLUMNS.user,
-        label: "Perspective user",
-        type: "option",
-        singleSelect: true,
-        icon: <UserRound className="size-4" />,
-        options: members.map((member) => ({
-          value: member.id,
-          label: member.name,
-        })),
-        emptyMessage: "No members",
-      },
-    ],
-    [members, profilesResult.data?.agentProfiles, spacesResult.data?.spaces],
-  );
-
   const spaceName = (spacesResult.data?.spaces ?? []).find(
     (space) => space.id === spaceId,
   )?.name;
@@ -686,9 +614,13 @@ export function SettingsCapabilities({
     (member) => member.id === perspectiveUserId,
   )?.name;
 
-  // Grant/detach exist only at agent and agent-profile scope (R11): a
-  // space or perspective-user selection is a read lens.
-  const writeScope = !result?.spaceId && !result?.perspectiveUserId;
+  // Grant/detach exist only at agent and agent-profile scope (R11).
+  // With the static scope bar the canonical operator view (Default
+  // space, own perspective) keeps writes enabled — targeting the
+  // selected sub-agent when one is set; a non-default space or another
+  // user's perspective is a read lens.
+  const writeScope =
+    spaceId === null && (!userId || perspectiveUserId === userId);
   const grantScope = agentProfileId
     ? CapabilityGrantScope.AgentProfile
     : CapabilityGrantScope.Agent;
@@ -1443,15 +1375,65 @@ export function SettingsCapabilities({
         className="mb-4 flex shrink-0 flex-wrap items-center gap-2"
         data-testid="capability-toolbar"
       >
-        <DataTableTokenFilter
-          table={filterTable}
-          columns={tokenFilterColumns}
-          addLabel="Filter"
-          showAddLabel={false}
-          clearLabel="Clear"
-          flattenToolbar
-          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
-          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        {/* Static, non-removable scope filters (THINK-173): the standard
+            token chrome and value popover (search + option rows), pinned —
+            no filter icon, no Clear, no per-token remove. */}
+        <StaticTokenFilter
+          data-testid="scope-filter-space"
+          column={{
+            id: "scope-space",
+            label: "Space",
+            type: "option",
+            singleSelect: true,
+            icon: <IconPlanet className="size-4" />,
+            options: [
+              { value: DEFAULT_SPACE_VALUE, label: "Default" },
+              ...(spacesResult.data?.spaces ?? []).map((space) => ({
+                value: space.id,
+                label: space.name,
+              })),
+            ],
+            emptyMessage: "No spaces",
+          }}
+          selected={selectedSpaceId}
+          onSelect={setSelectedSpaceId}
+        />
+        <StaticTokenFilter
+          data-testid="scope-filter-user"
+          column={{
+            id: "scope-user",
+            label: "User",
+            type: "option",
+            singleSelect: true,
+            icon: <UserRound className="size-4" />,
+            options: members.map((member) => ({
+              value: member.id,
+              label: member.name,
+            })),
+            emptyMessage: "No members",
+          }}
+          selected={perspectiveUserId ?? ""}
+          onSelect={(value) => setSelectedUserId(value)}
+        />
+        <StaticTokenFilter
+          data-testid="scope-filter-subagent"
+          column={{
+            id: "scope-subagent",
+            label: "Sub-Agent",
+            type: "option",
+            singleSelect: true,
+            icon: <Bot className="size-4" />,
+            options: [
+              { value: NONE_AGENT_VALUE, label: "None" },
+              ...(profilesResult.data?.agentProfiles ?? []).map((profile) => ({
+                value: profile.id,
+                label: profile.name,
+              })),
+            ],
+            emptyMessage: "No agent profiles",
+          }}
+          selected={selectedSubAgent}
+          onSelect={setSelectedSubAgent}
         />
       </div>
 

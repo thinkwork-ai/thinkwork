@@ -9,6 +9,7 @@
  * SAME grant/detach machinery.
  */
 
+import React from "react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -174,7 +175,7 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
 });
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1" }),
+  useTenant: () => ({ tenantId: "tenant-1", userId: "user-1" }),
 }));
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: () => {},
@@ -413,13 +414,16 @@ describe("Composer shell wiring", () => {
     expect(typeof props?.onDetachSkill).toBe("function");
   });
 
-  it("withholds write affordances on a read-lens (space) selection", () => {
+  it("withholds write affordances on a read-lens (space) selection", async () => {
     queryState.inspector = {
       data: inspection({ spaceId: "space-1" }),
       fetching: false,
       error: undefined,
     };
     render(<SettingsCapabilities />);
+    // The lens now comes from the static Space token (THINK-173).
+    fireEvent.click(screen.getByLabelText("Edit Space values"));
+    fireEvent.click(await screen.findByText("Customer"));
     expect(editorProps()?.canManageSkills).toBe(false);
   });
 });
@@ -655,13 +659,16 @@ describe("capability write actions (sheet rows)", () => {
     );
   });
 
-  it("hides the Add-extension control under a space read lens (R11/AE4)", () => {
+  it("hides the Add-extension control under a space read lens (R11/AE4)", async () => {
     queryState.inspector = {
       data: inspection({ spaceId: "space-1" }),
       fetching: false,
       error: undefined,
     };
     render(<SettingsCapabilities />);
+    // The lens now comes from the static Space token (THINK-173).
+    fireEvent.click(screen.getByLabelText("Edit Space values"));
+    fireEvent.click(await screen.findByText("Customer"));
     fireEvent.click(screen.getByTestId("open-extensions-sheet"));
     expect(screen.queryByTestId("open-add-extension")).toBeNull();
   });
@@ -1121,5 +1128,52 @@ describe("divergence surface (U13)", () => {
     expect(screen.getByTestId("divergence-chip").textContent).toContain(
       "no turn observed",
     );
+  });
+});
+
+// THINK-173 static scope bar (Eric 2026-07-05): three pinned tokens in
+// the standard token chrome — no filter icon, no Clear, no remove \u2715.
+// The value popover is the shared FilterValueEditor (search + options).
+describe("static scope bar", () => {
+  it("renders Space, User, and Sub-Agent tokens with required defaults and no clear affordances", () => {
+    render(<SettingsCapabilities />);
+    const toolbar = screen.getByTestId("capability-toolbar");
+    for (const id of [
+      "scope-filter-space",
+      "scope-filter-user",
+      "scope-filter-subagent",
+    ]) {
+      expect(screen.getByTestId(id)).toBeTruthy();
+    }
+    // Defaults visible on the value segments.
+    expect(screen.getByTestId("scope-filter-space").textContent).toContain(
+      "Default",
+    );
+    expect(screen.getByTestId("scope-filter-user").textContent).toContain(
+      "Eric",
+    );
+    expect(screen.getByTestId("scope-filter-subagent").textContent).toContain(
+      "None",
+    );
+    // No Clear, no add-filter icon, no removable tokens, no remove buttons.
+    expect(toolbar.textContent).not.toContain("Clear");
+    expect(toolbar.querySelector("[data-token-filter-token]")).toBeNull();
+    expect(toolbar.querySelector('[aria-label^="Remove"]')).toBeNull();
+  });
+
+  it("selecting a Sub-Agent (agent profile) through the standard popover drives the profile lens", async () => {
+    render(<SettingsCapabilities />);
+    // Open the shared value popover (search + option rows).
+    fireEvent.click(screen.getByLabelText("Edit Sub-Agent values"));
+    expect(await screen.findByLabelText("Search filter values")).toBeTruthy();
+    fireEvent.click(await screen.findByText("Coding"));
+    await waitFor(() => {
+      expect(editorProps()?.profileScopeName).toBe("Coding");
+    });
+  });
+
+  it("keeps write scope on the default view (own perspective)", () => {
+    render(<SettingsCapabilities />);
+    expect(editorProps()?.canManageSkills).toBe(true);
   });
 });
