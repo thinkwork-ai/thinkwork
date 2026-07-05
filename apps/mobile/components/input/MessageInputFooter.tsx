@@ -28,6 +28,7 @@ import {
   Mic,
   ChevronDown,
   Paperclip,
+  Plus,
   Bot,
   X,
   Target,
@@ -664,7 +665,7 @@ export const MessageInputFooter = forwardRef<
         />
 
         {/* Action buttons row */}
-        <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
+        <View className="flex-row items-center justify-between pl-1 pr-4 pt-1 pb-2">
           <View className="flex-row items-center gap-4">
             {onAttach && (
               <Pressable
@@ -681,7 +682,7 @@ export const MessageInputFooter = forwardRef<
                   opacity: disabled ? 0.35 : 1,
                 }}
               >
-                <Paperclip size={24} color={colors.mutedForeground} />
+                <Plus size={24} color={colors.mutedForeground} />
               </Pressable>
             )}
             {(onSpacePress || onSpaceSelect) && (
