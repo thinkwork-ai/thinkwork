@@ -1771,19 +1771,7 @@ function SpacesListSection({
   onPin?: (threadId: string) => void;
   onMarkSectionRead?: (threadIds: string[]) => void;
 }) {
-  if (spacesFetching && !hasLoadedSpaces) {
-    return (
-      <div className="space-y-0.5">
-        <SpacesSectionHeader
-          onExpandAll={onExpandAll}
-          onCollapseAll={onCollapseAll}
-        />
-        <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
-          Loading Spaces...
-        </p>
-      </div>
-    );
-  }
+  if (spacesFetching && !hasLoadedSpaces) return null;
 
   if (spaces.length === 0) return null;
 
