@@ -20,9 +20,15 @@
  *        blockedTools, skills (skillId + s3Key + secretRef/mcpServer refs —
  *        never env override VALUES), MCP servers (name, url, transport,
  *        sorted allowed + available tools), Pi extensions (assignmentId,
- *        versionId, artifactHash, sorted granted permission classes), and
+ *        versionId, artifactHash, sorted granted permission classes),
  *        agent profiles (id, slug, modelId, sorted builtInTools/skillSlugs,
- *        mcpToolAllowlist, availability scope, extension assignment ids).
+ *        mcpToolAllowlist, availability scope, extension assignment ids),
+ *        and folder capabilities (THINK-173 U4/KTD-4): connections (slug,
+ *        type, url, principal type, sorted operations, enabled, permitted
+ *        operations, pinned signed_content_sha) and tools (slug, kind,
+ *        kind target, enabled, pinned signed_content_sha). Sidecar
+ *        credential REFS shape identity only via the pinned content sha —
+ *        never token values.
  *
  *   OUT: thread-scoped sources (thread goal/notes files — per-thread content,
  *        not capability config), env override VALUES (rotating tokens must
@@ -36,7 +42,7 @@
 import { createHash } from "node:crypto";
 import type { AgentRuntimeConfig } from "./resolve-agent-runtime-config.js";
 
-export const CAPABILITY_FINGERPRINT_VERSION = 2;
+export const CAPABILITY_FINGERPRINT_VERSION = 3;
 
 export interface CapabilityFingerprintSelection {
   tenantId: string;
@@ -78,6 +84,33 @@ export interface CapabilityFingerprintInputs {
     availabilityScope: string;
     piExtensionAssignmentIds: string[];
   }>;
+  /**
+   * Folder-defined connections (THINK-173). Refs only per the IN/OUT
+   * contract — the pinned content sha stands in for definition bytes.
+   */
+  connections: Array<{
+    slug: string;
+    type: string;
+    url?: string | null;
+    principalType: string;
+    operations: string[];
+    enabled: boolean;
+    permittedOperations?: string[] | null;
+    signedContentSha?: string | null;
+  }>;
+  /**
+   * Folder-defined tools (THINK-173). `target` is the kind-qualified
+   * implementation ref, e.g. `binding:firecrawl/scrape`,
+   * `platform:send_email`, `extension:brain/brain_search`,
+   * `script:run.sh`.
+   */
+  tools: Array<{
+    slug: string;
+    kind: string;
+    target: string;
+    enabled: boolean;
+    signedContentSha?: string | null;
+  }>;
 }
 
 /** Project a full resolved runtime config onto the fingerprint inputs. */
@@ -117,6 +150,12 @@ export function fingerprintInputsFromRuntimeConfig(
         (extension) => extension.assignmentId,
       ),
     })),
+    // Folder capabilities enter the resolved runtime config in U5 (the
+    // dispatch/credential-resolver split). Until that lands, projection
+    // from a runtime config carries none — the manifest compile path
+    // (U2) supplies them directly via computeConfigFingerprint.
+    connections: [],
+    tools: [],
   };
 }
 
@@ -175,6 +214,29 @@ export function computeConfigFingerprint(
         piExtensions: [...profile.piExtensionAssignmentIds].sort(),
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
+    connections: (inputs.connections ?? [])
+      .map((connection) => ({
+        slug: connection.slug,
+        type: connection.type,
+        url: connection.url ?? null,
+        principalType: connection.principalType,
+        operations: [...connection.operations].sort(),
+        enabled: connection.enabled,
+        permittedOperations: connection.permittedOperations
+          ? [...connection.permittedOperations].sort()
+          : null,
+        signedContentSha: connection.signedContentSha ?? null,
+      }))
+      .sort((a, b) => a.slug.localeCompare(b.slug)),
+    tools: (inputs.tools ?? [])
+      .map((tool) => ({
+        slug: tool.slug,
+        kind: tool.kind,
+        target: tool.target,
+        enabled: tool.enabled,
+        signedContentSha: tool.signedContentSha ?? null,
+      }))
+      .sort((a, b) => a.slug.localeCompare(b.slug)),
   };
   return createHash("sha256")
     .update(JSON.stringify(canonical), "utf8")

@@ -227,6 +227,8 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
   });
@@ -257,6 +259,8 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
   });

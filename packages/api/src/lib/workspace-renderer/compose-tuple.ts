@@ -54,6 +54,20 @@ import type {
 } from "./types.js";
 import { WorkspaceRenderError } from "./types.js";
 import { parseToolsMdPolicy } from "./tools-md-parser.js";
+import {
+  CAPABILITIES_LATEST_PATH,
+  capabilitiesManifestPath,
+  compileCapabilitiesManifest,
+  computeCapabilityInputSignature,
+  parseCapabilitiesManifest,
+  type CapabilityFolderInput,
+} from "../capabilities/manifest-compile.js";
+import {
+  createConfiguredCapabilitySigner,
+  createConfiguredCapabilityVerifier,
+  type CapabilitySigner,
+  type CapabilityVerifier,
+} from "../capabilities/sidecar-signing.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -121,6 +135,15 @@ export interface RenderWorkspaceTupleDeps {
    */
   persist?: boolean;
   /**
+   * Capability manifest signing/verification seams (THINK-173 U2).
+   * Injectable for tests; default to the configured Ed25519 pair. A null
+   * signer emits an unsigned manifest (runtime treats it as unverified
+   * when the migration flag is on); a null verifier withholds every
+   * sidecar-signed entry as `unsigned` — fail closed, never open.
+   */
+  capabilitySigner?: CapabilitySigner | null;
+  capabilityVerifier?: CapabilityVerifier | null;
+  /**
    * Opt-in (Composer plan U1, KTD-3): expose the generated files' CONTENTS
    * (`generatedFiles`) on the render result, on both the cache-hit and
    * cache-miss return paths. Under `persist: false` nothing exists at the
@@ -146,6 +169,8 @@ interface GeneratedWorkspaceFile {
   key: string;
   content: string;
   owner: Exclude<WorkspaceHydrateOwner, "system">;
+  /** Defaults to markdown at write time. */
+  contentType?: string;
 }
 
 function latestMtime(sources: SourceSet[]): Date | null {
@@ -232,6 +257,11 @@ export function shouldRenderUserSourcePath(relPath: string): boolean {
 const SKILL_MARKER_RE = /^skills\/([^/]+)\/SKILL\.md$/;
 /** Per-assignment state file beside the marker (absent = enabled). */
 const SKILL_ASSIGNMENT_RE = /^skills\/([^/]+)\/\.assignment\.json$/;
+/** Capability folder markers (THINK-173 U2) — same presence rule. */
+const CONNECTION_MARKER_RE = /^connections\/([^/]+)\/CONNECTION\.md$/;
+const CONNECTION_ASSIGNMENT_RE = /^connections\/([^/]+)\/\.assignment\.json$/;
+const TOOL_MARKER_RE = /^tools\/([^/]+)\/TOOL\.md$/;
+const TOOL_ASSIGNMENT_RE = /^tools\/([^/]+)\/\.assignment\.json$/;
 
 /** `.assignment.json` semantics: absent/unparseable file = enabled. */
 function skillAssignmentEnabled(raw: string | null): boolean {
@@ -855,12 +885,58 @@ export async function renderWorkspaceTuple(
   );
   const skillAssignmentKeys = new Map<string, string>();
   const skillFolders: string[] = [];
+  // Capability folders (THINK-173 U2): presence = declared; the compile
+  // step below decides active vs withheld from the signed sidecar.
+  interface CapabilityFolderScan {
+    class: "connection" | "tool";
+    definitionKey?: string;
+    definitionEtag?: string | null;
+    sidecarKey?: string;
+    sidecarEtag?: string | null;
+  }
+  const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
+  const capabilityScan = (
+    klass: "connection" | "tool",
+    slug: string,
+  ): CapabilityFolderScan => {
+    const mapKey = `${klass}:${slug}`;
+    let scan = capabilityFolderScans.get(mapKey);
+    if (!scan) {
+      scan = { class: klass };
+      capabilityFolderScans.set(mapKey, scan);
+    }
+    return scan;
+  };
   for (const object of agentSource.objects) {
     const sourcePath = runtimeSourcePath(object.relPath);
     const marker = sourcePath.match(SKILL_MARKER_RE);
     if (marker) skillFolders.push(marker[1]!);
     const assignment = sourcePath.match(SKILL_ASSIGNMENT_RE);
     if (assignment) skillAssignmentKeys.set(assignment[1]!, object.key);
+    const connectionMarker = sourcePath.match(CONNECTION_MARKER_RE);
+    if (connectionMarker) {
+      const scan = capabilityScan("connection", connectionMarker[1]!);
+      scan.definitionKey = object.key;
+      scan.definitionEtag = object.etag ?? null;
+    }
+    const connectionAssignment = sourcePath.match(CONNECTION_ASSIGNMENT_RE);
+    if (connectionAssignment) {
+      const scan = capabilityScan("connection", connectionAssignment[1]!);
+      scan.sidecarKey = object.key;
+      scan.sidecarEtag = object.etag ?? null;
+    }
+    const toolMarker = sourcePath.match(TOOL_MARKER_RE);
+    if (toolMarker) {
+      const scan = capabilityScan("tool", toolMarker[1]!);
+      scan.definitionKey = object.key;
+      scan.definitionEtag = object.etag ?? null;
+    }
+    const toolAssignment = sourcePath.match(TOOL_ASSIGNMENT_RE);
+    if (toolAssignment) {
+      const scan = capabilityScan("tool", toolAssignment[1]!);
+      scan.sidecarKey = object.key;
+      scan.sidecarEtag = object.etag ?? null;
+    }
   }
   // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
   // reference skills the runtime will actually load. Consult the SAME
@@ -947,6 +1023,7 @@ export async function renderWorkspaceTuple(
       return [];
     }
   };
+  const capabilitiesLatestKey = `${renderedPrefix}${CAPABILITIES_LATEST_PATH}`;
   const [
     authorizedSpaces,
     spaceParticipants,
@@ -957,6 +1034,7 @@ export async function renderWorkspaceTuple(
     existingAgentsMd,
     existingGeneratedContext,
     savedCanvasIndex,
+    existingCapabilitiesRaw,
   ] = await Promise.all([
     repository.listAuthorizedSpaces?.(tuple) ??
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
@@ -968,7 +1046,83 @@ export async function renderWorkspaceTuple(
     objectStore.getText({ bucket, key: agentsMdKey }),
     objectStore.getText({ bucket, key: generatedContextFile.key }),
     resolveSavedCanvasIndex(),
+    objectStore.getText({ bucket, key: capabilitiesLatestKey }),
   ]);
+
+  // Capabilities manifest (THINK-173 U2, KTD-1/KTD-7): recompile only
+  // when capability-shaped inputs changed. The input signature derives
+  // from the listing already in hand (keys + etags) plus the skill scan,
+  // so an unchanged capability surface costs zero extra S3 reads — a
+  // scratch/memory write can bust the render cache without ever touching
+  // definition bytes.
+  const capabilitySkillEntries = contextSkillEntries.map((entry) => ({
+    slug: entry.slug,
+    enabled: entry.enabled !== false,
+    active: entry.active !== false,
+  }));
+  const capabilityInputSignature = computeCapabilityInputSignature({
+    capabilityObjects: [...capabilityFolderScans.values()].flatMap((scan) => [
+      ...(scan.definitionKey
+        ? [{ key: scan.definitionKey, etag: scan.definitionEtag }]
+        : []),
+      ...(scan.sidecarKey
+        ? [{ key: scan.sidecarKey, etag: scan.sidecarEtag }]
+        : []),
+    ]),
+    skills: capabilitySkillEntries,
+  });
+  const existingCapabilitiesManifest = parseCapabilitiesManifest(
+    existingCapabilitiesRaw,
+  );
+  let capabilitiesJson: string;
+  let capabilitiesFingerprint: string;
+  if (
+    existingCapabilitiesManifest &&
+    existingCapabilitiesManifest.input_signature === capabilityInputSignature
+  ) {
+    capabilitiesJson = existingCapabilitiesRaw!;
+    capabilitiesFingerprint = existingCapabilitiesManifest.fingerprint;
+  } else {
+    const folders: CapabilityFolderInput[] = await Promise.all(
+      [...capabilityFolderScans.entries()].map(async ([mapKey, scan]) => {
+        const slug = mapKey.slice(mapKey.indexOf(":") + 1);
+        const [definitionRaw, sidecarRaw] = await Promise.all([
+          scan.definitionKey
+            ? objectStore.getText({ bucket, key: scan.definitionKey })
+            : Promise.resolve(null),
+          scan.sidecarKey
+            ? objectStore.getText({ bucket, key: scan.sidecarKey })
+            : Promise.resolve(null),
+        ]);
+        return {
+          class: scan.class,
+          slug,
+          definitionPath: `${scan.class}s/${slug}/${
+            scan.class === "connection" ? "CONNECTION.md" : "TOOL.md"
+          }`,
+          definitionRaw,
+          sidecarRaw,
+        };
+      }),
+    );
+    const compiled = compileCapabilitiesManifest({
+      agent: { tenantId: tuple.tenantId, agentSlug: tuple.agentSlug },
+      folders,
+      skills: capabilitySkillEntries,
+      verifier:
+        deps.capabilityVerifier !== undefined
+          ? deps.capabilityVerifier
+          : createConfiguredCapabilityVerifier(),
+      signer:
+        deps.capabilitySigner !== undefined
+          ? deps.capabilitySigner
+          : createConfiguredCapabilitySigner(),
+      inputSignature: capabilityInputSignature,
+      generatedAt: (deps.now?.() ?? new Date()).toISOString(),
+    });
+    capabilitiesJson = compiled.json;
+    capabilitiesFingerprint = compiled.manifest.fingerprint;
+  }
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
     baseline: agentsMdBaseline ?? "",
@@ -989,6 +1143,24 @@ export async function renderWorkspaceTuple(
       owner: "agent",
     },
     generatedContextFile,
+    // THINK-173 U2: latest-pointer for inspection plus the
+    // content-addressed copy the dispatch payload pins (KTD-1). Both
+    // hydrate into the container workspace so the runtime reads the
+    // pinned bytes locally (U6).
+    {
+      path: CAPABILITIES_LATEST_PATH,
+      key: capabilitiesLatestKey,
+      content: capabilitiesJson,
+      owner: "agent",
+      contentType: "application/json",
+    },
+    {
+      path: capabilitiesManifestPath(capabilitiesFingerprint),
+      key: `${renderedPrefix}${capabilitiesManifestPath(capabilitiesFingerprint)}`,
+      content: capabilitiesJson,
+      owner: "agent",
+      contentType: "application/json",
+    },
   ];
   // Opt-in generated-content exposure (Composer plan U1): identical on the
   // hit and miss paths — the compose above already produced the exact bytes
@@ -1036,6 +1208,7 @@ export async function renderWorkspaceTuple(
     existingManifest !== null &&
     existingAgentsMd === agentsMd &&
     existingGeneratedContext === generatedContextFile.content &&
+    existingCapabilitiesRaw === capabilitiesJson &&
     markerFresh &&
     existingManifestMatchesContract(existingManifest, hydrateManifest);
   if (cacheIsFresh) {
@@ -1092,7 +1265,8 @@ export async function renderWorkspaceTuple(
         bucket,
         key: generatedFile.key,
         content: generatedFile.content,
-        contentType: "text/markdown; charset=utf-8",
+        contentType:
+          generatedFile.contentType ?? "text/markdown; charset=utf-8",
       });
     }
     // Write-once content-addressed copy of this render's AGENTS.md so the turn's
