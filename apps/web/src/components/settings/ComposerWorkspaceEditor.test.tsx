@@ -1305,6 +1305,33 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     ).toBe(false);
   });
 
+  it("generated capability manifests route to the rendered read-only pane, never the source editor", async () => {
+    const { resolveSource } = await import("./ComposerWorkspaceEditor.js");
+    const ids = { agentId: "agent-1", spaceId: "s1", perspectiveUserId: null };
+    for (const path of ["capabilities.json", "capabilities/abc123.json"]) {
+      expect(
+        resolveSource(
+          { path, owner: "agent", generated: true, size: 1 } as never,
+          ids,
+          "s1",
+        ),
+      ).toBeNull();
+    }
+    // Editable agent files still resolve their source layer.
+    expect(
+      resolveSource(
+        {
+          path: "TOOLS.md",
+          owner: "agent",
+          generated: false,
+          size: 1,
+        } as never,
+        ids,
+        "s1",
+      ),
+    ).not.toBeNull();
+  });
+
   it("withholds approve/revoke without write scope", async () => {
     seedCapabilityTree();
     await renderEditor({

@@ -315,6 +315,17 @@ export function resolveSource(
   fallbackSpaceId: string | null,
 ): SourcePaneResolution | null {
   if (!entry) return null;
+  // Generated-only capability manifests (THINK-173 U2): they exist ONLY
+  // as render outputs — there is no source counterpart to edit — so they
+  // always use the read-only rendered pane, whose preview-file query
+  // serves generated content. Routing them to the source editor would
+  // read an absent source object and show an empty file.
+  if (
+    entry.path === "capabilities.json" ||
+    entry.path.startsWith("capabilities/")
+  ) {
+    return null;
+  }
   const segments = entry.path.split("/");
   const isSpace = entry.owner === "space" || segments[0] === "Spaces";
   const isUser =
