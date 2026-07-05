@@ -41,6 +41,10 @@ import {
   sql,
 } from "../../graphql/utils.js";
 import { hasSpaceWriteRole } from "./canvas-access.js";
+import {
+  compileDocument,
+  type CompositorDiagnostic,
+} from "./document-compositor.js";
 import { boundedCanvasText } from "./canvas-lifecycle.js";
 import {
   DOCUMENT_CARD_MAX_BYTES,
@@ -125,7 +129,12 @@ export interface DocumentEmitInput {
   title: string;
   abstract: string;
   digestMarkdown: string;
-  renderHtml: string;
+  /**
+   * THINK-154 (KTD2): present → legacy v1 dual-body path with the full
+   * current validation including the PLATE gate; absent → v2 compositor path
+   * (the render is compiled server-side from digestMarkdown).
+   */
+  renderHtml?: string;
   status: "draft" | "final";
   spaceId?: string;
 }
@@ -155,8 +164,15 @@ export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
   if (typeof doc.digestMarkdown !== "string" || !doc.digestMarkdown.trim()) {
     return { ok: false, error: "document.digestMarkdown is required" };
   }
-  if (typeof doc.renderHtml !== "string" || !doc.renderHtml.trim()) {
-    return { ok: false, error: "document.renderHtml is required" };
+  if (
+    doc.renderHtml !== undefined &&
+    (typeof doc.renderHtml !== "string" || !doc.renderHtml.trim())
+  ) {
+    return {
+      ok: false,
+      error:
+        "document.renderHtml, when present, must be a non-empty string (omit it entirely for the markdown-only shape)",
+    };
   }
   const status = doc.status ?? "draft";
   if (status !== "draft" && status !== "final") {
@@ -190,7 +206,7 @@ export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
       title,
       abstract: typeof doc.abstract === "string" ? doc.abstract.trim() : "",
       digestMarkdown: doc.digestMarkdown,
-      renderHtml: doc.renderHtml,
+      renderHtml: doc.renderHtml as string | undefined,
       status,
       spaceId: doc.spaceId as string | undefined,
     },
@@ -203,7 +219,10 @@ export interface DocumentEmissionDeps {
     renderHtml: string;
     digestMarkdown: string;
     genre?: string;
+    skipPlateGate?: boolean;
   }) => DocumentPreflightResult;
+  /** THINK-154 (KTD1): compiles the v2 markdown-only shape into the render. */
+  compile: typeof compileDocument;
   writePayload: typeof writeArtifactPayloadToS3;
   resolveActingUserId: (input: {
     tenantId: string;
@@ -254,6 +273,7 @@ export interface DocumentRow {
 function defaultDeps(): DocumentEmissionDeps {
   return {
     preflight: runDocumentPreflight,
+    compile: compileDocument,
     writePayload: writeArtifactPayloadToS3,
     resolveActingUserId: async ({ tenantId, triggeringMessageId }) => {
       if (!triggeringMessageId) return null;
@@ -510,19 +530,81 @@ export async function handleDocumentEmission(
   }
   const doc = parsed.value;
 
+  // ---- Compositor path (THINK-154 KTD1/KTD2): renderHtml absent → compile
+  // the markdown into the house render between parse and preflight. --------
+  const isCompositorPath = doc.renderHtml === undefined;
+  let renderHtml: string;
+  let compileWarnings: CompositorDiagnostic[] = [];
+  if (isCompositorPath) {
+    const compiled = deps.compile({
+      genre: doc.genre,
+      title: doc.title,
+      abstract: doc.abstract,
+      markdownBody: doc.digestMarkdown,
+    });
+    if (!compiled.ok) {
+      console.log(
+        `[document-emission] compile rejected: ${compiled.diagnostics
+          .map((d) => d.code)
+          .join(
+            ",",
+          )} (digest ${Buffer.byteLength(doc.digestMarkdown, "utf8")}B)`,
+      );
+      return {
+        statusCode: 200,
+        body: {
+          ok: false,
+          code: "COMPILE_REJECTED",
+          diagnostics: compiled.diagnostics,
+        },
+      };
+    }
+    renderHtml = compiled.renderHtml;
+    compileWarnings = compiled.warnings;
+  } else {
+    renderHtml = doc.renderHtml as string;
+  }
+
   // ---- DocSpector (R7: rejects are the tool result, nothing persists) ----
   const preflight = deps.preflight({
-    renderHtml: doc.renderHtml,
+    renderHtml,
     digestMarkdown: doc.digestMarkdown,
     // THINK-177: genre plates are enforced — an off-plate render is rejected
     // in-turn with instructions to read the plate and re-emit on it.
+    // THINK-154 R10: compositor output is plate-conformant by construction,
+    // so only the PLATE check is skipped there; everything else still runs.
     genre: doc.genre,
+    skipPlateGate: isCompositorPath,
   });
   if (!preflight.ok) {
+    if (isCompositorPath) {
+      // R6: a preflight failure on compiled output is a compiler defect —
+      // log it as a platform error (codes + sizes + hash, never bodies) and
+      // do NOT hand the model a retry it can't act on.
+      const digestHash = createHash("sha256")
+        .update(doc.digestMarkdown)
+        .digest("hex");
+      console.error(
+        `[document-emission] COMPILER DEFECT: compiled output failed preflight: ${preflight.diagnostics
+          .map((d) => `${d.code}@${d.location}`)
+          .join(
+            ",",
+          )} (genre ${doc.genre}, digest ${Buffer.byteLength(doc.digestMarkdown, "utf8")}B sha256:${digestHash}, render ${Buffer.byteLength(renderHtml, "utf8")}B)`,
+      );
+      return {
+        statusCode: 500,
+        body: {
+          ok: false,
+          code: "COMPILER_DEFECT",
+          error:
+            "The platform failed to compile this document correctly. This is a platform defect, not a problem with your input — it has been logged. Do not retry with modified content.",
+        },
+      };
+    }
     console.log(
       `[document-emission] preflight rejected: ${preflight.diagnostics
         .map((d) => d.code)
-        .join(",")} (render ${Buffer.byteLength(doc.renderHtml, "utf8")}B)`,
+        .join(",")} (render ${Buffer.byteLength(renderHtml, "utf8")}B)`,
     );
     return {
       statusCode: 200,
@@ -604,7 +686,7 @@ export async function handleDocumentEmission(
   await deps.writePayload({
     tenantId: input.tenantId,
     key: renderKey,
-    body: doc.renderHtml,
+    body: renderHtml,
     contentType: DOCUMENT_RENDER_CONTENT_TYPE,
   });
   await deps.upsertDocumentRow({
@@ -641,7 +723,7 @@ export async function handleDocumentEmission(
         userId: actingUserId,
         spaceId: doc.spaceId,
         digestMarkdown: doc.digestMarkdown,
-        renderHtml: doc.renderHtml,
+        renderHtml,
       });
       headVersion = pin.headVersion;
       status = "final";
@@ -688,7 +770,14 @@ export async function handleDocumentEmission(
 
   return {
     statusCode: 200,
-    body: { ok: true, artifactId, documentId, status, headVersion },
+    body: {
+      ok: true,
+      artifactId,
+      documentId,
+      status,
+      headVersion,
+      ...(compileWarnings.length > 0 ? { warnings: compileWarnings } : {}),
+    },
   };
 }
 
