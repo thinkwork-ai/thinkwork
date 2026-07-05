@@ -159,15 +159,26 @@ caption: Qualification is the biggest drop-off.`;
     }
   });
 
-  it("rejects cleanly while the house renderer is unwired (pre-U3)", () => {
+  it("rejects cleanly when constructed without a renderer", () => {
+    const engine = buildDirectiveEngine([makeChartSpec(null)]);
+    const result = engine({ kind: "chart", body: VALID_CHART, genre });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].message).toContain("markdown table");
+    }
+  });
+
+  it("production engine renders charts via the wired house renderer", () => {
     const result = renderDocumentDirective({
       kind: "chart",
       body: VALID_CHART,
       genre,
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.diagnostics[0].message).toContain("markdown table");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.containsSvg).toBe(true);
+      expect(result.html).toContain("<svg ");
+      expect(result.html).toContain("var(--accent)");
     }
   });
 

@@ -16,6 +16,7 @@
  */
 
 import { parse as parseYaml } from "yaml";
+import { renderChart } from "./document-charts.js";
 import type {
   CompositorDiagnostic,
   DirectiveEngine,
@@ -210,11 +211,7 @@ export interface ChartDirectiveData {
   max?: number;
 }
 
-/**
- * U3 seam: data → `<svg …>` string. U2 ships with the shell unwired (null);
- * U3 wires the house renderer by direct import — nothing emits v2 markdown
- * before U5, so the window is inert.
- */
+/** Seam kept injectable for tests; production wires the house renderer. */
 export type ChartRenderer = (data: ChartDirectiveData) => string;
 
 const CHART_SCHEMA = {
@@ -337,7 +334,7 @@ export const makeChartSpec = (
 const DEFAULT_REGISTRY: readonly DirectiveSpec[] = [
   statsSpec,
   verdictGridSpec,
-  makeChartSpec(null),
+  makeChartSpec(renderChart),
 ];
 
 export function buildDirectiveEngine(
