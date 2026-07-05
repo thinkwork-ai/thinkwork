@@ -233,6 +233,15 @@ aws s3 sync ./jira/ "s3://$BUCKET/tenants/acme/skill-catalog/jira/"
 
 The skill is immediately available in that tenant's admin Skills catalog — no Lambda redeployment needed. A user-facing zip upload is not required for the current catalog path; operators upload or edit the folder contents in the tenant catalog, then install from the Skills tab.
 
+<Aside type="caution">
+  Catalog presence and installation are not enough for the skill to reach the
+  model. Every skill must also pass the trust pipeline (trust report, spec
+  check, content scan, signature) before the runtime injects it — and any edit
+  to the pack's content invalidates its existing trust report. An installed
+  skill with stale trust is **silently skipped** at invoke time. See [Skills:
+  the trust pipeline](/concepts/agents/skills/#the-trust-pipeline).
+</Aside>
+
 ## Assigning skills to agents
 
 Open the admin Agent page, switch to **Skills**, and run **Add Skill** for the catalog folder. Installation copies the catalog folder into the target workspace as `skills/<skill-slug>/` and writes `.catalog-ref.json` so stale/orphan status can be detected later.
