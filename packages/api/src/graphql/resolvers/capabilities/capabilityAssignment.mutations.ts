@@ -726,6 +726,36 @@ async function folderCapabilityMutation(
     input.toolAllowlist && input.toolAllowlist.length > 0
       ? input.toolAllowlist
       : (input.grantedPermissions ?? undefined);
+
+  // R8 (U8): script-kind tools must pass the SkillSpector-class trust
+  // gate BEFORE signing, so the trust verdict rides the same signature
+  // as the rest of the sidecar. Non-script kinds skip the scan.
+  let trust: Record<string, unknown> | undefined;
+  if (klass === "tool") {
+    const [{ readCapabilityDefinitionKind }, { runScriptToolTrustGate }] =
+      await Promise.all([
+        import("../../../lib/capabilities/definition-kind.js"),
+        import("../../../lib/capabilities/script-trust.js"),
+      ]);
+    const kind = await readCapabilityDefinitionKind({
+      targetPrefix: target.targetPrefix,
+      slug,
+    });
+    if (kind === "script") {
+      const gate = await runScriptToolTrustGate({
+        targetPrefix: target.targetPrefix,
+        slug,
+      });
+      if (!gate.ok) {
+        throw new GraphQLError(
+          `script tool '${slug}' failed the trust gate: ${gate.reason}${gate.detail ? ` — ${gate.detail}` : ""}`,
+          { extensions: { code: "TRUST_GATE_FAILED" } },
+        );
+      }
+      trust = gate.trust as unknown as Record<string, unknown>;
+    }
+  }
+
   const signed = await signExistingCapabilityFolder({
     targetPrefix: target.targetPrefix,
     klass,
@@ -733,6 +763,7 @@ async function folderCapabilityMutation(
     sidecar: {
       enabled: true,
       ...(operations ? { permissions: { operations } } : {}),
+      ...(trust ? { trust } : {}),
     },
     signedBy,
   });

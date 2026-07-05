@@ -87,6 +87,8 @@ export interface CapabilitySidecarFields {
   approval?: ApprovalPolicy;
   /** Credential/OAuth wiring — references only, never values (R2). */
   config?: Record<string, unknown>;
+  /** Script trust verdict (U8) — signed with the rest of the sidecar. */
+  trust?: Record<string, unknown>;
 }
 
 export type FolderWriteResult =
@@ -220,6 +222,7 @@ async function writeSignedSidecar(input: {
       : {}),
     ...(input.sidecar.approval ? { approval: input.sidecar.approval } : {}),
     ...(input.sidecar.config ? { config: input.sidecar.config } : {}),
+    ...(input.sidecar.trust ? { trust: input.sidecar.trust } : {}),
   };
   const { signed_content_sha, signature } = signCapabilitySidecar({
     signer,
