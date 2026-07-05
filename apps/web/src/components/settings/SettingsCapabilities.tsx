@@ -1386,12 +1386,18 @@ export function SettingsCapabilities({
             type: "option",
             singleSelect: true,
             icon: <IconPlanet className="size-4" />,
+            // Alphabetical, with the required sentinel pinned first. A
+            // real space also named "Default" is suppressed — the sentinel
+            // (agent-baseline, wire-null) is the single Default row, keeping
+            // the default view byte-identical.
             options: [
               { value: DEFAULT_SPACE_VALUE, label: "Default" },
-              ...(spacesResult.data?.spaces ?? []).map((space) => ({
-                value: space.id,
-                label: space.name,
-              })),
+              ...(spacesResult.data?.spaces ?? [])
+                .filter(
+                  (space) => space.name.trim().toLowerCase() !== "default",
+                )
+                .map((space) => ({ value: space.id, label: space.name }))
+                .sort((a, b) => a.label.localeCompare(b.label)),
             ],
             emptyMessage: "No spaces",
           }}
@@ -1406,10 +1412,9 @@ export function SettingsCapabilities({
             type: "option",
             singleSelect: true,
             icon: <UserRound className="size-4" />,
-            options: members.map((member) => ({
-              value: member.id,
-              label: member.name,
-            })),
+            options: members
+              .map((member) => ({ value: member.id, label: member.name }))
+              .sort((a, b) => a.label.localeCompare(b.label)),
             emptyMessage: "No members",
           }}
           selected={perspectiveUserId ?? ""}
@@ -1425,10 +1430,9 @@ export function SettingsCapabilities({
             icon: <Bot className="size-4" />,
             options: [
               { value: NONE_AGENT_VALUE, label: "None" },
-              ...(profilesResult.data?.agentProfiles ?? []).map((profile) => ({
-                value: profile.id,
-                label: profile.name,
-              })),
+              ...(profilesResult.data?.agentProfiles ?? [])
+                .map((profile) => ({ value: profile.id, label: profile.name }))
+                .sort((a, b) => a.label.localeCompare(b.label)),
             ],
             emptyMessage: "No agent profiles",
           }}

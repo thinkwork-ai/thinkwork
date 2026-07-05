@@ -89,7 +89,15 @@ vi.mock("urql", () => ({
     }
     if (query === queryDocs.SettingsSpacesListQuery) {
       return [
-        { data: { spaces: [{ id: "space-1", name: "Customer" }] } },
+        {
+          data: {
+            spaces: [
+              { id: "space-2", name: "Finance" },
+              { id: "space-1", name: "Customer" },
+              { id: "space-3", name: "Default" },
+            ],
+          },
+        },
         vi.fn(),
       ];
     }
@@ -1175,5 +1183,17 @@ describe("static scope bar", () => {
   it("keeps write scope on the default view (own perspective)", () => {
     render(<SettingsCapabilities />);
     expect(editorProps()?.canManageSkills).toBe(true);
+  });
+
+  it("sorts Space options alphabetically and dedupes a real space named Default", async () => {
+    render(<SettingsCapabilities />);
+    fireEvent.click(screen.getByLabelText("Edit Space values"));
+    await screen.findByLabelText("Search filter values");
+    const rows = screen
+      .getAllByRole("checkbox")
+      .map((row) => row.textContent?.trim());
+    // Sentinel Default pinned first, rest alphabetical, no duplicate row
+    // for the real space named "Default" (space-3).
+    expect(rows).toEqual(["Default", "Customer", "Finance"]);
   });
 });
