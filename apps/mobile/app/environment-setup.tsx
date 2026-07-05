@@ -16,9 +16,18 @@ import {
   setupEnvironmentFromDeploymentProfileLink,
   setupEnvironmentFromUrl,
 } from "@/lib/environments/setup-flow";
+import { canLeaveEnvironmentSetup } from "@/lib/environments/routing";
 
 export default function EnvironmentSetupScreen() {
   const router = useRouter();
+  const canLeave = canLeaveEnvironmentSetup();
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/sign-in");
+    }
+  };
   const [url, setUrl] = useState("");
   const [profileLink, setProfileLink] = useState("");
   const [showPasteLink, setShowPasteLink] = useState(false);
@@ -138,6 +147,14 @@ export default function EnvironmentSetupScreen() {
                 Scan QR instead
               </Text>
             </Pressable>
+
+            {canLeave && (
+              <Pressable className="py-3" onPress={handleBack}>
+                <Text size="sm" variant="muted" className="text-center">
+                  Back to sign in
+                </Text>
+              </Pressable>
+            )}
 
             {showPasteLink && (
               <View className="gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">

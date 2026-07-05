@@ -206,7 +206,7 @@ export default function SignUpScreen() {
 
               <Pressable
                 className="py-2"
-                onPress={() => router.back()}
+                onPress={() => (router.canGoBack() ? router.back() : router.replace("/sign-in"))}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Text size="sm" variant="muted" className="text-center">
