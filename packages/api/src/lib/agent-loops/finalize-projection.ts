@@ -1,6 +1,7 @@
 import {
   AGENT_LOOP_WAKEUP_SOURCE,
   buildAgentLoopWakeupPayload,
+  resolveDispatchableVersion,
   workerAgentId,
   type DispatchableAgentLoop,
   type DispatchableAgentLoopVersion,
@@ -320,9 +321,8 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         .select({
           id: agentLoopVersions.id,
           version_status: agentLoopVersions.version_status,
-          goal_spec: agentLoopVersions.goal_spec,
-          worker_spec: agentLoopVersions.worker_spec,
-          loop_policy: agentLoopVersions.loop_policy,
+          routine_actions_spec: agentLoopVersions.routine_actions_spec,
+          target_spec: agentLoopVersions.target_spec,
         })
         .from(agentLoopVersions)
         .where(
@@ -334,6 +334,12 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         .limit(1);
       if (!version) return null;
 
+      // Single-sourced resolution (THINK-159): goalSpec/workerSpec/loopPolicy
+      // are DERIVED from target_spec, never read from the (now inert) legacy
+      // columns. Finalize only runs after an agent turn, which is always an
+      // agent_thread target (routine/workflow targets never enqueue a wakeup,
+      // so never reach the projection path); resolveDispatchableVersion
+      // returns targetKind 'agent_thread' for it. THINK-137 U4.
       return {
         loop: {
           id: loop.id,
@@ -342,17 +348,7 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
           enabled: loop.enabled,
           lifecycleStatus: loop.lifecycle_status,
         },
-        version: {
-          id: version.id,
-          versionStatus: version.version_status,
-          goalSpec: version.goal_spec,
-          workerSpec: version.worker_spec,
-          loopPolicy: version.loop_policy,
-          // Finalize only runs after an agent turn, which is always an
-          // agent_thread target (routine/workflow targets never enqueue a
-          // wakeup, so never reach the projection path). THINK-137 U4.
-          targetKind: "agent_thread",
-        },
+        version: resolveDispatchableVersion(version),
         run: {
           id: run.id,
           status: run.status,

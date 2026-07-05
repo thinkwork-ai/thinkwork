@@ -115,10 +115,10 @@ async function createAgentLoop(
       version_number: 1,
       version_status: "active",
       trigger_spec: normalized.triggerSpec,
-      goal_spec: normalized.goalSpec,
-      worker_spec: normalized.workerSpec,
+      // THINK-159: goal_spec/worker_spec/loop_policy are no longer written —
+      // target_spec is the sole dispatch source. The columns are nullable
+      // (migration 0215) and dropped in the follow-up PR.
       target_spec: normalized.targetSpec,
-      loop_policy: normalized.loopPolicy,
       routine_actions_spec: normalized.routineActionsSpec,
       source_metadata: normalized.sourceMetadata,
       created_by_actor_type: actorId ? "user" : "system",
@@ -205,10 +205,8 @@ async function updateAgentLoop(
         version_number: nextNumber,
         version_status: "active",
         trigger_spec: normalized.triggerSpec,
-        goal_spec: normalized.goalSpec,
-        worker_spec: normalized.workerSpec,
+        // THINK-159: goal_spec/worker_spec/loop_policy no longer written.
         target_spec: normalized.targetSpec,
-        loop_policy: normalized.loopPolicy,
         routine_actions_spec: normalized.routineActionsSpec,
         source_metadata: normalized.sourceMetadata,
         created_by_actor_type: actorId ? "user" : "system",
@@ -504,22 +502,20 @@ async function loadDefaultAutomationWorker(
 function versionSpecsEqual(
   version: {
     trigger_spec: unknown;
-    goal_spec: unknown;
-    worker_spec: unknown;
     target_spec?: unknown;
-    loop_policy: unknown;
     routine_actions_spec?: unknown;
     source_metadata: unknown;
   },
   normalized: NormalizedAgentLoopSpecs,
 ): boolean {
+  // THINK-159: goal_spec/worker_spec/loop_policy are no longer written, so the
+  // dirty-diff compares only the live spec columns. target_spec is the
+  // authoritative dispatch source; trigger/routineActions/sourceMetadata round
+  // out the version identity.
   return (
     stableJson(version.trigger_spec) === stableJson(normalized.triggerSpec) &&
-    stableJson(version.goal_spec) === stableJson(normalized.goalSpec) &&
-    stableJson(version.worker_spec) === stableJson(normalized.workerSpec) &&
     stableJson(version.target_spec ?? null) ===
       stableJson(normalized.targetSpec) &&
-    stableJson(version.loop_policy) === stableJson(normalized.loopPolicy) &&
     stableJson(version.routine_actions_spec ?? null) ===
       stableJson(normalized.routineActionsSpec) &&
     stableJson(version.source_metadata) ===

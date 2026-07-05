@@ -9,9 +9,9 @@ import type {
   WorkerSpec,
 } from "./contracts";
 import {
+  DEFAULT_LOOP_POLICY,
   normalizeRoutineActionsSpec,
   normalizeTargetSpec,
-  targetSpecFromLegacy,
 } from "./contracts";
 
 export const AGENT_LOOP_WAKEUP_SOURCE = "agent_loop";
@@ -481,57 +481,57 @@ export function workerAgentId(workerSpec: WorkerSpec | null | undefined) {
 
 /**
  * Raw agent_loop_versions row (snake_case columns) as both dispatch call
- * sites already select it. `target_spec` is the authoritative target after
- * THINK-137 U3; the legacy blobs are the read-fallback for pre-U3 rows.
+ * sites select it. `target_spec` is the SOLE authoritative source of the
+ * dispatchable target after THINK-159: `goal_spec`/`worker_spec`/`loop_policy`
+ * are no longer read (they become inert columns dropped in the follow-up PR).
  */
 export interface RawAgentLoopVersionRow {
   id: string;
   version_status: string;
-  goal_spec: unknown;
-  worker_spec: unknown;
-  loop_policy: unknown;
   routine_actions_spec?: unknown;
   target_spec?: unknown;
 }
 
 /**
- * Single-sourced dispatch resolution (THINK-137 U3). Turns a raw version row
- * into the `DispatchableAgentLoopVersion` the dispatcher consumes, resolving
- * the target from `target_spec` when present, else `targetSpecFromLegacy`.
- * Both call sites (job-trigger's handleAgentLoopSchedule and the
- * triggerAgentLoopRun mutation) call this so the target→dispatch translation
- * is never duplicated.
+ * Single-sourced dispatch resolution (THINK-137 U3 → THINK-159). Turns a raw
+ * version row into the `DispatchableAgentLoopVersion` the dispatcher consumes,
+ * deriving EVERYTHING from `target_spec`. Both call sites (job-trigger's
+ * handleAgentLoopSchedule and the triggerAgentLoopRun mutation) call this so
+ * the target→dispatch translation is never duplicated.
  *
- * Behavior-preserving: a `routine`/`workflow` target reconstructs the
- * token-free `agentTurn:false` routineActionsSpec so it dispatches exactly
- * like today's routine-only path; an `agent_thread` target reconstructs the
- * goal/worker shapes so it dispatches exactly like today's goal/worker wakeup
- * path. Loop-policy always comes from the (still-written) legacy column — it is
- * off the product surface (R11) and not carried by target_spec. The judge /
- * evidence / ROI feature was removed in THINK-137 U10.
+ * `goalSpec`/`workerSpec`/`loopPolicy` on the returned object are now DERIVED,
+ * not read from columns:
+ *   - agent_thread → goalSpec {objective: instructions, completionCriteria},
+ *     workerSpec {type: workerType, id: workerId}. These feed the wakeup
+ *     payload + workerAgentId exactly as before.
+ *   - routine/workflow → a headless target that never enqueues a wakeup, so
+ *     goal/worker are never read on this path; we synthesize inert-but-non-empty
+ *     shapes so downstream typing (and any defensive reader) never sees an
+ *     undefined objective, and reconstruct the token-free `agentTurn:false`
+ *     routineActionsSpec so it dispatches exactly like today's routine-only path.
+ *   - loopPolicy is always `DEFAULT_LOOP_POLICY` — loop-policy is off the
+ *     product surface (R11), the form never set it, so every live version's
+ *     stored policy already equalled the default; synthesizing it is
+ *     behavior-preserving.
+ *
+ * `target_spec` is required (backfilled on every row by migration 0211). A
+ * null/absent value is treated as data corruption and rejected loudly rather
+ * than silently dispatching an empty target.
  */
 export function resolveDispatchableVersion(
   row: RawAgentLoopVersionRow,
 ): DispatchableAgentLoopVersion {
-  const targetSpec =
-    row.target_spec !== undefined && row.target_spec !== null
-      ? normalizeTargetSpec(row.target_spec)
-      : targetSpecFromLegacy({
-          goalSpec: row.goal_spec,
-          workerSpec: row.worker_spec,
-          routineActionsSpec: row.routine_actions_spec,
-        });
+  if (row.target_spec === undefined || row.target_spec === null) {
+    throw new Error(
+      `agent_loop_versions.target_spec is required to dispatch version ${row.id}: ` +
+        `every version was backfilled with target_spec (migration 0211), so a ` +
+        `null value indicates data corruption.`,
+    );
+  }
+  const targetSpec = normalizeTargetSpec(row.target_spec);
 
-  const legacyGoal = (row.goal_spec ?? {}) as GoalSpec;
-  const legacyWorker = (row.worker_spec ?? {
-    type: "agent",
-    id: "",
-    toolHints: [],
-    config: {},
-  }) as WorkerSpec;
-
-  let goalSpec = legacyGoal;
-  let workerSpec = legacyWorker;
+  let goalSpec: GoalSpec;
+  let workerSpec: WorkerSpec;
   let routineActionsSpec: RoutineActionsSpec | null;
 
   if (targetSpec.kind === "routine" || targetSpec.kind === "workflow") {
@@ -549,26 +549,27 @@ export function resolveDispatchableVersion(
         ]
       : [];
     routineActionsSpec = { actions, agentTurn: false };
+    // Headless: no wakeup ever reads these. Synthesize inert non-empty shapes.
+    goalSpec = {
+      objective: ref?.label ?? `routine:${ref?.routineId ?? "unknown"}`,
+      completionCriteria: [],
+    };
+    workerSpec = { type: "agent", id: "", toolHints: [], config: {} };
   } else {
     // agent_thread — target_spec is authoritative for objective + worker
     // identity; its orthogonal bolt-on routine actions stay in the legacy
     // routine_actions_spec column (mixed Automations).
     const at = targetSpec.agentThread;
-    if (at) {
-      goalSpec = {
-        ...legacyGoal,
-        objective: at.instructions,
-        completionCriteria:
-          at.completionCriteria ?? legacyGoal.completionCriteria ?? [],
-      };
-      if (at.workerId) {
-        workerSpec = {
-          ...legacyWorker,
-          type: at.workerType ?? legacyWorker.type ?? "agent",
-          id: at.workerId,
-        };
-      }
-    }
+    goalSpec = {
+      objective: at?.instructions ?? "",
+      completionCriteria: at?.completionCriteria ?? [],
+    };
+    workerSpec = {
+      type: at?.workerType ?? "agent",
+      id: at?.workerId ?? "",
+      toolHints: [],
+      config: {},
+    };
     routineActionsSpec = normalizeRoutineActionsSpec(row.routine_actions_spec);
   }
 
@@ -577,7 +578,7 @@ export function resolveDispatchableVersion(
     versionStatus: row.version_status,
     goalSpec,
     workerSpec,
-    loopPolicy: row.loop_policy as LoopPolicy,
+    loopPolicy: DEFAULT_LOOP_POLICY,
     routineActionsSpec,
     targetKind: targetSpec.kind,
     guards: targetSpec.guards ?? null,

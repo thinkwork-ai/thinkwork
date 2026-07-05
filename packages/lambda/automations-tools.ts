@@ -13,16 +13,15 @@
  * Tenant scoping is applied on EVERY query (loop / version / run rows are all
  * filtered on `tenant_id = tenantId`). Read-only — no mutations.
  *
- * Target presentation resolves `target_spec` when present, else falls back to
- * `targetSpecFromLegacy` for pre-U3 rows (KTD via THINK-137 U3), so a legacy
- * goal/worker or routine-actions row still yields a kind + label.
+ * Target presentation resolves `target_spec` directly (THINK-159: it is the
+ * sole source, backfilled on every row by migration 0211), yielding a kind +
+ * label.
  */
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@thinkwork/database-pg";
 import {
   normalizeTargetSpec,
-  targetSpecFromLegacy,
   type AgentLoopTargetKind,
   type TargetSpec,
 } from "@thinkwork/agent-loops-core";
@@ -84,8 +83,6 @@ export interface AutomationDetail extends AutomationListItem {
 
 interface VersionRow {
   id: string;
-  goal_spec: unknown;
-  worker_spec: unknown;
   routine_actions_spec: unknown;
   target_spec: unknown;
   trigger_spec: unknown;
@@ -96,19 +93,19 @@ function iso(value: Date | string | null | undefined): string | null {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-/** Resolves the authoritative TargetSpec for a version row: target_spec when
- * present, else the legacy goal/worker/routineActions fallback (pre-U3). */
+/** Resolves the authoritative TargetSpec for a version row. THINK-159:
+ * target_spec is the sole source (backfilled on every row by migration 0211);
+ * the legacy goal/worker fallback is gone. */
 function resolveTargetSpec(version: VersionRow | undefined): TargetSpec | null {
-  if (!version) return null;
+  if (
+    !version ||
+    version.target_spec === undefined ||
+    version.target_spec === null
+  ) {
+    return null;
+  }
   try {
-    if (version.target_spec !== undefined && version.target_spec !== null) {
-      return normalizeTargetSpec(version.target_spec);
-    }
-    return targetSpecFromLegacy({
-      goalSpec: version.goal_spec,
-      workerSpec: version.worker_spec,
-      routineActionsSpec: version.routine_actions_spec,
-    });
+    return normalizeTargetSpec(version.target_spec);
   } catch {
     // A malformed stored spec must not fail the whole list read.
     return null;
@@ -157,8 +154,6 @@ async function loadVersionsById(
   const rows = (await db
     .select({
       id: agentLoopVersions.id,
-      goal_spec: agentLoopVersions.goal_spec,
-      worker_spec: agentLoopVersions.worker_spec,
       routine_actions_spec: agentLoopVersions.routine_actions_spec,
       target_spec: agentLoopVersions.target_spec,
       trigger_spec: agentLoopVersions.trigger_spec,
@@ -255,9 +250,7 @@ export async function getAutomation(input: {
     .limit(1);
 
   if (!loop) {
-    throw new Error(
-      `automation ${input.automationId} not found in tenant`,
-    );
+    throw new Error(`automation ${input.automationId} not found in tenant`);
   }
 
   const versions = await loadVersionsById(

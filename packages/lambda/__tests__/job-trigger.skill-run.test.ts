@@ -117,9 +117,8 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agentLoopVersions: {
     id: "agent_loop_versions.id",
     version_status: "agent_loop_versions.version_status",
-    goal_spec: "agent_loop_versions.goal_spec",
-    worker_spec: "agent_loop_versions.worker_spec",
-    loop_policy: "agent_loop_versions.loop_policy",
+    routine_actions_spec: "agent_loop_versions.routine_actions_spec",
+    target_spec: "agent_loop_versions.target_spec",
   },
   agentLoopRuns: {
     id: "agent_loop_runs.id",
@@ -442,24 +441,22 @@ const AGENT_LOOP_ROW = {
   space_id: "loop-space-1",
 };
 
+// THINK-159: target_spec is the sole dispatch source; goal/worker/loop-policy
+// are derived from it (loop-policy is always DEFAULT_LOOP_POLICY, so the token
+// budget resolves to the default DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET).
 const AGENT_LOOP_VERSION_ROW = {
   id: "version-1",
   version_status: "active",
-  goal_spec: {
-    objective: "Prepare the daily research brief.",
-    completionCriteria: ["Brief exists."],
-  },
-  worker_spec: {
-    type: "agent",
-    id: "agent-1",
-    toolHints: [],
-    config: {},
-  },
-  loop_policy: {
-    maxIterations: 1,
-    maxTokens: 50_000,
-    failBehavior: "return_blocker",
-    escalateOnFailure: false,
+  routine_actions_spec: null,
+  target_spec: {
+    kind: "agent_thread",
+    agentThread: {
+      instructions: "Prepare the daily research brief.",
+      completionCriteria: ["Brief exists."],
+      workerId: "agent-1",
+      workerType: "agent",
+      threadMode: "new_per_run",
+    },
   },
 };
 
@@ -547,7 +544,7 @@ describe("job-trigger agent_loop_schedule", () => {
           goalMode: expect.objectContaining({
             action: "start",
             goalRunId: "run-1",
-            resolvedBudget: { tokenBudget: 50_000 },
+            resolvedBudget: { tokenBudget: 100_000 },
           }),
           agentLoop: expect.objectContaining({
             loopId: "loop-1",

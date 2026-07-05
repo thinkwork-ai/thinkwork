@@ -420,9 +420,7 @@ export type AgentLoopVersion = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdByActorId?: Maybe<Scalars['ID']['output']>;
   createdByActorType?: Maybe<Scalars['String']['output']>;
-  goalSpec: Scalars['AWSJSON']['output'];
   id: Scalars['ID']['output'];
-  loopPolicy: Scalars['AWSJSON']['output'];
   publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   routineActionsSpec?: Maybe<Scalars['AWSJSON']['output']>;
   sourceMetadata: Scalars['AWSJSON']['output'];
@@ -431,7 +429,6 @@ export type AgentLoopVersion = {
   triggerSpec: Scalars['AWSJSON']['output'];
   versionNumber: Scalars['Int']['output'];
   versionStatus: AgentLoopVersionStatus;
-  workerSpec: Scalars['AWSJSON']['output'];
 };
 
 export enum AgentLoopVersionStatus {
@@ -8427,7 +8424,7 @@ export type RuntimeManifest = {
 export type SaveAgentLoopInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  goalSpec: Scalars['AWSJSON']['input'];
+  goalSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   id?: InputMaybe<Scalars['ID']['input']>;
   lifecycleStatus?: InputMaybe<AgentLoopLifecycleStatus>;
   loopPolicy?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -8442,7 +8439,7 @@ export type SaveAgentLoopInput = {
   targetSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId: Scalars['ID']['input'];
   triggerSpec: Scalars['AWSJSON']['input'];
-  workerSpec: Scalars['AWSJSON']['input'];
+  workerSpec?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type SaveAppletInput = {

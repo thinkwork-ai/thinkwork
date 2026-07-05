@@ -129,21 +129,18 @@ export function defaultAgentLoopDraft(
   };
 }
 
-/** Reads the authoritative target_spec from a version, falling back to the
- * legacy goal/worker/routineActions blobs for pre-U3 rows. Mirrors
- * packages/agent-loops-core `targetSpecFromLegacy` for the read path. */
+/** Reads the authoritative target_spec from a version. THINK-159: target_spec
+ * is the sole source (backfilled on every row by migration 0211); the legacy
+ * goal/worker read-fallback is gone. An unrecognized/absent kind reads as an
+ * empty agent_thread so the form still renders. */
 export function readTargetSpec(
   version: AgentLoopVersionSummary | null | undefined,
 ): AgentLoopTargetSpec {
   const target = jsonRecord(version?.targetSpec);
   const kind = target.kind;
-  if (kind === "agent_thread" || kind === "routine" || kind === "workflow") {
+  if (kind === "routine" || kind === "workflow") {
     return {
       kind,
-      agentThread:
-        kind === "agent_thread"
-          ? normalizeAgentThreadRead(jsonRecord(target.agentThread))
-          : undefined,
       routine:
         kind === "routine"
           ? { routineId: stringValue(jsonRecord(target.routine).routineId) }
@@ -154,7 +151,10 @@ export function readTargetSpec(
           : undefined,
     };
   }
-  return targetSpecFromLegacyRead(version);
+  return {
+    kind: "agent_thread",
+    agentThread: normalizeAgentThreadRead(jsonRecord(target.agentThread)),
+  };
 }
 
 function normalizeAgentThreadRead(rec: Record<string, unknown>) {
@@ -171,38 +171,6 @@ function normalizeAgentThreadRead(rec: Record<string, unknown>) {
           : undefined,
     threadMode,
     fixedThreadId: stringValue(rec.fixedThreadId) || undefined,
-  };
-}
-
-/** Legacy read-fallback: routine-only versions map to routine kind; everything
- * else maps to agent_thread from goalSpec.objective + workerSpec. */
-function targetSpecFromLegacyRead(
-  version: AgentLoopVersionSummary | null | undefined,
-): AgentLoopTargetSpec {
-  const routineActions = jsonRecord(version?.routineActionsSpec);
-  const actions = Array.isArray(routineActions.actions)
-    ? (routineActions.actions as { routineId?: unknown }[])
-    : [];
-  const agentTurn = routineActions.agentTurn !== false;
-  if (actions.length > 0 && !agentTurn) {
-    const routineId = stringValue(actions[0]?.routineId);
-    return { kind: "routine", routine: { routineId } };
-  }
-  const goal = jsonRecord(version?.goalSpec);
-  const worker = jsonRecord(version?.workerSpec);
-  return {
-    kind: "agent_thread",
-    agentThread: {
-      instructions: stringValue(goal.objective),
-      workerId: stringValue(worker.id) || undefined,
-      workerType:
-        worker.type === "agent_profile"
-          ? "agent_profile"
-          : worker.type === "agent"
-            ? "agent"
-            : undefined,
-      threadMode: "new_per_run",
-    },
   };
 }
 

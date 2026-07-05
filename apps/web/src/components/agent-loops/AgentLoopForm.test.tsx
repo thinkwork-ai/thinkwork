@@ -390,9 +390,6 @@ function editLoop(overrides: Partial<AgentLoopRow> = {}): AgentLoopRow {
       id: "version-1",
       versionNumber: 2,
       triggerSpec: { family: "webhook", enabled: true, config: {} },
-      goalSpec: {},
-      workerSpec: {},
-      loopPolicy: {},
       targetSpec: {
         kind: "agent_thread",
         agentThread: {
