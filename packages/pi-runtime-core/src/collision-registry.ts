@@ -21,6 +21,27 @@
 /** Same shape the runtime enforces in dynamic-extensions.ts. */
 export const TOOL_NAME_RE = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 
+/**
+ * Full Pi built-in tool set. Declared here (a zero-import module) so
+ * packages/api's render pipeline can seed the reserved set without
+ * pulling the agent-loop module; agent-loop re-exports it unchanged.
+ * We pass an explicit allowlist so all seven are active in the cloud
+ * sandbox — "leverage built-ins, disable nothing"
+ * (feedback_pi_leverage_builtin_tools). Note: when `tools` is provided
+ * to `createAgentSession` it is an allowlist that gates BOTH built-ins
+ * and custom tools, so our platform tool names are appended in
+ * `buildToolAllowlist`.
+ */
+export const BUILTIN_TOOL_NAMES = [
+  "read",
+  "bash",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+] as const;
+
 export const CAPABILITY_TOOL_SOURCES = [
   "builtin",
   "platform",

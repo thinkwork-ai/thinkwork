@@ -186,13 +186,7 @@ export function parseConnectionDefinition(
 
   const name = requireSlug(record.name, path, errors);
   const description = requireDescription(record.description, path, errors);
-  const type = requireEnum(
-    record.type,
-    CONNECTION_TYPES,
-    "type",
-    path,
-    errors,
-  );
+  const type = requireEnum(record.type, CONNECTION_TYPES, "type", path, errors);
   const principalType =
     record.principal_type === undefined || record.principal_type === null
       ? "app"
@@ -490,7 +484,10 @@ export function parseCapabilitySidecar(
   if (errors.length > 0 || !slug || !klass || !updatedAt) {
     return { valid: false, errors };
   }
-  return { valid: true, parsed: record as unknown as CapabilityAssignmentSidecar };
+  return {
+    valid: true,
+    parsed: record as unknown as CapabilityAssignmentSidecar,
+  };
 }
 
 /**
@@ -510,9 +507,7 @@ function scanForSecretValues(
   errors: CapabilityDefinitionError[],
 ): void {
   if (!value || typeof value !== "object") return;
-  for (const [key, child] of Object.entries(
-    value as Record<string, unknown>,
-  )) {
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const childPath = keyPath ? `${keyPath}.${key}` : key;
     if (
       SECRET_KEY_RE.test(key) &&
@@ -657,7 +652,10 @@ function requireEnum<T extends string>(
   path: string,
   errors: CapabilityDefinitionError[],
 ): T | null {
-  if (typeof raw !== "string" || !(allowed as readonly string[]).includes(raw)) {
+  if (
+    typeof raw !== "string" ||
+    !(allowed as readonly string[]).includes(raw)
+  ) {
     errors.push({
       kind: raw === undefined || raw === null ? "MissingField" : "FieldShape",
       message: `${path} field '${field}' must be one of [${allowed.join(", ")}]`,
@@ -738,12 +736,7 @@ function parseOutputShaping(
     if (model) out.model = model;
   }
   if (record.thread !== undefined) {
-    const thread = optionalString(
-      record.thread,
-      "output.thread",
-      path,
-      errors,
-    );
+    const thread = optionalString(record.thread, "output.thread", path, errors);
     if (thread) out.thread = thread;
   }
   return out;

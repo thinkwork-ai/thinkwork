@@ -39,11 +39,18 @@ import { getConfig } from "@thinkwork/runtime-config";
 export const CAPABILITY_SIGNATURE_VERSION = 1;
 export const CAPABILITY_SIGNATURE_ALGORITHM = "Ed25519";
 
-/** Provenance of a signature — one of the three authorized call sites. */
+/**
+ * Provenance of a signature. Sidecars are signed only by the three
+ * authorized call sites (operator resolvers, backfill, plugin
+ * reconciler); `render` is reserved for the compiled manifest's own
+ * envelope, which the render pipeline signs (U2) and the runtime
+ * verifies (U6).
+ */
 export type CapabilitySignedBy =
   | `operator:${string}`
   | "backfill"
-  | "plugin-reconciler";
+  | "plugin-reconciler"
+  | "render";
 
 export interface CapabilitySignatureEnvelope {
   version: number;
@@ -60,16 +67,16 @@ export type CapabilityVerifyResult =
   | { ok: false; reason: "invalid_signature" | "definition_drift" };
 
 export interface CapabilitySigner {
-  signPayload(payload: Record<string, unknown>, input: {
-    signedBy: CapabilitySignedBy;
-  }): CapabilitySignatureEnvelope;
+  signPayload(
+    payload: Record<string, unknown>,
+    input: {
+      signedBy: CapabilitySignedBy;
+    },
+  ): CapabilitySignatureEnvelope;
 }
 
 export interface CapabilityVerifier {
-  verifyPayload(
-    payload: Record<string, unknown>,
-    envelope: unknown,
-  ): boolean;
+  verifyPayload(payload: Record<string, unknown>, envelope: unknown): boolean;
 }
 
 /** sha256 hex of definition-file bytes — the R18 pin value. */
@@ -117,13 +124,13 @@ export function createConfiguredCapabilitySigner(): CapabilitySigner | null {
 }
 
 /** Test/backfill entry — sign with an explicit key object. */
-export function capabilitySignerFromKey(privateKey: KeyObject): CapabilitySigner {
+export function capabilitySignerFromKey(
+  privateKey: KeyObject,
+): CapabilitySigner {
   return {
     signPayload(payload, input) {
       const canonical = canonicalizePayload(payload);
-      const payloadHash = createHash("sha256")
-        .update(canonical)
-        .digest("hex");
+      const payloadHash = createHash("sha256").update(canonical).digest("hex");
       const signature = edSign(
         null,
         Buffer.from(canonical, "utf8"),
@@ -157,15 +164,15 @@ export function createConfiguredCapabilityVerifier(): CapabilityVerifier | null 
   return capabilityVerifierFromKey(key);
 }
 
-export function capabilityVerifierFromKey(publicKey: KeyObject): CapabilityVerifier {
+export function capabilityVerifierFromKey(
+  publicKey: KeyObject,
+): CapabilityVerifier {
   return {
     verifyPayload(payload, envelope) {
       const parsed = parseCapabilitySignatureEnvelope(envelope);
       if (!parsed) return false;
       const canonical = canonicalizePayload(payload);
-      const payloadHash = createHash("sha256")
-        .update(canonical)
-        .digest("hex");
+      const payloadHash = createHash("sha256").update(canonical).digest("hex");
       if (payloadHash !== parsed.payloadHash) return false;
       try {
         return edVerify(
@@ -239,7 +246,9 @@ export function parseCapabilitySignatureEnvelope(
   raw: unknown,
 ): CapabilitySignatureEnvelope | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record = raw as Partial<Record<keyof CapabilitySignatureEnvelope, unknown>>;
+  const record = raw as Partial<
+    Record<keyof CapabilitySignatureEnvelope, unknown>
+  >;
   if (record.version !== CAPABILITY_SIGNATURE_VERSION) return null;
   if (record.algorithm !== CAPABILITY_SIGNATURE_ALGORITHM) return null;
   if (
@@ -260,6 +269,7 @@ export function parseCapabilitySignatureEnvelope(
   if (
     record.signed_by !== "backfill" &&
     record.signed_by !== "plugin-reconciler" &&
+    record.signed_by !== "render" &&
     !record.signed_by.startsWith("operator:")
   ) {
     return null;

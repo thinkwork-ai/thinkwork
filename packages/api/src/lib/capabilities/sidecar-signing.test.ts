@@ -107,8 +107,14 @@ describe("capability sidecar signing", () => {
   });
 
   it("canonicalization is key-order independent", () => {
-    const a = canonicalizePayload({ b: 1, a: { d: 2, c: [3, { f: 4, e: 5 }] } });
-    const b = canonicalizePayload({ a: { c: [3, { e: 5, f: 4 }], d: 2 }, b: 1 });
+    const a = canonicalizePayload({
+      b: 1,
+      a: { d: 2, c: [3, { f: 4, e: 5 }] },
+    });
+    const b = canonicalizePayload({
+      a: { c: [3, { e: 5, f: 4 }], d: 2 },
+      b: 1,
+    });
     expect(a).toBe(b);
   });
 
@@ -116,9 +122,9 @@ describe("capability sidecar signing", () => {
     const manifest = { agent: "ops", tools: [{ name: "x" }] };
     const envelope = signer.signPayload(manifest, { signedBy: "backfill" });
     expect(verifier.verifyPayload(manifest, envelope)).toBe(true);
-    expect(
-      verifier.verifyPayload({ ...manifest, tools: [] }, envelope),
-    ).toBe(false);
+    expect(verifier.verifyPayload({ ...manifest, tools: [] }, envelope)).toBe(
+      false,
+    );
   });
 
   it("parses only well-formed envelopes with known provenance", () => {
@@ -133,7 +139,10 @@ describe("capability sidecar signing", () => {
       parseCapabilitySignatureEnvelope({ ...envelope, signed_by: "agent" }),
     ).toBeNull();
     expect(
-      parseCapabilitySignatureEnvelope({ ...envelope, algorithm: "HMAC-SHA256" }),
+      parseCapabilitySignatureEnvelope({
+        ...envelope,
+        algorithm: "HMAC-SHA256",
+      }),
     ).toBeNull();
     expect(
       parseCapabilitySignatureEnvelope({ ...envelope, signature: "short" }),

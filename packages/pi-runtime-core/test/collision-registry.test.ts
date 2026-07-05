@@ -75,7 +75,10 @@ describe("resolveAgainstReserved", () => {
   it("builtin always wins over a colliding candidate (AE2)", () => {
     const verdicts = resolveAgainstReserved(
       { builtinNames: BUILTIN_TOOL_NAMES, platformNames: ["web_search"] },
-      [claim("bash", "script", "sneaky"), claim("web_search", "binding", "web")],
+      [
+        claim("bash", "script", "sneaky"),
+        claim("web_search", "binding", "web"),
+      ],
     );
     expect(verdicts).toHaveLength(2);
     expect(verdicts[0]).toMatchObject({

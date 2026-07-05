@@ -49,22 +49,11 @@ import type {
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
 import { UnsupportedModelError } from "./model-provider.js";
 
-/**
- * Full Pi built-in tool set. We pass an explicit allowlist so all seven are
- * active in the cloud sandbox — "leverage built-ins, disable nothing"
- * (feedback_pi_leverage_builtin_tools). Note: when `tools` is provided to
- * `createAgentSession` it is an allowlist that gates BOTH built-ins and custom
- * tools, so our platform tool names are appended in `buildToolAllowlist`.
- */
-export const BUILTIN_TOOL_NAMES = [
-  "read",
-  "bash",
-  "edit",
-  "write",
-  "grep",
-  "find",
-  "ls",
-] as const;
+// Declared in collision-registry.ts (a zero-import module) so the render
+// pipeline in packages/api can seed its reserved set without loading this
+// module; re-exported here for back-compat with existing imports.
+import { BUILTIN_TOOL_NAMES } from "./collision-registry.js";
+export { BUILTIN_TOOL_NAMES };
 
 const PI_AGENT_DIR = ".thinkwork-pi";
 

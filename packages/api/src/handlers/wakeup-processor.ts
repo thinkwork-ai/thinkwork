@@ -813,7 +813,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
-    { guardrailIdentifier: string; guardrailVersion: string } | undefined;
+    | { guardrailIdentifier: string; guardrailVersion: string }
+    | undefined;
   if (agent.guardrail_id) {
     const [gr] = await db
       .select({
@@ -2462,7 +2463,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     ) {
       // Route response to email thread (create or reuse based on reply token context)
       const replyTokenContextId = payload?.replyTokenContextId as
-        string | undefined;
+        | string
+        | undefined;
       const emailSubject = (payload?.subject as string) || "(no subject)";
       let emailThreadId = replyTokenContextId || "";
 

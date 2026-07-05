@@ -5,7 +5,8 @@ import {
   parseCapabilitySidecar,
 } from "./definition-schemas.js";
 
-const md = (yaml: string, body = "Prose body.") => `---\n${yaml}\n---\n${body}\n`;
+const md = (yaml: string, body = "Prose body.") =>
+  `---\n${yaml}\n---\n${body}\n`;
 
 describe("parseConnectionDefinition", () => {
   it("parses a valid mcp connection", () => {
@@ -22,7 +23,7 @@ describe("parseConnectionDefinition", () => {
           "  - save_issue",
           "auth:",
           "  method: oauth",
-          "  secret_ref: \"secretsmanager:mcp-tokens/{userId}/linear\"",
+          '  secret_ref: "secretsmanager:mcp-tokens/{userId}/linear"',
         ].join("\n"),
       ),
       "connections/linear/CONNECTION.md",
@@ -72,7 +73,7 @@ describe("parseConnectionDefinition", () => {
           "auth:",
           "  method: bearer",
           "  api_key: FIRECRAWL_API_KEY",
-          "  secret_ref: \"secretsmanager:oauth/abc\"",
+          '  secret_ref: "secretsmanager:oauth/abc"',
         ].join("\n"),
       ),
       "connections/firecrawl/CONNECTION.md",
@@ -233,10 +234,8 @@ describe("parseCapabilitySidecar", () => {
   it("rejects malformed JSON, bad class, bad approval, bad sha", () => {
     expect(parseCapabilitySidecar("{nope", "x").valid).toBe(false);
     expect(
-      parseCapabilitySidecar(
-        JSON.stringify({ ...base, class: "skill" }),
-        "x",
-      ).valid,
+      parseCapabilitySidecar(JSON.stringify({ ...base, class: "skill" }), "x")
+        .valid,
     ).toBe(false);
     expect(
       parseCapabilitySidecar(

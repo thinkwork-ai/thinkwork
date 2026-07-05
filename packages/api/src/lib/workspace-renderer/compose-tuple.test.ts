@@ -1,4 +1,10 @@
+import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import {
+  capabilitySignerFromKey,
+  capabilityVerifierFromKey,
+  signCapabilitySidecar,
+} from "../capabilities/sidecar-signing.js";
 import { WORKSPACE_ROUTING_MARKER } from "./agents-md-composer.js";
 import {
   agentsMdContentSha,
@@ -456,6 +462,8 @@ describe("renderWorkspaceTuple", () => {
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.sources).toEqual([
@@ -590,6 +598,10 @@ describe("renderWorkspaceTuple", () => {
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
       "tenants/acme/threads/thread-1/CONTEXT.md",
+      "tenants/acme/threads/thread-1/capabilities.json",
+      expect.stringMatching(
+        /^tenants\/acme\/threads\/thread-1\/capabilities\/[a-f0-9]{64}\.json$/,
+      ),
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -754,6 +766,8 @@ describe("renderWorkspaceTuple", () => {
     expect(readOnly.generatedFiles?.map((file) => file.path)).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
     ]);
     expect(readOnly.generatedFiles?.[0]?.owner).toBe("agent");
 
@@ -798,6 +812,16 @@ describe("renderWorkspaceTuple", () => {
     expect(hit.generatedFiles).toEqual([
       { path: "AGENTS.md", owner: "agent", content: primedAgentsMd },
       { path: "CONTEXT.md", owner: "agent", content: primedContextMd },
+      {
+        path: "capabilities.json",
+        owner: "agent",
+        content: expect.stringContaining('"version": 1'),
+      },
+      {
+        path: expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
+        owner: "agent",
+        content: expect.stringContaining('"version": 1'),
+      },
     ]);
   });
 
@@ -1258,6 +1282,8 @@ modelRouting:
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
     const manifestPut = store.puts.find((put) =>
@@ -1309,6 +1335,8 @@ modelRouting:
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
     const putKeys = store.puts.map((put) => put.key);
@@ -1319,6 +1347,10 @@ modelRouting:
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
       "tenants/acme/threads/thread-1/CONTEXT.md",
+      "tenants/acme/threads/thread-1/capabilities.json",
+      expect.stringMatching(
+        /^tenants\/acme\/threads\/thread-1\/capabilities\/[a-f0-9]{64}\.json$/,
+      ),
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -1373,6 +1405,10 @@ modelRouting:
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
       "tenants/acme/threads/thread-1/CONTEXT.md",
+      "tenants/acme/threads/thread-1/capabilities.json",
+      expect.stringMatching(
+        /^tenants\/acme\/threads\/thread-1\/capabilities\/[a-f0-9]{64}\.json$/,
+      ),
     ]);
     // one write-once, content-addressed copy of this render's AGENTS.md
     expect(
@@ -1480,6 +1516,8 @@ modelRouting:
     expect(result.writtenFiles).toEqual([
       "AGENTS.md",
       "CONTEXT.md",
+      "capabilities.json",
+      expect.stringMatching(/^capabilities\/[a-f0-9]{64}\.json$/),
       ".hydrate_manifest.json",
     ]);
     expect(result.hydrateManifest.files).toEqual(
@@ -1546,5 +1584,225 @@ modelRouting:
     expect(composed).not.toContain("### User");
     expect(composed).not.toContain("### Active Space Participants");
     expect(composed).not.toContain("### Agent Profiles");
+  });
+});
+
+describe("renderWorkspaceTuple — capabilities manifest (THINK-173 U2)", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const capabilitySigner = capabilitySignerFromKey(privateKey);
+  const capabilityVerifier = capabilityVerifierFromKey(publicKey);
+
+  const CONNECTION_MD = `---
+name: firecrawl
+description: Firecrawl API.
+type: api
+url: https://api.firecrawl.dev
+operations:
+  - scrape
+---
+Firecrawl.
+`;
+
+  function signedSidecarJson(input: {
+    slug: string;
+    klass: "connection" | "tool";
+    definition: string;
+  }): string {
+    const base = {
+      slug: input.slug,
+      class: input.klass,
+      updated_at: "2026-05-22T09:00:00.000Z",
+    };
+    const { signed_content_sha, signature } = signCapabilitySidecar({
+      signer: capabilitySigner,
+      sidecar: base,
+      definitionBytes: input.definition,
+      signedBy: "operator:user-1",
+    });
+    return JSON.stringify({ ...base, signed_content_sha, signature });
+  }
+
+  function capabilitySeed() {
+    return seedObjects({
+      "tenants/acme/agents/finance-agent/connections/firecrawl/CONNECTION.md": {
+        content: CONNECTION_MD,
+        lastModified: "2026-05-22T09:02:00.000Z",
+      },
+      "tenants/acme/agents/finance-agent/connections/firecrawl/.assignment.json":
+        {
+          content: signedSidecarJson({
+            slug: "firecrawl",
+            klass: "connection",
+            definition: CONNECTION_MD,
+          }),
+          lastModified: "2026-05-22T09:02:00.000Z",
+        },
+      "tenants/acme/agents/finance-agent/tools/draft-x/TOOL.md": {
+        content:
+          "---\nname: draft-x\ndescription: Agent draft.\nkind: script\nentry: run.sh\n---\n",
+        lastModified: "2026-05-22T09:02:00.000Z",
+      },
+    });
+  }
+
+  function capabilityDeps(store: WorkspaceRendererObjectStore) {
+    return {
+      bucket: "workspace",
+      repository: new FakeRepository(TUPLE),
+      objectStore: store,
+      now: () => new Date("2026-05-22T10:00:00.000Z"),
+      capabilitySigner,
+      capabilityVerifier,
+    };
+  }
+
+  function recordGets(store: FakeStore): {
+    wrapped: WorkspaceRendererObjectStore;
+    gets: string[];
+  } {
+    const gets: string[] = [];
+    return {
+      gets,
+      wrapped: {
+        listObjects: (input) => store.listObjects(input),
+        getText: (input) => {
+          gets.push(input.key);
+          return store.getText(input);
+        },
+        putText: (input) => store.putText(input),
+      },
+    };
+  }
+
+  it("renders signed connections active and unsigned folders withheld (AE1)", async () => {
+    const store = new FakeStore(capabilitySeed());
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      capabilityDeps(store),
+    );
+    const latest = store.puts.find((put) =>
+      put.key.endsWith("/capabilities.json"),
+    );
+    expect(latest).toBeDefined();
+    const manifest = JSON.parse(latest!.content) as {
+      active: Array<{ slug: string; class: string }>;
+      withheld: Array<{ slug: string; reason: string }>;
+      signature: { signed_by: string } | null;
+      fingerprint: string;
+    };
+    expect(
+      manifest.active.some(
+        (entry) => entry.slug === "firecrawl" && entry.class === "connection",
+      ),
+    ).toBe(true);
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({ slug: "draft-x", reason: "unsigned" }),
+    ]);
+    expect(manifest.signature?.signed_by).toBe("render");
+    // Content-addressed copy exists at the fingerprint key.
+    expect(
+      store.puts.some((put) =>
+        put.key.endsWith(`/capabilities/${manifest.fingerprint}.json`),
+      ),
+    ).toBe(true);
+  });
+
+  it("KTD-7: a scratch write re-renders without re-reading capability bytes", async () => {
+    const store = new FakeStore(capabilitySeed());
+    const first = recordGets(store);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        ...capabilityDeps(first.wrapped),
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+    const capabilityKeyOf = (key: string) =>
+      key.includes("/connections/") || key.includes("/tools/");
+    expect(first.gets.filter(capabilityKeyOf).length).toBeGreaterThan(0);
+    const manifestAfterFirst = store.puts.find((put) =>
+      put.key.endsWith("/capabilities.json"),
+    )?.content;
+
+    // Agent scratch write: busts the render cache (newer mtime) but is
+    // not capability-shaped.
+    store.setObject(
+      "tenants/acme/agents/finance-agent/memory/scratch-notes.md",
+      { content: "scratch", lastModified: "2026-05-22T11:00:00.000Z" },
+    );
+    const second = recordGets(store);
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        ...capabilityDeps(second.wrapped),
+        now: () => new Date("2026-05-22T12:00:00.000Z"),
+      },
+    );
+    expect(result.cacheStatus).toBe("miss");
+    // The manifest was reused byte-for-byte with zero capability reads.
+    expect(second.gets.filter(capabilityKeyOf)).toEqual([]);
+    const manifestAfterSecond = [...store.puts]
+      .reverse()
+      .find((put) => put.key.endsWith("/capabilities.json"))?.content;
+    expect(manifestAfterSecond).toBe(manifestAfterFirst);
+  });
+
+  it("sidecar edit recompiles and the content address moves", async () => {
+    const store = new FakeStore(capabilitySeed());
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      capabilityDeps(store),
+    );
+    const firstManifest = JSON.parse(
+      store.puts.find((put) => put.key.endsWith("/capabilities.json"))!.content,
+    ) as { fingerprint: string };
+
+    // Operator disables the connection: platform writes a new signed
+    // sidecar (new etag) — recompile must fire and the surface change.
+    const disabledBase = {
+      slug: "firecrawl",
+      class: "connection" as const,
+      enabled: false,
+      updated_at: "2026-05-22T11:30:00.000Z",
+    };
+    const { signed_content_sha, signature } = signCapabilitySidecar({
+      signer: capabilitySigner,
+      sidecar: disabledBase,
+      definitionBytes: CONNECTION_MD,
+      signedBy: "operator:user-1",
+    });
+    store.setObject(
+      "tenants/acme/agents/finance-agent/connections/firecrawl/.assignment.json",
+      {
+        content: JSON.stringify({
+          ...disabledBase,
+          signed_content_sha,
+          signature,
+        }),
+        lastModified: "2026-05-22T11:30:00.000Z",
+        etag: "sidecar-v2",
+      },
+    );
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        ...capabilityDeps(store),
+        now: () => new Date("2026-05-22T12:00:00.000Z"),
+      },
+    );
+    const secondManifest = JSON.parse(
+      [...store.puts]
+        .reverse()
+        .find((put) => put.key.endsWith("/capabilities.json"))!.content,
+    ) as {
+      fingerprint: string;
+      withheld: Array<{ slug: string; reason: string }>;
+    };
+    expect(secondManifest.fingerprint).not.toBe(firstManifest.fingerprint);
+    expect(secondManifest.withheld).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: "firecrawl", reason: "disabled" }),
+      ]),
+    );
   });
 });
