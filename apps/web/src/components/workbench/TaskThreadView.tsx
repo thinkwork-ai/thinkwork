@@ -151,6 +151,10 @@ import {
   type GeneratedArtifact,
 } from "@/components/workbench/GeneratedArtifactCard";
 import {
+  ArtifactCard,
+  bornCanvasStablePartId,
+} from "@/components/artifacts/ArtifactCard";
+import {
   SkillDraftStatusCard,
   type SkillDraftStatusData,
 } from "@/components/workbench/SkillDraftStatusCard";
@@ -2631,6 +2635,15 @@ function TranscriptMessage({
     currentUser,
     mentionTargets,
   });
+  // Born-as-artifact emission (THINK-166 U3): when the message's durable
+  // artifact is a living GenUI canvas, the matching inline json-render
+  // emission collapses out of the transcript and a compact ArtifactCard
+  // renders at the end of the message instead. Transient GenUI parts (never
+  // saved as an artifact, e.g. safety-net table conversions) are untouched.
+  const bornCanvasPartId =
+    !isUser && message.durableArtifact
+      ? bornCanvasStablePartId(message.durableArtifact)
+      : null;
   const renderedTypedParts =
     typedParts.length > 0
       ? renderTypedParts(typedParts, {
@@ -2639,6 +2652,9 @@ function TranscriptMessage({
           threadId,
           userQuestion,
           onJsonRenderActionSuccess,
+          suppressJsonRenderPartIds: bornCanvasPartId
+            ? new Set([bornCanvasPartId])
+            : undefined,
         }).filter(Boolean)
       : [];
   const transcriptContentClassName =
@@ -2753,10 +2769,25 @@ function TranscriptMessage({
               {!isUser &&
               message.durableArtifact &&
               message.durableArtifact.metadata?.kind !== "document" ? (
-                <GeneratedArtifactCard
-                  artifact={message.durableArtifact}
-                  onOpenArtifact={onOpenArtifact}
-                />
+                bornCanvasPartId ? (
+                  // Born-as-artifact canvas: one compact shared card at the
+                  // end of the message (title = artifact/canvas title, never
+                  // the widget/component type). Full render: /artifacts/$id.
+                  <ArtifactCard
+                    artifact={{
+                      ...message.durableArtifact,
+                      title:
+                        message.durableArtifact.title?.trim() ||
+                        emissionTitleForPart(typedParts, bornCanvasPartId) ||
+                        "Canvas",
+                    }}
+                  />
+                ) : (
+                  <GeneratedArtifactCard
+                    artifact={message.durableArtifact}
+                    onOpenArtifact={onOpenArtifact}
+                  />
+                )
               ) : null}
             </>
           )}
@@ -4233,6 +4264,27 @@ function actionRowsForMessage(message: TaskThreadMessage) {
 // deliverable, so they render inline in the transcript rather than inside the
 // collapsed turn-activity disclosure. Multiple emits for the same artifact in
 // one turn (draft → final) collapse to the latest card.
+/**
+ * Title fallback for a born-as-artifact canvas card (THINK-166 U3): the
+ * emission's own title arg (`data.mobileFallback.title`) from the matching
+ * json-render part — used when the artifact row's title is empty. Never the
+ * widget/component type.
+ */
+export function emissionTitleForPart(
+  parts: AccumulatedPart[],
+  partId: string,
+): string | null {
+  for (const part of parts) {
+    if (part.type !== "data-json-render") continue;
+    if ((part as { id?: string }).id !== partId) continue;
+    const data = parseRecord((part as { data?: unknown }).data);
+    const fallback = parseRecord(data.mobileFallback);
+    const title = stringValue(fallback.title);
+    if (title) return title;
+  }
+  return null;
+}
+
 function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
   const byArtifact = new Map<string, DocumentCardData>();
   const sortedEvents = [...(turn.events ?? [])].sort((a, b) => {

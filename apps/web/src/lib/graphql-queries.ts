@@ -1642,6 +1642,7 @@ export const ComputerThreadQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt
@@ -1887,6 +1888,7 @@ export const SpaceThreadCollaborationQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt

@@ -257,6 +257,126 @@ describe("TaskThreadView", () => {
 
     expect(screen.getByTestId("genui-task-review")).toBeTruthy();
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
+    // Transient GenUI (never saved as an artifact) shows no artifact card.
+    expect(screen.queryByTestId("artifact-card")).toBeNull();
+  });
+
+  it("collapses a born-as-artifact json-render emission to prose + a compact ArtifactCard (THINK-166 U3)", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Born as artifact",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Here is the review canvas you asked for.",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-1",
+                title: "Onboarding review canvas",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                headVersion: 0,
+                summary: "Confirm the customer kickoff task is ready.",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:task-review:123",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Prose still renders…
+    expect(
+      screen.getByText("Here is the review canvas you asked for."),
+    ).toBeTruthy();
+    // …the full inline widget does NOT…
+    expect(screen.queryByTestId("genui-task-review")).toBeNull();
+    // …and a single compact card renders, titled by the artifact (never the
+    // widget/component type), linking to the artifact page.
+    const card = screen.getByTestId("artifact-card");
+    expect(card.getAttribute("href")).toBe("/artifacts/artifact-canvas-1");
+    expect(screen.getByText("Onboarding review canvas")).toBeTruthy();
+    expect(screen.getByText("Draft")).toBeTruthy();
+    // The old generic artifact card (button/side-panel variant) is gone.
+    expect(
+      screen.queryByLabelText("Open artifact Onboarding review canvas"),
+    ).toBeNull();
+  });
+
+  it("falls back to the emission's title arg when the born artifact has no title", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Born as artifact — title fallback",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Canvas below.",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-2",
+                title: "  ",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:task-review:123",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // mobileFallback.title of the fixture — the emission's title arg.
+    const card = screen.getByTestId("artifact-card");
+    expect(card.textContent).toContain("Review onboarding task");
+  });
+
+  it("keeps rendering the widget inline when the artifact's stable part id does not match", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Unmatched stable part id",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-3",
+                title: "Some other canvas",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:other-part:999",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // The part is NOT the born artifact — it keeps rendering inline, and the
+    // canvas artifact card still renders for the linked artifact.
+    expect(screen.getByTestId("genui-task-review")).toBeTruthy();
+    expect(screen.getByTestId("artifact-card")).toBeTruthy();
   });
 
   it("passes the selected approved model through follow-up submit", async () => {

@@ -226,6 +226,8 @@ interface ThreadResult {
             id: string;
             title: string;
             type?: string | null;
+            status?: string | null;
+            headVersion?: number | null;
             summary?: string | null;
             metadata?: unknown;
           } | null;
@@ -1025,9 +1027,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-      (optimisticThreadStart.expectAssistantResponse === false ||
-        threadTurns.length > 0 ||
-        hasDurableAssistantAfterLatestUser(thread)),
+    (optimisticThreadStart.expectAssistantResponse === false ||
+      threadTurns.length > 0 ||
+      hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -1219,9 +1221,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-      (hasActiveAgentTurn ||
-        (effectiveOptimisticMessage &&
-          effectiveOptimisticMessage.expectAssistantResponse !== false)),
+    (hasActiveAgentTurn ||
+      (effectiveOptimisticMessage &&
+        effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1511,11 +1513,11 @@ export function SpacesThreadDetailRoute({
   // rejects non-participants server-side; the UI matches it, review-pinned).
   const canEditThreadMode = Boolean(
     userId &&
-      routeThread?.participants?.some(
-        (participant) =>
-          (participant.participantType ?? "").toUpperCase() === "USER" &&
-          participant.userId === userId,
-      ),
+    routeThread?.participants?.some(
+      (participant) =>
+        (participant.participantType ?? "").toUpperCase() === "USER" &&
+        participant.userId === userId,
+    ),
   );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
@@ -2777,6 +2779,8 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
             id: node.durableArtifact.id,
             title: node.durableArtifact.title,
             type: node.durableArtifact.type,
+            status: node.durableArtifact.status,
+            headVersion: node.durableArtifact.headVersion,
             summary: node.durableArtifact.summary,
             metadata: metadataObject(node.durableArtifact.metadata),
           }
@@ -3083,9 +3087,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-      !["completed", "failed", "error", "cancelled", "rejected"].includes(
-        normalized,
-      ),
+    !["completed", "failed", "error", "cancelled", "rejected"].includes(
+      normalized,
+    ),
   );
 }
 
