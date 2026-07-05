@@ -70,17 +70,19 @@ export function WikiResultRow({
       className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
       style={{ backgroundColor: colors.background }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", width: 56 }}>
-        <View
-          style={{ width: 16, alignItems: "center", justifyContent: "center" }}
-        >
-          {isUnread && (
-            <View
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: "#3b82f6" }}
-            />
-          )}
-        </View>
+      <View style={{ flexDirection: "row", alignItems: "center", width: 52 }}>
+        {isUnread && (
+          <View
+            className="w-2 h-2 rounded-full"
+            style={{
+              backgroundColor: "#3b82f6",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              zIndex: 1,
+            }}
+          />
+        )}
         <View
           style={{
             width: 40,
