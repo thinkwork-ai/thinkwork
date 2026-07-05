@@ -4,12 +4,7 @@
  * scheduled_jobs.agent_loop_id.
  */
 
-import type {
-  GoalSpec,
-  LoopPolicy,
-  TriggerSpec,
-  WorkerSpec,
-} from "@thinkwork/agent-loops-core";
+import type { LoopPolicy, TriggerSpec } from "@thinkwork/agent-loops-core";
 import {
   bigint,
   boolean,
@@ -175,18 +170,12 @@ export const agentLoopVersions = pgTable(
     version_number: integer("version_number").notNull(),
     version_status: text("version_status").notNull().default("draft"),
     trigger_spec: jsonb("trigger_spec").$type<TriggerSpec>().notNull(),
-    // THINK-159: goal_spec/worker_spec/loop_policy are inert — target_spec is
-    // the sole dispatch source. Nullable (migration 0215) so saveAgentLoop can
-    // stop writing them; the columns are DROPPED in the follow-up PR.
-    goal_spec: jsonb("goal_spec").$type<GoalSpec>(),
-    worker_spec: jsonb("worker_spec").$type<WorkerSpec>(),
-    loop_policy: jsonb("loop_policy").$type<LoopPolicy>(),
     // Deterministic routine actions (plan 2026-07-03-004 U5). Null on
     // versions without routine actions; {actions[], agentTurn} otherwise.
     routine_actions_spec: jsonb("routine_actions_spec"),
-    // THINK-137 Automations target resolution spec (plan 2026-07-03 U1).
-    // Nullable; populated by later units.
-    target_spec: jsonb("target_spec"),
+    // THINK-137 Automations target resolution spec: the sole dispatch source
+    // (goal_spec/worker_spec/loop_policy were dropped in THINK-159 U11).
+    target_spec: jsonb("target_spec").notNull(),
     source_metadata: jsonb("source_metadata")
       .$type<Record<string, unknown>>()
       .notNull()
