@@ -385,7 +385,7 @@ function defaultDeps(): DocumentEmissionDeps {
 /**
  * Pin the document head (BOTH bodies) as a write-once, content-addressed
  * version and flip status to FINAL — the document counterpart of
- * `pinHeadToVersion`, hashing digest AND render together so a render-only
+ * `snapshotHeadToVersion`, hashing digest AND render together so a render-only
  * revision still produces a distinct pin. Guarded by the head_write_seq
  * conditional UPDATE (THINK-145 KTD6).
  */

@@ -32,8 +32,8 @@ interface VersionContentResult {
 }
 
 /**
- * Version history for a canvas artifact (R11). Lists pinned versions newest
- * first; clicking one opens it read-only. Pinned versions are content-addressed
+ * Version history for a canvas artifact (R11). Lists snapshots newest
+ * first; clicking one opens it read-only. Snapshots are content-addressed
  * and write-once — this is a viewer, never an editor.
  */
 export function CanvasVersionHistory({
@@ -54,8 +54,8 @@ export function CanvasVersionHistory({
           <History className="size-4" /> Version history
         </h2>
         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          No pinned versions yet. Pinning a version snapshots the current
-          canvas.
+          No snapshots yet. A snapshot captures the current canvas as a
+          read-only version.
         </p>
       </section>
     );

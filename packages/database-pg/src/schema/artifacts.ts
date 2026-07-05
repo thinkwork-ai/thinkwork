@@ -44,7 +44,7 @@ export const artifacts = pgTable(
       onDelete: "restrict",
     }),
 
-    // Version chain (KTD3): the living head's version pointer. Pinning and
+    // Version chain (KTD3): the living head's version pointer. Snapshotting and
     // check-in append content-addressed rows to artifact_versions and advance
     // this pointer. Existing artifacts default to 0.
     head_version: integer("head_version").notNull().default(0),

@@ -143,8 +143,8 @@ The recall unit for externally-sourced knowledge: every research run stamps its 
 ### Living Canvas
 A GenUI (json-render) artifact with living semantics: it exists as an artifact from first emission (born-as-artifact, status `draft`), belongs to a space rather than its originating thread, and is edited across threads via chat. Contrast with the pre-THINK-145 model where artifacts were immutable promote-time snapshots. v1 living semantics apply to the canvas kind only.
 
-### Living Head / Pinned Version
-The two storage grades of a Living Canvas. The living head is the overwrite-in-place working copy the agent and user keep editing; pinning creates a content-addressed, write-once version in the artifact's linear version chain. A deferred third grade, the published embed, is a pinned version plus a revocable token for outside-the-app reads.
+### Living Head / Snapshot
+The two storage grades of a Living Canvas. The living head is the overwrite-in-place working copy the agent and user keep editing; a snapshot captures the head as a content-addressed, write-once version in the artifact's linear version chain (formerly "pinned version" — "pin" is reserved for nav pinning). A deferred third grade, the published embed, is a snapshot plus a revocable token for outside-the-app reads.
 
 ### Data-Source Binding
 The record of the tool invocation that produced a widget's data: MCP server ref, tool name, frozen args, result-shape hash, auth context, last-fetched time. The binding IS the widget's data source — "open it up" shows the saved call, refresh re-executes it. Refresh runs only under the identity that produced the original data; per-user-OAuth bindings are never refreshed unattended.
@@ -156,7 +156,7 @@ The two refresh operations on a bound widget. Data-refresh re-executes the saved
 The per-widget data-quality state rendered with every bound widget: GOOD (fresh), STALE (refresh blocked or overdue), BAD (last refresh failed). A widget never blanks on failure — last-good data stays visible under the degraded badge (SCADA last-good discipline).
 
 ### Check-Out / Check-In
-Reopening a saved Living Canvas as a live part in a thread under its original stable part id (check-out), editing it via chat, and re-saving as a new pinned version on the same artifact (check-in). The return path that keeps one identity across threads instead of forking duplicate artifacts.
+Reopening a saved Living Canvas as a live part in a thread under its original stable part id (check-out), editing it via chat, and re-saving as a new snapshot on the same artifact (check-in). The return path that keeps one identity across threads instead of forking duplicate artifacts.
 
 ## Document Artifacts
 

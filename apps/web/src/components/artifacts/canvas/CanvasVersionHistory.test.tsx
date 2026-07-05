@@ -56,7 +56,7 @@ describe("CanvasVersionHistory", () => {
       <CanvasVersionHistory artifactId="a1" versions={[]} headVersion={0} />,
     );
     expect(screen.getByTestId("canvas-version-history").textContent).toContain(
-      "No pinned versions yet",
+      "No snapshots yet",
     );
   });
 
@@ -78,7 +78,7 @@ describe("CanvasVersionHistory", () => {
     expect(rows[0].textContent).toContain("(current)");
   });
 
-  it("opens a pinned version read-only when View is clicked", () => {
+  it("opens a snapshot version read-only when View is clicked", () => {
     useQueryMock.mockReturnValue([
       {
         data: {

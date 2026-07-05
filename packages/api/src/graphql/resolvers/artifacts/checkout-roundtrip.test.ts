@@ -383,7 +383,7 @@ describe("checkout → re-emit → re-save round-trip (AE3)", () => {
     expect(store.artifacts.get(ARTIFACT_A)!.head_write_seq).toBe(3);
   });
 
-  it("two threads check out the same canvas; each re-save auto-pins a version (no silent loss)", async () => {
+  it("two threads check out the same canvas; each re-save auto-snapshots a version (no silent loss)", async () => {
     const base = createTaskReviewJsonRenderFixture();
     seedSavedCanvas(base, 3);
     seedThread(THREAD_2);

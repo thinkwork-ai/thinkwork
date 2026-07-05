@@ -108,7 +108,7 @@ vi.mock("../../../lib/artifacts/payload-storage.js", () => ({
 }));
 
 import { saveCanvas } from "./saveCanvas.mutation.js";
-import { pinArtifact } from "./pinArtifact.mutation.js";
+import { snapshotArtifact } from "./snapshotArtifact.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as never;
 
@@ -184,9 +184,9 @@ describe("saveCanvas", () => {
     expect(mocks.versionInserts).toHaveLength(0);
   });
 
-  it("re-saving a saved canvas auto-pins the prior head as a version (AE3 mechanism)", async () => {
+  it("re-saving a saved canvas auto-snapshots the prior head as a version (AE3 mechanism)", async () => {
     mocks.selectQueue.push([canvasRow({ status: "final", head_version: 0 })]);
-    mocks.s3Reads.push('{"canvas":"head-content"}'); // head content for the pin
+    mocks.s3Reads.push('{"canvas":"head-content"}'); // head content for the snapshot
     mocks.updateResults.push([
       canvasRow({ status: "final", head_version: 1, head_write_seq: 1 }),
     ]);
@@ -240,8 +240,8 @@ describe("saveCanvas", () => {
   });
 });
 
-describe("pinArtifact", () => {
-  it("pins the head at version N -> immutable version row + head_version bump", async () => {
+describe("snapshotArtifact", () => {
+  it("snapshots the head at version N -> immutable version row + head_version bump", async () => {
     mocks.selectQueue.push([
       canvasRow({
         status: "final",
@@ -260,7 +260,7 @@ describe("pinArtifact", () => {
       }),
     ]);
 
-    const result = await pinArtifact({}, { artifactId: ARTIFACT_ID }, ctx);
+    const result = await snapshotArtifact({}, { artifactId: ARTIFACT_ID }, ctx);
 
     expect(result).toMatchObject({ headVersion: 3 });
     expect(mocks.versionInserts).toHaveLength(1);
@@ -280,7 +280,7 @@ describe("pinArtifact", () => {
     mocks.updateResults.push([]); // guarded UPDATE matched 0 rows
 
     await expect(
-      pinArtifact({}, { artifactId: ARTIFACT_ID }, ctx),
+      snapshotArtifact({}, { artifactId: ARTIFACT_ID }, ctx),
     ).rejects.toMatchObject({ extensions: { code: "CONFLICT" } });
     // No version row written when the guard fails.
     expect(mocks.versionInserts).toHaveLength(0);

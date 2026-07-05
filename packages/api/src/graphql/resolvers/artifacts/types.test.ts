@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 
 describe("Artifact.versions field resolver", () => {
-  it("camel-maps pinned versions for the parent artifact", async () => {
+  it("camel-maps snapshot versions for the parent artifact", async () => {
     mocks.nextRows = [
       {
         id: "v2",
@@ -168,7 +168,7 @@ describe("Artifact.bindings field resolver", () => {
 });
 
 describe("ArtifactVersion.content field resolver", () => {
-  it("hydrates the pinned payload from the version's S3 key", async () => {
+  it("hydrates the snapshot payload from the version's S3 key", async () => {
     const result = await artifactVersionTypeResolvers.content({
       tenantId: TENANT_ID,
       s3Key: "tenants/x/artifacts/v/2",

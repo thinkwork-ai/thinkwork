@@ -1,5 +1,5 @@
 /**
- * pinArtifact (Living Artifacts THINK-145 U4, R11).
+ * snapshotArtifact (Living Artifacts THINK-145 U4, R11).
  *
  * Atomically snapshots the persisted canvas head to a content-addressed,
  * write-once revision key, appends an `artifact_versions` row (version =
@@ -15,19 +15,19 @@ import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 import {
   isLivingCanvasMetadata,
-  pinHeadToVersion,
+  snapshotHeadToVersion,
   type CanvasArtifactRow,
 } from "../../../lib/artifacts/canvas-lifecycle.js";
 import { artifactToCamelWithPayload } from "./payload.js";
 
-export const pinArtifact = async (
+export const snapshotArtifact = async (
   _parent: unknown,
   args: { artifactId: string },
   ctx: GraphQLContext,
 ) => {
   const artifactId = args.artifactId?.trim();
   if (!artifactId) {
-    throw new GraphQLError("pinArtifact artifactId is required", {
+    throw new GraphQLError("snapshotArtifact artifactId is required", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
@@ -55,16 +55,19 @@ export const pinArtifact = async (
     });
   }
   if (!isLivingCanvasMetadata(row.metadata)) {
-    throw new GraphQLError("pinArtifact is only valid for GenUI canvases", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
+    throw new GraphQLError(
+      "snapshotArtifact is only valid for GenUI canvases",
+      {
+        extensions: { code: "BAD_USER_INPUT" },
+      },
+    );
   }
 
-  // Pinning is a write: saved canvases require member-or-above on their
+  // Snapshotting is a write: saved canvases require member-or-above on their
   // space; drafts require originating-thread visibility (R15/U2).
   await assertCanvasAccess(ctx, row, "write");
 
-  const updated = await pinHeadToVersion({
+  const updated = await snapshotHeadToVersion({
     row: row as unknown as CanvasArtifactRow,
     userId: caller.userId,
   });

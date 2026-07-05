@@ -1,6 +1,6 @@
 /**
  * Field resolvers for the Artifact GraphQL type — the read-only nested reads
- * introduced by Living Artifacts U1 (THINK-145): the pinned version chain and
+ * introduced by Living Artifacts U1 (THINK-145): the snapshot version chain and
  * the per-widget data-source bindings.
  *
  * These are lazy: they only run when the client selects `versions` / `bindings`
@@ -101,8 +101,8 @@ export const artifactTypeResolvers = {
 
 /**
  * Field resolvers for the ArtifactVersion GraphQL type. `content` lazily
- * hydrates the pinned revision's payload from its content-addressed S3 key —
- * only when the client selects it (viewing a pinned version read-only, U10).
+ * hydrates the snapshot revision's payload from its content-addressed S3 key —
+ * only when the client selects it (viewing a snapshot version read-only, U10).
  * The parent Artifact resolver already gated read access (R15), so no extra
  * access check is needed here.
  */

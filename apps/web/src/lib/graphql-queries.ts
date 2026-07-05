@@ -2479,7 +2479,7 @@ export const ThreadArtifactsQuery = gql`
 
 // Living Artifacts (THINK-145 U10): the canvas detail query carries the
 // version chain (history UI) and the per-widget data-source bindings (freshness
-// badges + provenance). `versions` intentionally omits `content` — the pinned
+// badges + provenance). `versions` intentionally omits `content` — the snapshot
 // payload is hydrated on demand by `ArtifactVersionContentQuery` when a version
 // is opened, so the detail read stays light.
 const CanvasBindingFields = gql`
@@ -2534,7 +2534,7 @@ export const ArtifactDetailForRouteQuery = gql`
   ${CanvasBindingFields}
 `;
 
-// On-demand read of a single pinned version's canvas payload (viewing history
+// On-demand read of a single snapshot version's canvas payload (viewing history
 // read-only). Fetches all versions' content in one round-trip — canvas parts
 // are small and v1 chains are short — and the caller picks the clicked version.
 export const ArtifactVersionContentQuery = gql`
@@ -2564,10 +2564,10 @@ export const SaveCanvasMutation = gql`
   }
 `;
 
-// Pin the current canvas head as a write-once, content-addressed version (R11).
-export const PinArtifactMutation = gql`
-  mutation PinArtifact($artifactId: ID!) {
-    pinArtifact(artifactId: $artifactId) {
+// Snapshot the current canvas head as a write-once, content-addressed version (R11).
+export const SnapshotArtifactMutation = gql`
+  mutation SnapshotArtifact($artifactId: ID!) {
+    snapshotArtifact(artifactId: $artifactId) {
       id
       headVersion
       versions {

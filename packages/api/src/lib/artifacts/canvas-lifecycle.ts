@@ -2,15 +2,15 @@
  * Living Artifacts (THINK-145 U4): shared canvas-lifecycle primitives.
  *
  * A GenUI canvas is an artifact from first emission (KTD3, R10). This module
- * holds the pieces the born-as-artifact upsert, the save/pin mutations, and the
+ * holds the pieces the born-as-artifact upsert, the save/snapshot mutations, and the
  * U8 check-in path all share:
  *
  *  - the canvas metadata `kind` marker + a canvas-detection predicate,
  *  - a deterministic artifact id derived from (tenant, thread, stable part id)
  *    so the first-emission upsert is exactly-once under concurrency via the
  *    primary key (no extra unique index needed),
- *  - {@link pinHeadToVersion}: the write-once version snapshot used by both
- *    `pinArtifact` and the auto-pin-on-re-save (check-in) rule, guarded by the
+ *  - {@link snapshotHeadToVersion}: the write-once version snapshot used by both
+ *    `snapshotArtifact` and the auto-snapshot-on-re-save (check-in) rule, guarded by the
  *    KTD6 `head_write_seq` conditional UPDATE so a concurrent head change never
  *    silently loses.
  */
@@ -41,7 +41,7 @@ import {
  */
 export const CANVAS_METADATA_KIND = CANVAS_LIVING_KIND;
 
-/** JSON content type used for canvas head + pinned-version payloads. */
+/** JSON content type used for canvas head + snapshot-version payloads. */
 export const CANVAS_CONTENT_TYPE = "application/json; charset=utf-8" as const;
 
 export interface CanvasArtifactRow {
@@ -172,8 +172,8 @@ export async function loadCanvasHeadContent(
 }
 
 /**
- * Pin the currently-persisted head as a write-once, content-addressed version
- * (KTD3). Used by `pinArtifact` and by the auto-pin-on-re-save check-in rule
+ * Snapshot the currently-persisted head as a write-once, content-addressed version
+ * (KTD3). Used by `snapshotArtifact` and by the auto-snapshot-on-re-save check-in rule
  * (reused by U8's check-in path).
  *
  * The whole mutation is guarded by a single conditional UPDATE on
@@ -184,7 +184,7 @@ export async function loadCanvasHeadContent(
  *
  * Returns the updated head row.
  */
-export async function pinHeadToVersion(input: {
+export async function snapshotHeadToVersion(input: {
   row: CanvasArtifactRow;
   userId: string | null;
   extraUpdates?: Record<string, unknown>;
@@ -194,7 +194,7 @@ export async function pinHeadToVersion(input: {
   const newVersion = (row.head_version ?? 0) + 1;
 
   // Content-addressed, write-once revision key. Writing it is idempotent by
-  // hash, so it is safe to write before the guarded UPDATE claims the pin.
+  // hash, so it is safe to write before the guarded UPDATE claims the snapshot.
   const content = await loadCanvasHeadContent(row);
   const contentHash = createHash("sha256").update(content).digest("hex");
   const revisionKey = artifactContentKey({
@@ -222,9 +222,12 @@ export async function pinHeadToVersion(input: {
     )
     .returning();
   if (!updated) {
-    throw new GraphQLError("Canvas head changed concurrently; retry the pin", {
-      extensions: { code: "CONFLICT" },
-    });
+    throw new GraphQLError(
+      "Canvas head changed concurrently; retry the snapshot",
+      {
+        extensions: { code: "CONFLICT" },
+      },
+    );
   }
 
   await db.insert(artifactVersions).values({

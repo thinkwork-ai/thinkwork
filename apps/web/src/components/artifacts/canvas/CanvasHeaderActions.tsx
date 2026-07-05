@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
 import { useClient, useMutation } from "urql";
 import { toast } from "sonner";
-import { Pin, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { IconCameraSpark } from "@tabler/icons-react";
 import { Button } from "@thinkwork/ui";
 import {
   CanvasBindingFreshnessQuery,
-  PinArtifactMutation,
+  SnapshotArtifactMutation,
   RefreshCanvasDataMutation,
   SendMessageMutation,
 } from "@/lib/graphql-queries";
@@ -51,7 +52,7 @@ function sleep(ms: number): Promise<void> {
 /**
  * Header actions for a canvas artifact (THINK-145 declutter): muted icon
  * buttons in the page header instead of in-body chrome. Drafts get the Save
- * dialog; saved canvases get Refresh-data (when bindings exist) + Pin-version.
+ * dialog; saved canvases get Refresh-data (when bindings exist) + Snapshot.
  *
  * Owner-initiated refresh (THINK-167): when the headless refresh reports
  * NEEDS_USER bindings that the VIEWER owns, dispatch an agent-mediated refresh
@@ -76,7 +77,9 @@ export function CanvasHeaderActions({
 }) {
   const isDraft = artifact.status?.toLowerCase() === "draft";
   const client = useClient();
-  const [{ fetching: pinning }, pinArtifact] = useMutation(PinArtifactMutation);
+  const [{ fetching: snapshotting }, snapshotArtifact] = useMutation(
+    SnapshotArtifactMutation,
+  );
   const [, refreshCanvasData] = useMutation(RefreshCanvasDataMutation);
   const [, sendMessage] = useMutation(SendMessageMutation);
   const [refreshing, setRefreshing] = useState(false);
@@ -167,17 +170,19 @@ export function CanvasHeaderActions({
     refreshCanvasData,
   ]);
 
-  const handlePin = useCallback(async () => {
-    const result = await pinArtifact({ artifactId: artifact.id });
-    if (result.error || !result.data?.pinArtifact?.id) {
+  const handleSnapshot = useCallback(async () => {
+    const result = await snapshotArtifact({ artifactId: artifact.id });
+    if (result.error || !result.data?.snapshotArtifact?.id) {
       toast.error(
-        `Couldn't pin version: ${result.error?.message ?? "unknown error"}`,
+        `Couldn't save snapshot: ${result.error?.message ?? "unknown error"}`,
       );
       return;
     }
-    toast.success(`Pinned version ${result.data.pinArtifact.headVersion}`);
+    toast.success(
+      `Snapshot saved (v ${result.data.snapshotArtifact.headVersion})`,
+    );
     onChanged();
-  }, [artifact.id, onChanged, pinArtifact]);
+  }, [artifact.id, onChanged, snapshotArtifact]);
 
   if (isDraft) {
     return (
@@ -211,13 +216,13 @@ export function CanvasHeaderActions({
         variant="ghost"
         size="icon"
         className="text-muted-foreground hover:text-foreground"
-        title="Pin version"
-        aria-label="Pin version"
-        disabled={pinning}
-        onClick={() => void handlePin()}
-        data-testid="canvas-pin"
+        title="Snapshot"
+        aria-label="Snapshot"
+        disabled={snapshotting}
+        onClick={() => void handleSnapshot()}
+        data-testid="canvas-snapshot"
       >
-        <Pin className="size-4" />
+        <IconCameraSpark className="size-4" />
       </Button>
     </>
   );

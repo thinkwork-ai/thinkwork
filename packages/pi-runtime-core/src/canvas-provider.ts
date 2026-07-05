@@ -32,7 +32,7 @@ export interface CanvasSummaryItem {
   title: string;
   /** ISO timestamp of the last head update, when known. */
   updatedAt: string | null;
-  /** Version-chain head pointer (0 until the canvas has been pinned/checked in). */
+  /** Version-chain head pointer (0 until the canvas has been snapshotted/checked in). */
   headVersion: number;
   /** Artifact status — "draft" | "final" | "superseded". */
   status: string;
@@ -131,7 +131,7 @@ export interface CanvasProvider {
 
   /**
    * Save a draft canvas (status flip + naming + space assignment) or re-save a
-   * saved canvas (auto-pins the prior head as a version). Wraps the web
+   * saved canvas (auto-snapshots the prior head as a version). Wraps the web
    * `saveCanvas` mutation — same write path, same R15 membership gate.
    */
   save(
