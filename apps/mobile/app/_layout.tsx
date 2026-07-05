@@ -33,6 +33,12 @@ import { useAgents } from "@/lib/hooks/use-agents";
 import { usePushNotifications } from "@/lib/hooks/use-push-notifications";
 import { useMe } from "@/lib/hooks/use-users";
 import { TurnCompletionProvider } from "@/lib/hooks/use-turn-completion";
+import {
+  getActiveEnvironmentEntry,
+  getEnvironmentEntries,
+  isEnvironmentStoreHydrated,
+} from "@/lib/environments/store";
+import { shouldRouteToEnvironmentSetup } from "@/lib/environments/routing";
 import { useWorkspaceAccessRevokedSubscription } from "@thinkwork/react-native-sdk";
 import { handleWorkspaceAccessRevoked } from "@/lib/agent/workspace-revocation";
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
@@ -63,6 +69,7 @@ function RootLayoutNav() {
     getToken,
     hasStoredSession,
     retryBootstrap,
+    deploymentConfig,
   } = useAuth();
   const {
     isEnabled: biometricEnabled,
@@ -222,6 +229,7 @@ function RootLayoutNav() {
       "forgot-password",
       "auth",
       "deployment-profile",
+      "environment-setup",
     ];
     const isPublicRoute = publicRoutes.includes(segments[0] as string);
 
@@ -232,6 +240,23 @@ function RootLayoutNav() {
     // to /sign-in — that would wipe the session they're trying to recover.
     if (!isAuthenticated && hasStoredSession) {
       // Hold position: the biometric lock overlay below will handle recovery.
+      return;
+    }
+
+    const shouldSetupEnvironment = shouldRouteToEnvironmentSetup({
+      isAuthenticated,
+      hasStoredSession,
+      isEnvironmentStoreHydrated: isEnvironmentStoreHydrated(),
+      environmentCount: getEnvironmentEntries().length,
+      hasActiveEnvironment: Boolean(getActiveEnvironmentEntry()),
+      platformConfig: deploymentConfig,
+    });
+
+    if (
+      shouldSetupEnvironment &&
+      segments[0] !== "environment-setup"
+    ) {
+      router.replace("/environment-setup");
       return;
     }
 
@@ -269,6 +294,7 @@ function RootLayoutNav() {
     hasStoredSession,
     navigationReady,
     agents,
+    deploymentConfig,
   ]);
 
   const handleBiometricUnlock = async () => {
@@ -361,6 +387,10 @@ function RootLayoutNav() {
                   name="deployment-profile"
                   options={{ headerShown: false }}
                 />
+                <Stack.Screen
+                  name="environment-setup"
+                  options={{ headerShown: false }}
+                />
                 <Stack.Screen name="demo" />
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen
@@ -380,6 +410,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="settings/account" />
                 <Stack.Screen name="settings/profile" />
                 <Stack.Screen name="settings/credentials" />
+                <Stack.Screen name="settings/environments" />
                 <Stack.Screen name="settings/integration-detail" />
                 <Stack.Screen name="settings/usage" />
                 <Stack.Screen
