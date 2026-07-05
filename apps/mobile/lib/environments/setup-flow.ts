@@ -1,4 +1,4 @@
-import { importDeploymentProfile, runtimeConfigFromProfile } from "../deployment-profile";
+import { extractProfileJson } from "../deployment-profile";
 import {
   addOrUpdateEnvironment,
   type MobileEnvironmentEntry,
@@ -39,19 +39,36 @@ export async function setupEnvironmentFromUrl(
   return { ok: true, entry };
 }
 
+/**
+ * QR / setup-link import. The scanned profile is treated as a POINTER, not a
+ * payload: we read only its host (spacesUrl) and then fetch the environment's
+ * published runtime config over TLS — the same server-authoritative path as
+ * typed URL entry. This sidesteps the unsigned-profile production gate
+ * (no profile signing infrastructure exists, so embedded payloads can never
+ * pass it on release builds) and means a tampered QR can at worst point at a
+ * different host, never inject endpoint config for a real one.
+ */
 export async function setupEnvironmentFromDeploymentProfileLink(
   input: string,
+  deps: Parameters<typeof setupEnvironmentFromUrl>[1] = {},
 ): Promise<MobileEnvironmentEntry> {
-  const snapshot = await importDeploymentProfile(input);
-  if (!snapshot.profile) {
-    throw new Error("Deployment profile could not be imported.");
+  let host: string | undefined;
+  try {
+    const parsed = JSON.parse(extractProfileJson(input)) as {
+      spacesUrl?: string;
+    };
+    host = parsed.spacesUrl?.trim() || undefined;
+  } catch {
+    throw new Error("This setup link isn't a ThinkWork deployment profile.");
   }
-  const config = runtimeConfigFromProfile(snapshot.profile);
-  return addOrUpdateEnvironment({
-    host: snapshot.profile.spacesUrl,
-    config,
-    displayName: snapshot.profile.displayName,
-  });
+  if (!host) {
+    throw new Error("This setup link is missing its environment URL.");
+  }
+  const result = await setupEnvironmentFromUrl(host, deps);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+  return result.entry;
 }
 
 export function environmentSetupErrorMessage(
