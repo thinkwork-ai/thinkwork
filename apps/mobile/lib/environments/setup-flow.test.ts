@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   environmentSetupErrorMessage,
+  setupEnvironmentFromDeploymentProfileLink,
   setupEnvironmentFromUrl,
 } from "./setup-flow";
 import type { EnvironmentRuntimeConfig } from "./runtime-config-fetch";
@@ -64,6 +65,54 @@ describe("environment setup flow", () => {
       config: runtimeConfig(),
       displayName: "Customer",
     });
+  });
+
+  it("treats a scanned deployment-profile link as a host pointer (server-authoritative config)", async () => {
+    // Unsigned profile, as the web card mints them — must still work in
+    // production because only spacesUrl is read; endpoints come from the
+    // host's published runtime config, never the QR payload.
+    const profile = {
+      schemaVersion: 1,
+      spacesUrl: "https://customer.thinkwork.ai",
+      graphqlHttpUrl: "https://attacker.example.com/graphql",
+      signature: null,
+    };
+    const encoded = Buffer.from(JSON.stringify(profile))
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const link = `thinkwork://deployment-profile?profile=${encoded}`;
+
+    const fetchConfig = vi.fn(async () => ({
+      ok: true as const,
+      host: "https://customer.thinkwork.ai",
+      config: runtimeConfig(),
+    }));
+    const saveEnvironment = vi.fn(async (input) => ({
+      id: "env-1",
+      displayName: input.displayName ?? "Customer",
+      host: input.host,
+      stage: input.config.stage,
+      region: input.config.region,
+      config: input.config,
+      createdAt: "2026-07-04T00:00:00.000Z",
+    }));
+
+    const entry = await setupEnvironmentFromDeploymentProfileLink(link, {
+      fetchConfig,
+      saveEnvironment,
+    });
+
+    expect(fetchConfig).toHaveBeenCalledWith("https://customer.thinkwork.ai");
+    // The QR's embedded endpoints are ignored — config is the fetched one.
+    expect(entry.config).toEqual(runtimeConfig());
+  });
+
+  it("rejects setup links without an environment URL", async () => {
+    await expect(
+      setupEnvironmentFromDeploymentProfileLink("not-a-profile"),
+    ).rejects.toThrow(/isn't a ThinkWork deployment profile/);
   });
 });
 
