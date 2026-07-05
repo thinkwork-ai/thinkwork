@@ -313,18 +313,28 @@ also mines the dogfood report for durable paper-cut patterns.
 **Codex lane**: the `linear-agent-dispatcher` heartbeat agent in the Codex app
 invokes the Codex skill on its schedule. No local process is required.
 
-**Claude lane**: run a dedicated Claude Code session at the repo root on
-Eric's Mac:
+**Claude lane**: one command in a terminal you keep open:
 
 ```bash
-caffeinate -dims   # separate terminal, keeps the Mac awake
-claude             # then inside the session:
+scripts/factory-up.sh
+```
+
+The script preflights (claude CLI, gh auth, agent-browser, worker dirs, stale
+auto-worktree note), starts `caffeinate` tied to its own lifetime, and execs a
+**Sonnet** Claude Code session running `/loop 4m linear-dispatch` with
+permissions bypassed so unattended worker launches never stall on approval
+prompts. Equivalent manual startup:
+
+```bash
+caffeinate -dims &                                  # keeps the Mac awake
+claude --model sonnet --dangerously-skip-permissions   # then inside the session:
 /loop 4m linear-dispatch
 ```
 
 Notes:
 
-- `/loop` recurring tasks expire after ~7 days; restart the loop weekly.
+- `/loop` recurring tasks expire after ~7 days; rerun `scripts/factory-up.sh`
+  weekly, after a reboot, or whenever the terminal closes.
 - The dispatcher session never edits the repo; workers run headless in their
   own worktrees with logs in `~/.thinkwork-factory/logs/`.
 - To pause the lane, stop the loop; in-flight workers finish their current
