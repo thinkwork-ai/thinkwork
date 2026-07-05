@@ -408,7 +408,10 @@ resource "aws_lambda_function" "agentcore_pi" {
       DB_CLUSTER_ARN             = var.db_cluster_arn
       DB_SECRET_ARN              = var.db_secret_arn
       OKF_WIKI_NAVIGATOR_ENABLED = tostring(local.okf_efs_mount_enabled)
-      OKF_WIKI_ROOT              = var.okf_efs_mount_path
+      # THINK-173 U6: PUBLIC key only — the container verifies capability
+      # manifests and must never hold signing material (KTD-3).
+      CAPABILITY_SIGNING_PUBLIC_KEY = var.capability_signing_public_key
+      OKF_WIKI_ROOT                 = var.okf_efs_mount_path
     }
   }
 

@@ -34,7 +34,7 @@ import {
   verify as edVerify,
   type KeyObject,
 } from "node:crypto";
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getSecret } from "@thinkwork/runtime-config";
 
 export const CAPABILITY_SIGNATURE_VERSION = 1;
 export const CAPABILITY_SIGNATURE_ALGORITHM = "Ed25519";
@@ -121,6 +121,30 @@ export function createConfiguredCapabilitySigner(): CapabilitySigner | null {
     return null;
   }
   return capabilitySignerFromKey(key);
+}
+
+/**
+ * Async signer resolution: direct key first (env/document — tests, local),
+ * then the Secrets Manager indirection `CAPABILITY_SIGNING_PRIVATE_KEY_SECRET`
+ * (the terraform-provisioned path — the PEM never enters the Lambda env,
+ * which sits at the 4KB ceiling, nor the SSM String document). Null =
+ * signing unavailable; callers fail loudly, never write unsigned
+ * registration-grade state.
+ */
+export async function resolveConfiguredCapabilitySigner(): Promise<CapabilitySigner | null> {
+  const direct = createConfiguredCapabilitySigner();
+  if (direct) return direct;
+  const secretName = readKeyConfig("CAPABILITY_SIGNING_PRIVATE_KEY_SECRET");
+  if (!secretName) return null;
+  try {
+    const pem = await getSecret(secretName.trim());
+    if (!pem?.trim()) return null;
+    return capabilitySignerFromKey(
+      createPrivateKey(pem.includes("\\n") ? pem.replace(/\\n/g, "\n") : pem),
+    );
+  } catch {
+    return null;
+  }
 }
 
 /** Test/backfill entry — sign with an explicit key object. */

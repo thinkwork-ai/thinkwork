@@ -738,3 +738,15 @@ variable "parameters_secrets_extension_layer_arn" {
   type        = string
   default     = ""
 }
+
+variable "capability_signing_public_key" {
+  description = "Ed25519 public key (SPKI PEM) verifying capability sidecars/manifests (THINK-173). Empty disables verification (render fails closed: signed entries withhold as unsigned)."
+  type        = string
+  default     = ""
+}
+
+variable "capability_signing_private_key_secret" {
+  description = "Secrets Manager name holding the Ed25519 private signing key. Empty disables signing (grants fail loudly with signing_unavailable)."
+  type        = string
+  default     = ""
+}

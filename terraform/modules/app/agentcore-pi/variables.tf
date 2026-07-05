@@ -131,3 +131,9 @@ variable "okf_efs_mount_path" {
   type        = string
   default     = "/mnt/thinkwork-okf"
 }
+
+variable "capability_signing_public_key" {
+  description = "Ed25519 public key (SPKI PEM) the runtime verifies capability manifests with (THINK-173). Empty = manifest-mode invocations fail closed."
+  type        = string
+  default     = ""
+}

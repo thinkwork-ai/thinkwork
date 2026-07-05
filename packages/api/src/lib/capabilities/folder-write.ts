@@ -32,7 +32,7 @@ import {
   type ApprovalPolicy,
 } from "./definition-schemas.js";
 import {
-  createConfiguredCapabilitySigner,
+  resolveConfiguredCapabilitySigner,
   signCapabilitySidecar,
   type CapabilitySignedBy,
   type CapabilitySigner,
@@ -207,7 +207,7 @@ async function writeSignedSidecar(input: {
   const signer =
     input.deps.signer !== undefined
       ? input.deps.signer
-      : createConfiguredCapabilitySigner();
+      : await resolveConfiguredCapabilitySigner();
   if (!signer) return { ok: false, reason: "signing_unavailable" };
 
   const base: Record<string, unknown> = {
