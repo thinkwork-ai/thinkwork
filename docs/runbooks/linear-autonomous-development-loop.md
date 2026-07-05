@@ -107,6 +107,12 @@ comment verbatim in the next worker's launch prompt, and synthesizes one from
 the Progress document when a human moved the status without one. The template
 lives in the shared `launch-prompts.md`.
 
+Handoffs into Verification are QA briefs: entry-point URL on deployed dev,
+"since your last update" summary, merged PRs and Deploy run link, a numbered
+click-level QA checklist with the expected observable result for each step,
+unit mapping, and timing caveats. The verifier seeds its scenario matrix from
+that checklist — it is the floor, not the ceiling.
+
 ## Questions During A Phase
 
 When a material question blocks a worker (product scope, destructive choices,
@@ -325,3 +331,24 @@ Notes:
   phase and stop at the next gate.
 - Both lanes tolerate restarts: all durable state lives in Linear (Progress
   document + handoff comments), so a fresh dispatcher resumes from Linear.
+
+### Agent Browser Setup (verification prerequisite)
+
+Verification workers drive the deployed dev stack with the `agent-browser`
+CLI (a Rust binary controlling a real browser; workers invoke it via the
+`agent-browser` skill). One-time setup on the machine running the Claude
+lane:
+
+1. Confirm the binary: `agent-browser --version` (installed via Homebrew at
+   `/opt/homebrew/bin/agent-browser`; state lives in `~/.agent-browser/`).
+2. Seed an authenticated session for deployed dev: open the dev web app in a
+   headed run (`agent-browser open <dev-web-url> --headed`), complete the
+   Google/Cognito sign-in once, and confirm the app loads signed in. The
+   session persists in the agent-browser profile, so later headless
+   verification runs start authenticated.
+3. Re-run the headed sign-in whenever verification starts failing with
+   `Blocked: Auth` — expired Cognito refresh tokens are the usual cause.
+
+Flows that require accounts or grants the profile does not have (other
+tenants, third-party OAuth consents, real email delivery) stay human-verified
+per the fix-loop governor.

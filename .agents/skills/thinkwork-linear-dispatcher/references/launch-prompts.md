@@ -46,6 +46,38 @@ Inputs:
 Open questions / risks: <carry-forwards, or "none">
 ```
 
+### Verification Handoffs Are QA Briefs
+
+A `handoff:<ISSUE_ID>:Verification` comment is the verifier's test brief, not
+a status note. In addition to the template fields it must include:
+
+- **Entry point**: the deployed dev URL/route where verification starts, plus
+  any required role or account;
+- **Since your last update**: what merged since the previous verification
+  pass, in plain language (new PRs, main merged in, integrations wired);
+- **QA checklist**: numbered, click-level steps, each naming the exact
+  interaction and the expected observable result — toasts, live updates,
+  routes, persisted data, absence of error states. Write it so a verifier
+  with no prior context can execute it step by step;
+- **Unit mapping**: which checklist items prove which plan units, when more
+  than one unit shipped;
+- **Timing caveats**: anything that may lag, such as "the post-merge Deploy
+  run is finishing about now — if you see the old behavior, wait a few
+  minutes and retry".
+
+Example checklist item shape:
+
+```text
+4. Click the Refresh icon in the panel header → toast "Refreshing via your
+   connection…" then the card flips to fresh data (proves U2+U4 together;
+   U2's deploy is landing about now — retry after a few minutes if you see
+   the old toast).
+```
+
+The verifier seeds its scenario matrix from this checklist plus the
+plan-owned verification contract; it must still map and test the complete
+flows, so the checklist is the floor, not the ceiling.
+
 ## Brainstorm Prompt
 
 ```text
@@ -163,9 +195,12 @@ and rolling Linear ledger with PR/merge/CI evidence.
 
 When implementation is merged: record the post-merge Deploy workflow run link
 for main (dev is continuous-CD from main; verification needs the deploy to
-land), post the handoff:<ISSUE_ID>:Verification comment listing the merged
-PRs, the Deploy run, and the complete user flows the verifier must prove, and
-move the issue or child/unit to Verification.
+land), then post the handoff:<ISSUE_ID>:Verification comment written as a QA
+brief per the "Verification Handoffs Are QA Briefs" rules: entry-point URL on
+deployed dev, since-your-last-update summary, merged PRs and the Deploy run
+link, a numbered click-level QA checklist with the expected observable result
+for each step, unit mapping, and timing caveats. Then move the issue or
+child/unit to Verification.
 
 If LFG is absent, stop after moving to Verification for human review. If LFG
 is present, later heartbeats continue through verification, repair rebounds,
@@ -196,9 +231,11 @@ Scope and scenarios (diff-scoped, never whole-app):
 2. Map the complete user flows the change participates in, and follow each
    flow to its real end. A reply feature is verified when the recipient's
    click lands on the right thread — not when the form submits.
-3. Build a scenario matrix from the plan-owned verification contract plus the
-   mapped flows, and write it into the dogfood report file first. The report
-   is the checkpoint: a killed run resumes from it.
+3. Build a scenario matrix seeded from the handoff QA checklist and the
+   plan-owned verification contract, extended with the mapped flows (the
+   checklist is the floor, not the ceiling), and write it into the dogfood
+   report file first. The report is the checkpoint: a killed run resumes
+   from it.
 
 Execution:
 4. Drive the deployed dev stack through each scenario in a real browser
