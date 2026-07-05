@@ -221,6 +221,44 @@ exit 1
     });
   });
 
+  it("omits zero-byte files from the trust runner payload", async () => {
+    // The runner rejects an empty contentBase64; empty files (e.g. an
+    // __init__.py) carry nothing to scan, so they must be dropped from the
+    // payload rather than fail the scan.
+    process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME =
+      "thinkwork-dev-skill-trust-runner";
+    mocks.lambdaSend.mockResolvedValueOnce({
+      Payload: Buffer.from(
+        JSON.stringify({
+          report: {
+            risk_assessment: { score: 0, severity: "LOW" },
+            issues: [],
+            metadata: { skillspector_version: "2.2.3" },
+          },
+        }),
+      ),
+    });
+
+    await runSkillSpectorForFiles({
+      slug: "runner-skill",
+      files: [
+        {
+          path: "SKILL.md",
+          content: Buffer.from("---\nname: runner-skill\n---\n"),
+        },
+        { path: "scripts/__init__.py", content: Buffer.from("") },
+      ],
+    });
+
+    const payload = JSON.parse(
+      Buffer.from(
+        (mocks.invokeCommand.mock.calls[0]![0] as { Payload: Uint8Array })
+          .Payload,
+      ).toString("utf8"),
+    ) as { files: Array<{ path: string }> };
+    expect(payload.files.map((f) => f.path)).toEqual(["SKILL.md"]);
+  });
+
   it("passes the configured AWS region to the trust runner client", async () => {
     process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME =
       "thinkwork-dev-skill-trust-runner";

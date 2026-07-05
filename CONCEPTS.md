@@ -7,8 +7,16 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 ### Stage
 A named, fully isolated deployment environment of the platform — its own AWS stack (database, Lambdas, Cognito pool, storage) — selected per command by the CLI's stage flag and backed by a single Terraform workspace. Vendor-operated stages (the shared dev and prod) are continuously deployed from the trunk by the vendor's CI on every merge; customer stages are instead applied by a Deployment Controller in the customer's own account. On a continuously-deployed stage a change is durably live only once it is on the trunk — code pushed to such a stage from a feature branch is reverted by the next trunk deploy.
 
+### Targeted Apply
+The reduced-scope Terraform apply a continuously-deployed Stage runs when a trunk merge changes no Terraform source: instead of converging the whole stack, it applies only a fixed recovery list of resources (the API handler functions and their grouped IAM policies). Its purpose is recovering stale handler code after transient failures without pulling unrelated drift into the deploy.
+
+Because deploy runs cancel superseded runs, a merge that does change Terraform can have its full apply cancelled by the next merge — leaving the Targeted Apply as the only apply that ever runs for it. Any resource class absent from the recovery list can therefore sit merged-but-unapplied indefinitely while every deploy reports success; a resource added to the recovery-critical set must enter the recovery list in the same change.
+
 ### Deployment Controller
 The AWS-native control plane that lives inside a customer's own AWS account and applies platform releases there. Steady-state deployment authority belongs to the controller in the customer account, not to the vendor's CI.
+
+### Runtime Config
+The unauthenticated `thinkwork-runtime-config.json` document the CLI publishes to a deployment's web host after every deploy: the client-facing settings for that environment (Cognito pool/client/domain, GraphQL HTTP/WS endpoints, API key). The web app boots from it with build-time env as fallback; it is the discovery document clients use to configure themselves against an environment from nothing but its web URL.
 
 ### Deployment Runner
 The script the Deployment Controller executes to render a deployment root, run Terraform against the pinned release, and record Deployment Evidence. It is hosted in the customer account and changes only through Runner Self-Update or manual replacement.
@@ -100,6 +108,12 @@ The single operator surface for all agent configuration (Settings → Agent, rou
 ### Capability Manifest
 Per-turn runtime evidence of what the agent actually received: which skills, tools, MCP servers, and extensions loaded, which were gated out, and why. The runtime-truth counterpart to the config-derived effective capability set; divergence between the two is a defect signal, and the manifest doubles as the action-time capability snapshot the compliance direction requires.
 
+### Connection
+A workspace-native capability class superseding "MCP server" as the product concept: an external system the agent can reach, of type MCP or API, defined by `connections/<slug>/CONNECTION.md` plus a `.assignment.json` sidecar in the agent workspace. Presence declares the connection; only platform-signed sidecar state (operator action or trust-gate pass) activates it. Sidecars carry enabled state, `permissions.operations`, approval policy, and credential references — never secret values. Distinct from the legacy `connections` DB table (per-user OAuth rows), which becomes the per-principal satisfaction ledger behind this concept.
+
+### Tool Kind
+The four-way taxonomy for workspace-defined tools (`tools/<slug>/TOOL.md`): `binding` (declarative wrapper over admitted connection operations — stable verb, preset arguments, model-vs-thread output shaping), `platform` (reference to a runtime-implemented built-in; implementation stays in the container), `extension` (binds an approved dynamic Pi extension tool), and `script` (sandbox-executed tenant content; the only kind requiring a trust-gate pass before registration). Definition files are declarative — never tenant TypeScript — so no tool change requires a container rebuild.
+
 ## Memory & Brain
 
 ### Tenant Brain
@@ -113,6 +127,32 @@ The mechanical rule deciding which knowledge-graph entities earn wiki pages: an 
 
 ### Progressive Discovery
 The agent's Brain-first memory read path: consult the compiled wiki and knowledge graph first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
+
+### External Research Loop
+The event-triggered enrichment path that grows the Wiki from outside sources: a new-Entity event (or manual per-entity action) enqueues a deterministic research routine that gathers summarized, cited, origin-tagged facts from zero-credential public sources and submits them through the standard retain → Reflection → Wiki-Compile pipeline. Never a second ingestion path — Reflection remains the only Brain gate.
+
+### Research Lot
+The recall unit for externally-sourced knowledge: every research run stamps its observation batch with a lot ID threaded through KG extraction into derived entity/relationship provenance. Recalling a lot tombstones it, removes or downgrades its derived graph state via merge-upsert, recompiles affected wiki pages, and discloses the recall in their coverage line.
+
+## Living Artifacts
+
+### Living Canvas
+A GenUI (json-render) artifact with living semantics: it exists as an artifact from first emission (born-as-artifact, status `draft`), belongs to a space rather than its originating thread, and is edited across threads via chat. Contrast with the pre-THINK-145 model where artifacts were immutable promote-time snapshots. v1 living semantics apply to the canvas kind only.
+
+### Living Head / Pinned Version
+The two storage grades of a Living Canvas. The living head is the overwrite-in-place working copy the agent and user keep editing; pinning creates a content-addressed, write-once version in the artifact's linear version chain. A deferred third grade, the published embed, is a pinned version plus a revocable token for outside-the-app reads.
+
+### Data-Source Binding
+The record of the tool invocation that produced a widget's data: MCP server ref, tool name, frozen args, result-shape hash, auth context, last-fetched time. The binding IS the widget's data source — "open it up" shows the saved call, refresh re-executes it. Refresh runs only under the identity that produced the original data; per-user-OAuth bindings are never refreshed unattended.
+
+### Data-Refresh vs Schema-Refresh
+The two refresh operations on a bound widget. Data-refresh re-executes the saved call headlessly and replaces only the data slice — no agent turn, no tokens. Schema-refresh fires on a result-shape hash mismatch and escalates to an agent turn to re-emit the spec; mismatched data is never rendered through the old spec.
+
+### Freshness Flags
+The per-widget data-quality state rendered with every bound widget: GOOD (fresh), STALE (refresh blocked or overdue), BAD (last refresh failed). A widget never blanks on failure — last-good data stays visible under the degraded badge (SCADA last-good discipline).
+
+### Check-Out / Check-In
+Reopening a saved Living Canvas as a live part in a thread under its original stable part id (check-out), editing it via chat, and re-saving as a new pinned version on the same artifact (check-in). The return path that keeps one identity across threads instead of forking duplicate artifacts.
 
 ## Document Artifacts
 
@@ -152,3 +192,36 @@ The cutover period during which both the legacy domain and the claimed namespace
 
 ### Legacy Retirement
 The reviewable, gated step that ends the Dual Window: legacy callback entries and the legacy email identity are removed only after the cutover has deployed and a fresh survey finds no remaining consumers of the old domain.
+
+## Threads & Multiplayer
+
+### Multiplayer Thread
+A Spaces thread with two or more human participants. In a Multiplayer Thread the agent is not engaged automatically — a message dispatches only when the agent is mentioned or explicitly requested. A thread becomes Multiplayer the moment a second human becomes a participant, including via an @mention the person has not yet answered.
+
+### Thread Mode
+The per-thread dispatch posture — Agent (messages auto-dispatch to the agent) or Multiplayer (mention required). Derived server-side from the thread's human participant count, with an explicit per-thread override settable from the thread info panel that applies to all participants and wins over the derived default.
+
+### Mention Invite
+The grant created by @mentioning a user in a thread: the user becomes a thread participant and gains visibility to that one thread, even inside a private Space they are not a member of. It is thread-level access, not Space membership.
+
+### Per-Sender Context Injection
+The rule that an agent turn is contextualized by whoever triggered it: the sending user's workspace projection and memory bank are injected into that turn, on every dispatch path. In multiplayer threads this means consecutive turns can carry different users' contexts.
+
+## Deterministic Routines
+
+### Deterministic Routine
+An agent-authored, token-free Python function that replaces repeated agent-thread work. Its code lives only in the tenant-configured routine git repository (single source of truth — the platform stores metadata and SHA pointers, never a second copy); it is pulled at latest on execution with the commit SHA recorded per run, and is invocable as a "Run routine" action inside an Automation with zero agent turns.
+
+### Validated SHA
+The most recent commit of a routine that has passed that routine's recorded fixtures. A SHA the executor has not seen must pass the Fixture Gate before it becomes the validated SHA; execution falls back to the last validated SHA when a new SHA fails or when the git host is unreachable.
+
+### Fixture Gate
+The rule that a routine change — agent repair or direct human push — runs the routine's recorded input/expected-output fixtures before first production use, and that a routine cannot be used by an Automation without at least one fixture ("no fixture, no publish").
+
+### Repair Ladder
+The budgeted escalation path for routine failures: mechanical tier first at zero token cost (retry once, revert to the last Validated SHA), then a rate-limited agent wakeup that commits a fix which auto-publishes on green fixtures and is recorded in a visible repair log. Exhausting the repair budget disables the routine and notifies the operator rather than looping.
+
+## Notifications
+
+### Notification Tier
+The three-grade contract classifying every push type by interrupt weight: Code (time-boxed decisions such as computer approvals — always breaks through), Page (blocked work or agent-needs-input — batched within minutes), Chart (completions and activity — silent badge or digest, never interruptive). Tier is carried in the push payload and governs delivery behavior; it is a server-side contract, not a user-facing setting.

@@ -131,10 +131,17 @@ async function runSkillSpectorWithRunner(
         Payload: Buffer.from(
           JSON.stringify({
             slug: input.slug,
-            files: input.files.map((file) => ({
-              path: file.path,
-              contentBase64: file.content.toString("base64"),
-            })),
+            // The runner rejects an empty `contentBase64` ("required"), but
+            // zero-byte files (e.g. a Python package's `__init__.py`) are
+            // legitimate and carry nothing to scan. Drop them from the scan
+            // payload — they still ship in the catalog and count toward the
+            // content sha; skipping them only avoids a spurious scan failure.
+            files: input.files
+              .filter((file) => file.content.byteLength > 0)
+              .map((file) => ({
+                path: file.path,
+                contentBase64: file.content.toString("base64"),
+              })),
           }),
         ),
       }),

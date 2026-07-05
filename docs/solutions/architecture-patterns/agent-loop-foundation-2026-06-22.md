@@ -30,18 +30,25 @@ tags:
 
 ## Supersession Note
 
-Follow-up planning on 2026-06-23 moved the user-facing noun back to
-**Automations**. AgentLoop remains the internal runtime, version, run,
-judgment, and evidence contract. UI and docs should teach Automations while
-engineering code can continue to use AgentLoop names where they describe the
-backing substrate.
+**THINK-137 (shipped 2026-07-04) superseded the judge/evidence/loop-policy
+half of this document.** An Automation is now a **Trigger (schedule | webhook)
+bound to a Target (agent_thread | routine | workflow)**, optionally run-as a
+user, optionally in a Space (absent ⇒ headless, no threads). The
+`agent_loop_judgments` / `agent_loop_evidence` tables, judge modes, evidence
+policy, loop-policy authoring, and the ROI counter columns on `agent_loops`
+were **removed from the product surface and DROPPED from schema** (migrations
+0210–0214). `target_spec` JSONB on `agent_loop_versions` is the authoritative
+version spec; `goal_spec`/`worker_spec`/`loop_policy` columns remain only as a
+dispatch read-fallback pending the deferred U11. Sections below describing
+judgment projection, evidence policy, verification/hill-climbing loop phases,
+and mandatory execution Spaces are **historical** — do not treat them as the
+current contract. The single-dispatcher rule, the run/iteration ledger, and the
+scheduler-plumbing separation still hold.
 
-The prompt-first Automations follow-up also changed the expected product shape:
-creation starts from Chat or Manual prompt flows, every Automation persists an
-execution Space, hidden builder threads live in a system-managed Automation
-Builder Space, and actual runs create ordinary execution threads in the selected
-Space. Advanced AgentLoop settings remain available through inspectors, not as
-the default authoring surface.
+Earlier follow-up (2026-06-23) had already moved the user-facing noun back to
+**Automations** with a prompt-first authoring shape; THINK-137 replaced that
+authoring surface with a compact Trigger→Target dialog and made the Space
+optional (headless is normal for routine/workflow targets).
 
 ## Context
 
