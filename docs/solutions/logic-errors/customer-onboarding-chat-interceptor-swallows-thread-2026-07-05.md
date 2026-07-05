@@ -7,6 +7,7 @@ problem_type: logic_error
 component: message_dispatch
 severity: high
 linear_issue: THINK-170
+last_updated: 2026-07-05
 applies_when:
   - "A user posts a plain (un-@mentioned) message in a Customer Onboarding space thread"
   - "Debugging why the platform agent never responds in a workflow-tagged thread"
@@ -178,3 +179,28 @@ The Brainstorming phase should fold this fix direction into that product
 framing: define space workflows via worktasks (templates + state + agent
 tools), delete the bespoke interception layer, and let the platform agent be
 the only thing that answers a human in a thread.
+
+## Verified outcome (2026-07-05)
+
+The recommended fix direction shipped and was verified live on deployed dev:
+
+- **R0 shipped:** PR #3373 (merged 2026-07-05 14:14 UTC) removed the
+  `applyCustomerOnboardingChatUpdate` call, the `customerOnboardingHandled`
+  short-circuit, and the `shouldApplyCustomerOnboardingChatUpdate` gate;
+  dispatch falls through to normal Thread Mode. Regression test
+  `sendMessage.customer-onboarding-dispatch.test.ts` verified red on old code,
+  green after.
+- **Dogfood verification PASS:** PR #3375 →
+  `docs/dogfood-reports/2026-07-05-THINK-170-dogfood.md`. On the same thread
+  (`d1d1049d`), the identical report question that previously produced the
+  57 ms canned card now runs a real 49 s agent turn; zero
+  `metadata.kind='customer_onboarding_chat_update'` rows after the deploy;
+  prefixed task commands are agent-mediated (~16 s) per the accepted D1
+  trade-off.
+- **Still open (R1+ scope, returns to Planning):** the wider
+  `customer-onboarding-*.ts` layer, checklist tool surface (agent still cannot
+  see checklist state), and the workflow-as-data redesign per
+  `docs/brainstorms/2026-07-05-think-170-space-workflows-worktasks-requirements.md`.
+  The dogfood pass also caught the agent fabricating a work-item write
+  confirmation — see
+  `docs/solutions/best-practices/verify-agent-claimed-writes-against-db-in-dogfood-qa.md`.
