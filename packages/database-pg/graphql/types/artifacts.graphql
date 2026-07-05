@@ -103,6 +103,13 @@ type CanvasRefreshBindingResult {
   reason: String
   serverName: String
   toolName: String
+  # Credential owner of a per-user binding (THINK-167): lets the client detect
+  # "the viewer clicking Refresh IS the owner" and self-dispatch an
+  # agent-mediated refresh instead of dead-ending on NEEDS_USER. Nullable for
+  # deploy skew and for tenant-scoped bindings (no owner).
+  ownerUserId: ID
+  # True when the caller of refreshCanvasData is the binding's owner.
+  viewerIsOwner: Boolean
 }
 
 # Result of a refreshCanvasData mutation. `dispatched` is false when the refresh

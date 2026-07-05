@@ -2580,6 +2580,8 @@ export const PinArtifactMutation = gql`
 `;
 
 // Living Artifacts (THINK-145 U10, R6): headless data-refresh trigger.
+// ownerUserId/viewerIsOwner (THINK-167) let the client self-dispatch an
+// agent-mediated refresh when the viewer owns a NEEDS_USER binding.
 export const RefreshCanvasDataMutation = gql`
   mutation RefreshCanvasData($artifactId: ID!, $partId: String) {
     refreshCanvasData(artifactId: $artifactId, partId: $partId) {
@@ -2593,6 +2595,24 @@ export const RefreshCanvasDataMutation = gql`
         outcome
         quality
         reason
+        ownerUserId
+        viewerIsOwner
+      }
+    }
+  }
+`;
+
+// THINK-167: freshness poll while an owner-dispatched agent-mediated refresh
+// runs in the background — the view flips from "Refreshing via your
+// connection…" to done when the stale bindings read GOOD again.
+export const CanvasBindingFreshnessQuery = gql`
+  query CanvasBindingFreshness($id: ID!) {
+    artifact(id: $id) {
+      id
+      bindings {
+        id
+        quality
+        lastFetchedAt
       }
     }
   }
