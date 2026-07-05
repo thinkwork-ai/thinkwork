@@ -1464,9 +1464,8 @@ async function mcpDeleteServer(
   // Bucket-gated; null (no DB read) in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("../lib/mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: serverId,
@@ -1551,9 +1550,8 @@ async function mcpDeleteServer(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("../lib/mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
     } catch (err) {
       console.warn(
@@ -2543,9 +2541,8 @@ async function mcpAssignToAgent(
   // DB-only attachments are backfilled). Best-effort, bucket-gated.
   const reconcileAgentMcpFolders = async () => {
     try {
-      const { reconcileMcpAssignmentFolders } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { reconcileMcpAssignmentFolders } =
+        await import("../lib/mcp/assignment-state.js");
       await reconcileMcpAssignmentFolders({
         agentId,
         tenantId: agentRow.tenant_id,
@@ -2600,9 +2597,8 @@ async function mcpUnassignFromAgent(
   // Remove the agent's `mcp/<slug>/` folder for this server (Composer U9
   // follow-up). Best-effort, bucket-gated.
   try {
-    const { removeMcpAssignmentForAgentServer } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { removeMcpAssignmentForAgentServer } =
+      await import("../lib/mcp/assignment-state.js");
     await removeMcpAssignmentForAgentServer({
       agentId,
       registryServerId: mcpServerId,
@@ -2768,9 +2764,8 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } = await import(
-        "@aws-sdk/client-secrets-manager"
-      );
+      const { SecretsManagerClient, DeleteSecretCommand } =
+        await import("@aws-sdk/client-secrets-manager");
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -2826,9 +2821,8 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { agents, userMcpTokens } =
+    await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -3621,9 +3615,8 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

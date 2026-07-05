@@ -117,7 +117,7 @@ describe("setSpaceTools", () => {
     vi.resetModules();
   });
 
-  it("replaces built-in tool and MCP selections for a Space", async () => {
+  it("rejects MCP server selections — the Space Tool Library is read-only (THINK-173 U10)", async () => {
     selectQueue.push(
       [
         {
@@ -133,63 +133,23 @@ describe("setSpaceTools", () => {
     );
     const { setSpaceTools } = await import("./setSpaceTools.mutation.js");
 
-    const result = await setSpaceTools(
-      null,
-      {
-        input: {
-          tenantId: "tenant-1",
-          spaceId: "space-1",
-          builtInToolSlugs: ["web-search", "web-extract", "web-search"],
-          mcpServerIds: ["mcp-2", "mcp-1"],
+    await expect(
+      setSpaceTools(
+        null,
+        {
+          input: {
+            tenantId: "tenant-1",
+            spaceId: "space-1",
+            builtInToolSlugs: ["web-search"],
+            mcpServerIds: ["mcp-2", "mcp-1"],
+          },
         },
-      },
-      { auth: { authType: "cognito" } } as any,
-    );
-
-    expect(authCalls[0]).toEqual([
-      { auth: { authType: "cognito" } },
-      "tenant-1",
-      "set_space_tools",
-    ]);
-    expect(deleteTables).toHaveLength(1);
-    expect(insertValues[0]).toEqual([
-      {
-        tenant_id: "tenant-1",
-        space_id: "space-1",
-        mcp_server_id: "mcp-2",
-        enabled: true,
-        config: null,
-      },
-      {
-        tenant_id: "tenant-1",
-        space_id: "space-1",
-        mcp_server_id: "mcp-1",
-        enabled: true,
-        config: null,
-      },
-    ]);
-    expect(updateSets[0]).toEqual(
-      expect.objectContaining({
-        tool_policy: {
-          blockedTools: ["send_email"],
-          builtInTools: ["web-extract", "web-search"],
-          allowedTools: ["web-extract", "web-search"],
-        },
-        mcp_policy: {
-          blockedServers: ["prod-db"],
-          allowedServers: ["linear", "github"],
-        },
-      }),
-    );
-    expect(result).toEqual(
-      expect.objectContaining({
-        id: "space-1",
-        tenantId: "tenant-1",
-        toolPolicy: expect.objectContaining({
-          builtInTools: ["web-extract", "web-search"],
-        }),
-      }),
-    );
+        { auth: { authType: "cognito" } } as any,
+      ),
+    ).rejects.toThrow(/read-only for MCP servers/);
+    // The retired spaceMcpServers table is never written.
+    expect(deleteTables).toHaveLength(0);
+    expect(insertValues).toHaveLength(0);
   });
 
   it("allows clearing MCP assignments without clearing built-in tools", async () => {
@@ -215,7 +175,9 @@ describe("setSpaceTools", () => {
       { auth: { authType: "cognito" } } as any,
     );
 
-    expect(deleteTables).toHaveLength(1);
+    // THINK-173 U10: the retired spaceMcpServers table is untouched even
+    // on the empty-selection path.
+    expect(deleteTables).toHaveLength(0);
     expect(insertValues).toHaveLength(0);
     expect(updateSets[0]).toEqual(
       expect.objectContaining({

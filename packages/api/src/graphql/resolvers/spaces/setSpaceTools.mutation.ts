@@ -83,28 +83,20 @@ export async function setSpaceTools(
     .map((id) => mcpSlugsById.get(id))
     .filter((slug): slug is string => Boolean(slug));
 
+  // THINK-173 U10 (R14/R16): the Space Tool Library's MCP half is
+  // read-only in v1 — space-level connection grants have no folder
+  // semantics until THINK-174's space-source work, and spaceMcpServers
+  // is retired for capability purposes (this was its only inserter).
+  // Built-in tool policy editing stays live; requesting MCP servers is
+  // a loud error, never a silent drop.
+  if (requestedMcpServerIds.length > 0) {
+    throw new GraphQLError(
+      "The Space Tool Library is read-only for MCP servers: space-level connection grants are being replaced by workspace capability folders (THINK-173). Assign connections on the agent instead.",
+      { extensions: { code: "SPACE_TOOLS_READ_ONLY" } },
+    );
+  }
+
   const [updatedSpace] = await db.transaction(async (tx) => {
-    await tx
-      .delete(spaceMcpServers)
-      .where(
-        and(
-          eq(spaceMcpServers.tenant_id, input.tenantId),
-          eq(spaceMcpServers.space_id, input.spaceId),
-        ),
-      );
-
-    if (requestedMcpServerIds.length > 0) {
-      await tx.insert(spaceMcpServers).values(
-        requestedMcpServerIds.map((mcpServerId) => ({
-          tenant_id: input.tenantId,
-          space_id: input.spaceId,
-          mcp_server_id: mcpServerId,
-          enabled: true,
-          config: null,
-        })),
-      );
-    }
-
     return tx
       .update(spaces)
       .set({
