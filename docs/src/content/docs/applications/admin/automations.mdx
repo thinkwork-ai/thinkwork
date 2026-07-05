@@ -1,36 +1,32 @@
 ---
 title: Admin — Automations and Schedule Plumbing
-description: Automations are the v1 product surface for recurring or manually rerunnable agent work. AgentLoop remains the internal runtime and ledger behind the operator UI.
+description: Automations are a trigger (schedule or webhook) bound to a target (agent thread, routine, or workflow), optionally run-as a user and optionally headless. This page covers the operator surface and the schedule/webhook plumbing behind it.
 ---
 
-Automations are the admin app's v1 surface for recurring or manually
-rerunnable autonomous work. They own the prompt, Space, trigger, run history,
-and evidence that operators inspect. Internally, the AgentLoop runtime keeps
-the durable trigger, goal, worker, judge, policy, run ledger, and evidence
-contract. Schedule plumbing such as `scheduled_jobs`, AWS Scheduler,
-EventBridge, and webhook ingress remains behind the product surface.
+An Automation is a **trigger** (schedule or webhook) bound to a **target** (agent
+thread, routine, or workflow), optionally running as a user and optionally in a
+Space. Manual "Run now" is an action on every Automation, not a configured
+trigger. Schedule plumbing (`scheduled_jobs`, AWS Scheduler, EventBridge) and the
+webhook substrate sit behind the product surface.
 
-Active multi-step work appears in **Settings -> Workflows**. Step
-Functions-backed workflows still use the Routine adapter internally, so old
-Routine deep links continue to resolve during the transition, but Routines are
-not presented as a separate top-level product surface.
+Active multi-step work appears in **Settings → Workflows**. Step Functions-backed
+workflows still use the Routine adapter internally, so old Routine deep links
+continue to resolve, but Routines are not a separate top-level product surface —
+they show up as a target type on an Automation and as a Workflow row.
 
 ## Where it lives in the admin sidebar
-
-The current operator placement is:
 
 ```
 Settings
 ├── Automations            ← /settings/automations
-├── Workflows              ← /settings/workflows
-└── Webhooks               ← webhook endpoints
+└── Workflows              ← /settings/workflows
 ```
 
-The previous Settings AgentLoop list redirects to `/settings/automations`.
-Old `/automations` shell routes redirect into the Automations list or the
-scheduled-job compatibility detail. Old Routine detail and execution URLs
-remain compatibility routes that either redirect to the matching Workflow
-detail/run or render the Step Functions adapter detail as a fallback.
+There is **no separate Webhooks entry**. Webhooks are a trigger configuration of
+an Automation; the endpoint URL and token are minted and shown inline on the
+Automation. The previous `/settings/webhooks` page was retired once
+webhook-trigger Automations shipped, and its delivery history now renders on the
+owning Automation's detail.
 
 ## Automations
 
@@ -38,65 +34,69 @@ detail/run or render the Step Functions adapter detail as a fallback.
 **Detail route:** `/settings/agent-loops/:agentLoopId`
 **Run-detail route:** `/settings/agent-loops/:agentLoopId/runs/:runId`
 
-An Automation should be used when:
+The inventory follows the Work Items list conventions — token filters and a
+collapsed search. Columns are **Name, Trigger, Target, Status, Last run**.
 
-- the work repeats or needs a durable "run now" button;
-- completion can be judged by criteria, a self-check, or a human escalation;
-- the worker can run with configured tools and connectors;
-- operators need evidence explaining completion, continuation, failure, budget
-  stop, or escalation.
-
-Phase 1 Automations support manual and scheduled triggers, prompt-first
-creation, worker goal-mode dispatch, self-check/human-approval judgment policy,
-and a run inspector backed by AgentLoop internals. Model/reviewer judges and
-event-driven triggers remain later phases.
+Use an Automation when work should fire on a **schedule** or in response to a
+**webhook**, and the thing to run is an agent thread, a routine, or a workflow.
 
 ### Creating an Automation
 
-New Automations open in a single block builder:
+The New/Edit form is a single compact dialog showing exactly the model fields —
+no Advanced accordion of runtime machinery, no preset sheet, no builder-thread
+questions card:
 
-1. name the Automation;
-2. choose a supported trigger, currently manual or schedule;
-3. write a **Start session** instruction;
-4. review visible MCP/connector availability;
-5. expand **Advanced** only when explicit criteria, worker/judge settings,
-   policy limits, or evidence controls are needed.
+1. **Trigger** — Schedule or Webhook. Schedule shows cadence controls (steered
+   toward `cron()`); Webhook mints the endpoint URL + token inline.
+2. **Target** — Agent thread, Routine, or Workflow. The form shows only that
+   target's config: agent instructions for a thread target, a routine picker for
+   a routine target, a workflow picker for a workflow target.
+3. **Agent Instructions** (agent-thread targets only) — the labeled instruction
+   field.
+4. **Run-as user** — defaults to the creator; injected into the run's context.
+5. **Space** — optional for routine/workflow targets (absent ⇒ headless);
+   required for agent-thread targets.
 
-The common path only needs a name, trigger, instruction, and Space. ThinkWork
-derives the internal goal, self-check judge, worker, and policy defaults from
-that builder state. Chat help can still create setup history and prefill the
-same builder, but it is no longer a separate creation mode or a required step.
+A name is required but can be derived from the target config. Creation needs
+exactly a name, a trigger, and a target.
 
-Every Automation must choose a Space. The form defaults to the Space configured
-in Agent settings, then persists the selected Space on the Automation. Manual
-and scheduled runs create their execution thread in that Space so operators see
-the result in the same conversation surface as ordinary agent work.
+### Spaces and headless runs
 
-### Builder and execution threads
+- **Agent-thread targets require a Space** — the run's conversation lives there.
+  Save-time validation rejects a headless agent-thread automation with an
+  actionable error.
+- **Routine and workflow targets** may omit the Space. A run with no Space is
+  **headless**: no thread is created on any dispatch path. This is how an
+  Automation runs "outside a Space" without generating messages.
 
-Optional chat help uses a real setup thread in a lazily-created system-managed
-Automation Builder Space. The Space and its setup threads are hidden from normal
-navigation, search, and unread counts. Direct thread access still requires the
-creating user to be a participant, and the Automation detail page can link to
-the setup thread when context is needed.
+### Run-as context
 
-Setup threads are distinct from execution threads:
+Every Automation carries `run_as_user_id` (default: creator). Dispatch injects
+that user's context per the Per-Sender Context Injection rule, entering through a
+narrow service path with a tenant-membership cross-check — never by widening
+`resolveCaller`.
 
-- **Builder thread**: hidden setup conversation used to design the Automation.
-- **Execution thread**: visible run conversation created in the selected Space.
+### Webhook triggers
 
-### Automation Loop Designer skill
+Webhook-trigger Automations reuse the existing webhook substrate (token auth,
+idempotency, delivery audit) bound to the Automation. An inbound POST dispatches
+through the same shared dispatcher as schedule and manual runs, with trigger
+family `webhook`. Payload mapping v1 is raw JSON:
 
-The optional chat helper seeds the hidden thread with the
-`automation-loop-designer` workspace skill. The skill emits a ThinkWork-native
-`AutomationDraft` containing prompt, Space, trigger, goal, judge, policy, and
-source metadata.
+- routine/workflow targets receive the body as run input;
+- agent-thread targets get the body appended to instruction context, wrapped in
+  an explicit **untrusted-data fence** so the model never treats payload content
+  as operator directives.
 
-The skill is adapted from Kevin Simback's
-[Looper](https://github.com/ksimback/looper) project under the MIT license. The
-ThinkWork seed keeps Looper's design-coaching ideas, including goal
-clarification, verification rubrics, stop guards, observability, and privacy
-boundaries, but ThinkWork remains the durable orchestrator.
+Delivery bodies can carry PII, so delivery history renders on the Automation
+detail only where viewer permissions are equivalent to (not broader than) the
+retired operator-only Webhooks page; otherwise body previews are redacted.
+
+### Failure surfacing
+
+- **Thread-target failures** surface in the execution thread.
+- **Headless failures** raise a **deduplicated Inbox item** — one per failing
+  automation, failure count incremented on retry. No silent failures.
 
 ## Workflows
 
@@ -134,40 +134,23 @@ The customer-visible "watch the workflow execute" surface combines canonical Wor
 - **`StepDetailPanel`** — click a step in the graph; this panel shows input/output JSON, recipe type, retry count, LLM cost, duration. For `python` recipe steps with S3-offloaded stdout/stderr, the inline 4KB preview surfaces with a "(truncated)" marker plus the S3 URI for full output.
 - **Workflow evidence** — backend/app proof such as Step Functions executions, n8n execution IDs, CRM event references, and redacted payload summaries.
 
-The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRoutineExecutionUpdated`) is a Phase E follow-up — current polling is fine at 4-tenant scale.
+The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRoutineExecutionUpdated`) is a follow-up — current polling is fine at current scale.
 
 ## Scheduled-Job Compatibility
 
 **Compatibility detail:** `/settings/automations/:scheduledJobId`
-**Retired shell:** `/automations` redirects to `/settings/automations`
-**Retired shell detail:** `/automations/:scheduledJobId` redirects to the
-Settings compatibility detail
 
 The `scheduled_jobs` substrate behavior is unchanged. It still carries internal
-scheduled work for evals, skill runs, idle-memory learning, Automation
-schedules,
-and Workflow triggers. The EventBridge -> `job-schedule-manager` ->
-`job-trigger` provisioning chain remains the operational wake path.
+scheduled work for evals, skill runs, idle-memory learning, Automation schedules,
+and Workflow triggers. The EventBridge → `job-schedule-manager` → `job-trigger`
+provisioning chain remains the operational wake path.
 
 Operators should start by inspecting the owning product run:
 
-- Automation schedule fired? Open the Automation run inspector.
+- Automation schedule fired? Open the Automation run (thread or Inbox item).
 - Workflow schedule fired? Open the Workflow run detail.
 - No product run exists? Then inspect `scheduled_jobs`, AWS Scheduler, and
   `job-trigger` logs.
-
-## Webhooks
-
-**Route:** `/settings/webhooks`
-**Detail:** `/settings/webhooks/:webhookId`
-
-The webhook surface behavior is unchanged: webhook tokens, target_type (agent |
-workflow, with `routine` as the compatibility storage value for Step
-Functions-backed workflow targets), enabled toggle, invocation history.
-Workflow-target webhooks create Workflow run evidence when they invoke
-multi-step work. Event-driven Automations are a later phase; webhooks may
-trigger them later, but ThinkWork should still own AgentLoop state, judgment,
-and evidence behind the product surface.
 
 ## What does _not_ live here
 
@@ -176,39 +159,30 @@ and evidence behind the product surface.
 - **Per-user OAuth or integration credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
 - **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the compatibility migration and excluded from active Workflow inventory. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
 
-## Rollout Notes
-
-- Apply the AgentLoop database migrations before deploying API/web code that
-  expects the Automation backing tables, including `agent_loops.space_id` for
-  configured execution Spaces.
-- The Automation Builder Space is created lazily per tenant. No tenant bootstrap
-  migration is required for builder setup history.
-- Keep `/api/scheduled-jobs` and `/api/job-schedules` routes deployed; internal
-  jobs and compatibility details still use them.
-- Do not introduce new REST routes for Automations unless GraphQL is
-  insufficient.
-- If a tenant has user-created scheduled jobs from the retired Automations shell,
-  preserve their detail URLs until they are migrated to AgentLoop definitions or
-  explicitly retired with operator evidence.
-
 ## Under the hood
 
-- Workflows: first-class `workflows`, `workflow_versions`, `workflow_triggers`, `workflow_engine_bindings`, `workflow_runs`, `workflow_run_events`, and `workflow_evidence` rows form the product control plane and run ledger.
-- Step Functions adapter: `routines` stores the adapter record; `routine_asl_versions` is the ASL version history; `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log. EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the adapter execution row tracks lifecycle even for `agent_invoke`-only workflows that have no wrapper Lambda.
-- Automations: `agent_loops`, `agent_loop_versions`, `agent_loop_runs`,
-  iterations, judgments, and evidence tables own autonomous loop identity.
-- Schedules: `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS
-  Scheduler; `job-trigger` fires the owning AgentLoop, Workflow, eval, skill,
-  idle-memory, or other internal target.
-- Webhooks: `webhooks` table; `webhooks` handler authenticates the public endpoint and routes the payload.
+- **Automations:** `agent_loops` (name, description, enabled, `run_as_user_id`, optional `space_id`, primary trigger family) and `agent_loop_versions` — where `target_spec` (JSONB) is the **single authoritative version spec** describing the trigger and target. The old `goal_spec`, `worker_spec`, `loop_policy` columns and the judgment/evidence/ROI tables were dropped; `target_spec` is now dispatch-self-sufficient (THINK-137 / THINK-159).
+- **Runs:** `agent_loop_runs` records each run with status, trigger family, and trigger source (`manual_run` for "Run now"). One shared dispatch ledger serves schedule, manual, and webhook paths, with recoverable idempotency and distinct side-effect sets for spaced (thread) vs headless runs.
+- **Webhooks:** the `webhooks` substrate (token auth, idempotency, delivery audit) is now bound to an Automation rather than a standalone settings entity; the `webhooks` handler authenticates the public endpoint and dispatches through the shared automation dispatcher.
+- **Workflows:** first-class `workflows`, `workflow_versions`, `workflow_triggers`, `workflow_engine_bindings`, `workflow_runs`, `workflow_run_events`, and `workflow_evidence` rows form the product control plane and run ledger.
+- **Step Functions adapter:** `routines` stores the adapter record; `routine_asl_versions` is the ASL version history; `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log. EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the adapter execution row tracks lifecycle even for `agent_invoke`-only workflows that have no wrapper Lambda.
+- **Schedules:** `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS Scheduler; `job-trigger` fires the owning Automation, Workflow, eval, skill, idle-memory, or other internal target.
 
 `rate()` schedules treat the cadence as creation-time + interval, not wall-clock-aligned — a `rate(1 hour)` job created at 09:23 fires at 10:23, 11:23, … rather than on the hour. Use `cron()` for wall-clock alignment. The Schedule create form steers operators toward `cron()` for this reason.
 
 User-initiated create and update Lambda invokes use `RequestResponse` so errors surface synchronously — no fire-and-forget paths.
 
+## Rollout Notes
+
+- Apply the Automation database migrations before deploying API/web code that expects the backing tables, including `agent_loops.space_id` and `agent_loops.run_as_user_id`.
+- Destructive schema changes (dropping `goal_spec`/`worker_spec`/`loop_policy` or the judgment/evidence tables) follow expand/contract: ship the Drizzle definition-removal deploy first, then apply the drop migration. See `docs/solutions/workflow-issues/dropping-orm-declared-columns-needs-def-removal-deploy-first.md`.
+- Keep `/api/scheduled-jobs` and `/api/job-schedules` routes deployed; internal jobs and compatibility details still use them.
+- Do not introduce new REST routes for Automations unless GraphQL is insufficient.
+
 ## Related pages
 
-- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including workflow `inbox_approval` waits.
+- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions and headless automation failures.
 - [Threads](/applications/admin/threads/) — the conversation surface for agent runs that aren't workflow-driven.
-- [Automations](/concepts/automations/) — the v1 automation product object.
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedule and event plumbing reaches Automations and Workflows.
+- [Automations](/concepts/automations/) — the trigger → target automation object.
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedule and webhook plumbing reaches Automations and Workflows.
+  </content>

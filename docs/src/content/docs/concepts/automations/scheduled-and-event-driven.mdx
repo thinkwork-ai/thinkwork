@@ -6,10 +6,11 @@ description: How ThinkWork schedule and event plumbing reaches Automations and W
 import { Aside } from "@astrojs/starlight/components";
 
 ThinkWork has two entry paths for background work: a schedule fires at a
-predetermined time, or an event arrives and triggers a run. In v1, recurring
-goal-driven agent work should surface as an **Automation**. Explicit multi-step
-orchestration should surface as a **Workflow**. AWS Scheduler, EventBridge, and
-`scheduled_jobs` are the plumbing that wakes those product records.
+predetermined time, or an event arrives and triggers a run. Both surface as an
+**Automation** — a trigger (schedule or webhook) bound to a target. Explicit
+multi-step orchestration surfaces as a **Workflow**, which can itself be an
+Automation's target. AWS Scheduler, EventBridge, and `scheduled_jobs` are the
+plumbing that wakes those product records.
 
 Routing both entry points through durable ThinkWork records is what gives the
 **Traceability** operating guarantee its consistency: a scheduled monthly
@@ -35,23 +36,23 @@ feature owns the target contract.
 
 ### Event-driven
 
-An event-driven trigger fires when something external happens: a webhook
-arrives, an integration event lands, an external task changes state, or a KPI
-crosses a threshold. Event-driven triggers in ThinkWork route through
-**EventBridge** (the custom event bus, not scheduled rules). A triggering event
-carries a `detail-type`, `source`, and `detail` payload; ThinkWork's event
-trigger rules match on those fields.
+An event-driven trigger fires when something external happens. The shipped
+event trigger is the **webhook**: an inbound HTTP POST to an endpoint the
+Automation mints inline (URL + token), dispatched through the same shared
+automation dispatcher as schedule and manual runs. The raw JSON body becomes the
+run input — passed to routine/workflow targets, or appended to an agent-thread
+target's instruction context inside an explicit untrusted-data fence. There is
+no separate Webhooks settings page; a webhook is simply an Automation's trigger.
 
-Event-driven Automations are later-phase work. When they arrive, EventBridge or
-a workflow engine such as n8n may trigger or participate in a loop, but
-ThinkWork must still own AgentLoop identity, run state, judgment, and evidence.
-
-Event-driven triggers in ThinkWork can be configured for:
+Richer event sources — matching on an EventBridge custom bus by `detail-type`,
+`source`, and `detail` — remain later-phase work. When they arrive, EventBridge
+or a workflow engine such as n8n may trigger or participate in a run, but
+ThinkWork still owns the Automation identity, run state, and dispatch ledger.
+Candidate sources for that phase:
 
 - Integration events (`GitHub: new issue`, `Slack: app mention in #ops`).
 - External task events (`Task assigned to me`).
 - Internal events (agent completed a turn of a specific type; a guardrail fired; a budget was hit).
-- Webhook events (custom external webhook routed into the event bus).
 
 ## The provisioning chain
 
@@ -75,15 +76,15 @@ AWS Scheduler → job-trigger Lambda
         │  (resolves the job row; starts an Automation run OR
         │   starts a Workflow SFN execution)
         ▼
-For Automation targets: AgentLoopRun -> worker wakeup -> AgentCore
-For Workflow targets:  Workflow run -> Routine adapter -> SFN.StartExecution
+For agent-thread targets: automation run -> agent wakeup -> AgentCore
+For routine/workflow targets: automation run -> Routine adapter -> SFN.StartExecution
 ```
 
 The chain exists because schedule plumbing is stored in ThinkWork
 (`scheduled_jobs` in Aurora), not as bare AWS Scheduler entries. The manager
 Lambda keeps Aurora and AWS Scheduler in sync. The product identity still lives
-above that plumbing: AgentLoop owns loop goal/state/evidence; Workflow owns
-orchestration state/evidence.
+above that plumbing: the Automation owns its trigger, target, run-as user, and
+run ledger; Workflow owns orchestration state/evidence.
 
 This indirection matters:
 
@@ -112,8 +113,8 @@ When a scheduled automation doesn't run, work the chain:
 4. **Did it find the `scheduled_jobs` row?** If the Aurora row was deleted but
    the Scheduler entry was not reconciled, the trigger Lambda will log "no
    matching job."
-5. **Did AgentCore or Step Functions run?** Automations dispatch an AgentCore
-   worker wakeup; Workflows start Step Functions.
+5. **Did AgentCore or Step Functions run?** Agent-thread automations dispatch an
+   AgentCore agent wakeup; routine/workflow targets start Step Functions.
 
 Most missed runs are at step 1 or 2. Schedule drift between Aurora and Scheduler is the single most common class of bug, which is why the reconciler Lambda exists — but it's reconciler-based (eventual), not transactional.
 
@@ -148,5 +149,5 @@ Scheduler invokes the trigger target; the trigger resolves the current schedule
 row at fire time and starts the owning product path.
 
 State machines, rule patterns, and the EventBridge custom bus are provisioned by
-the ThinkWork Terraform module. For goal-driven recurring agent work, use
-Settings -> Automations.
+the ThinkWork Terraform module. For recurring or webhook-triggered agent work,
+use Settings → Automations.
