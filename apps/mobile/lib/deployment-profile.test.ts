@@ -86,8 +86,9 @@ describe("mobile deployment profiles", () => {
     });
     expect(getPlatformConfig()).toMatchObject({
       configured: true,
-      graphqlUrl:
-        "https://customer.appsync-api.us-east-1.amazonaws.com/graphql",
+      // Queries ride the profile's HTTP API, not the subscription-only
+      // AppSync endpoint.
+      graphqlUrl: "https://api.customer.thinkwork.example.com/graphql",
       graphqlWsUrl:
         "wss://customer.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
       cognitoClientId: "profile-client",

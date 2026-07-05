@@ -41,7 +41,8 @@ describe("fetchEnvironmentRuntimeConfig", () => {
       config: {
         apiUrl: "https://api.example.com",
         graphqlHttpUrl: "https://api.example.com/graphql",
-        graphqlUrl: "https://appsync.example.com/graphql",
+        // Queries ride the HTTP API — never the subscription-only AppSync endpoint.
+        graphqlUrl: "https://api.example.com/graphql",
         graphqlWsUrl: "wss://appsync.example.com/graphql",
         graphqlApiKey: "vite-key",
         cognitoDomain: "auth.example.com",
@@ -85,7 +86,7 @@ describe("fetchEnvironmentRuntimeConfig", () => {
       config: {
         apiUrl: "https://vite-api.example.com",
         graphqlHttpUrl: "https://outer-api.example.com/graphql",
-        graphqlUrl: "https://outer-appsync.example.com/graphql",
+        graphqlUrl: "https://outer-api.example.com/graphql",
         graphqlWsUrl: "wss://outer-appsync.example.com/graphql",
         graphqlApiKey: "outer-key",
         cognitoDomain: "outer-auth.example.com",
