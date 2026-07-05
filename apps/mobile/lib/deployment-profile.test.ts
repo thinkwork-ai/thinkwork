@@ -12,6 +12,10 @@ import {
   resetDeploymentProfileForTests,
   setDeploymentProfileStorageForTests,
 } from "./deployment-profile";
+import {
+  resetEnvironmentStoreForTests,
+  setEnvironmentStoreStorageForTests,
+} from "./environments/store";
 import { getPlatformConfig, hydratePlatformConfig } from "./platform-config";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -23,22 +27,26 @@ describe("mobile deployment profiles", () => {
     process.env = { ...ORIGINAL_ENV, NODE_ENV: "test" };
     storage = new Map<string, string>();
     resetDeploymentProfileForTests();
-    setDeploymentProfileStorageForTests({
-      async getItem(key) {
+    resetEnvironmentStoreForTests();
+    const adapter = {
+      async getItem(key: string) {
         return storage.get(key) ?? null;
       },
-      async setItem(key, value) {
+      async setItem(key: string, value: string) {
         storage.set(key, value);
       },
-      async removeItem(key) {
+      async removeItem(key: string) {
         storage.delete(key);
       },
-    });
+    };
+    setDeploymentProfileStorageForTests(adapter);
+    setEnvironmentStoreStorageForTests(adapter);
   });
 
   afterEach(() => {
     process.env = ORIGINAL_ENV;
     resetDeploymentProfileForTests();
+    resetEnvironmentStoreForTests();
   });
 
   it("uses build-time env when no deployment profile is active", async () => {
@@ -202,6 +210,7 @@ function baseProfile(): DeploymentProfile {
     cognitoDomain: "customer.auth.us-east-1.amazoncognito.com",
     cognitoUserPoolId: "us-east-1_profile",
     cognitoClientId: "profile-client",
+    graphqlApiKey: "profile-api-key",
     signature: null,
   });
 }

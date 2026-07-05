@@ -72,7 +72,7 @@ export const memoryRecords = async (
       query: args.query ?? undefined,
       limit: Math.min(args.limit ?? TOTAL_CAP, TOTAL_CAP),
     });
-    return toRows(records);
+    return toMemoryRecordRows(records);
   }
 
   const { tenantId, userId } = await requireMemoryUserScope(ctx, {
@@ -87,10 +87,10 @@ export const memoryRecords = async (
     ownerId: userId,
   });
 
-  return toRows(records, userId);
+  return toMemoryRecordRows(records, userId);
 };
 
-function toRows(
+export function toMemoryRecordRows(
   records: ThinkWorkMemoryRecord[],
   userId?: string,
 ): MemoryRow[] {

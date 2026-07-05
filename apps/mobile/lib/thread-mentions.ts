@@ -6,19 +6,44 @@ export interface ThreadMentionTargetLike {
   targetType: "USER" | "AGENT";
   targetId: string;
   displayName: string;
+  aliases?: string[] | null;
+  isDefaultAgent?: boolean | null;
+  avatarUrl?: string | null;
+  role?: string | null;
+  email?: string | null;
+  description?: string | null;
 }
 
 export function mentionCandidatesForTargets(
-  targets: ThreadMentionTargetLike[],
+  targets: readonly ThreadMentionTargetLike[] | null | undefined,
 ): MentionCandidate[] {
-  return targets.map((target) => ({
-    id: target.id,
-    name: target.displayName,
-    displayName: target.displayName,
-    targetId: target.targetId,
-    targetType: target.targetType,
-    type: target.targetType === "AGENT" ? "assistant" : "member",
-  }));
+  return (targets ?? []).map((target) => {
+    const candidate: MentionCandidate = {
+      id: target.id,
+      name: target.displayName,
+      displayName: target.displayName,
+      targetId: target.targetId,
+      targetType: target.targetType,
+      type: target.targetType === "AGENT" ? "assistant" : "member",
+    };
+    if (target.aliases) candidate.aliases = target.aliases;
+    if (target.isDefaultAgent !== null && target.isDefaultAgent !== undefined) {
+      candidate.isDefaultAgent = target.isDefaultAgent;
+    }
+    if (target.avatarUrl !== null && target.avatarUrl !== undefined) {
+      candidate.avatarUrl = target.avatarUrl;
+    }
+    if (target.role !== null && target.role !== undefined) {
+      candidate.role = target.role;
+    }
+    if (target.email !== null && target.email !== undefined) {
+      candidate.email = target.email;
+    }
+    if (target.description !== null && target.description !== undefined) {
+      candidate.description = target.description;
+    }
+    return candidate;
+  });
 }
 
 export function sendMessageMentionsForInput(mentions: MessageInputMention[]) {
@@ -36,8 +61,15 @@ export function filterMentionCandidates(
 ): MentionCandidate[] {
   const normalizedQuery = query.toLowerCase();
   return candidates
-    .filter((candidate) =>
-      candidate.name.toLowerCase().startsWith(normalizedQuery),
+    .filter(
+      (candidate) =>
+        candidate.name.toLowerCase().startsWith(normalizedQuery) ||
+        candidate.aliases?.some((alias) =>
+          alias.toLowerCase().includes(normalizedQuery),
+        ) ||
+        candidate.role?.toLowerCase().includes(normalizedQuery) ||
+        candidate.email?.toLowerCase().includes(normalizedQuery) ||
+        candidate.description?.toLowerCase().includes(normalizedQuery),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -12,7 +12,8 @@
     "css:watch": "tailwindcss -i ./global.css -o ./public/styles.css --watch",
     "build:web": "npm run css && expo export --platform web",
     "codegen": "graphql-codegen --config codegen.ts",
-    "test": "vitest run --config vitest.config.ts"
+    "test": "vitest run --config vitest.config.ts",
+    "eas-build-post-install": "pnpm --filter @thinkwork/database-pg --filter @thinkwork/thread-json-render --filter @thinkwork/deployment-profile --filter @thinkwork/pricing-config --filter @thinkwork/react-native-sdk build"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

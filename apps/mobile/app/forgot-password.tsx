@@ -243,7 +243,7 @@ export default function ForgotPasswordScreen() {
               </>
             )}
 
-            <Pressable className="py-3" onPress={() => router.back()}>
+            <Pressable className="py-3" onPress={() => (router.canGoBack() ? router.back() : router.replace("/sign-in"))}>
               <Text size="sm" variant="muted" className="text-center">
                 Back to sign in
               </Text>

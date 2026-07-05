@@ -11,6 +11,9 @@ import * as SecureStore from "expo-secure-store";
 import { getPlatformConfig } from "./platform-config";
 
 const PREFIX = "CognitoIdentityServiceProvider";
+const KEYCHAIN_ACCESSIBLE_OPTIONS = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+};
 
 // In-memory cache so synchronous reads work (Cognito SDK calls getItem synchronously)
 const memoryCache = new Map<string, string>();
@@ -41,6 +44,8 @@ async function hydrate() {
     // where a reload — e.g. Updates.reloadAsync() after an OTA install —
     // killed the debounced manifest write before it could flush.
     const lastUserKey = `${PREFIX}.${clientId}.LastAuthUser`;
+    const migrationKey = `${PREFIX}.${clientId}.__after_first_unlock_migrated__`;
+    const migrationDone = await SecureStore.getItemAsync(migrationKey);
     const username = await SecureStore.getItemAsync(lastUserKey);
     console.log(
       "[auth-boot] hydrate LastAuthUser:",
@@ -58,28 +63,43 @@ async function hydrate() {
       keysToLoad.add(`${userPrefix}.userData`);
     }
 
-    // Legacy manifest support (pre-fix sessions). Harmless once all users
-    // have re-signed in under the new hydration path; delete later.
-    const manifestRaw = await SecureStore.getItemAsync(
-      `${PREFIX}.__manifest__`,
+    const scopedManifestRaw = await SecureStore.getItemAsync(
+      manifestKeyForClientId(clientId),
     );
-    if (manifestRaw) {
-      try {
-        const keys: string[] = JSON.parse(manifestRaw);
-        keys.forEach((k) => keysToLoad.add(k));
-      } catch {}
-    }
+    addManifestKeys(keysToLoad, scopedManifestRaw);
+
+    // Legacy manifest support (pre-environment-scoped sessions). Harmless
+    // once all users have re-signed in under the scoped manifest path; delete
+    // later.
+    addManifestKeys(
+      keysToLoad,
+      await SecureStore.getItemAsync(`${PREFIX}.__manifest__`),
+    );
 
     let foundCount = 0;
+    const loadedEntries: Array<[string, string]> = [];
     await Promise.all(
       [...keysToLoad].map(async (key) => {
         const value = await SecureStore.getItemAsync(key);
         if (value !== null) {
           memoryCache.set(key, value);
+          loadedEntries.push([key, value]);
           foundCount += 1;
         }
       }),
     );
+    if (!migrationDone && loadedEntries.length > 0) {
+      await Promise.all(
+        loadedEntries.map(([key, value]) =>
+          SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS),
+        ),
+      );
+      await SecureStore.setItemAsync(
+        migrationKey,
+        "true",
+        KEYCHAIN_ACCESSIBLE_OPTIONS,
+      );
+    }
     console.log(
       `[auth-boot] hydrate done in ${Date.now() - t0}ms, queried=${keysToLoad.size}, found=${foundCount}, cacheSize=${memoryCache.size}`,
     );
@@ -111,15 +131,62 @@ let manifestTimer: ReturnType<typeof setTimeout> | null = null;
 
 function updateManifest() {
   if (Platform.OS === "web") return;
+  const clientId = getPlatformConfig().cognitoClientId;
+  if (!clientId) return;
   if (manifestTimer) clearTimeout(manifestTimer);
   manifestTimer = setTimeout(() => {
     manifestTimer = null;
-    const keys = [...memoryCache.keys()];
+    const keyPrefix = keyPrefixForClientId(clientId);
+    const keys = [...memoryCache.keys()].filter((key) =>
+      key.startsWith(keyPrefix),
+    );
     SecureStore.setItemAsync(
-      `${PREFIX}.__manifest__`,
+      manifestKeyForClientId(clientId),
       JSON.stringify(keys),
+      KEYCHAIN_ACCESSIBLE_OPTIONS,
     ).catch((e) => console.warn("[CognitoStorage] manifest write error:", e));
   }, 100);
+}
+
+/**
+ * Clear session material for one Cognito app client. Environment entries keep
+ * their own Cognito clientId, and Cognito token keys already include that
+ * clientId, so clientId is the precise scope discriminator without changing
+ * persisted token key names.
+ */
+export async function clearCognitoStorageForClientId(
+  clientId: string,
+): Promise<void> {
+  const trimmedClientId = clientId.trim();
+  if (!trimmedClientId) return;
+  const keyPrefix = keyPrefixForClientId(trimmedClientId);
+
+  if (Platform.OS === "web") {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(keyPrefix) || key === manifestKeyForClientId(trimmedClientId)) {
+        toRemove.push(key);
+      }
+    }
+    toRemove.forEach((key) => localStorage.removeItem(key));
+    return;
+  }
+
+  const keys = [...memoryCache.keys()].filter((key) =>
+    key.startsWith(keyPrefix),
+  );
+  keys.forEach((key) => memoryCache.delete(key));
+  await Promise.all([
+    ...keys.map((key) =>
+      SecureStore.deleteItemAsync(key).catch((e) =>
+        console.warn("[CognitoStorage] scoped clear error:", e),
+      ),
+    ),
+    SecureStore.deleteItemAsync(manifestKeyForClientId(trimmedClientId)).catch(
+      () => undefined,
+    ),
+  ]);
 }
 
 /**
@@ -135,8 +202,8 @@ export const CognitoSecureStorage = {
       return value;
     }
     memoryCache.set(key, value);
-    SecureStore.setItemAsync(key, value).catch((e) =>
-      console.warn("[CognitoStorage] setItem error:", e),
+    SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS).catch(
+      (e) => console.warn("[CognitoStorage] setItem error:", e),
     );
     updateManifest();
     return value;
@@ -180,7 +247,38 @@ export const CognitoSecureStorage = {
         console.warn("[CognitoStorage] clear error:", e),
       ),
     );
+    const clientIds = new Set(
+      keys.flatMap((key) => {
+        const match = key.match(/^CognitoIdentityServiceProvider\.([^.]+)\./);
+        return match?.[1] ? [match[1]] : [];
+      }),
+    );
+    clientIds.forEach((clientId) => {
+      SecureStore.deleteItemAsync(manifestKeyForClientId(clientId)).catch(
+        () => {},
+      );
+    });
     SecureStore.deleteItemAsync(`${PREFIX}.__manifest__`).catch(() => {});
     return {};
   },
 };
+
+function keyPrefixForClientId(clientId: string): string {
+  return `${PREFIX}.${clientId}.`;
+}
+
+function manifestKeyForClientId(clientId: string): string {
+  return `${PREFIX}.${clientId}.__manifest__`;
+}
+
+function addManifestKeys(target: Set<string>, manifestRaw: string | null) {
+  if (!manifestRaw) return;
+  try {
+    const keys: unknown = JSON.parse(manifestRaw);
+    if (Array.isArray(keys)) {
+      keys.forEach((key) => {
+        if (typeof key === "string") target.add(key);
+      });
+    }
+  } catch {}
+}

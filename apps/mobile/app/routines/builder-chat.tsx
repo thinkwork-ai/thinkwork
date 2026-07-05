@@ -15,8 +15,8 @@ import { COLORS } from "@/lib/theme";
 import { Text, Muted } from "@/components/ui/typography";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { ChatBubble } from "@/components/chat/ChatBubble";
-import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
 
@@ -78,6 +78,7 @@ export default function BuilderChatScreen() {
 
   const [building, setBuilding] = useState(false);
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null);
+  const [messageText, setMessageText] = useState("");
 
   // Create session on mount (or use existing thread)
   const sessionCreated = useRef(false);
@@ -182,6 +183,13 @@ export default function BuilderChatScreen() {
 
   const notReady = !sessionThreadId || !tenantRepo;
 
+  const handleSubmit = useCallback(() => {
+    const content = messageText.trim();
+    if (!content || notReady) return;
+    setMessageText("");
+    void handleSend(content);
+  }, [messageText, notReady, handleSend]);
+
   return (
     <DetailLayout
       title={
@@ -232,7 +240,14 @@ export default function BuilderChatScreen() {
         )}
 
         <WebContent>
-          <ChatInput onSend={handleSend} disabled={notReady} />
+          <MessageInputFooter
+            value={messageText}
+            onChangeText={setMessageText}
+            onSubmit={handleSubmit}
+            disabled={notReady}
+            colors={colors}
+            isDark={colorScheme === "dark"}
+          />
         </WebContent>
       </KeyboardAvoidingView>
     </DetailLayout>

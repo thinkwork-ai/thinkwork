@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { pushNavigationTarget } from "./push-navigation";
 
 describe("pushNavigationTarget", () => {
-  it("opens computer approval notifications at the apps/web approval URL", () => {
+  it("routes computer approval notifications to a native approval target", () => {
     expect(
       pushNavigationTarget(
         {
@@ -15,8 +15,18 @@ describe("pushNavigationTarget", () => {
       ),
     ).toEqual({
       kind: "computer_approval",
-      url: "https://computer.thinkwork.ai/approvals/approval-1",
+      approvalId: "approval-1",
     });
+    expect(
+      pushNavigationTarget(
+        {
+          type: "computer_approval",
+          approvalId: "approval-1",
+          deepLinkUrl: "https://computer.thinkwork.ai/approvals/approval-1",
+        },
+        null,
+      ),
+    ).not.toHaveProperty("url");
   });
 
   it("keeps existing thread notification navigation", () => {
@@ -31,13 +41,17 @@ describe("pushNavigationTarget", () => {
       pushNavigationTarget(
         {
           type: "computer_approval",
-          deepLinkUrl: "https://computer.thinkwork.ai/approvals/approval-2",
+          approvalId: "approval-2",
         },
         { threadId: "thread-1" },
       ),
     ).toEqual({
       kind: "computer_approval",
-      url: "https://computer.thinkwork.ai/approvals/approval-2",
+      approvalId: "approval-2",
     });
+  });
+
+  it("ignores unrecognized payloads", () => {
+    expect(pushNavigationTarget({ type: "unknown" }, null)).toBeNull();
   });
 });

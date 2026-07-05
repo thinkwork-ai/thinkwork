@@ -61,6 +61,7 @@ export function getSpacesDeploymentProfileSnapshot(
     region,
     accountId: stringEnv(env.VITE_AWS_ACCOUNT_ID),
     releaseVersion,
+    graphqlApiKey: stringEnv(env.VITE_GRAPHQL_API_KEY),
     releaseManifestUrl: stringEnv(env.VITE_RELEASE_MANIFEST_URL),
     releaseManifestSha256: stringEnv(env.VITE_RELEASE_MANIFEST_SHA256),
     controller: compactController({

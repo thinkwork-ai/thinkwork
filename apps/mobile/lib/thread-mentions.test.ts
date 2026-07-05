@@ -43,6 +43,46 @@ describe("thread mentions", () => {
     ]);
   });
 
+  it("keeps schema mention target metadata on mobile candidates", () => {
+    expect(
+      mentionCandidatesForTargets([
+        {
+          id: "target-1",
+          targetType: "USER",
+          targetId: "user-scott",
+          displayName: "Scott Hertel",
+          aliases: ["scott"],
+          isDefaultAgent: false,
+          avatarUrl: "https://example.com/avatar.png",
+          role: "Engineering",
+          email: "scott@example.com",
+          description: "Works on mobile mentions",
+        },
+      ]),
+    ).toEqual([
+      {
+        id: "target-1",
+        name: "Scott Hertel",
+        displayName: "Scott Hertel",
+        targetId: "user-scott",
+        targetType: "USER",
+        type: "member",
+        aliases: ["scott"],
+        isDefaultAgent: false,
+        avatarUrl: "https://example.com/avatar.png",
+        role: "Engineering",
+        email: "scott@example.com",
+        description: "Works on mobile mentions",
+      },
+    ]);
+  });
+
+  it("maps empty or missing mention target data to no autocomplete candidates", () => {
+    expect(mentionCandidatesForTargets([])).toEqual([]);
+    expect(mentionCandidatesForTargets(undefined)).toEqual([]);
+    expect(mentionCandidatesForTargets(null)).toEqual([]);
+  });
+
   it("maps selected mobile mentions to SendMessageInput mentions", () => {
     expect(
       sendMessageMentionsForInput([
@@ -88,6 +128,27 @@ describe("thread mentions", () => {
     expect(filtered.map((candidate) => candidate.name)).toContain(
       "Scott Hertel",
     );
+  });
+
+  it("filters mention candidates by alias, role, email, or description", () => {
+    const candidates = mentionCandidatesForTargets([
+      {
+        id: "target-1",
+        targetType: "USER",
+        targetId: "user-scott",
+        displayName: "Scott Hertel",
+        aliases: ["scooter"],
+        role: "Engineering",
+        email: "scott@example.com",
+        description: "Mobile parity owner",
+      },
+    ]);
+
+    expect(filterMentionCandidates(candidates, "scooter")).toHaveLength(1);
+    expect(filterMentionCandidates(candidates, "engineer")).toHaveLength(1);
+    expect(filterMentionCandidates(candidates, "example.com")).toHaveLength(1);
+    expect(filterMentionCandidates(candidates, "parity")).toHaveLength(1);
+    expect(filterMentionCandidates(candidates, "missing")).toHaveLength(0);
   });
 
   it("detects an active mention query at the current cursor", () => {

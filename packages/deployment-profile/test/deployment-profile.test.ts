@@ -43,6 +43,7 @@ const baseProfile = (): DeploymentProfile =>
     cognitoDomain: "auth.example.com",
     cognitoUserPoolId: "us-east-1_abc123",
     cognitoClientId: "client-123",
+    graphqlApiKey: "profile-api-key",
   });
 
 function testKeyPair() {
@@ -246,6 +247,7 @@ describe("deployment profile contract", () => {
       displayName: "Acme ThinkWork",
       accountId: "123456789012",
       releaseVersion: "v0.1.0-canary.134",
+      graphqlApiKey: "profile-api-key",
       releaseManifestSha256: "a".repeat(64),
       controller: expect.objectContaining({
         stateMachineName: "thinkwork-dev-deployment-orchestrator",
@@ -255,6 +257,16 @@ describe("deployment profile contract", () => {
       cognitoDomain: "https://auth.example.com",
       cognitoClientId: "client-123",
     });
+  });
+
+  it("accepts existing profiles without a GraphQL API key", () => {
+    const { graphqlApiKey: _graphqlApiKey, ...profile } = baseProfile();
+
+    const result = assessDeploymentProfile(profile, { allowUnsigned: true });
+
+    expect(result.ok).toBe(true);
+    expect(result.profile).not.toHaveProperty("graphqlApiKey");
+    expect(profileToRuntimeConfig(profile).graphqlApiKey).toBeUndefined();
   });
 
   it("keeps controller authority metadata optional for existing profiles", () => {

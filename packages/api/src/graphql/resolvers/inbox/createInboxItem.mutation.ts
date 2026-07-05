@@ -58,11 +58,15 @@ export async function notifyComputerApprovalCreated(
   if (row.type !== "computer_approval" || !row.recipient_id) return;
 
   try {
-    await sendComputerApprovalPush({
-      userId: row.recipient_id,
-      tenantId: row.tenant_id,
-      approvalId: row.id,
-      question: computerApprovalPushQuestion(row),
+    void Promise.resolve(
+      sendComputerApprovalPush({
+        userId: row.recipient_id,
+        tenantId: row.tenant_id,
+        approvalId: row.id,
+        question: computerApprovalPushQuestion(row),
+      }),
+    ).catch((err) => {
+      console.error("[createInboxItem] computer approval push failed:", err);
     });
   } catch (err) {
     console.error("[createInboxItem] computer approval push failed:", err);

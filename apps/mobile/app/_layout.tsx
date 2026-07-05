@@ -34,12 +34,16 @@ import { usePushNotifications } from "@/lib/hooks/use-push-notifications";
 import { useMe } from "@/lib/hooks/use-users";
 import { TurnCompletionProvider } from "@/lib/hooks/use-turn-completion";
 import {
-  useThreadTurnUpdatedSubscription,
-  useWorkspaceAccessRevokedSubscription,
-} from "@thinkwork/react-native-sdk";
+  getActiveEnvironmentEntry,
+  getEnvironmentEntries,
+  isEnvironmentStoreHydrated,
+} from "@/lib/environments/store";
+import { shouldRouteToEnvironmentSetup } from "@/lib/environments/routing";
+import { useWorkspaceAccessRevokedSubscription } from "@thinkwork/react-native-sdk";
 import { handleWorkspaceAccessRevoked } from "@/lib/agent/workspace-revocation";
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { BiometricLockScreen } from "@/components/BiometricLockScreen";
+import { LiveStatusProvider } from "@/components/providers/LiveStatusProvider";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
@@ -65,6 +69,7 @@ function RootLayoutNav() {
     getToken,
     hasStoredSession,
     retryBootstrap,
+    deploymentConfig,
   } = useAuth();
   const {
     isEnabled: biometricEnabled,
@@ -88,9 +93,6 @@ function RootLayoutNav() {
 
   const tenantId = user?.tenantId;
   const hasTenant = !!tenantId;
-
-  // Register turn subscription early at root level so it's active before home tab mounts
-  useThreadTurnUpdatedSubscription(tenantId);
 
   const [{ data: meData }] = useMe();
   const currentUserId = meData?.me?.id ?? null;
@@ -226,7 +228,9 @@ function RootLayoutNav() {
       "invite",
       "forgot-password",
       "auth",
+      "oauth",
       "deployment-profile",
+      "environment-setup",
     ];
     const isPublicRoute = publicRoutes.includes(segments[0] as string);
 
@@ -237,6 +241,23 @@ function RootLayoutNav() {
     // to /sign-in — that would wipe the session they're trying to recover.
     if (!isAuthenticated && hasStoredSession) {
       // Hold position: the biometric lock overlay below will handle recovery.
+      return;
+    }
+
+    const shouldSetupEnvironment = shouldRouteToEnvironmentSetup({
+      isAuthenticated,
+      hasStoredSession,
+      isEnvironmentStoreHydrated: isEnvironmentStoreHydrated(),
+      environmentCount: getEnvironmentEntries().length,
+      hasActiveEnvironment: Boolean(getActiveEnvironmentEntry()),
+      platformConfig: deploymentConfig,
+    });
+
+    if (
+      shouldSetupEnvironment &&
+      segments[0] !== "environment-setup"
+    ) {
+      router.replace("/environment-setup");
       return;
     }
 
@@ -274,6 +295,7 @@ function RootLayoutNav() {
     hasStoredSession,
     navigationReady,
     agents,
+    deploymentConfig,
   ]);
 
   const handleBiometricUnlock = async () => {
@@ -344,92 +366,104 @@ function RootLayoutNav() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <TurnCompletionProvider tenantId={tenantId}>
-          <ThemeProvider value={NAV_THEME.dark}>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen
-                name="sign-in"
-                options={{ animationTypeForReplace: "pop" }}
-              />
-              <Stack.Screen name="forgot-password" />
-              <Stack.Screen name="sign-up" />
-              <Stack.Screen name="verify" />
-              <Stack.Screen name="onboarding/verify-email" />
-              <Stack.Screen name="onboarding/verify-code" />
-              <Stack.Screen name="onboarding/payment" />
-              <Stack.Screen name="onboarding/complete" />
-              <Stack.Screen
-                name="auth/callback"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="deployment-profile"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="demo" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="thread/[threadId]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="chat/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="threads" />
-              <Stack.Screen name="routines/[id]/index" />
-              <Stack.Screen
-                name="settings/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="settings/account" />
-              <Stack.Screen name="settings/profile" />
-              <Stack.Screen name="settings/credentials" />
-              <Stack.Screen name="settings/integration-detail" />
-              <Stack.Screen name="settings/usage" />
-              <Stack.Screen
-                name="settings/billing"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="invite/[token]" />
-              <Stack.Screen name="agents/[id]/files" />
-              <Stack.Screen name="agents/[id]/file-view" />
-              <Stack.Screen name="agents/[id]/model" />
-              <Stack.Screen
-                name="artifacts/[id]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/index"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/list"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/[file]"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="memory/edit-file"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="heartbeats/new" />
-              <Stack.Screen name="heartbeats/[id]" />
-              <Stack.Screen name="routines/new" />
-              <Stack.Screen name="routines/builder" />
-              <Stack.Screen name="routines/builder-chat" />
-            </Stack>
+          <LiveStatusProvider>
+            <ThemeProvider value={NAV_THEME.dark}>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen
+                  name="sign-in"
+                  options={{ animationTypeForReplace: "pop" }}
+                />
+                <Stack.Screen name="forgot-password" />
+                <Stack.Screen name="sign-up" />
+                <Stack.Screen name="verify" />
+                <Stack.Screen name="onboarding/verify-email" />
+                <Stack.Screen name="onboarding/verify-code" />
+                <Stack.Screen name="onboarding/payment" />
+                <Stack.Screen name="onboarding/complete" />
+                <Stack.Screen
+                  name="auth/callback"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="oauth/callback"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="deployment-profile"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="environment-setup"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="demo" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="thread/[threadId]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="chat/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="threads" />
+                <Stack.Screen name="routines/[id]/index" />
+                <Stack.Screen
+                  name="settings/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="settings/account" />
+                <Stack.Screen name="settings/profile" />
+                <Stack.Screen name="settings/credentials" />
+                <Stack.Screen name="settings/environments" />
+                <Stack.Screen name="settings/integration-detail" />
+                <Stack.Screen name="settings/usage" />
+                <Stack.Screen
+                  name="settings/billing"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="invite/[token]" />
+                <Stack.Screen name="agents/[id]/files" />
+                <Stack.Screen name="agents/[id]/file-view" />
+                <Stack.Screen name="agents/[id]/model" />
+                <Stack.Screen
+                  name="artifacts/[id]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/list"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/[file]"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="memory/edit-file"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="heartbeats/new" />
+                <Stack.Screen name="heartbeats/[id]" />
+                <Stack.Screen name="routines/new" />
+                <Stack.Screen name="routines/builder" />
+                <Stack.Screen name="routines/builder-chat" />
+                <Stack.Screen name="fleet/[id]/inbox" />
+              </Stack>
 
-            {needsBiometricUnlock && (
-              <BiometricLockScreen
-                onUnlock={handleBiometricUnlock}
-                onLoginScreen={handleLoginScreen}
-                onStartAuth={handleStartAuth}
-                onEndAuth={handleEndAuth}
-              />
-            )}
-          </ThemeProvider>
+              {needsBiometricUnlock && (
+                <BiometricLockScreen
+                  onUnlock={handleBiometricUnlock}
+                  onLoginScreen={handleLoginScreen}
+                  onStartAuth={handleStartAuth}
+                  onEndAuth={handleEndAuth}
+                />
+              )}
+            </ThemeProvider>
+          </LiveStatusProvider>
         </TurnCompletionProvider>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

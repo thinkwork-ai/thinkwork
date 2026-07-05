@@ -68,6 +68,17 @@ export const AgentQuery = graphql(`
   }
 `);
 
+export const MyApprovedModelCatalogQuery = graphql(`
+  query MyApprovedModelCatalog {
+    myApprovedModelCatalog {
+      id
+      modelId
+      displayName
+      provider
+    }
+  }
+`);
+
 export const CreateAgentMutation = graphql(`
   mutation CreateAgent($tenantId: ID!, $input: UpdateTenantAgentInput!) {
     updateTenantAgent(tenantId: $tenantId, input: $input) {
@@ -164,6 +175,193 @@ export const SendMessageMutation = graphql(`
 export const DeleteMessageMutation = graphql(`
   mutation DeleteMessage($id: ID!) {
     deleteMessage(id: $id)
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Work Items
+// ---------------------------------------------------------------------------
+
+export const WorkItemsQuery = graphql(`
+  query WorkItems($input: WorkItemsInput) {
+    workItems(input: $input) {
+      id
+      tenantId
+      spaceId
+      statusId
+      status {
+        id
+        name
+        color
+        category
+        isActive
+        isFinal
+        displayOrder
+      }
+      title
+      notes
+      priority
+      ownerUserId
+      dueAt
+      required
+      applicable
+      blocked
+      threadLinks {
+        id
+        threadId
+        relationship
+        createdAt
+      }
+      events {
+        id
+        eventType
+        previousStatusId
+        newStatusId
+        createdAt
+      }
+      comments {
+        id
+        authorUserId
+        authorAgentId
+        body
+        createdAt
+        updatedAt
+      }
+      createdAt
+      updatedAt
+      archivedAt
+    }
+  }
+`);
+
+export const WorkItemQuery = graphql(`
+  query WorkItem($tenantId: ID, $id: ID!) {
+    workItem(tenantId: $tenantId, id: $id) {
+      id
+      tenantId
+      spaceId
+      statusId
+      status {
+        id
+        name
+        color
+        category
+        isActive
+        isFinal
+        displayOrder
+      }
+      title
+      notes
+      priority
+      ownerUserId
+      dueAt
+      required
+      applicable
+      blocked
+      threadLinks {
+        id
+        threadId
+        relationship
+        createdAt
+      }
+      events {
+        id
+        eventType
+        previousStatusId
+        newStatusId
+        createdAt
+      }
+      comments {
+        id
+        authorUserId
+        authorAgentId
+        body
+        createdAt
+        updatedAt
+      }
+      createdAt
+      updatedAt
+      archivedAt
+    }
+  }
+`);
+
+export const WorkItemStatusesQuery = graphql(`
+  query WorkItemStatuses($tenantId: ID, $spaceId: ID!) {
+    workItemStatuses(tenantId: $tenantId, spaceId: $spaceId) {
+      id
+      tenantId
+      spaceId
+      name
+      color
+      category
+      isActive
+      isFinal
+      isDefault
+      displayOrder
+    }
+  }
+`);
+
+export const SpacesWithMembersQuery = graphql(`
+  query SpacesWithMembers($tenantId: ID!) {
+    spaces(tenantId: $tenantId) {
+      id
+      name
+      members {
+        id
+        userId
+        role
+        user {
+          id
+          name
+          email
+          image
+        }
+      }
+    }
+  }
+`);
+
+export const UpdateWorkItemStatusMutation = graphql(`
+  mutation UpdateWorkItemStatus($input: UpdateWorkItemStatusInput!) {
+    updateWorkItemStatus(input: $input) {
+      id
+      statusId
+      status {
+        id
+        name
+        category
+        color
+        displayOrder
+      }
+      blocked
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateWorkItemMutation = graphql(`
+  mutation UpdateWorkItem($input: UpdateWorkItemInput!) {
+    updateWorkItem(input: $input) {
+      id
+      ownerUserId
+      updatedAt
+    }
+  }
+`);
+
+export const CreateWorkItemCommentMutation = graphql(`
+  mutation CreateWorkItemComment($input: CreateWorkItemCommentInput!) {
+    createWorkItemComment(input: $input) {
+      id
+      workItemId
+      authorUserId
+      authorAgentId
+      body
+      createdAt
+      updatedAt
+    }
   }
 `);
 
@@ -649,6 +847,12 @@ export const TenantMembersQuery = graphql(`
       principalId
       role
       status
+      user {
+        id
+        name
+        email
+        image
+      }
       createdAt
       updatedAt
     }
@@ -844,6 +1048,8 @@ export const NewThreadMentionTargetsQuery = graphql(`
       isDefaultAgent
       avatarUrl
       role
+      email
+      description
     }
   }
 `);
@@ -859,6 +1065,8 @@ export const ThreadMentionTargetsQuery = graphql(`
       isDefaultAgent
       avatarUrl
       role
+      email
+      description
     }
   }
 `);
@@ -1136,6 +1344,82 @@ export const InboxItemQuery = graphql(`
   }
 `);
 
+export const ComputerApprovalsQuery = graphql(`
+  query ComputerApprovals($tenantId: ID!) {
+    inboxItems(tenantId: $tenantId, status: PENDING) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ComputerApprovalQuery = graphql(`
+  query ComputerApproval($id: ID!) {
+    inboxItem(id: $id) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ApproveComputerApprovalMutation = graphql(`
+  mutation ApproveComputerApproval($id: ID!, $input: ApproveInboxItemInput) {
+    approveInboxItem(id: $id, input: $input) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const RejectComputerApprovalMutation = graphql(`
+  mutation RejectComputerApproval($id: ID!, $input: RejectInboxItemInput) {
+    rejectInboxItem(id: $id, input: $input) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      entityType
+      entityId
+      config
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const DecideInboxItemMutation = graphql(`
   mutation DecideInboxItem($id: ID!, $input: InboxItemDecisionInput!) {
     decideInboxItem(id: $id, input: $input) {
@@ -1259,6 +1543,36 @@ export const MemoryRecordsQuery = graphql(`
         slug
         title
       }
+    }
+  }
+`);
+
+export const WikiPageSourceMemoryIdsQuery = graphql(`
+  query WikiPageSourceMemoryIds(
+    $tenantId: ID!
+    $userId: ID
+    $type: WikiPageType!
+    $slug: String!
+    $limit: Int
+  ) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
+      id
+      sourceMemoryIds(limit: $limit)
+    }
+  }
+`);
+
+export const MemoryRecordsByIdsQuery = graphql(`
+  query MemoryRecordsByIds($tenantId: ID!, $ids: [ID!]!) {
+    memoryRecordsByIds(tenantId: $tenantId, ids: $ids) {
+      memoryRecordId
+      content {
+        text
+      }
+      createdAt
+      updatedAt
+      factType
+      strategyId
     }
   }
 `);

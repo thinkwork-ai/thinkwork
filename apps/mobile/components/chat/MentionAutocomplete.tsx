@@ -14,6 +14,12 @@ export interface MentionCandidate {
   targetId?: string;
   targetType?: "USER" | "AGENT";
   displayName?: string;
+  aliases?: string[];
+  isDefaultAgent?: boolean;
+  avatarUrl?: string | null;
+  role?: string | null;
+  email?: string | null;
+  description?: string | null;
   rawText?: string;
 }
 

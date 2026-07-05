@@ -120,7 +120,7 @@ export function WikiList({
         ItemSeparatorComponent={() => (
           <View
             className="h-px bg-neutral-200 dark:bg-neutral-800"
-            style={{ marginLeft: 68 }}
+            style={{ marginLeft: 52 }}
           />
         )}
         refreshControl={

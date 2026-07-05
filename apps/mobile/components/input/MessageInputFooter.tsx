@@ -28,13 +28,21 @@ import {
   Mic,
   ChevronDown,
   Paperclip,
+  Plus,
   Bot,
   X,
+  Target,
 } from "lucide-react-native";
 import { IconPlanet } from "@tabler/icons-react-native";
 import { COLORS } from "@/lib/theme";
-import { VoiceDictationBar } from "./VoiceDictationBar";
+import {
+  VoiceDictationBar,
+  WaveformBars,
+  type VoiceDictationBarRef,
+} from "./VoiceDictationBar";
 import { WorkspaceChip } from "./WorkspaceChip";
+import { ComposerModelPicker } from "./ComposerModelPicker";
+import { GoalIntentCard } from "./GoalIntentCard";
 import {
   ComposerPickerOverlay,
   MentionAutocomplete,
@@ -42,6 +50,8 @@ import {
   type ComposerPickerOption,
 } from "@/components/chat/MentionAutocomplete";
 import { currentMentionQuery } from "@/lib/thread-mentions";
+import type { ApprovedComposerModel } from "@/lib/composer-model-selection";
+import type { GoalIntentDraft } from "@/lib/composer-goal-intent";
 
 export interface SelectedWorkspace {
   id: string;
@@ -95,6 +105,15 @@ interface MessageInputFooterProps {
   spaceOptions?: SelectedSpace[];
   onSpaceSelect?: (space: SelectedSpace) => void;
   selectedSpace?: SelectedSpace | null;
+  modelOptions?: ApprovedComposerModel[] | null;
+  selectedModelId?: string | null;
+  onModelSelect?: (model: ApprovedComposerModel) => void;
+  goalDraft?: GoalIntentDraft;
+  goalActive?: boolean;
+  onGoalDraftChange?: (draft: GoalIntentDraft) => void;
+  onGoalApply?: (draft: GoalIntentDraft) => void;
+  onGoalCancel?: () => void;
+  onGoalClear?: () => void;
   /** Disable composing and submission while keeping the footer visible. */
   disabled?: boolean;
   /** Currently selected workspaces shown as chips */
@@ -132,6 +151,15 @@ export const MessageInputFooter = forwardRef<
     spaceOptions = [],
     onSpaceSelect,
     selectedSpace,
+    modelOptions,
+    selectedModelId,
+    onModelSelect,
+    goalDraft,
+    goalActive,
+    onGoalDraftChange,
+    onGoalApply,
+    onGoalCancel,
+    onGoalClear,
     disabled,
     selectedWorkspaces,
     onRemoveWorkspace,
@@ -140,8 +168,10 @@ export const MessageInputFooter = forwardRef<
 ) {
   const containerRef = useRef<View>(null);
   const inputRef = useRef<TextInput>(null);
+  const voiceRef = useRef<VoiceDictationBarRef>(null);
   const inputAnchorRef = useRef<View>(null);
   const spaceAnchorRef = useRef<View>(null);
+  const modelAnchorRef = useRef<View>(null);
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }));
   const [isDictating, setIsDictating] = useState(false);
   const [draftValue, setDraftValue] = useState(value);
@@ -156,7 +186,13 @@ export const MessageInputFooter = forwardRef<
     x: number;
     width: number;
   } | null>(null);
+  const [modelAnchor, setModelAnchor] = useState<{
+    x: number;
+    width: number;
+  } | null>(null);
   const [spacePickerVisible, setSpacePickerVisible] = useState(false);
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [goalCardVisible, setGoalCardVisible] = useState(false);
   const [dismissedMentionKey, setDismissedMentionKey] = useState<string | null>(
     null,
   );
@@ -216,6 +252,7 @@ export const MessageInputFooter = forwardRef<
   const mentionPickerVisible =
     autocompleteVisible &&
     !spacePickerVisible &&
+    !modelPickerVisible &&
     mentionKey !== dismissedMentionKey;
   const visibleSpaceOptions = useMemo(
     () =>
@@ -226,6 +263,33 @@ export const MessageInputFooter = forwardRef<
       })),
     [spaceOptions],
   );
+  const visibleModelOptions = useMemo(
+    () =>
+      (modelOptions ?? []).map((model) => ({
+        id: model.modelId,
+        label: model.displayName,
+        model,
+      })),
+    [modelOptions],
+  );
+
+  const handleVoicePressIn = useCallback(async () => {
+    if (disabled) return;
+    setSpacePickerVisible(false);
+    setModelPickerVisible(false);
+    if (mentionKey) setDismissedMentionKey(mentionKey);
+    const started = await voiceRef.current?.start();
+    if (started) {
+      setIsDictating(true);
+    } else {
+      setIsDictating(false);
+    }
+  }, [disabled, mentionKey]);
+
+  const handleVoicePressOut = useCallback(() => {
+    voiceRef.current?.stop();
+    setIsDictating(false);
+  }, []);
 
   const measureAnchor = useCallback(
     (
@@ -252,6 +316,7 @@ export const MessageInputFooter = forwardRef<
   useEffect(() => {
     if (autocompleteVisible) {
       setSpacePickerVisible(false);
+      setModelPickerVisible(false);
       measureAnchor(inputAnchorRef, setInputAnchor);
     }
   }, [autocompleteVisible, measureAnchor]);
@@ -279,6 +344,7 @@ export const MessageInputFooter = forwardRef<
     commitText(nextValue, nextCursor);
     setDismissedMentionKey(null);
     setSpacePickerVisible(false);
+    setModelPickerVisible(false);
 
     const targetType =
       candidate.targetType ??
@@ -346,6 +412,7 @@ export const MessageInputFooter = forwardRef<
       measureAnchor(spaceAnchorRef, setSpaceAnchor);
       if (mentionKey) setDismissedMentionKey(mentionKey);
       setSpacePickerVisible((visible) => !visible);
+      setModelPickerVisible(false);
       return;
     }
     onSpacePress?.();
@@ -360,9 +427,52 @@ export const MessageInputFooter = forwardRef<
     onSpaceSelect?.(option.space);
   }
 
+  function handleModelPress() {
+    if (disabled || visibleModelOptions.length === 0) return;
+    Keyboard.dismiss();
+    measureAnchor(modelAnchorRef, setModelAnchor);
+    if (mentionKey) setDismissedMentionKey(mentionKey);
+    setSpacePickerVisible(false);
+    setModelPickerVisible((visible) => !visible);
+  }
+
+  function handleModelSelect(
+    option: ComposerPickerOption & {
+      model: ApprovedComposerModel;
+    },
+  ) {
+    setModelPickerVisible(false);
+    onModelSelect?.(option.model);
+  }
+
+  function handleGoalPress() {
+    if (disabled || !goalDraft || !onGoalDraftChange) return;
+    Keyboard.dismiss();
+    if (mentionKey) setDismissedMentionKey(mentionKey);
+    setSpacePickerVisible(false);
+    setModelPickerVisible(false);
+    setGoalCardVisible(true);
+  }
+
+  function handleGoalApply(draft: GoalIntentDraft) {
+    onGoalApply?.(draft);
+    setGoalCardVisible(false);
+  }
+
+  function handleGoalCancel() {
+    onGoalCancel?.();
+    setGoalCardVisible(false);
+  }
+
+  function handleGoalClear() {
+    onGoalClear?.();
+    setGoalCardVisible(false);
+  }
+
   function handlePickerDismiss() {
     if (mentionKey) setDismissedMentionKey(mentionKey);
     setSpacePickerVisible(false);
+    setModelPickerVisible(false);
   }
 
   function getAnchoredPickerStyle(
@@ -395,7 +505,9 @@ export const MessageInputFooter = forwardRef<
 
   const mentionPicker = getAnchoredPickerStyle(inputAnchor);
   const spacePicker = getAnchoredPickerStyle(spaceAnchor);
-  const pickerOpen = mentionPickerVisible || spacePickerVisible;
+  const modelPicker = getAnchoredPickerStyle(modelAnchor);
+  const pickerOpen =
+    mentionPickerVisible || spacePickerVisible || modelPickerVisible;
 
   return (
     <View
@@ -515,6 +627,7 @@ export const MessageInputFooter = forwardRef<
             value={draftValue}
             onChangeText={(nextText) => {
               setSpacePickerVisible(false);
+              setModelPickerVisible(false);
               setDismissedMentionKey(null);
               commitText(nextText);
             }}
@@ -538,111 +651,168 @@ export const MessageInputFooter = forwardRef<
           />
         </View>
 
-        {/* Action buttons row / Dictation bar */}
-        {isDictating ? (
-          <VoiceDictationBar
-            onInterim={(text) => commitText(text)}
-            onTranscript={(text) => {
-              commitText(text);
-              setIsDictating(false);
-            }}
-            onCancel={() => setIsDictating(false)}
-            colors={colors}
-            isDark={isDark}
-          />
-        ) : (
-          <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
-            <View className="flex-row items-center gap-4">
-              {onToggleAgent && (
-                <Pressable
-                  onPress={disabled ? undefined : onToggleAgent}
-                  disabled={disabled}
-                  accessibilityLabel="Send to agent"
-                  accessibilityState={{ selected: agentEnabled }}
-                  className="p-1 active:opacity-70"
-                  style={{ opacity: disabled ? 0.35 : 1 }}
-                >
-                  <Bot
-                    size={24}
-                    color={agentEnabled ? "#54a9ff" : colors.mutedForeground}
-                  />
-                </Pressable>
-              )}
-              {onAttach && (
-                <Pressable
-                  onPress={disabled ? undefined : onAttach}
-                  disabled={disabled}
-                  accessibilityLabel="Attach image"
-                  className="p-1 active:opacity-70"
-                  style={{ opacity: disabled ? 0.35 : 1 }}
-                >
-                  <Paperclip size={24} color={colors.mutedForeground} />
-                </Pressable>
-              )}
-              {(onSpacePress || onSpaceSelect) && (
-                <View ref={spaceAnchorRef}>
-                  <Pressable
-                    onPress={handleSpacePress}
-                    disabled={disabled}
-                    // Borderless/transparent to match the desktop composer's space picker —
-                    // it sits inline with the other toolbar icons, no filled pill.
-                    className="flex-row items-center gap-1.5 active:opacity-70"
-                    style={{
-                      minHeight: 32,
-                      paddingTop: 2,
-                      opacity: disabled ? 0.35 : 1,
-                    }}
-                  >
-                    <IconPlanet size={24} color={colors.mutedForeground} />
-                    <Text
-                      style={{
-                        color: colors.mutedForeground,
-                        fontSize: 18,
-                        maxWidth: 140,
-                      }}
-                      numberOfLines={1}
-                    >
-                      {selectedSpace?.name ?? "Default"}
-                    </Text>
-                    <ChevronDown size={20} color={colors.mutedForeground} />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-            <View className="flex-row items-center gap-4">
+        <VoiceDictationBar
+          ref={voiceRef}
+          onInterim={(text) => commitText(text)}
+          onTranscript={(text) => {
+            commitText(text);
+            setIsDictating(false);
+          }}
+          onCancel={() => setIsDictating(false)}
+          onListeningChange={setIsDictating}
+          colors={colors}
+          isDark={isDark}
+        />
+
+        {/* Action buttons row */}
+        <View className="flex-row items-center justify-between pl-1 pr-4 pt-1 pb-2">
+          <View className="flex-row items-center gap-4">
+            {onAttach && (
               <Pressable
-                onPress={disabled ? undefined : () => setIsDictating(true)}
+                onPress={disabled ? undefined : onAttach}
                 disabled={disabled}
+                accessibilityLabel="Attach image"
                 className="p-1 active:opacity-70"
-                style={{ opacity: disabled ? 0.35 : 1 }}
-              >
-                <Mic size={24} color={colors.mutedForeground} />
-              </Pressable>
-              <Pressable
-                onPress={handleSubmit}
-                disabled={!canSubmit}
+                hitSlop={8}
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
+                  minWidth: 44,
+                  minHeight: 44,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: canSubmit
-                    ? colors.primary
-                    : isDark
-                      ? "#404040"
-                      : "#d4d4d4",
+                  opacity: disabled ? 0.35 : 1,
                 }}
               >
-                <ArrowUp
-                  size={20}
-                  strokeWidth={2.5}
-                  color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+                <Plus size={24} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+            {(onSpacePress || onSpaceSelect) && (
+              <View ref={spaceAnchorRef}>
+                <Pressable
+                  onPress={handleSpacePress}
+                  disabled={disabled}
+                  // Borderless/transparent to match the desktop composer's space picker —
+                  // it sits inline with the other toolbar icons, no filled pill.
+                  className="flex-row items-center gap-1.5 active:opacity-70"
+                  style={{
+                    minHeight: 32,
+                    paddingTop: 2,
+                    opacity: disabled ? 0.35 : 1,
+                  }}
+                >
+                  <IconPlanet size={24} color={colors.mutedForeground} />
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      fontSize: 18,
+                      maxWidth: 140,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {selectedSpace?.name ?? "Default"}
+                  </Text>
+                  <ChevronDown size={20} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+            )}
+          </View>
+          <View className="flex-row items-center gap-4">
+            {onToggleAgent && (
+              <Pressable
+                onPress={disabled ? undefined : onToggleAgent}
+                disabled={disabled}
+                accessibilityLabel="Send to agent"
+                accessibilityState={{ selected: agentEnabled }}
+                className="p-1 active:opacity-70"
+                hitSlop={8}
+                style={{
+                  minWidth: 44,
+                  minHeight: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: disabled ? 0.35 : 1,
+                }}
+              >
+                <Bot
+                  size={24}
+                  color={agentEnabled ? "#54a9ff" : colors.mutedForeground}
                 />
               </Pressable>
-            </View>
+            )}
+            {goalDraft && onGoalDraftChange ? (
+              <Pressable
+                onPress={handleGoalPress}
+                disabled={disabled}
+                accessibilityLabel="Goal"
+                accessibilityState={{ selected: goalActive }}
+                className="p-1 active:opacity-70"
+                hitSlop={8}
+                style={{
+                  minWidth: 44,
+                  minHeight: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: disabled ? 0.35 : 1,
+                }}
+              >
+                <Target
+                  size={24}
+                  color={goalActive ? "#54a9ff" : colors.mutedForeground}
+                />
+              </Pressable>
+            ) : null}
+            <ComposerModelPicker
+              ref={modelAnchorRef}
+              models={modelOptions}
+              value={selectedModelId}
+              disabled={disabled}
+              colors={colors}
+              onPress={handleModelPress}
+            />
+            <Pressable
+              onPressIn={handleVoicePressIn}
+              onPressOut={handleVoicePressOut}
+              disabled={disabled}
+              accessibilityLabel="Hold to talk"
+              className="p-1 active:opacity-70"
+              hitSlop={8}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: disabled ? 0.35 : 1,
+              }}
+            >
+              {isDictating ? (
+                <WaveformBars isDark={isDark} />
+              ) : (
+                <Mic size={24} color={colors.mutedForeground} />
+              )}
+            </Pressable>
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: canSubmit
+                  ? colors.primary
+                  : isDark
+                    ? "#404040"
+                    : "#d4d4d4",
+              }}
+            >
+              <ArrowUp
+                size={20}
+                strokeWidth={2.5}
+                color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+              />
+            </Pressable>
           </View>
-        )}
+        </View>
       </View>
 
       {pickerOpen ? (
@@ -674,6 +844,25 @@ export const MessageInputFooter = forwardRef<
         style={spacePicker.style}
         width={spacePicker.width}
       />
+      <ComposerPickerOverlay
+        options={visibleModelOptions}
+        onSelect={handleModelSelect}
+        visible={modelPickerVisible}
+        style={modelPicker.style}
+        width={modelPicker.width}
+      />
+      {goalDraft && onGoalDraftChange ? (
+        <GoalIntentCard
+          visible={goalCardVisible}
+          draft={goalDraft}
+          colors={colors}
+          isDark={isDark}
+          onChangeDraft={onGoalDraftChange}
+          onApply={handleGoalApply}
+          onCancel={handleGoalCancel}
+          onClear={handleGoalClear}
+        />
+      ) : null}
     </View>
   );
 });

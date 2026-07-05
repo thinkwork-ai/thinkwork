@@ -44,6 +44,15 @@ interface SendComputerApprovalPushParams {
   computerBaseUrl?: string;
 }
 
+interface SendWorkItemPushParams {
+  userId: string;
+  tenantId: string;
+  workItemId: string;
+  kind: "assigned" | "blocked";
+  title: string;
+  body: string;
+}
+
 export function buildComputerApprovalPushMessage(input: {
   token: string;
   approvalId: string;
@@ -56,6 +65,7 @@ export function buildComputerApprovalPushMessage(input: {
   return {
     to: input.token,
     sound: "default",
+    categoryId: "computer_approval_actions",
     title: "Approval needed",
     body:
       input.question.length > 100
@@ -65,6 +75,7 @@ export function buildComputerApprovalPushMessage(input: {
       type: "computer_approval",
       approvalId: input.approvalId,
       deepLinkUrl: `${baseUrl}/approvals/${input.approvalId}`,
+      tier: "code",
     },
   };
 }
@@ -124,7 +135,7 @@ export async function sendExternalTaskPush({
       sound: "default",
       title,
       body: body.length > 150 ? body.slice(0, 147) + "..." : body,
-      data: { threadId, type: "external_task_event", eventKind },
+      data: { threadId, type: "external_task_event", eventKind, tier: "page" },
     };
 
     try {
@@ -219,6 +230,77 @@ export async function sendComputerApprovalPush({
   }
 }
 
+export async function sendWorkItemPush({
+  userId,
+  tenantId: _tenantId,
+  workItemId,
+  kind,
+  title,
+  body,
+}: SendWorkItemPushParams) {
+  try {
+    const db = getDb();
+
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        token: users.expo_push_token,
+      })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (rows.length === 0) {
+      console.log(
+        `[push-notifications] User ${userId}: not found, skipping work item push`,
+      );
+      return;
+    }
+
+    const row = rows[0];
+    if (!row.token) {
+      console.log(
+        `[push-notifications] User ${row.email}: no Expo push token, skipping`,
+      );
+      return;
+    }
+    if (!isExpoPushToken(row.token)) {
+      console.warn(
+        `[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`,
+      );
+      return;
+    }
+
+    const message = {
+      to: row.token,
+      sound: "default",
+      title,
+      body: body.length > 150 ? body.slice(0, 147) + "..." : body,
+      data: { type: "work_item_event", workItemId, kind, tier: "page" },
+    };
+
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([message]),
+      });
+      const result = await res.json();
+      console.log(
+        `[push-notifications] work_item_event push (${res.status}) to ${row.email}:`,
+        JSON.stringify(result),
+      );
+    } catch (err) {
+      console.error("[push-notifications] Work item push failed:", err);
+    }
+  } catch (err) {
+    console.error("[push-notifications] sendWorkItemPush error:", err);
+  }
+}
+
 /**
  * Send a push notification to the user paired with the agent (agents.human_pair_id).
  */
@@ -278,10 +360,9 @@ export async function sendTurnCompletedPush({
     // Build messages
     const messages = pushTokens.map((token) => ({
       to: token,
-      sound: "default",
       title,
       body: body.length > 150 ? body.slice(0, 147) + "..." : body,
-      data: { threadId, type: "turn_completed" },
+      data: { threadId, type: "turn_completed", tier: "chart" },
     }));
 
     // Send via Expo HTTP API

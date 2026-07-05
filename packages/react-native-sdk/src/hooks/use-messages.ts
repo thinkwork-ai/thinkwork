@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "urql";
 import { MessagesQuery, SendMessageMutation } from "../graphql/queries";
+import {
+  buildSendMessageMutationVariables,
+  type SendMessageGoalMode,
+  type SendMessageOptions,
+} from "../send-message-options";
 import type { Message } from "../types";
 import { useNewMessageSubscription } from "./use-subscriptions";
+
+export type { SendMessageGoalMode, SendMessageOptions };
 
 interface MessageEdge {
   node: Message;
@@ -42,15 +49,6 @@ export function useMessages(threadId: string | null | undefined) {
   };
 }
 
-export interface SendMessageOptions {
-  /** Optional attribution. Defaults to `"user"` if not provided. */
-  senderType?: string;
-  /** Optional user/agent id stamped on the message row. */
-  senderId?: string;
-  /** Optional message metadata. Serialized to GraphQL AWSJSON. */
-  metadata?: Record<string, unknown>;
-}
-
 // Unbound imperative sender. Pre-0.2.0 the hook took a threadId at render time,
 // which was a footgun for "create thread then send first message" flows: the
 // freshly-minted threadId wasn't available until after the component re-rendered.
@@ -66,18 +64,9 @@ export function useSendMessage() {
       opts?: SendMessageOptions,
     ): Promise<Message> => {
       if (!threadId) throw new Error("useSendMessage: threadId is required");
-      const result = await sendMessage({
-        input: {
-          threadId,
-          role: "USER",
-          content,
-          senderType: opts?.senderType ?? "user",
-          ...(opts?.senderId ? { senderId: opts.senderId } : {}),
-          ...(opts?.metadata
-            ? { metadata: JSON.stringify(opts.metadata) }
-            : {}),
-        },
-      });
+      const result = await sendMessage(
+        buildSendMessageMutationVariables(threadId, content, opts),
+      );
       const message = result.data?.sendMessage;
       if (!message) {
         throw result.error ?? new Error("Failed to send message");

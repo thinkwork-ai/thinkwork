@@ -9,7 +9,9 @@
     ".": {
       "types": "./src/index.ts",
       "development": "./src/index.ts",
-      "import": "./dist/src/index.js"
+      "react-native": "./dist/src/index.js",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

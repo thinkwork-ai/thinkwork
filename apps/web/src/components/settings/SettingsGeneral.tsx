@@ -53,6 +53,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { SetUpMobileCard } from "@/components/settings/SetUpMobileCard";
 
 export function SettingsGeneral() {
   const { isOperator, roleResolved } = useTenant();
@@ -91,6 +92,8 @@ export function SettingsGeneral() {
           <ThreadNotificationsRow />
         </SettingsSection>
       ) : null}
+
+      <SetUpMobileCard />
 
       {showOperator ? (
         <>

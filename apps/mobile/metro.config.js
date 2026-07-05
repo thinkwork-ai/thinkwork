@@ -7,6 +7,8 @@ const workspacePackages = [
   path.resolve(monorepoRoot, "packages/react-native-sdk"),
   path.resolve(monorepoRoot, "packages/pricing-config"),
   path.resolve(monorepoRoot, "packages/pi-extensions"),
+  path.resolve(monorepoRoot, "packages/thread-json-render"),
+  path.resolve(monorepoRoot, "packages/deployment-profile"),
 ];
 
 /** @type {import('expo/metro-config').MetroConfig} */
