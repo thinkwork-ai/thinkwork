@@ -16,6 +16,10 @@ vi.mock("urql", async (importOriginal) => ({
   ...(await importOriginal<typeof import("urql")>()),
   useQuery: useQueryMock,
   useMutation: () => [{ fetching: false }, vi.fn()],
+  // CanvasHeaderActions (THINK-167 owner refresh) polls via the raw client.
+  useClient: () => ({
+    query: () => ({ toPromise: async () => ({ data: undefined }) }),
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({

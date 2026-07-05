@@ -120,6 +120,8 @@ export function ThreadArtifactPanel({
               id: artifact.id,
               title: artifact.title,
               status: artifact.status,
+              // THINK-167 owner-refresh dispatch target: the canvas's thread.
+              threadId: artifact.threadId ?? null,
             }}
             hasBindings={hasBindings}
             onChanged={refetch}
