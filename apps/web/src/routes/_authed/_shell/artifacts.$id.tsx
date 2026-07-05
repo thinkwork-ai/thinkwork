@@ -24,6 +24,7 @@ import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
+import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
 import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionHistory";
 import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
@@ -504,14 +505,37 @@ function DataViewArtifactContent({
   onChanged: () => void;
 }) {
   const isCanvas = isLivingCanvasMetadata(artifact.metadata);
+  const hasBindings = (artifact.bindings ?? []).length > 0;
+  // Canvas save/pin/refresh live in the page header as muted icons — the
+  // canvas body itself is chrome-free (THINK-145 declutter).
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
-      <ArtifactDetailActions
-        artifactId={artifact.id}
-        artifactTitle={artifact.title}
-      />
+      <div className="flex items-center gap-1">
+        {isCanvas ? (
+          <CanvasHeaderActions
+            artifact={{
+              id: artifact.id,
+              title: artifact.title,
+              status: artifact.status,
+            }}
+            hasBindings={hasBindings}
+            onChanged={onChanged}
+          />
+        ) : null}
+        <ArtifactDetailActions
+          artifactId={artifact.id}
+          artifactTitle={artifact.title}
+        />
+      </div>
     ),
-    [artifact.id, artifact.title],
+    [
+      artifact.id,
+      artifact.status,
+      artifact.title,
+      hasBindings,
+      isCanvas,
+      onChanged,
+    ],
   );
   const titleTrailing = useMemo<ReactNode>(
     () => (
@@ -537,9 +561,10 @@ function DataViewArtifactContent({
   });
 
   // Living Artifacts (THINK-145): living canvases are the only GenUI artifact
-  // kind — they get the full canvas surface (freshness chrome, save/pin,
-  // version history). The legacy promote-copy snapshot render path was retired
-  // when the living canvas became the single GenUI artifact system.
+  // kind. The body renders just the canvas + version history; save/pin/
+  // refresh are header icons composed above. The legacy promote-copy snapshot
+  // render path was retired when the living canvas became the single GenUI
+  // artifact system.
   if (isCanvas) {
     return (
       <CanvasArtifactView
@@ -554,7 +579,6 @@ function DataViewArtifactContent({
           bindings: artifact.bindings ?? [],
           versions: artifact.versions ?? [],
         }}
-        onChanged={onChanged}
       />
     );
   }
