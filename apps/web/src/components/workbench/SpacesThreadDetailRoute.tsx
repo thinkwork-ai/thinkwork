@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Flag, Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
+import { Flag, Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { describeSendMessageError } from "@/lib/send-message-error";
 import { Button } from "@thinkwork/ui";
@@ -23,6 +23,7 @@ import {
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
+import { useThreadArtifactPanel } from "@/components/artifacts/thread-artifact-panel-store";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
@@ -444,17 +445,16 @@ export function SpacesThreadDetailRoute({
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readStoredModelId(),
   );
-  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
-  const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
+  // THINK-168: the docked artifact panel replaced the legacy GeneratedArtifact
+  // side panel. The header PanelRight button opens the thread's NEWEST durable
+  // artifact directly in it (same store the transcript cards use).
+  const dockedArtifactPanel = useThreadArtifactPanel(threadId);
   // Hide the "…" actions menu while the title is being renamed — leaving the
   // trigger mounted lets Radix's focus-restore steal focus back from the
   // rename input on menu close, cancelling the edit.
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [goalReviewError, setGoalReviewError] = useState<string | null>(null);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
-    null,
-  );
   const [manualRefreshStartedAt, setManualRefreshStartedAt] = useState<
     number | null
   >(null);
@@ -1131,10 +1131,7 @@ export function SpacesThreadDetailRoute({
     () => deriveThreadArtifacts(visibleThread),
     [visibleThread],
   );
-  const effectiveSelectedArtifactId = resolveThreadArtifactSelection(
-    threadArtifacts,
-    selectedArtifactId,
-  );
+  const newestThreadArtifactId = threadArtifacts.at(-1)?.id ?? null;
   const runbookQueues = useMemo(
     () => toRunbookQueues(runbookRunsData?.runbookRuns),
     [runbookRunsData?.runbookRuns],
@@ -1429,58 +1426,6 @@ export function SpacesThreadDetailRoute({
     });
   }, [hasDurableAssistant, threadId, visibleThread]);
 
-  useEffect(() => {
-    if (selectedArtifactId !== effectiveSelectedArtifactId) {
-      setSelectedArtifactId(effectiveSelectedArtifactId);
-    }
-    if (threadArtifacts.length === 0 && artifactPanelOpen) {
-      setArtifactPanelOpen(false);
-    }
-    if (
-      (!artifactPanelOpen || threadArtifacts.length === 0) &&
-      artifactFullscreen
-    ) {
-      setArtifactFullscreen(false);
-    }
-  }, [
-    artifactFullscreen,
-    artifactPanelOpen,
-    effectiveSelectedArtifactId,
-    selectedArtifactId,
-    threadArtifacts.length,
-  ]);
-
-  const artifactPanelState = useMemo(
-    () => ({
-      artifacts: threadArtifacts,
-      selectedArtifactId: effectiveSelectedArtifactId,
-      isOpen: artifactPanelOpen,
-      isFullscreen: artifactFullscreen,
-      onOpenChange: (open: boolean) => {
-        setArtifactPanelOpen(open);
-        if (!open) {
-          setArtifactFullscreen(false);
-        }
-        if (open) {
-          setThreadInfoOpen(false);
-        }
-      },
-      onSelectArtifact: (artifactId: string) => {
-        if (!threadArtifacts.some((artifact) => artifact.id === artifactId)) {
-          return;
-        }
-        setSelectedArtifactId(artifactId);
-        setArtifactPanelOpen(true);
-        setThreadInfoOpen(false);
-      },
-    }),
-    [
-      artifactFullscreen,
-      artifactPanelOpen,
-      effectiveSelectedArtifactId,
-      threadArtifacts,
-    ],
-  );
   const handleReviewGoal = useCallback(
     async (
       action: "CONFIRM_COMPLETION" | "REQUEST_CHANGES",
@@ -1566,8 +1511,7 @@ export function SpacesThreadDetailRoute({
       onOpenChange: (open: boolean) => {
         setThreadInfoOpen(open);
         if (open) {
-          setArtifactPanelOpen(false);
-          setArtifactFullscreen(false);
+          dockedArtifactPanel.close();
         }
       },
       threadId: routeThread?.id ?? threadId,
@@ -1805,73 +1749,41 @@ export function SpacesThreadDetailRoute({
             const nextOpen = !threadInfoOpen;
             setThreadInfoOpen(nextOpen);
             if (nextOpen) {
-              setArtifactPanelOpen(false);
-              setArtifactFullscreen(false);
+              dockedArtifactPanel.close();
             }
           }}
         >
           <Info className="size-4" />
         </Button>
-        {artifactPanelOpen && effectiveSelectedArtifactId ? (
+        {newestThreadArtifactId ? (
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             aria-label={
-              artifactFullscreen
-                ? "Minimize artifact panel"
-                : "Maximize artifact panel"
+              dockedArtifactPanel.artifactId
+                ? "Close artifact panel"
+                : "Open artifact panel"
             }
             title={
-              artifactFullscreen
-                ? "Minimize artifact panel"
-                : "Maximize artifact panel"
+              dockedArtifactPanel.artifactId
+                ? "Close artifact panel"
+                : "Open artifact panel"
             }
             className={
-              artifactFullscreen
+              dockedArtifactPanel.artifactId
                 ? desktopToolbarActiveButtonClassName
                 : desktopToolbarButtonClassName
             }
             onClick={() => {
-              setArtifactFullscreen((current) => !current);
-            }}
-          >
-            {artifactFullscreen ? (
-              <Minimize2 className="size-4" />
-            ) : (
-              <Maximize2 className="size-4" />
-            )}
-          </Button>
-        ) : null}
-        {effectiveSelectedArtifactId ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-              artifactPanelOpen
-                ? "Close artifact side panel"
-                : "Open artifact side panel"
-            }
-            title={
-              artifactPanelOpen
-                ? "Close artifact side panel"
-                : "Open artifact side panel"
-            }
-            className={
-              artifactPanelOpen
-                ? desktopToolbarActiveButtonClassName
-                : desktopToolbarButtonClassName
-            }
-            onClick={() => {
-              const nextOpen = !artifactPanelOpen;
-              setArtifactPanelOpen(nextOpen);
-              if (!nextOpen) {
-                setArtifactFullscreen(false);
+              // Opens the thread's newest artifact DIRECTLY in the docked
+              // panel — the legacy intermediate summary card is retired.
+              if (dockedArtifactPanel.artifactId) {
+                dockedArtifactPanel.close();
+                return;
               }
-              if (nextOpen) {
-                setThreadInfoOpen(false);
-              }
+              dockedArtifactPanel.open(newestThreadArtifactId);
+              setThreadInfoOpen(false);
             }}
           >
             <PanelRight className="size-4" />
@@ -1879,7 +1791,7 @@ export function SpacesThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${newestThreadArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${dockedArtifactPanel.artifactId ?? "closed"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
   });
 
   useEffect(() => {
@@ -1942,7 +1854,6 @@ export function SpacesThreadDetailRoute({
         id: userId,
       }}
       threadMode={routeThreadMode}
-      artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
       onFlagTurn={
         isOperator
@@ -2195,19 +2106,6 @@ export function deriveThreadArtifacts(
     artifacts.push(artifact);
   }
   return artifacts;
-}
-
-export function resolveThreadArtifactSelection(
-  artifacts: GeneratedArtifact[],
-  currentArtifactId: string | null,
-) {
-  if (
-    currentArtifactId &&
-    artifacts.some((artifact) => artifact.id === currentArtifactId)
-  ) {
-    return currentArtifactId;
-  }
-  return artifacts.at(-1)?.id ?? null;
 }
 
 function toSendMention(mention: ComposerMention) {

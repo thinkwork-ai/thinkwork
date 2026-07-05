@@ -21,6 +21,7 @@ import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
 import {
   ArtifactBodyView,
+  coerceArtifactMetadataRecord,
   isCanvasArtifactNode,
   type ArtifactBodyNode,
 } from "@/components/artifacts/ArtifactBodyView";
@@ -36,24 +37,6 @@ const LIVE_REFRESH_DEBOUNCE_MS = 400;
 
 interface PanelArtifactResult {
   artifact?: (ArtifactBodyNode & { threadId?: string | null }) | null;
-}
-
-function coerceMetadataRecord(
-  metadata: unknown,
-): Record<string, unknown> | null {
-  const parsed =
-    typeof metadata === "string"
-      ? (() => {
-          try {
-            return JSON.parse(metadata) as unknown;
-          } catch {
-            return null;
-          }
-        })()
-      : metadata;
-  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : null;
 }
 
 export function ThreadArtifactPanel({
@@ -84,7 +67,7 @@ export function ThreadArtifactPanel({
     () =>
       artifact
         ? bornCanvasStablePartId({
-            metadata: coerceMetadataRecord(artifact.metadata),
+            metadata: coerceArtifactMetadataRecord(artifact.metadata),
           })
         : null,
     [artifact],

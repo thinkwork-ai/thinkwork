@@ -44,6 +44,17 @@ vi.mock("urql", async () => {
   };
 });
 
+// The docked artifact panel fetches via urql useQuery (unmocked here);
+// stub it — its own behavior is covered in ThreadArtifactPanel.test.tsx.
+vi.mock("@/components/artifacts/ThreadArtifactPanel", () => ({
+  ThreadArtifactPanel: ({ artifactId }: { artifactId: string }) => (
+    <aside
+      data-testid="thread-artifact-panel-stub"
+      data-artifact-id={artifactId}
+    />
+  ),
+}));
+
 // react-resizable-panels chokes on apps/web's ResizeObserver stub — render
 // plain passthroughs so the chat/panel split mounts deterministically
 // (same workaround as ComposerWorkspaceEditor.test.tsx).
@@ -93,6 +104,7 @@ import {
   normalizePersistedParts,
   TaskThreadView,
 } from "./TaskThreadView";
+import { resetThreadArtifactPanels } from "@/components/artifacts/thread-artifact-panel-store";
 
 afterEach(() => {
   cleanup();
@@ -100,6 +112,7 @@ afterEach(() => {
   delete window.thinkworkBridge;
   tenantMock.isOperator = false;
   tenantMock.roleResolved = true;
+  resetThreadArtifactPanels();
 });
 
 function getThinkingDisclosure(index = 0): HTMLElement {
@@ -842,9 +855,7 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("opens a transcript artifact through the artifact panel callback", () => {
-    const onSelectArtifact = vi.fn();
-
+  it("opens a transcript app artifact in the docked panel (THINK-168)", () => {
     render(
       <TaskThreadView
         thread={{
@@ -871,21 +882,6 @@ describe("TaskThreadView", () => {
             },
           ],
         }}
-        artifactPanelState={{
-          artifacts: [
-            {
-              id: "artifact_123",
-              title: "CRM pipeline risk app",
-              type: "DATA_VIEW",
-              summary: "Stale opportunity analysis",
-              metadata: { kind: "research_dashboard" },
-            },
-          ],
-          selectedArtifactId: "artifact_123",
-          isOpen: false,
-          onOpenChange: vi.fn(),
-          onSelectArtifact,
-        }}
       />,
     );
 
@@ -895,8 +891,11 @@ describe("TaskThreadView", () => {
       }),
     );
 
-    expect(onSelectArtifact).toHaveBeenCalledWith("artifact_123");
-    expect(screen.queryByTestId("inline-applet-embed-stub")).toBeNull();
+    // Straight into the docked panel — no legacy summary side panel.
+    expect(
+      screen.getByTestId("thread-artifact-panel-stub").dataset.artifactId,
+    ).toBe("artifact_123");
+    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
   });
 
   it("submits the follow-up composer when Enter is pressed", async () => {
@@ -937,84 +936,6 @@ describe("TaskThreadView", () => {
         [],
       ),
     );
-  });
-
-  it("renders the selected artifact in the side panel when artifact panel state is open", () => {
-    render(
-      <TaskThreadView
-        thread={{
-          id: "thread-1",
-          title: "CRM pipeline risk",
-          lifecycleStatus: "COMPLETED",
-          messages: [
-            {
-              id: "message-1",
-              role: "USER",
-              content: "Build a CRM pipeline dashboard",
-            },
-            {
-              id: "message-2",
-              role: "ASSISTANT",
-              content: "I created a dashboard app.",
-              durableArtifact: {
-                id: "artifact_123",
-                title: "CRM pipeline risk app",
-                type: "DATA_VIEW",
-                summary: "Stale opportunity analysis",
-                metadata: { kind: "research_dashboard" },
-              },
-            },
-          ],
-        }}
-        artifactPanelState={{
-          artifacts: [
-            {
-              id: "artifact_123",
-              title: "CRM pipeline risk app",
-              type: "DATA_VIEW",
-              summary: "Stale opportunity analysis",
-              metadata: { kind: "research_dashboard" },
-            },
-          ],
-          selectedArtifactId: "artifact_123",
-          isOpen: true,
-          onOpenChange: vi.fn(),
-          onSelectArtifact: vi.fn(),
-        }}
-      />,
-    );
-
-    const panel = screen.getByTestId("artifact-side-panel");
-    expect(within(panel).queryByText("CRM pipeline risk app")).toBeNull();
-    expect(within(panel).getByTestId("inline-applet-embed-stub")).toBeTruthy();
-    expect(
-      within(panel).queryByRole("button", { name: /maximize artifact panel/i }),
-    ).toBeNull();
-    expect(
-      within(panel).getByRole("separator", { name: /resize artifact panel/i }),
-    ).toBeTruthy();
-  });
-
-  it("does not mount the artifact side panel when no selected artifact can be displayed", () => {
-    render(
-      <TaskThreadView
-        thread={{
-          id: "thread-1",
-          title: "Artifact loading gap",
-          lifecycleStatus: "COMPLETED",
-          messages: [{ id: "message-1", role: "USER", content: "Open app" }],
-        }}
-        artifactPanelState={{
-          artifacts: [],
-          selectedArtifactId: "artifact_123",
-          isOpen: true,
-          onOpenChange: vi.fn(),
-          onSelectArtifact: vi.fn(),
-        }}
-      />,
-    );
-
-    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
   });
 
   it("reserves thread width for the info panel with details and downloadable attachments", async () => {

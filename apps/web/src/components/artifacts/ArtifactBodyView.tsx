@@ -11,7 +11,9 @@
  * composes them into the page header, the thread panel into its own header.
  */
 
+import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
+import { isAppArtifact } from "@/components/workbench/GeneratedArtifactCard";
 import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionHistory";
 import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
@@ -109,13 +111,49 @@ export function DocumentArtifactBody({
   );
 }
 
+/** AWSJSON metadata may arrive as a string — coerce to a record for reads. */
+export function coerceArtifactMetadataRecord(
+  metadata: unknown,
+): Record<string, unknown> | null {
+  const parsed =
+    typeof metadata === "string"
+      ? (() => {
+          try {
+            return JSON.parse(metadata) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : metadata;
+  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : null;
+}
+
 /**
  * Body dispatch for every artifact type an in-thread ArtifactCard can open.
+ * App artifacts (applets, research dashboards) embed their live applet —
+ * the same inline embed the retired GeneratedArtifact side panel used.
  * Unknown/unsupported types show the same fallback the full page shows.
  */
 export function ArtifactBodyView({ artifact }: { artifact: ArtifactBodyNode }) {
   if (isDocumentArtifactMetadata(artifact.metadata)) {
     return <DocumentArtifactBody artifact={artifact} />;
+  }
+
+  if (
+    isAppArtifact({
+      id: artifact.id,
+      title: artifact.title,
+      type: artifact.type,
+      metadata: coerceArtifactMetadataRecord(artifact.metadata),
+    })
+  ) {
+    return (
+      <div className="p-4" data-testid="artifact-body-applet">
+        <InlineAppletEmbed appId={artifact.id} />
+      </div>
+    );
   }
 
   if (isCanvasArtifactNode(artifact)) {

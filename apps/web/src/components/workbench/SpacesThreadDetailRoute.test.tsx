@@ -32,8 +32,11 @@ import {
   SpacesThreadDetailRoute,
   deriveThreadArtifacts,
   jsonRenderPartIdFromChunk,
-  resolveThreadArtifactSelection,
 } from "./SpacesThreadDetailRoute";
+import {
+  getOpenThreadArtifactId,
+  resetThreadArtifactPanels,
+} from "@/components/artifacts/thread-artifact-panel-store";
 import {
   clearPendingThreadStart,
   setPendingThreadStart,
@@ -317,6 +320,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete window.thinkworkBridge;
+  resetThreadArtifactPanels();
 });
 
 describe("SpacesThreadDetailRoute", () => {
@@ -466,22 +470,6 @@ describe("SpacesThreadDetailRoute", () => {
       "artifact-b",
     ]);
     expect(artifacts[0].title).toBe("First artifact");
-  });
-
-  it("keeps a valid selected artifact and otherwise falls back to the latest artifact", () => {
-    const artifacts = [
-      { id: "artifact-a", title: "First artifact" },
-      { id: "artifact-b", title: "Second artifact" },
-    ];
-
-    expect(resolveThreadArtifactSelection(artifacts, "artifact-a")).toBe(
-      "artifact-a",
-    );
-    expect(resolveThreadArtifactSelection(artifacts, "missing")).toBe(
-      "artifact-b",
-    );
-    expect(resolveThreadArtifactSelection(artifacts, null)).toBe("artifact-b");
-    expect(resolveThreadArtifactSelection([], "artifact-a")).toBeNull();
   });
 
   it("does not register a header back button by default", () => {
@@ -637,9 +625,65 @@ describe("SpacesThreadDetailRoute", () => {
       screen.getByRole("button", { name: "Open thread info" }).className,
     ).toContain("text-muted-foreground/70");
     expect(
-      screen.getByRole("button", { name: "Open artifact side panel" })
-        .className,
+      screen.getByRole("button", { name: "Open artifact panel" }).className,
     ).toContain("text-muted-foreground/70");
+  });
+
+  it("header artifact button opens the NEWEST thread artifact directly in the docked panel (THINK-168)", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "First artifact.",
+                durableArtifact: {
+                  id: "artifact-old",
+                  title: "Older artifact",
+                  type: "DATA_VIEW",
+                },
+              },
+            },
+            {
+              node: {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Second artifact.",
+                durableArtifact: {
+                  id: "artifact-new",
+                  title: "Newest artifact",
+                  type: "DATA_VIEW",
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+
+    // No intermediate summary card: the click loads the artifact directly.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open artifact panel" }),
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-new");
+    // The docked panel itself is mounted in the thread view.
+    expect(screen.getByTestId("thread-artifact-panel")).toBeTruthy();
+    // The legacy GeneratedArtifact summary panel is gone.
+    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
+
+    // Toggle closes it (re-render the refreshed header action first).
+    renderHeaderAction();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Close artifact panel" }).at(-1)!,
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBeNull();
   });
 
   it("does not refetch the full thread for turn-only status updates", () => {

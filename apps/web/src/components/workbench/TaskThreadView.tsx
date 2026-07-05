@@ -151,7 +151,6 @@ import {
 } from "@/lib/agent-mode";
 import {
   GeneratedArtifactCard,
-  GeneratedArtifactPreview,
   type GeneratedArtifact,
 } from "@/components/workbench/GeneratedArtifactCard";
 import {
@@ -320,7 +319,6 @@ interface TaskThreadViewProps {
    * local message-history heuristic.
    */
   threadMode?: ServerThreadMode | null;
-  artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
   /**
    * Flag-for-evaluation affordance (Trust Core U7). Rendered per
@@ -360,15 +358,6 @@ export interface SavedCanvasSummaryLite {
   headVersion?: number | null;
   stablePartId?: string | null;
   updatedAt?: string | null;
-}
-
-export interface TaskThreadArtifactPanelState {
-  artifacts: GeneratedArtifact[];
-  selectedArtifactId: string | null;
-  isOpen: boolean;
-  isFullscreen?: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelectArtifact: (artifactId: string) => void;
 }
 
 export interface TaskThreadInfoPanelState {
@@ -520,7 +509,6 @@ export function TaskThreadView({
   currentUser,
   onSendFollowUp,
   threadMode,
-  artifactPanelState,
   infoPanelState,
   onFlagTurn,
   onJsonRenderActionSuccess,
@@ -655,13 +643,6 @@ export function TaskThreadView({
       .find((candidate) => candidate.role.toUpperCase() !== "USER");
     documentCardsByMessageId.set(reply?.id ?? message.id, cards);
   });
-  const selectedArtifact =
-    artifactPanelState?.artifacts.find(
-      (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
-    ) ?? null;
-  const artifactPanelOpen = Boolean(
-    artifactPanelState?.isOpen && selectedArtifact,
-  );
   const infoPanelOpen = infoPanelState?.isOpen ?? false;
 
   return (
@@ -736,7 +717,6 @@ export function TaskThreadView({
                               ? streamState
                               : undefined
                           }
-                          onOpenArtifact={artifactPanelState?.onSelectArtifact}
                           onOpenArtifactPanel={canvasPanel.open}
                           onSendFollowUp={onSendFollowUp}
                           isSending={isSending}
@@ -825,102 +805,8 @@ export function TaskThreadView({
           </>
         ) : null}
       </ResizablePanelGroup>
-
-      {/* Docked artifact panel wins the right edge when open — the legacy
-          generated-artifact side panel yields rather than double-docking. */}
-      <ArtifactSidePanel
-        artifact={selectedArtifact}
-        open={artifactPanelOpen && !canvasPanel.artifactId}
-        fullscreen={artifactPanelState?.isFullscreen ?? false}
-      />
     </main>
   );
-}
-
-function ArtifactSidePanel({
-  artifact,
-  open,
-  fullscreen,
-}: {
-  artifact: GeneratedArtifact | null;
-  open: boolean;
-  fullscreen: boolean;
-}) {
-  const [width, setWidth] = useState(500);
-  const [isDragging, setIsDragging] = useState(false);
-
-  useEffect(() => {
-    if (!isDragging || fullscreen) return;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const maxWidth = Math.max(420, window.innerWidth - 360);
-      setWidth(clamp(window.innerWidth - event.clientX, 360, maxWidth));
-    };
-
-    const handlePointerUp = () => {
-      setIsDragging(false);
-    };
-
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    return () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, [fullscreen, isDragging]);
-
-  if (!open || !artifact) return null;
-
-  return (
-    <aside
-      className={cn(
-        "relative hidden h-full shrink-0 flex-col border-l border-border bg-background shadow-xl md:flex",
-        fullscreen && "absolute inset-0 z-30 w-full border-l-0",
-      )}
-      style={fullscreen ? undefined : { width }}
-      aria-label="Artifact side panel"
-      data-testid="artifact-side-panel"
-    >
-      {!fullscreen ? (
-        <div
-          role="separator"
-          aria-label="Resize artifact panel"
-          aria-orientation="vertical"
-          aria-valuemin={360}
-          aria-valuemax={Math.max(420, window.innerWidth - 360)}
-          aria-valuenow={width}
-          tabIndex={0}
-          className="absolute inset-y-0 left-0 z-20 w-2 -translate-x-1 cursor-col-resize outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            event.preventDefault();
-            const delta = event.key === "ArrowLeft" ? 24 : -24;
-            const maxWidth = Math.max(420, window.innerWidth - 360);
-            setWidth((currentWidth) =>
-              clamp(currentWidth + delta, 360, maxWidth),
-            );
-          }}
-        />
-      ) : null}
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <GeneratedArtifactPreview artifact={artifact} bare />
-      </div>
-    </aside>
-  );
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 function ThreadInfoPanel({
@@ -1973,7 +1859,6 @@ function TranscriptSegment({
   isLatestUser,
   streamingChunks,
   streamState,
-  onOpenArtifact,
   onOpenArtifactPanel,
   onSendFollowUp,
   isSending,
@@ -1996,7 +1881,6 @@ function TranscriptSegment({
   isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
-  onOpenArtifact?: (artifactId: string) => void;
   /** THINK-168: open an artifact in the thread's docked panel. */
   onOpenArtifactPanel?: (artifactId: string) => void;
   onSendFollowUp?: (
@@ -2033,7 +1917,6 @@ function TranscriptSegment({
         documentCards={documentCards}
         canvasesByStablePartId={canvasesByStablePartId}
         threadId={threadId}
-        onOpenArtifact={onOpenArtifact}
         onOpenArtifactPanel={onOpenArtifactPanel}
         onSendFollowUp={onSendFollowUp}
         isSending={isSending}
@@ -2725,7 +2608,6 @@ function TranscriptMessage({
   documentCards,
   canvasesByStablePartId,
   threadId,
-  onOpenArtifact,
   onOpenArtifactPanel,
   onSendFollowUp,
   isSending,
@@ -2740,7 +2622,6 @@ function TranscriptMessage({
   documentCards?: DocumentCardData[];
   canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
-  onOpenArtifact?: (artifactId: string) => void;
   /** THINK-168: open an artifact in the thread's docked panel. */
   onOpenArtifactPanel?: (artifactId: string) => void;
   onSendFollowUp?: (
@@ -2996,7 +2877,7 @@ function TranscriptMessage({
               !bornCanvasStablePartId(durableArtifact) ? (
                 <GeneratedArtifactCard
                   artifact={durableArtifact}
-                  onOpenArtifact={onOpenArtifact}
+                  onOpenArtifact={onOpenArtifactPanel}
                 />
               ) : null}
             </>
