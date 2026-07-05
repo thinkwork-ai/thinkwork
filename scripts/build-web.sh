@@ -148,6 +148,7 @@ echo "▸ Syncing to S3 bucket (immutable assets): $APP_BUCKET ..."
 aws s3 sync apps/web/dist/ "s3://${APP_BUCKET}/" \
   --delete \
   --exclude "iframe-shell/*" \
+  --exclude "thinkwork-runtime-config.json" \
   --cache-control "public,max-age=31536000,immutable" \
   --region "$REGION"
 
@@ -162,6 +163,72 @@ echo "▸ Invalidating CloudFront cache: $APP_CF_ID ..."
 aws cloudfront create-invalidation \
   --distribution-id "$APP_CF_ID" \
   --paths "/*" \
+  --region "$REGION" \
+  --output text > /dev/null
+
+# Publish the unauthenticated runtime-config document mobile (and tooling)
+# discover environments from. Customer deploys get this from the CLI's
+# publishRuntimeConfig; hosts shipped by this script (app.thinkwork.ai) never
+# had it, which broke mobile's URL-based environment setup against them.
+# Mirrors apps/cli/src/commands/deploy.ts buildRuntimeConfig — keep in sync.
+echo "▸ Publishing thinkwork-runtime-config.json ..."
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+ISSUED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+API_BASE="${API_ENDPOINT%/}"
+if [[ "$AUTH_DOMAIN" == https://* ]]; then
+  COGNITO_DOMAIN="$AUTH_DOMAIN"
+elif [[ -n "$AUTH_DOMAIN" ]]; then
+  COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
+else
+  COGNITO_DOMAIN=""
+fi
+APP_URL="$(tf_output_cached_raw app_url 2>/dev/null || echo '')"
+jq -n \
+  --arg stage "$STAGE" --arg region "$REGION" --arg accountId "$ACCOUNT_ID" \
+  --arg releaseVersion "${VITE_RELEASE_VERSION:-}" \
+  --arg appUrl "$APP_URL" --arg apiEndpoint "$API_ENDPOINT" \
+  --arg graphqlHttpUrl "${API_BASE:+${API_BASE}/graphql}" \
+  --arg appsyncUrl "$APPSYNC_API_URL" --arg appsyncRealtimeUrl "$APPSYNC_REALTIME_URL" \
+  --arg appsyncApiKey "$APPSYNC_API_KEY" \
+  --arg cognitoDomain "$COGNITO_DOMAIN" --arg userPoolId "$USER_POOL_ID" \
+  --arg clientId "$ADMIN_CLIENT_ID" --arg issuedAt "$ISSUED_AT" \
+  '{
+    stage: $stage, region: $region, accountId: $accountId,
+    releaseVersion: (if $releaseVersion == "" then null else $releaseVersion end),
+    releaseManifestUrl: null, releaseManifestSha256: null,
+    deploymentId: ("thinkwork-" + $stage), displayName: "ThinkWork",
+    appUrl: $appUrl, apiEndpoint: $apiEndpoint,
+    graphqlHttpUrl: $graphqlHttpUrl,
+    appsyncUrl: $appsyncUrl, appsyncRealtimeUrl: $appsyncRealtimeUrl,
+    appsyncApiKey: $appsyncApiKey,
+    cognitoDomain: $cognitoDomain, cognitoUserPoolId: $userPoolId,
+    cognitoClientId: $clientId, controller: null, issuedAt: $issuedAt,
+    viteEnv: {
+      VITE_API_URL: $apiEndpoint,
+      VITE_GRAPHQL_HTTP_URL: $graphqlHttpUrl,
+      VITE_GRAPHQL_URL: $appsyncUrl,
+      VITE_GRAPHQL_WS_URL: $appsyncRealtimeUrl,
+      VITE_GRAPHQL_API_KEY: $appsyncApiKey,
+      VITE_COGNITO_DOMAIN: $cognitoDomain,
+      VITE_COGNITO_USER_POOL_ID: $userPoolId,
+      VITE_COGNITO_CLIENT_ID: $clientId,
+      VITE_DEPLOYMENT_ID: ("thinkwork-" + $stage),
+      VITE_DEPLOYMENT_DISPLAY_NAME: "ThinkWork",
+      VITE_DEPLOYMENT_PROFILE_ISSUED_AT: $issuedAt,
+      VITE_SPACES_URL: $appUrl,
+      VITE_STAGE: $stage, VITE_AWS_REGION: $region, VITE_AWS_ACCOUNT_ID: $accountId,
+      VITE_RELEASE_VERSION: $releaseVersion
+    }
+  }' > /tmp/thinkwork-runtime-config.json
+aws s3 cp /tmp/thinkwork-runtime-config.json \
+  "s3://${APP_BUCKET}/thinkwork-runtime-config.json" \
+  --content-type "application/json" \
+  --cache-control "no-store" \
+  --region "$REGION" \
+  --output text > /dev/null
+aws cloudfront create-invalidation \
+  --distribution-id "$APP_CF_ID" \
+  --paths "/thinkwork-runtime-config.json" \
   --region "$REGION" \
   --output text > /dev/null
 
