@@ -88,6 +88,12 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ThinkWork to scan the setup QR code from your web app."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#38bdf8"
