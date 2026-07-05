@@ -42,12 +42,16 @@ interface Recorder {
   toolCalls: number;
 }
 
-function makeDeps(
-  over: Partial<CanvasRefreshDeps> = {},
-): { deps: CanvasRefreshDeps; rec: Recorder } {
+function makeDeps(over: Partial<CanvasRefreshDeps> = {}): {
+  deps: CanvasRefreshDeps;
+  rec: Recorder;
+} {
   const rec: Recorder = { qualityWrites: [], headApplies: 0, toolCalls: 0 };
   const deps: CanvasRefreshDeps = {
-    resolveServerTarget: async () => ({ kind: "ok", target: { url: "https://x" } }),
+    resolveServerTarget: async () => ({
+      kind: "ok",
+      target: { url: "https://x" },
+    }),
     callTool: async () => {
       rec.toolCalls++;
       return { isError: false, raw: RAW_RESULT };
@@ -87,6 +91,100 @@ describe("refreshBinding — per-user OAuth (AE1, R9)", () => {
       markFetched: false,
       markGood: false,
     });
+  });
+});
+
+describe("refreshBinding — owner-token path (THINK-172 U2b)", () => {
+  const OWNER = "55555555-5555-5555-5555-555555555555";
+  const OTHER = "66666666-6666-6666-6666-666666666666";
+
+  function ownerDeps(over: Partial<CanvasRefreshDeps> = {}) {
+    return makeDeps({
+      actingUserId: OWNER,
+      resolveOwnerServerTarget: async () => ({
+        kind: "ok",
+        target: { url: "https://owner" },
+      }),
+      // The tenant resolver must never be consulted for a per-user binding.
+      resolveServerTarget: async () => {
+        throw new Error("tenant resolver must not be called");
+      },
+      ...over,
+    });
+  }
+
+  it("refreshes a per-user binding under the owner's credential when the acting user IS the owner", async () => {
+    const { deps, rec } = ownerDeps();
+    const result = await refreshBinding(
+      tenantBinding({ authContext: "per_user_oauth", ownerUserId: OWNER }),
+      deps,
+    );
+    expect(rec.toolCalls).toBe(1);
+    expect(rec.headApplies).toBe(1);
+    expect(result.outcome).toBe("refreshed");
+    expect(result.quality).toBe("good");
+  });
+
+  it("still degrades to NEEDS_USER when the acting user is NOT the owner", async () => {
+    const { deps, rec } = ownerDeps({ actingUserId: OTHER });
+    const result = await refreshBinding(
+      tenantBinding({ authContext: "per_user_oauth", ownerUserId: OWNER }),
+      deps,
+    );
+    expect(rec.toolCalls).toBe(0);
+    expect(result.outcome).toBe("needs_user");
+    expect(result.quality).toBe("stale");
+  });
+
+  it("still degrades to NEEDS_USER with no acting user (unattended posture, R9)", async () => {
+    const { deps, rec } = ownerDeps({ actingUserId: null });
+    const result = await refreshBinding(
+      tenantBinding({ authContext: "per_user_oauth", ownerUserId: OWNER }),
+      deps,
+    );
+    expect(rec.toolCalls).toBe(0);
+    expect(result.outcome).toBe("needs_user");
+  });
+
+  it("still degrades to NEEDS_USER when the binding has no recorded owner", async () => {
+    const { deps, rec } = ownerDeps();
+    const result = await refreshBinding(
+      tenantBinding({ authContext: "per_user_oauth", ownerUserId: null }),
+      deps,
+    );
+    expect(rec.toolCalls).toBe(0);
+    expect(result.outcome).toBe("needs_user");
+  });
+
+  it("maps an owner-resolver needs_user (no active token) to the ordinary NEEDS_USER outcome", async () => {
+    const { deps, rec } = ownerDeps({
+      resolveOwnerServerTarget: async () => ({
+        kind: "needs_user",
+        reason: "no active connector token for the requesting owner",
+      }),
+    });
+    const result = await refreshBinding(
+      tenantBinding({ authContext: "per_user_oauth", ownerUserId: OWNER }),
+      deps,
+    );
+    expect(rec.toolCalls).toBe(0);
+    expect(result.outcome).toBe("needs_user");
+    expect(result.quality).toBe("stale");
+  });
+
+  it("never consults the owner resolver for tenant-scoped bindings", async () => {
+    let ownerResolves = 0;
+    const { deps, rec } = makeDeps({
+      actingUserId: OWNER,
+      resolveOwnerServerTarget: async () => {
+        ownerResolves++;
+        return { kind: "ok", target: { url: "https://owner" } };
+      },
+    });
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(ownerResolves).toBe(0);
+    expect(rec.toolCalls).toBe(1);
+    expect(result.outcome).toBe("refreshed");
   });
 });
 
