@@ -79,6 +79,10 @@ The agent-under-test as a named, reusable configuration: agent model, pinned jud
 ### Work Item
 The native ThinkWork unit of durable work. A Work Item belongs to a tenant and an owning Space, can link to Threads for collaboration context, and owns task state such as status, owner, due date, required/applicable flags, completion metadata, provenance, and event history. Threads remain collaboration records; Work Items are the source of truth for work/task state. The UI may say "Tasks" in user-facing contexts, but the platform model is `work_item`.
 
+### Worktask Template
+The data-defined description of a Space workflow: an ordered set of task definitions — each with a role, required/applicability rules, and an optional external-task binding — plus the workflow's required intake fields and completion criteria. Starting a workflow (by webhook, manual start, or thread creation) materializes the template into Work Items, which then hold all live state; the template itself is never a runtime state store. Templates are per-tenant, per-Space data an operator can change without a code deploy, and workflow logic never branches on an external provider — external systems of record attach through external references resolved by plugin adapters.
+*Avoid:* checklist template, workflow config
+
 ### Work Item Status
 A Space-scoped status row for Work Items. Status names, colors, icons, display order, active/final flags, and defaults belong to the Space, while every status also carries a normalized category such as `todo`, `active`, `blocked`, `done`, or `skipped`. Single-Space boards render the Space's exact statuses; cross-Space views use normalized categories or show status labels with Space context so different Spaces are not flattened into a misleading global workflow.
 
@@ -225,3 +229,14 @@ The budgeted escalation path for routine failures: mechanical tier first at zero
 
 ### Notification Tier
 The three-grade contract classifying every push type by interrupt weight: Code (time-boxed decisions such as computer approvals — always breaks through), Page (blocked work or agent-needs-input — batched within minutes), Chart (completions and activity — silent badge or digest, never interruptive). Tier is carried in the push payload and governs delivery behavior; it is a server-side contract, not a user-facing setting.
+
+## Delivery Loop
+
+### Handoff Baton
+The structured note that transfers an issue between phases of the delivery loop. A baton states the phase goal, what the previous phase completed, where to start, the inputs, and open risks — enough for a fresh worker with no prior context to continue the work. Each phase ends by posting the baton for the next phase; an issue entering a phase without one gets a baton synthesized by the dispatcher.
+
+### Dogfood Verification
+The verification pass that judges a shipped change by exercising the deployed product surface the way a real operator would, grading every claim against authoritative evidence — store-level state and provenance, not UI appearance or the agent's own replies. A pass produces a merged dogfood report with a PASS/FAIL verdict against the phase's verification contract. The verifier is a judge, not a mechanic: it records findings and evidence but does not fix the product.
+
+### Paper Cut
+A defect or friction observed during Dogfood Verification that does not violate the verification contract, so it is recorded rather than failing the verdict. Paper cuts are listed in the dogfood report and carried into the next planning pass, where they are re-ranked on their own merits — a paper cut that misleads users (such as a fabricated write confirmation) can outrank cosmetic or capability gaps.
