@@ -15,6 +15,25 @@ const KEYCHAIN_ACCESSIBLE_OPTIONS = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
 };
 
+/**
+ * SecureStore only accepts keys matching [A-Za-z0-9._-]. Cognito token keys
+ * embed the username, which for email/password users contains "@" — writes
+ * for those keys were rejected, so email sign-ins never persisted a session.
+ * Map unsafe keys to a deterministic safe alias at the SecureStore boundary;
+ * the memory cache, manifest contents, and the Cognito SDK keep raw keys.
+ * Safe keys pass through untouched, so existing stored sessions keep their
+ * names (unsafe keys never persisted, so there is nothing to migrate).
+ */
+const SECURE_STORE_SAFE_KEY = /^[A-Za-z0-9._-]+$/;
+
+export function secureStoreKeyFor(key: string): string {
+  if (SECURE_STORE_SAFE_KEY.test(key)) return key;
+  return key.replace(
+    /[^A-Za-z0-9._-]/g,
+    (ch) => `-x${ch.codePointAt(0)!.toString(16)}-`,
+  );
+}
+
 // In-memory cache so synchronous reads work (Cognito SDK calls getItem synchronously)
 const memoryCache = new Map<string, string>();
 
@@ -80,7 +99,7 @@ async function hydrate() {
     const loadedEntries: Array<[string, string]> = [];
     await Promise.all(
       [...keysToLoad].map(async (key) => {
-        const value = await SecureStore.getItemAsync(key);
+        const value = await SecureStore.getItemAsync(secureStoreKeyFor(key));
         if (value !== null) {
           memoryCache.set(key, value);
           loadedEntries.push([key, value]);
@@ -91,7 +110,11 @@ async function hydrate() {
     if (!migrationDone && loadedEntries.length > 0) {
       await Promise.all(
         loadedEntries.map(([key, value]) =>
-          SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS),
+          SecureStore.setItemAsync(
+            secureStoreKeyFor(key),
+            value,
+            KEYCHAIN_ACCESSIBLE_OPTIONS,
+          ),
         ),
       );
       await SecureStore.setItemAsync(
@@ -179,7 +202,7 @@ export async function clearCognitoStorageForClientId(
   keys.forEach((key) => memoryCache.delete(key));
   await Promise.all([
     ...keys.map((key) =>
-      SecureStore.deleteItemAsync(key).catch((e) =>
+      SecureStore.deleteItemAsync(secureStoreKeyFor(key)).catch((e) =>
         console.warn("[CognitoStorage] scoped clear error:", e),
       ),
     ),
@@ -202,9 +225,11 @@ export const CognitoSecureStorage = {
       return value;
     }
     memoryCache.set(key, value);
-    SecureStore.setItemAsync(key, value, KEYCHAIN_ACCESSIBLE_OPTIONS).catch(
-      (e) => console.warn("[CognitoStorage] setItem error:", e),
-    );
+    SecureStore.setItemAsync(
+      secureStoreKeyFor(key),
+      value,
+      KEYCHAIN_ACCESSIBLE_OPTIONS,
+    ).catch((e) => console.warn("[CognitoStorage] setItem error:", e));
     updateManifest();
     return value;
   },
@@ -222,7 +247,7 @@ export const CognitoSecureStorage = {
       return true;
     }
     memoryCache.delete(key);
-    SecureStore.deleteItemAsync(key).catch((e) =>
+    SecureStore.deleteItemAsync(secureStoreKeyFor(key)).catch((e) =>
       console.warn("[CognitoStorage] removeItem error:", e),
     );
     updateManifest();
@@ -243,7 +268,7 @@ export const CognitoSecureStorage = {
     const keys = [...memoryCache.keys()];
     memoryCache.clear();
     keys.forEach((k) =>
-      SecureStore.deleteItemAsync(k).catch((e) =>
+      SecureStore.deleteItemAsync(secureStoreKeyFor(k)).catch((e) =>
         console.warn("[CognitoStorage] clear error:", e),
       ),
     );
