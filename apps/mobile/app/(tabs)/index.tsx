@@ -6,6 +6,7 @@ import React, {
   useRef,
 } from "react";
 import {
+  ActivityIndicator,
   View,
   FlatList,
   RefreshControl,
@@ -329,6 +330,7 @@ export default function ThreadsScreen() {
   const [activeSegment, setActiveSegment] =
     useState<HomeSegmentKey>(initialSegment);
   const [workItemFiltersOpen, setWorkItemFiltersOpen] = useState(false);
+  const [workItemsFetching, setWorkItemsFetching] = useState(false);
 
   useEffect(() => {
     const nextSegment = params.segment;
@@ -982,14 +984,22 @@ export default function ThreadsScreen() {
             {/* Right: Filter + Menu */}
             <View className="flex-row items-center gap-3">
               {activeSegment === "threads" || activeSegment === "work-items" ? (
-                <Pressable
-                  onPress={() =>
-                    activeSegment === "threads"
-                      ? setFiltersOpen((o) => !o)
-                      : setWorkItemFiltersOpen((o) => !o)
-                  }
-                  className="p-2 relative"
-                >
+                <>
+                  {activeSegment === "work-items" && workItemsFetching && (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.mutedForeground}
+                      style={{ marginRight: 4 }}
+                    />
+                  )}
+                  <Pressable
+                    onPress={() =>
+                      activeSegment === "threads"
+                        ? setFiltersOpen((o) => !o)
+                        : setWorkItemFiltersOpen((o) => !o)
+                    }
+                    className="p-2 relative"
+                  >
                   <Filter
                     size={22}
                     color={
@@ -1010,7 +1020,8 @@ export default function ThreadsScreen() {
                         style={{ backgroundColor: colors.primary }}
                       />
                     )}
-                </Pressable>
+                  </Pressable>
+                </>
               ) : null}
               <HeaderContextMenu
                 items={[
@@ -1151,6 +1162,7 @@ export default function ThreadsScreen() {
                   tenantId={tenantId}
                   callerUserId={callerUserId}
                   filtersOpen={workItemFiltersOpen}
+                  onFetchingChange={setWorkItemsFetching}
                 />
               );
             }

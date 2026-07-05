@@ -51,6 +51,8 @@ import { isStale } from "@/lib/work-items/stale-guard";
 import { WorkItemRow, type WorkItemRowItem } from "./WorkItemRow";
 
 interface WorkItemListProps {
+  /** Reports background refetch state (not pull-to-refresh) for a subtle header indicator. */
+  onFetchingChange?: (fetching: boolean) => void;
   tenantId: string | null | undefined;
   callerUserId: string | null | undefined;
   filtersOpen?: boolean;
@@ -77,6 +79,7 @@ const BLOCK_REASONS = [
 const statusCache = new Map<string, WorkItemStatusLookup[]>();
 
 export function WorkItemList({
+  onFetchingChange,
   tenantId,
   callerUserId,
   filtersOpen = false,
@@ -119,6 +122,11 @@ export function WorkItemList({
     pause: !tenantId || !callerUserId,
     requestPolicy: "cache-and-network",
   });
+
+  useEffect(() => {
+    onFetchingChange?.(fetching && !refreshing);
+    return () => onFetchingChange?.(false);
+  }, [fetching, refreshing, onFetchingChange]);
 
   const [{ data: spacesData }] = useQuery({
     query: SpacesWithMembersQuery,
@@ -462,7 +470,7 @@ export function WorkItemList({
           )}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing || fetching}
+              refreshing={refreshing}
               onRefresh={handleRefresh}
               tintColor={colors.primary}
             />
