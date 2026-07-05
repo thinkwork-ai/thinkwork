@@ -2015,6 +2015,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # THINK-173 U2: the workspace renderer (compose-tuple →
+      # manifest-compile) now imports @thinkwork/pi-runtime-core at
+      # runtime, and tsx resolves the package's `import` condition to
+      # dist/ — build it (and its workspace deps) before running the
+      # migration script.
+      - run: pnpm --filter @thinkwork/pi-runtime-core... build
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
