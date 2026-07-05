@@ -12,6 +12,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL(".", import.meta.url).pathname,
+      // Resolve the workspace SDK from source so tests don't depend on a
+      // prebuilt dist/ (CI runs tests without building workspace packages).
+      "@thinkwork/react-native-sdk": new URL(
+        "../../packages/react-native-sdk/src/index.ts",
+        import.meta.url,
+      ).pathname,
     },
   },
 });
