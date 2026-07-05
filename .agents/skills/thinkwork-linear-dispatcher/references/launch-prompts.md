@@ -38,6 +38,15 @@ exit, and the dispatcher treats an exited worker with an unmet goal as dead
 and relaunches from the Progress document. Restate your goal as your first
 action and check your last action against it before ending the run.
 
+Claude workers, mechanically: the CI wait MUST be a blocking foreground
+command — run `gh pr merge <pr> --squash --auto --delete-branch`, then
+`gh pr checks <pr> --watch` and keep polling `gh pr view <pr> --json mergedAt`
+in the foreground until `mergedAt` is non-null, all as regular (non-background)
+commands. Do not use background/run-in-background execution for any step on
+the goal's critical path — the THINK-170 E2E run proved twice that "a
+background watcher will notify me" is how workers die with unmet goals. The
+dispatcher's dead-worker sweep is a safety net, not the plan.
+
 ## Handoff Comment Template
 
 Post this comment when a phase completes, before stopping. It is the baton the
