@@ -153,9 +153,6 @@ function loopFixture(): AgentLoopRow {
         enabled: true,
         config: { scheduleExpression: "rate(5 minutes)", timezone: "UTC" },
       },
-      goalSpec: {},
-      workerSpec: {},
-      loopPolicy: {},
       targetSpec: {
         kind: "agent_thread",
         agentThread: {

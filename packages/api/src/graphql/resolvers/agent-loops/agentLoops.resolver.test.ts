@@ -198,17 +198,18 @@ describe("AgentLoop resolvers", () => {
           {
             id: "version-1",
             version_status: "active",
-            goal_spec: {
-              objective: "Do the thing",
-              completionCriteria: ["Thing is done"],
+            // THINK-159: target_spec is the sole dispatch source.
+            routine_actions_spec: null,
+            target_spec: {
+              kind: "agent_thread",
+              agentThread: {
+                instructions: "Do the thing",
+                completionCriteria: ["Thing is done"],
+                workerId: "agent-1",
+                workerType: "agent",
+                threadMode: "new_per_run",
+              },
             },
-            worker_spec: {
-              type: "agent",
-              id: "agent-1",
-              toolHints: [],
-              config: {},
-            },
-            loop_policy: { maxIterations: 1 },
           },
         ];
       }
@@ -272,7 +273,13 @@ describe("AgentLoop resolvers", () => {
         actor_id: "user-1",
         idempotency_key: "idem-1",
         current_iteration: 1,
-        policy_snapshot: { maxIterations: 1 },
+        // THINK-159: loop-policy is synthesized as DEFAULT_LOOP_POLICY (it is
+        // off the product surface and no longer read from a column).
+        policy_snapshot: {
+          maxIterations: 1,
+          failBehavior: "return_blocker",
+          escalateOnFailure: false,
+        },
         input_summary: { reason: "operator-test" },
       }),
     );

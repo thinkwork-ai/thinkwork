@@ -72,8 +72,6 @@ function targetVersionRow(overrides: Record<string, unknown> = {}) {
   return {
     id: VERSION_A,
     tenant_id: TENANT,
-    goal_spec: { objective: "STALE", completionCriteria: [] },
-    worker_spec: { type: "agent", id: "legacy-agent", toolHints: [], config: {} },
     routine_actions_spec: null,
     trigger_spec: { family: "schedule", source: "cron:daily", config: {} },
     target_spec: {
@@ -93,10 +91,7 @@ describe("listAutomations", () => {
   it("returns only the caller tenant's loops in the new-model shape", async () => {
     const db = fakeDb(
       {
-        loops: [
-          loopRow(),
-          loopRow({ id: LOOP_B, tenant_id: OTHER_TENANT }),
-        ],
+        loops: [loopRow(), loopRow({ id: LOOP_B, tenant_id: OTHER_TENANT })],
         versions: [targetVersionRow()],
       },
       TENANT,
@@ -121,7 +116,7 @@ describe("listAutomations", () => {
     });
   });
 
-  it("resolves a legacy version (no target_spec) via the legacy fallback", async () => {
+  it("presents no target for a version with a missing/malformed target_spec (THINK-159: no legacy fallback)", async () => {
     const db = fakeDb(
       {
         loops: [loopRow({ current_version_id: VERSION_B })],
@@ -129,16 +124,6 @@ describe("listAutomations", () => {
           {
             id: VERSION_B,
             tenant_id: TENANT,
-            goal_spec: {
-              objective: "Prepare the brief",
-              completionCriteria: ["done"],
-            },
-            worker_spec: {
-              type: "agent",
-              id: "legacy-worker",
-              toolHints: [],
-              config: {},
-            },
             routine_actions_spec: null,
             trigger_spec: { family: "manual", config: {} },
             target_spec: null,
@@ -149,14 +134,13 @@ describe("listAutomations", () => {
     );
 
     const [item] = await listAutomations({ tenantId: TENANT, db });
-    expect(item.target).toEqual({
-      kind: "agent_thread",
-      label: "legacy-worker",
-    });
+    // target_spec is the sole source; a null value yields no target rather
+    // than failing the whole list read.
+    expect(item.target).toBeNull();
     expect(item.trigger).toEqual({ family: "manual", source: null });
   });
 
-  it("presents a routine-kind target's label from a legacy routine-only row", async () => {
+  it("presents a routine-kind target's label from target_spec", async () => {
     const db = fakeDb(
       {
         loops: [loopRow({ current_version_id: VERSION_B, last_run_id: null })],
@@ -164,14 +148,12 @@ describe("listAutomations", () => {
           {
             id: VERSION_B,
             tenant_id: TENANT,
-            goal_spec: { objective: "", completionCriteria: [] },
-            worker_spec: { type: "agent", id: "", toolHints: [], config: {} },
-            routine_actions_spec: {
-              actions: [{ routineId: ROUTINE_ID, label: "LastMile check" }],
-              agentTurn: false,
-            },
+            routine_actions_spec: null,
             trigger_spec: { family: "schedule", source: "cron", config: {} },
-            target_spec: null,
+            target_spec: {
+              kind: "routine",
+              routine: { routineId: ROUTINE_ID, label: "LastMile check" },
+            },
           },
         ],
       },

@@ -128,9 +128,8 @@ type AgentLoopVersion {
   versionNumber: Int!
   versionStatus: AgentLoopVersionStatus!
   triggerSpec: AWSJSON!
-  goalSpec: AWSJSON!
-  workerSpec: AWSJSON!
-  loopPolicy: AWSJSON!
+  # THINK-159: goalSpec/workerSpec/loopPolicy are no longer exposed — target_spec
+  # is the sole dispatch source and those columns are inert (dropped in PR B).
   # Deterministic routine actions (plan 2026-07-03-004 U5, R7). Null when
   # the version has none; {actions: [{routineId, input?, label?}],
   # agentTurn} otherwise — agentTurn=false is a routine-only Automation.
@@ -216,15 +215,19 @@ input SaveAgentLoopInput {
   runAsUserId: ID
   spaceId: ID
   triggerSpec: AWSJSON!
-  goalSpec: AWSJSON!
-  workerSpec: AWSJSON!
+  # THINK-159: goalSpec/workerSpec are now OPTIONAL. target_spec is the sole
+  # dispatch source; when a caller omits it these still feed the derivation
+  # fallback (targetSpecFromLegacy) + schedule binding, but they are no longer
+  # persisted to columns. The web form always sends targetSpec.
+  goalSpec: AWSJSON
+  workerSpec: AWSJSON
   # THINK-137 U3 (R3): the authoritative target spec. When present it is
   # validated + written; when absent, target_spec is derived from the legacy
   # goal/worker/routineActions inputs so no version row is written NULL.
   targetSpec: AWSJSON
   # THINK-137 U3 (R11): loop-policy is off the product surface. Still accepted
-  # (and ignored) for back-compat; the column is written with a default. The
-  # judge / evidence inputs were removed in THINK-137 U10.
+  # (and ignored) for back-compat. The judge / evidence inputs were removed in
+  # THINK-137 U10; the loop_policy column is inert (dropped in PR B).
   loopPolicy: AWSJSON
   # Optional routine actions. Validated at save: every routineId must be
   # an enabled git_python routine in this tenant.

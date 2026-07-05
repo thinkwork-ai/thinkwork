@@ -526,9 +526,6 @@ export const SettingsAgentLoopsQuery = gql`
         versionNumber
         versionStatus
         triggerSpec
-        goalSpec
-        workerSpec
-        loopPolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -610,9 +607,6 @@ export const SettingsAgentLoopQuery = gql`
         versionNumber
         versionStatus
         triggerSpec
-        goalSpec
-        workerSpec
-        loopPolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -665,9 +659,6 @@ export const SettingsAgentLoopRunQuery = gql`
         versionNumber
         versionStatus
         triggerSpec
-        goalSpec
-        workerSpec
-        loopPolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -751,9 +742,6 @@ export const SettingsSaveAgentLoopMutation = gql`
         id
         versionNumber
         triggerSpec
-        goalSpec
-        workerSpec
-        loopPolicy
         routineActionsSpec
         targetSpec
         sourceMetadata
@@ -800,9 +788,6 @@ export const SettingsConfirmAutomationDraftMutation = gql`
         id
         versionNumber
         triggerSpec
-        goalSpec
-        workerSpec
-        loopPolicy
         routineActionsSpec
         targetSpec
         sourceMetadata

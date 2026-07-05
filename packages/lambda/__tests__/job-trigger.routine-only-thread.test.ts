@@ -15,16 +15,10 @@ import {
 
 const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
 
+// THINK-159: target_spec is the sole dispatch source; no legacy columns.
 const baseRow = {
   id: "version-1",
   version_status: "active",
-  goal_spec: { objective: "Do it", completionCriteria: ["done"] },
-  worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-  loop_policy: {
-    maxIterations: 1,
-    failBehavior: "return_blocker",
-    escalateOnFailure: false,
-  },
 };
 
 describe("dispatchNeedsThread gating over the resolved target", () => {

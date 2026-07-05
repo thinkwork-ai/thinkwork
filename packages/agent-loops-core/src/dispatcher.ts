@@ -486,7 +486,7 @@ export function isRepairableHalfBuiltStart(
 }
 
 type StartGateResult =
-  | { ok: true; workerAgentId: string }
+  | { ok: true; workerAgentId?: string }
   | { ok: false; code: string; reason: string };
 
 /**
@@ -632,15 +632,24 @@ function evaluateStartGate(input: AgentLoopDispatchInput): StartGateResult {
       reason: "AgentLoop policy allows no iterations.",
     };
   }
-  const agentId = workerAgentId(input.version.workerSpec);
-  if (!agentId) {
-    return {
-      ok: false,
-      code: "worker_agent_missing",
-      reason: "AgentLoop v1 requires a worker agent.",
-    };
+  // Only an agent_thread target runs an agent turn, so only it requires a
+  // worker agent (THINK-159). routine/workflow targets are headless — they
+  // dispatch token-free with no wakeup and no worker. Before target_spec became
+  // the sole source, this check passed for routine versions only incidentally,
+  // because saveAgentLoop backfilled a default worker into the (now inert)
+  // worker_spec column; target_spec carries no worker for routine/workflow.
+  if (input.version.targetKind === "agent_thread") {
+    const agentId = workerAgentId(input.version.workerSpec);
+    if (!agentId) {
+      return {
+        ok: false,
+        code: "worker_agent_missing",
+        reason: "AgentLoop v1 requires a worker agent.",
+      };
+    }
+    return { ok: true, workerAgentId: agentId };
   }
-  return { ok: true, workerAgentId: agentId };
+  return { ok: true };
 }
 
 function buildRunInput(args: {

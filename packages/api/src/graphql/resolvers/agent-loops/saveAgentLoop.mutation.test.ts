@@ -229,18 +229,8 @@ describe("saveAgentLoop", () => {
       2,
       2,
       expect.objectContaining({
-        goal_spec: expect.objectContaining({
-          objective: "Review support escalations every morning.",
-          completionCriteria: [
-            "The agent produces a useful response or next step for the automation prompt.",
-          ],
-        }),
-        worker_spec: expect.objectContaining({
-          type: "agent",
-          id: "agent-1",
-          label: "ThinkWork Agent",
-        }),
-        // R3: target_spec derived from the legacy inputs (never NULL).
+        // R3: target_spec derived from the legacy inputs (never NULL). THINK-159:
+        // it is the SOLE persisted dispatch source.
         target_spec: {
           kind: "agent_thread",
           agentThread: {
@@ -260,6 +250,13 @@ describe("saveAgentLoop", () => {
         }),
       }),
     );
+    // THINK-159: goal_spec/worker_spec/loop_policy are no longer written.
+    const versionInsert = mocks.insertValues.mock.calls.find(
+      (call: unknown[]) => call[0] === 2,
+    )?.[1] as Record<string, unknown>;
+    expect(versionInsert).not.toHaveProperty("goal_spec");
+    expect(versionInsert).not.toHaveProperty("worker_spec");
+    expect(versionInsert).not.toHaveProperty("loop_policy");
     expect(mocks.syncAgentLoopScheduleBinding).toHaveBeenCalledWith(
       expect.objectContaining({
         workerAgentId: "agent-1",

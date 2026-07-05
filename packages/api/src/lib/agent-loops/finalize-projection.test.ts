@@ -1,12 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_LOOP_POLICY } from "@thinkwork/agent-loops-core";
 import type {
   AgentLoopFinalizeLedger,
   AgentLoopFinalizeLoadedContext,
 } from "./finalize-projection.js";
 import {
   agentLoopContextFromSnapshot,
+  createDrizzleAgentLoopFinalizeLedger,
   projectAgentLoopFinalize,
 } from "./finalize-projection.js";
+
+// THINK-159: the real Drizzle loadContext derives goalSpec/workerSpec/loopPolicy
+// from target_spec (via resolveDispatchableVersion), never from the inert legacy
+// columns. A tiny getDb mock feeds the four sequential selects (iteration, run,
+// loop, version) so we can assert that derivation end-to-end.
+const dbMock = vi.hoisted(() => {
+  const queue: unknown[][] = [];
+  const selectChain = (rows: unknown[]) => {
+    const chain: Record<string, unknown> = {
+      from: () => chain,
+      where: () => chain,
+      limit: async () => rows,
+    };
+    return chain;
+  };
+  return {
+    queue,
+    getDb: () => ({ select: () => selectChain(queue.shift() ?? []) }),
+  };
+});
+
+vi.mock("@thinkwork/database-pg", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/database-pg")>();
+  return { ...actual, getDb: dbMock.getDb };
+});
 
 const loadedContext = (
   overrides: Partial<AgentLoopFinalizeLoadedContext> = {},
@@ -306,5 +334,70 @@ describe("projectAgentLoopFinalize", () => {
         message: "x".repeat(1000),
       }),
     );
+  });
+});
+
+describe("createDrizzleAgentLoopFinalizeLedger.loadContext (THINK-159)", () => {
+  it("builds goalSpec/workerSpec/loopPolicy from target_spec, not the legacy columns", async () => {
+    dbMock.queue.length = 0;
+    dbMock.queue.push(
+      [{ id: "iteration-1", iteration_number: 1, status: "running" }],
+      [
+        {
+          id: "run-1",
+          agent_loop_id: "loop-1",
+          agent_loop_version_id: "version-1",
+          status: "running",
+          current_iteration: 1,
+          started_at: null,
+        },
+      ],
+      [
+        {
+          id: "loop-1",
+          tenant_id: "tenant-1",
+          name: "Weekly check-in",
+          enabled: true,
+          lifecycle_status: "active",
+        },
+      ],
+      // Version row: ONLY target_spec (goal/worker/loop columns unselected).
+      [
+        {
+          id: "version-1",
+          version_status: "active",
+          routine_actions_spec: null,
+          target_spec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Prepare the weekly check-in.",
+              completionCriteria: ["Useful for operator review."],
+              workerId: "agent-7",
+              workerType: "agent",
+              threadMode: "new_per_run",
+            },
+          },
+        },
+      ],
+    );
+
+    const ledger = createDrizzleAgentLoopFinalizeLedger();
+    const loaded = await ledger.loadContext({
+      tenantId: "tenant-1",
+      runId: "run-1",
+      iterationId: "iteration-1",
+      threadTurnId: "turn-1",
+    });
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.version.goalSpec.objective).toBe(
+      "Prepare the weekly check-in.",
+    );
+    expect(loaded?.version.goalSpec.completionCriteria).toEqual([
+      "Useful for operator review.",
+    ]);
+    expect(loaded?.version.workerSpec.id).toBe("agent-7");
+    expect(loaded?.version.loopPolicy).toEqual(DEFAULT_LOOP_POLICY);
+    expect(loaded?.version.targetKind).toBe("agent_thread");
   });
 });

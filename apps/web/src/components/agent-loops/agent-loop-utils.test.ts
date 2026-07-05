@@ -128,9 +128,6 @@ describe("agent-loop-utils", () => {
             enabled: true,
             config: {},
           },
-          goalSpec: {},
-          workerSpec: {},
-          loopPolicy: {},
           targetSpec: {
             kind: "agent_thread",
             agentThread: {
@@ -160,38 +157,51 @@ describe("agent-loop-utils", () => {
     });
   });
 
-  it("falls back to legacy goal/worker blobs when targetSpec is absent", () => {
+  it("reads an agent_thread target directly from targetSpec (THINK-159: no legacy fallback)", () => {
     const target = readTargetSpec({
       id: "v0",
       versionNumber: 1,
       triggerSpec: {},
-      goalSpec: { objective: "Legacy objective" },
-      workerSpec: { type: "agent", id: "agent-1" },
-      loopPolicy: {},
+      targetSpec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Do the thing",
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
     });
     expect(target).toMatchObject({
       kind: "agent_thread",
-      agentThread: { instructions: "Legacy objective", workerId: "agent-1" },
+      agentThread: { instructions: "Do the thing", workerId: "agent-1" },
     });
   });
 
-  it("falls back to routine kind for a legacy routine-only version", () => {
+  it("reads a routine target directly from targetSpec", () => {
     const target = readTargetSpec({
       id: "v0",
       versionNumber: 1,
       triggerSpec: {},
-      goalSpec: {},
-      workerSpec: {},
-      loopPolicy: {},
-      routineActionsSpec: {
-        actions: [{ routineId: ROUTINE_ID }],
-        agentTurn: false,
+      targetSpec: {
+        kind: "routine",
+        routine: { routineId: ROUTINE_ID },
       },
     });
     expect(target).toEqual({
       kind: "routine",
       routine: { routineId: ROUTINE_ID },
     });
+  });
+
+  it("reads an empty agent_thread when targetSpec is absent/unrecognized (defensive)", () => {
+    const target = readTargetSpec({
+      id: "v0",
+      versionNumber: 1,
+      triggerSpec: {},
+    });
+    expect(target.kind).toBe("agent_thread");
+    expect(target.agentThread?.instructions).toBe("");
   });
 });
 

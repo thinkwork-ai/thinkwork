@@ -77,9 +77,12 @@ describe("agent loop schema", () => {
     expect(versionColumns.agent_loop_id.notNull).toBe(true);
     expect(versionColumns.version_number.notNull).toBe(true);
     expect(versionColumns.trigger_spec.notNull).toBe(true);
-    expect(versionColumns.goal_spec.notNull).toBe(true);
-    expect(versionColumns.worker_spec.notNull).toBe(true);
-    expect(versionColumns.loop_policy.notNull).toBe(true);
+    // THINK-159: goal_spec/worker_spec/loop_policy are inert + nullable
+    // (migration 0215); target_spec is the sole dispatch source. The columns
+    // themselves are dropped in the follow-up PR.
+    expect(versionColumns.goal_spec.notNull).toBe(false);
+    expect(versionColumns.worker_spec.notNull).toBe(false);
+    expect(versionColumns.loop_policy.notNull).toBe(false);
     expect(indexNames(agentLoopVersions)).toEqual(
       expect.arrayContaining([
         "agent_loop_versions_loop_version_uidx",
