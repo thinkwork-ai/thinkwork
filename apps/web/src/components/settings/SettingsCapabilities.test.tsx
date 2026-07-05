@@ -25,6 +25,7 @@ const {
   queryState,
   refetchMock,
   refetchExtensionsMock,
+  refetchManifestFileMock,
   grantMock,
   detachMock,
   toastMock,
@@ -42,9 +43,17 @@ const {
       fetching: false,
       error: undefined as { message: string } | undefined,
     },
+    // THINK-173 U9: the rendered capabilities.json served through the
+    // workspace preview-file resolver.
+    manifestFile: {
+      data: undefined as unknown,
+      fetching: false,
+      error: undefined as { message: string } | undefined,
+    },
   },
   refetchMock: vi.fn(),
   refetchExtensionsMock: vi.fn(),
+  refetchManifestFileMock: vi.fn(),
   grantMock: vi.fn(),
   detachMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
@@ -57,6 +66,7 @@ const {
     // Agent page merge U3: registry-shaped read for the Extensions sheet.
     SettingsPiExtensionsQuery: Symbol("piExtensionsRegistry"),
     SettingsPiExtensionFieldsFragment: Symbol("piExtensionFields"),
+    SettingsWorkspacePreviewFileQuery: Symbol("workspacePreviewFile"),
     SettingsGrantCapabilityMutation: Symbol("grantCapability"),
     SettingsDetachCapabilityMutation: Symbol("detachCapability"),
     // U9: SettingsAgentExtensions mounts inside the Extensions sheet.
@@ -93,6 +103,9 @@ vi.mock("urql", () => ({
     }
     if (query === queryDocs.SettingsPiExtensionsQuery) {
       return [{ data: { piExtensions: [] }, fetching: false }, vi.fn()];
+    }
+    if (query === queryDocs.SettingsWorkspacePreviewFileQuery) {
+      return [queryState.manifestFile, refetchManifestFileMock];
     }
     return [
       {
@@ -332,6 +345,11 @@ beforeEach(() => {
     fetching: false,
     error: undefined,
   };
+  queryState.manifestFile = {
+    data: undefined,
+    fetching: false,
+    error: undefined,
+  };
   grantMock.mockResolvedValue(grantResult(null));
   detachMock.mockResolvedValue({
     data: {
@@ -432,12 +450,6 @@ describe("URL-driven sheet state (U7, KTD-1)", () => {
 });
 
 describe("capability side sheet (read surface)", () => {
-
-
-
-
-
-
   it("explains the no-user baseline in the view-info dialog", () => {
     render(<SettingsCapabilities />);
     fireEvent.click(screen.getByTestId("view-info-trigger"));
@@ -451,7 +463,6 @@ describe("capability side sheet (read surface)", () => {
 });
 
 describe("capability write actions (sheet rows)", () => {
-
   it("a held gate leaves no stuck pending node (no sync ghost)", async () => {
     grantMock.mockResolvedValue(
       grantResult({
@@ -517,8 +528,6 @@ describe("capability write actions (sheet rows)", () => {
     view.rerender(<SettingsCapabilities />);
     await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBeNull());
   });
-
-
 
   it("a granted extension version that left the registry shows a disabled detach (plan U8)", () => {
     // Empty registry: the active "Live Ext" (assignment-3) can't be resolved to
@@ -846,6 +855,163 @@ describe("MCP tree callbacks (U9c)", () => {
   });
 });
 
+describe("folder capabilities from the manifest (THINK-173 U9)", () => {
+  const MANIFEST = {
+    version: 1,
+    fingerprint: "f".repeat(64),
+    active: [
+      { slug: "firecrawl", class: "connection", type: "api" },
+      { slug: "web-fetch", class: "tool", kind: "binding" },
+      { slug: "read", class: "builtin" },
+    ],
+    withheld: [
+      { slug: "draft-x", class: "tool", reason: "unsigned" },
+      { slug: "linear", class: "connection", reason: "definition_drift" },
+      { slug: "gated-mailer", class: "tool", reason: "approval_gated" },
+      { slug: "shadow", class: "tool", reason: "collision" },
+      { slug: "cruncher", class: "tool", reason: "trust_gate" },
+      { slug: "blocked-db", class: "connection", reason: "policy_blocked" },
+    ],
+  };
+
+  function seedManifest(manifest: unknown = MANIFEST) {
+    queryState.manifestFile = {
+      data: {
+        workspacePreviewFile: {
+          state: "ok",
+          stateDetail: null,
+          file: {
+            path: "capabilities.json",
+            owner: "agent",
+            generated: true,
+            size: 1,
+          },
+          content: JSON.stringify(manifest),
+        },
+      },
+      fetching: false,
+      error: undefined,
+    };
+  }
+
+  it("mirrors the manifest's active+withheld sets into the editor decoration exactly", () => {
+    seedManifest();
+    render(<SettingsCapabilities />);
+    const props = editorProps();
+    const connections = props?.connectionStateBySlug as Map<
+      string,
+      { active: boolean; reason: string | null }
+    >;
+    const tools = props?.toolStateBySlug as Map<
+      string,
+      { active: boolean; reason: string | null }
+    >;
+    // Consistency: exactly the manifest's folder-class entries, no more.
+    expect([...connections.keys()].sort()).toEqual([
+      "blocked-db",
+      "firecrawl",
+      "linear",
+    ]);
+    expect([...tools.keys()].sort()).toEqual([
+      "cruncher",
+      "draft-x",
+      "gated-mailer",
+      "shadow",
+      "web-fetch",
+    ]);
+    expect(connections.get("firecrawl")).toEqual({
+      active: true,
+      reason: null,
+    });
+    // Reason strings carry verbatim from the backend taxonomy.
+    expect(connections.get("linear")?.reason).toBe("definition_drift");
+    expect(connections.get("blocked-db")?.reason).toBe("policy_blocked");
+    expect(tools.get("draft-x")?.reason).toBe("unsigned");
+    expect(tools.get("gated-mailer")?.reason).toBe("approval_gated");
+    expect(tools.get("shadow")?.reason).toBe("collision");
+    expect(tools.get("cruncher")?.reason).toBe("trust_gate");
+  });
+
+  it("lists ONLY unsigned folders as pending proposals; approve grants with the folder class", async () => {
+    seedManifest();
+    render(<SettingsCapabilities />);
+    const proposals = screen.getByTestId("pending-proposals");
+    expect(proposals.textContent).toContain("tools/draft-x");
+    expect(proposals.textContent).not.toContain("linear");
+    expect(proposals.textContent).toContain("1 pending proposal");
+    fireEvent.click(screen.getByTestId("approve-proposal-tool-draft-x"));
+    await waitFor(() =>
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "TOOL",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "draft-x",
+        },
+      }),
+    );
+  });
+
+  it("approve from the editor's tree callback grants a CONNECTION proposal", async () => {
+    seedManifest();
+    render(<SettingsCapabilities />);
+    act(() => {
+      (
+        editorProps()?.onApproveCapabilityFolder as (
+          klass: string,
+          slug: string,
+        ) => void
+      )("connection", "pending-conn");
+    });
+    await waitFor(() =>
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "CONNECTION",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "pending-conn",
+        },
+      }),
+    );
+  });
+
+  it("revoke rides the shared detach confirm with the folder class", async () => {
+    seedManifest();
+    render(<SettingsCapabilities />);
+    act(() => {
+      (
+        editorProps()?.onDetachCapabilityFolder as (
+          klass: string,
+          slug: string,
+        ) => void
+      )("connection", "firecrawl");
+    });
+    fireEvent.click(screen.getByTestId("tree-detach-confirm"));
+    await waitFor(() =>
+      expect(detachMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "CONNECTION",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "firecrawl",
+        },
+      }),
+    );
+  });
+
+  it("renders no proposals block when the manifest has none", () => {
+    seedManifest({ version: 1, active: [], withheld: [] });
+    render(<SettingsCapabilities />);
+    expect(screen.queryByTestId("pending-proposals")).toBeNull();
+  });
+});
+
 describe("divergence surface (U13)", () => {
   it("renders the divergent summary in the footer with per-row deltas on the Inspector (U9)", () => {
     queryState.inspector = {
@@ -883,9 +1049,8 @@ describe("divergence surface (U13)", () => {
     // Per-row divergence renders on the read-only Inspector (U9).
     fireEvent.click(screen.getByTestId("open-inspector-view"));
     expect(
-      screen.getByTestId(
-        "inspector-divergent-skill:approve-receipt",
-      ).textContent,
+      screen.getByTestId("inspector-divergent-skill:approve-receipt")
+        .textContent,
     ).toContain("Not loaded last turn");
   });
 

@@ -462,7 +462,12 @@ describe("context-menu actions (item 4)", () => {
       manifest({
         entries: [
           ...ENTRIES,
-          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+          {
+            path: "agents/analyst.md",
+            owner: "agent",
+            generated: false,
+            size: 64,
+          },
         ],
       }),
     );
@@ -481,7 +486,12 @@ describe("context-menu actions (item 4)", () => {
       manifest({
         entries: [
           ...ENTRIES,
-          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+          {
+            path: "agents/analyst.md",
+            owner: "agent",
+            generated: false,
+            size: 64,
+          },
         ],
       }),
     );
@@ -499,7 +509,12 @@ describe("context-menu actions (item 4)", () => {
       manifest({
         entries: [
           ...ENTRIES,
-          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
+          {
+            path: "agents/analyst.md",
+            owner: "agent",
+            generated: false,
+            size: 64,
+          },
         ],
       }),
     );
@@ -519,8 +534,18 @@ describe("context-menu actions (item 4)", () => {
       manifest({
         entries: [
           ...ENTRIES,
-          { path: "agents/analyst.md", owner: "agent", generated: false, size: 64 },
-          { path: "agents/custom.md", owner: "agent", generated: false, size: 64 },
+          {
+            path: "agents/analyst.md",
+            owner: "agent",
+            generated: false,
+            size: 64,
+          },
+          {
+            path: "agents/custom.md",
+            owner: "agent",
+            generated: false,
+            size: 64,
+          },
         ],
       }),
     );
@@ -890,9 +915,7 @@ describe("jump-to-cause (KTD-5)", () => {
   it("agent-owned files have no Open source menu entry (U7)", async () => {
     await renderEditor();
     await screen.findByTestId("tree-node-CAPABILITIES.md");
-    expect(
-      screen.queryByTestId("menu-open-source-CAPABILITIES.md"),
-    ).toBeNull();
+    expect(screen.queryByTestId("menu-open-source-CAPABILITIES.md")).toBeNull();
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
@@ -1176,5 +1199,103 @@ describe("loading and error states", () => {
     expect((await screen.findByTestId("preview-error")).textContent).toContain(
       "network sad",
     );
+  });
+});
+
+describe("Folder capability tree affordances (THINK-173 U9)", () => {
+  const CAPABILITY_ENTRIES = [
+    ...ENTRIES,
+    {
+      path: "connections/firecrawl/CONNECTION.md",
+      owner: "agent",
+      generated: false,
+      size: 240,
+    },
+    {
+      path: "connections/linear/CONNECTION.md",
+      owner: "agent",
+      generated: false,
+      size: 220,
+    },
+    {
+      path: "tools/draft-x/TOOL.md",
+      owner: "agent",
+      generated: false,
+      size: 180,
+    },
+  ];
+  const approveMock = vi.fn();
+  const revokeMock = vi.fn();
+
+  function seedCapabilityTree() {
+    getManifestMock.mockResolvedValue(
+      manifest({ entries: CAPABILITY_ENTRIES }),
+    );
+  }
+
+  beforeEach(() => {
+    approveMock.mockReset();
+    revokeMock.mockReset();
+  });
+
+  it("decorates a withheld connection with the verbatim reason; the badge focuses the connection row", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      connectionStateBySlug: new Map<string, SkillNodeState>([
+        ["linear", { active: false, reason: "definition_drift" }],
+        ["firecrawl", { active: true, reason: null }],
+      ]),
+    });
+    const gate = await screen.findByTestId("tree-gate-connections/linear");
+    expect(gate.textContent).toContain("definition_drift");
+    expect(screen.queryByTestId("tree-gate-connections/firecrawl")).toBeNull();
+    fireEvent.click(gate);
+    expect(focusRowMock).toHaveBeenCalledWith("connection", "linear");
+  });
+
+  it("offers Approve on an unsigned tool proposal and routes the callback", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      canManageSkills: true,
+      toolStateBySlug: new Map<string, SkillNodeState>([
+        ["draft-x", { active: false, reason: "unsigned" }],
+      ]),
+      onApproveCapabilityFolder: approveMock,
+    });
+    await screen.findByTestId("tree-node-tools/draft-x");
+    fireEvent.click(screen.getByTestId("menu-approve-tool-draft-x"));
+    expect(approveMock).toHaveBeenCalledWith("tool", "draft-x");
+  });
+
+  it("offers Revoke on an active connection and routes the callback", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      canManageSkills: true,
+      connectionStateBySlug: new Map<string, SkillNodeState>([
+        ["firecrawl", { active: true, reason: null }],
+      ]),
+      onDetachCapabilityFolder: revokeMock,
+    });
+    await screen.findByTestId("tree-node-connections/firecrawl");
+    fireEvent.click(screen.getByTestId("menu-revoke-connection-firecrawl"));
+    expect(revokeMock).toHaveBeenCalledWith("connection", "firecrawl");
+  });
+
+  it("withholds approve/revoke without write scope", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      canManageSkills: false,
+      toolStateBySlug: new Map<string, SkillNodeState>([
+        ["draft-x", { active: false, reason: "unsigned" }],
+      ]),
+      connectionStateBySlug: new Map<string, SkillNodeState>([
+        ["firecrawl", { active: true, reason: null }],
+      ]),
+      onApproveCapabilityFolder: approveMock,
+      onDetachCapabilityFolder: revokeMock,
+    });
+    await screen.findByTestId("tree-node-tools/draft-x");
+    expect(screen.queryByTestId("menu-approve-tool-draft-x")).toBeNull();
+    expect(screen.queryByTestId("menu-revoke-connection-firecrawl")).toBeNull();
   });
 });

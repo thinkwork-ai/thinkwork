@@ -160,6 +160,25 @@ export interface ComposerWorkspaceEditorProps {
   /** Open the destructive detach confirm for an `mcp/<slug>/` folder. */
   onDetachMcpServer?: (slug: string) => void;
   /**
+   * Folder-capability mirror (THINK-173 U9): `connections/<slug>/` and
+   * `tools/<slug>/` folders carry the rendered capabilities manifest's
+   * active/withheld state. Reason strings render verbatim from the
+   * backend taxonomy; an `unsigned` folder is a pending PROPOSAL whose
+   * approve action signs the definition as reviewed (grant-as-approve).
+   */
+  connectionStateBySlug?: Map<string, SkillNodeState>;
+  toolStateBySlug?: Map<string, SkillNodeState>;
+  /** Approve (sign) an unsigned `connections/`/`tools/` proposal folder. */
+  onApproveCapabilityFolder?: (
+    klass: "connection" | "tool",
+    slug: string,
+  ) => void;
+  /** Revoke a signed folder capability (removes the sidecar only). */
+  onDetachCapabilityFolder?: (
+    klass: "connection" | "tool",
+    slug: string,
+  ) => void;
+  /**
    * Profile treatment for `agents/<slug>.md` files (Agent page merge U2):
    * "Edit Agent Profile" opens the Profiles sheet at that profile's
    * detail, replacing the generic agent-source navigation for these files.
@@ -375,6 +394,20 @@ function mcpSlugForFolder(node: TreeNode): string | null {
   return match ? match[1] : null;
 }
 
+/** Connection slug for a `connections/<slug>` folder node (THINK-173 U9). */
+function connectionSlugForFolder(node: TreeNode): string | null {
+  if (!node.isFolder) return null;
+  const match = /^connections\/([^/]+)$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
+/** Folder-tool slug for a `tools/<slug>` folder node (THINK-173 U9). */
+function toolSlugForFolder(node: TreeNode): string | null {
+  if (!node.isFolder) return null;
+  const match = /^tools\/([^/]+)$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
 /** Agent Profile slug for an `agents/<slug>.md` file node, else null (U2). */
 function agentProfileSlugForFile(node: TreeNode): string | null {
   if (node.isFolder) return null;
@@ -471,6 +504,10 @@ export function ComposerWorkspaceEditor({
   onAddSkill,
   onDetachSkill,
   mcpStateBySlug,
+  connectionStateBySlug,
+  toolStateBySlug,
+  onApproveCapabilityFolder,
+  onDetachCapabilityFolder,
   pendingMcpSlug = null,
   removingMcpSlug = null,
   onAddMcpServer,
@@ -850,10 +887,45 @@ export function ComposerWorkspaceEditor({
     // MCP mirror (U9c): `mcp/<slug>/` folders carry the mcp_server row state.
     const mcpSlug = mcpSlugForFolder(node);
     const mcpState = mcpSlug ? mcpStateBySlug?.get(mcpSlug) : undefined;
-    // One gate treatment for both capability-folder classes.
-    const gateState = skillState ?? mcpState;
-    const gateClass = skillSlug ? "skill" : "mcp_server";
-    const gateId = skillSlug ?? mcpSlug;
+    // Folder capabilities (THINK-173 U9): connections/<slug> and
+    // tools/<slug> carry the capabilities-manifest state.
+    const connectionSlug = connectionSlugForFolder(node);
+    const connectionState = connectionSlug
+      ? connectionStateBySlug?.get(connectionSlug)
+      : undefined;
+    const toolSlug = toolSlugForFolder(node);
+    const toolState = toolSlug ? toolStateBySlug?.get(toolSlug) : undefined;
+    // One gate treatment for every capability-folder class.
+    const gateState = skillState ?? mcpState ?? connectionState ?? toolState;
+    const gateClass = skillSlug
+      ? "skill"
+      : mcpSlug
+        ? "mcp_server"
+        : connectionSlug
+          ? "connection"
+          : "tool";
+    const gateId = skillSlug ?? mcpSlug ?? connectionSlug ?? toolSlug;
+    const folderCapability = connectionSlug
+      ? ({
+          klass: "connection",
+          slug: connectionSlug,
+          state: connectionState,
+        } as const)
+      : toolSlug
+        ? ({ klass: "tool", slug: toolSlug, state: toolState } as const)
+        : null;
+    const canApproveFolderCapability = Boolean(
+      folderCapability &&
+      folderCapability.state?.reason === "unsigned" &&
+      canManageSkills &&
+      onApproveCapabilityFolder,
+    );
+    const canRevokeFolderCapability = Boolean(
+      folderCapability &&
+      folderCapability.state?.active &&
+      canManageSkills &&
+      onDetachCapabilityFolder,
+    );
     const isGated = Boolean(gateState && !gateState.active);
     const isRemoving = Boolean(
       (skillSlug && skillSlug === removingSkillSlug) ||
@@ -945,6 +1017,8 @@ export function ComposerWorkspaceEditor({
       canAddHere ||
       canDetachMcp ||
       canAddMcpHere ||
+      canApproveFolderCapability ||
+      canRevokeFolderCapability ||
       canConfigureProfile ||
       canDeleteProfile ||
       canAddProfileHere ||
@@ -1138,7 +1212,41 @@ export function ComposerWorkspaceEditor({
                 : "Detach MCP server…"}
             </ContextMenuItem>
           ) : null}
-          {(canAddHere || canDetachThis || canAddMcpHere || canDetachMcp) &&
+          {canApproveFolderCapability && folderCapability ? (
+            <ContextMenuItem
+              onSelect={() =>
+                onApproveCapabilityFolder?.(
+                  folderCapability.klass,
+                  folderCapability.slug,
+                )
+              }
+              data-testid={`menu-approve-${folderCapability.klass}-${folderCapability.slug}`}
+            >
+              <Plus className="mr-2 size-4" /> Approve {folderCapability.klass}{" "}
+              (signs the definition as reviewed)…
+            </ContextMenuItem>
+          ) : null}
+          {canRevokeFolderCapability && folderCapability ? (
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() =>
+                onDetachCapabilityFolder?.(
+                  folderCapability.klass,
+                  folderCapability.slug,
+                )
+              }
+              data-testid={`menu-revoke-${folderCapability.klass}-${folderCapability.slug}`}
+            >
+              <Trash2 className="mr-2 size-4" /> Revoke {folderCapability.klass}{" "}
+              (definition stays as a proposal)…
+            </ContextMenuItem>
+          ) : null}
+          {(canAddHere ||
+            canDetachThis ||
+            canAddMcpHere ||
+            canDetachMcp ||
+            canApproveFolderCapability ||
+            canRevokeFolderCapability) &&
           hasStdOps ? (
             <ContextMenuSeparator />
           ) : null}
