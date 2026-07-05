@@ -174,6 +174,31 @@ describe("upsertBindingFromActivityEvent", () => {
     expect(mocks.onConflicts[0].target).toBeDefined();
   });
 
+  it("marks the binding fresh on capture — quality good + fetch timestamps (THINK-165)", async () => {
+    // A binding descriptor only reaches capture when the runtime validated
+    // sourceToolCallId against the CURRENT turn's completed MCP invocations,
+    // so capture must stamp freshness on both the insert and re-capture paths.
+    const part = createTaskReviewJsonRenderFixture();
+    mocks.mcpServerRow = { auth_type: "tenant_api_key" };
+    await upsertBindingFromActivityEvent({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      payload: payloadWithBinding(part, descriptor(part)),
+    });
+
+    const inserted = mocks.bindingInserts[0] as Record<string, unknown>;
+    expect(inserted.quality).toBe("good");
+    expect(JSON.stringify(inserted.last_fetched_at)).toContain("now()");
+    expect(JSON.stringify(inserted.last_good_at)).toContain("now()");
+
+    // Re-capture (conflict) path: an agent-mediated refresh re-emit must flip
+    // a STALE row back to GOOD — the last open THINK-145 seam.
+    const set = (mocks.onConflicts[0] as { set: Record<string, unknown> }).set;
+    expect(set.quality).toBe("good");
+    expect(JSON.stringify(set.last_fetched_at)).toContain("now()");
+    expect(JSON.stringify(set.last_good_at)).toContain("now()");
+  });
+
   it("classifies an oauth MCP server as per_user_oauth and resolves the owner", async () => {
     const part = createTaskReviewJsonRenderFixture();
     mocks.mcpServerRow = { auth_type: "oauth" };
