@@ -482,13 +482,6 @@ function headlessRoutineVersion() {
   return resolveDispatchableVersion({
     id: "version-1",
     version_status: "active",
-    goal_spec: { objective: "", completionCriteria: [] },
-    worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-    loop_policy: {
-      maxIterations: 1,
-      failBehavior: "return_blocker",
-      escalateOnFailure: false,
-    },
     target_spec: {
       kind: "routine",
       routine: { routineId: ROUTINE_ID, label: "LastMile check" },
@@ -660,51 +653,50 @@ describe("headless-run failure raises a deduplicated inbox item (R10)", () => {
 // ---------------------------------------------------------------------------
 
 import { resolveDispatchableVersion } from "./run-ledger";
+import { DEFAULT_LOOP_POLICY } from "./contracts";
 
 const ROUTINE_ID = "33333333-3333-4333-8333-333333333333";
 
 describe("resolveDispatchableVersion", () => {
-  it("resolves a legacy goal/worker row (no target_spec) to an agent-turn version", () => {
+  it("derives goal/worker from an agent_thread target_spec and synthesizes DEFAULT_LOOP_POLICY (THINK-159, no legacy columns)", () => {
     const resolved = resolveDispatchableVersion({
       id: "version-1",
       version_status: "active",
-      goal_spec: {
-        objective: "Prepare the brief",
-        completionCriteria: ["done"],
-      },
-      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      loop_policy: {
-        maxIterations: 1,
-        failBehavior: "return_blocker",
-        escalateOnFailure: false,
-      },
       routine_actions_spec: null,
-      target_spec: null,
+      target_spec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Prepare the brief",
+          completionCriteria: ["done"],
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
+      },
     });
     expect(resolved.goalSpec.objective).toBe("Prepare the brief");
+    expect(resolved.goalSpec.completionCriteria).toEqual(["done"]);
     expect(resolved.workerSpec).toMatchObject({ type: "agent", id: "agent-1" });
     expect(resolved.routineActionsSpec).toBeNull();
+    // Loop-policy is off the product surface; it is always the default.
+    expect(resolved.loopPolicy).toEqual(DEFAULT_LOOP_POLICY);
+    expect(resolved.targetKind).toBe("agent_thread");
   });
 
-  it("prefers an authoritative target_spec over the legacy blobs", () => {
+  it("throws when target_spec is null (backfilled on every row; a null value is data corruption)", () => {
+    expect(() =>
+      resolveDispatchableVersion({
+        id: "version-1",
+        version_status: "active",
+        target_spec: null,
+      }),
+    ).toThrow(/target_spec is required/);
+  });
+
+  it("reads worker identity from target_spec.agentThread for an agent_thread target", () => {
     const resolved = resolveDispatchableVersion({
       id: "version-1",
       version_status: "active",
-      goal_spec: {
-        objective: "STALE legacy objective",
-        completionCriteria: [],
-      },
-      worker_spec: {
-        type: "agent",
-        id: "legacy-agent",
-        toolHints: [],
-        config: {},
-      },
-      loop_policy: {
-        maxIterations: 1,
-        failBehavior: "return_blocker",
-        escalateOnFailure: false,
-      },
       target_spec: {
         kind: "agent_thread",
         agentThread: {
@@ -723,13 +715,6 @@ describe("resolveDispatchableVersion", () => {
     const resolved = resolveDispatchableVersion({
       id: "version-1",
       version_status: "active",
-      goal_spec: { objective: "", completionCriteria: [] },
-      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      loop_policy: {
-        maxIterations: 1,
-        failBehavior: "return_blocker",
-        escalateOnFailure: false,
-      },
       target_spec: {
         kind: "routine",
         routine: { routineId: ROUTINE_ID, label: "Check" },
@@ -749,22 +734,17 @@ describe("dispatchAgentLoop via resolved routine-kind target", () => {
     const completeRoutineOnlyRun = vi.fn();
     Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
 
-    // A row whose target_spec is kind routine (no legacy routine_actions_spec).
+    // A routine target carries NO worker in target_spec; it must still
+    // dispatch token-free (headless targets require no worker agent — THINK-159).
     const version = resolveDispatchableVersion({
       id: "version-1",
       version_status: "active",
-      goal_spec: { objective: "", completionCriteria: [] },
-      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      loop_policy: {
-        maxIterations: 1,
-        failBehavior: "return_blocker",
-        escalateOnFailure: false,
-      },
       target_spec: {
         kind: "routine",
         routine: { routineId: ROUTINE_ID, label: "LastMile check" },
       },
     });
+    expect(version.workerSpec.id).toBe("");
 
     const result = await dispatchAgentLoop(baseInput({ version }), ledger);
 
@@ -776,35 +756,31 @@ describe("dispatchAgentLoop via resolved routine-kind target", () => {
     );
   });
 
-  it("resolves a legacy routine-only row (no target_spec) to the same token-free dispatch", async () => {
+  it("dispatches an agent_thread target built purely from target_spec (NULL legacy columns) via the wakeup path", async () => {
     const ledger = fakeLedger();
-    const runRoutineAction = vi.fn(async () => okRoutineResult());
-    const completeRoutineOnlyRun = vi.fn();
-    Object.assign(ledger, { runRoutineAction, completeRoutineOnlyRun });
 
+    // A version whose ONLY spec source is target_spec (goal/worker/loop columns
+    // are NULL / unselected) still resolves to a dispatchable agent-turn version.
     const version = resolveDispatchableVersion({
       id: "version-1",
       version_status: "active",
-      goal_spec: { objective: "", completionCriteria: [] },
-      worker_spec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
-      loop_policy: {
-        maxIterations: 1,
-        failBehavior: "return_blocker",
-        escalateOnFailure: false,
+      target_spec: {
+        kind: "agent_thread",
+        agentThread: {
+          instructions: "Prepare the weekly brief",
+          workerId: "agent-1",
+          workerType: "agent",
+          threadMode: "new_per_run",
+        },
       },
-      routine_actions_spec: {
-        actions: [{ routineId: ROUTINE_ID, label: "LastMile check" }],
-        agentTurn: false,
-      },
-      target_spec: null,
     });
 
     const result = await dispatchAgentLoop(baseInput({ version }), ledger);
 
-    expect(result.status).toBe("completed_routine_only");
-    expect(ledger.wakeups).toHaveLength(0);
-    expect(completeRoutineOnlyRun).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "completed" }),
+    expect(result.status).toBe("queued");
+    expect(ledger.wakeups).toHaveLength(1);
+    expect(ledger.wakeups[0].payload.goalMode.objective).toBe(
+      "Prepare the weekly brief",
     );
   });
 });

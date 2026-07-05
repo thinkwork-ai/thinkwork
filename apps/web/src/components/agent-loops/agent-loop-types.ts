@@ -73,9 +73,8 @@ export interface AgentLoopVersionSummary {
   versionNumber: number;
   versionStatus?: string;
   triggerSpec: unknown;
-  goalSpec: unknown;
-  workerSpec: unknown;
-  loopPolicy: unknown;
+  // THINK-159: goalSpec/workerSpec/loopPolicy are no longer selected — target_spec
+  // is the authoritative read source.
   routineActionsSpec?: unknown;
   // THINK-137 U3 (R3): authoritative target spec; null on pre-U3 rows.
   targetSpec?: unknown;

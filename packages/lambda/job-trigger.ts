@@ -682,9 +682,7 @@ async function handleAgentLoopContinueDispatch(input: {
     .select({
       id: agentLoopVersions.id,
       version_status: agentLoopVersions.version_status,
-      goal_spec: agentLoopVersions.goal_spec,
-      worker_spec: agentLoopVersions.worker_spec,
-      loop_policy: agentLoopVersions.loop_policy,
+      // THINK-159: dispatch resolves goal/worker/loop-policy from target_spec.
       routine_actions_spec: agentLoopVersions.routine_actions_spec,
       target_spec: agentLoopVersions.target_spec,
     })
@@ -818,9 +816,7 @@ async function handleAgentLoopSchedule(input: {
           .select({
             id: agentLoopVersions.id,
             version_status: agentLoopVersions.version_status,
-            goal_spec: agentLoopVersions.goal_spec,
-            worker_spec: agentLoopVersions.worker_spec,
-            loop_policy: agentLoopVersions.loop_policy,
+            // THINK-159: target_spec is the sole dispatch source.
             routine_actions_spec: agentLoopVersions.routine_actions_spec,
             target_spec: agentLoopVersions.target_spec,
           })
