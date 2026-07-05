@@ -82,13 +82,26 @@ function escapeHtml(s: string): string {
  * non-object frontmatter is warned-and-dropped, never a hard reject (KTD7 —
  * a stray hint never threatens render integrity).
  */
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
+/**
+ * Drop a leading YAML frontmatter block, if any. For digest CONSUMERS
+ * (mobile rendering, email/PDF delivery) that display the markdown directly:
+ * frontmatter is a compiler input, not reader-facing content, and markdown
+ * renderers garble it (hr + setext heading).
+ */
+export function stripLeadingFrontmatter(markdown: string): string {
+  const match = FRONTMATTER_RE.exec(markdown);
+  return match ? markdown.slice(match[0].length) : markdown;
+}
+
 function parseFrontmatter(markdown: string): {
   frontmatter: Frontmatter;
   body: string;
   warnings: CompositorDiagnostic[];
 } {
   const warnings: CompositorDiagnostic[] = [];
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(markdown);
+  const match = FRONTMATTER_RE.exec(markdown);
   if (!match) return { frontmatter: {}, body: markdown, warnings };
 
   const body = markdown.slice(match[0].length);

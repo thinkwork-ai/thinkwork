@@ -3,7 +3,7 @@ import {
   createDocumentComposerExtension,
   DOCUMENT_GENRES,
   EMIT_DOCUMENT_TOOL_NAME,
-  EMIT_DOCUMENT_RENDER_MAX_BYTES,
+  EMIT_DOCUMENT_DIGEST_MAX_BYTES,
 } from "../src/document-composer.js";
 import { collectExtensionToolNames } from "../src/define-extension.js";
 
@@ -43,9 +43,7 @@ const VALID_PARAMS = {
   genre: "report",
   title: "Q3 Report",
   abstract: "Numbers are up.",
-  digest_markdown: "# Q3\n\nNumbers up.",
-  render_html:
-    '<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id="t">Q3</h1></body></html>',
+  digest_markdown: "## Summary\n\nNumbers up 18% this quarter.",
 };
 
 function okFetch(body: Record<string, unknown>): typeof fetch {
@@ -98,38 +96,64 @@ describe("createDocumentComposerExtension", () => {
     expect(url).toBe("https://api.example/api/threads/thread-1/activity");
     const body = JSON.parse(String(init.body));
     expect(body.document.genre).toBe("report");
-    expect(body.document.renderHtml).toContain("<!DOCTYPE");
+    // v2 contract: the tool posts digestMarkdown and NO renderHtml field —
+    // the platform compiles the render server-side (THINK-154 R1).
+    expect(body.document.digestMarkdown).toContain("## Summary");
+    expect("renderHtml" in body.document).toBe(false);
     expect(body.thread_turn_id).toBe("turn-1");
   });
 
   it("returns server diagnostics verbatim as the tool result (R7)", async () => {
     const diagnostics = [
       {
-        code: "EXTERNAL_REF",
-        message: "fonts.googleapis.com",
-        location: "line 3",
+        code: "UNKNOWN_DIRECTIVE",
+        message: 'Directive "tw:hologram" is not in the component vocabulary.',
+        location: "tw:hologram",
       },
     ];
     const { tools } = register({
       documentComposerConfig: CONFIG,
       fetchImpl: okFetch({
         ok: false,
-        code: "PREFLIGHT_REJECTED",
+        code: "COMPILE_REJECTED",
         diagnostics,
       }),
     });
     const result = await tools[0].execute("call-1", VALID_PARAMS);
     expect(result.content[0].text).toContain("REJECTED");
-    expect(result.content[0].text).toContain("fonts.googleapis.com");
-    expect(result.details?.code).toBe("PREFLIGHT_REJECTED");
+    expect(result.content[0].text).toContain("tw:hologram");
+    expect(result.details?.code).toBe("REJECTED");
   });
 
-  it("fast-fails an oversize render locally without a network call", async () => {
+  it("surfaces non-blocking compile warnings on success", async () => {
+    const { tools } = register({
+      documentComposerConfig: CONFIG,
+      fetchImpl: okFetch({
+        ok: true,
+        artifactId: "artifact-1",
+        documentId: "doc-1",
+        status: "draft",
+        headVersion: 0,
+        warnings: [
+          {
+            code: "FRONTMATTER_UNKNOWN_KEY",
+            message: 'Frontmatter key "banana" is not supported.',
+            location: "frontmatter",
+          },
+        ],
+      }),
+    });
+    const result = await tools[0].execute("call-1", VALID_PARAMS);
+    expect(result.content[0].text).toContain("Document saved");
+    expect(result.content[0].text).toContain("banana");
+  });
+
+  it("fast-fails an oversize digest locally without a network call", async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
     const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
     const result = await tools[0].execute("call-1", {
       ...VALID_PARAMS,
-      render_html: "x".repeat(EMIT_DOCUMENT_RENDER_MAX_BYTES + 1),
+      digest_markdown: "x".repeat(EMIT_DOCUMENT_DIGEST_MAX_BYTES + 1),
     });
     expect(result.content[0].text).toContain("SIZE_CEILING");
     expect(

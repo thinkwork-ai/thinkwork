@@ -4,6 +4,7 @@ import { useQuery } from "urql";
 import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
+import { stripLeadingFrontmatter } from "../../lib/markdown-frontmatter";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { ArtifactDetailQuery } from "@/lib/graphql-queries";
@@ -64,9 +65,9 @@ export default function ArtifactViewScreen() {
             )}
           </View>
           <MarkdownMessage
-            content={
-              artifact.content || artifact.summary || "No content available."
-            }
+            content={stripLeadingFrontmatter(
+              artifact.content || artifact.summary || "No content available.",
+            )}
             isUser={false}
           />
         </ScrollView>

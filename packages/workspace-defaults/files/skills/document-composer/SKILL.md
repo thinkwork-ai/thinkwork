@@ -1,14 +1,15 @@
 ---
 name: document-composer
-description: 'Compose beautiful, self-contained HTML document deliverables — ideation docs, plans, reports, and briefs — saved as durable artifacts via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.'
+description: 'Compose document deliverables — ideation docs, plans, reports, and briefs — as markdown that the platform compiles into a beautiful house-style document, saved as a durable artifact via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.'
 ---
 
 # Document Composer
 
-Produce document deliverables as **dual-body artifacts**: a canonical markdown
-digest (the machine- and mobile-readable record) plus a single-file HTML render
-(the beautiful human-facing document), saved together with one `emit_document`
-call. The thread shows a compact card linking to the full-page reader.
+Author documents as **markdown only**. You write the substance — frontmatter,
+prose, tables, and `tw:` component blocks — and call `emit_document` with that
+single body. The platform compiles the polished house-style HTML render
+(layout, typography, dark mode, charts) at emission; you never write HTML.
+The thread shows a compact card linking to the full-page reader.
 
 ## When to reach for a document
 
@@ -21,51 +22,107 @@ call. The thread shows a compact card linking to the full-page reader.
 
 ## Genres
 
-Pick one; open its plate in `references/` and imitate its structure:
+| Genre      | Use for                                                    |
+| ---------- | ---------------------------------------------------------- |
+| `ideation` | Ranked options/ideas with evidence and a rejection record  |
+| `plan`     | How something will be done: decisions, requirements, steps |
+| `report`   | What happened / what is true: findings, metrics, analysis  |
+| `brief`    | A compact one-page summary for a decision-maker            |
 
-| Genre      | Use for                                                    | Plate                            |
-| ---------- | ---------------------------------------------------------- | -------------------------------- |
-| `ideation` | Ranked options/ideas with evidence and a rejection record  | `references/plate-ideation.html` |
-| `plan`     | How something will be done: decisions, requirements, steps | `references/plate-plan.html`     |
-| `report`   | What happened / what is true: findings, metrics, analysis  | `references/plate-report.html`   |
-| `brief`    | A compact one-page summary for a decision-maker            | `references/plate-brief.html`    |
+## Authoring the markdown body
 
-## Composing the two bodies
+Structure: optional frontmatter, then `##` sections. The platform supplies
+the document header (eyebrow, H1 from your `title` parameter, meta line from
+frontmatter) — start your body at `## Summary`, never with a `#` heading.
 
-1. **Write the markdown digest first** — the document's full substance as
-   clean markdown (sections, tables, decisions). It is the canonical record:
-   agents, mobile, and memory pipelines read it. It is not a transcript; it is
-   the document itself in markdown form. Keep it under ~90KB.
-2. **Then hand-write the HTML render** following the genre plate and
-   `references/authoring-rules.md`. The render presents the same substance —
-   never content that isn't in the digest. Keep it under ~250KB.
+Optional frontmatter (unknown keys are dropped with a warning):
 
-## Hard rules for the HTML render (violations are rejected, nothing saves)
+```
+---
+eyebrow: QUARTERLY REPORT
+date: 2026-07-05
+context: coverage of the Q3 pipeline
+---
+```
 
-- **Fully self-contained.** No external URLs anywhere — no CDN fonts or
-  styles, no remote images, no relative paths. Every URL in every attribute
-  and CSS value must be `data:`, a same-document `#anchor`, or `mailto:`.
-  Use system font stacks; inline images as data: URIs; draw diagrams as
-  inline SVG.
-- **Scriptless.** No `<script>` of any kind, no inline event handlers, no
-  `javascript:` URLs. Interactivity is CSS-only: `<details>`, anchors.
-- **Both themes.** Style light AND dark: define CSS custom properties in
-  `:root`, override them in `@media (prefers-color-scheme: dark)` AND in
-  `:root[data-theme="dark"]` (the reader injects `data-theme`; it must win in
-  both directions). Include `@media print` rules — the downloaded file is the
-  export, and print-to-PDF must look right.
-- **Skeleton.** A non-empty `<title>` and id-anchored section headings
-  (`<h2 id="summary">`).
-- **Never include secrets, tokens, or credentials in either body.**
+- `eyebrow` — small-caps category label above the title.
+- `date` / `context` — the muted metadata line under the title.
 
-If `emit_document` returns preflight diagnostics, fix EVERY listed issue and
-re-emit — nothing was saved.
+Then plain markdown: `##` sections (lead with a Summary section that answers
+the document's question), GFM tables for 5+ uniform items, ordered lists for
+steps and recommendations. See `references/authoring-rules.md` for the house
+guidance on structure and when to use each component.
+
+## Components (`tw:` fenced blocks)
+
+Rich visuals are declarative fenced blocks — the platform renders the pixels.
+The fence info string picks the component; the body is YAML.
+
+**Stat strip** — 3+ headline numbers at the top of a document:
+
+````
+```tw:stats
+items:
+  - { value: 42, label: opportunities }
+  - { value: "+18%", label: change vs prior }
+  - { value: 3, label: need action }
+```
+````
+
+**Verdict grid** — discrete questions with bold answers:
+
+````
+```tw:verdict-grid
+cards:
+  - { question: Ship it?, answer: Yes, note: All gates green, tone: acc }
+  - { question: Risk, answer: Low, tone: info }
+```
+````
+
+Tones: `acc` (positive), `info` (neutral), `warn`, `bad`.
+
+**Chart** — data you write, pixels the platform draws. Types: `bar`, `line`,
+`donut`, `stat-strip`, `sparkline`, `meter`, `funnel`.
+
+````
+```tw:chart
+type: funnel
+title: Pipeline by stage
+qualifier: count of opportunities
+series:
+  - { label: Leads, value: 120 }
+  - { label: Qualified, value: 64 }
+  - { label: Won, value: 18 }
+caption: Qualification is the biggest drop-off.
+```
+````
+
+- `title` is required; `qualifier` is the one-line unit note; `caption` is
+  the takeaway sentence (an interpretation, not a description).
+- `meter` takes `max:` (defaults to 100) and a single-point series.
+- Every chart automatically gets a collapsible data table — don't repeat the
+  numbers in prose unless interpreting them.
+- Never write SVG or chart markup yourself — it is stripped.
+
+An unknown component or malformed YAML rejects the emission with a diagnostic
+that names the supported vocabulary and shows a corrected example — fix the
+block and re-emit.
+
+## Hard rules
+
+- **No raw HTML.** Any inline HTML in the markdown is stripped; express
+  structure with markdown and `tw:` components only.
+- **External links become plain text** — documents are fully self-contained.
+  Same-document `#anchors` and `mailto:` links survive.
+- **Keep the body under ~90KB.** It is the document itself in markdown form —
+  substance, not a transcript.
+- **Never include secrets, tokens, or credentials.**
 
 ## Emitting and revising
 
-- First emission: call `emit_document` with genre, title, abstract (2-3
-  sentences), both bodies, and `status: "draft"` unless the user asked for a
-  final document.
+- Call `emit_document` with genre, title, abstract (2-3 sentences), the
+  markdown body as `digest_markdown`, and `status: "draft"` unless the user
+  asked for a final document.
 - The result returns a `document_id`. **Always pass that document_id when
   revising** — re-emission with it updates the same document instead of
   creating a duplicate.

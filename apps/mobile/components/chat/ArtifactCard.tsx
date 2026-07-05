@@ -1,6 +1,7 @@
 import React from "react";
 import { View } from "react-native";
 import { Text } from "@/components/ui/typography";
+import { stripLeadingFrontmatter } from "../../lib/markdown-frontmatter";
 import { MarkdownMessage } from "./MarkdownMessage";
 import {
   FileText,
@@ -63,7 +64,10 @@ export function ArtifactCard({
         )}
       </View>
       <View className="px-3 py-2">
-        <MarkdownMessage content={content} isUser={false} />
+        <MarkdownMessage
+          content={stripLeadingFrontmatter(content)}
+          isUser={false}
+        />
       </View>
     </View>
   );
