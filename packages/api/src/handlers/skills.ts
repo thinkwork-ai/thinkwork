@@ -14,6 +14,7 @@ import {
 import { eq, and, or, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
+import { scheduledJobs } from "@thinkwork/database-pg/schema";
 import { listAgentWorkspaceSkills } from "../lib/skills/workspace-skill-index.js";
 import {
   skillRuns,
@@ -353,6 +354,72 @@ export async function handler(
     );
     if (credMatch && method === "POST") {
       return saveSkillCredentials(credMatch[1], credMatch[2], event);
+    }
+
+    // THINK-173 U12: automation references for a workspace tool — the
+    // Composer delete flow shows a non-blocking "referenced by N
+    // automations" warning before a tools/<slug>/ folder is removed.
+    // GET /api/skills/tool-automation-refs?agentId=..&toolSlug=..
+    if (path === "/api/skills/tool-automation-refs" && method === "GET") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin", "member"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      const agentId = event.queryStringParameters?.agentId ?? "";
+      const toolSlug = event.queryStringParameters?.toolSlug ?? "";
+      if (!agentId || !toolSlug) {
+        return error("agentId and toolSlug are required", 400);
+      }
+      const rows = await db
+        .select({ id: scheduledJobs.id, name: scheduledJobs.name })
+        .from(scheduledJobs)
+        .where(
+          and(
+            eq(scheduledJobs.enabled, true),
+            sql`${scheduledJobs.config} ->> 'agentId' = ${agentId}`,
+            sql`${scheduledJobs.config} ->> 'toolSlug' = ${toolSlug}`,
+          ),
+        );
+      return json({
+        count: rows.length,
+        automations: rows.map((row) => ({ id: row.id, name: row.name })),
+      });
+    }
+
+    // THINK-173 U11: capability-folder backfill — dry-run collision
+    // report, compare-and-write apply, divergence-gated per-agent flag
+    // flip, and (fully-flipped tenants only) the auth_config secret
+    // scrub. Operator-only; the CLI's `thinkwork capabilities backfill`
+    // is the intended caller.
+    // POST /api/skills/capabilities/backfill { apply?, flip?, scrub? }
+    if (path === "/api/skills/capabilities/backfill" && method === "POST") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      const tenantId = await resolveTenantId(tenantSlug);
+      if (!tenantId) return error("tenant not found", 404);
+      let body: { apply?: unknown; flip?: unknown; scrub?: unknown } = {};
+      try {
+        body = JSON.parse(event.body ?? "{}");
+      } catch {
+        return error("invalid JSON body", 400);
+      }
+      const { runCapabilityFolderBackfill } =
+        await import("../lib/capabilities/backfill.js");
+      const report = await runCapabilityFolderBackfill({
+        tenantId,
+        apply: body.apply === true,
+        flip: body.flip === true,
+        scrub: body.scrub === true,
+      });
+      return json(report);
     }
 
     // --- MCP Server routes (tenant-level registry) ---
@@ -1464,9 +1531,8 @@ async function mcpDeleteServer(
   // Bucket-gated; null (no DB read) in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("../lib/mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: serverId,
@@ -1551,9 +1617,8 @@ async function mcpDeleteServer(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("../lib/mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
     } catch (err) {
       console.warn(
@@ -2543,9 +2608,8 @@ async function mcpAssignToAgent(
   // DB-only attachments are backfilled). Best-effort, bucket-gated.
   const reconcileAgentMcpFolders = async () => {
     try {
-      const { reconcileMcpAssignmentFolders } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { reconcileMcpAssignmentFolders } =
+        await import("../lib/mcp/assignment-state.js");
       await reconcileMcpAssignmentFolders({
         agentId,
         tenantId: agentRow.tenant_id,
@@ -2600,9 +2664,8 @@ async function mcpUnassignFromAgent(
   // Remove the agent's `mcp/<slug>/` folder for this server (Composer U9
   // follow-up). Best-effort, bucket-gated.
   try {
-    const { removeMcpAssignmentForAgentServer } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { removeMcpAssignmentForAgentServer } =
+      await import("../lib/mcp/assignment-state.js");
     await removeMcpAssignmentForAgentServer({
       agentId,
       registryServerId: mcpServerId,
@@ -2768,9 +2831,8 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } = await import(
-        "@aws-sdk/client-secrets-manager"
-      );
+      const { SecretsManagerClient, DeleteSecretCommand } =
+        await import("@aws-sdk/client-secrets-manager");
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -2826,9 +2888,8 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { agents, userMcpTokens } =
+    await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -3621,9 +3682,8 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

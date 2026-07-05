@@ -101,6 +101,63 @@ async function readWorkspaceObject(
   }
 }
 
+/**
+ * THINK-173 U12 (AE6): folder-tool presence check for automations that
+ * reference a workspace tool. Presence = tools/<slug>/TOOL.md exists;
+ * registered = a platform-signed .assignment.json sits beside it with
+ * enabled !== false. Deleting the folder (or detaching the sidecar)
+ * degrades the automation at fire time with an audit row — mirroring
+ * the skillRuns skipped-with-reason pattern — instead of failing
+ * silently mid-task. Render/runtime enforce the full signature checks;
+ * this pre-flight only needs presence + enablement.
+ */
+async function workspaceToolRegistration(
+  db: ReturnType<typeof getDb>,
+  agentId: string,
+  toolSlug: string,
+): Promise<"registered" | "unregistered" | "not_present"> {
+  const bucket = getConfig("WORKSPACE_BUCKET");
+  if (!bucket) {
+    throw new Error("WORKSPACE_BUCKET not configured");
+  }
+  const [agent] = await db
+    .select({
+      slug: agents.slug,
+      workspace_folder_name: agents.workspace_folder_name,
+      tenant_id: agents.tenant_id,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  if (!agent?.slug || !agent.tenant_id) return "not_present";
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id))
+    .limit(1);
+  if (!tenant?.slug) return "not_present";
+  const folder = agent.workspace_folder_name ?? agent.slug;
+  const prefix = `tenants/${tenant.slug}/agents/${folder}/tools/${toolSlug}/`;
+
+  const definition = await readWorkspaceObject(bucket, `${prefix}TOOL.md`);
+  if (definition === null) return "not_present";
+  const sidecarRaw = await readWorkspaceObject(
+    bucket,
+    `${prefix}.assignment.json`,
+  );
+  if (sidecarRaw === null) return "unregistered";
+  try {
+    const sidecar = JSON.parse(sidecarRaw) as {
+      enabled?: unknown;
+      signature?: unknown;
+    };
+    if (!sidecar.signature) return "unregistered";
+    return sidecar.enabled === false ? "unregistered" : "registered";
+  } catch {
+    return "unregistered";
+  }
+}
+
 async function workspaceSkillEnablement(
   db: ReturnType<typeof getDb>,
   agentId: string,
@@ -1415,6 +1472,44 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       // confirm that agent still has the skill enabled. Skill runs
       // not gated to a specific agent (webhook-style, no agentId) skip
       // this check — the container validates at dispatch time.
+      // THINK-173 U12 (AE6): automations that reference a workspace tool
+      // degrade at fire time when the folder is gone or unregistered —
+      // an audit row with a reason, job stays enabled.
+      const referencedToolSlug =
+        typeof (cfg as { toolSlug?: unknown }).toolSlug === "string"
+          ? ((cfg as { toolSlug?: unknown }).toolSlug as string)
+          : null;
+      if (targetAgentId && referencedToolSlug) {
+        const registration = await workspaceToolRegistration(
+          db,
+          targetAgentId,
+          referencedToolSlug,
+        );
+        if (registration !== "registered") {
+          await db.insert(skillRuns).values({
+            tenant_id: tenantId,
+            agent_id: targetAgentId,
+            invoker_user_id: invokerUserId,
+            skill_id: skillId,
+            skill_version: cfg.skillVersion ?? 1,
+            invocation_source: "scheduled",
+            inputs: { inputBindings: cfg.inputBindings ?? {} },
+            resolved_inputs: resolvedInputs,
+            resolved_inputs_hash: hashResolvedInputs(resolvedInputs),
+            status: "skipped_disabled",
+            failure_reason:
+              registration === "not_present"
+                ? `tool folder 'tools/${referencedToolSlug}/' was deleted from the agent workspace`
+                : `tool '${referencedToolSlug}' is not registered for this agent`,
+            finished_at: new Date(),
+          });
+          console.log(
+            `[job-trigger] skill_run ${triggerId} skipped: tool ${referencedToolSlug} ${registration} for agent ${targetAgentId}`,
+          );
+          return;
+        }
+      }
+
       if (targetAgentId) {
         const enablement = await workspaceSkillEnablement(
           db,

@@ -64,7 +64,7 @@ import {
   type CapabilityFolderInput,
 } from "../capabilities/manifest-compile.js";
 import {
-  createConfiguredCapabilitySigner,
+  resolveConfiguredCapabilitySigner,
   createConfiguredCapabilityVerifier,
   type CapabilitySigner,
   type CapabilityVerifier,
@@ -1142,7 +1142,7 @@ export async function renderWorkspaceTuple(
       signer:
         deps.capabilitySigner !== undefined
           ? deps.capabilitySigner
-          : createConfiguredCapabilitySigner(),
+          : await resolveConfiguredCapabilitySigner(),
       mcpPolicy: capabilityMcpPolicy,
       inputSignature: capabilityInputSignature,
       generatedAt: (deps.now?.() ?? new Date()).toISOString(),

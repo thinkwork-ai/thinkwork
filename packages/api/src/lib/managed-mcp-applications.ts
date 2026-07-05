@@ -359,9 +359,8 @@ async function ensureManagedMcpDefaultAgentAssignments(
   // attached set) so it does not silently drop from an agent that already has
   // other mcp/ files. Best-effort, bucket-gated — a no-op in DB-mocked tests.
   try {
-    const { reconcileMcpAssignmentFoldersForAgents } = await import(
-      "./mcp/assignment-state.js"
-    );
+    const { reconcileMcpAssignmentFoldersForAgents } =
+      await import("./mcp/assignment-state.js");
     await reconcileMcpAssignmentFoldersForAgents({
       agentIds: platformAgents.map((agent) => agent.id),
       tenantId,
@@ -523,9 +522,8 @@ async function destroyTwentyManagedMcp(
   // folders get removed too. Bucket-gated; null in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "./mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("./mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: existing.id,
@@ -591,9 +589,8 @@ async function destroyTwentyManagedMcp(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "./mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("./mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
     } catch (err) {
       console.warn(

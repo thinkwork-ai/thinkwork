@@ -11,6 +11,10 @@
 
 terraform {
   required_providers {
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
@@ -930,8 +934,33 @@ module "deployment_control_plane" {
   create_secret_placeholders = var.deployment_control_plane_create_secret_placeholders
 }
 
+# ── Capability signing keypair (THINK-173 KTD-3) ──────────────────────────
+# Asymmetric by requirement: the multi-tenant Pi container VERIFIES
+# capability sidecars/manifests, so it may only ever hold the public key —
+# a symmetric verify key would be a forge key. The private key lives in
+# Secrets Manager (the api resolves it by name through runtime-config's
+# secret loader; it must never enter the graphql-http env, which sits at
+# the 4KB ceiling). Key material in terraform state is accepted under the
+# same posture as the existing plaintext tfvars (SSM migration pending).
+resource "tls_private_key" "capability_signing" {
+  algorithm = "ED25519"
+}
+
+resource "aws_secretsmanager_secret" "capability_signing_key" {
+  name        = "thinkwork/${var.stage}/capability-signing-key"
+  description = "Ed25519 private key (PKCS8 PEM) signing capability sidecars and manifests (THINK-173)."
+}
+
+resource "aws_secretsmanager_secret_version" "capability_signing_key" {
+  secret_id     = aws_secretsmanager_secret.capability_signing_key.id
+  secret_string = tls_private_key.capability_signing.private_key_pem
+}
+
 module "api" {
   source = "../app/lambda-api"
+
+  capability_signing_public_key         = tls_private_key.capability_signing.public_key_pem
+  capability_signing_private_key_secret = aws_secretsmanager_secret.capability_signing_key.name
 
   stage      = var.stage
   account_id = var.account_id
@@ -1116,6 +1145,8 @@ module "agentcore_platform" {
 
 module "agentcore_pi" {
   source = "../app/agentcore-pi"
+
+  capability_signing_public_key = tls_private_key.capability_signing.public_key_pem
 
   stage       = var.stage
   account_id  = var.account_id

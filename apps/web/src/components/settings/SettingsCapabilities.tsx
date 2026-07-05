@@ -21,7 +21,7 @@
  * write ends on the touched item's FRESH inspector state (R12).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -88,6 +88,7 @@ import {
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
 import { useTenant } from "@/context/TenantContext";
+import { getToolAutomationRefs } from "@/lib/mcp-api";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import { useFragment } from "@/gql/fragment-masking";
 import { SettingsAgentExtensions } from "@/components/settings/SettingsAgentExtensions";
@@ -108,6 +109,7 @@ import {
   SettingsPiExtensionsQuery,
   SettingsSpacesListQuery,
   SettingsTenantMembersQuery,
+  SettingsWorkspacePreviewFileQuery,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -124,6 +126,8 @@ const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
   builtin_tool: "Built-in tools",
   mcp_server: "MCP servers",
+  connection: "Connections",
+  tool: "Tools",
   pi_extension: "Pi extensions",
   plugin: "Plugins",
   agent_profile: "Agent profiles",
@@ -134,6 +138,8 @@ const CLASS_ORDER = [
   "skill",
   "builtin_tool",
   "mcp_server",
+  "connection",
+  "tool",
   "pi_extension",
   "plugin",
   "agent_profile",
@@ -143,6 +149,10 @@ const CLASS_ORDER = [
 const GRANT_CLASS: Record<string, CapabilityGrantClass> = {
   skill: CapabilityGrantClass.Skill,
   mcp_server: CapabilityGrantClass.McpServer,
+  // Folder capabilities (THINK-173 U9): grant IS approve — signing the
+  // definition bytes reviewed at approval moment.
+  connection: CapabilityGrantClass.Connection,
+  tool: CapabilityGrantClass.Tool,
 };
 
 const FILTER_COLUMNS = {
@@ -309,7 +319,7 @@ export function SettingsCapabilities({
     target?: { profileId?: string | null; focus?: string | null },
   ) => void;
 } = {}) {
-  const { tenantId } = useTenant();
+  const { tenant, tenantId } = useTenant();
   // No default filters (Agent page merge U12): the empty selection IS the
   // default agent in the default space, and every row state is visible.
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -444,7 +454,9 @@ export function SettingsCapabilities({
   });
   const [, grantCapability] = useMutation(SettingsGrantCapabilityMutation);
   const [, detachCapability] = useMutation(SettingsDetachCapabilityMutation);
-  const [, deleteAgentProfile] = useMutation(SettingsDeleteAgentProfileMutation);
+  const [, deleteAgentProfile] = useMutation(
+    SettingsDeleteAgentProfileMutation,
+  );
 
   const loading = inspection.fetching;
   // The refresh icon reflects only a user-initiated refresh — background
@@ -455,10 +467,106 @@ export function SettingsCapabilities({
     if (!inspection.fetching && manualRefreshing) setManualRefreshing(false);
   }, [inspection.fetching, manualRefreshing]);
   const result = inspection.data?.capabilityInspector;
+
+  // THINK-173 U12: advisory automation-reference count for the Composer
+  // tools/<slug>/ delete warning (non-blocking; null = unknown).
+  const countToolAutomationRefs = useCallback(
+    async (toolSlug: string): Promise<number | null> => {
+      const resolvedAgentId = inspection.data?.capabilityInspector?.agentId;
+      const slug = tenant?.slug;
+      if (!resolvedAgentId || !slug) return null;
+      try {
+        const refs = await getToolAutomationRefs(
+          slug,
+          resolvedAgentId,
+          toolSlug,
+        );
+        return refs.count;
+      } catch {
+        return null;
+      }
+    },
+    [inspection.data?.capabilityInspector?.agentId, tenant?.slug],
+  );
   const predicted = result?.predicted ?? null;
   const items = useMemo(
     () => (predicted?.items ?? []) as InspectorItem[],
     [predicted?.items],
+  );
+
+  // Capabilities manifest (THINK-173 U9, R12): the SAME bytes the runtime
+  // registers from — the rendered workspace's capabilities.json latest
+  // pointer, fetched through the preview-file resolver. Decorates
+  // connections/ and tools/ folders, and surfaces unsigned proposals.
+  const [manifestResult, refetchManifestFile] = useQuery({
+    query: SettingsWorkspacePreviewFileQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      agentId: null,
+      spaceId,
+      perspectiveUserId,
+      path: "capabilities.json",
+    },
+    pause: !tenantId,
+    requestPolicy: "network-only",
+  });
+  useEffect(() => {
+    if (previewRefreshToken > 0) {
+      refetchManifestFile({ requestPolicy: "network-only" });
+    }
+  }, [previewRefreshToken, refetchManifestFile]);
+  const folderCapabilityManifest = useMemo(() => {
+    const raw = manifestResult.data?.workspacePreviewFile?.content;
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as {
+        active?: Array<{ slug: string; class: string; kind?: string }>;
+        withheld?: Array<{
+          slug: string;
+          class: string;
+          reason: string;
+          detail?: string;
+        }>;
+      };
+      if (!Array.isArray(parsed.active) || !Array.isArray(parsed.withheld)) {
+        return null;
+      }
+      return { active: parsed.active, withheld: parsed.withheld };
+    } catch {
+      return null;
+    }
+  }, [manifestResult.data?.workspacePreviewFile?.content]);
+  const folderStateBySlug = useMemo(() => {
+    const connection = new Map<string, SkillNodeState>();
+    const tool = new Map<string, SkillNodeState>();
+    for (const entry of folderCapabilityManifest?.active ?? []) {
+      if (entry.class === "connection") {
+        connection.set(entry.slug, { active: true, reason: null });
+      } else if (entry.class === "tool") {
+        tool.set(entry.slug, { active: true, reason: null });
+      }
+    }
+    for (const entry of folderCapabilityManifest?.withheld ?? []) {
+      const map =
+        entry.class === "connection"
+          ? connection
+          : entry.class === "tool"
+            ? tool
+            : null;
+      // Reason strings render verbatim from the backend taxonomy (R6).
+      map?.set(entry.slug, { active: false, reason: entry.reason });
+    }
+    return { connection, tool };
+  }, [folderCapabilityManifest]);
+  // AE1: unsigned folders ARE the pending proposals.
+  const folderProposals = useMemo(
+    () =>
+      (folderCapabilityManifest?.withheld ?? []).filter(
+        (entry) =>
+          entry.reason === "unsigned" &&
+          (entry.class === "connection" || entry.class === "tool"),
+      ),
+    [folderCapabilityManifest],
   );
 
   const divergence = result?.divergence ?? null;
@@ -896,6 +1004,42 @@ export function SettingsCapabilities({
     if (item) setDetachTarget(item);
   }
 
+  // Folder capabilities (THINK-173 U9): approve = grant (signs the
+  // reviewed definition); revoke = detach (removes only the sidecar, the
+  // definition stays as an inert proposal). Both ride runMutation via the
+  // synthesized inspector-item shape.
+  function folderCapabilityItem(
+    klass: "connection" | "tool",
+    slug: string,
+    active: boolean,
+  ): InspectorItem {
+    return {
+      capabilityClass: klass,
+      capabilityId: slug,
+      displayName: slug,
+      active,
+      provenance: "workspace-manifest",
+      reason: null,
+      detail: null,
+      tokenStatus: null,
+    };
+  }
+
+  async function approveFolderCapability(
+    klass: "connection" | "tool",
+    slug: string,
+  ) {
+    await runMutation("attach", folderCapabilityItem(klass, slug, false));
+    refetchManifestFile({ requestPolicy: "network-only" });
+  }
+
+  function requestRevokeFolderCapability(
+    klass: "connection" | "tool",
+    slug: string,
+  ) {
+    setDetachTarget(folderCapabilityItem(klass, slug, true));
+  }
+
   async function confirmDetachFromTree() {
     if (!detachTarget) return;
     const item = detachTarget;
@@ -1133,7 +1277,6 @@ export function SettingsCapabilities({
       ? confirmation.rowKey.slice("mcp_server:".length)
       : null;
 
-
   // Agent page merge U12: page actions live in the header bar as muted icons
   // (Evaluations pattern) — the in-body row keeps only search + filters.
   const composerHeaderActions = (
@@ -1203,74 +1346,73 @@ export function SettingsCapabilities({
           className={cn("size-4", manualRefreshing && "animate-spin")}
         />
       </Button>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="What am I looking at?"
-                aria-label="What am I looking at?"
-                className={desktopToolbarButtonClassName}
-                data-testid="view-info-trigger"
-              >
-                <Info className="size-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>What this view shows</DialogTitle>
-                <DialogDescription>
-                  The rendered workspace the platform agent would mount for the
-                  current selection, computed through the same resolver the
-                  runtime uses. Open the capability list for the full effective
-                  set and its gate reasons.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 text-sm" data-testid="view-info-body">
-                <p>
-                  <span className="font-medium">Selection:</span>{" "}
-                  {spaceId
-                    ? `Space ${spaceName ?? spaceId}`
-                    : "no Space (agent baseline)"}
-                  {" · "}
-                  {agentProfileId
-                    ? `agent profile ${profileName ?? agentProfileId}`
-                    : "default agent"}
-                  {" · "}
-                  {perspectiveUserId
-                    ? `as ${memberName ?? perspectiveUserId}`
-                    : "no perspective user"}
-                </p>
-                {result?.noUserBaseline ? (
-                  <p data-testid="baseline-note">
-                    No perspective user means the no-user baseline — exactly
-                    what a scheduled or wakeup turn gets: plugin per-user
-                    servers excluded, direct OAuth via the agent&apos;s human
-                    pair.
-                  </p>
-                ) : null}
-                <p>
-                  <span className="font-medium">Filters:</span> all states
-                </p>
-                <p className="text-muted-foreground">
-                  Skill folders in the tree carry their capability state —
-                  active or the exact gate that dropped them (trust gate, eval
-                  gate, OAuth, policy…). The capability list adds every other
-                  class and the not-installed tenant pool you can attach.
-                </p>
-                {predicted ? (
-                  <p className="text-muted-foreground">
-                    Computed {new Date(predicted.computedAt).toLocaleString()} ·
-                    fingerprint{" "}
-                    <span className="font-mono">
-                      {predicted.configFingerprint.slice(0, 12)}
-                    </span>
-                  </p>
-                ) : null}
-              </div>
-            </DialogContent>
-          </Dialog>
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title="What am I looking at?"
+            aria-label="What am I looking at?"
+            className={desktopToolbarButtonClassName}
+            data-testid="view-info-trigger"
+          >
+            <Info className="size-4" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>What this view shows</DialogTitle>
+            <DialogDescription>
+              The rendered workspace the platform agent would mount for the
+              current selection, computed through the same resolver the runtime
+              uses. Open the capability list for the full effective set and its
+              gate reasons.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm" data-testid="view-info-body">
+            <p>
+              <span className="font-medium">Selection:</span>{" "}
+              {spaceId
+                ? `Space ${spaceName ?? spaceId}`
+                : "no Space (agent baseline)"}
+              {" · "}
+              {agentProfileId
+                ? `agent profile ${profileName ?? agentProfileId}`
+                : "default agent"}
+              {" · "}
+              {perspectiveUserId
+                ? `as ${memberName ?? perspectiveUserId}`
+                : "no perspective user"}
+            </p>
+            {result?.noUserBaseline ? (
+              <p data-testid="baseline-note">
+                No perspective user means the no-user baseline — exactly what a
+                scheduled or wakeup turn gets: plugin per-user servers excluded,
+                direct OAuth via the agent&apos;s human pair.
+              </p>
+            ) : null}
+            <p>
+              <span className="font-medium">Filters:</span> all states
+            </p>
+            <p className="text-muted-foreground">
+              Skill folders in the tree carry their capability state — active or
+              the exact gate that dropped them (trust gate, eval gate, OAuth,
+              policy…). The capability list adds every other class and the
+              not-installed tenant pool you can attach.
+            </p>
+            {predicted ? (
+              <p className="text-muted-foreground">
+                Computed {new Date(predicted.computedAt).toLocaleString()} ·
+                fingerprint{" "}
+                <span className="font-mono">
+                  {predicted.configFingerprint.slice(0, 12)}
+                </span>
+              </p>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
@@ -1328,6 +1470,13 @@ export function SettingsCapabilities({
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
+          connectionStateBySlug={folderStateBySlug.connection}
+          toolStateBySlug={folderStateBySlug.tool}
+          onApproveCapabilityFolder={(klass, slug) =>
+            void approveFolderCapability(klass, slug)
+          }
+          onDetachCapabilityFolder={requestRevokeFolderCapability}
+          onCountToolAutomationRefs={countToolAutomationRefs}
           initialSelectedPath={initialTreeFile}
           onConfigureAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
@@ -1366,6 +1515,47 @@ export function SettingsCapabilities({
           <span data-testid="extra-in-observed">
             +{extraInObserved.length} loaded at runtime only:{" "}
             {extraInObserved.map((delta) => delta.capabilityId).join(", ")}
+          </span>
+        ) : null}
+        {folderProposals.length > 0 ? (
+          <span
+            className="flex flex-wrap items-center gap-2"
+            data-testid="pending-proposals"
+          >
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            >
+              {folderProposals.length} pending{" "}
+              {folderProposals.length === 1 ? "proposal" : "proposals"}
+            </Badge>
+            {folderProposals.map((proposal) => (
+              <span
+                key={`${proposal.class}:${proposal.slug}`}
+                className="flex items-center gap-1"
+              >
+                <span className="font-mono">
+                  {proposal.class}s/{proposal.slug}
+                </span>
+                {writeScope ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() =>
+                      void approveFolderCapability(
+                        proposal.class as "connection" | "tool",
+                        proposal.slug,
+                      )
+                    }
+                    data-testid={`approve-proposal-${proposal.class}-${proposal.slug}`}
+                    title="Approving signs the definition as reviewed"
+                  >
+                    Approve
+                  </Button>
+                ) : null}
+              </span>
+            ))}
           </span>
         ) : null}
       </div>
@@ -1796,8 +1986,8 @@ export function SettingsCapabilities({
               Delete {deleteProfileTarget?.name ?? "this Agent Profile"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Removes the profile and its agents/ file from the workspace.
-              This cannot be undone.
+              Removes the profile and its agents/ file from the workspace. This
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1814,4 +2004,3 @@ export function SettingsCapabilities({
     </div>
   );
 }
-

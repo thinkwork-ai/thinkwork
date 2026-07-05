@@ -1337,3 +1337,87 @@ describe("job-trigger thread_idle_memory_learning", () => {
     expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 });
+
+// THINK-173 U12 (AE6): automations referencing a workspace tool degrade
+// at fire time with an audit row when the tool folder was deleted or its
+// registration (signed sidecar) is gone — the job stays enabled.
+describe("job-trigger skill_run referenced-tool degradation (THINK-173 U12)", () => {
+  const TOOL_PREFIX = "tenants/acme/agents/agent-a1/tools/firecrawl-scrape/";
+  const pushToolRegistration = (
+    state: "registered" | "unsigned" | "absent",
+  ): void => {
+    // Same two prefix-resolving selects as the skill check.
+    mockSelect.mockReturnValueOnce([
+      { slug: "agent-a1", workspace_folder_name: null, tenant_id: "T1" },
+    ]);
+    mockSelect.mockReturnValueOnce([{ slug: "acme" }]);
+    if (state !== "absent") {
+      s3Store.set(
+        `${TOOL_PREFIX}TOOL.md`,
+        "---\nname: firecrawl-scrape\nkind: binding\n---\n",
+      );
+    }
+    if (state === "registered") {
+      s3Store.set(
+        `${TOOL_PREFIX}.assignment.json`,
+        JSON.stringify({
+          slug: "firecrawl-scrape",
+          class: "tool",
+          enabled: true,
+          signature: { version: 1 },
+        }),
+      );
+    }
+  };
+
+  it("deleted tool folder → skipped row with a deletion reason, job stays enabled", async () => {
+    pushJobLookup(JOB_CONFIG({ toolSlug: "firecrawl-scrape" }));
+    pushInvokerLookup(true);
+    pushTenantSettings({});
+    pushToolRegistration("absent");
+    mockInsert.mockReturnValueOnce([]);
+
+    await handler(BASE_EVENT as never);
+
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    const row = mockInsertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(row.status).toBe("skipped_disabled");
+    expect(String(row.failure_reason)).toContain("was deleted");
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+    // The scheduled job itself is never disabled by a skip.
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("unsigned tool sidecar → skipped row with an unregistered reason", async () => {
+    pushJobLookup(JOB_CONFIG({ toolSlug: "firecrawl-scrape" }));
+    pushInvokerLookup(true);
+    pushTenantSettings({});
+    pushToolRegistration("unsigned");
+    mockInsert.mockReturnValueOnce([]);
+
+    await handler(BASE_EVENT as never);
+
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    const row = mockInsertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(row.status).toBe("skipped_disabled");
+    expect(String(row.failure_reason)).toContain("not registered");
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("registered tool → fire proceeds to the skill-enablement gate", async () => {
+    pushJobLookup(JOB_CONFIG({ toolSlug: "firecrawl-scrape" }));
+    pushInvokerLookup(true);
+    pushTenantSettings({});
+    pushToolRegistration("registered");
+    // Next gate: skill enablement — disabled here so the run stops at a
+    // KNOWN later gate, proving the tool gate passed.
+    pushAgentSkillEnablement(false);
+    mockInsert.mockReturnValueOnce([]);
+
+    await handler(BASE_EVENT as never);
+
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    const row = mockInsertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(String(row.failure_reason)).toContain("skill is disabled");
+  });
+});

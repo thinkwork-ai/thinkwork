@@ -48,9 +48,14 @@ locals {
   # env forever, secrets live in Secrets Manager (R4), never in the String
   # document.
   config_env = merge({
-    DATABASE_SECRET_ARN = var.graphql_db_secret_arn
-    DATABASE_HOST       = var.db_cluster_endpoint
-    DATABASE_NAME       = var.database_name
+    # THINK-173: PUBLIC verification key (not a secret) + the NAME of the
+    # private-key secret (resolved via runtime-config's secret loader —
+    # the PEM itself never enters the env or the String document).
+    CAPABILITY_SIGNING_PUBLIC_KEY         = var.capability_signing_public_key
+    CAPABILITY_SIGNING_PRIVATE_KEY_SECRET = var.capability_signing_private_key_secret
+    DATABASE_SECRET_ARN                   = var.graphql_db_secret_arn
+    DATABASE_HOST                         = var.db_cluster_endpoint
+    DATABASE_NAME                         = var.database_name
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
     # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
