@@ -1496,10 +1496,6 @@ export function ComposerWorkspaceEditor({
     <div className="flex min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
         <FolderTree className="size-3.5" />
-        <span data-testid="composer-files-header">
-          {visibleEntries.length}{" "}
-          {visibleEntries.length === 1 ? "file" : "files"}
-        </span>
         <span className="ml-auto flex items-center gap-2">
           <button
             type="button"
@@ -1515,14 +1511,6 @@ export function ComposerWorkspaceEditor({
             )}
             compiled
           </button>
-          {result?.noUserBaseline ? (
-            <Badge
-              variant="outline"
-              className="px-1.5 py-0 text-[10px] text-muted-foreground"
-            >
-              no-user baseline
-            </Badge>
-          ) : null}
         </span>
       </div>
       {canEditRoot ? (

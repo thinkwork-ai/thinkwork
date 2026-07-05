@@ -316,10 +316,6 @@ describe("ComposerWorkspaceEditor rendering", () => {
       screen.getByTestId("tree-generated-Spaces/customer-success/CONTEXT.md"),
     ).toBeTruthy();
     expect(screen.queryByTestId("tree-generated-CAPABILITIES.md")).toBeNull();
-    // The editor-shell "N files" header counts the manifest entries.
-    expect(screen.getByTestId("composer-files-header").textContent).toContain(
-      "8 files",
-    );
   });
 
   it("collapses and expands folders", async () => {
@@ -1346,22 +1342,12 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     // Off by default: neither the latest pointer nor the hashed copy lists.
     expect(screen.queryByTestId("tree-node-capabilities.json")).toBeNull();
     expect(screen.queryByTestId("tree-node-capabilities")).toBeNull();
-    // Count reflects what is listed.
-    const header = screen.getByTestId("composer-files-header");
-    const hiddenCount = Number(header.textContent?.trim().split(" ")[0]);
 
     fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
     expect(
       await screen.findByTestId("tree-node-capabilities.json"),
     ).toBeTruthy();
     expect(screen.getByTestId("tree-node-capabilities")).toBeTruthy();
-    const shownCount = Number(
-      screen
-        .getByTestId("composer-files-header")
-        .textContent?.trim()
-        .split(" ")[0],
-    );
-    expect(shownCount).toBe(hiddenCount + 2);
 
     // Toggle back off.
     fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
