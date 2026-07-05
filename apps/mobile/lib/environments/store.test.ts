@@ -74,6 +74,11 @@ describe("mobile environment store", () => {
       stage: "prod",
       createdAt: "2026-07-01T00:00:00.000Z",
     });
+    expect(
+      getEnvironmentEntries().filter(
+        (entry) => entry.config.cognitoClientId === "client-id",
+      ),
+    ).toHaveLength(1);
   });
 
   it("adds separate entries for different hosts", async () => {

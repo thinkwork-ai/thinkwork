@@ -23,6 +23,10 @@ import {
   isComputerApprovalAction,
   registerComputerApprovalActions,
 } from "@/lib/notification-actions";
+import {
+  getActiveEnvironmentEntry,
+  subscribeEnvironmentStore,
+} from "@/lib/environments/store";
 
 // Show notifications even when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -55,11 +59,23 @@ export function resolvePresentationForTier(tier: string | undefined) {
 
 export function usePushNotifications(isAuthenticated: boolean) {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [activeEnvironmentId, setActiveEnvironmentId] = useState(
+    () => getActiveEnvironmentEntry()?.id ?? null,
+  );
   const notificationListener = useRef<Notifications.Subscription | null>(null);
   const responseListener = useRef<Notifications.Subscription | null>(null);
   const [, executeRegister] = useMutation(RegisterPushTokenMutation);
   const [, executeUnregister] = useMutation(UnregisterPushTokenMutation);
   const { user } = useAuth();
+
+  useEffect(() => {
+    const unsubscribe = subscribeEnvironmentStore((snapshot) => {
+      setActiveEnvironmentId(snapshot.activeEnvironmentId);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     // Skip on web and non-device environments (simulators may work with limitations)
@@ -164,7 +180,7 @@ export function usePushNotifications(isAuthenticated: boolean) {
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, [isAuthenticated, user?.tenantId]);
+  }, [activeEnvironmentId, isAuthenticated, user?.tenantId]);
 
   const unregisterToken = async () => {
     if (!expoPushToken) return;

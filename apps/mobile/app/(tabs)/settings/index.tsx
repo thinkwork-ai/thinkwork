@@ -357,6 +357,11 @@ export default function SettingsScreen() {
               onPress={() => router.push("/settings/account")}
               colors={colors}
             />
+            <SettingsNavRow
+              label="Environments"
+              onPress={() => router.push("/settings/environments")}
+              colors={colors}
+            />
             {Platform.OS !== "web" &&
               biometricSupported &&
               !biometricLoading && (

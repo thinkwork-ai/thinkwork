@@ -13,6 +13,7 @@ import {
 } from "amazon-cognito-identity-js";
 import {
   CognitoSecureStorage,
+  clearCognitoStorageForClientId,
   waitForStorageReady,
   isStorageReady,
   resetStorageHydrationForDeploymentChange,
@@ -206,6 +207,14 @@ export async function getIdToken(): Promise<string | null> {
   // Returning the stale token would just cause 401 loops downstream; signal
   // unauthenticated so the caller can route the user back to sign-in.
   return null;
+}
+
+export async function getStoredAuthTokenForActiveEnvironment(): Promise<
+  string | null
+> {
+  const stored = getStoredOAuthIdToken();
+  if (stored && !isJwtExpiringSoon(stored)) return stored;
+  return getIdToken();
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +521,19 @@ export function clearAuthStorageForDeploymentChange(): void {
   _oauthRefreshInFlight = null;
   CognitoSecureStorage.clear();
   resetStorageHydrationForDeploymentChange();
+}
+
+export async function clearAuthStorageForEnvironment(
+  cognitoClientId: string,
+): Promise<void> {
+  const activeClientId = getPlatformConfig().cognitoClientId;
+  if (activeClientId === cognitoClientId) signOut();
+  if (activeClientId === cognitoClientId) {
+    _userPool = null;
+    _userPoolKey = null;
+  }
+  _oauthRefreshInFlight = null;
+  await clearCognitoStorageForClientId(cognitoClientId);
 }
 
 function cognitoStoragePrefix(): string | null {

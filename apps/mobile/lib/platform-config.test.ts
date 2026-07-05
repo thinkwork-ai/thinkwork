@@ -11,10 +11,15 @@ import {
 import {
   addOrUpdateEnvironment,
   resetEnvironmentStoreForTests,
+  setActiveEnvironment,
   setEnvironmentStoreStorageForTests,
 } from "./environments/store";
 import type { EnvironmentRuntimeConfig } from "./environments/runtime-config-fetch";
-import { getPlatformConfig, hydratePlatformConfig } from "./platform-config";
+import {
+  getPlatformConfig,
+  hydratePlatformConfig,
+  subscribePlatformConfig,
+} from "./platform-config";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -101,6 +106,32 @@ describe("mobile platform config", () => {
       cognitoClientId: "env-client",
       deployment: { source: "env" },
     });
+  });
+
+  it("notifies platform-config subscribers with the new active environment config", async () => {
+    const first = await addOrUpdateEnvironment({
+      host: "one.thinkwork.ai",
+      config: environmentConfig({
+        displayName: "One",
+        cognitoClientId: "client-one",
+      }),
+    });
+    await addOrUpdateEnvironment({
+      host: "two.thinkwork.ai",
+      config: environmentConfig({
+        displayName: "Two",
+        cognitoClientId: "client-two",
+      }),
+    });
+    const seen: string[] = [];
+    const unsubscribe = subscribePlatformConfig((config) => {
+      seen.push(config.cognitoClientId);
+    });
+
+    await setActiveEnvironment(first.id);
+    unsubscribe();
+
+    expect(seen).toContain("client-one");
   });
 });
 
