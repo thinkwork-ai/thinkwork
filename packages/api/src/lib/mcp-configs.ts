@@ -1,11 +1,15 @@
 /**
  * Build MCP server configs for an agent invocation.
  *
- * Queries `agent_mcp_servers` ⋈ `tenant_mcp_servers`, resolves auth
- * (tenant_api_key → auth_config, per_user_oauth → user_mcp_tokens +
- * Secrets Manager, with refresh-on-expiry), and returns the list of
- * servers the runtime container should connect to. Servers whose auth
- * can't be resolved are logged and skipped.
+ * Resolves the agent's attached server set from the rendered capabilities
+ * manifest (flag-on agents) or workspace `mcp/<slug>/.assignment.json`
+ * files (flag-off agents), joins the approved+enabled `tenant_mcp_servers`
+ * credential registry, resolves auth (tenant_api_key → auth_config,
+ * per_user_oauth → user_mcp_tokens + Secrets Manager, with
+ * refresh-on-expiry), and returns the list of servers the runtime
+ * container should connect to. Servers whose auth can't be resolved are
+ * logged and skipped. The `agent_mcp_servers` dispatch read is RETIRED
+ * (THINK-173 U11) — that table is a derived index only.
  *
  * Requester identity (plan 2026-06-12-001 U6): callers pass BOTH halves
  * of the dispatch identity explicitly —
@@ -35,7 +39,6 @@ import { and, eq, or } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   tenantMcpServers,
-  agentMcpServers,
   userMcpTokens,
   agents,
 } from "@thinkwork/database-pg/schema";
@@ -325,13 +328,17 @@ export async function buildMcpConfigs(
       `${logPrefix} mcp attachment resolution source=folder-manifest agentId=${agentId} fingerprint=${folder.manifest.fingerprint.slice(0, 12)} servers=${mcpRows.length}`,
     );
   } else {
-    // Prefer the workspace `mcp/<slug>/.assignment.json` files (U9a
-    // dual-write) as the source of the agent's ATTACHED server set; the
-    // `agent_mcp_servers` DB read is the fallback for file-absent agents
-    // and S3 outages. Per-user OAuth/token resolution at turn time (the
-    // loop below) is unchanged. The DB read is only DEMOTED here —
-    // retirement is a named follow-up, gated on observing the file path
-    // serve live turns on dev (see the log line below).
+    // The workspace `mcp/<slug>/.assignment.json` files (U9a dual-write)
+    // are the source of the agent's ATTACHED server set. The
+    // `agent_mcp_servers` dispatch read is RETIRED (THINK-173 U11 cutover
+    // metric: zero capability-state reads from that table at dispatch) —
+    // when files can't serve resolution, the fallback is the registry
+    // default: every approved+enabled tenant server, no per-agent
+    // overlay. That is byte-identical to the pre-retirement output for
+    // any agent without assignment rows (the common file-absent case);
+    // per-agent disable/allowlist state lives ONLY in files/folders now.
+    // Per-user OAuth/token resolution at turn time (the loop below) is
+    // unchanged.
     const fileResolution = await resolveAttachedRowsFromWorkspaceFiles({
       agentId,
       agentSlug: agentRow.slug,
@@ -346,9 +353,9 @@ export async function buildMcpConfigs(
         `${logPrefix} mcp attachment resolution source=workspace-file agentId=${agentId} files=${fileResolution.fileCount} servers=${mcpRows.length}`,
       );
     } else {
-      mcpRows = await resolveAttachedRowsFromDb(agentId, serverRows);
+      mcpRows = resolveRegistryDefaultRows(serverRows);
       console.log(
-        `${logPrefix} mcp attachment resolution source=database agentId=${agentId} fallbackReason=${fileResolution.fallbackReason} servers=${mcpRows.length}`,
+        `${logPrefix} mcp attachment resolution source=registry-default agentId=${agentId} fallbackReason=${fileResolution.fallbackReason} servers=${mcpRows.length} (agent_mcp_servers dispatch read retired)`,
       );
     }
   }
@@ -701,41 +708,22 @@ type McpRegistryServerRow = Omit<
 >;
 
 /**
- * DB fallback (Composer plan U9b): the pre-U9b resolution — every approved +
- * enabled tenant server, overlaid with its `agent_mcp_servers` row (enabled +
- * config), dropping assignment-disabled rows. Byte-identical to the behavior
- * that shipped before the file path, so file-absent agents are unchanged.
+ * Registry-default fallback (THINK-173 U11): every approved + enabled
+ * tenant server, attached-by-default with no per-agent overlay. This is
+ * what the retired `agent_mcp_servers` read produced for an agent with
+ * zero assignment rows — the only case that still reaches this fallback,
+ * since any per-agent assignment change dual-writes an `mcp/<slug>/`
+ * file (which makes the file path serve resolution instead). Per-agent
+ * disable/allowlist state lives ONLY in files/folders.
  */
-async function resolveAttachedRowsFromDb(
-  agentId: string,
+function resolveRegistryDefaultRows(
   serverRows: readonly McpRegistryServerRow[],
-): Promise<McpJoinedRow[]> {
-  const assignmentRows = await db
-    .select({
-      mcp_server_id: agentMcpServers.mcp_server_id,
-      enabled: agentMcpServers.enabled,
-      config: agentMcpServers.config,
-    })
-    .from(agentMcpServers)
-    .where(eq(agentMcpServers.agent_id, agentId));
-
-  const assignmentsByServerId = new Map(
-    assignmentRows.map((assignment) => [
-      assignment.mcp_server_id,
-      { enabled: assignment.enabled, config: assignment.config },
-    ]),
-  );
-
-  return serverRows
-    .map((row) => {
-      const assignment = assignmentsByServerId.get(row.mcp_server_id);
-      return {
-        ...row,
-        assignment_enabled: assignment?.enabled ?? true,
-        assignment_config: assignment?.config ?? null,
-      };
-    })
-    .filter((row) => row.assignment_enabled);
+): McpJoinedRow[] {
+  return serverRows.map((row) => ({
+    ...row,
+    assignment_enabled: true,
+    assignment_config: null,
+  }));
 }
 
 /**

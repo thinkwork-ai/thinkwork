@@ -4,12 +4,13 @@
  * The runtime resolves an agent's ATTACHED MCP-server set from the
  * `mcp/<slug>/.assignment.json` files U9a dual-writes into the agent
  * workspace source, joining registry data via `registryServerId`. The
- * `agent_mcp_servers` DB read is the fallback for file-absent agents and S3
- * outages. Per-user OAuth/token resolution is unchanged from the DB path.
+ * `agent_mcp_servers` dispatch read is RETIRED (THINK-173 U11): when the
+ * files can't serve resolution, the fallback is the registry default —
+ * every approved+enabled tenant server with no per-agent overlay.
+ * Per-user OAuth/token resolution is unchanged.
  *
  * The `workspaceMcp` dep is injected here so these tests never load the
- * S3/graphql-utils-coupled assignment-state module; the existing
- * DB-mocked suites (mcp-configs-approved-filter etc.) exercise the fallback.
+ * S3/graphql-utils-coupled assignment-state module.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -174,16 +175,16 @@ beforeEach(() => {
 });
 
 describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
-  it("resolves the attached set from files, parity-identical to the DB path", async () => {
+  it("resolves the attached set from files, parity-identical to the registry-default fallback", async () => {
     // File path: one attached file → registryServerId srv-1.
     const fileConfigs = await buildMcpConfigs("agent-1", null, "[test]", {
       workspaceMcp: fileStore({ "test-server": state() }),
     });
 
-    // DB path for the SAME registry data: no slug → fallback; server has no
-    // assignment row so it is attached-by-default.
+    // Registry-default fallback for the SAME registry data: no slug →
+    // fallback; every approved+enabled server attaches with no overlay.
     mockRowsForAgent.mockReturnValue([{ tenant_id: "tenant-1", slug: null }]);
-    const dbConfigs = await buildMcpConfigs("agent-1", null, "[test]");
+    const fallbackConfigs = await buildMcpConfigs("agent-1", null, "[test]");
 
     expect(fileConfigs).toEqual([
       {
@@ -192,7 +193,7 @@ describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
         transport: "streamable-http",
       },
     ]);
-    expect(fileConfigs).toEqual(dbConfigs);
+    expect(fileConfigs).toEqual(fallbackConfigs);
   });
 
   it("round-trips the enabledTools allowlist into the tool allowlist (parity)", async () => {
@@ -288,10 +289,11 @@ describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
     warn.mockRestore();
   });
 
-  it("falls back to the DB path (byte-identical) when the file listing is empty", async () => {
-    // A server WITH an assignment override, to make the DB path meaningful.
+  it("falls back to the registry default when the file listing is empty (no agent_mcp_servers read)", async () => {
+    // Even if a legacy assignment row exists, it must NOT be read — the
+    // dispatch read is retired; the fallback attaches the registry set.
     mockRowsForAssignments.mockReturnValue([
-      { mcp_server_id: "srv-1", enabled: true, config: null },
+      { mcp_server_id: "srv-1", enabled: false, config: null },
     ]);
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const configs = await buildMcpConfigs("agent-1", null, "[test]", {
@@ -304,15 +306,18 @@ describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
         transport: "streamable-http",
       },
     ]);
+    // The disabled legacy row was ignored (retired read), and the
+    // assignment-table mock was never queried.
+    expect(mockRowsForAssignments).not.toHaveBeenCalled();
     const line = log.mock.calls
       .map((call) => String(call[0]))
       .find((msg) => msg.includes("mcp attachment resolution"));
-    expect(line).toContain("source=database");
+    expect(line).toContain("source=registry-default");
     expect(line).toContain("fallbackReason=no-attachment-files");
     log.mockRestore();
   });
 
-  it("falls back to the DB path when the workspace is unavailable (S3 null)", async () => {
+  it("falls back to the registry default when the workspace is unavailable (S3 null)", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const configs = await buildMcpConfigs("agent-1", null, "[test]", {
       workspaceMcp: fileStore(
@@ -324,7 +329,7 @@ describe("buildMcpConfigs — workspace-file resolution (U9b)", () => {
     const line = log.mock.calls
       .map((call) => String(call[0]))
       .find((msg) => msg.includes("mcp attachment resolution"));
-    expect(line).toContain("source=database");
+    expect(line).toContain("source=registry-default");
     expect(line).toContain("fallbackReason=workspace-unavailable");
     log.mockRestore();
   });

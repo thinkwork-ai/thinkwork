@@ -209,17 +209,36 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     ]);
   });
 
-  it("skips an enabled tenant MCP row when the agent override disables it", async () => {
+  it("skips an enabled tenant MCP row when the workspace file disables it (DB override retired)", async () => {
+    // The agent_mcp_servers dispatch read is retired (THINK-173 U11):
+    // per-agent disable state lives in mcp/<slug>/.assignment.json. A
+    // legacy DB row saying enabled:false must be ignored — and never read.
     mockRowsForAssignments.mockReturnValue([
       { mcp_server_id: "srv-1", enabled: false, config: null },
+    ]);
+    mockRowsForAgent.mockReturnValue([
+      { tenant_id: "tenant-1", slug: "agent-x" },
     ]);
     mockRowsForJoin.mockReturnValue([
       baseRow({ server_url_hash: null, auth_type: "none" }),
     ]);
 
-    const configs = await buildMcpConfigs("agent-1", null);
+    const configs = await buildMcpConfigs("agent-1", null, "[mcp-configs]", {
+      workspaceMcp: {
+        resolveAgentWorkspacePrefix: async () => "tenants/t/agents/agent-x/",
+        listWorkspaceMcpSlugs: async () => ["test-server"],
+        readMcpAssignmentState: async () => ({
+          slug: "test-server",
+          name: "Test Server",
+          registryServerId: "srv-1",
+          enabled: false,
+          updated_at: "2026-07-05T00:00:00.000Z",
+        }),
+      },
+    });
 
     expect(configs).toEqual([]);
+    expect(mockRowsForAssignments).not.toHaveBeenCalled();
   });
 
   it("grandfathered approved rows (url_hash=null) are returned", async () => {
@@ -412,12 +431,10 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
   });
 
   it("includes cached MCP tool names so desktop Pi can enforce allowlist exclusions", async () => {
-    mockRowsForAssignments.mockReturnValue([
-      {
-        mcp_server_id: "srv-1",
-        enabled: true,
-        config: { toolAllowlist: ["opportunities_list"] },
-      },
+    // Allowlist state comes from the workspace file's enabledTools — the
+    // agent_mcp_servers config overlay is retired (THINK-173 U11).
+    mockRowsForAgent.mockReturnValue([
+      { tenant_id: "tenant-1", slug: "agent-x" },
     ]);
     mockRowsForJoin.mockReturnValue([
       baseRow({
@@ -429,7 +446,19 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
       }),
     ]);
 
-    const configs = await buildMcpConfigs("agent-1", null);
+    const configs = await buildMcpConfigs("agent-1", null, "[mcp-configs]", {
+      workspaceMcp: {
+        resolveAgentWorkspacePrefix: async () => "tenants/t/agents/agent-x/",
+        listWorkspaceMcpSlugs: async () => ["test-server"],
+        readMcpAssignmentState: async () => ({
+          slug: "test-server",
+          name: "Test Server",
+          registryServerId: "srv-1",
+          enabledTools: ["opportunities_list"],
+          updated_at: "2026-07-05T00:00:00.000Z",
+        }),
+      },
+    });
 
     expect(configs[0]).toMatchObject({
       name: "test-server",
