@@ -167,10 +167,24 @@ A dual-body artifact kind: a canonical markdown digest (the record agents, mobil
 The scriptless rendering containment level for Document Artifacts: the sandboxed-iframe trust model with `allow-scripts` stripped (zero grants). Contrast with the app tier (McpAppFrame), which grants script execution. A document that needs interactivity graduates to the app tier deliberately; it never gains scripts at the document tier.
 
 ### DocSpector
-The emission-time preflight validator for Document Artifacts: default-deny rejection of non-self-contained HTML (any URL-resolving attribute or CSS value that is not `data:`, `#fragment`, or `mailto:`), any `<script>` at the document tier, oversize bodies, and missing dark-mode support — with model-actionable diagnostics so the agent self-corrects in-turn. Named after SkillSpector, the skill-publish trust gate.
+The emission-time preflight validator for Document Artifacts: default-deny rejection of non-self-contained HTML (any URL-resolving attribute or CSS value that is not `data:`, `#fragment`, or `mailto:`), any `<script>` at the document tier, oversize bodies, missing dark-mode support, and renders not authored on the matching Genre Plate — with model-actionable diagnostics so the agent self-corrects in-turn. Named after SkillSpector, the skill-publish trust gate.
 
 ### Genre Plate
-A complete exemplar document shipped in the document-composer skill's references, one per genre, that the agent imitates structurally when composing — pattern-book plates rather than prose style rules. The v1 plates encode the house style (header anatomy, inline-SVG visuals, dual-theme tokens, print CSS) with full self-containment (system fonts).
+A complete exemplar document shipped in the document-composer skill's references, one per genre, that the agent authors on when composing — pattern-book plates rather than prose style rules. Plates are enforced, not suggested: each carries a genre marker and DocSpector rejects a render authored off-plate, so an agent cannot ship an improvised document. The v1 plates encode the house style (header anatomy, inline-SVG visuals, dual-theme tokens, print CSS) with full self-containment (system fonts).
+
+## Skills Distribution
+
+### Skill Catalog
+The per-tenant library of publishable skills: each entry holds the skill's source files plus its trust evidence, and is the unit operators install onto agents. Publication into the catalog is trust-gated — a skill enters or updates only through the Skill Trust Pipeline. Distinct from the installed copy an agent runs (see Skill Materialization).
+
+### Skill Trust Pipeline
+The gate sequence a skill passes to become runnable: publish (content lands in the Skill Catalog with a content hash), trust scan (automated review must pass), and signature (a platform signature over the approved content). All three must be current for the runtime to load the skill; a content change invalidates them and the sequence re-runs.
+
+### Skill Materialization
+The copy step from Skill Catalog to an agent's workspace: installing a skill writes its files into the agent's own skill folder, and the runtime reads only that materialized copy — never the catalog directly. Consequence: republishing a skill's catalog content does not change agent behavior until the installed copy is re-materialized; a plain install skips agents that already have the folder, so content updates require an explicit reinstall.
+
+### Default Skill Seeding
+The deploy-time process that publishes a curated allowlist of platform skills through the Skill Trust Pipeline into every tenant's Skill Catalog, auto-installing designated ones on the platform agent. Only allowlisted skills participate — a default skill absent from the allowlist never propagates, regardless of content changes.
 
 ## Flagged ambiguities
 
