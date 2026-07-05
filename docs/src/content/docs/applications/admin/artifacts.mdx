@@ -1,115 +1,53 @@
 ---
 title: Admin — Artifacts
-description: Tenant-wide gallery of thread-generated artifacts — reports, data views, notes, plans, drafts, and digests — with a detail viewer and links back to their source threads.
+description: Tenant-wide gallery of agent-produced artifacts — living canvases, documents, and plugin-minted kinds — with a full-page reader, version history, and refresh.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Artifacts are structured, thread-attached outputs that agents produce during a turn. Unlike chat messages — which are conversational — artifacts are durable, named outputs meant to outlive the thread that produced them. The Artifacts page is the tenant-wide gallery for browsing them, reading their contents, and linking back to the threads that generated them.
+Artifacts are durable, named outputs agents produce during a turn — the deliverable, not the conversation about it. The Artifacts page is the tenant-wide gallery for browsing them; the artifact detail page is the full render with version history. For the underlying model (born-as-artifact, dual bodies, plates, bindings, the trust tiers), see [Concepts: Artifacts](/concepts/artifacts/).
 
-**Route:** `/artifacts`  
-**File:** `apps/web/src/routes/_authed/_tenant/artifacts/index.tsx`
+**Routes:** `/artifacts` (list) · `/artifacts/<id>` (detail)
 
 ## Artifact types
 
-Agents can produce six artifact types today:
+`Artifact.type` is an **open string**, not an enum — plugins can mint their own kinds, and the UI renders every kind with a type badge. The types you will commonly see:
 
-| Type            | Purpose                                                            |
-| --------------- | ------------------------------------------------------------------ |
-| **`REPORT`**    | Multi-section analysis with markdown, embedded metrics, and tables |
-| **`DATA_VIEW`** | Structured data visualization — JSON schema plus a rendering hint  |
-| **`NOTE`**      | Plain-text or markdown note                                        |
-| **`PLAN`**      | Step-by-step action plan                                           |
-| **`DRAFT`**     | Early version of something the agent is iterating on               |
-| **`DIGEST`**    | Summary of thread turns, emails, or events                         |
-
-Artifacts are typically generated mid-turn when the agent wraps part of its output as a named artifact instead of a conversational message. The thread carries the conversation; the artifact carries the deliverable.
+| Type                                  | Produced by                                                          |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `DATA_VIEW`                           | Living Canvases — GenUI widgets with data bindings                    |
+| `REPORT`, `PLAN`, `BRIEF`, `IDEATION` | Document Artifacts — dual-body (markdown digest + plate-styled HTML) |
+| plugin-defined kinds                  | Application plugins; rendered with the generic detail view            |
 
 ## The list view
 
-A searchable `DataTable` with columns:
+A searchable table of every saved artifact in the tenant (drafts behind an "Include drafts" toggle): title with type badge, status, and freshness. Clicking a row navigates to the **full detail page** — there is no modal viewer.
 
-| Column  | Notes                                                     |
-| ------- | --------------------------------------------------------- |
-| Title   | Type icon + title                                         |
-| Type    | Badge (REPORT / DATA_VIEW / NOTE / PLAN / DRAFT / DIGEST) |
-| Status  | Draft / Published / Archived                              |
-| Created | Relative timestamp                                        |
+## The detail page
 
-Clicking a row opens an **`ArtifactViewDialog`** — a modal with the full content rendered inline. The modal takes an artifact id, fires `ArtifactDetailQuery` to load the content (which isn't returned in the list query for performance), and renders the result.
+- **Living Canvas** — chrome-free canvas render with muted header icons: **Refresh data** (when the canvas has bindings) and **Pin version**. Version history lists pinned versions with a read-only viewer.
+- **Document Artifact** — the plate-styled HTML render in a sandboxed, scriptless frame, plus version history.
+- **Other kinds** — generic metadata view with the raw content when renderable.
 
-## Rendering the content
+**Refresh just works:** tenant-scoped bindings refresh headlessly in seconds; a per-user connector binding refreshes under the clicking owner's own stored connection. Only a non-owner viewing someone else's per-user widget is asked to run the refresh through the agent. See [Concepts: Artifacts — Living Canvases and data refresh](/concepts/artifacts/#living-canvases-and-data-refresh).
 
-Different artifact types render differently inside the dialog:
+## In threads
 
-- **REPORT** — markdown rendered with the same renderer the threads page uses for agent messages (supports headings, tables, code blocks, inline callouts)
-- **DATA_VIEW** — structured data rendered as a table or chart based on the rendering hint in the artifact's content
-- **NOTE**, **PLAN**, **DRAFT**, **DIGEST** — markdown rendering with minimal chrome
-
-The dialog also shows metadata: the source thread (clickable — navigates to the thread detail page), the agent that produced the artifact, the created and updated timestamps, and the artifact's status.
-
-## GraphQL queries
-
-| Query                                   | Purpose                                         |
-| --------------------------------------- | ----------------------------------------------- |
-| `ArtifactsListQuery($tenantId, $limit)` | List artifacts with summary fields (no content) |
-| `ArtifactDetailQuery($id)`              | Lazy-loaded full content when a row is clicked  |
-
-The list query intentionally omits the `content` field because artifact content can be large (full reports are multi-thousand-character markdown blobs). Lazy loading on click keeps the list responsive.
-
-## Data model
-
-**`artifacts`** — Aurora table with:
-
-- `id`, `tenant_id`, `thread_id`, `agent_id`
-- `title`, `type`, `status`
-- `content` — the full text / markdown / structured data (stored as TEXT)
-- `summary` — short description, usually auto-generated at artifact creation
-- `created_at`, `updated_at`
-
-Artifacts are tenant-scoped and thread-scoped. Deleting the source thread does not currently cascade to its artifacts — this is deliberate, so important outputs survive even after the conversation that produced them is cleaned up.
+Every emission renders as prose plus a compact **artifact card** at the end of the agent's message (title, type badge, `Status · vN · freshness`). Clicking a card opens the artifact in a **docked, resizable panel** beside the thread; the panel updates live when chat edits re-emit the artifact. The thread header's panel button opens the newest artifact directly, or a picker when the thread produced several. The full page remains for deep links.
 
 ## How artifacts get created
 
-Agents produce artifacts during a turn by emitting a special structured output that the runtime captures and writes to the `artifacts` table. The structure is part of the agent's tool policy: tools that produce artifacts return an artifact shape, and the runtime persists it automatically.
+Agents emit artifacts mid-turn (`emit_json_render_ui` for canvases, `emit_document` for documents). Both are **born as artifacts**: a draft row exists from first emission, and saving/finalizing flips status and pins versions. Emission is validated server-side — documents pass DocSpector (self-contained, scriptless, dual-theme, authored on the genre plate) or the agent is rejected in-turn and corrects itself.
 
-The admin UI does not currently let operators **create or edit** artifacts directly — it is a read-only gallery. Artifacts are an agent-output primitive, not a human-authored one.
-
-## Workflows
-
-### Find an agent's most recent reports
-
-1. Open `/artifacts`
-2. Filter by type = REPORT (via search or the implicit list filter)
-3. Sort by Created descending
-4. Click through to read the top-of-list report
-
-### Trace an artifact back to its conversation
-
-1. Open the artifact in the dialog
-2. Click the linked thread id in the metadata sidebar
-3. Land on the thread detail page at the turn that produced the artifact
-4. Read the surrounding conversation for context
-
-### Use an artifact as source material
-
-Artifacts are durable, so they're the right primitive to point at when you want to reference an agent's output elsewhere:
-
-- Quote a report in a downstream document
-- Reference a plan in a project-management tool
-- Archive a digest for later review
-
-Because the content is just text / markdown, any downstream system can consume it.
+The admin UI does not create or edit artifact content directly — artifacts are an agent-output primitive. Operators can save/pin canvases and finalize documents through the detail page actions.
 
 ## Known limits
 
-- **Read-only from the admin UI.** Operators cannot create, edit, or delete artifacts from the admin app. Artifact creation is driven entirely by agent runtime output.
-- **No per-type custom rendering beyond the built-ins.** A new artifact type (say, `DIAGRAM`) would require code changes in the `ArtifactViewDialog` to render properly.
-- **Status transitions are implicit.** The admin UI shows status but doesn't expose explicit publish / archive buttons — those happen through agent activity or database-level updates.
-- **No export.** The UI doesn't offer a download-as-markdown or copy-all button; the operator selects text from the dialog manually.
+- **No export button.** The document reader's print-to-PDF path is the export; there is no download-as-markdown affordance yet.
+- **Sharing permalinks** (revocable public links to pinned versions) are planned, not shipped.
 
 ## Related pages
 
-- [Threads](/applications/web/threads/) — the source of every artifact; the thread detail page lists artifacts produced on that thread
-- [Agents](/applications/web/agents/) — which agents produce which artifact types is a function of their tool policy
-- [Automations (concept)](/concepts/automations/) — workflows can produce artifacts as their output
+- [Concepts: Artifacts](/concepts/artifacts/) — the model: kinds, plates, bindings, trust tiers
+- [Threads](/applications/web/threads/) — where artifacts are born and edited via chat
+- [Automations (concept)](/concepts/automations/) — automations can produce artifacts as their output

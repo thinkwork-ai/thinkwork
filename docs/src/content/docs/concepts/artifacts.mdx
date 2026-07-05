@@ -36,20 +36,37 @@ v1 ships four document genres, each backed by a **plate** — a complete exempla
 
 Plates are pattern books, not prose style rules: the agent copies the plate's document anatomy (eyebrow, header, section structure, CSS variables, dark-mode handling) and fills it with the content of the current task. Plates ship as assets of the `document-composer` skill, so a tenant can restyle its documents by editing the plates in its skill catalog.
 
-### Where documents appear
+Plates are **enforced, not suggested**. Every plate carries a `tw-plate` marker identifying its genre, and DocSpector rejects an emission whose HTML was not authored on the matching plate — the agent is told to read the plate and re-emit on it. A model cannot ship an improvised, off-brand document no matter how it is prompted.
 
-- **In the thread** — the emitting turn renders a compact document card inside the agent's reply, next to the summary. The card links to the full document; the agent's chat reply stays to a sentence or two, because the document is the deliverable.
-- **Full-page view** — `/artifacts/<id>` renders the HTML body full-height in a sandboxed frame, with the version history and the markdown digest available alongside.
+### Where artifacts appear
+
+Every artifact kind shares one rendering pattern in chat:
+
+- **In the thread** — the emitting turn renders the agent's short reply plus a compact **artifact card** at the end of the message (title, type badge, `Status · vN · freshness` meta line). The transcript never carries a full inline render — the card is the pointer, the artifact is the deliverable.
+- **Docked panel** — clicking a card opens the artifact in a resizable panel beside the thread. The conversation stays usable; edits requested in chat re-emit the artifact and the open panel updates live. The thread header's panel button opens the newest artifact directly (or a picker when the thread produced several).
+- **Full-page view** — `/artifacts/<id>` renders the artifact full-height (documents in a sandboxed frame), with the version history alongside.
 - **In the space** — the artifact lists under its owning space like any other living artifact.
 
 ### The document tier (trust model)
 
 Document Artifacts render at the **document tier**: a sandboxed iframe with `allow-scripts` stripped. A document can carry arbitrary styling but can never execute code. This is enforced twice:
 
-1. **At emission** — DocSpector, the preflight validator, rejects any HTML that is not fully self-contained: external `src`/`href`/`url()`/`@import` references, `javascript:` URLs, any `<script>` element, oversize bodies, and missing dark-mode support all fail with model-actionable diagnostics, so the agent corrects itself in-turn rather than shipping a broken document.
+1. **At emission** — DocSpector, the preflight validator, rejects any HTML that is not fully self-contained: external `src`/`href`/`url()`/`@import` references, `javascript:` URLs, any `<script>` element, oversize bodies, missing dark-mode support, and renders not authored on the genre plate all fail with model-actionable diagnostics, so the agent corrects itself in-turn rather than shipping a broken document.
 2. **At render** — the sandbox attribute set guarantees that even HTML that slipped past validation cannot run scripts or reach the network.
 
 A document that genuinely needs interactivity is not the document tier's job — it graduates deliberately to the app tier (a Living Canvas or MCP app frame), which grants script execution under its own containment rules.
+
+## Living Canvases and data refresh
+
+A Living Canvas widget built from a tool result carries a **data binding** — the saved tool call that produced its data — so the canvas can be refreshed without re-authoring it. Each binding tracks a freshness quality (`GOOD`, `STALE`, `BAD`, `SCHEMA_STALE`) and last-fetched timestamps.
+
+Clicking **Refresh** on a canvas just works, by whichever path the binding's credentials allow:
+
+- **Tenant-scoped bindings** (tenant API keys, service credentials) refresh headlessly — the saved tool call re-executes server-side and the fresh data lands in the canvas in a few seconds. No agent turn, no tokens.
+- **Per-user connector bindings** (e.g. a CRM connected with your personal OAuth) refresh under **the clicking owner's own stored connection** — also seconds, also headless. Unattended refreshes (schedules, other viewers) never touch personal credentials; for a non-owner the canvas falls back to an agent-mediated refresh in the canvas's thread.
+- **Schema changes** (the tool now returns a different shape) escalate to the agent, which re-authors the widget rather than force-fitting stale structure onto new data.
+
+After any successful refresh — headless or agent-mediated — the binding reads `GOOD` with fresh timestamps.
 
 <Aside type="note">
   Document composition is delivered by the `document-composer` skill, which must
