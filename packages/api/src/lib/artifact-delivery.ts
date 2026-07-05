@@ -11,6 +11,7 @@
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { renderForEmail } from "./channel-rendering/index.js";
+import { stripLeadingFrontmatter } from "./artifacts/document-compositor.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,7 +80,10 @@ export function renderEmailDelivery(
 <h1 style="font-size:20px;font-weight:600;margin:0 0 16px;color:#1a1a1a">${escapeHtml(artifact.title)}</h1>
 `;
 
-  const contentHtml = renderForEmail(artifact.content).html;
+  // THINK-154: document digests may lead with compiler frontmatter — not
+  // reader-facing content; strip it before rendering.
+  const markdownContent = stripLeadingFrontmatter(artifact.content);
+  const contentHtml = renderForEmail(markdownContent).html;
 
   const htmlBody = wrapEmailDocument(headerHtml + contentHtml, {
     title: artifact.title,
@@ -91,8 +95,8 @@ export function renderEmailDelivery(
     `${label}: ${artifact.title}`,
     artifact.status === "draft" ? "[DRAFT]" : "",
     "",
-    artifact.content.slice(0, 2000),
-    artifact.content.length > 2000 ? "\n[Content truncated]" : "",
+    markdownContent.slice(0, 2000),
+    markdownContent.length > 2000 ? "\n[Content truncated]" : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -124,7 +128,7 @@ export function renderSmsDelivery(
     return { body: prefix + artifact.summary };
   }
 
-  const source = artifact.summary ?? artifact.content;
+  const source = artifact.summary ?? stripLeadingFrontmatter(artifact.content);
   // Strip markdown formatting for SMS
   const plain = source
     .replace(/[#*_`~\[\]()>]/g, "")
@@ -204,7 +208,9 @@ function renderMarkdownForPdf(markdown: string): string {
  */
 export function renderPdfHtml(artifact: ArtifactPayload): string {
   const label = typeLabel(artifact.type);
-  const contentHtml = renderMarkdownForPdf(artifact.content);
+  const contentHtml = renderMarkdownForPdf(
+    stripLeadingFrontmatter(artifact.content),
+  );
 
   return `<!DOCTYPE html>
 <html>

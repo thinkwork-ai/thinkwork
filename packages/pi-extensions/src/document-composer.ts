@@ -1,15 +1,15 @@
 /**
- * HTML Document Artifacts (THINK-147 U4): the `emit_document` tool.
+ * Document Compositor v2 (THINK-154 U5): the `emit_document` tool, v2 shape.
  *
- * The agent-facing half of the document pipeline: it ships the dual-body
- * document (markdown digest + self-contained single-file HTML render) to the
- * chat-agent-activity endpoint's `document.emit` branch, which validates
- * (DocSpector), persists both bodies to S3, upserts the born-as-artifact row,
- * optionally pins-and-finalizes, and appends the compact thread card. Bodies
- * ride the ~6MB Lambda invoke — never `thread_turn_events` (R4).
+ * The agent authors MARKDOWN ONLY — frontmatter + prose + `tw:` directive
+ * blocks in `digest_markdown`. There is no `render_html` parameter: the
+ * platform compiles the house-style HTML render server-side at emission
+ * (enforcement-over-nudge — freestyle HTML is impossible by construction,
+ * KTD3). The server accepts the legacy dual-body shape from lagging customer
+ * runtimes independently of this schema (R8).
  *
- * Preflight rejects come back on the same synchronous call and are returned
- * VERBATIM as the tool result so the model self-corrects in-turn (R7).
+ * Compile/preflight rejects come back on the same synchronous call and are
+ * returned VERBATIM as the tool result so the model self-corrects in-turn.
  *
  * Registration is unconditional (gated only on the standard wiring fields and
  * not eval_mode) — R6 is satisfied a fortiori with no new dispatch-payload
@@ -29,11 +29,10 @@ export const EMIT_DOCUMENT_TOOL_NAME = "emit_document";
 export const DOCUMENT_GENRES = ["ideation", "plan", "report", "brief"] as const;
 
 /**
- * Local fast-fail ceilings. Kept in sync with the server-side source of truth
+ * Local fast-fail ceiling. Kept in sync with the server-side source of truth
  * in packages/api/src/lib/artifacts/document-preflight.ts (DocSpector) — the
- * server always re-checks; these only save a wasted round trip.
+ * server always re-checks; this only saves a wasted round trip.
  */
-export const EMIT_DOCUMENT_RENDER_MAX_BYTES = 256 * 1024;
 export const EMIT_DOCUMENT_DIGEST_MAX_BYTES = 96 * 1024;
 
 export interface DocumentComposerConfig {
@@ -83,19 +82,17 @@ export function createDocumentComposerExtension(
         name: EMIT_DOCUMENT_TOOL_NAME,
         label: "Emit Document",
         description:
-          "Save a document deliverable (ideation, plan, report, or brief) as a durable artifact " +
-          "with a beautiful single-file HTML render and a canonical markdown digest. " +
-          "REQUIRED WORKFLOW: BEFORE composing render_html, read the genre's plate template " +
-          "(skills/document-composer/references/plate-<genre>.html, via the workspace_skill tool) and author " +
-          'ON that plate — keep its <head> (style + <meta name="tw-plate"> marker) and layout skeleton, ' +
-          "replacing only the bracketed placeholder content. Off-plate renders are REJECTED by validation. " +
-          "The render must be FULLY self-contained: inline CSS only, system font stacks, inline SVG, data: " +
-          "URIs — no external URLs (they are rejected), no <script>, and it must style both " +
-          "light and dark themes. The digest is a faithful markdown record of the document's " +
-          "full substance. Emitting again with the same document_id revises the document " +
-          "(always pass the document_id returned by a prior call when revising). " +
-          "status 'final' pins an immutable version; drafts stay editable. " +
-          "Never include secrets, tokens, or credentials in either body.",
+          "Save a document deliverable (ideation, plan, report, or brief) as a durable artifact. " +
+          "You author MARKDOWN ONLY in digest_markdown — optional frontmatter (eyebrow, date, context), " +
+          "## sections, GFM tables, and tw: component blocks (```tw:stats, ```tw:verdict-grid, ```tw:chart " +
+          "with types bar|line|donut|stat-strip|sparkline|meter|funnel). The platform compiles the " +
+          "beautiful house-style HTML render server-side, including chart SVG drawn from your data — " +
+          "never write HTML or SVG yourself (raw HTML is stripped; external links become plain text). " +
+          "Start the body at ## Summary (the platform renders the H1 from title). " +
+          "Unknown components or malformed YAML reject with a diagnostic showing the corrected form. " +
+          "Emitting again with the same document_id revises the document (always pass the document_id " +
+          "returned by a prior call when revising). status 'final' pins an immutable version; drafts stay " +
+          "editable. Never include secrets, tokens, or credentials.",
         parameters: Type.Object({
           genre: Type.String({
             description: "One of: ideation, plan, report, brief.",
@@ -107,11 +104,7 @@ export function createDocumentComposerExtension(
           }),
           digest_markdown: Type.String({
             description:
-              "Canonical markdown digest of the document's full substance (agents and mobile read this body).",
-          }),
-          render_html: Type.String({
-            description:
-              "The complete self-contained single-file HTML document (human-facing render).",
+              "The document's full substance as markdown: optional frontmatter, ## sections, tables, and tw: component blocks. This is the canonical record AND the source the platform compiles the visual render from.",
           }),
           status: Type.Optional(
             Type.String({
@@ -136,8 +129,6 @@ export function createDocumentComposerExtension(
         async execute(_toolCallId, params) {
           const typed = (params ?? {}) as Record<string, unknown>;
           const genre = asString(typed.genre).toLowerCase();
-          const renderHtml =
-            typeof typed.render_html === "string" ? typed.render_html : "";
           const digestMarkdown =
             typeof typed.digest_markdown === "string"
               ? typed.digest_markdown
@@ -150,16 +141,6 @@ export function createDocumentComposerExtension(
           }
           // Local fast-fail (same diagnostic shape the server returns) — saves
           // shipping an oversize body just to have DocSpector reject it.
-          const renderBytes = byteLength(renderHtml);
-          if (renderBytes > EMIT_DOCUMENT_RENDER_MAX_BYTES) {
-            return diagnosticsResult([
-              {
-                code: "SIZE_CEILING",
-                message: `render_html is ${renderBytes} bytes; the ceiling is ${EMIT_DOCUMENT_RENDER_MAX_BYTES}. Tighten the document rather than splitting it.`,
-                location: "render_html",
-              },
-            ]);
-          }
           const digestBytes = byteLength(digestMarkdown);
           if (digestBytes > EMIT_DOCUMENT_DIGEST_MAX_BYTES) {
             return diagnosticsResult([
@@ -192,7 +173,6 @@ export function createDocumentComposerExtension(
                   title: asString(typed.title),
                   abstract: asString(typed.abstract),
                   digestMarkdown,
-                  renderHtml,
                   status: asString(typed.status) || "draft",
                   spaceId: asString(typed.space_id) || undefined,
                 },
@@ -209,10 +189,20 @@ export function createDocumentComposerExtension(
             const status = asString(body.status) || "draft";
             const headVersion =
               typeof body.headVersion === "number" ? body.headVersion : 0;
+            const warnings = Array.isArray(body.warnings)
+              ? (body.warnings as Array<Record<string, unknown>>)
+              : [];
+            const warningText =
+              warnings.length > 0
+                ? ` Non-blocking authoring warnings (fix on the next revision):\n${warnings
+                    .map((w) => `- [${w.code}] ${w.message}`)
+                    .join("\n")}`
+                : "";
             const text =
               `Document saved (${status}${status === "final" ? `, pinned version ${headVersion}` : ""}). ` +
               `document_id: ${asString(body.documentId)} — pass this document_id on every revision. ` +
-              `The document card is visible in the thread.`;
+              `The document card is visible in the thread.` +
+              warningText;
             return {
               content: [{ type: "text", text }],
               details: {
@@ -224,7 +214,10 @@ export function createDocumentComposerExtension(
             };
           }
 
-          if (body.code === "PREFLIGHT_REJECTED") {
+          if (
+            body.code === "PREFLIGHT_REJECTED" ||
+            body.code === "COMPILE_REJECTED"
+          ) {
             return diagnosticsResult(
               Array.isArray(body.diagnostics)
                 ? (body.diagnostics as Array<Record<string, unknown>>)
@@ -264,10 +257,10 @@ function diagnosticsResult(diagnostics: Array<Record<string, unknown>>): {
     (d) => `- [${d.code}] ${d.location}: ${d.message}`,
   );
   const text =
-    `The document was REJECTED by preflight validation — nothing was saved. ` +
-    `Fix every issue below and call emit_document again with the corrected bodies:\n${lines.join("\n")}`;
+    `The document was REJECTED by validation — nothing was saved. ` +
+    `Fix every issue below and call emit_document again with the corrected markdown:\n${lines.join("\n")}`;
   return {
     content: [{ type: "text", text }],
-    details: { code: "PREFLIGHT_REJECTED", diagnostics },
+    details: { code: "REJECTED", diagnostics },
   };
 }
