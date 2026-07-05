@@ -71,7 +71,7 @@ export function WorkItemRow({
       onPress={() => onPress(item)}
       onLongPress={() => onReassign(item)}
       delayLongPress={400}
-      className="flex-row items-start py-2 pl-4 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
+      className="flex-row items-start py-2 pl-[16px] pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
       style={{ backgroundColor: colors.background, minHeight: 72 }}
       accessibilityRole="button"
       accessibilityLabel={item.title}
