@@ -29,9 +29,12 @@ describe("document-composer plates pass DocSpector", () => {
   for (const plate of plates) {
     it(`${plate} is fully self-contained, dual-theme, and scriptless`, () => {
       const renderHtml = readFileSync(join(platesDir, plate), "utf8");
+      const genre = plate.replace(/^plate-/, "").replace(/\.html$/, "");
       const result = runDocumentPreflight({
         renderHtml,
         digestMarkdown: "# Plate digest placeholder",
+        // THINK-177: plates must pass their own enforcement gate.
+        genre,
       });
       if (!result.ok) {
         throw new Error(
@@ -43,6 +46,8 @@ describe("document-composer plates pass DocSpector", () => {
       expect(result.ok).toBe(true);
       // The reader-injected token overrides must exist alongside the media query.
       expect(renderHtml).toContain('data-theme="dark"');
+      // THINK-177: the plate carries the marker the PLATE gate enforces.
+      expect(renderHtml).toContain(`<meta name="tw-plate" content="${genre}">`);
       expect(renderHtml).toContain("@media print");
     });
   }
