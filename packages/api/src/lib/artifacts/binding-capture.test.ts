@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   // Per-table select results the mock db hands back at `.limit()`.
   mcpServerRow: null as { auth_type: string } | null,
   threadRow: null as { user_id: string | null } | null,
+  checkoutRoutedRow: null as { id: string } | null,
 }));
 
 vi.mock("../../graphql/utils.js", () => {
@@ -41,6 +42,19 @@ vi.mock("../../graphql/utils.js", () => {
     id: { name: "id" },
     user_id: { name: "user_id" },
   };
+  const artifacts = {
+    __table: "artifacts",
+    id: { name: "id" },
+    tenant_id: { name: "tenant_id" },
+    type: { name: "type" },
+    status: { name: "status" },
+    content: { name: "content" },
+    s3_key: { name: "s3_key" },
+    head_version: { name: "head_version" },
+    head_write_seq: { name: "head_write_seq" },
+    metadata: { name: "metadata" },
+  };
+  const artifactVersions = { __table: "artifact_versions" };
 
   function selectBuilder() {
     let table = "";
@@ -61,6 +75,11 @@ vi.mock("../../graphql/utils.js", () => {
         }
         if (table === "threads") {
           return Promise.resolve(mocks.threadRow ? [mocks.threadRow] : []);
+        }
+        if (table === "artifacts") {
+          return Promise.resolve(
+            mocks.checkoutRoutedRow ? [mocks.checkoutRoutedRow] : [],
+          );
         }
         return Promise.resolve([]);
       },
@@ -84,6 +103,8 @@ vi.mock("../../graphql/utils.js", () => {
     artifactDataBindings,
     tenantMcpServers,
     threads,
+    artifacts,
+    artifactVersions,
     db: {
       select: vi.fn(() => selectBuilder()),
       insert: vi.fn(() => insertBuilder),
@@ -131,6 +152,7 @@ beforeEach(() => {
   mocks.wherePredicates.length = 0;
   mocks.mcpServerRow = null;
   mocks.threadRow = null;
+  mocks.checkoutRoutedRow = null;
 });
 
 describe("upsertBindingFromActivityEvent", () => {
@@ -255,5 +277,34 @@ describe("upsertBindingFromActivityEvent", () => {
       auth_context: "tenant_mcp",
       owner_user_id: null,
     });
+  });
+
+  it("routes capture to the checked-out artifact instead of the thread-derived id (THINK-165)", async () => {
+    // Regression (observed live): a re-emission in a CHECKOUT thread derived
+    // artifact_id from (tenant, checkout thread, part) — an id with no
+    // artifacts row — so the insert died on the FK and the binding never
+    // refreshed. Capture must route via metadata.checkouts like the
+    // born-artifact head-update path.
+    const part = createTaskReviewJsonRenderFixture();
+    const ORIGINAL_ARTIFACT_ID = "44444444-4444-4444-4444-444444444444";
+    mocks.checkoutRoutedRow = { id: ORIGINAL_ARTIFACT_ID };
+    mocks.mcpServerRow = { auth_type: "oauth" };
+    mocks.threadRow = { user_id: OWNER_ID };
+    const result = await upsertBindingFromActivityEvent({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      payload: payloadWithBinding(part, descriptor(part)),
+    });
+    expect(result).toEqual({ bindingId: "binding-1" });
+    expect(mocks.bindingInserts[0]).toMatchObject({
+      artifact_id: ORIGINAL_ARTIFACT_ID,
+    });
+    // The checkout lookup constrains on stablePartId + checkouts containment.
+    const artifactWhere = mocks.wherePredicates.find(
+      (w) => w.table === "artifacts",
+    );
+    const flat = JSON.stringify(artifactWhere?.predicate);
+    expect(flat).toContain("stablePartId");
+    expect(flat).toContain("checkouts");
   });
 });
