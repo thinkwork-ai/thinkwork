@@ -1633,9 +1633,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         // KTD-3: same fingerprint function the capability inspector stamps
         // on predicted sets; the container forwards it into the per-turn
         // manifest so R15 divergence is only asserted on matching config.
-        capabilitiesManifestFingerprint: renderedWorkspace.rendered
-          ? renderedWorkspace.capabilities?.fingerprint
-          : undefined,
+        // Presence of this field IS the runtime's folder-mode signal —
+        // it ships only for flag-on agents (THINK-173 U6 contract).
+        capabilitiesManifestFingerprint:
+          runtimeConfig.capabilityFolderDispatch && renderedWorkspace.rendered
+            ? renderedWorkspace.capabilities?.fingerprint
+            : undefined,
         configFingerprint: computeConfigFingerprint(
           {
             tenantId,

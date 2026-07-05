@@ -2219,9 +2219,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         apiAuthSecret: getApiAuthSecret(),
         threadId: resolvedThreadId || undefined,
         threadTurnId: run.id,
-        capabilitiesManifestFingerprint: renderedWorkspace.rendered
-          ? renderedWorkspace.capabilities?.fingerprint
-          : undefined,
+        // Presence of this field IS the runtime's folder-mode signal —
+        // it ships only for flag-on agents (THINK-173 U6 contract).
+        capabilitiesManifestFingerprint:
+          agent.capability_folder_dispatch === true &&
+          renderedWorkspace.rendered
+            ? renderedWorkspace.capabilities?.fingerprint
+            : undefined,
         agentProfiles: agentProfilesConfig,
         piExtensions,
         modelRoutingPolicy,
@@ -2874,9 +2878,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               apiAuthSecret: getApiAuthSecret(),
               threadId: resolvedThreadId || undefined,
               threadTurnId: run.id,
-              capabilitiesManifestFingerprint: renderedWorkspace.rendered
-                ? renderedWorkspace.capabilities?.fingerprint
-                : undefined,
+              capabilitiesManifestFingerprint:
+                agent.capability_folder_dispatch === true &&
+                renderedWorkspace.rendered
+                  ? renderedWorkspace.capabilities?.fingerprint
+                  : undefined,
               agentProfiles: agentProfilesConfig,
               piExtensions,
               modelRoutingPolicy,
