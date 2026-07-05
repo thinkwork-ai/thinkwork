@@ -189,6 +189,14 @@ const ENTRIES = [
     generated: false,
     size: 210,
   },
+  // Compiled render artifacts (THINK-173) — hidden from the tree by default.
+  { path: "capabilities.json", owner: "agent", generated: true, size: 1400 },
+  {
+    path: "capabilities/e01b7982deadbeef.json",
+    owner: "agent",
+    generated: true,
+    size: 1400,
+  },
 ];
 
 function manifest(overrides: Record<string, unknown> = {}) {
@@ -1330,6 +1338,65 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
         "s1",
       ),
     ).not.toBeNull();
+  });
+
+  it("hides compiled artifacts by default; the debug toggle re-includes them", async () => {
+    seedCapabilityTree();
+    await renderEditor();
+    // Off by default: neither the latest pointer nor the hashed copy lists.
+    expect(screen.queryByTestId("tree-node-capabilities.json")).toBeNull();
+    expect(screen.queryByTestId("tree-node-capabilities")).toBeNull();
+    // Count reflects what is listed.
+    const header = screen.getByTestId("composer-files-header");
+    const hiddenCount = Number(header.textContent?.trim().split(" ")[0]);
+
+    fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
+    expect(
+      await screen.findByTestId("tree-node-capabilities.json"),
+    ).toBeTruthy();
+    expect(screen.getByTestId("tree-node-capabilities")).toBeTruthy();
+    const shownCount = Number(
+      screen
+        .getByTestId("composer-files-header")
+        .textContent?.trim()
+        .split(" ")[0],
+    );
+    expect(shownCount).toBe(hiddenCount + 2);
+
+    // Toggle back off.
+    fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
+    expect(screen.queryByTestId("tree-node-capabilities.json")).toBeNull();
+  });
+
+  it("offers Re-approve on a definition_drift tool and routes the approve callback", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      canManageSkills: true,
+      toolStateBySlug: new Map<string, SkillNodeState>([
+        ["draft-x", { active: false, reason: "definition_drift" }],
+      ]),
+      onApproveCapabilityFolder: approveMock,
+    });
+    await screen.findByTestId("tree-node-tools/draft-x");
+    fireEvent.click(screen.getByTestId("menu-reapprove-tool-draft-x"));
+    expect(approveMock).toHaveBeenCalledWith("tool", "draft-x");
+    // Plain Approve stays reserved for unsigned proposals.
+    expect(screen.queryByTestId("menu-approve-tool-draft-x")).toBeNull();
+  });
+
+  it("withholds Re-approve without write scope", async () => {
+    seedCapabilityTree();
+    await renderEditor({
+      canManageSkills: false,
+      connectionStateBySlug: new Map<string, SkillNodeState>([
+        ["firecrawl", { active: false, reason: "invalid_signature" }],
+      ]),
+      onApproveCapabilityFolder: approveMock,
+    });
+    await screen.findByTestId("tree-node-connections/firecrawl");
+    expect(
+      screen.queryByTestId("menu-reapprove-connection-firecrawl"),
+    ).toBeNull();
   });
 
   it("withholds approve/revoke without write scope", async () => {

@@ -1009,6 +1009,31 @@ describe("folder capabilities from the manifest (THINK-173 U9)", () => {
     seedManifest({ version: 1, active: [], withheld: [] });
     render(<SettingsCapabilities />);
     expect(screen.queryByTestId("pending-proposals")).toBeNull();
+    expect(screen.queryByTestId("drifted-capabilities")).toBeNull();
+  });
+
+  it("lists drift/signature-withheld folders with a Re-approve that re-grants the class", async () => {
+    seedManifest();
+    render(<SettingsCapabilities />);
+    const drifted = screen.getByTestId("drifted-capabilities");
+    // linear is definition_drift in the shared fixture; unsigned draft-x
+    // stays in the proposals block, not here.
+    expect(drifted.textContent).toContain("connections/linear");
+    expect(drifted.textContent).toContain("changed since approval");
+    expect(drifted.textContent).not.toContain("draft-x");
+    fireEvent.click(screen.getByTestId("reapprove-proposal-connection-linear"));
+    await waitFor(() =>
+      expect(grantMock).toHaveBeenCalledWith({
+        input: {
+          tenantId: "tenant-1",
+          capabilityClass: "CONNECTION",
+          scope: "AGENT",
+          agentId: null,
+          agentProfileId: null,
+          capabilityRef: "linear",
+        },
+      }),
+    );
   });
 });
 
