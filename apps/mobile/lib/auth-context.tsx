@@ -23,11 +23,7 @@ import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import {
-  setAuthToken,
-  reconnectSubscriptions,
-  resetGraphqlClientForPlatformConfigChange,
-} from "@/lib/graphql/client";
+import { setAuthToken, reconnectSubscriptions } from "@/lib/graphql/client";
 import {
   formatPlatformConfigMissing,
   getPlatformConfig,
@@ -35,10 +31,6 @@ import {
   subscribePlatformConfig,
   type MobilePlatformConfig,
 } from "@/lib/platform-config";
-import {
-  importDeploymentProfile as importDeploymentProfileJson,
-  removeDeploymentProfile as removeDeploymentProfileJson,
-} from "@/lib/deployment-profile";
 import type { PublicOAuthOption } from "@/lib/auth-options";
 import {
   buildWorkosAuthorizeUrl,
@@ -48,14 +40,37 @@ import {
 } from "@/lib/workos-auth";
 import * as SecureStore from "expo-secure-store";
 
-// Keys for biometric credential storage
+// Keys for biometric credential storage, scoped per environment clientId so a
+// sign-in on one environment can't overwrite (or be replayed against) another.
 const CRED_EMAIL_KEY = "biometric_stored_email";
 const CRED_PASSWORD_KEY = "biometric_stored_password";
+
+function credEmailKey(): string {
+  const clientId = getPlatformConfig().cognitoClientId;
+  return clientId ? `${CRED_EMAIL_KEY}.${clientId}` : CRED_EMAIL_KEY;
+}
+
+function credPasswordKey(): string {
+  const clientId = getPlatformConfig().cognitoClientId;
+  return clientId ? `${CRED_PASSWORD_KEY}.${clientId}` : CRED_PASSWORD_KEY;
+}
 // Google federated JWTs don't carry custom:tenant_id, so we persist the
 // id returned by bootstrapUser here and rehydrate it during the cold-start
 // session restore. Without this, every cold start drops the user on /sign-in
 // and silently disables their biometric preference (see _layout.tsx guard).
 const STORED_TENANT_ID_KEY = "thinkwork_stored_tenant_id";
+
+/**
+ * TenantId cache key, scoped to the active environment's Cognito clientId.
+ * A single global key poisons cross-environment switches: a tenantId cached
+ * on one environment gets replayed as another environment's tenant filter,
+ * silently emptying every list. Unscoped legacy values are intentionally
+ * ignored — resolveTenantId falls back to bootstrapUser.
+ */
+function storedTenantIdKey(): string {
+  const clientId = getPlatformConfig().cognitoClientId;
+  return clientId ? `${STORED_TENANT_ID_KEY}.${clientId}` : STORED_TENANT_ID_KEY;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,6 +103,14 @@ interface AuthContextValue {
    * usable user was restored, `false` otherwise.
    */
   retryBootstrap: () => Promise<boolean>;
+  /**
+   * Rescope in-memory auth to the active environment after an environment
+   * switch/add: clears the previous environment's in-memory user/token (its
+   * stored session stays intact), re-hydrates scoped storage, and restores
+   * the new environment's session when one exists. Resolves true when a
+   * session was restored, false when the environment needs a login.
+   */
+  rescopeAuthForEnvironmentChange: () => Promise<boolean>;
   /** Sign in with Google via Cognito hosted UI */
   signInWithGoogle: () => Promise<void>;
   /** Sign in with WorkOS SSO via the environment's brokered bridge */
@@ -95,8 +118,6 @@ interface AuthContextValue {
   /** Complete a WorkOS SSO bridge code delivered by a deep link fallback */
   completeSignInWithSSOBridge: (bridgeCode: string) => Promise<void>;
   deploymentConfig: MobilePlatformConfig;
-  importDeploymentProfile: (input: string) => Promise<void>;
-  removeDeploymentProfile: () => Promise<void>;
   /** Increments each time the app returns to foreground and token is refreshed. Watch this to re-fetch data. */
   refreshCounter: number;
 }
@@ -145,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user.tenantId) return user;
 
       try {
-        const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
+        const cached = await SecureStore.getItemAsync(storedTenantIdKey());
         if (cached) {
           console.log("[auth-boot] tenantId resolved from cache");
           return { ...user, tenantId: cached };
@@ -173,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           | undefined;
         if (tenantId) {
           console.log("[auth-boot] tenantId resolved via bootstrapUser");
-          SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch((e) =>
+          SecureStore.setItemAsync(storedTenantIdKey(), tenantId).catch((e) =>
             console.warn("[auth-boot] tenantId persist failed:", e),
           );
           return { ...user, tenantId };
@@ -268,6 +289,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [resolveTenantId]);
 
+  const rescopeAuthForEnvironmentChange = useCallback(async (): Promise<
+    boolean
+  > => {
+    auth.resetAuthEngineForEnvironmentChange();
+    setAuthToken(null);
+    setUser(null);
+    setHasStoredSession(false);
+    setDidActiveLogin(false);
+    return runBootstrap();
+  }, [runBootstrap]);
+
   // First-run bootstrap on mount
   useEffect(() => {
     let cancelled = false;
@@ -347,8 +379,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // doesn't block the login flow (SecureStore writes take ~50ms each)
     if (Platform.OS !== "web") {
       Promise.all([
-        SecureStore.setItemAsync(CRED_EMAIL_KEY, email),
-        SecureStore.setItemAsync(CRED_PASSWORD_KEY, password),
+        SecureStore.setItemAsync(credEmailKey(), email),
+        SecureStore.setItemAsync(credPasswordKey(), password),
       ]).catch((e) =>
         console.warn("[AuthProvider] credential store error:", e),
       );
@@ -359,8 +391,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const restoreWithCredentials = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === "web") return false;
     try {
-      const email = await SecureStore.getItemAsync(CRED_EMAIL_KEY);
-      const password = await SecureStore.getItemAsync(CRED_PASSWORD_KEY);
+      const email = await SecureStore.getItemAsync(credEmailKey());
+      const password = await SecureStore.getItemAsync(credPasswordKey());
       if (!email || !password) return false;
 
       const session = await auth.signIn(email, password);
@@ -488,7 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // so we're guaranteed to be on native here.
       if (oauthUser.tenantId) {
         SecureStore.setItemAsync(
-          STORED_TENANT_ID_KEY,
+          storedTenantIdKey(),
           oauthUser.tenantId,
         ).catch((e) => {
           console.warn("[AuthProvider] tenantId persist failed:", e);
@@ -543,7 +575,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (ssoUser.tenantId) {
-        SecureStore.setItemAsync(STORED_TENANT_ID_KEY, ssoUser.tenantId).catch(
+        SecureStore.setItemAsync(storedTenantIdKey(), ssoUser.tenantId).catch(
           (e) => {
             console.warn("[AuthProvider] tenantId persist failed:", e);
           },
@@ -622,48 +654,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Do clear the persisted tenantId so a fresh sign-in (possibly as a
     // different user) doesn't pick up the previous tenant. Fire-and-forget.
     if (Platform.OS !== "web") {
-      SecureStore.deleteItemAsync(STORED_TENANT_ID_KEY).catch(() => {});
+      SecureStore.deleteItemAsync(storedTenantIdKey()).catch(() => {});
     }
   }, []);
-
-  const clearDeploymentScopedSession = useCallback(async () => {
-    auth.clearAuthStorageForDeploymentChange();
-    setAuthToken(null);
-    resetGraphqlClientForPlatformConfigChange();
-    setUser(null);
-    setHasStoredSession(false);
-    setDidActiveLogin(false);
-    if (Platform.OS !== "web") {
-      await Promise.all([
-        SecureStore.deleteItemAsync(STORED_TENANT_ID_KEY).catch(() => {}),
-        SecureStore.deleteItemAsync(CRED_EMAIL_KEY).catch(() => {}),
-        SecureStore.deleteItemAsync(CRED_PASSWORD_KEY).catch(() => {}),
-      ]);
-    }
-  }, []);
-
-  const ensureProfileChangeAllowed = useCallback(() => {
-    if (user || hasStoredSession) {
-      throw new Error("Sign out before changing deployment profiles.");
-    }
-  }, [hasStoredSession, user]);
-
-  const handleImportDeploymentProfile = useCallback(
-    async (input: string) => {
-      ensureProfileChangeAllowed();
-      await importDeploymentProfileJson(input);
-      await clearDeploymentScopedSession();
-      setDeploymentConfig(getPlatformConfig());
-    },
-    [clearDeploymentScopedSession, ensureProfileChangeAllowed],
-  );
-
-  const handleRemoveDeploymentProfile = useCallback(async () => {
-    ensureProfileChangeAllowed();
-    await removeDeploymentProfileJson();
-    await clearDeploymentScopedSession();
-    setDeploymentConfig(getPlatformConfig());
-  }, [clearDeploymentScopedSession, ensureProfileChangeAllowed]);
 
   // ------ Token getter (for manual use) ------
   const getToken = useCallback(async () => {
@@ -687,12 +680,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getToken,
         restoreWithCredentials,
         retryBootstrap: runBootstrap,
+        rescopeAuthForEnvironmentChange,
         signInWithGoogle: handleSignInWithGoogle,
         signInWithSSO: handleSignInWithSSO,
         completeSignInWithSSOBridge: completeWorkosBridgeSignIn,
         deploymentConfig,
-        importDeploymentProfile: handleImportDeploymentProfile,
-        removeDeploymentProfile: handleRemoveDeploymentProfile,
         refreshCounter,
       }}
     >

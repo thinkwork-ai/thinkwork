@@ -38,6 +38,7 @@ import {
   removeEnvironmentWithSessionCleanup,
   switchActiveEnvironment,
 } from "@/lib/environments/switch";
+import { useAuth } from "@/lib/auth-context";
 
 export interface EnvironmentPickerSheetRef {
   present: () => void;
@@ -54,6 +55,7 @@ export function EnvironmentPicker({
   onRequestClose,
 }: EnvironmentPickerProps) {
   const router = useRouter();
+  const { rescopeAuthForEnvironmentChange } = useAuth();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const [entries, setEntries] = useState(() => getEnvironmentEntries());
@@ -82,9 +84,10 @@ export function EnvironmentPicker({
   const handleSwitch = async (entry: MobileEnvironmentEntry) => {
     setBusyId(entry.id);
     try {
-      const result = await switchActiveEnvironment(entry.id);
+      await switchActiveEnvironment(entry.id);
+      const restored = await rescopeAuthForEnvironmentChange();
       onRequestClose?.();
-      router.replace(result.status === "restored" ? "/" : "/sign-in");
+      router.replace(restored ? "/" : "/sign-in");
     } catch (error) {
       Alert.alert(
         "Switch failed",
@@ -133,12 +136,12 @@ export function EnvironmentPicker({
     try {
       const result = await removeEnvironmentWithSessionCleanup(entry.id);
       if (result.status === "removed-active-no-fallback") {
+        await rescopeAuthForEnvironmentChange();
         onRequestClose?.();
         router.replace("/environment-setup");
       } else if (result.status === "removed-active-fallback-restored") {
-        router.replace(
-          result.switchResult.status === "restored" ? "/" : "/sign-in",
-        );
+        const restored = await rescopeAuthForEnvironmentChange();
+        router.replace(restored ? "/" : "/sign-in");
       }
     } catch (error) {
       Alert.alert(
