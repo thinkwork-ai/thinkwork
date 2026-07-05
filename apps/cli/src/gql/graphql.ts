@@ -3768,7 +3768,6 @@ export type Mutation = {
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
   overrideEvalCaseVerdict: Scalars["Boolean"]["output"];
   overrideEvalResult: EvalResult;
-  pinArtifact: Artifact;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
@@ -3873,6 +3872,7 @@ export type Mutation = {
    */
   setThreadNotificationPreference: ThreadParticipant;
   setUserModelApproval: Array<UserModelCatalogEntry>;
+  snapshotArtifact: Artifact;
   startAutomationBuilder: AutomationBuilderSession;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
@@ -4603,10 +4603,6 @@ export type MutationOverrideEvalResultArgs = {
   input: OverrideEvalResultInput;
 };
 
-export type MutationPinArtifactArgs = {
-  artifactId: Scalars["ID"]["input"];
-};
-
 export type MutationPinThreadArgs = {
   tenantId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
@@ -4919,6 +4915,10 @@ export type MutationSetUserModelApprovalArgs = {
   approved: Scalars["Boolean"]["input"];
   modelId: Scalars["String"]["input"];
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationSnapshotArtifactArgs = {
+  artifactId: Scalars["ID"]["input"];
 };
 
 export type MutationStartAutomationBuilderArgs = {

@@ -1,7 +1,7 @@
 /**
  * Living Artifacts (THINK-145 U10): parse a living-canvas artifact payload.
  *
- * A living canvas stores its head (and each pinned version) as the stably-
+ * A living canvas stores its head (and each snapshot version) as the stably-
  * stringified persisted json-render PART — `{ type: "data-json-render", id,
  * data }` — NOT the retired promote-copy snapshot envelope. This
  * extracts the `{ id, data }` the thread json-render renderer consumes.

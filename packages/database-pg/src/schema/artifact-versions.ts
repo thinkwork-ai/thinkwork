@@ -2,13 +2,13 @@
  * Artifact version chain (Living Artifacts / THINK-145, KTD3).
  *
  * A canvas artifact's living head is an overwrite-in-place working copy stored
- * on `artifacts`. Pinning — and check-in, which auto-pins the prior head —
- * appends a content-addressed, write-once row here. Version history is
- * user-visible and any pinned version can be viewed (read-only in v1).
+ * on `artifacts`. Snapshotting — and check-in, which auto-snapshots the
+ * prior head — appends a content-addressed, write-once row here. Version
+ * history is user-visible and any snapshot can be viewed (read-only in v1).
  *
  * The content-addressed S3 key is written once and never mutated (two-key
- * rule): the head keeps its overwrite-in-place key, each pin gets a distinct
- * revision-keyed key.
+ * rule): the head keeps its overwrite-in-place key, each snapshot gets a
+ * distinct revision-keyed key.
  */
 
 import { pgTable, uuid, text, integer, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
@@ -30,16 +30,16 @@ export const artifactVersions = pgTable(
       .references(() => artifacts.id, { onDelete: "cascade" })
       .notNull(),
 
-    // Monotonic version number within an artifact (1-based pins).
+    // Monotonic version number within an artifact (1-based snapshots).
     version: integer("version").notNull(),
 
-    // Content-addressed, write-once S3 key for this pinned revision.
+    // Content-addressed, write-once S3 key for this snapshot revision.
     s3_key: text("s3_key").notNull(),
-    // Hash of the pinned content (content addressing / integrity).
+    // Hash of the snapshotted content (content addressing / integrity).
     content_hash: text("content_hash").notNull(),
 
-    // User who created the pin. Nullable + SET NULL so user deletion does not
-    // orphan the version chain.
+    // User who created the snapshot. Nullable + SET NULL so user deletion
+    // does not orphan the version chain.
     created_by: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

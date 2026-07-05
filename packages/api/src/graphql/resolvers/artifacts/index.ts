@@ -3,7 +3,7 @@ import { artifact } from "./artifact.query.js";
 import { threadCanvasContext } from "./threadCanvasContext.query.js";
 import { createArtifact } from "./createArtifact.mutation.js";
 import { saveCanvas } from "./saveCanvas.mutation.js";
-import { pinArtifact } from "./pinArtifact.mutation.js";
+import { snapshotArtifact } from "./snapshotArtifact.mutation.js";
 import { checkoutCanvas } from "./checkoutCanvas.mutation.js";
 import { refreshCanvasData } from "./refreshCanvasData.mutation.js";
 import { createCanvasRefreshSchedule } from "./createCanvasRefreshSchedule.mutation.js";
@@ -19,7 +19,7 @@ export const artifactQueries = { artifacts, artifact, threadCanvasContext };
 export const artifactMutations = {
   createArtifact,
   saveCanvas,
-  pinArtifact,
+  snapshotArtifact,
   checkoutCanvas,
   refreshCanvasData,
   createCanvasRefreshSchedule,

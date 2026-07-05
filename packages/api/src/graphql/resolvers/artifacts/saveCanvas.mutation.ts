@@ -8,9 +8,9 @@
  * updated and returns the already-saved row idempotently (no version, no
  * duplicate).
  *
- * Re-saving an already-final canvas auto-pins the prior head as a version
+ * Re-saving an already-final canvas auto-snapshots the prior head as a version
  * before applying the naming/space change (KTD3 check-in rule) — the mechanism
- * behind AE3. The U8 check-in path reuses {@link pinHeadToVersion}.
+ * behind AE3. The U8 check-in path reuses {@link snapshotHeadToVersion}.
  */
 
 import { GraphQLError } from "graphql";
@@ -25,7 +25,7 @@ import {
 import {
   boundedCanvasText,
   isLivingCanvasMetadata,
-  pinHeadToVersion,
+  snapshotHeadToVersion,
   type CanvasArtifactRow,
 } from "../../../lib/artifacts/canvas-lifecycle.js";
 import { artifactToCamelWithPayload } from "./payload.js";
@@ -103,7 +103,7 @@ export const saveCanvas = async (
     if (flipped) return artifactToCamelWithPayload(flipped);
 
     // Lost the flip race — someone saved concurrently. Return the current
-    // saved row; do NOT auto-pin (this is the same save, not an edit re-save).
+    // saved row; do NOT auto-snapshot (this is the same save, not an edit re-save).
     const [current] = await db
       .select()
       .from(artifacts)
@@ -117,10 +117,10 @@ export const saveCanvas = async (
   }
 
   if (row.status === "final") {
-    // Re-save of an already-saved canvas: auto-pin the prior head as a version
+    // Re-save of an already-saved canvas: auto-snapshot the prior head as a version
     // (check-in rule) and apply the naming/space change in the same guarded
     // UPDATE (KTD3 + KTD6).
-    const updated = await pinHeadToVersion({
+    const updated = await snapshotHeadToVersion({
       row: canvasRow,
       userId: caller.userId,
       extraUpdates: { title, space_id: spaceId },

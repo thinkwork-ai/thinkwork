@@ -8,7 +8,7 @@ type Artifact {
   # Living Artifacts (THINK-145): the space a saved canvas belongs to. Null for
   # draft (unsaved) canvases and all legacy artifacts.
   spaceId: ID
-  # Version-chain head pointer. 0 until the canvas has been pinned/checked in.
+  # Version-chain head pointer. 0 until the canvas has been snapshotted/checked in.
   headVersion: Int!
   title: String!
   # Artifact type is an OPEN, plugin-extensible vocabulary — not a closed enum.
@@ -26,7 +26,7 @@ type Artifact {
   favoritedAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
-  # Pinned, content-addressed version history (read-only; newest first).
+  # Snapshotted, content-addressed version history (read-only; newest first).
   versions: [ArtifactVersion!]!
   # Per-widget data-source bindings — the saved tool call behind each widget.
   bindings: [ArtifactDataBinding!]!
@@ -37,7 +37,7 @@ type Artifact {
   renderHtml: String
 }
 
-# A content-addressed, write-once pinned revision of a canvas artifact.
+# A content-addressed, write-once snapshot revision of a canvas artifact.
 type ArtifactVersion {
   id: ID!
   tenantId: ID!
@@ -47,7 +47,7 @@ type ArtifactVersion {
   contentHash: String!
   createdBy: ID
   createdAt: AWSDateTime!
-  # Living Artifacts (THINK-145 U10): the pinned revision's canvas payload,
+  # Living Artifacts (THINK-145 U10): the snapshot revision's canvas payload,
   # lazily hydrated from S3. Only fetched when selected — the version list
   # queries without it. Read access is gated by the parent Artifact resolver
   # (space membership / thread visibility, R15).
@@ -148,7 +148,7 @@ type ArtifactDataBinding {
 
 # A saved (or the current thread's draft) canvas summary for agent parity
 # (THINK-145 U9). `status` is draft | final | superseded; `headVersion` is 0
-# until the canvas has been pinned/checked in. `stablePartId` is the canvas's
+# until the canvas has been snapshotted/checked in. `stablePartId` is the canvas's
 # json-render part id — the id the agent must re-emit under to update THIS
 # canvas rather than minting a stray draft (checkout routing keys on it).
 type CanvasSummary {
@@ -341,11 +341,11 @@ extend type Query {
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
   # Living Artifacts (THINK-145 U4): save a draft canvas — status flip + naming
-  # + space assignment (R10/R12/R15). Re-saving a saved canvas auto-pins the
+  # + space assignment (R10/R12/R15). Re-saving a saved canvas auto-snapshots the
   # prior head as a version (KTD3 check-in rule).
   saveCanvas(artifactId: ID!, title: String!, spaceId: ID!): Artifact!
-  # Pin the current canvas head as a write-once, content-addressed version (R11).
-  pinArtifact(artifactId: ID!): Artifact!
+  # Snapshot the current canvas head as a write-once, content-addressed version (R11).
+  snapshotArtifact(artifactId: ID!): Artifact!
   # Living Artifacts (THINK-145 U8, R13): reopen a saved canvas in a same-space
   # thread. Materializes its head as a live part under its original stable part
   # id; a later re-emission + re-save appends a version to the SAME artifact.
