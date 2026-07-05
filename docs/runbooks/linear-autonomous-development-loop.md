@@ -1,37 +1,44 @@
 ---
 title: "Linear autonomous development loop"
-date: 2026-06-24
+date: 2026-07-05
 status: active
 ---
 
 # Linear Autonomous Development Loop
 
 This runbook defines the ThinkWork team's Linear-driven development loop for
-Codex automation. The loop aligns Linear state with the Compound Engineering
-workflow:
+agent automation. Two dispatcher lanes — Codex and Claude Code — drive the same
+Compound Engineering workflow:
 
 ```text
-ce-brainstorm -> ce-plan -> ce-work/autopilot -> verification -> ce-compound
+ce-ideate (human) -> ce-brainstorm -> ce-plan -> ce-work/autopilot
+  -> dogfood verification -> ce-compound
 ```
 
 The goal is a reliable autonomous path that is explicit about opt-in,
 verification, cleanup, and human review.
 
-## Dispatcher Skill
+## Dispatcher Skills
 
-The executable dispatcher contract lives in the repo-local Codex skill:
+The executable dispatcher contracts live in two lane skills that share one
+routing contract:
 
 ```text
-.agents/skills/thinkwork-linear-dispatcher/SKILL.md
+.agents/skills/thinkwork-linear-dispatcher/SKILL.md      # Codex lane
+.claude/skills/linear-dispatch/SKILL.md                  # Claude lane
+.agents/skills/thinkwork-linear-dispatcher/references/   # shared routing contract + launch prompts
 ```
 
-The `linear-agent-dispatcher` heartbeat prompt should stay tiny and invoke that
-skill every run. The skill owns the routing rules, tool sequence, worker launch
-contract, and reusable launch prompt templates. This runbook explains the
-workflow for humans; the skill is the automation source of truth.
+The Codex `linear-agent-dispatcher` heartbeat prompt should stay tiny and
+invoke the Codex skill every run. The Claude lane runs as a `/loop` in a
+dedicated local Claude Code session (see Operations below). The shared
+references own the routing rules, handoff contract, and launch prompt
+templates. This runbook explains the workflow for humans; the skills are the
+automation source of truth.
 
-When changing dispatcher behavior, update the skill and this runbook together.
-Do not paste a large copy of the rules back into the automation prompt.
+When changing dispatcher behavior, update the shared references, the affected
+lane skill, and this runbook together. Do not paste a large copy of the rules
+back into the automation prompt.
 
 ## Label Contract
 
@@ -39,46 +46,75 @@ Use status for phase, labels for routing and permissions:
 
 | Label                 | Meaning                                                                                 |
 | --------------------- | --------------------------------------------------------------------------------------- |
-| `Codex`               | Enrolls the issue in Codex dispatcher automation.                                       |
+| `Codex`               | Lane label: routes the issue to the Codex dispatcher.                                   |
+| `Claude`              | Lane label: routes the issue to the Claude Code dispatcher.                             |
 | `LFG`                 | Runs end-to-end autopilot across implementation, verification, repair, Done, compound.  |
 | `Verification Failed` | Marks a Ready to Work issue as a repair pass seeded by failed verification evidence.    |
 | Blocker labels        | `Needs User`, `Needs Credentials`, `Unsafe Ambiguity`, and `CI Failed` stop automation. |
+| `Blocked: Auth`       | Verification is blocked on auth needed to complete the normal user/admin flow.          |
 
-`Ready to Work` is implementation approval. A `Codex` issue in Ready to Work
-should launch the autopilot implementation prompt even when `LFG` is absent.
+An automated issue carries exactly one lane label; both at once is a lane
+conflict that halts routing with `Needs User`. Child issues inherit the
+parent's lane label and `LFG`.
+
+`Ready to Work` is implementation approval. A lane-labeled issue in Ready to
+Work launches the autopilot implementation prompt even when `LFG` is absent.
 Without `LFG`, the agent works the implementation pass, moves the issue to
 Verification, and stops for human review. With `LFG`, the agent owns the full
 closed loop: implementation, verification, repair rebounds, Done, and selective
 compounding.
 
 The old `Human` label is retired from the ThinkWork workflow. If a `Human`
-label still exists historically, the dispatcher must ignore it and must not
+label still exists historically, the dispatchers must ignore it and must not
 recreate old Human-gated behavior.
 
 ## Status Model
 
-The dispatcher is a router, not an implementation worker. It uses Linear status
-as the phase source of truth:
+Dispatchers are routers, not implementation workers. Linear status is the
+phase source of truth:
 
-| Status                | Dispatcher behavior                                                            |
-| --------------------- | ------------------------------------------------------------------------------ |
-| `Todo`                | If labeled `Codex`, move to `Brainstorming` and stop.                          |
-| `Brainstorming`       | Launch or continue a `ce-brainstorm` worker.                                   |
-| `Requirements Review` | Wait unless `LFG` is present, then move to `Planning`.                         |
-| `Planning`            | Launch or continue a `ce-plan` worker.                                         |
-| `Plan Review`         | Wait unless `LFG` is present, then move to `Ready to Work`.                    |
-| `Ready to Work`       | Launch implementation when `Codex` is present and no blocker labels exist.     |
-| `In Progress`         | Continue active implementation or repair work.                                 |
-| `Verification`        | Wait for human review unless `LFG` is present.                                 |
-| `Done`                | Do not implement or verify. Run selective `ce-compound` for `LFG` completions. |
+| Status                | Dispatcher behavior                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Todo`                | Human phase: Eric fleshes out the issue (usually `ce-ideate`), then adds one lane label. The lane dispatcher moves it to `Brainstorming` and stops. |
+| `Brainstorming`       | Launch or continue a `ce-brainstorm` worker.                                                                                                        |
+| `Requirements Review` | Wait unless `LFG` is present, then move to `Planning`.                                                                                              |
+| `Planning`            | Launch or continue a `ce-plan` worker.                                                                                                              |
+| `Plan Review`         | Wait unless `LFG` is present, then move to `Ready to Work`.                                                                                         |
+| `Ready to Work`       | Launch implementation when lane-labeled and no blocker labels exist.                                                                                |
+| `In Progress`         | Continue active implementation or repair work.                                                                                                      |
+| `Verification`        | **Claude lane only, both lane labels.** Wait for human review unless `LFG`, then launch a dogfood verification worker.                              |
+| `Done`                | Do not implement or verify. Run selective `ce-compound` for `LFG` completions.                                                                      |
 
-`Codex` without `LFG` may run one CE phase at a time and waits at Requirements
-Review and Plan Review. If a human moves the issue to Ready to Work,
-implementation is approved and should launch. After that implementation pass,
-non-`LFG` work moves to Verification and stops. `Codex` plus `LFG` skips
-Requirements Review and Plan Review, then continues through automated
+A lane label without `LFG` runs one CE phase at a time and waits at
+Requirements Review and Plan Review. If a human moves the issue to Ready to
+Work, implementation is approved and should launch. After that implementation
+pass, non-`LFG` work moves to Verification and stops. A lane label plus `LFG`
+skips Requirements Review and Plan Review, then continues through automated
 verification, repair loops, Done, and compounding unless there is a true hard
 blocker or unsafe ambiguity.
+
+Verification always runs on the Claude lane — it drives a real browser with
+operator auth against the deployed dev stack, which Codex cloud workers
+cannot do. Codex implements; the Claude lane verifies.
+
+## Goal-Based Handoff Comments
+
+Every phase transition posts a baton: a `handoff:<ISSUE_ID>:<NEXT_PHASE>`
+comment containing a one-sentence goal for the next worker, what the finished
+phase shipped (with links), exact start-here actions, required inputs, and
+carried-forward open questions. The dispatcher includes the newest handoff
+comment verbatim in the next worker's launch prompt, and synthesizes one from
+the Progress document when a human moved the status without one. The template
+lives in the shared `launch-prompts.md`.
+
+## Questions During A Phase
+
+When a material question blocks a worker (product scope, destructive choices,
+ambiguity that risks wrong work), it posts one comment @mentioning eric1 with
+numbered questions and a recommended answer for each, adds `Needs User`, and
+stops. Answer in the thread, remove the label, and the next heartbeat resumes
+the phase. `LFG` does not override `Needs User`. Trivial reversible choices
+are made autonomously and recorded in the Progress document.
 
 ## Child Issues As Work Units
 
@@ -90,8 +126,9 @@ multiple shippable units. Each child issue must include:
 - a clear unit objective;
 - the required implementation scope;
 - dependencies or ordering constraints;
-- a plan-owned verification contract;
-- inherited `Codex` and, when present on the parent, `LFG` labels.
+- a plan-owned verification contract naming the complete user flows that prove
+  the unit works;
+- the parent's inherited lane label and, when present, `LFG`.
 
 The parent issue tracks aggregate progress. It moves to `In Progress` when the
 first child starts, moves to `Verification` when all children are implemented,
@@ -128,43 +165,57 @@ next unit from the Progress document's `Next Steps`, not from chat memory alone.
 
 `Ready to Work` has two modes:
 
-1. First implementation pass: the issue has `Codex` and does not have
+1. First implementation pass: the issue is lane-labeled and does not have
    `Verification Failed`.
-2. Repair pass: the issue has `Codex` and `Verification Failed`.
+2. Repair pass: the issue is lane-labeled and has `Verification Failed`.
 
-A repair worker must start from the failed verification evidence and implement
-the smallest correct fix. The `Verification Failed` label stays in place through
-the repair pass and is removed only after verification passes.
+A repair worker must start from the failed verification evidence (verdict
+comment plus dogfood report) and implement the smallest correct fix, including
+a regression test that is red before and green after the fix. The
+`Verification Failed` label stays in place through the repair pass and is
+removed only after verification passes.
 
-## Verification Contract
+## Verification Contract (Dogfood)
 
-The plan owns the definition of "correct and done." A verification worker must
-grade the implementation against the plan-owned verification contract for the
-active child issue or parent issue.
+The plan owns the definition of "correct and done." Verification is a dogfood
+run against the deployed dev stack — dev is continuous-CD from `main`, so the
+verifier first confirms the post-merge Deploy workflow run is green.
 
-Verification workers are judges, not mechanics. They must not fix product code.
-They must:
+Verification workers are judges, not mechanics. They must not fix product
+code. They must:
 
-- inspect requirements, plan, PRs, comments, and existing evidence;
-- actively produce missing end-to-end evidence when safe;
-- prefer local dev server plus Browser for UI workflows;
-- use sanctioned dev/test deploy, smoke, teardown, and cleanup paths when the
-  plan requires deployed proof;
-- record concrete pass/fail evidence in the rolling Linear ledger;
-- move failed work back to `Ready to Work` with `Verification Failed` when the
-  behavior is wrong, incomplete, not wired, or not deployable;
-- add blocker labels only for true blockers such as missing credentials,
-  unavailable context, unsafe ambiguity, CI failure, human-only approval, or an
-  unauthorized destructive action.
+- scope to the diff: enumerate what the merged PRs changed, never re-test the
+  whole app;
+- map the complete user flows the change participates in and follow each flow
+  to its real end (a reply feature is proven when the recipient's click lands
+  on the right thread, not when the form submits);
+- build a scenario matrix from the plan-owned verification contract plus the
+  mapped flows, checkpointed in the report file so a killed run can resume;
+- drive the deployed dev stack through each scenario in a real browser
+  (agent-browser / Chrome), capturing URLs, screenshots, console/network
+  errors, and persisted-data checks;
+- record two verdicts per scenario: functional (works end to end) and
+  experiential (as the feature's persona, hunt paper cuts — friction too small
+  to fail a test but real enough to degrade the experience; paper cuts don't
+  fail verification, they become report entries and follow-up issues);
+- classify every failure with the fix-loop governor: small/well-understood/
+  low-risk → `Verification Failed` rebound to Ready to Work with exact
+  evidence and the smallest suggested fix; large/risky/ambiguous → options,
+  trade-offs, and a recommendation with `Needs User`; unprovable-by-automation
+  (external email delivery, third-party OAuth, broken auth) → `Blocked: Auth`
+  or `Needs User` with exactly what a human must check;
+- write the durable report to `docs/dogfood-reports/<date>-<ISSUE>-dogfood.md`
+  and merge it via a docs-only PR, linked from the Progress document.
 
-Done requires merged implementation and artifact PRs plus the proof required by
-the verification contract. If the plan requires deployed proof, local checks
-alone are not enough.
+Done requires merged implementation and artifact PRs, the proof required by
+the verification contract, and the merged dogfood report with an empty (or
+explicitly handed-off) "Decisions for a human" section. If the plan requires
+deployed proof, local checks alone are not enough.
 
 ## Progress Documents And Ledgers
 
-Linear is the canonical progress ledger for autopilot work. Every `Codex` issue
-that is beyond `Todo` should have an attached progress document named:
+Linear is the canonical progress ledger for autopilot work. Every lane-labeled
+issue that is beyond `Todo` should have an attached progress document named:
 
 ```text
 Progress: <feature title>
@@ -187,14 +238,15 @@ verdict, blocker, and cleanup. Unit completion is the strongest checkpoint:
 Progress must include shipped evidence and the next unit before the worker
 continues.
 
-Use one rolling Linear automation ledger comment per issue or unit. The
-dispatcher and workers should update that comment in place whenever possible,
-but it is only a short router pointer: current phase, active worker or pending
-worktree, active branch/worktree/PR, blocker summary, and a link to the progress
-document. New comments are reserved for:
+Use one rolling Linear automation ledger comment per issue or unit
+(`automation-ledger:<ISSUE_ID>`). The dispatcher and workers should update
+that comment in place whenever possible, but it is only a short router
+pointer: current phase, active worker or pending worktree, active
+branch/worktree/PR, blocker summary, and a link to the progress document. New
+comments are reserved for:
 
-- worker handoffs;
-- hard blockers;
+- goal handoffs and worker launches;
+- hard blockers and questions for Eric;
 - failed verification verdicts;
 - final completion summaries.
 
@@ -206,60 +258,25 @@ and PRs, then reconcile the Linear progress document before proceeding.
 
 ## Worker Launches
 
-The dispatcher must create real Codex project threads. A Linear comment is not a
-worker launch.
+A Linear comment is not a worker launch; dispatchers must create real workers.
 
-When launching a ThinkWork worker, the dispatcher must:
+- **Codex lane**: Codex project threads in the
+  `/Users/ericodom/Projects/thinkwork` project with worktree environments,
+  titled with the issue id, with a first-action `/goal`. Full rules in
+  `.agents/skills/thinkwork-linear-dispatcher/SKILL.md`.
+- **Claude lane**: local headless `claude -p` runs in fresh worktrees under
+  `.claude/worktrees/auto-*`, logs and prompt files under
+  `~/.thinkwork-factory/`, recorded as `pid:<PID> log:<path> worktree:<path>`.
+  Full rules in `.claude/skills/linear-dispatch/SKILL.md`.
 
-- call Codex `create_thread` in the `/Users/ericodom/Projects/thinkwork`
-  project;
-- use a worktree environment and omit `startingState` for new worktrees;
-- record only the returned `threadId` or `pendingWorktreeId`;
-- title every worker chat with the Linear issue id prefix, such as
-  `THNK-69: Implement Native Work Items`;
-- call `set_thread_title` immediately when `create_thread` returns a real
-  `threadId`;
-- record the desired title in Linear when `create_thread` returns only a
-  `pendingWorktreeId`, then set the title after the real thread exists;
-- include a Codex goal instruction in every implementation or repair prompt,
-  and require the worker to set the thread goal before changing code;
-- include the progress document URL/title in every launch prompt and require
-  the worker to read it before selecting the next unit;
-- update the progress document before launch with selected phase/unit, desired
-  title, returned `threadId` or `pendingWorktreeId`, active branch/worktree when
-  known, and expected stop condition;
-- validate existing `threadId` values with `read_thread` before treating them
-  as active;
-- ignore stale handoff comments whose thread ids cannot be read;
-- treat failed pending worktrees as failed launches and retry with corrected
-  inputs while the issue remains eligible.
-
-Do not pass a made-up branch name as `startingState.branchName` for a new
-worker. Codex treats that value as an existing git ref, so worktree creation
-fails if the ref does not already exist.
-
-Launches are atomic. After `create_thread` returns, the dispatcher immediately
-records the returned `threadId` or `pendingWorktreeId` in the Progress document,
-rolling ledger, and handoff comment, then moves the issue state when required.
-If a launch decision is made but `create_thread` cannot be called, the
-dispatcher records `launch-blocked` instead of stopping at "launching now." If
-Linear recording fails after a worker was created, the dispatcher records the
-returned id wherever possible and must not create a replacement worker in the
-same heartbeat.
-
-Each inspected issue must end a heartbeat in one observable router state:
-active worker, pending worker, waiting, blocked, launched, or skipped with
-reason. The dispatcher may create at most one new implementation/repair worker
-per heartbeat, but existing worker monitoring does not consume that launch
-budget. Issues skipped because the launch budget was used must say that in the
-rolling ledger or Progress document.
-
-Implementation and repair prompts must include a first-action goal line. The
-goal should name the Linear issue, the implementation scope, the expected PR or
-artifact landing, the Linear ledger/status evidence to update, and the terminal
-phase. For non-`LFG` issues, the goal ends at moving the issue to Verification
-for human review. For `LFG` issues, the goal covers the closed loop through
-verification, repair rebounds, Done, and selective compounding.
+Launches are atomic: after a worker is created, the dispatcher immediately
+records the returned worker id in the Progress document, rolling ledger, and
+`dispatcher:<ISSUE_ID>:<PHASE>:<LANE>` launch comment, then moves the issue
+state when required. Every launch prompt embeds the newest
+`handoff:<ISSUE_ID>:<PHASE>` comment. Each inspected issue ends a heartbeat in
+one observable router state: active worker, pending worker, waiting, blocked,
+launched, or skipped with reason. A dispatcher may create at most one new
+implementation/repair worker per heartbeat.
 
 ## Worktrees, PRs, And Cleanup
 
@@ -282,4 +299,29 @@ automation branch.
 After an issue reaches `Done`, run selective `ce-compound` for completed
 CE-driven work that has not already been compounded. Run the recommendation
 step, accept the recommendation automatically, and create docs only when the
-recommendation says there is durable learning to preserve.
+recommendation says there is durable learning to preserve. The compound worker
+also mines the dogfood report for durable paper-cut patterns.
+
+## Operations
+
+**Codex lane**: the `linear-agent-dispatcher` heartbeat agent in the Codex app
+invokes the Codex skill on its schedule. No local process is required.
+
+**Claude lane**: run a dedicated Claude Code session at the repo root on
+Eric's Mac:
+
+```bash
+caffeinate -dims   # separate terminal, keeps the Mac awake
+claude             # then inside the session:
+/loop 4m linear-dispatch
+```
+
+Notes:
+
+- `/loop` recurring tasks expire after ~7 days; restart the loop weekly.
+- The dispatcher session never edits the repo; workers run headless in their
+  own worktrees with logs in `~/.thinkwork-factory/logs/`.
+- To pause the lane, stop the loop; in-flight workers finish their current
+  phase and stop at the next gate.
+- Both lanes tolerate restarts: all durable state lives in Linear (Progress
+  document + handoff comments), so a fresh dispatcher resumes from Linear.
