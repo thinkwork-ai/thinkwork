@@ -131,7 +131,8 @@ export interface DocumentEmitInput {
 }
 
 export type DocumentEmitParse =
-  { ok: true; value: DocumentEmitInput } | { ok: false; error: string };
+  | { ok: true; value: DocumentEmitInput }
+  | { ok: false; error: string };
 
 /** Shape validation — tool bugs, not model-actionable content rejects. */
 export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
@@ -201,6 +202,7 @@ export interface DocumentEmissionDeps {
   preflight: (input: {
     renderHtml: string;
     digestMarkdown: string;
+    genre?: string;
   }) => DocumentPreflightResult;
   writePayload: typeof writeArtifactPayloadToS3;
   resolveActingUserId: (input: {
@@ -512,6 +514,9 @@ export async function handleDocumentEmission(
   const preflight = deps.preflight({
     renderHtml: doc.renderHtml,
     digestMarkdown: doc.digestMarkdown,
+    // THINK-177: genre plates are enforced — an off-plate render is rejected
+    // in-turn with instructions to read the plate and re-emit on it.
+    genre: doc.genre,
   });
   if (!preflight.ok) {
     console.log(

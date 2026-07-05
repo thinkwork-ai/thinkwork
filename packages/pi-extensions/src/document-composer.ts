@@ -84,8 +84,12 @@ export function createDocumentComposerExtension(
         label: "Emit Document",
         description:
           "Save a document deliverable (ideation, plan, report, or brief) as a durable artifact " +
-          "with a beautiful single-file HTML render and a canonical markdown digest. The render " +
-          "must be FULLY self-contained: inline CSS only, system font stacks, inline SVG, data: " +
+          "with a beautiful single-file HTML render and a canonical markdown digest. " +
+          "REQUIRED WORKFLOW: BEFORE composing render_html, read the genre's plate template " +
+          "(skills/document-composer/references/plate-<genre>.html, via the workspace_skill tool) and author " +
+          'ON that plate — keep its <head> (style + <meta name="tw-plate"> marker) and layout skeleton, ' +
+          "replacing only the bracketed placeholder content. Off-plate renders are REJECTED by validation. " +
+          "The render must be FULLY self-contained: inline CSS only, system font stacks, inline SVG, data: " +
           "URIs — no external URLs (they are rejected), no <script>, and it must style both " +
           "light and dark themes. The digest is a faithful markdown record of the document's " +
           "full substance. Emitting again with the same document_id revises the document " +

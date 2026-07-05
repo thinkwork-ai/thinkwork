@@ -243,4 +243,65 @@ describe("runDocumentPreflight", () => {
     expect(found).toContain("EXTERNAL_REF");
     expect(found).toContain("SKELETON");
   });
+
+  // ---- Plate enforcement (THINK-177) --------------------------------------
+  describe("PLATE gate", () => {
+    const ON_PLATE = VALID_DOC.replace(
+      '<meta charset="utf-8">',
+      '<meta charset="utf-8">\n<meta name="tw-plate" content="report">',
+    );
+
+    it("rejects a genre emission not authored on a plate, naming the plate file", () => {
+      const result = runDocumentPreflight({
+        renderHtml: VALID_DOC,
+        digestMarkdown: DIGEST,
+        genre: "report",
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      const plate = result.diagnostics.find((d) => d.code === "PLATE");
+      expect(plate).toBeDefined();
+      expect(plate!.message).toContain("plate-report.html");
+      expect(plate!.message).toContain("workspace_skill");
+    });
+
+    it("accepts an emission carrying the matching plate marker", () => {
+      const result = runDocumentPreflight({
+        renderHtml: ON_PLATE,
+        digestMarkdown: DIGEST,
+        genre: "report",
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("rejects a marker/genre mismatch with both plates named", () => {
+      const result = runDocumentPreflight({
+        renderHtml: ON_PLATE,
+        digestMarkdown: DIGEST,
+        genre: "brief",
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      const plate = result.diagnostics.find((d) => d.code === "PLATE");
+      expect(plate!.message).toContain("plate-brief.html");
+      expect(plate!.message).toContain('"report"');
+    });
+
+    it("accepts reversed attribute order on the marker meta", () => {
+      const reversed = VALID_DOC.replace(
+        '<meta charset="utf-8">',
+        '<meta charset="utf-8">\n<meta content="report" name="tw-plate">',
+      );
+      const result = runDocumentPreflight({
+        renderHtml: reversed,
+        digestMarkdown: DIGEST,
+        genre: "report",
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("skips the gate entirely when no genre is provided (legacy callers)", () => {
+      expect(run(VALID_DOC).ok).toBe(true);
+    });
+  });
 });
