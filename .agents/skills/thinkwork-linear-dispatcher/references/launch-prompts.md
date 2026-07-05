@@ -24,6 +24,20 @@ one comment @mentioning eric1 with numbered questions and a recommended answer
 for each, add `Needs User`, record the questions in the Progress document, and
 stop. Make trivial reversible choices autonomously and record them.
 
+Goal discipline (all workers, both lanes): the Goal paragraph in a launch
+prompt is the run contract, not an aspiration. A worker run has exactly two
+valid endings: (1) the goal's terminal condition is observably true — required
+PRs merged, handoff comment posted, status moved, cleanup done — or (2) a hard
+blocker is recorded per the question protocol. Nothing in between. In
+particular: never end a run "waiting on CI" — watch checks to completion
+in-run (`gh pr checks <pr> --watch` or an explicit poll loop) and finish the
+post-merge steps before your final message. Arming auto-merge, spawning a
+background watcher, or noting that "a later heartbeat will finish this" does
+not satisfy the goal: background state does not survive a headless worker's
+exit, and the dispatcher treats an exited worker with an unmet goal as dead
+and relaunches from the Progress document. Restate your goal as your first
+action and check your last action against it before ending the run.
+
 ## Handoff Comment Template
 
 Post this comment when a phase completes, before stopping. It is the baton the
