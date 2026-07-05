@@ -86,11 +86,18 @@ fi
 lambda_function_name="thinkwork-${STAGE}-agentcore-pi"
 
 runtime_env_json() {
+  # AgentCore rejects env values containing control characters (0x00-0x1F),
+  # but Lambda allows them — e.g. CAPABILITY_SIGNING_PUBLIC_KEY is a
+  # multi-line PEM on the Lambda. Escape control chars as literal \n/\r/\t in
+  # the mirrored copy; any consumer of such a value must un-escape (the Pi
+  # container's publicKeyPemFromEnv already normalizes literal \n → newline).
   aws lambda get-function-configuration \
     --function-name "$lambda_function_name" \
     --region "$REGION" \
     --query 'Environment.Variables' \
-    --output json 2>/dev/null || echo ""
+    --output json 2>/dev/null \
+    | jq 'if . == null then null else map_values(if type == "string" then gsub("\r"; "\\r") | gsub("\n"; "\\n") | gsub("\t"; "\\t") else . end) end' \
+    || echo ""
 }
 
 is_agentcore_forbidden() {
