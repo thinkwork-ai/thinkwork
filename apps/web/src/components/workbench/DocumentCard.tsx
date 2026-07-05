@@ -16,21 +16,33 @@ export interface DocumentCardData {
   abstract?: string;
   status?: string;
   headVersion?: number;
+  /** Emission time of the folded document.card event — the card's freshness. */
+  updatedAt?: string;
 }
 
-export function DocumentCard({ card }: { card: DocumentCardData }) {
+export function DocumentCard({
+  card,
+  onOpen,
+}: {
+  card: DocumentCardData;
+  /** THINK-168: open in the thread's docked panel (primary click). */
+  onOpen?: () => void;
+}) {
   const statusLabel =
     card.status === "final"
       ? `Final${card.headVersion ? ` · v${card.headVersion}` : ""}`
       : "Draft";
   return (
     <ArtifactCard
-      artifact={{ id: card.artifactId, title: card.title }}
+      artifact={{
+        id: card.artifactId,
+        title: card.title,
+        updatedAt: card.updatedAt ?? null,
+      }}
       badge={card.genre ?? null}
       statusLabel={statusLabel}
-      description={card.abstract}
-      openLabel="Open document →"
       testId="document-card"
+      onOpen={onOpen}
     />
   );
 }

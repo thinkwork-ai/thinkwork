@@ -14,6 +14,7 @@ export interface GeneratedArtifact {
   status?: string | null;
   headVersion?: number | null;
   metadata?: Record<string, unknown> | null;
+  updatedAt?: string | null;
 }
 
 interface GeneratedArtifactCardProps {

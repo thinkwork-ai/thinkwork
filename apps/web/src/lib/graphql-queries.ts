@@ -2461,6 +2461,7 @@ export const ThreadCanvasContextQuery = gql`
         status
         headVersion
         stablePartId
+        updatedAt
       }
     }
   }

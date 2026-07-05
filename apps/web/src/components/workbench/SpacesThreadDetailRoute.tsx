@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Flag, Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
+import { Flag, Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { describeSendMessageError } from "@/lib/send-message-error";
 import { Button } from "@thinkwork/ui";
@@ -12,6 +12,7 @@ import {
 import { spaceCrumbLabel } from "@/components/spaces/space-utils";
 import {
   TaskThreadView,
+  deriveCardRenderedArtifacts,
   normalizePersistedParts,
   type ComposerMention,
   type TaskThread,
@@ -23,6 +24,10 @@ import {
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
+import {
+  THREAD_ARTIFACT_PANEL_LIST,
+  useThreadArtifactPanel,
+} from "@/components/artifacts/thread-artifact-panel-store";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
@@ -231,6 +236,7 @@ interface ThreadResult {
             headVersion?: number | null;
             summary?: string | null;
             metadata?: unknown;
+            updatedAt?: string | null;
           } | null;
         };
       }>;
@@ -443,17 +449,16 @@ export function SpacesThreadDetailRoute({
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readStoredModelId(),
   );
-  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
-  const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
+  // THINK-168: the docked artifact panel replaced the legacy GeneratedArtifact
+  // side panel. The header PanelRight button opens the thread's NEWEST durable
+  // artifact directly in it (same store the transcript cards use).
+  const dockedArtifactPanel = useThreadArtifactPanel(threadId);
   // Hide the "…" actions menu while the title is being renamed — leaving the
   // trigger mounted lets Radix's focus-restore steal focus back from the
   // rename input on menu close, cancelling the edit.
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [goalReviewError, setGoalReviewError] = useState<string | null>(null);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
-    null,
-  );
   const [manualRefreshStartedAt, setManualRefreshStartedAt] = useState<
     number | null
   >(null);
@@ -517,6 +522,7 @@ export function SpacesThreadDetailRoute({
         status?: string | null;
         headVersion?: number | null;
         stablePartId?: string | null;
+        updatedAt?: string | null;
       }> | null;
     } | null;
   }>({
@@ -795,6 +801,13 @@ export function SpacesThreadDetailRoute({
   const [liveStreamStateByRun, setLiveStreamStateByRun] = useState<
     Map<string, UIMessageStreamState>
   >(new Map());
+  // THINK-168: partId → bump counter for live json-render (re-)emissions.
+  // The docked artifact panel watches its artifact's stablePartId here and
+  // refetches when the agent re-emits the canvas in this thread — event-
+  // driven via the same onThreadTurnStep fold, no polling.
+  const [jsonRenderPartVersions, setJsonRenderPartVersions] = useState<
+    Map<string, number>
+  >(new Map());
   const liveStepSeqByRun = useRef<Map<string, Set<number>>>(new Map());
   const [{ data: stepUpdate }] = useSubscription<{
     onThreadTurnStep?: {
@@ -815,6 +828,7 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     setLiveStepsByRun(new Map());
     setLiveStreamStateByRun(new Map());
+    setJsonRenderPartVersions(new Map());
     liveStepSeqByRun.current = new Map();
   }, [threadId]);
 
@@ -846,6 +860,16 @@ export function SpacesThreadDetailRoute({
         );
         return next;
       });
+      // THINK-168: signal the docked artifact panel that this stable part id
+      // just (re-)landed so it can refetch the artifact's persisted head.
+      const jsonRenderPartId = jsonRenderPartIdFromChunk(uiChunk);
+      if (jsonRenderPartId) {
+        setJsonRenderPartVersions((prev) => {
+          const next = new Map(prev);
+          next.set(jsonRenderPartId, (next.get(jsonRenderPartId) ?? 0) + 1);
+          return next;
+        });
+      }
       return;
     }
     const event: TaskThreadEvent = {
@@ -1111,10 +1135,16 @@ export function SpacesThreadDetailRoute({
     () => deriveThreadArtifacts(visibleThread),
     [visibleThread],
   );
-  const effectiveSelectedArtifactId = resolveThreadArtifactSelection(
-    threadArtifacts,
-    selectedArtifactId,
+  // Header-button resolution invariant (THINK-168): only artifacts that
+  // render as transcript cards are openable — raw durableArtifact order
+  // included the auto-minted safety-net "Table" drafts, which never render
+  // cards (that was the wrong-artifact bug Eric hit).
+  const cardArtifacts = useMemo(
+    () =>
+      deriveCardRenderedArtifacts(visibleThread, savedCanvases ?? undefined),
+    [visibleThread, savedCanvases],
   );
+  const newestCardArtifactId = cardArtifacts.at(-1)?.id ?? null;
   const runbookQueues = useMemo(
     () => toRunbookQueues(runbookRunsData?.runbookRuns),
     [runbookRunsData?.runbookRuns],
@@ -1409,58 +1439,6 @@ export function SpacesThreadDetailRoute({
     });
   }, [hasDurableAssistant, threadId, visibleThread]);
 
-  useEffect(() => {
-    if (selectedArtifactId !== effectiveSelectedArtifactId) {
-      setSelectedArtifactId(effectiveSelectedArtifactId);
-    }
-    if (threadArtifacts.length === 0 && artifactPanelOpen) {
-      setArtifactPanelOpen(false);
-    }
-    if (
-      (!artifactPanelOpen || threadArtifacts.length === 0) &&
-      artifactFullscreen
-    ) {
-      setArtifactFullscreen(false);
-    }
-  }, [
-    artifactFullscreen,
-    artifactPanelOpen,
-    effectiveSelectedArtifactId,
-    selectedArtifactId,
-    threadArtifacts.length,
-  ]);
-
-  const artifactPanelState = useMemo(
-    () => ({
-      artifacts: threadArtifacts,
-      selectedArtifactId: effectiveSelectedArtifactId,
-      isOpen: artifactPanelOpen,
-      isFullscreen: artifactFullscreen,
-      onOpenChange: (open: boolean) => {
-        setArtifactPanelOpen(open);
-        if (!open) {
-          setArtifactFullscreen(false);
-        }
-        if (open) {
-          setThreadInfoOpen(false);
-        }
-      },
-      onSelectArtifact: (artifactId: string) => {
-        if (!threadArtifacts.some((artifact) => artifact.id === artifactId)) {
-          return;
-        }
-        setSelectedArtifactId(artifactId);
-        setArtifactPanelOpen(true);
-        setThreadInfoOpen(false);
-      },
-    }),
-    [
-      artifactFullscreen,
-      artifactPanelOpen,
-      effectiveSelectedArtifactId,
-      threadArtifacts,
-    ],
-  );
   const handleReviewGoal = useCallback(
     async (
       action: "CONFIRM_COMPLETION" | "REQUEST_CHANGES",
@@ -1546,8 +1524,7 @@ export function SpacesThreadDetailRoute({
       onOpenChange: (open: boolean) => {
         setThreadInfoOpen(open);
         if (open) {
-          setArtifactPanelOpen(false);
-          setArtifactFullscreen(false);
+          dockedArtifactPanel.close();
         }
       },
       threadId: routeThread?.id ?? threadId,
@@ -1785,73 +1762,45 @@ export function SpacesThreadDetailRoute({
             const nextOpen = !threadInfoOpen;
             setThreadInfoOpen(nextOpen);
             if (nextOpen) {
-              setArtifactPanelOpen(false);
-              setArtifactFullscreen(false);
+              dockedArtifactPanel.close();
             }
           }}
         >
           <Info className="size-4" />
         </Button>
-        {artifactPanelOpen && effectiveSelectedArtifactId ? (
+        {newestCardArtifactId ? (
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             aria-label={
-              artifactFullscreen
-                ? "Minimize artifact panel"
-                : "Maximize artifact panel"
+              dockedArtifactPanel.artifactId
+                ? "Close artifact panel"
+                : "Open artifact panel"
             }
             title={
-              artifactFullscreen
-                ? "Minimize artifact panel"
-                : "Maximize artifact panel"
+              dockedArtifactPanel.artifactId
+                ? "Close artifact panel"
+                : "Open artifact panel"
             }
             className={
-              artifactFullscreen
+              dockedArtifactPanel.artifactId
                 ? desktopToolbarActiveButtonClassName
                 : desktopToolbarButtonClassName
             }
             onClick={() => {
-              setArtifactFullscreen((current) => !current);
-            }}
-          >
-            {artifactFullscreen ? (
-              <Minimize2 className="size-4" />
-            ) : (
-              <Maximize2 className="size-4" />
-            )}
-          </Button>
-        ) : null}
-        {effectiveSelectedArtifactId ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-              artifactPanelOpen
-                ? "Close artifact side panel"
-                : "Open artifact side panel"
-            }
-            title={
-              artifactPanelOpen
-                ? "Close artifact side panel"
-                : "Open artifact side panel"
-            }
-            className={
-              artifactPanelOpen
-                ? desktopToolbarActiveButtonClassName
-                : desktopToolbarButtonClassName
-            }
-            onClick={() => {
-              const nextOpen = !artifactPanelOpen;
-              setArtifactPanelOpen(nextOpen);
-              if (!nextOpen) {
-                setArtifactFullscreen(false);
+              // Single artifact → load it directly; several → open the list
+              // state so the user picks (no intermediate summary card).
+              if (dockedArtifactPanel.artifactId) {
+                dockedArtifactPanel.close();
+                return;
               }
-              if (nextOpen) {
-                setThreadInfoOpen(false);
-              }
+              dockedArtifactPanel.open(
+                cardArtifacts.length > 1
+                  ? THREAD_ARTIFACT_PANEL_LIST
+                  : newestCardArtifactId,
+              );
+              setThreadInfoOpen(false);
             }}
           >
             <PanelRight className="size-4" />
@@ -1859,7 +1808,7 @@ export function SpacesThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${cardArtifacts.length}:${newestCardArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${dockedArtifactPanel.artifactId ?? "closed"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
   });
 
   useEffect(() => {
@@ -1898,6 +1847,7 @@ export function SpacesThreadDetailRoute({
     <TaskThreadView
       thread={visibleThread}
       savedCanvases={savedCanvases ?? undefined}
+      jsonRenderPartVersions={jsonRenderPartVersions}
       isLoading={
         (fetching && !routeThread && !optimisticThreadStart) ||
         hasMismatchedThreadData
@@ -1921,7 +1871,6 @@ export function SpacesThreadDetailRoute({
         id: userId,
       }}
       threadMode={routeThreadMode}
-      artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
       onFlagTurn={
         isOperator
@@ -2174,19 +2123,6 @@ export function deriveThreadArtifacts(
     artifacts.push(artifact);
   }
   return artifacts;
-}
-
-export function resolveThreadArtifactSelection(
-  artifacts: GeneratedArtifact[],
-  currentArtifactId: string | null,
-) {
-  if (
-    currentArtifactId &&
-    artifacts.some((artifact) => artifact.id === currentArtifactId)
-  ) {
-    return currentArtifactId;
-  }
-  return artifacts.at(-1)?.id ?? null;
 }
 
 function toSendMention(mention: ComposerMention) {
@@ -2805,6 +2741,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
             headVersion: node.durableArtifact.headVersion,
             summary: node.durableArtifact.summary,
             metadata: metadataObject(node.durableArtifact.metadata),
+            updatedAt: node.durableArtifact.updatedAt ?? null,
           }
         : null,
     })),
@@ -3007,6 +2944,20 @@ export function uiMessageChunkFromThreadTurnPayload(
     return null;
   }
   return record.chunk ?? null;
+}
+
+/**
+ * THINK-168: stable part id of a live json-render (re-)emission chunk. Both
+ * wire shapes — the AG-UI STATE_SNAPSHOT unwrap and the legacy
+ * thread_json_render.ui_message_chunk — carry the persisted part
+ * `{ type: "data-json-render", id, data }`, so one check covers both.
+ */
+export function jsonRenderPartIdFromChunk(chunk: unknown): string | null {
+  const record = metadataObject(chunk);
+  if (!record || record.type !== "data-json-render") return null;
+  return typeof record.id === "string" && record.id.length > 0
+    ? record.id
+    : null;
 }
 
 function taskThreadEventDedupeKey(event: TaskThreadEvent): string {

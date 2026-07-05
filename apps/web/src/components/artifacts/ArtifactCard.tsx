@@ -17,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
+import { cn, relativeTime } from "@/lib/utils";
 
 export interface ArtifactCardData {
   id: string;
@@ -25,15 +26,16 @@ export interface ArtifactCardData {
   type?: string | null;
   status?: string | null;
   headVersion?: number | null;
+  /** Freshness timestamp (created/last refreshed) for the meta line. */
+  updatedAt?: string | null;
 }
 
 export function ArtifactCard({
   artifact,
   badge,
   statusLabel,
-  description,
-  openLabel = "Open →",
   testId = "artifact-card",
+  onOpen,
 }: {
   artifact: ArtifactCardData;
   /**
@@ -43,9 +45,14 @@ export function ArtifactCard({
   badge?: string | null;
   /** Overrides the derived "Status · vN" label. */
   statusLabel?: string | null;
-  description?: string | null;
-  openLabel?: string;
   testId?: string;
+  /**
+   * THINK-168: when set, the card's click opens the artifact in the thread's
+   * docked panel (via this callback) instead of navigating; the full page is
+   * reachable from the panel header. Omitted (list surfaces, hosts without a
+   * panel) → the whole card stays a /artifacts/$id link.
+   */
+  onOpen?: () => void;
 }) {
   const badgeLabel =
     badge === null ? null : (badge ?? artifact.type ?? "Artifact");
@@ -54,13 +61,16 @@ export function ArtifactCard({
       ? null
       : (statusLabel ??
         deriveStatusLabel(artifact.status, artifact.headVersion));
-  return (
-    <Link
-      to="/artifacts/$id"
-      params={{ id: artifact.id }}
-      className="not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
-      data-testid={testId}
-    >
+  const timeLabel = artifact.updatedAt
+    ? relativeTime(artifact.updatedAt)
+    : null;
+  // Line 2 for every card: "Final · v3 · 8h ago" (status · vN · freshness).
+  const metaLine = [resolvedStatus, timeLabel].filter(Boolean).join(" · ");
+  const rootClassName =
+    "not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40";
+
+  const cardBody = (
+    <>
       <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground group-hover:text-foreground">
         <FileText className="h-4 w-4" />
       </div>
@@ -74,21 +84,38 @@ export function ArtifactCard({
               {badgeLabel}
             </span>
           ) : null}
-          {resolvedStatus ? (
-            <span className="shrink-0 text-[10px] text-muted-foreground">
-              {resolvedStatus}
-            </span>
-          ) : null}
         </div>
-        {description ? (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-            {description}
+        {metaLine ? (
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {metaLine}
           </p>
         ) : null}
-        <span className="mt-1 inline-block text-xs font-medium text-primary">
-          {openLabel}
-        </span>
       </div>
+    </>
+  );
+
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        aria-label={`Open ${artifact.title?.trim() || "artifact"}`}
+        className={cn(rootClassName, "cursor-pointer")}
+        onClick={onOpen}
+        data-testid={testId}
+      >
+        {cardBody}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      to="/artifacts/$id"
+      params={{ id: artifact.id }}
+      className={rootClassName}
+      data-testid={testId}
+    >
+      {cardBody}
     </Link>
   );
 }

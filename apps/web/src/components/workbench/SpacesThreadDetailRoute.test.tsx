@@ -31,8 +31,13 @@ import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
   deriveThreadArtifacts,
-  resolveThreadArtifactSelection,
+  jsonRenderPartIdFromChunk,
 } from "./SpacesThreadDetailRoute";
+import {
+  getOpenThreadArtifactId,
+  resetThreadArtifactPanels,
+  THREAD_ARTIFACT_PANEL_LIST,
+} from "@/components/artifacts/thread-artifact-panel-store";
 import {
   clearPendingThreadStart,
   setPendingThreadStart,
@@ -118,6 +123,22 @@ vi.mock("@/lib/use-computer-thread-chunks", () => ({
 vi.mock("@/lib/api-fetch", () => ({
   apiFetch: apiFetchMock.apiFetch,
 }));
+
+// react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+// plain passthroughs so TaskThreadView's chat/panel split mounts
+// deterministically (same workaround as ComposerWorkspaceEditor.test.tsx).
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
+  };
+});
 
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
@@ -300,6 +321,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   delete window.thinkworkBridge;
+  resetThreadArtifactPanels();
 });
 
 describe("SpacesThreadDetailRoute", () => {
@@ -449,22 +471,6 @@ describe("SpacesThreadDetailRoute", () => {
       "artifact-b",
     ]);
     expect(artifacts[0].title).toBe("First artifact");
-  });
-
-  it("keeps a valid selected artifact and otherwise falls back to the latest artifact", () => {
-    const artifacts = [
-      { id: "artifact-a", title: "First artifact" },
-      { id: "artifact-b", title: "Second artifact" },
-    ];
-
-    expect(resolveThreadArtifactSelection(artifacts, "artifact-a")).toBe(
-      "artifact-a",
-    );
-    expect(resolveThreadArtifactSelection(artifacts, "missing")).toBe(
-      "artifact-b",
-    );
-    expect(resolveThreadArtifactSelection(artifacts, null)).toBe("artifact-b");
-    expect(resolveThreadArtifactSelection([], "artifact-a")).toBeNull();
   });
 
   it("does not register a header back button by default", () => {
@@ -620,9 +626,129 @@ describe("SpacesThreadDetailRoute", () => {
       screen.getByRole("button", { name: "Open thread info" }).className,
     ).toContain("text-muted-foreground/70");
     expect(
-      screen.getByRole("button", { name: "Open artifact side panel" })
-        .className,
+      screen.getByRole("button", { name: "Open artifact panel" }).className,
     ).toContain("text-muted-foreground/70");
+  });
+
+  it("header artifact button opens a single card-rendered artifact directly, skipping safety-net drafts (THINK-168)", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "Real canvas.",
+                durableArtifact: {
+                  id: "artifact-real",
+                  title: "Revenue canvas",
+                  type: "DATA_VIEW",
+                  metadata: {
+                    kind: "json_render_canvas",
+                    stablePartId: "json-render:real",
+                  },
+                },
+              },
+            },
+            {
+              node: {
+                // NEWEST durable is the auto-minted safety-net "Table" draft —
+                // it never renders a card, so the header button must NOT open
+                // it (the wrong-artifact bug from Eric's re-check).
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Here's the data as a table.",
+                durableArtifact: {
+                  id: "artifact-table",
+                  title: "Table",
+                  type: "DATA_VIEW",
+                  metadata: {
+                    kind: "json_render_canvas",
+                    stablePartId: "json-render:safety-net:json-render-fnv1a:1",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+
+    // One card-rendered artifact → straight in, no list, no summary card.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open artifact panel" }),
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-real");
+    expect(screen.getByTestId("thread-artifact-panel")).toBeTruthy();
+    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
+
+    // Toggle closes it (re-render the refreshed header action first).
+    renderHeaderAction();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Close artifact panel" }).at(-1)!,
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBeNull();
+  });
+
+  it("header artifact button opens the LIST state when several artifacts render cards (THINK-168)", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "First artifact.",
+                durableArtifact: {
+                  id: "artifact-old",
+                  title: "Older artifact",
+                  type: "DATA_VIEW",
+                },
+              },
+            },
+            {
+              node: {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Second artifact.",
+                durableArtifact: {
+                  id: "artifact-new",
+                  title: "Newest artifact",
+                  type: "DATA_VIEW",
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open artifact panel" }),
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBe(
+      THREAD_ARTIFACT_PANEL_LIST,
+    );
+
+    // The panel shows the compact list, newest first; picking one loads it.
+    const list = screen.getByTestId("thread-artifact-panel-list");
+    const cards = within(list).getAllByTestId("artifact-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain("Newest artifact");
+    fireEvent.click(cards[1]);
+    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-old");
   });
 
   it("does not refetch the full thread for turn-only status updates", () => {
@@ -1891,6 +2017,32 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
     expect(screen.queryByText(/Managed delegation/)).toBeNull();
+  });
+});
+
+describe("jsonRenderPartIdFromChunk (THINK-168 live panel refresh)", () => {
+  it("returns the stable part id for a persisted json-render part chunk", () => {
+    expect(
+      jsonRenderPartIdFromChunk({
+        type: "data-json-render",
+        id: "json-render:abc123",
+        data: { component: "table" },
+      }),
+    ).toBe("json-render:abc123");
+  });
+
+  it("ignores non-json-render chunks, missing ids, and non-objects", () => {
+    expect(
+      jsonRenderPartIdFromChunk({ type: "text-delta", delta: "hi" }),
+    ).toBeNull();
+    expect(
+      jsonRenderPartIdFromChunk({ type: "data-json-render", data: {} }),
+    ).toBeNull();
+    expect(
+      jsonRenderPartIdFromChunk({ type: "data-json-render", id: "" }),
+    ).toBeNull();
+    expect(jsonRenderPartIdFromChunk(null)).toBeNull();
+    expect(jsonRenderPartIdFromChunk("chunk")).toBeNull();
   });
 });
 

@@ -864,9 +864,7 @@ export function ComposerWorkspaceEditor({
     // Profile files get the dedicated Edit/Delete treatment (U2); the generic
     // "Open agent source" item is suppressed for them by contract (R5).
     const profileSlug = agentProfileSlugForFile(node);
-    const canConfigureProfile = Boolean(
-      profileSlug && onConfigureAgentProfile,
-    );
+    const canConfigureProfile = Boolean(profileSlug && onConfigureAgentProfile);
     const canDeleteProfile = Boolean(
       profileSlug &&
       onDeleteAgentProfile &&
@@ -1342,11 +1340,17 @@ export function ComposerWorkspaceEditor({
       className="flex h-full w-full min-h-0 overflow-hidden rounded-md border"
       data-testid="composer-editor"
     >
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        // Grab zone expands AROUND the 1px separator; a wide transparent
+        // handle occupied layout space and read as a gap beside the line.
+        resizeTargetMinimumSize={{ coarse: 24, fine: 10 }}
+      >
         <ResizablePanel
           defaultSize="26%"
           minSize="18%"
-          className="flex min-h-0 flex-col border-r"
+          className="flex min-h-0 flex-col"
         >
           {treePanel}
         </ResizablePanel>

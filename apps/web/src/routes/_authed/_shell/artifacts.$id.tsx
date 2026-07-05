@@ -21,6 +21,10 @@ import {
   useAppletInstanceId,
 } from "@/applets/mount";
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
+import {
+  DocumentArtifactBody,
+  isDocumentArtifactMetadata,
+} from "@/components/artifacts/ArtifactBodyView";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
@@ -28,7 +32,6 @@ import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderA
 import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionHistory";
 import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
-import { DocumentFrame } from "@/components/workbench/DocumentFrame";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
@@ -79,23 +82,7 @@ interface ArtifactRouteNode {
 
 /** HTML Document Artifacts (THINK-147): dual-body document detection. */
 function isDocumentArtifactNode(artifact: ArtifactRouteNode): boolean {
-  const metadata = artifact.metadata;
-  const parsed =
-    typeof metadata === "string"
-      ? (() => {
-          try {
-            return JSON.parse(metadata) as unknown;
-          } catch {
-            return null;
-          }
-        })()
-      : metadata;
-  return (
-    parsed !== null &&
-    typeof parsed === "object" &&
-    !Array.isArray(parsed) &&
-    (parsed as { kind?: unknown }).kind === "document"
-  );
+  return isDocumentArtifactMetadata(artifact.metadata);
 }
 
 function AppArtifactPage() {
@@ -461,34 +448,9 @@ function DocumentArtifactContent({
     actionKey: `document-actions:${artifact.id}:${artifact.favoritedAt ?? "_"}`,
   });
 
-  const statusChip =
-    artifact.status === "FINAL"
-      ? `Final · v${artifact.headVersion ?? 0}`
-      : "Draft";
-
   return (
     <main className="flex h-full min-h-0 w-full flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-border/70 px-4 py-1.5 text-xs text-muted-foreground">
-        <span className="rounded-full bg-muted px-2 py-0.5 font-medium capitalize">
-          {artifact.type.toLowerCase()}
-        </span>
-        <span data-testid="document-status-chip">{statusChip}</span>
-        <span>· Updated {relativeTime(artifact.updatedAt)}</span>
-      </div>
-      {artifact.renderHtml ? (
-        <DocumentFrame
-          html={artifact.renderHtml}
-          title={artifact.title}
-          fullHeight
-        />
-      ) : (
-        <div className="flex flex-1 items-center justify-center p-6">
-          <p className="text-sm text-muted-foreground">
-            This document&apos;s render is unavailable. The markdown record is
-            preserved; try re-emitting the document from its thread.
-          </p>
-        </div>
-      )}
+      <DocumentArtifactBody artifact={artifact} />
     </main>
   );
 }
