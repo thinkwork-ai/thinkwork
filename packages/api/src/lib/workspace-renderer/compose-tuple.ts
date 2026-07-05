@@ -60,6 +60,7 @@ import {
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
+  type CapabilitiesManifest,
   type CapabilityFolderInput,
 } from "../capabilities/manifest-compile.js";
 import {
@@ -1060,6 +1061,10 @@ export async function renderWorkspaceTuple(
     enabled: entry.enabled !== false,
     active: entry.active !== false,
   }));
+  const capabilityMcpPolicy = {
+    allowedServers: effectivePolicy.mcpAllowedServers ?? null,
+    blockedServers: effectivePolicy.mcpBlockedServers ?? [],
+  };
   const capabilityInputSignature = computeCapabilityInputSignature({
     capabilityObjects: [...capabilityFolderScans.values()].flatMap((scan) => [
       ...(scan.definitionKey
@@ -1070,18 +1075,19 @@ export async function renderWorkspaceTuple(
         : []),
     ]),
     skills: capabilitySkillEntries,
+    mcpPolicy: capabilityMcpPolicy,
   });
   const existingCapabilitiesManifest = parseCapabilitiesManifest(
     existingCapabilitiesRaw,
   );
   let capabilitiesJson: string;
-  let capabilitiesFingerprint: string;
+  let capabilitiesManifest: CapabilitiesManifest;
   if (
     existingCapabilitiesManifest &&
     existingCapabilitiesManifest.input_signature === capabilityInputSignature
   ) {
     capabilitiesJson = existingCapabilitiesRaw!;
-    capabilitiesFingerprint = existingCapabilitiesManifest.fingerprint;
+    capabilitiesManifest = existingCapabilitiesManifest;
   } else {
     const folders: CapabilityFolderInput[] = await Promise.all(
       [...capabilityFolderScans.entries()].map(async ([mapKey, scan]) => {
@@ -1117,12 +1123,19 @@ export async function renderWorkspaceTuple(
         deps.capabilitySigner !== undefined
           ? deps.capabilitySigner
           : createConfiguredCapabilitySigner(),
+      mcpPolicy: capabilityMcpPolicy,
       inputSignature: capabilityInputSignature,
       generatedAt: (deps.now?.() ?? new Date()).toISOString(),
     });
     capabilitiesJson = compiled.json;
-    capabilitiesFingerprint = compiled.manifest.fingerprint;
+    capabilitiesManifest = compiled.manifest;
   }
+  const capabilitiesFingerprint = capabilitiesManifest.fingerprint;
+  const capabilitiesResult = {
+    fingerprint: capabilitiesFingerprint,
+    path: capabilitiesManifestPath(capabilitiesFingerprint),
+    manifest: capabilitiesManifest,
+  };
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
     baseline: agentsMdBaseline ?? "",
@@ -1218,6 +1231,7 @@ export async function renderWorkspaceTuple(
       sourcePrefixes,
       writtenFiles: [],
       hydrateManifest,
+      capabilities: capabilitiesResult,
       ...generatedContents,
       activeSpace: {
         id: tuple.spaceId,
@@ -1299,6 +1313,7 @@ export async function renderWorkspaceTuple(
     sourcePrefixes,
     writtenFiles,
     hydrateManifest: nextHydrateManifest,
+    capabilities: capabilitiesResult,
     ...generatedContents,
     activeSpace: {
       id: tuple.spaceId,

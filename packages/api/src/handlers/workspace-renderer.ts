@@ -34,6 +34,12 @@ export interface WorkspaceRendererResponse {
     isDefault: boolean;
   };
   effectivePolicy?: EffectiveWorkspacePolicy;
+  /** Compiled capabilities manifest identity + body (THINK-173 U5). */
+  capabilities?: {
+    fingerprint: string;
+    path: string;
+    manifest: unknown;
+  };
   error?: {
     code: string;
     message: string;
@@ -102,6 +108,7 @@ export function createWorkspaceRendererHandler(
         hydrateManifest: result.hydrateManifest,
         activeSpace: result.activeSpace,
         effectivePolicy: result.effectivePolicy,
+        capabilities: result.capabilities,
       };
     } catch (error) {
       if (error instanceof WorkspaceRenderError) {

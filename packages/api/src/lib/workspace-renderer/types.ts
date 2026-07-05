@@ -189,6 +189,18 @@ export interface RenderedWorkspaceTuple {
    * and cache-miss return paths.
    */
   generatedFiles?: RenderedWorkspaceGeneratedFile[];
+  /**
+   * Compiled capabilities manifest (THINK-173 U2/U5): the content
+   * address the dispatch payload pins, its rendered-prefix-relative
+   * path, and the parsed manifest for dispatch-side consumers (folder
+   * connection enumeration, fingerprint projection). Present on both
+   * cache paths.
+   */
+  capabilities: {
+    fingerprint: string;
+    path: string;
+    manifest: import("../capabilities/manifest-compile.js").CapabilitiesManifest;
+  };
   activeSpace: {
     id: string;
     slug: string;

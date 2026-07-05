@@ -45,6 +45,7 @@ import {
   UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
+import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
 // Type-only import: erased at compile time, so referencing McpAssignmentState
@@ -137,6 +138,29 @@ export interface BuildMcpConfigsDeps {
    * dependency graph stays out of the DB-only resolution path.
    */
   workspaceMcp?: WorkspaceMcpHelpers;
+  /**
+   * Folder-capability dispatch source (THINK-173 U5, R20). For an agent
+   * whose `capability_folder_dispatch` flag is ON, the attached
+   * connection set comes EXCLUSIVELY from the rendered capabilities
+   * manifest — never per-file fallback:
+   *
+   *   - `{ manifest }` — enumerate mcp-type connection entries.
+   *   - `{ manifest: null }` — the caller rendered but no manifest
+   *     exists: loud error (R9 flag-on missing-manifest rule).
+   *   - `{ defer: true }` — pre-render resolution (chat's
+   *     resolveAgentRuntimeConfig call): return ZERO configs for the
+   *     flag-on agent; the handler rebuilds post-render with the
+   *     manifest. Fails safe (no tools) rather than split-brain.
+   *   - `undefined` — caller not yet folder-aware: loud error for
+   *     flag-on agents so a missed call site can never silently read
+   *     the legacy tables.
+   *
+   * Flag-off agents ignore this entirely (byte-identical legacy path).
+   */
+  folderCapabilities?: {
+    manifest?: CapabilitiesManifest | null;
+    defer?: boolean;
+  };
 }
 
 /**
@@ -224,7 +248,11 @@ export async function buildMcpConfigs(
   // here with a log line so operators see the reason a capability
   // vanished. This is the SI-5 defensive layer.
   const [agentRow] = await db
-    .select({ tenant_id: agents.tenant_id, slug: agents.slug })
+    .select({
+      tenant_id: agents.tenant_id,
+      slug: agents.slug,
+      capability_folder_dispatch: agents.capability_folder_dispatch,
+    })
     .from(agents)
     .where(eq(agents.id, agentId))
     .limit(1);
@@ -265,32 +293,64 @@ export async function buildMcpConfigs(
       ),
     );
 
-  // ── Attachment resolution (Composer plan U9b) ──────────────────────────
-  // Prefer the workspace `mcp/<slug>/.assignment.json` files (U9a dual-write)
-  // as the source of the agent's ATTACHED server set; the `agent_mcp_servers`
-  // DB read is the fallback for file-absent agents and S3 outages. Per-user
-  // OAuth/token resolution at turn time (the loop below) is unchanged. The DB
-  // read is only DEMOTED here — retirement is a named follow-up, gated on
-  // observing the file path serve live turns on dev (see the log line below).
-  const fileResolution = await resolveAttachedRowsFromWorkspaceFiles({
-    agentId,
-    agentSlug: agentRow.slug,
-    serverRows,
-    logPrefix,
-    helpers: deps.workspaceMcp,
-  });
-
+  // ── Attachment resolution ───────────────────────────────────────────────
+  // THINK-173 U5 (R20): a flag-on agent reads its attached connection set
+  // from the rendered capabilities manifest, all-or-nothing. Flag-off
+  // agents take the existing workspace-file/DB path byte-identically.
   let mcpRows: McpJoinedRow[];
-  if ("rows" in fileResolution) {
-    mcpRows = fileResolution.rows;
+  if (agentRow.capability_folder_dispatch === true) {
+    const folder = deps.folderCapabilities;
+    if (folder?.defer) {
+      console.log(
+        `${logPrefix} mcp attachment resolution source=folder-deferred agentId=${agentId} — caller rebuilds post-render`,
+      );
+      return [];
+    }
+    if (!folder || folder.manifest === undefined) {
+      throw new Error(
+        `${logPrefix} agent ${agentId} has capability_folder_dispatch=true but the caller is not folder-aware — refusing silent legacy fallback (R20)`,
+      );
+    }
+    if (folder.manifest === null) {
+      throw new Error(
+        `${logPrefix} agent ${agentId} has capability_folder_dispatch=true but no capabilities manifest was rendered — failing the turn loudly (R9)`,
+      );
+    }
+    mcpRows = resolveAttachedRowsFromFolderConnections({
+      manifest: folder.manifest,
+      serverRows,
+      logPrefix,
+    });
     console.log(
-      `${logPrefix} mcp attachment resolution source=workspace-file agentId=${agentId} files=${fileResolution.fileCount} servers=${mcpRows.length}`,
+      `${logPrefix} mcp attachment resolution source=folder-manifest agentId=${agentId} fingerprint=${folder.manifest.fingerprint.slice(0, 12)} servers=${mcpRows.length}`,
     );
   } else {
-    mcpRows = await resolveAttachedRowsFromDb(agentId, serverRows);
-    console.log(
-      `${logPrefix} mcp attachment resolution source=database agentId=${agentId} fallbackReason=${fileResolution.fallbackReason} servers=${mcpRows.length}`,
-    );
+    // Prefer the workspace `mcp/<slug>/.assignment.json` files (U9a
+    // dual-write) as the source of the agent's ATTACHED server set; the
+    // `agent_mcp_servers` DB read is the fallback for file-absent agents
+    // and S3 outages. Per-user OAuth/token resolution at turn time (the
+    // loop below) is unchanged. The DB read is only DEMOTED here —
+    // retirement is a named follow-up, gated on observing the file path
+    // serve live turns on dev (see the log line below).
+    const fileResolution = await resolveAttachedRowsFromWorkspaceFiles({
+      agentId,
+      agentSlug: agentRow.slug,
+      serverRows,
+      logPrefix,
+      helpers: deps.workspaceMcp,
+    });
+
+    if ("rows" in fileResolution) {
+      mcpRows = fileResolution.rows;
+      console.log(
+        `${logPrefix} mcp attachment resolution source=workspace-file agentId=${agentId} files=${fileResolution.fileCount} servers=${mcpRows.length}`,
+      );
+    } else {
+      mcpRows = await resolveAttachedRowsFromDb(agentId, serverRows);
+      console.log(
+        `${logPrefix} mcp attachment resolution source=database agentId=${agentId} fallbackReason=${fileResolution.fallbackReason} servers=${mcpRows.length}`,
+      );
+    }
   }
 
   // Plugin rows resolve FIRST so the URL-dedupe pass below can give the
@@ -676,6 +736,63 @@ async function resolveAttachedRowsFromDb(
       };
     })
     .filter((row) => row.assignment_enabled);
+}
+
+/**
+ * Folder-manifest resolution (THINK-173 U5): the agent's attached
+ * connection set is the rendered manifest's ACTIVE mcp-type connection
+ * entries. Each joins to the approved+enabled tenant registry via the
+ * sidecar's `registryServerId` credential ref (the backfill writes it;
+ * R17 — same secrets, same rows) with a slug match fallback, so the
+ * U11 approval/hash gate and the entire per-user OAuth auth loop below
+ * apply unchanged (KTD-2: the auth half survives as a credential
+ * resolver over folder-derived connections). `permittedOperations`
+ * becomes the toolAllowlist overlay. The workspace TOOLS.md MCP policy
+ * is NOT applied here — the manifest already carries that verdict
+ * (KTD-6), so callers must not re-filter the folder path.
+ */
+function resolveAttachedRowsFromFolderConnections(input: {
+  manifest: CapabilitiesManifest;
+  serverRows: readonly McpRegistryServerRow[];
+  logPrefix: string;
+}): McpJoinedRow[] {
+  const registryById = new Map(
+    input.serverRows.map((row) => [row.mcp_server_id, row]),
+  );
+  const registryBySlug = new Map(
+    input.serverRows
+      .filter((row) => row.slug)
+      .map((row) => [row.slug as string, row]),
+  );
+  const rows: McpJoinedRow[] = [];
+  for (const entry of input.manifest.active) {
+    if (entry.class !== "connection") continue;
+    if (entry.type !== "mcp") continue;
+    const refId = entry.credentialRefs?.registryServerId;
+    const registry =
+      (typeof refId === "string" ? registryById.get(refId) : undefined) ??
+      registryBySlug.get(entry.slug);
+    if (!registry) {
+      console.warn(
+        `${input.logPrefix} skipping connections/${entry.slug}: no approved+enabled tenant registry row (registryServerId=${
+          typeof refId === "string" ? refId : "(missing)"
+        })`,
+      );
+      continue;
+    }
+    const permitted = Array.isArray(entry.permittedOperations)
+      ? entry.permittedOperations.filter(
+          (operation): operation is string => typeof operation === "string",
+        )
+      : [];
+    rows.push({
+      ...registry,
+      assignment_enabled: true,
+      assignment_config:
+        permitted.length > 0 ? { toolAllowlist: permitted } : null,
+    });
+  }
+  return rows;
 }
 
 /**
