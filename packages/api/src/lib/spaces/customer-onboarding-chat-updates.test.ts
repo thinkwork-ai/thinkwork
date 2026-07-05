@@ -474,26 +474,11 @@ describe("extractCustomerOnboardingChatUpdate", () => {
   });
 });
 
+// THINK-170 R0: the sendMessage interception hook is retired — the mutation
+// no longer calls applyCustomerOnboardingChatUpdate (regression pinned in
+// sendMessage.customer-onboarding-dispatch.test.ts). The tests below cover
+// the still-present lib internals pending the workflow-as-data redesign.
 describe("sendMessage customer onboarding hook", () => {
-  it("applies onboarding chat updates before default agent dispatch", () => {
-    const source = readFileSync(
-      new URL(
-        "../../graphql/resolvers/messages/sendMessage.mutation.ts",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-
-    expect(source).toContain("applyCustomerOnboardingChatUpdate");
-    expect(source).toContain("customerOnboardingHandled");
-    expect(source).toContain("agentDispatchRequired");
-    expect(
-      source.indexOf("await applyCustomerOnboardingChatUpdate"),
-    ).toBeLessThan(source.indexOf("await dispatchDefaultAgentChatTurn"));
-    expect(source).toContain("shouldApplyCustomerOnboardingChatUpdate");
-    expect(source).toContain("shouldDispatchDefaultAgentTurn");
-  });
-
   it("does not return generic-agent fallback before checking onboarding workflow metadata", () => {
     const source = readFileSync(
       new URL("./customer-onboarding-chat-updates.ts", import.meta.url),

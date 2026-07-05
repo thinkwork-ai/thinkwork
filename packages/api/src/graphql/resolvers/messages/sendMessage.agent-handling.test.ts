@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveAgentDispatchRequest,
-  shouldApplyCustomerOnboardingChatUpdate,
   shouldDispatchDefaultAgentTurn,
   shouldSuppressAgentMentionDispatch,
   type DefaultAgentDispatchInput,
@@ -15,7 +14,6 @@ function gateInput(
     senderType: "user",
     hasAgentMentions: false,
     hasComputerThread: false,
-    customerOnboardingHandled: false,
     ...overrides,
   };
 }
@@ -188,15 +186,10 @@ describe("shouldDispatchDefaultAgentTurn (U4 precedence)", () => {
     ).toBe(false);
   });
 
-  it("computer threads and handled onboarding still short-circuit", () => {
+  it("computer threads still short-circuit", () => {
     expect(
       shouldDispatchDefaultAgentTurn(
         gateInput({ hasComputerThread: true, threadMode: "agent" }),
-      ),
-    ).toBe(false);
-    expect(
-      shouldDispatchDefaultAgentTurn(
-        gateInput({ customerOnboardingHandled: true, threadMode: "agent" }),
       ),
     ).toBe(false);
   });
@@ -238,36 +231,5 @@ describe("shouldSuppressAgentMentionDispatch (R5 explicit-off-wins)", () => {
     expect(
       shouldSuppressAgentMentionDispatch({ agentDispatch: "FORCE_ON" }),
     ).toBe(false);
-  });
-});
-
-describe("shouldApplyCustomerOnboardingChatUpdate honors the tri-state", () => {
-  it("FORCE_OFF (explicit or legacy false) skips the onboarding update", () => {
-    expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        agentDispatch: "FORCE_OFF",
-        hasAgentMentions: false,
-      }),
-    ).toBe(false);
-    expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        agentRequested: false,
-        hasAgentMentions: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("AUTO applies as before", () => {
-    expect(
-      shouldApplyCustomerOnboardingChatUpdate({
-        isUserMessage: true,
-        senderType: "user",
-        hasAgentMentions: false,
-      }),
-    ).toBe(true);
   });
 });

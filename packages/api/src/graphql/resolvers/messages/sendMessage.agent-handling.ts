@@ -20,7 +20,6 @@ export interface SendMessageAgentHandlingInput {
 
 export interface DefaultAgentDispatchInput extends SendMessageAgentHandlingInput {
   hasComputerThread: boolean;
-  customerOnboardingHandled: boolean;
   // A #profile mention (targetType agent_profile). Profile mentions engage
   // the agent through THIS default route (as requestedProfileSlug) — they are
   // not agent mentions for the mention-dispatch route — so the gate must
@@ -79,17 +78,6 @@ export function shouldSuppressAgentMentionDispatch(
   return input.agentDispatch === "FORCE_OFF";
 }
 
-export function shouldApplyCustomerOnboardingChatUpdate(
-  input: SendMessageAgentHandlingInput,
-) {
-  return (
-    input.isUserMessage &&
-    input.senderType === "user" &&
-    resolveAgentDispatchRequest(input) !== "FORCE_OFF" &&
-    !input.hasAgentMentions
-  );
-}
-
 // Precedence (KTD2, pinned by review): FORCE_OFF -> agent mentions (handled
 // by the mention-dispatch route, so this default gate stays closed) ->
 // FORCE_ON -> AUTO falls to Thread Mode.
@@ -97,11 +85,7 @@ export function shouldDispatchDefaultAgentTurn(
   input: DefaultAgentDispatchInput,
 ) {
   if (!canRequestAgentHandling(input)) return false;
-  if (
-    input.hasAgentMentions ||
-    input.hasComputerThread ||
-    input.customerOnboardingHandled
-  ) {
+  if (input.hasAgentMentions || input.hasComputerThread) {
     return false;
   }
   const request = resolveAgentDispatchRequest(input);
