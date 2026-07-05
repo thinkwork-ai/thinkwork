@@ -368,6 +368,7 @@ export default defineConfig({
                 },
               ],
             },
+            { label: "Artifacts", slug: "concepts/artifacts" },
             {
               label: "Memory",
               collapsed: true,

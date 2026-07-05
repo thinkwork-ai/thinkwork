@@ -224,6 +224,25 @@ For unit-testing specific tools, the same path can bypass the model entirely —
 
 See [Authoring Guide: Skill Packs](/guides/skill-packs/) for specific command invocations.
 
+## The trust pipeline
+
+Being in the catalog and assigned to an agent is necessary but **not sufficient** for a skill to reach the model. Every catalog skill passes through a trust pipeline, and the runtime gates injection on its outcome. A skill is loaded into the agent's system prompt only when **all** of the following hold:
+
+1. **Trust report passed** — the skill's most recent trust report has status `passed`.
+2. **Spec check passed** — the pack conforms to the Agent Skills spec (frontmatter, structure).
+3. **Scanner completed** — the content scanner (prompt-injection and malicious-content analysis) ran to completion.
+4. **Signature evidence present** — the pack carries signature evidence in state `verified` or `approved_unverified`.
+5. **Content hash is current** — the trust report's content SHA matches the catalog content's current SHA. Any edit to any file in the pack invalidates the existing report.
+6. **Pipeline version is current** — the report was produced by the current trust-pipeline version.
+
+If any condition fails, the skill is **silently omitted** from the turn: no operator-facing error, no thread signal — the agent simply behaves as if the skill doesn't exist and free-hands the task. The only trace is a runtime log line listing the untrusted skill IDs.
+
+Practical consequences:
+
+- **After editing a published skill's content, re-run trust.** The content hash goes stale immediately, and the skill drops out of every agent that has it installed until the pipeline passes again.
+- **Publish through the skill-draft flow** (draft → submit → publish), which runs trust as part of publication. It also validates frontmatter more strictly than the catalog indexer — quote any `description` containing a colon.
+- **Diagnosing "the agent ignored its skill":** check trust status first. A green catalog entry with a stale or unsigned trust report is the most common cause of a skill that is installed but never used.
+
 ## Known limits
 
 - **No per-agent skill version pinning.** An agent always gets the latest version of each assigned pack. Pinning via distinct pack names is the current workaround.
