@@ -7,7 +7,10 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewJsonRenderFixture } from "./json-render/fixtures";
+import {
+  createPrimitiveJsonRenderFixture,
+  createTaskReviewJsonRenderFixture,
+} from "./json-render/fixtures";
 import { serializeEditor } from "./SkillTokenInput";
 
 // The follow-up composer is a contenteditable token field, not a <textarea>:
@@ -257,6 +260,232 @@ describe("TaskThreadView", () => {
 
     expect(screen.getByTestId("genui-task-review")).toBeTruthy();
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
+    // Transient GenUI (never saved as an artifact) shows no artifact card.
+    expect(screen.queryByTestId("artifact-card")).toBeNull();
+  });
+
+  it("collapses a born-as-artifact json-render emission to prose + a compact ArtifactCard (THINK-166 U3)", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Born as artifact",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Here is the review canvas you asked for.",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-1",
+                title: "Onboarding review canvas",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                headVersion: 0,
+                summary: "Confirm the customer kickoff task is ready.",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:task-review:123",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Prose still renders…
+    expect(
+      screen.getByText("Here is the review canvas you asked for."),
+    ).toBeTruthy();
+    // …the full inline widget does NOT…
+    expect(screen.queryByTestId("genui-task-review")).toBeNull();
+    // …and a single compact card renders, titled by the artifact (never the
+    // widget/component type), linking to the artifact page.
+    const card = screen.getByTestId("artifact-card");
+    expect(card.getAttribute("href")).toBe("/artifacts/artifact-canvas-1");
+    expect(screen.getByText("Onboarding review canvas")).toBeTruthy();
+    expect(screen.getByText("Draft")).toBeTruthy();
+    // The old generic artifact card (button/side-panel variant) is gone.
+    expect(
+      screen.queryByLabelText("Open artifact Onboarding review canvas"),
+    ).toBeNull();
+  });
+
+  it("falls back to the emission's title arg when the born artifact has no title", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Born as artifact — title fallback",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Canvas below.",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-2",
+                title: "  ",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:task-review:123",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // mobileFallback.title of the fixture — the emission's title arg.
+    const card = screen.getByTestId("artifact-card");
+    expect(card.textContent).toContain("Review onboarding task");
+  });
+
+  it("keeps rendering the widget inline when the artifact's stable part id does not match", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Unmatched stable part id",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "",
+              parts: [createTaskReviewJsonRenderFixture()],
+              durableArtifact: {
+                id: "artifact-canvas-3",
+                title: "Some other canvas",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId: "json-render:other-part:999",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // The part is NOT the born artifact — it keeps rendering inline, and the
+    // canvas artifact card still renders for the linked artifact.
+    expect(screen.getByTestId("genui-task-review")).toBeTruthy();
+    expect(screen.getByTestId("artifact-card")).toBeTruthy();
+  });
+
+  it("resolves a CHECKED-OUT canvas emission via savedCanvases and never surfaces safety-net cards", () => {
+    // Mirrors the U11 leg-B dev regression: the message carries the real
+    // canvas emission (checked out — its artifact row lives in the HOME
+    // thread) plus a safety-net table conversion whose draft artifact
+    // ("Table") got linked as this message's durableArtifact.
+    const canvasPart = {
+      ...createTaskReviewJsonRenderFixture(),
+      id: "json-render:83ce9aad",
+    };
+    const safetyNetPart = {
+      ...createPrimitiveJsonRenderFixture(),
+      id: "json-render:safety-net:json-render-fnv1a:acad7e56",
+    };
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-checkout",
+          title: "Checked-out canvas",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Opened and refreshed your canvas.",
+              parts: [canvasPart, safetyNetPart],
+              durableArtifact: {
+                id: "artifact-safety-net-draft",
+                title: "Table",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId:
+                    "json-render:safety-net:json-render-fnv1a:acad7e56",
+                },
+              },
+            },
+          ],
+        }}
+        savedCanvases={[
+          {
+            artifactId: "artifact-checked-out",
+            title: "CRM Tasks by Status",
+            status: "FINAL",
+            headVersion: 3,
+            stablePartId: "json-render:83ce9aad",
+          },
+        ]}
+      />,
+    );
+
+    // The canvas emission collapses to the checked-out artifact's card…
+    expect(screen.queryByTestId("genui-task-review")).toBeNull();
+    const cards = screen.getAllByTestId("artifact-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0].getAttribute("href")).toBe(
+      "/artifacts/artifact-checked-out",
+    );
+    expect(screen.getByText("CRM Tasks by Status")).toBeTruthy();
+    expect(screen.getByText("Final · v3")).toBeTruthy();
+    // …the safety-net conversion keeps rendering inline…
+    expect(screen.getByText("Pipeline health")).toBeTruthy();
+    // …and the safety-net draft never surfaces as a "Table" card.
+    expect(screen.queryByText("Table")).toBeNull();
+  });
+
+  it("never renders a card for a safety-net-born draft artifact", () => {
+    const safetyNetPart = {
+      ...createPrimitiveJsonRenderFixture(),
+      id: "json-render:safety-net:json-render-fnv1a:2ad8b1e0",
+    };
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-safety-net",
+          title: "Safety net only",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Here's the data as a table.",
+              parts: [safetyNetPart],
+              durableArtifact: {
+                id: "artifact-safety-net",
+                title: "Table",
+                type: "DATA_VIEW",
+                status: "DRAFT",
+                metadata: {
+                  kind: "json_render_canvas",
+                  stablePartId:
+                    "json-render:safety-net:json-render-fnv1a:2ad8b1e0",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Safety-net render stays inline; no card of any kind for its draft.
+    expect(screen.getByText("Pipeline health")).toBeTruthy();
+    expect(screen.queryByTestId("artifact-card")).toBeNull();
+    expect(screen.queryByLabelText("Open artifact Table")).toBeNull();
   });
 
   it("passes the selected approved model through follow-up submit", async () => {

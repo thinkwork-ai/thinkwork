@@ -1627,6 +1627,7 @@ export const ComputerThreadQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt
@@ -1872,6 +1873,7 @@ export const SpaceThreadCollaborationQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt
@@ -2442,6 +2444,25 @@ export const UpdateThreadMutation = gql`
 export const DeleteThreadMutation = gql`
   mutation DeleteThread($id: ID!) {
     deleteThread(id: $id)
+  }
+`;
+
+// THINK-166 U3: saved canvases visible to a thread, keyed by stablePartId —
+// resolves checked-out canvas emissions (THINK-145 R13; the artifact row
+// lives in the HOME thread) to their original artifact so the transcript can
+// collapse the inline emission to a compact ArtifactCard.
+export const ThreadCanvasContextQuery = gql`
+  query ThreadCanvasContextForTranscript($threadId: ID!) {
+    threadCanvasContext(threadId: $threadId) {
+      threadId
+      savedCanvases {
+        artifactId
+        title
+        status
+        headVersion
+        stablePartId
+      }
+    }
   }
 `;
 

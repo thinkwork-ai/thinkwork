@@ -71,6 +71,13 @@ export interface RenderTypedPartOptions {
   threadId?: string;
   sourceMessageId?: string;
   onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
+  /**
+   * Stable part ids of born-as-artifact json-render emissions (THINK-166 U3).
+   * These parts are NOT rendered inline — the transcript renders a compact
+   * ArtifactCard at the end of the message instead; the full render lives on
+   * /artifacts/$id. Transient GenUI (never saved as an artifact) is unaffected.
+   */
+  suppressJsonRenderPartIds?: ReadonlySet<string>;
 }
 
 export function renderTypedPart(
@@ -83,6 +90,7 @@ export function renderTypedPart(
     sourceMessageId,
     threadId,
     onJsonRenderActionSuccess,
+    suppressJsonRenderPartIds,
   }: RenderTypedPartOptions,
 ): ReactNode {
   const key = `${keyPrefix}::${index}`;
@@ -203,6 +211,11 @@ export function renderTypedPart(
       );
     }
     if (part.type === "data-json-render") {
+      // Born-as-artifact emission: prose + end-of-message ArtifactCard
+      // (rendered by the transcript message), never the full inline widget.
+      if (part.id && suppressJsonRenderPartIds?.has(part.id)) {
+        return null;
+      }
       return (
         <ThreadJsonRenderRenderer
           key={key}
@@ -275,6 +288,7 @@ export function renderTypedParts(
     threadId?: string;
     sourceMessageId?: string;
     onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
+    suppressJsonRenderPartIds?: ReadonlySet<string>;
   },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -309,6 +323,7 @@ export function renderTypedParts(
         sourceMessageId: options.sourceMessageId,
         threadId: options.threadId,
         onJsonRenderActionSuccess: options.onJsonRenderActionSuccess,
+        suppressJsonRenderPartIds: options.suppressJsonRenderPartIds,
       }),
     );
   });
