@@ -14,6 +14,7 @@ import {
   type WorkItemsQuery,
 } from "@/lib/gql/graphql";
 import { workItemAgeBucket } from "@/lib/work-items/age-bucket";
+import { WorkItemStatusIcon } from "./WorkItemStatusIcon";
 
 export type WorkItemRowItem = WorkItemsQuery["workItems"][number];
 
@@ -32,12 +33,15 @@ const PRIORITY_LABEL: Record<WorkItemPriority, string> = {
   [WorkItemPriority.Low]: "Low",
 };
 
-const CATEGORY_LABEL: Record<WorkItemStatusCategory, string> = {
-  [WorkItemStatusCategory.Todo]: "Todo",
-  [WorkItemStatusCategory.Active]: "Active",
-  [WorkItemStatusCategory.Blocked]: "Blocked",
-  [WorkItemStatusCategory.Done]: "Done",
-  [WorkItemStatusCategory.Skipped]: "Skipped",
+/** Default category → color mapping, mirrored from web's status tone palette
+ * (apps/web/src/components/work-items/work-item-display.ts). Falls back to
+ * this when the item's own status has no explicit color. */
+const CATEGORY_COLOR: Record<WorkItemStatusCategory, string> = {
+  [WorkItemStatusCategory.Todo]: "#94a3b8",
+  [WorkItemStatusCategory.Active]: "#3b82f6",
+  [WorkItemStatusCategory.Blocked]: "#ef4444",
+  [WorkItemStatusCategory.Done]: "#10b981",
+  [WorkItemStatusCategory.Skipped]: "#64748b",
 };
 
 export function WorkItemRow({
@@ -60,40 +64,59 @@ export function WorkItemRow({
     category !== WorkItemStatusCategory.Done &&
     category !== WorkItemStatusCategory.Skipped;
 
+  const statusColor = item.status?.color ?? CATEGORY_COLOR[category];
+
   const content = (
     <Pressable
       onPress={() => onPress(item)}
       onLongPress={() => onReassign(item)}
       delayLongPress={400}
-      className="bg-white dark:bg-neutral-950 px-4 py-3 active:opacity-70"
-      style={{ minHeight: 72 }}
+      className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
+      style={{ backgroundColor: colors.background, minHeight: 72 }}
       accessibilityRole="button"
       accessibilityLabel={item.title}
     >
-      <View className="flex-row items-start gap-3">
-        <View className="min-w-0 flex-1 gap-2">
-          <View className="flex-row items-start gap-2">
-            <Text className="flex-1 text-base font-semibold" numberOfLines={2}>
-              {item.title}
-            </Text>
-            <ChevronRight size={18} color={colors.mutedForeground} />
-          </View>
-          {item.notes ? (
-            <Muted className="text-sm" numberOfLines={2}>
-              {item.notes}
-            </Muted>
-          ) : null}
-          <View className="flex-row flex-wrap items-center gap-2">
-            <StatusPill
-              label={item.status?.name ?? CATEGORY_LABEL[category]}
-              color={item.status?.color ?? colors.primary}
-              colors={colors}
-            />
-            <AgePill dueAt={item.dueAt ?? null} colors={colors} />
-            <Muted className="text-xs">
-              {PRIORITY_LABEL[item.priority]} priority
-            </Muted>
-          </View>
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: `${statusColor}22`,
+          borderWidth: 0.25,
+          borderColor: statusColor,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <WorkItemStatusIcon category={category} color={statusColor} size={20} />
+      </View>
+
+      <View className="flex-1 ml-3">
+        <View className="flex-row items-start justify-between">
+          <Text
+            className="flex-1 text-base font-semibold mr-2"
+            style={{ lineHeight: 20, marginTop: -1 }}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+          <ChevronRight
+            size={14}
+            color={colors.mutedForeground}
+            style={{ marginTop: 3 }}
+          />
+        </View>
+        {item.notes ? (
+          <Muted style={{ fontSize: 14, lineHeight: 18 }} numberOfLines={2}>
+            {item.notes}
+          </Muted>
+        ) : null}
+        <View className="flex-row items-center gap-1 mt-1">
+          <AgeText dueAt={item.dueAt ?? null} colors={colors} />
+          <Muted className="text-xs">
+            {" "}
+            · {PRIORITY_LABEL[item.priority]} priority
+          </Muted>
         </View>
       </View>
     </Pressable>
@@ -165,31 +188,7 @@ function SwipeAction({
   );
 }
 
-function StatusPill({
-  label,
-  color,
-  colors,
-}: {
-  label: string;
-  color: string;
-  colors: (typeof COLORS)["dark"];
-}) {
-  return (
-    <View
-      className="rounded-full border px-2.5 py-1"
-      style={{ borderColor: color, backgroundColor: `${color}22` }}
-    >
-      <Text
-        className="text-xs font-semibold"
-        style={{ color: colors.foreground }}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function AgePill({
+function AgeText({
   dueAt,
   colors,
 }: {
@@ -206,17 +205,9 @@ function AgePill({
   const label = dueAt ? formatDueDate(dueAt, bucket) : "No due date";
 
   return (
-    <View
-      className="rounded-full border px-2.5 py-1"
-      style={{ borderColor: hue, backgroundColor: `${hue}1f` }}
-    >
-      <Text
-        className="text-xs font-semibold"
-        style={{ color: colors.foreground }}
-      >
-        {label}
-      </Text>
-    </View>
+    <Text className="text-xs font-medium" style={{ color: hue }}>
+      {label}
+    </Text>
   );
 }
 
