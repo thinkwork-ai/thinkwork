@@ -1340,7 +1340,13 @@ export function ComposerWorkspaceEditor({
       className="flex h-full w-full min-h-0 overflow-hidden rounded-md border"
       data-testid="composer-editor"
     >
-      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        // Grab zone expands AROUND the 1px separator; a wide transparent
+        // handle occupied layout space and read as a gap beside the line.
+        resizeTargetMinimumSize={{ coarse: 24, fine: 10 }}
+      >
         <ResizablePanel
           defaultSize="26%"
           minSize="18%"
@@ -1348,12 +1354,8 @@ export function ComposerWorkspaceEditor({
         >
           {treePanel}
         </ResizablePanel>
-        {/* Thin draggable divider (col-resize) — no visible grip handle. The
-            panel's old border-r drew a second line beside the handle, so the
-            grabbable area sat offset from the visible divider; instead the
-            handle is a 10px transparent hit zone with the single 1px line
-            centered in it. */}
-        <ResizableHandle className="w-2.5 bg-transparent after:w-px after:bg-border" />
+        {/* Thin draggable divider (col-resize) — no visible grip handle. */}
+        <ResizableHandle />
         <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
           {selectedPath ? (
             (() => {

@@ -673,6 +673,9 @@ export function TaskThreadView({
       <ResizablePanelGroup
         orientation="horizontal"
         className="min-h-0 min-w-0 flex-1"
+        // Grab zone expands symmetrically AROUND the 1px separator (no
+        // layout-occupying gutter — a wide transparent handle read as a gap).
+        resizeTargetMinimumSize={{ coarse: 24, fine: 10 }}
       >
         <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
           <section
@@ -804,7 +807,7 @@ export function TaskThreadView({
                 1px divider line centered in it (after:*) so the cursor shows
                 col-resize exactly ON the visible line — the default w-px
                 handle put the grabbable area beside the line it drew. */}
-            <ResizableHandle className="hidden w-2.5 bg-transparent after:w-px after:bg-border md:flex" />
+            <ResizableHandle className="hidden md:flex" />
             <ResizablePanel
               defaultSize={`${panelDefaultWidthPx}px`}
               minSize={`${MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX}px`}
