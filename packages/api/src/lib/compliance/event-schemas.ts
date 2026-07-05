@@ -463,6 +463,11 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   "mcp.detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
   "agent.extension_granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
   "agent.extension_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  // Folder capabilities (THINK-173 U7) — same mutation payload shape.
+  "agent.connection_granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "agent.connection_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "agent.tool_granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+  "agent.tool_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

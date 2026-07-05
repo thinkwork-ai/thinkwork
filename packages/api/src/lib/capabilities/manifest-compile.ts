@@ -26,6 +26,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { filesEtagSignature } from "./script-trust.js";
 import {
   BUILTIN_TOOL_NAMES,
   resolveToolNameClaims,
@@ -66,7 +67,8 @@ export type WithheldReason =
   | "disabled"
   | "trust_gate"
   | "missing_connection"
-  | "operation_not_permitted";
+  | "operation_not_permitted"
+  | "policy_blocked";
 
 export interface CapabilityManifestEntry {
   /** Tool-registration name (definition `name`; slug for connections). */
@@ -123,6 +125,13 @@ export interface CapabilityFolderInput {
   definitionPath: string;
   definitionRaw: string | null;
   sidecarRaw: string | null;
+  /**
+   * All folder files as (path, etag) pairs, sidecar excluded (U8). Lets
+   * the script trust check invalidate on ANY folder-file edit without
+   * reading script bytes — compared against the trust report's
+   * `files_etag_signature`.
+   */
+  files?: Array<{ path: string; etag?: string | null }>;
 }
 
 export interface CompileCapabilitiesManifestInput {
@@ -132,6 +141,15 @@ export interface CompileCapabilitiesManifestInput {
   skills: Array<{ slug: string; enabled: boolean; active: boolean }>;
   /** Folder-external extension tool names known to the caller. */
   extensionToolNames?: readonly string[];
+  /**
+   * Workspace TOOLS.md MCP policy (KTD-6 fold): the manifest carries the
+   * policy verdict at render time so the folder dispatch path does not
+   * re-apply it. `allowedServers: null` = no allowlist configured.
+   */
+  mcpPolicy?: {
+    allowedServers: string[] | null;
+    blockedServers: string[];
+  } | null;
   verifier: CapabilityVerifier | null;
   signer: CapabilitySigner | null;
   inputSignature: string;
@@ -148,6 +166,10 @@ export function computeCapabilityInputSignature(input: {
   capabilityObjects: Array<{ key: string; etag?: string | null }>;
   skills: Array<{ slug: string; enabled: boolean; active: boolean }>;
   extensionToolNames?: readonly string[];
+  mcpPolicy?: {
+    allowedServers: string[] | null;
+    blockedServers: string[];
+  } | null;
 }): string {
   const canonical = canonicalizePayload({
     v: CAPABILITIES_MANIFEST_VERSION,
@@ -156,6 +178,14 @@ export function computeCapabilityInputSignature(input: {
       .sort((a, b) => (a[0]! < b[0]! ? -1 : 1)),
     skills: [...input.skills].sort((a, b) => a.slug.localeCompare(b.slug)),
     extensionToolNames: [...(input.extensionToolNames ?? [])].sort(),
+    mcpPolicy: input.mcpPolicy
+      ? {
+          allowedServers: input.mcpPolicy.allowedServers
+            ? [...input.mcpPolicy.allowedServers].sort()
+            : null,
+          blockedServers: [...input.mcpPolicy.blockedServers].sort(),
+        }
+      : null,
   });
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
@@ -194,6 +224,29 @@ export function compileCapabilitiesManifest(
         },
       );
     }
+  }
+
+  // Policy pass (KTD-6): the workspace MCP policy withholds connections
+  // at render so dispatch does not re-filter on the folder path.
+  const policy = input.mcpPolicy ?? null;
+  const policyAllows = (slug: string): boolean => {
+    if (!policy) return true;
+    if (policy.blockedServers.includes(slug)) return false;
+    if (policy.allowedServers && !policy.allowedServers.includes(slug)) {
+      return false;
+    }
+    return true;
+  };
+  for (let i = activeConnections.length - 1; i >= 0; i--) {
+    const slug = activeConnections[i]!.definition.name;
+    if (policyAllows(slug)) continue;
+    withheld.push({
+      slug,
+      class: "connection",
+      reason: "policy_blocked",
+      detail: "excluded by workspace TOOLS.md MCP policy",
+    });
+    activeConnections.splice(i, 1);
   }
 
   // Pass 2 — binding resolution against ACTIVE connections (a binding
@@ -446,7 +499,11 @@ function admitFolder(
     (definition as ToolDefinition).kind === "script"
   ) {
     const trust = (sidecar as unknown as Record<string, unknown>).trust as
-      | { content_sha?: unknown; status?: unknown }
+      | {
+          content_sha?: unknown;
+          status?: unknown;
+          files_etag_signature?: unknown;
+        }
       | undefined;
     const currentSha = sidecar.signed_content_sha;
     if (
@@ -457,6 +514,20 @@ function admitFolder(
       trust.content_sha.toLowerCase() !== currentSha.toLowerCase()
     ) {
       return reject("trust_gate", "no current passed trust report");
+    }
+    // U8: any folder-file edit (entry script, support files) since the
+    // scan invalidates the report — recomputed from the listing, zero
+    // content reads.
+    if (folder.files && typeof trust.files_etag_signature === "string") {
+      const current = filesEtagSignature(folder.files);
+      if (current !== trust.files_etag_signature) {
+        return reject(
+          "trust_gate",
+          "folder contents changed since the trust scan — re-run required",
+        );
+      }
+    } else if (folder.files && trust.files_etag_signature === undefined) {
+      return reject("trust_gate", "trust report lacks a files signature");
     }
   }
   return { definition, sidecar };
@@ -520,4 +591,56 @@ function toolEntry(definition: ToolDefinition): CapabilityManifestEntry {
         entry: definition.entry,
       };
   }
+}
+
+/**
+ * Project a compiled manifest onto the capability-fingerprint inputs
+ * (U4/U5): both dispatch builders call this so the `connections`/`tools`
+ * slices can never drift between the chat and wakeup paths.
+ */
+export function fingerprintInputsFromCapabilitiesManifest(
+  manifest: CapabilitiesManifest | null,
+): {
+  connections: Array<{
+    slug: string;
+    type: string;
+    url?: string | null;
+    principalType: string;
+    operations: string[];
+    enabled: boolean;
+    permittedOperations?: string[] | null;
+    signedContentSha?: string | null;
+  }>;
+  tools: Array<{
+    slug: string;
+    kind: string;
+    target: string;
+    enabled: boolean;
+    signedContentSha?: string | null;
+  }>;
+} {
+  if (!manifest) return { connections: [], tools: [] };
+  return {
+    connections: manifest.active
+      .filter((entry) => entry.class === "connection")
+      .map((entry) => ({
+        slug: entry.slug,
+        type: entry.type ?? "mcp",
+        url: entry.url ?? null,
+        principalType: entry.principalType ?? "app",
+        operations: entry.operations ?? [],
+        enabled: true,
+        permittedOperations: entry.permittedOperations ?? null,
+        signedContentSha: null,
+      })),
+    tools: manifest.active
+      .filter((entry) => entry.class === "tool")
+      .map((entry) => ({
+        slug: entry.slug,
+        kind: entry.kind ?? "binding",
+        target: entry.target ?? "",
+        enabled: true,
+        signedContentSha: null,
+      })),
+  };
 }

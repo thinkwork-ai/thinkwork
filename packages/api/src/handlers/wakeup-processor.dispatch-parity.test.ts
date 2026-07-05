@@ -132,6 +132,18 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     }
   });
 
+  it("carries the pinned capabilities manifest fingerprint on every dispatch path (THINK-173 U5)", () => {
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ capabilitiesManifestFingerprint: "a".repeat(64) }),
+    );
+    expect(fields.capabilities_manifest_fingerprint).toBe("a".repeat(64));
+    // Pre-manifest callers (migration window) omit it — the key drops out
+    // at JSON serialization, and the runtime falls back to the legacy path
+    // only while the agent's migration flag is off.
+    const legacy = buildAgentDispatchControlFields(baseArgs());
+    expect(legacy.capabilities_manifest_fingerprint).toBeUndefined();
+  });
+
   it("wakeup payloads carry the extension-gate wiring (api url/secret + turn id)", () => {
     const fields = buildAgentDispatchControlFields(baseArgs());
     expect(fields.thinkwork_api_url).toBe("https://api.example.com");

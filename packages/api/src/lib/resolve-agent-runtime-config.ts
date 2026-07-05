@@ -255,6 +255,13 @@ export interface AgentRuntimeConfig {
   budgetPaused: boolean;
   blockedTools: string[];
   sandboxTemplate: TemplateSandboxConfig | null;
+  /**
+   * THINK-173 U5 (R20): when true the agent's capability surface is
+   * folder-manifest-sourced. Dispatch handlers use this to rebuild MCP
+   * configs post-render and to skip the dispatch-side TOOLS.md MCP
+   * policy filter (the manifest already carries the policy verdict).
+   */
+  capabilityFolderDispatch: boolean;
   browserAutomationEnabled: boolean;
   threadJsonRenderUiEnabled: boolean;
   contextEngineEnabled: boolean;
@@ -337,6 +344,16 @@ export interface ResolveAgentRuntimeConfigOptions {
    */
   mcpTokenMode?: "resolve" | "probe";
   /**
+   * Rendered capabilities manifest (THINK-173 U5). Callers that resolve
+   * AFTER a workspace render (capability inspector) pass it so a
+   * flag-on agent's MCP configs come from the folder path here. Dispatch
+   * handlers resolve BEFORE render and leave it unset — buildMcpConfigs
+   * defers (zero configs) and the handler rebuilds post-render.
+   */
+  capabilitiesManifest?:
+    | import("./capabilities/manifest-compile.js").CapabilitiesManifest
+    | null;
+  /**
    * Logging prefix (e.g. "[chat-agent-invoke]", "[skill-run-dispatcher]") so
    * logs trace back to the caller context.
    */
@@ -392,6 +409,7 @@ export async function resolveAgentRuntimeConfig(
       slug: agents.slug,
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
+      capability_folder_dispatch: agents.capability_folder_dispatch,
       template_id: agents.template_id,
       runtime: agents.runtime,
       model: agents.model,
@@ -811,6 +829,11 @@ export async function resolveAgentRuntimeConfig(
   // Direct servers fall back to the agent's human pair when there is no
   // requester (R16 scheduled/wakeup compatibility). No invoker → plugin
   // servers are excluded (fail closed).
+  // THINK-173 U5: runtime-config resolution runs BEFORE the workspace
+  // render, so a flag-on agent's connection set cannot come from here —
+  // `defer` returns zero MCP configs and the dispatch handler rebuilds
+  // them post-render from the capabilities manifest. Callers that hold a
+  // manifest (capability inspector) pass it via opts instead.
   const mcpConfigs = await buildMcpConfigs(
     opts.agentId,
     {
@@ -818,7 +841,13 @@ export async function resolveAgentRuntimeConfig(
       requesterUserId: opts.currentUserId ?? null,
     },
     logPrefix,
-    { tokenMode: opts.mcpTokenMode, diagnostics },
+    {
+      tokenMode: opts.mcpTokenMode,
+      diagnostics,
+      folderCapabilities: opts.capabilitiesManifest
+        ? { manifest: opts.capabilitiesManifest }
+        : { defer: true },
+    },
   );
 
   const resolvedConfig: AgentRuntimeConfig = {
@@ -836,6 +865,7 @@ export async function resolveAgentRuntimeConfig(
     budgetPaused: agent.budget_paused ?? false,
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
+    capabilityFolderDispatch: agent.capability_folder_dispatch === true,
     browserAutomationEnabled,
     threadJsonRenderUiEnabled,
     contextEngineEnabled,

@@ -1407,7 +1407,13 @@ describe("resolveAgentRuntimeConfig", () => {
       { humanPairId: null, requesterUserId: null },
       expect.stringContaining("agent-runtime-config"),
       // Runtime path: no token-mode override, no diagnostics collector.
-      { tokenMode: undefined, diagnostics: null },
+      {
+        tokenMode: undefined,
+        diagnostics: null,
+        // THINK-173 U5: pre-render resolution defers folder-dispatch
+        // agents; the dispatch handler rebuilds post-render.
+        folderCapabilities: { defer: true },
+      },
     );
   });
 

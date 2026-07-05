@@ -107,6 +107,8 @@ function normalizeClass(value: string): CapabilityGrantClass {
     SKILL: "skill",
     MCP_SERVER: "mcp_server",
     PI_EXTENSION: "pi_extension",
+    CONNECTION: "connection",
+    TOOL: "tool",
   };
   const normalized = map[value];
   if (!normalized) throw badInput(`unknown capability class '${value}'`);
@@ -252,6 +254,11 @@ const AUDIT_EVENT_TYPES: Record<
     grant: "agent.extension_granted",
     detach: "agent.extension_detached",
   },
+  connection: {
+    grant: "agent.connection_granted",
+    detach: "agent.connection_detached",
+  },
+  tool: { grant: "agent.tool_granted", detach: "agent.tool_detached" },
 };
 
 // ─── skill @ agent: S3 catalog install / uninstall ─────────────────────────
@@ -449,6 +456,9 @@ interface TenantMcpServerRow {
   id: string;
   slug: string | null;
   name: string;
+  url: string;
+  transport: string | null;
+  tools: unknown;
 }
 
 async function resolveTenantMcpServer(
@@ -462,6 +472,9 @@ async function resolveTenantMcpServer(
       id: tenantMcpServers.id,
       slug: tenantMcpServers.slug,
       name: tenantMcpServers.name,
+      url: tenantMcpServers.url,
+      transport: tenantMcpServers.transport,
+      tools: tenantMcpServers.tools,
     })
     .from(tenantMcpServers)
     .where(eq(tenantMcpServers.tenant_id, tenantId))) as TenantMcpServerRow[];
@@ -477,6 +490,7 @@ async function mcpAgentMutation(
   input: CapabilityMutationGqlInput,
   target: AgentTarget,
   audit: (spec: AuditSpec) => Parameters<typeof emitAuditEvent>[1],
+  signedBy: `operator:${string}`,
 ): Promise<ClassOutcome> {
   const server = await resolveTenantMcpServer(
     input.tenantId,
@@ -583,8 +597,28 @@ async function mcpAgentMutation(
         removeMcpAssignmentFolder,
         reconcileMcpAssignmentFolders,
       } = await import("../../../lib/mcp/assignment-state.js");
+      // THINK-173 U7 DualWrite window: the same grant/detach also
+      // mirrors a signed connections/<slug>/ folder so the folder path
+      // stays convergent with the DB rows until each agent's U11 flip.
+      // Best-effort like the mcp/ mirror — the DB row stays the read
+      // source while the agent's capability_folder_dispatch flag is off.
+      const {
+        connectionDefinitionFromRegistryRow,
+        putCapabilityFolder,
+        removeCapabilityFolder,
+      } = await import("../../../lib/capabilities/folder-write.js");
       if (appliedDetach) {
         await removeMcpAssignmentFolder(target.targetPrefix, itemId);
+        const removed = await removeCapabilityFolder({
+          targetPrefix: target.targetPrefix,
+          klass: "connection",
+          slug: connectionDefinitionFromRegistryRow(server).slug,
+        });
+        if (!removed.ok) {
+          console.warn(
+            `${LOG_PREFIX} connection-folder dual-delete failed for '${itemId}': ${removed.reason}`,
+          );
+        }
       } else {
         await materializeMcpAssignmentFolder({
           targetPrefix: target.targetPrefix,
@@ -599,6 +633,37 @@ async function mcpAgentMutation(
           tenantId: input.tenantId,
           targetPrefix: target.targetPrefix,
         });
+        const generated = connectionDefinitionFromRegistryRow(server);
+        const allowlist = (
+          appliedGrantConfig as {
+            toolAllowlist?: unknown;
+          } | null
+        )?.toolAllowlist;
+        const written = await putCapabilityFolder({
+          targetPrefix: target.targetPrefix,
+          klass: "connection",
+          slug: generated.slug,
+          definition: generated.definition,
+          sidecar: {
+            enabled: true,
+            ...(Array.isArray(allowlist) && allowlist.length > 0
+              ? {
+                  permissions: {
+                    operations: allowlist.filter(
+                      (op): op is string => typeof op === "string",
+                    ),
+                  },
+                }
+              : {}),
+            config: { registryServerId: server.id },
+          },
+          signedBy,
+        });
+        if (!written.ok) {
+          console.warn(
+            `${LOG_PREFIX} connection-folder dual-write failed for '${itemId}': ${written.reason} (agent_mcp_servers row remains authoritative)`,
+          );
+        }
       }
     } catch (err) {
       console.error(
@@ -609,6 +674,124 @@ async function mcpAgentMutation(
   }
 
   return outcome;
+}
+
+// ─── connection/tool @ agent: signed workspace-folder sidecars ─────────────
+// THINK-173 U7 (R3, R4, R18). Grant IS approve: the sidecar signs over the
+// definition bytes read at this moment, so an agent draft (or any
+// definition folder) becomes registration-grade only through this path —
+// and a rewrite between review and sign surfaces as `definition_drift` at
+// the next render, never as a blessed unreviewed capability. Detach
+// removes only the sidecar; the definition remains an inert proposal.
+// Unlike the DB-backed classes, the substrate is S3: a failed write is a
+// failed mutation (thrown), not a best-effort shadow.
+
+async function folderCapabilityMutation(
+  mode: MutationMode,
+  input: CapabilityMutationGqlInput,
+  target: AgentTarget,
+  klass: "connection" | "tool",
+  signedBy: `operator:${string}`,
+): Promise<ClassOutcome> {
+  const slug = input.capabilityRef.trim();
+  if (!slug) throw badInput("capabilityRef (folder slug) is required");
+  const { signExistingCapabilityFolder, removeCapabilitySidecar } =
+    await import("../../../lib/capabilities/folder-write.js");
+
+  if (mode === "detach") {
+    const removed = await removeCapabilitySidecar({
+      targetPrefix: target.targetPrefix,
+      klass,
+      slug,
+    });
+    if (!removed.ok) {
+      throw new GraphQLError(
+        `failed to detach ${klass} '${slug}': ${removed.reason}`,
+        { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+      );
+    }
+    return {
+      outcome: "applied",
+      auditEmitted: false,
+      itemId: slug,
+      audit: {
+        eventType: AUDIT_EVENT_TYPES[klass].detach,
+        before: { registered: true },
+        after: { registered: false, proposal: true },
+      },
+    };
+  }
+
+  const operations =
+    input.toolAllowlist && input.toolAllowlist.length > 0
+      ? input.toolAllowlist
+      : (input.grantedPermissions ?? undefined);
+
+  // R8 (U8): script-kind tools must pass the SkillSpector-class trust
+  // gate BEFORE signing, so the trust verdict rides the same signature
+  // as the rest of the sidecar. Non-script kinds skip the scan.
+  let trust: Record<string, unknown> | undefined;
+  if (klass === "tool") {
+    const [{ readCapabilityDefinitionKind }, { runScriptToolTrustGate }] =
+      await Promise.all([
+        import("../../../lib/capabilities/definition-kind.js"),
+        import("../../../lib/capabilities/script-trust.js"),
+      ]);
+    const kind = await readCapabilityDefinitionKind({
+      targetPrefix: target.targetPrefix,
+      slug,
+    });
+    if (kind === "script") {
+      const gate = await runScriptToolTrustGate({
+        targetPrefix: target.targetPrefix,
+        slug,
+      });
+      if (!gate.ok) {
+        throw new GraphQLError(
+          `script tool '${slug}' failed the trust gate: ${gate.reason}${gate.detail ? ` — ${gate.detail}` : ""}`,
+          { extensions: { code: "TRUST_GATE_FAILED" } },
+        );
+      }
+      trust = gate.trust as unknown as Record<string, unknown>;
+    }
+  }
+
+  const signed = await signExistingCapabilityFolder({
+    targetPrefix: target.targetPrefix,
+    klass,
+    slug,
+    sidecar: {
+      enabled: true,
+      ...(operations ? { permissions: { operations } } : {}),
+      ...(trust ? { trust } : {}),
+    },
+    signedBy,
+  });
+  if (!signed.ok) {
+    if (signed.reason === "definition_missing") {
+      throw notFound(
+        `no ${klass} definition folder '${klass}s/${slug}/' exists in the agent workspace — author (or let the agent draft) the definition first; grant signs it`,
+      );
+    }
+    throw new GraphQLError(
+      `failed to grant ${klass} '${slug}': ${signed.reason}${signed.detail ? ` (${signed.detail})` : ""}`,
+      { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+    );
+  }
+  return {
+    outcome: "applied",
+    auditEmitted: false,
+    itemId: slug,
+    audit: {
+      eventType: AUDIT_EVENT_TYPES[klass].grant,
+      before: { registered: false },
+      after: {
+        registered: true,
+        signedBy,
+        permissions: operations ?? null,
+      },
+    },
+  };
 }
 
 // ─── mcp_server @ profile: tool_policy.mcpServers subset ───────────────────
@@ -839,9 +1022,23 @@ async function executeCapabilityMutation(
   } else if (capabilityClass === "skill") {
     result = await skillProfileMutation(mode, rawInput, auditBase);
   } else if (capabilityClass === "mcp_server" && scope === "agent") {
-    result = await mcpAgentMutation(mode, rawInput, agentTarget!, auditBase);
+    result = await mcpAgentMutation(
+      mode,
+      rawInput,
+      agentTarget!,
+      auditBase,
+      `operator:${actorId}`,
+    );
   } else if (capabilityClass === "mcp_server") {
     result = await mcpProfileMutation(mode, rawInput, auditBase);
+  } else if (capabilityClass === "connection" || capabilityClass === "tool") {
+    result = await folderCapabilityMutation(
+      mode,
+      rawInput,
+      agentTarget!,
+      capabilityClass,
+      `operator:${actorId}`,
+    );
   } else {
     result = await piExtensionMutation(mode, rawInput, scope, ctx);
   }

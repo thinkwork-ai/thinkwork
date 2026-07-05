@@ -77,6 +77,16 @@ export const agents = pgTable(
     is_platform_default: boolean("is_platform_default")
       .notNull()
       .default(false),
+    /**
+     * THINK-173 R20 per-agent migration flag: when true, dispatch reads
+     * the agent's capability surface from the rendered folder manifest
+     * instead of the legacy MCP tables. Flipped atomically per agent by
+     * the U11 backfill after its divergence check passes — never
+     * per-file.
+     */
+    capability_folder_dispatch: boolean("capability_folder_dispatch")
+      .notNull()
+      .default(false),
     budget_monthly_cents: integer("budget_monthly_cents"),
     spent_monthly_cents: integer("spent_monthly_cents").default(0),
     budget_paused: boolean("budget_paused").notNull().default(false),

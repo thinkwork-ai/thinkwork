@@ -21,6 +21,8 @@ export const CAPABILITY_GRANT_CLASSES = [
   "skill",
   "mcp_server",
   "pi_extension",
+  "connection",
+  "tool",
 ] as const;
 export type CapabilityGrantClass = (typeof CAPABILITY_GRANT_CLASSES)[number];
 
@@ -47,6 +49,12 @@ const ASSIGNABLE_SCOPES: Record<
   // Dynamic Pi extensions: Grant at agent (target default_agent) and
   // profile (target agent_profile). Never space, never user.
   pi_extension: new Set(["agent", "agent_profile"]),
+  // Folder capabilities (THINK-173 U7): workspace-native — presence is a
+  // folder in the AGENT workspace source; registration is a platform-
+  // signed sidecar. No profile/space folder semantics in v1 (space-source
+  // capability folders are THINK-174's space work).
+  connection: new Set(["agent"]),
+  tool: new Set(["agent"]),
 };
 
 export class CapabilityMatrixViolationError extends Error {

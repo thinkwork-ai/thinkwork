@@ -34,6 +34,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "thinkwork_api_secret",
   "thread_turn_id",
   "config_fingerprint",
+  "capabilities_manifest_fingerprint",
   "agent_profiles",
   "pi_extensions",
   "model_routing_policy",
@@ -69,7 +70,8 @@ export interface AgentDispatchControlFieldArgs {
   agentProfiles: AgentProfileRuntimeConfig[];
   piExtensions: AgentRuntimePiExtension[];
   modelRoutingPolicy:
-    { routes: EffectiveWorkspaceModelRoutingEntry[] } | undefined;
+    | { routes: EffectiveWorkspaceModelRoutingEntry[] }
+    | undefined;
   approvedModelIds: string[] | undefined;
   renderedWorkspacePrefix: string | undefined;
   turnContext: DispatchTurnContext | null;
@@ -94,6 +96,15 @@ export interface AgentDispatchControlFieldArgs {
    * manifest row lands with a null fingerprint.
    */
   configFingerprint?: string;
+  /**
+   * Content address of the compiled capabilities manifest the render
+   * produced for this turn (THINK-173 U5, KTD-1). The runtime reads the
+   * pinned `capabilities/<fingerprint>.json` from the synced workspace —
+   * in-flight turns keep their pinned bytes across mid-turn edits.
+   * Optional during the migration window; a flag-on agent dispatched
+   * without it fails the turn loudly at the runtime (R9).
+   */
+  capabilitiesManifestFingerprint?: string;
 }
 
 export function buildAgentDispatchControlFields(
@@ -112,6 +123,8 @@ export function buildAgentDispatchControlFields(
     thinkwork_api_secret: args.apiAuthSecret || undefined,
     thread_turn_id: args.threadTurnId || undefined,
     config_fingerprint: args.configFingerprint || undefined,
+    capabilities_manifest_fingerprint:
+      args.capabilitiesManifestFingerprint || undefined,
     // Always an array — `[]` (not absent) when the tenant has no profiles.
     agent_profiles: args.agentProfiles,
     // Dynamic Pi extensions are resolved at invocation time from approved,

@@ -50,6 +50,11 @@ import {
 import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
+import {
+  fingerprintInputsFromCapabilitiesManifest,
+  parseCapabilitiesManifest,
+  type CapabilitiesManifest,
+} from "../lib/capabilities/manifest-compile.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 import {
   applySandboxPayloadFields,
@@ -300,6 +305,11 @@ interface RenderWorkspaceTupleForWakeupResult {
    * workspace projection snapshot (plan 2026-06-12-002 U6).
    */
   hydrateManifest?: WorkspaceProjectionManifestLike;
+  /** Compiled capabilities manifest identity + body (THINK-173 U5). */
+  capabilities?: {
+    fingerprint: string;
+    manifest: CapabilitiesManifest | null;
+  };
   errorCode?: string;
   statusCode?: number;
   reason?: string;
@@ -417,6 +427,27 @@ export async function renderWorkspaceTupleForWakeup(input: {
     hydrateManifest: isWorkspaceProjectionManifestLike(parsed.hydrateManifest)
       ? parsed.hydrateManifest
       : undefined,
+    capabilities: parseWakeupCapabilitiesPayload(parsed.capabilities),
+  };
+}
+
+/**
+ * Validate the renderer Lambda's capabilities payload (THINK-173 U5) —
+ * same shape and degradation semantics as the chat path's parser: a
+ * malformed body becomes `manifest: null`, which the folder dispatch
+ * path treats as a loud failure for flag-on agents.
+ */
+function parseWakeupCapabilitiesPayload(
+  value: unknown,
+): RenderWorkspaceTupleForWakeupResult["capabilities"] {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.fingerprint !== "string") return undefined;
+  return {
+    fingerprint: record.fingerprint,
+    manifest: parseCapabilitiesManifest(
+      record.manifest === undefined ? null : JSON.stringify(record.manifest),
+    ),
   };
 }
 
@@ -669,6 +700,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       slug: agents.slug,
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
+      capability_folder_dispatch: agents.capability_folder_dispatch,
       runtime_config: agents.runtime_config,
       budget_paused: agents.budget_paused,
       guardrail_id: agentTemplates.guardrail_id,
@@ -1912,13 +1944,26 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       requesterUserId: invokerUserId ?? null,
     },
     "[wakeup-processor]",
+    {
+      // THINK-173 U5: the wakeup path renders before this call, so a
+      // folder-dispatch agent resolves straight from the manifest. A
+      // missing manifest throws — flag-on turns fail loudly (R9), never
+      // silently fall back to the legacy tables (R20).
+      folderCapabilities: {
+        manifest: renderedWorkspace.rendered
+          ? (renderedWorkspace.capabilities?.manifest ?? null)
+          : null,
+      },
+    },
   );
   // Shared chokepoint (U7): the TOOLS.md MCP policy filter is the same
   // function chat-agent-invoke applies — the two builders cannot drift.
-  const mcpConfigs = applyWorkspaceMcpPolicyFilter(
-    mcpConfigsRaw,
-    effectiveMcpPolicy,
-  );
+  // KTD-6 (THINK-173): the folder path's manifest already carries the
+  // policy verdict at render time, so it is not re-applied there.
+  const mcpConfigs =
+    agent.capability_folder_dispatch === true
+      ? mcpConfigsRaw
+      : applyWorkspaceMcpPolicyFilter(mcpConfigsRaw, effectiveMcpPolicy);
 
   // Dispatch-control parity with chat-agent-invoke (plan 2026-06-12-002 U1):
   // agent_profiles / model routing resolve exactly the way the chat path
@@ -2088,11 +2133,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             (extension) => extension.assignmentId,
           ),
         })),
-        // Folder capabilities (THINK-173) enter the wakeup projection in
-        // U5's credential-resolver split; until the per-agent flag path
-        // lands, both dispatch builders hash them empty.
-        connections: [],
-        tools: [],
+        // THINK-173 U5: folder capabilities project from the SAME
+        // manifest on both dispatch paths (parity helper).
+        ...fingerprintInputsFromCapabilitiesManifest(
+          renderedWorkspace.rendered
+            ? (renderedWorkspace.capabilities?.manifest ?? null)
+            : null,
+        ),
       },
     );
 
@@ -2172,6 +2219,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         apiAuthSecret: getApiAuthSecret(),
         threadId: resolvedThreadId || undefined,
         threadTurnId: run.id,
+        // Presence of this field IS the runtime's folder-mode signal —
+        // it ships only for flag-on agents (THINK-173 U6 contract).
+        capabilitiesManifestFingerprint:
+          agent.capability_folder_dispatch === true &&
+          renderedWorkspace.rendered
+            ? renderedWorkspace.capabilities?.fingerprint
+            : undefined,
         agentProfiles: agentProfilesConfig,
         piExtensions,
         modelRoutingPolicy,
@@ -2824,6 +2878,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               apiAuthSecret: getApiAuthSecret(),
               threadId: resolvedThreadId || undefined,
               threadTurnId: run.id,
+              capabilitiesManifestFingerprint:
+                agent.capability_folder_dispatch === true &&
+                renderedWorkspace.rendered
+                  ? renderedWorkspace.capabilities?.fingerprint
+                  : undefined,
               agentProfiles: agentProfilesConfig,
               piExtensions,
               modelRoutingPolicy,

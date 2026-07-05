@@ -94,6 +94,12 @@ import {
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { buildMcpConfigs } from "../lib/mcp-configs.js";
+import {
+  fingerprintInputsFromCapabilitiesManifest,
+  parseCapabilitiesManifest,
+  type CapabilitiesManifest,
+} from "../lib/capabilities/manifest-compile.js";
 import {
   computeConfigFingerprint,
   fingerprintInputsFromRuntimeConfig,
@@ -352,6 +358,11 @@ export interface RenderWorkspaceTupleForInvokeResult {
    * workspace projection snapshot (plan 2026-06-12-002 U6).
    */
   hydrateManifest?: WorkspaceProjectionManifestLike;
+  /** Compiled capabilities manifest identity + body (THINK-173 U5). */
+  capabilities?: {
+    fingerprint: string;
+    manifest: CapabilitiesManifest | null;
+  };
   errorCode?: string;
   statusCode?: number;
   reason?: string;
@@ -426,6 +437,7 @@ export async function renderWorkspaceTupleForInvoke(
     activeSpace: isActiveSpacePayload(parsed.activeSpace)
       ? parsed.activeSpace
       : undefined,
+    capabilities: parseRenderedCapabilitiesPayload(parsed.capabilities),
     effectivePolicy: isEffectiveWorkspacePolicy(parsed.effectivePolicy)
       ? parsed.effectivePolicy
       : undefined,
@@ -436,6 +448,27 @@ export async function renderWorkspaceTupleForInvoke(
       parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
         ? parsed.cacheStatus
         : undefined,
+  };
+}
+
+/**
+ * Validate the renderer Lambda's capabilities payload (THINK-173 U5).
+ * The manifest body re-validates through the same parser the renderer
+ * used, so a malformed cross-Lambda payload degrades to `manifest: null`
+ * — which the folder dispatch path treats as a loud failure for flag-on
+ * agents rather than a silent legacy fallback.
+ */
+function parseRenderedCapabilitiesPayload(
+  value: unknown,
+): RenderWorkspaceTupleForInvokeResult["capabilities"] {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.fingerprint !== "string") return undefined;
+  return {
+    fingerprint: record.fingerprint,
+    manifest: parseCapabilitiesManifest(
+      record.manifest === undefined ? null : JSON.stringify(record.manifest),
+    ),
   };
 }
 
@@ -480,7 +513,10 @@ function isEffectiveWorkspacePolicy(
 }
 
 type ChatInvokeIdentitySource =
-  "message_sender" | "thread_creator" | "computer_agent_human_pair" | "none";
+  | "message_sender"
+  | "thread_creator"
+  | "computer_agent_human_pair"
+  | "none";
 
 export interface ChatInvokeIdentity {
   currentUserId: string;
@@ -1117,8 +1153,10 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       count: messagesHistory.length,
     });
 
-    // MCP configs already resolved by runtimeConfig.
-    const mcpConfigs = runtimeConfig.mcpConfigs;
+    // MCP configs already resolved by runtimeConfig — except for
+    // folder-dispatch agents (THINK-173 U5), whose configs rebuild from
+    // the capabilities manifest after the workspace render below.
+    let mcpConfigs = runtimeConfig.mcpConfigs;
     let effectiveBlockedTools = runtimeConfig.blockedTools;
     let effectiveToolPolicy: EffectiveWorkspacePolicy = {
       blockedTools: runtimeConfig.blockedTools,
@@ -1262,6 +1300,29 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
+    // THINK-173 U5 (R20): a folder-dispatch agent's MCP configs come
+    // exclusively from the rendered capabilities manifest. The
+    // runtime-config resolution above deferred (zero configs), so rebuild
+    // here post-render. A missing manifest throws — a flag-on agent must
+    // fail the turn loudly, never fall back to the legacy tables (R9).
+    if (runtimeConfig.capabilityFolderDispatch) {
+      mcpConfigs = await buildMcpConfigs(
+        agentId,
+        {
+          humanPairId: runtimeConfig.humanPairId,
+          requesterUserId: currentUserId || null,
+        },
+        "[chat-agent-invoke]",
+        {
+          folderCapabilities: {
+            manifest: renderedWorkspace.rendered
+              ? (renderedWorkspace.capabilities?.manifest ?? null)
+              : null,
+          },
+        },
+      );
+    }
+
     const isEffectivelyBlocked = (toolName: string): boolean =>
       effectiveBlockedTools.includes(toolName);
     const isAnyEffectivelyBlocked = (...toolNames: string[]): boolean =>
@@ -1324,10 +1385,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // drift. Plugin activation gating already happened inside
     // buildMcpConfigs, keyed on the same currentUserId passed to the
     // workspace render above.
-    const policyFilteredMcpConfigs = applyWorkspaceMcpPolicyFilter(
-      mcpConfigs,
-      effectiveMcpPolicy,
-    );
+    // KTD-6 (THINK-173): the folder path's manifest already carries the
+    // TOOLS.md MCP policy verdict at render time — re-applying it here
+    // would double-filter; the legacy path keeps the dispatch-side check.
+    const policyFilteredMcpConfigs = runtimeConfig.capabilityFolderDispatch
+      ? mcpConfigs
+      : applyWorkspaceMcpPolicyFilter(mcpConfigs, effectiveMcpPolicy);
     const effectiveMcpConfigs = filterMcpConfigsForExplicitPluginMention(
       policyFilteredMcpConfigs,
       userMessage,
@@ -1570,6 +1633,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         // KTD-3: same fingerprint function the capability inspector stamps
         // on predicted sets; the container forwards it into the per-turn
         // manifest so R15 divergence is only asserted on matching config.
+        // Presence of this field IS the runtime's folder-mode signal —
+        // it ships only for flag-on agents (THINK-173 U6 contract).
+        capabilitiesManifestFingerprint:
+          runtimeConfig.capabilityFolderDispatch && renderedWorkspace.rendered
+            ? renderedWorkspace.capabilities?.fingerprint
+            : undefined,
         configFingerprint: computeConfigFingerprint(
           {
             tenantId,
@@ -1578,7 +1647,16 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             agentProfileId: null,
             perspectiveUserId: currentUserId || null,
           },
-          fingerprintInputsFromRuntimeConfig(runtimeConfig),
+          {
+            ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
+            // THINK-173 U5: folder capabilities project from the SAME
+            // manifest on both dispatch paths (parity helper).
+            ...fingerprintInputsFromCapabilitiesManifest(
+              renderedWorkspace.rendered
+                ? (renderedWorkspace.capabilities?.manifest ?? null)
+                : null,
+            ),
+          },
         ),
       }),
     } as Record<string, unknown>;

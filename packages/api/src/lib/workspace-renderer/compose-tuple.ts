@@ -60,6 +60,7 @@ import {
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
+  type CapabilitiesManifest,
   type CapabilityFolderInput,
 } from "../capabilities/manifest-compile.js";
 import {
@@ -893,6 +894,8 @@ export async function renderWorkspaceTuple(
     definitionEtag?: string | null;
     sidecarKey?: string;
     sidecarEtag?: string | null;
+    /** Every folder file (sidecar excluded) — U8 trust invalidation. */
+    files: Array<{ path: string; etag?: string | null }>;
   }
   const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
   const capabilityScan = (
@@ -902,11 +905,12 @@ export async function renderWorkspaceTuple(
     const mapKey = `${klass}:${slug}`;
     let scan = capabilityFolderScans.get(mapKey);
     if (!scan) {
-      scan = { class: klass };
+      scan = { class: klass, files: [] };
       capabilityFolderScans.set(mapKey, scan);
     }
     return scan;
   };
+  const CAPABILITY_FOLDER_FILE_RE = /^(connections|tools)\/([^/]+)\/(.+)$/;
   for (const object of agentSource.objects) {
     const sourcePath = runtimeSourcePath(object.relPath);
     const marker = sourcePath.match(SKILL_MARKER_RE);
@@ -936,6 +940,19 @@ export async function renderWorkspaceTuple(
       const scan = capabilityScan("tool", toolAssignment[1]!);
       scan.sidecarKey = object.key;
       scan.sidecarEtag = object.etag ?? null;
+    }
+    // U8: EVERY capability-folder file (entry scripts, support files)
+    // feeds the input signature and the per-folder etag set, so a
+    // run.sh edit both retriggers the compile and invalidates the
+    // script trust report — with zero content reads.
+    const folderFile = sourcePath.match(CAPABILITY_FOLDER_FILE_RE);
+    if (folderFile && !sourcePath.endsWith("/.assignment.json")) {
+      const klass =
+        folderFile[1] === "connections" ? "connection" : ("tool" as const);
+      capabilityScan(klass, folderFile[2]!).files.push({
+        path: folderFile[3]!,
+        etag: object.etag ?? null,
+      });
     }
   }
   // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
@@ -1060,28 +1077,36 @@ export async function renderWorkspaceTuple(
     enabled: entry.enabled !== false,
     active: entry.active !== false,
   }));
+  const capabilityMcpPolicy = {
+    allowedServers: effectivePolicy.mcpAllowedServers ?? null,
+    blockedServers: effectivePolicy.mcpBlockedServers ?? [],
+  };
   const capabilityInputSignature = computeCapabilityInputSignature({
-    capabilityObjects: [...capabilityFolderScans.values()].flatMap((scan) => [
-      ...(scan.definitionKey
-        ? [{ key: scan.definitionKey, etag: scan.definitionEtag }]
-        : []),
-      ...(scan.sidecarKey
-        ? [{ key: scan.sidecarKey, etag: scan.sidecarEtag }]
-        : []),
-    ]),
+    capabilityObjects: [...capabilityFolderScans.entries()].flatMap(
+      ([mapKey, scan]) => [
+        ...scan.files.map((file) => ({
+          key: `${mapKey}/${file.path}`,
+          etag: file.etag,
+        })),
+        ...(scan.sidecarKey
+          ? [{ key: scan.sidecarKey, etag: scan.sidecarEtag }]
+          : []),
+      ],
+    ),
     skills: capabilitySkillEntries,
+    mcpPolicy: capabilityMcpPolicy,
   });
   const existingCapabilitiesManifest = parseCapabilitiesManifest(
     existingCapabilitiesRaw,
   );
   let capabilitiesJson: string;
-  let capabilitiesFingerprint: string;
+  let capabilitiesManifest: CapabilitiesManifest;
   if (
     existingCapabilitiesManifest &&
     existingCapabilitiesManifest.input_signature === capabilityInputSignature
   ) {
     capabilitiesJson = existingCapabilitiesRaw!;
-    capabilitiesFingerprint = existingCapabilitiesManifest.fingerprint;
+    capabilitiesManifest = existingCapabilitiesManifest;
   } else {
     const folders: CapabilityFolderInput[] = await Promise.all(
       [...capabilityFolderScans.entries()].map(async ([mapKey, scan]) => {
@@ -1102,6 +1127,7 @@ export async function renderWorkspaceTuple(
           }`,
           definitionRaw,
           sidecarRaw,
+          files: scan.files,
         };
       }),
     );
@@ -1117,12 +1143,19 @@ export async function renderWorkspaceTuple(
         deps.capabilitySigner !== undefined
           ? deps.capabilitySigner
           : createConfiguredCapabilitySigner(),
+      mcpPolicy: capabilityMcpPolicy,
       inputSignature: capabilityInputSignature,
       generatedAt: (deps.now?.() ?? new Date()).toISOString(),
     });
     capabilitiesJson = compiled.json;
-    capabilitiesFingerprint = compiled.manifest.fingerprint;
+    capabilitiesManifest = compiled.manifest;
   }
+  const capabilitiesFingerprint = capabilitiesManifest.fingerprint;
+  const capabilitiesResult = {
+    fingerprint: capabilitiesFingerprint,
+    path: capabilitiesManifestPath(capabilitiesFingerprint),
+    manifest: capabilitiesManifest,
+  };
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
     baseline: agentsMdBaseline ?? "",
@@ -1218,6 +1251,7 @@ export async function renderWorkspaceTuple(
       sourcePrefixes,
       writtenFiles: [],
       hydrateManifest,
+      capabilities: capabilitiesResult,
       ...generatedContents,
       activeSpace: {
         id: tuple.spaceId,
@@ -1299,6 +1333,7 @@ export async function renderWorkspaceTuple(
     sourcePrefixes,
     writtenFiles,
     hydrateManifest: nextHydrateManifest,
+    capabilities: capabilitiesResult,
     ...generatedContents,
     activeSpace: {
       id: tuple.spaceId,

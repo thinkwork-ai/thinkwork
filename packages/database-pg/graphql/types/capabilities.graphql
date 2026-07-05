@@ -182,6 +182,8 @@ enum CapabilityGrantClass {
   SKILL
   MCP_SERVER
   PI_EXTENSION
+  CONNECTION
+  TOOL
 }
 
 enum CapabilityGrantScope {

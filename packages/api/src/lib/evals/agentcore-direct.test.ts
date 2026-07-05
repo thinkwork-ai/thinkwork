@@ -37,6 +37,7 @@ vi.mock("../resolve-runtime-function-name.js", () => ({
 }));
 
 const runtimeConfig: AgentRuntimeConfig = {
+  capabilityFolderDispatch: false,
   tenantId: "tenant-1",
   tenantSlug: "acme",
   agentId: "agent-1",
