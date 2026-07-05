@@ -12,6 +12,13 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+/**
+ * Sentinel "artifact id": the panel is open in LIST state (thread has
+ * multiple card-rendered artifacts; the user picks one from the list).
+ * Transient by design — choosing an artifact replaces it with the real id.
+ */
+export const THREAD_ARTIFACT_PANEL_LIST = "::artifact-list::";
+
 const openArtifactByThread = new Map<string, string>();
 const listeners = new Set<() => void>();
 

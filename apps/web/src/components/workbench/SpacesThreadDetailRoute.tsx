@@ -12,6 +12,7 @@ import {
 import { spaceCrumbLabel } from "@/components/spaces/space-utils";
 import {
   TaskThreadView,
+  deriveCardRenderedArtifacts,
   normalizePersistedParts,
   type ComposerMention,
   type TaskThread,
@@ -23,7 +24,10 @@ import {
   type TaskThreadInfoPanelState,
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
-import { useThreadArtifactPanel } from "@/components/artifacts/thread-artifact-panel-store";
+import {
+  THREAD_ARTIFACT_PANEL_LIST,
+  useThreadArtifactPanel,
+} from "@/components/artifacts/thread-artifact-panel-store";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
@@ -1131,7 +1135,16 @@ export function SpacesThreadDetailRoute({
     () => deriveThreadArtifacts(visibleThread),
     [visibleThread],
   );
-  const newestThreadArtifactId = threadArtifacts.at(-1)?.id ?? null;
+  // Header-button resolution invariant (THINK-168): only artifacts that
+  // render as transcript cards are openable — raw durableArtifact order
+  // included the auto-minted safety-net "Table" drafts, which never render
+  // cards (that was the wrong-artifact bug Eric hit).
+  const cardArtifacts = useMemo(
+    () =>
+      deriveCardRenderedArtifacts(visibleThread, savedCanvases ?? undefined),
+    [visibleThread, savedCanvases],
+  );
+  const newestCardArtifactId = cardArtifacts.at(-1)?.id ?? null;
   const runbookQueues = useMemo(
     () => toRunbookQueues(runbookRunsData?.runbookRuns),
     [runbookRunsData?.runbookRuns],
@@ -1755,7 +1768,7 @@ export function SpacesThreadDetailRoute({
         >
           <Info className="size-4" />
         </Button>
-        {newestThreadArtifactId ? (
+        {newestCardArtifactId ? (
           <Button
             type="button"
             variant="ghost"
@@ -1776,13 +1789,17 @@ export function SpacesThreadDetailRoute({
                 : desktopToolbarButtonClassName
             }
             onClick={() => {
-              // Opens the thread's newest artifact DIRECTLY in the docked
-              // panel — the legacy intermediate summary card is retired.
+              // Single artifact → load it directly; several → open the list
+              // state so the user picks (no intermediate summary card).
               if (dockedArtifactPanel.artifactId) {
                 dockedArtifactPanel.close();
                 return;
               }
-              dockedArtifactPanel.open(newestThreadArtifactId);
+              dockedArtifactPanel.open(
+                cardArtifacts.length > 1
+                  ? THREAD_ARTIFACT_PANEL_LIST
+                  : newestCardArtifactId,
+              );
               setThreadInfoOpen(false);
             }}
           >
@@ -1791,7 +1808,7 @@ export function SpacesThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${newestThreadArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${dockedArtifactPanel.artifactId ?? "closed"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${cardArtifacts.length}:${newestCardArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${dockedArtifactPanel.artifactId ?? "closed"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
   });
 
   useEffect(() => {

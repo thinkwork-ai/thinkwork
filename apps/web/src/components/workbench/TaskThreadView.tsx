@@ -164,6 +164,7 @@ import {
   getStoredThreadArtifactPanelWidthPx,
   MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
   storeThreadArtifactPanelWidthPx,
+  THREAD_ARTIFACT_PANEL_LIST,
   useThreadArtifactPanel,
 } from "@/components/artifacts/thread-artifact-panel-store";
 import {
@@ -358,6 +359,77 @@ export interface SavedCanvasSummaryLite {
   headVersion?: number | null;
   stablePartId?: string | null;
   updatedAt?: string | null;
+}
+
+/**
+ * The artifacts that actually render as cards in this thread's transcript —
+ * the ONLY set the header artifact button may open (THINK-168 invariant: if
+ * it never renders as a card, the header button never opens it). Mirrors
+ * TranscriptMessage's per-message card rules — keep the two in sync:
+ *   - json-render emissions resolve via savedCanvases (checkout-aware) or
+ *     the message's own born-canvas durableArtifact; safety-net part ids
+ *     are transcript furniture and NEVER become cards
+ *   - born-canvas durables with a safety-net stablePartId are excluded
+ *     (the auto-minted "Table" drafts)
+ *   - documents and generic/app durables render DocumentCard /
+ *     GeneratedArtifactCard respectively — included
+ * Returned in message order (deduped by artifact id) — `.at(-1)` is the
+ * newest.
+ */
+export function deriveCardRenderedArtifacts(
+  thread: TaskThread | null,
+  savedCanvases?: SavedCanvasSummaryLite[],
+): ArtifactCardData[] {
+  const byId = new Map<string, ArtifactCardData>();
+  const canvasesByPartId = new Map<string, ArtifactCardData>();
+  for (const canvas of savedCanvases ?? []) {
+    if (!canvas.stablePartId) continue;
+    canvasesByPartId.set(canvas.stablePartId, {
+      id: canvas.artifactId,
+      title: canvas.title,
+      type: "DATA_VIEW",
+      status: canvas.status,
+      headVersion: canvas.headVersion,
+      updatedAt: canvas.updatedAt ?? null,
+    });
+  }
+  const add = (card: ArtifactCardData) => {
+    if (!byId.has(card.id)) byId.set(card.id, card);
+  };
+  for (const message of thread?.messages ?? []) {
+    if (message.role.toUpperCase() === "USER") continue;
+    const durable = message.durableArtifact ?? null;
+    const durableCard: ArtifactCardData | null = durable
+      ? {
+          id: durable.id,
+          title: durable.title,
+          type: durable.type,
+          status: durable.status,
+          headVersion: durable.headVersion,
+          updatedAt: durable.updatedAt,
+        }
+      : null;
+    const durablePartId = durable ? bornCanvasStablePartId(durable) : null;
+    for (const part of message.parts ?? []) {
+      if (part.type !== "data-json-render") continue;
+      const partId = (part as { id?: string }).id;
+      if (!partId || isSafetyNetPartId(partId)) continue;
+      const resolved =
+        canvasesByPartId.get(partId) ??
+        (durableCard && durablePartId === partId ? durableCard : null);
+      if (resolved) add(resolved);
+    }
+    if (durableCard) {
+      if (durablePartId) {
+        // Born canvas: card only when NOT safety-net-born.
+        if (!isSafetyNetPartId(durablePartId)) add(durableCard);
+      } else {
+        // Document (DocumentCard) or generic/app (GeneratedArtifactCard).
+        add(durableCard);
+      }
+    }
+  }
+  return [...byId.values()];
 }
 
 export interface TaskThreadInfoPanelState {
@@ -588,6 +660,12 @@ export function TaskThreadView({
   // Docked artifact panel (THINK-168): per-thread selection in a module
   // store, so it survives message sends / refetch-driven remounts.
   const canvasPanel = useThreadArtifactPanel(thread?.id ?? null);
+  // Card-rendered artifacts, newest first — the panel's LIST state and its
+  // back-to-list affordance (shown only when a list exists, i.e. >1).
+  const panelListArtifacts = useMemo(
+    () => deriveCardRenderedArtifacts(thread, savedCanvases).reverse(),
+    [thread, savedCanvases],
+  );
   // Panel width: read the persisted global width once per mount (the panel's
   // ResizablePanel consumes it as defaultSize) and persist every drag.
   const [panelDefaultWidthPx] = useState(() =>
@@ -798,6 +876,13 @@ export function TaskThreadView({
               <ThreadArtifactPanel
                 key={canvasPanel.artifactId}
                 artifactId={canvasPanel.artifactId}
+                listArtifacts={panelListArtifacts}
+                onOpenArtifact={canvasPanel.open}
+                onBackToList={
+                  panelListArtifacts.length > 1
+                    ? () => canvasPanel.open(THREAD_ARTIFACT_PANEL_LIST)
+                    : undefined
+                }
                 onClose={canvasPanel.close}
                 jsonRenderPartVersions={jsonRenderPartVersions}
               />

@@ -36,6 +36,7 @@ import {
 import {
   getOpenThreadArtifactId,
   resetThreadArtifactPanels,
+  THREAD_ARTIFACT_PANEL_LIST,
 } from "@/components/artifacts/thread-artifact-panel-store";
 import {
   clearPendingThreadStart,
@@ -629,7 +630,73 @@ describe("SpacesThreadDetailRoute", () => {
     ).toContain("text-muted-foreground/70");
   });
 
-  it("header artifact button opens the NEWEST thread artifact directly in the docked panel (THINK-168)", () => {
+  it("header artifact button opens a single card-rendered artifact directly, skipping safety-net drafts (THINK-168)", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Artifact thread",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "Real canvas.",
+                durableArtifact: {
+                  id: "artifact-real",
+                  title: "Revenue canvas",
+                  type: "DATA_VIEW",
+                  metadata: {
+                    kind: "json_render_canvas",
+                    stablePartId: "json-render:real",
+                  },
+                },
+              },
+            },
+            {
+              node: {
+                // NEWEST durable is the auto-minted safety-net "Table" draft —
+                // it never renders a card, so the header button must NOT open
+                // it (the wrong-artifact bug from Eric's re-check).
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Here's the data as a table.",
+                durableArtifact: {
+                  id: "artifact-table",
+                  title: "Table",
+                  type: "DATA_VIEW",
+                  metadata: {
+                    kind: "json_render_canvas",
+                    stablePartId: "json-render:safety-net:json-render-fnv1a:1",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+
+    // One card-rendered artifact → straight in, no list, no summary card.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open artifact panel" }),
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-real");
+    expect(screen.getByTestId("thread-artifact-panel")).toBeTruthy();
+    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
+
+    // Toggle closes it (re-render the refreshed header action first).
+    renderHeaderAction();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Close artifact panel" }).at(-1)!,
+    );
+    expect(getOpenThreadArtifactId("thread-1")).toBeNull();
+  });
+
+  it("header artifact button opens the LIST state when several artifacts render cards (THINK-168)", () => {
     threadData = {
       thread: {
         id: "thread-1",
@@ -668,22 +735,20 @@ describe("SpacesThreadDetailRoute", () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
     renderHeaderAction();
 
-    // No intermediate summary card: the click loads the artifact directly.
     fireEvent.click(
       screen.getByRole("button", { name: "Open artifact panel" }),
     );
-    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-new");
-    // The docked panel itself is mounted in the thread view.
-    expect(screen.getByTestId("thread-artifact-panel")).toBeTruthy();
-    // The legacy GeneratedArtifact summary panel is gone.
-    expect(screen.queryByTestId("artifact-side-panel")).toBeNull();
-
-    // Toggle closes it (re-render the refreshed header action first).
-    renderHeaderAction();
-    fireEvent.click(
-      screen.getAllByRole("button", { name: "Close artifact panel" }).at(-1)!,
+    expect(getOpenThreadArtifactId("thread-1")).toBe(
+      THREAD_ARTIFACT_PANEL_LIST,
     );
-    expect(getOpenThreadArtifactId("thread-1")).toBeNull();
+
+    // The panel shows the compact list, newest first; picking one loads it.
+    const list = screen.getByTestId("thread-artifact-panel-list");
+    const cards = within(list).getAllByTestId("artifact-card");
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain("Newest artifact");
+    fireEvent.click(cards[1]);
+    expect(getOpenThreadArtifactId("thread-1")).toBe("artifact-old");
   });
 
   it("does not refetch the full thread for turn-only status updates", () => {

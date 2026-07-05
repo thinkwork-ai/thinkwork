@@ -8,6 +8,11 @@
  * page remains for deep links — the header keeps an explicit "Open full page"
  * affordance.
  *
+ * List state: `artifactId === THREAD_ARTIFACT_PANEL_LIST` renders a compact
+ * vertical list of the thread's card-rendered artifacts (newest first);
+ * choosing one loads it in this same panel. When a list exists (>1 artifact)
+ * the artifact view shows a back-to-list button.
+ *
  * Live updates: when the agent re-emits the canvas in this thread (same
  * stable json-render part id), the host bumps `jsonRenderPartVersions` from
  * the onThreadTurnStep subscription fold and the panel refetches its
@@ -16,7 +21,7 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, SquareArrowOutUpRight, X } from "lucide-react";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
 import {
@@ -25,9 +30,14 @@ import {
   isCanvasArtifactNode,
   type ArtifactBodyNode,
 } from "@/components/artifacts/ArtifactBodyView";
-import { bornCanvasStablePartId } from "@/components/artifacts/ArtifactCard";
+import {
+  ArtifactCard,
+  bornCanvasStablePartId,
+  type ArtifactCardData,
+} from "@/components/artifacts/ArtifactCard";
 import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { THREAD_ARTIFACT_PANEL_LIST } from "@/components/artifacts/thread-artifact-panel-store";
 import { ArtifactDetailForRouteQuery } from "@/lib/graphql-queries";
 
 /** Trailing debounce for live re-emission refetches — a streamed emission can
@@ -41,21 +51,33 @@ interface PanelArtifactResult {
 
 export function ThreadArtifactPanel({
   artifactId,
+  listArtifacts = [],
+  onOpenArtifact,
+  onBackToList,
   onClose,
   jsonRenderPartVersions,
 }: {
+  /** Artifact to show, or THREAD_ARTIFACT_PANEL_LIST for the list state. */
   artifactId: string;
+  /** The thread's card-rendered artifacts, newest first (list state). */
+  listArtifacts?: ArtifactCardData[];
+  /** Load an artifact picked from the list (in this same panel). */
+  onOpenArtifact?: (artifactId: string) => void;
+  /** Present only when a list exists (>1 artifacts) — renders the ← button. */
+  onBackToList?: () => void;
   onClose: () => void;
   /** partId → bump counter from the host's onThreadTurnStep fold. */
   jsonRenderPartVersions?: ReadonlyMap<string, number>;
 }) {
+  const isListState = artifactId === THREAD_ARTIFACT_PANEL_LIST;
   const [{ data, fetching, error }, reexecuteQuery] =
     useQuery<PanelArtifactResult>({
       query: ArtifactDetailForRouteQuery,
       variables: { id: artifactId },
       requestPolicy: "cache-and-network",
+      pause: isListState,
     });
-  const artifact = data?.artifact ?? null;
+  const artifact = isListState ? null : (data?.artifact ?? null);
 
   const refetch = useCallback(() => {
     reexecuteQuery({ requestPolicy: "network-only" });
@@ -92,12 +114,26 @@ export function ThreadArtifactPanel({
       aria-label="Artifact panel"
       data-testid="thread-artifact-panel"
     >
-      <header className="flex shrink-0 items-center gap-1 border-b border-border/70 py-1.5 pl-4 pr-2">
+      <header className="flex shrink-0 items-center gap-1 border-b border-border/70 py-1.5 pl-2 pr-2">
+        {!isListState && onBackToList ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+            title="Back to artifact list"
+            aria-label="Back to artifact list"
+            onClick={onBackToList}
+            data-testid="thread-artifact-panel-back"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        ) : null}
         <h2
-          className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+          className="min-w-0 flex-1 truncate pl-2 text-sm font-medium text-foreground"
           data-testid="thread-artifact-panel-title"
         >
-          {artifact?.title ?? "Artifact"}
+          {isListState ? "Artifacts" : (artifact?.title ?? "Artifact")}
         </h2>
         {artifact && isCanvas ? (
           <CanvasHeaderActions
@@ -112,22 +148,24 @@ export function ThreadArtifactPanel({
             onChanged={refetch}
           />
         ) : null}
-        <Button
-          asChild
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <Link
-            to="/artifacts/$id"
-            params={{ id: artifactId }}
-            title="Open full page"
-            aria-label="Open full page"
-            data-testid="thread-artifact-panel-full-page"
+        {!isListState ? (
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
           >
-            <SquareArrowOutUpRight className="size-4" />
-          </Link>
-        </Button>
+            <Link
+              to="/artifacts/$id"
+              params={{ id: artifactId }}
+              title="Open full page"
+              aria-label="Open full page"
+              data-testid="thread-artifact-panel-full-page"
+            >
+              <SquareArrowOutUpRight className="size-4" />
+            </Link>
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -142,7 +180,22 @@ export function ThreadArtifactPanel({
         </Button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {artifact ? (
+        {isListState ? (
+          <div
+            className="grid content-start gap-1 p-3"
+            data-testid="thread-artifact-panel-list"
+          >
+            {listArtifacts.map((card) => (
+              <ArtifactCard
+                key={`panel-list-${card.id}`}
+                artifact={card}
+                onOpen={
+                  onOpenArtifact ? () => onOpenArtifact(card.id) : undefined
+                }
+              />
+            ))}
+          </div>
+        ) : artifact ? (
           <ArtifactBodyView artifact={artifact} />
         ) : fetching ? (
           <div className="flex h-full items-center justify-center p-6">

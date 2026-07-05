@@ -58,6 +58,7 @@ vi.mock("@/components/artifacts/ArtifactBodyView", async (importOriginal) => ({
 }));
 
 import { ThreadArtifactPanel } from "./ThreadArtifactPanel";
+import { THREAD_ARTIFACT_PANEL_LIST } from "./thread-artifact-panel-store";
 
 const canvasArtifact = {
   id: "artifact-1",
@@ -109,6 +110,56 @@ describe("ThreadArtifactPanel", () => {
 
     fireEvent.click(screen.getByTestId("thread-artifact-panel-close"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("list state: compact ArtifactCard list, newest first; picking one loads it here (THINK-168)", () => {
+    mockArtifactQuery(null);
+    const onOpenArtifact = vi.fn();
+    render(
+      <ThreadArtifactPanel
+        artifactId={THREAD_ARTIFACT_PANEL_LIST}
+        listArtifacts={[
+          { id: "artifact-b", title: "Newest artifact", type: "DATA_VIEW" },
+          { id: "artifact-a", title: "Older artifact", type: "DOCUMENT" },
+        ]}
+        onOpenArtifact={onOpenArtifact}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId("thread-artifact-panel-title").textContent).toBe(
+      "Artifacts",
+    );
+    // No full-page link and no back button while listing.
+    expect(screen.queryByTestId("thread-artifact-panel-full-page")).toBeNull();
+    expect(screen.queryByTestId("thread-artifact-panel-back")).toBeNull();
+
+    const cards = screen.getAllByTestId("artifact-card");
+    expect(cards.map((card) => card.textContent)).toEqual([
+      expect.stringContaining("Newest artifact"),
+      expect.stringContaining("Older artifact"),
+    ]);
+    fireEvent.click(cards[1]);
+    expect(onOpenArtifact).toHaveBeenCalledWith("artifact-a");
+  });
+
+  it("shows the back-to-list button only when a list exists", () => {
+    mockArtifactQuery(canvasArtifact);
+    const onBackToList = vi.fn();
+    const { unmount } = render(
+      <ThreadArtifactPanel
+        artifactId="artifact-1"
+        onClose={() => {}}
+        onBackToList={onBackToList}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("thread-artifact-panel-back"));
+    expect(onBackToList).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // Single-artifact threads pass no onBackToList → no button.
+    render(<ThreadArtifactPanel artifactId="artifact-1" onClose={() => {}} />);
+    expect(screen.queryByTestId("thread-artifact-panel-back")).toBeNull();
   });
 
   it("refetches (debounced) when its stable part id bumps on the live stream", () => {

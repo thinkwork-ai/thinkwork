@@ -89,7 +89,11 @@ vi.mock("@/components/artifacts/ThreadArtifactPanel", () => ({
   ),
 }));
 
-import { TaskThreadView, type TaskThread } from "./TaskThreadView";
+import {
+  TaskThreadView,
+  deriveCardRenderedArtifacts,
+  type TaskThread,
+} from "./TaskThreadView";
 import { resetThreadArtifactPanels } from "@/components/artifacts/thread-artifact-panel-store";
 
 afterEach(() => {
@@ -209,5 +213,132 @@ describe("TaskThreadView docked artifact panel (THINK-168)", () => {
     cleanup();
     render(<TaskThreadView thread={bornCanvasThread("thread-1")} />);
     expect(screen.getByTestId("panel-stub")).toBeTruthy();
+  });
+});
+
+describe("deriveCardRenderedArtifacts (header-button resolution, THINK-168)", () => {
+  it("excludes safety-net drafts and resolves checked-out canvases via savedCanvases", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Mixed artifacts",
+      messages: [
+        {
+          id: "message-1",
+          role: "ASSISTANT",
+          content: "",
+          // Checked-out canvas emission — artifact row lives in its HOME
+          // thread; resolves through the saved-canvas map only.
+          parts: [
+            {
+              type: "data-json-render",
+              id: "json-render:checked-out",
+              data: {},
+            },
+          ],
+        },
+        {
+          id: "message-2",
+          role: "ASSISTANT",
+          content: "Doc + table.",
+          durableArtifact: {
+            id: "artifact-doc",
+            title: "Guide",
+            type: "DOCUMENT",
+            metadata: { kind: "document" },
+          },
+        },
+        {
+          id: "message-3",
+          role: "ASSISTANT",
+          content: "Here's the data as a table.",
+          durableArtifact: {
+            // Auto-minted safety-net draft — NEVER a card, NEVER openable
+            // from the header (the wrong-artifact bug).
+            id: "artifact-table",
+            title: "Table",
+            type: "DATA_VIEW",
+            metadata: {
+              kind: "json_render_canvas",
+              stablePartId: "json-render:safety-net:json-render-fnv1a:9",
+            },
+          },
+        },
+      ],
+    };
+
+    const cards = deriveCardRenderedArtifacts(thread, [
+      {
+        artifactId: "artifact-checked-out",
+        title: "CRM Tasks by Status",
+        status: "FINAL",
+        headVersion: 3,
+        stablePartId: "json-render:checked-out",
+      },
+    ]);
+
+    expect(cards.map((card) => card.id)).toEqual([
+      "artifact-checked-out",
+      "artifact-doc",
+    ]);
+    // Newest card-rendered artifact — what a single-artifact thread's header
+    // button would open — is the document, never the "Table" draft.
+    expect(cards.at(-1)?.id).toBe("artifact-doc");
+  });
+
+  it("includes born canvases and generic/app durables, deduped in message order", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Dedupe",
+      messages: [
+        { id: "m0", role: "USER", content: "go" },
+        {
+          id: "m1",
+          role: "ASSISTANT",
+          content: "",
+          parts: [
+            { type: "data-json-render", id: "json-render:born", data: {} },
+          ],
+          durableArtifact: {
+            id: "artifact-born",
+            title: "Born canvas",
+            type: "DATA_VIEW",
+            metadata: {
+              kind: "json_render_canvas",
+              stablePartId: "json-render:born",
+            },
+          },
+        },
+        {
+          id: "m2",
+          role: "ASSISTANT",
+          content: "app",
+          durableArtifact: {
+            id: "artifact-app",
+            title: "Dashboard",
+            type: "DATA_VIEW",
+            metadata: { kind: "research_dashboard" },
+          },
+        },
+        {
+          id: "m3",
+          role: "ASSISTANT",
+          content: "re-emitted",
+          durableArtifact: {
+            id: "artifact-born",
+            title: "Born canvas",
+            type: "DATA_VIEW",
+            metadata: {
+              kind: "json_render_canvas",
+              stablePartId: "json-render:born",
+            },
+          },
+        },
+      ],
+    };
+
+    expect(deriveCardRenderedArtifacts(thread).map((card) => card.id)).toEqual([
+      "artifact-born",
+      "artifact-app",
+    ]);
   });
 });
