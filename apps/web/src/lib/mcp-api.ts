@@ -103,6 +103,21 @@ export function setMcpServerEnabled(
   });
 }
 
+/**
+ * THINK-173 U12: automations referencing a workspace tool (Composer
+ * delete-warning count). Non-blocking advisory — deletion stays legal.
+ */
+export function getToolAutomationRefs(
+  tenantSlug: string,
+  agentId: string,
+  toolSlug: string,
+): Promise<{ count: number; automations: { id: string; name: string }[] }> {
+  return request(
+    `/api/skills/tool-automation-refs?agentId=${encodeURIComponent(agentId)}&toolSlug=${encodeURIComponent(toolSlug)}`,
+    { tenantSlug },
+  );
+}
+
 export function deleteMcpServer(
   tenantSlug: string,
   serverId: string,

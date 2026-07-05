@@ -188,6 +188,11 @@ export interface ComposerWorkspaceEditorProps {
   onCreateAgentProfile?: () => void;
   /** "Delete Agent Profile" on a deletable (non-built-in) profile file. */
   onDeleteAgentProfile?: (slug: string) => void;
+  /**
+   * THINK-173 U12: count automations referencing a workspace tool before
+   * folder deletion (non-blocking advisory). Absent = no warning.
+   */
+  onCountToolAutomationRefs?: (toolSlug: string) => Promise<number | null>;
   /** Slugs whose profiles may be deleted (built-ins are excluded). */
   deletableProfileSlugs?: ReadonlySet<string>;
   /**
@@ -477,6 +482,11 @@ interface NameDialogState {
 interface DeleteConfirmState {
   path: string;
   isFolder: boolean;
+  /**
+   * THINK-173 U12: automations referencing a tools/<slug>/ folder being
+   * deleted. undefined = not applicable, null = still loading.
+   */
+  automationRefs?: number | null;
 }
 
 interface ManifestState {
@@ -515,6 +525,7 @@ export function ComposerWorkspaceEditor({
   onConfigureAgentProfile,
   onCreateAgentProfile,
   onDeleteAgentProfile,
+  onCountToolAutomationRefs,
   deletableProfileSlugs,
   profileScopeName = null,
   initialSelectedPath = null,
@@ -1311,9 +1322,33 @@ export function ComposerWorkspaceEditor({
           {canDelete ? (
             <ContextMenuItem
               variant="destructive"
-              onSelect={() =>
-                setDeleteConfirm({ path: node.path, isFolder: node.isFolder })
-              }
+              onSelect={() => {
+                const toolFolder =
+                  node.isFolder && /^tools\/[^/]+$/.exec(node.path);
+                if (toolFolder && onCountToolAutomationRefs) {
+                  // U12: advisory automation-reference count; deletion
+                  // stays legal regardless of the answer.
+                  setDeleteConfirm({
+                    path: node.path,
+                    isFolder: true,
+                    automationRefs: null,
+                  });
+                  void onCountToolAutomationRefs(
+                    node.path.split("/")[1] ?? "",
+                  ).then((count) =>
+                    setDeleteConfirm((current) =>
+                      current && current.path === node.path
+                        ? { ...current, automationRefs: count }
+                        : current,
+                    ),
+                  );
+                } else {
+                  setDeleteConfirm({
+                    path: node.path,
+                    isFolder: node.isFolder,
+                  });
+                }
+              }}
               data-testid={`menu-delete-${node.path}`}
             >
               <Trash2 className="mr-2 size-4" /> Delete
@@ -1587,6 +1622,18 @@ export function ComposerWorkspaceEditor({
                     deleteConfirm.isFolder ? " and everything inside it" : ""
                   } from its source layer.`
                 : ""}
+              {typeof deleteConfirm?.automationRefs === "number" &&
+              deleteConfirm.automationRefs > 0 ? (
+                <span
+                  className="mt-2 block font-medium text-amber-600 dark:text-amber-500"
+                  data-testid="composer-delete-automation-refs"
+                >
+                  Referenced by {deleteConfirm.automationRefs} automation
+                  {deleteConfirm.automationRefs === 1 ? "" : "s"} — they will
+                  record skipped runs until re-pointed. Deleting is still
+                  allowed.
+                </span>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

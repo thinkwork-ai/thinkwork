@@ -21,7 +21,7 @@
  * write ends on the touched item's FRESH inspector state (R12).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -88,6 +88,7 @@ import {
   desktopToolbarGapClassName,
 } from "@/lib/desktop-chrome";
 import { useTenant } from "@/context/TenantContext";
+import { getToolAutomationRefs } from "@/lib/mcp-api";
 import { AgentConfigSheet } from "@/components/settings/AgentConfigSheet";
 import { useFragment } from "@/gql/fragment-masking";
 import { SettingsAgentExtensions } from "@/components/settings/SettingsAgentExtensions";
@@ -318,7 +319,7 @@ export function SettingsCapabilities({
     target?: { profileId?: string | null; focus?: string | null },
   ) => void;
 } = {}) {
-  const { tenantId } = useTenant();
+  const { tenant, tenantId } = useTenant();
   // No default filters (Agent page merge U12): the empty selection IS the
   // default agent in the default space, and every row state is visible.
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -466,6 +467,27 @@ export function SettingsCapabilities({
     if (!inspection.fetching && manualRefreshing) setManualRefreshing(false);
   }, [inspection.fetching, manualRefreshing]);
   const result = inspection.data?.capabilityInspector;
+
+  // THINK-173 U12: advisory automation-reference count for the Composer
+  // tools/<slug>/ delete warning (non-blocking; null = unknown).
+  const countToolAutomationRefs = useCallback(
+    async (toolSlug: string): Promise<number | null> => {
+      const resolvedAgentId = inspection.data?.capabilityInspector?.agentId;
+      const slug = tenant?.slug;
+      if (!resolvedAgentId || !slug) return null;
+      try {
+        const refs = await getToolAutomationRefs(
+          slug,
+          resolvedAgentId,
+          toolSlug,
+        );
+        return refs.count;
+      } catch {
+        return null;
+      }
+    },
+    [inspection.data?.capabilityInspector?.agentId, tenant?.slug],
+  );
   const predicted = result?.predicted ?? null;
   const items = useMemo(
     () => (predicted?.items ?? []) as InspectorItem[],
@@ -1454,6 +1476,7 @@ export function SettingsCapabilities({
             void approveFolderCapability(klass, slug)
           }
           onDetachCapabilityFolder={requestRevokeFolderCapability}
+          onCountToolAutomationRefs={countToolAutomationRefs}
           initialSelectedPath={initialTreeFile}
           onConfigureAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(

@@ -14,6 +14,7 @@ import {
 import { eq, and, or, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { patchSkillAssignmentState } from "../lib/skills/assignment-state.js";
+import { scheduledJobs } from "@thinkwork/database-pg/schema";
 import { listAgentWorkspaceSkills } from "../lib/skills/workspace-skill-index.js";
 import {
   skillRuns,
@@ -353,6 +354,72 @@ export async function handler(
     );
     if (credMatch && method === "POST") {
       return saveSkillCredentials(credMatch[1], credMatch[2], event);
+    }
+
+    // THINK-173 U12: automation references for a workspace tool — the
+    // Composer delete flow shows a non-blocking "referenced by N
+    // automations" warning before a tools/<slug>/ folder is removed.
+    // GET /api/skills/tool-automation-refs?agentId=..&toolSlug=..
+    if (path === "/api/skills/tool-automation-refs" && method === "GET") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin", "member"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      const agentId = event.queryStringParameters?.agentId ?? "";
+      const toolSlug = event.queryStringParameters?.toolSlug ?? "";
+      if (!agentId || !toolSlug) {
+        return error("agentId and toolSlug are required", 400);
+      }
+      const rows = await db
+        .select({ id: scheduledJobs.id, name: scheduledJobs.name })
+        .from(scheduledJobs)
+        .where(
+          and(
+            eq(scheduledJobs.enabled, true),
+            sql`${scheduledJobs.config} ->> 'agentId' = ${agentId}`,
+            sql`${scheduledJobs.config} ->> 'toolSlug' = ${toolSlug}`,
+          ),
+        );
+      return json({
+        count: rows.length,
+        automations: rows.map((row) => ({ id: row.id, name: row.name })),
+      });
+    }
+
+    // THINK-173 U11: capability-folder backfill — dry-run collision
+    // report, compare-and-write apply, divergence-gated per-agent flag
+    // flip, and (fully-flipped tenants only) the auth_config secret
+    // scrub. Operator-only; the CLI's `thinkwork capabilities backfill`
+    // is the intended caller.
+    // POST /api/skills/capabilities/backfill { apply?, flip?, scrub? }
+    if (path === "/api/skills/capabilities/backfill" && method === "POST") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      const tenantId = await resolveTenantId(tenantSlug);
+      if (!tenantId) return error("tenant not found", 404);
+      let body: { apply?: unknown; flip?: unknown; scrub?: unknown } = {};
+      try {
+        body = JSON.parse(event.body ?? "{}");
+      } catch {
+        return error("invalid JSON body", 400);
+      }
+      const { runCapabilityFolderBackfill } =
+        await import("../lib/capabilities/backfill.js");
+      const report = await runCapabilityFolderBackfill({
+        tenantId,
+        apply: body.apply === true,
+        flip: body.flip === true,
+        scrub: body.scrub === true,
+      });
+      return json(report);
     }
 
     // --- MCP Server routes (tenant-level registry) ---

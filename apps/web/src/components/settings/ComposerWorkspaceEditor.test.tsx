@@ -1281,6 +1281,30 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     expect(revokeMock).toHaveBeenCalledWith("connection", "firecrawl");
   });
 
+  it("U12: deleting a tools/<slug> folder shows the automation-reference warning", async () => {
+    seedCapabilityTree();
+    const countRefs = vi.fn(async () => 2);
+    await renderEditor({
+      canManageSkills: true,
+      toolStateBySlug: new Map<string, SkillNodeState>([
+        ["draft-x", { active: true, reason: null }],
+      ]),
+      onCountToolAutomationRefs: countRefs,
+    });
+    await screen.findByTestId("tree-node-tools/draft-x");
+    fireEvent.click(screen.getByTestId("menu-delete-tools/draft-x"));
+    expect(countRefs).toHaveBeenCalledWith("draft-x");
+    const warning = await screen.findByTestId(
+      "composer-delete-automation-refs",
+    );
+    expect(warning.textContent).toContain("2 automations");
+    expect(warning.textContent).toContain("still allowed");
+    // Non-blocking: the destructive action stays present and clickable.
+    expect(
+      screen.getByTestId("composer-delete-confirm").hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
   it("withholds approve/revoke without write scope", async () => {
     seedCapabilityTree();
     await renderEditor({
