@@ -375,34 +375,55 @@ function renderMeter(data: ChartDirectiveData): string {
 
 function renderFunnel(data: ChartDirectiveData): string {
   const width = 720;
-  const rowHeight = 40;
+  const segmentHeight = 56;
+  const gap = 4;
   const series = data.series;
-  const height = 52 + series.length * rowHeight + 8;
+  const height = 52 + series.length * (segmentHeight + gap) + 8;
   const labelRight = 150;
-  const barLeft = 162;
-  const barMaxWidth = 440;
+  const funnelLeft = 168;
+  const funnelMaxWidth = 420;
+  const center = funnelLeft + funnelMaxWidth / 2;
   const first = Math.max(0, series[0]?.value ?? 0);
   const max = maxOf(series);
   const top = max <= 0 ? 1 : max;
 
-  let rows = "";
+  // True funnel: each stage is a centered TRAPEZOID — its top edge scales
+  // with this stage's value, its bottom edge with the NEXT stage's value, so
+  // the taper is continuous. The final stage narrows to 60% of its own top.
+  // Segments cycle the fixed hue order; stage names sit left of each
+  // segment's middle, value + conversion right of its top edge — direct
+  // labels, no legend (authoring rules).
+  const halfOf = (v: number) =>
+    Math.max(r2(((Math.max(0, v) / top) * funnelMaxWidth) / 2), 12);
+  let segments = "";
   for (const [i, p] of series.entries()) {
-    const y = 52 + i * rowHeight;
-    const barWidth = Math.max(
-      r2((Math.max(0, p.value) / top) * barMaxWidth),
-      3,
-    );
+    const yTop = 52 + i * (segmentHeight + gap);
+    const yBottom = yTop + segmentHeight;
+    const topHalf = halfOf(p.value);
+    const next = series[i + 1];
+    const bottomHalf =
+      next !== undefined ? halfOf(next.value) : Math.max(r2(topHalf * 0.6), 12);
+    const hue = SERIES_HUES[i % SERIES_HUES.length];
+    const points = [
+      `${r2(center - topHalf)},${yTop}`,
+      `${r2(center + topHalf)},${yTop}`,
+      `${r2(center + bottomHalf)},${yBottom}`,
+      `${r2(center - bottomHalf)},${yBottom}`,
+    ].join(" ");
     const pct =
       first > 0 && i > 0
         ? `<tspan font-size="10" font-weight="400" fill="var(--muted)"> · ${Math.round((Math.max(0, p.value) / first) * 100)}%</tspan>`
         : "";
-    rows += `<text x="${labelRight}" y="${y + 20}" font-size="11" fill="var(--muted)" text-anchor="end">${esc(p.label)}</text><rect x="${barLeft}" y="${y + 6}" width="${barWidth}" height="24" rx="5" fill="var(--accent)"/><text x="${r2(barLeft + barWidth + 10)}" y="${y + 23}" font-size="12" font-weight="600" fill="var(--ink)">${fmt(p.value)}${pct}</text>`;
+    segments +=
+      `<polygon points="${points}" fill="${hue}"/>` +
+      `<text x="${labelRight}" y="${r2(yTop + segmentHeight / 2 + 4)}" font-size="11" fill="var(--muted)" text-anchor="end">${esc(p.label)}</text>` +
+      `<text x="${r2(center + topHalf + 12)}" y="${yTop + 14}" font-size="12" font-weight="600" fill="var(--ink)">${fmt(p.value)}${pct}</text>`;
   }
 
   return [
     svgOpen(width, height, `Funnel chart: ${data.title}`),
     header(data.title, data.qualifier),
-    rows,
+    segments,
     "</svg>",
   ].join("");
 }
