@@ -17,6 +17,8 @@ import {
   setupEnvironmentFromUrl,
 } from "@/lib/environments/setup-flow";
 import { canLeaveEnvironmentSetup } from "@/lib/environments/routing";
+import { parseEnvironmentQrPayload } from "@/lib/environments/qr-scan";
+import { EnvironmentQrScanner } from "@/components/environments/EnvironmentQrScanner";
 import { useAuth } from "@/lib/auth-context";
 
 export default function EnvironmentSetupScreen() {
@@ -33,9 +35,42 @@ export default function EnvironmentSetupScreen() {
   const [url, setUrl] = useState("");
   const [profileLink, setProfileLink] = useState("");
   const [showPasteLink, setShowPasteLink] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [pasting, setPasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleScanned = async (data: string) => {
+    setScannerOpen(false);
+    const payload = parseEnvironmentQrPayload(data);
+    if (payload.kind === "invalid") {
+      setError("That QR code isn't a ThinkWork setup code.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (payload.kind === "profile-link") {
+        await setupEnvironmentFromDeploymentProfileLink(payload.link);
+      } else {
+        const result = await setupEnvironmentFromUrl(payload.url);
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
+      }
+      const restored = await rescopeAuthForEnvironmentChange();
+      router.replace(restored ? "/" : "/sign-in");
+    } catch (scanError) {
+      setError(
+        scanError instanceof Error
+          ? scanError.message
+          : "Environment setup failed.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!url.trim()) {
@@ -144,7 +179,7 @@ export default function EnvironmentSetupScreen() {
 
             <Pressable
               className="flex-row items-center justify-center gap-2 py-2"
-              onPress={() => setShowPasteLink((value) => !value)}
+              onPress={() => setScannerOpen(true)}
             >
               <ScanLine size={18} color="#38bdf8" />
               <Text className="text-sm font-medium text-sky-500">
@@ -189,6 +224,16 @@ export default function EnvironmentSetupScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <EnvironmentQrScanner
+        visible={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanned={(data) => void handleScanned(data)}
+        onPasteInstead={() => {
+          setScannerOpen(false);
+          setShowPasteLink(true);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
