@@ -29,6 +29,7 @@ describe("CognitoSecureStorage", () => {
   });
 
   it("writes Cognito token keys with AFTER_FIRST_UNLOCK accessibility", async () => {
+    vi.useFakeTimers();
     const { CognitoSecureStorage } = await import("./cognito-storage");
 
     CognitoSecureStorage.setItem(
@@ -41,9 +42,14 @@ describe("CognitoSecureStorage", () => {
       "id-token",
       { keychainAccessible: "AFTER_FIRST_UNLOCK" },
     );
+    vi.advanceTimersByTime(120);
   });
 
   it("encodes SecureStore-illegal characters in keys (email usernames)", async () => {
+    // Fake timers so the debounced manifest write fires inside the test
+    // instead of leaking past teardown (where the reset mock returns
+    // undefined and its .catch crashes the run).
+    vi.useFakeTimers();
     const { CognitoSecureStorage, secureStoreKeyFor } = await import(
       "./cognito-storage"
     );
@@ -63,6 +69,7 @@ describe("CognitoSecureStorage", () => {
     expect(mockDeleteItemAsync).toHaveBeenCalledWith(
       secureStoreKeyFor(rawKey),
     );
+    vi.advanceTimersByTime(120);
   });
 
   it("leaves SecureStore-safe keys unchanged for existing sessions", async () => {
