@@ -1013,11 +1013,13 @@ export type CanvasRefreshBindingResult = {
   bindingId: Scalars['ID']['output'];
   elementId: Scalars['String']['output'];
   outcome: CanvasRefreshOutcome;
+  ownerUserId?: Maybe<Scalars['ID']['output']>;
   partId: Scalars['String']['output'];
   quality: ArtifactBindingQuality;
   reason?: Maybe<Scalars['String']['output']>;
   serverName?: Maybe<Scalars['String']['output']>;
   toolName?: Maybe<Scalars['String']['output']>;
+  viewerIsOwner?: Maybe<Scalars['Boolean']['output']>;
 };
 
 export enum CanvasRefreshOutcome {

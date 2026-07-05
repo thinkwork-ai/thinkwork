@@ -18,8 +18,9 @@
 
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, artifacts } from "../../utils.js";
+import { db, eq, artifacts, artifactDataBindings } from "../../utils.js";
 import { requireActingTenantMember } from "../core/authz.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 
 interface RefreshCanvasDataArgs {
@@ -59,6 +60,8 @@ interface RefreshResult {
     reason: string | null;
     serverName: string | null;
     toolName: string | null;
+    ownerUserId: string | null;
+    viewerIsOwner: boolean;
   }>;
 }
 
@@ -144,11 +147,51 @@ export const refreshCanvasData = async (
     };
   }
 
+  // Owner enrichment (THINK-167): a NEEDS_USER outcome is only a dead end for
+  // someone who ISN'T the credential owner. Expose each binding's owner plus a
+  // caller-vs-owner verdict so the client can self-dispatch an agent-mediated
+  // refresh when the person clicking Refresh is the owner. Best-effort: an
+  // unresolvable caller (service principals, legacy rows) just reads as
+  // viewerIsOwner=false — the old toast affordance remains.
+  const ownerByBindingId = new Map<string, string | null>();
+  if ((parsed.bindings ?? []).length > 0) {
+    const ownerRows = await db
+      .select({
+        id: artifactDataBindings.id,
+        owner_user_id: artifactDataBindings.owner_user_id,
+      })
+      .from(artifactDataBindings)
+      .where(eq(artifactDataBindings.artifact_id, artifactId));
+    for (const r of ownerRows) ownerByBindingId.set(r.id, r.owner_user_id);
+  }
+  const callerUserId = await resolveCallerUserId(ctx);
+
   return {
     artifactId,
     dispatched: true,
     errorMessage: null,
-    bindings: (parsed.bindings ?? []).map((b) => ({
+    bindings: enrichRefreshBindings(
+      parsed.bindings ?? [],
+      ownerByBindingId,
+      callerUserId,
+    ),
+  };
+};
+
+/**
+ * Map the Lambda's per-binding results to the GraphQL shape with ownership
+ * enrichment (THINK-167). Exported for tests. viewerIsOwner is strict: it is
+ * true only when BOTH the binding owner and the caller resolved and match —
+ * an unknown caller or ownerless (tenant-scoped) binding is never "owned".
+ */
+export function enrichRefreshBindings(
+  bindings: readonly LambdaBindingResult[],
+  ownerByBindingId: ReadonlyMap<string, string | null>,
+  callerUserId: string | null,
+): RefreshResult["bindings"] {
+  return bindings.map((b) => {
+    const ownerUserId = ownerByBindingId.get(b.bindingId) ?? null;
+    return {
       bindingId: b.bindingId,
       partId: b.partId,
       elementId: b.elementId,
@@ -158,9 +201,14 @@ export const refreshCanvasData = async (
       reason: b.reason,
       serverName: b.serverName ?? null,
       toolName: b.toolName ?? null,
-    })),
-  };
-};
+      ownerUserId,
+      viewerIsOwner:
+        ownerUserId !== null &&
+        callerUserId !== null &&
+        ownerUserId === callerUserId,
+    };
+  });
+}
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {

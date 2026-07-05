@@ -517,6 +517,7 @@ function DataViewArtifactContent({
               id: artifact.id,
               title: artifact.title,
               status: artifact.status,
+              threadId: artifact.threadId ?? null,
             }}
             hasBindings={hasBindings}
             onChanged={onChanged}
@@ -532,6 +533,7 @@ function DataViewArtifactContent({
       artifact.id,
       artifact.status,
       artifact.title,
+      artifact.threadId,
       hasBindings,
       isCanvas,
       onChanged,

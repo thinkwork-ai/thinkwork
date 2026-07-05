@@ -11,6 +11,8 @@ export interface GeneratedArtifact {
   title: string;
   type?: string | null;
   summary?: string | null;
+  status?: string | null;
+  headVersion?: number | null;
   metadata?: Record<string, unknown> | null;
 }
 

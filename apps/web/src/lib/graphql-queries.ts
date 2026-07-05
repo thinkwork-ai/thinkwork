@@ -1627,6 +1627,7 @@ export const ComputerThreadQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt
@@ -1872,6 +1873,7 @@ export const SpaceThreadCollaborationQuery = gql`
               title
               type
               status
+              headVersion
               summary
               metadata
               createdAt
@@ -2445,6 +2447,25 @@ export const DeleteThreadMutation = gql`
   }
 `;
 
+// THINK-166 U3: saved canvases visible to a thread, keyed by stablePartId —
+// resolves checked-out canvas emissions (THINK-145 R13; the artifact row
+// lives in the HOME thread) to their original artifact so the transcript can
+// collapse the inline emission to a compact ArtifactCard.
+export const ThreadCanvasContextQuery = gql`
+  query ThreadCanvasContextForTranscript($threadId: ID!) {
+    threadCanvasContext(threadId: $threadId) {
+      threadId
+      savedCanvases {
+        artifactId
+        title
+        status
+        headVersion
+        stablePartId
+      }
+    }
+  }
+`;
+
 export const ThreadArtifactsQuery = gql`
   query ThreadArtifacts($tenantId: ID!, $threadId: ID!) {
     artifacts(tenantId: $tenantId, threadId: $threadId) {
@@ -2559,6 +2580,8 @@ export const PinArtifactMutation = gql`
 `;
 
 // Living Artifacts (THINK-145 U10, R6): headless data-refresh trigger.
+// ownerUserId/viewerIsOwner (THINK-167) let the client self-dispatch an
+// agent-mediated refresh when the viewer owns a NEEDS_USER binding.
 export const RefreshCanvasDataMutation = gql`
   mutation RefreshCanvasData($artifactId: ID!, $partId: String) {
     refreshCanvasData(artifactId: $artifactId, partId: $partId) {
@@ -2572,6 +2595,24 @@ export const RefreshCanvasDataMutation = gql`
         outcome
         quality
         reason
+        ownerUserId
+        viewerIsOwner
+      }
+    }
+  }
+`;
+
+// THINK-167: freshness poll while an owner-dispatched agent-mediated refresh
+// runs in the background — the view flips from "Refreshing via your
+// connection…" to done when the stale bindings read GOOD again.
+export const CanvasBindingFreshnessQuery = gql`
+  query CanvasBindingFreshness($id: ID!) {
+    artifact(id: $id) {
+      id
+      bindings {
+        id
+        quality
+        lastFetchedAt
       }
     }
   }
