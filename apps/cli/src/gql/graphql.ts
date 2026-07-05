@@ -1222,12 +1222,16 @@ export type ComplianceEventPageInfo = {
 };
 
 export enum ComplianceEventType {
+  AgentConnectionDetached = "AGENT_CONNECTION_DETACHED",
+  AgentConnectionGranted = "AGENT_CONNECTION_GRANTED",
   AgentCreated = "AGENT_CREATED",
   AgentDeleted = "AGENT_DELETED",
   AgentExtensionDetached = "AGENT_EXTENSION_DETACHED",
   AgentExtensionGranted = "AGENT_EXTENSION_GRANTED",
   AgentMigrated = "AGENT_MIGRATED",
   AgentSkillsChanged = "AGENT_SKILLS_CHANGED",
+  AgentToolDetached = "AGENT_TOOL_DETACHED",
+  AgentToolGranted = "AGENT_TOOL_GRANTED",
   ApprovalRecorded = "APPROVAL_RECORDED",
   AttachmentReceived = "ATTACHMENT_RECEIVED",
   AuthSigninFailure = "AUTH_SIGNIN_FAILURE",
