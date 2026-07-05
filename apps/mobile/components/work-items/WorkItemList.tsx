@@ -466,7 +466,10 @@ export function WorkItemList({
             />
           )}
           ItemSeparatorComponent={() => (
-            <View className="h-px bg-neutral-200 dark:bg-neutral-800" />
+            <View
+              className="h-px bg-neutral-200 dark:bg-neutral-800"
+              style={{ marginLeft: 68 }}
+            />
           )}
           refreshControl={
             <RefreshControl

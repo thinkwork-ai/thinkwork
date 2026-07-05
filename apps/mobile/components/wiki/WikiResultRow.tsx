@@ -67,7 +67,7 @@ export function WikiResultRow({
   return (
     <Pressable
       onPress={onPress ? () => onPress(hit) : undefined}
-      className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
+      className="flex-row items-start py-2 pl-4 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
       style={{ backgroundColor: colors.background }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", width: 52 }}>
