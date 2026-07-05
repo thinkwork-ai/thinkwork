@@ -14,12 +14,32 @@ state; workers get their own worktrees.
 One invocation of this skill is one heartbeat. Eric runs the loop with:
 
 ```text
+claude --model sonnet     # dispatcher session runs on Sonnet — routing is mechanical
 /loop 4m linear-dispatch
 ```
 
 from a dedicated Claude Code session at the repo root, with the Mac kept awake
 (`caffeinate -dims` in a spare terminal). The `/loop` recurring task expires
 after 7 days and must be restarted.
+
+## Model Policy
+
+The dispatcher runs on Sonnet. Workers get an explicit `--model` per phase —
+never inherit the session default:
+
+| Phase                              | `--model` | Notes                                                               |
+| ---------------------------------- | --------- | ------------------------------------------------------------------- |
+| Brainstorm, Plan, Implement/Repair | `fable`   | Architect-as-orchestrator: delegate units to cheaper lanes (below). |
+| Verify (dogfood), Debug            | `opus`    | Judgment-heavy; browser + evidence work.                            |
+| Compound                           | `sonnet`  | Mechanical distillation.                                            |
+
+Fable workers must act as architects, not typists: load the fable-advisor
+orchestration doctrine and delegate mechanical implementation to subagent
+lanes — `fable-advisor:codex-implementer` (GPT-5.5) as the default
+implementation lane, `fable-advisor:implementer` with `model: "opus"` for
+subtle/high-stakes units, Sonnet implementer last. The Fable session writes
+specs, reviews diffs, and owns verification evidence; it consults
+`fable-advisor:fable-advisor` at commitment boundaries.
 
 ## Required References
 
@@ -90,10 +110,13 @@ When a route requires a worker:
      -b auto/<issue-slug>-<phase> origin/main
    ```
 
-4. Launch the worker in the background and capture the pid:
+4. Launch the worker in the background and capture the pid, passing the
+   phase's model from the Model Policy table (never rely on the session
+   default):
 
    ```bash
    cd <worktree> && nohup claude -p "$(cat <prompt-file>)" \
+     --model <phase-model> \
      --dangerously-skip-permissions \
      > ~/.thinkwork-factory/logs/<ISSUE_ID>-<phase>-<ts>.log 2>&1 & echo $!
    ```

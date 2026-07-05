@@ -19,6 +19,23 @@ Lane notes:
   instruction — the Goal paragraph stays in the prompt as the worker's goal
   statement.
 
+Model policy (Claude lane): the dispatcher runs on Sonnet; every worker launch
+passes an explicit `--model` — brainstorm/plan/implement/repair on `fable`,
+verify/debug on `opus`, compound on `sonnet`.
+
+Orchestration doctrine (Fable workers — brainstorm, plan, implement): you are
+the architect, not the typist. Load the fable-advisor orchestration skill and
+delegate mechanical work to subagent lanes: `fable-advisor:codex-implementer`
+(GPT-5.5) is the default implementation lane, `fable-advisor:implementer` with
+`model: "opus"` for subtle or high-stakes units, Sonnet implementer last. The
+Fable worker writes the spec (objective, files, interfaces, constraints,
+verification command), reviews the returned diffs, runs verification itself,
+and stays the single writer of Linear state. Consult
+`fable-advisor:fable-advisor` at commitment boundaries (architecture, schema,
+API shape) and when the same problem resists two attempts. Implementation
+subagents inherit none of the Linear duties — the worker owns the ledger,
+Progress document, handoffs, and merges.
+
 Question protocol (all phases): when a material question blocks progress, post
 one comment @mentioning eric1 with numbered questions and a recommended answer
 for each, add `Needs User`, record the questions in the Progress document, and
@@ -193,6 +210,13 @@ with Linear status, open PRs, worker handoffs, and local worktrees. Use the
 plan-owned verification contract. Start from fresh origin/main in this
 isolated worktree. Implement the active issue or child/unit end to end with no
 preference questions.
+
+[Claude lane] You run on Fable as the architect: follow the orchestration
+doctrine in this file's lane notes — write a complete spec per unit and
+delegate the mechanical implementation to fable-advisor:codex-implementer
+(default) or fable-advisor:implementer (opus for subtle/high-stakes units),
+review the returned diffs, and run all verification yourself. Do not hand
+subagents any Linear duties.
 
 If Verification Failed is present, this is a repair pass: start from the
 failed verification evidence in the newest verification verdict and dogfood
