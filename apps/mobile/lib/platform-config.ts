@@ -6,6 +6,12 @@ import {
   subscribeDeploymentProfile,
   type MobileDeploymentProfileSummary,
 } from "./deployment-profile";
+import {
+  getActiveEnvironmentEntry,
+  hydrateEnvironmentStore,
+  subscribeEnvironmentStore,
+} from "./environments/store";
+import type { EnvironmentRuntimeConfig } from "./environments/runtime-config-fetch";
 
 export interface MobilePlatformConfig {
   stage: string;
@@ -28,6 +34,7 @@ type PlatformConfigListener = (config: MobilePlatformConfig) => void;
 const listeners = new Set<PlatformConfigListener>();
 
 export async function hydratePlatformConfig(): Promise<MobilePlatformConfig> {
+  await hydrateEnvironmentStore();
   await hydrateDeploymentProfile();
   const config = getPlatformConfig();
   notify(config);
@@ -35,22 +42,37 @@ export async function hydratePlatformConfig(): Promise<MobilePlatformConfig> {
 }
 
 export function getPlatformConfig(): MobilePlatformConfig {
+  const environmentEntry = getActiveEnvironmentEntry();
+  if (environmentEntry) {
+    const config = runtimePlatformConfig(
+      environmentEntry.config,
+      [],
+      {
+        source: "environment",
+        deploymentId: environmentEntry.config.deploymentId || null,
+        displayName: environmentEntry.displayName,
+        stage: environmentEntry.stage || environmentEntry.config.stage || "dev",
+        region: environmentEntry.region || environmentEntry.config.region || null,
+        profileSha256: null,
+        trustStatus: "unsigned",
+        trustLabel: "Environment config",
+      },
+    );
+    return {
+      ...config,
+      ...validationFor(config),
+    };
+  }
+
   const profileSnapshot = getDeploymentProfileSnapshot();
   if (profileSnapshot.profile) {
     const runtime = runtimeConfigFromProfile(profileSnapshot.profile);
-    const config = {
-      stage: runtime.stage,
-      apiUrl: runtime.apiUrl,
-      graphqlHttpUrl: runtime.graphqlHttpUrl,
-      graphqlUrl: runtime.graphqlUrl,
-      graphqlWsUrl: runtime.graphqlWsUrl,
-      graphqlApiKey: env("EXPO_PUBLIC_GRAPHQL_API_KEY"),
-      cognitoUserPoolId: runtime.cognitoUserPoolId,
-      cognitoClientId: runtime.cognitoClientId,
-      cognitoDomain: runtime.cognitoDomain,
-      issues: profileSnapshot.issues,
-      deployment: profileSnapshot.summary!,
-    };
+    const config = runtimePlatformConfig(
+      runtime,
+      profileSnapshot.issues,
+      profileSnapshot.summary!,
+      env("EXPO_PUBLIC_GRAPHQL_API_KEY"),
+    );
     return {
       ...config,
       ...validationFor(config),
@@ -66,12 +88,17 @@ export function getPlatformConfig(): MobilePlatformConfig {
 
 export function subscribePlatformConfig(listener: PlatformConfigListener) {
   listeners.add(listener);
+  const unsubscribeEnvironmentStore = subscribeEnvironmentStore(() => {
+    const config = getPlatformConfig();
+    notify(config);
+  });
   const unsubscribeProfile = subscribeDeploymentProfile(() => {
     const config = getPlatformConfig();
     notify(config);
   });
   return () => {
     listeners.delete(listener);
+    unsubscribeEnvironmentStore();
     unsubscribeProfile();
   };
 }
@@ -116,6 +143,27 @@ function envPlatformConfig(
       trustStatus: "unsigned",
       trustLabel: "Build-time fallback",
     },
+  };
+}
+
+function runtimePlatformConfig(
+  runtime: EnvironmentRuntimeConfig,
+  issues: DeploymentProfileValidationIssue[],
+  deployment: MobileDeploymentProfileSummary,
+  graphqlApiKeyFallback = "",
+): Omit<MobilePlatformConfig, "configured" | "missing"> {
+  return {
+    stage: runtime.stage,
+    apiUrl: runtime.apiUrl,
+    graphqlHttpUrl: runtime.graphqlHttpUrl,
+    graphqlUrl: runtime.graphqlUrl,
+    graphqlWsUrl: runtime.graphqlWsUrl,
+    graphqlApiKey: runtime.graphqlApiKey?.trim() || graphqlApiKeyFallback,
+    cognitoUserPoolId: runtime.cognitoUserPoolId,
+    cognitoClientId: runtime.cognitoClientId,
+    cognitoDomain: normalizedCognitoDomain(runtime.cognitoDomain),
+    issues,
+    deployment,
   };
 }
 

@@ -19,7 +19,7 @@ export interface MobileDeploymentProfileStorage {
 }
 
 export interface MobileDeploymentProfileSummary {
-  source: "profile" | "env";
+  source: "environment" | "profile" | "env";
   deploymentId: string | null;
   displayName: string;
   stage: string;
