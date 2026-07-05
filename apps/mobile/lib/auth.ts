@@ -514,6 +514,19 @@ export async function refreshOAuthTokens(): Promise<string | null> {
   return _oauthRefreshInFlight;
 }
 
+/**
+ * Re-point the auth engine at the (new) active environment without touching
+ * persisted sessions: drop pool caches and re-run SecureStore hydration for
+ * the active environment's clientId. Environment switches keep each
+ * environment's stored session intact — this is rescoping, not sign-out.
+ */
+export function resetAuthEngineForEnvironmentChange(): void {
+  _userPool = null;
+  _userPoolKey = null;
+  _oauthRefreshInFlight = null;
+  resetStorageHydrationForDeploymentChange();
+}
+
 export function clearAuthStorageForDeploymentChange(): void {
   signOut();
   _userPool = null;

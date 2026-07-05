@@ -6576,6 +6576,7 @@ export type Query = {
   spaces: Array<Space>;
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
+  tenantAgentSummary: TenantAgentSummary;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantMembers: Array<TenantMember>;
@@ -7497,6 +7498,11 @@ export type QueryTenantArgs = {
 
 
 export type QueryTenantAgentArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantAgentSummaryArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -9292,6 +9298,25 @@ export type Tenant = {
   settings?: Maybe<TenantSettings>;
   slug: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+/**
+ * Member-safe view of the tenant's platform agent: display fields only, no
+ * configuration (system prompt, adapter/runtime config, budgets). End-user
+ * surfaces (mobile home) read this; the full Agent stays admin-gated via
+ * tenantAgent.
+ */
+export type TenantAgentSummary = {
+  __typename?: 'TenantAgentSummary';
+  avatarUrl?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  role?: Maybe<Scalars['String']['output']>;
+  runtime: AgentRuntime;
+  slug?: Maybe<Scalars['String']['output']>;
+  status: AgentStatus;
+  tenantId: Scalars['ID']['output'];
+  type: AgentType;
 };
 
 /**

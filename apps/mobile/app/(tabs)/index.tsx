@@ -952,7 +952,7 @@ export default function ThreadsScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   const computerDisplayName =
-    selectedComputer?.name || (computersFetching ? "" : "Computer");
+    selectedComputer?.name || (computersFetching ? "" : "Agent");
   const noAssignedComputer = !computersFetching && computers.length === 0;
 
   return (
@@ -1136,7 +1136,7 @@ export default function ThreadsScreen() {
                     }}
                     numberOfLines={1}
                   >
-                    {item.name || item.slug || "Computer"}
+                    {item.name || item.slug || "Agent"}
                   </Text>
                 </Pressable>
               );
@@ -1230,7 +1230,7 @@ export default function ThreadsScreen() {
                           <ListTodo size={32} color={colors.mutedForeground} />
                           <Muted>
                             {noAssignedComputer
-                              ? "Ask an operator to assign a Computer"
+                              ? "Your agent isn't set up yet"
                               : "No threads found"}
                           </Muted>
                         </View>
@@ -1252,7 +1252,7 @@ export default function ThreadsScreen() {
                     onSubmit={() => handleCreateThread()}
                     placeholder={
                       noAssignedComputer
-                        ? "Ask an operator to assign a Computer"
+                        ? "Your agent isn't set up yet"
                         : "Start a new thread..."
                     }
                     disabled={noAssignedComputer}

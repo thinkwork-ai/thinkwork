@@ -27,6 +27,22 @@ export const AgentsQuery = gql`
   }
 `;
 
+export const TenantAgentSummaryQuery = gql`
+  query TenantAgentSummary($tenantId: ID!) {
+    agent: tenantAgentSummary(tenantId: $tenantId) {
+      id
+      tenantId
+      name
+      slug
+      role
+      type
+      status
+      runtime
+      avatarUrl
+    }
+  }
+`;
+
 export const ThreadsQuery = gql`
   query Threads(
     $tenantId: ID!
