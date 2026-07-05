@@ -160,9 +160,23 @@ export function bornCanvasStablePartId(artifact: {
  * transcript furniture — they keep rendering inline and never collapse to an
  * artifact card, even though the born-as-artifact upsert mints a draft row
  * for them (titled by their generic fallback, e.g. "Table").
+ *
+ * Exception: once a safety-net-born canvas is deliberately SAVED (status is
+ * no longer a draft — e.g. the user asked the agent to save it), it is a real
+ * artifact and MUST surface a card / be openable from the header panel button.
+ * Gate safety-net exclusions with {@link isSavedCanvasStatus} accordingly.
  */
 export const SAFETY_NET_PART_ID_PREFIX = "json-render:safety-net:";
 
 export function isSafetyNetPartId(partId: string | null | undefined): boolean {
   return Boolean(partId?.startsWith(SAFETY_NET_PART_ID_PREFIX));
+}
+
+/**
+ * True when a canvas status marks a deliberately saved artifact (anything but
+ * the auto-minted `draft`). Status is an open string — compare loosely.
+ */
+export function isSavedCanvasStatus(status?: string | null): boolean {
+  const trimmed = status?.trim().toLowerCase();
+  return Boolean(trimmed) && trimmed !== "draft";
 }
