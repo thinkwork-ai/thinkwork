@@ -43,6 +43,7 @@ import { DEFAULTS_VERSION, loadDefaults } from "@thinkwork/workspace-defaults";
 import { ensureCustomerOnboardingSourceFiles } from "../lib/spaces/customer-onboarding-source-files.js";
 import { ensureSpaceMdSourceFile } from "../lib/spaces/space-md-source-file.js";
 import { ensureDefaultsExist } from "../lib/workspace-copy.js";
+import { seedDefaultCatalogSkills } from "../lib/skill-trust/seed-default-skills.js";
 import { reseedTenantGovernanceDefaults } from "../lib/workspace-defaults-reseed.js";
 import { regenerateAgentsMdDerivedSections } from "../lib/workspace-map-generator.js";
 import { regenerateManifest } from "../lib/workspace-manifest.js";
@@ -77,8 +78,26 @@ type SeedSummary = {
   reseedAgentsChecked: number;
   reseedAgentsRewritten: number;
   reseedFilesRewritten: number;
+  defaultSkillsPublished: number;
+  defaultSkillsInstalled: number;
   results: PerTenantResult[];
 };
+
+/**
+ * Resolve the SkillSpector runner Lambda name from STAGE when it isn't already
+ * set. `runSkillSpectorForFiles` only auto-derives it inside a Lambda
+ * (AWS_LAMBDA_FUNCTION_NAME set); this handler runs via `npx tsx` in CI, so
+ * without this the scanner reports `not_configured` and every default-skill
+ * trust gate would (correctly) fail the deploy. Setting it lets the seeder
+ * invoke `thinkwork-<stage>-skill-trust-runner`.
+ */
+function ensureSkillTrustRunnerConfigured(): void {
+  if (process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME?.trim()) return;
+  const stage = process.env.STAGE?.trim();
+  if (stage) {
+    process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME = `thinkwork-${stage}-skill-trust-runner`;
+  }
+}
 
 function workspaceBucket(): string {
   const bucket = getConfig("WORKSPACE_BUCKET") || "";
@@ -321,6 +340,8 @@ export async function handler(): Promise<SeedSummary> {
     throw new Error("WORKSPACE_BUCKET environment variable is required");
   }
 
+  ensureSkillTrustRunnerConfigured();
+
   console.log(
     `[seed-defaults] Starting; target DEFAULTS_VERSION=${DEFAULTS_VERSION}`,
   );
@@ -344,6 +365,8 @@ export async function handler(): Promise<SeedSummary> {
   let reseedAgentsChecked = 0;
   let reseedAgentsRewritten = 0;
   let reseedFilesRewritten = 0;
+  let defaultSkillsPublished = 0;
+  let defaultSkillsInstalled = 0;
 
   for (const row of rows) {
     const tenantSlug = row.slug!;
@@ -392,6 +415,21 @@ export async function handler(): Promise<SeedSummary> {
       console.log(
         `[seed-defaults] ${tenantSlug}: governance reseed checked ${reseed.agentsChecked} agent(s), rewrote ${reseed.filesRewritten} file(s) across ${reseed.agentsRewritten} agent(s)`,
       );
+      // THINK-160: publish + trust default skills into the tenant catalog and
+      // install the document/artifact skill on the platform agent. Throws (and
+      // is counted as a per-tenant error → non-zero exit) if any skill fails
+      // the trust gate, so an untrusted default skill can never ship silently.
+      const skillSeed = await seedDefaultCatalogSkills({
+        s3,
+        bucket: workspaceBucket(),
+        tenantId: row.id,
+        tenantSlug,
+      });
+      defaultSkillsPublished += skillSeed.published;
+      defaultSkillsInstalled += skillSeed.installed;
+      console.log(
+        `[seed-defaults] ${tenantSlug}: default skills — ${skillSeed.published} published, ${skillSeed.alreadyCurrent} already current, ${skillSeed.installed} installed on platform agent`,
+      );
     } catch (err) {
       errors++;
       const message = err instanceof Error ? err.message : String(err);
@@ -419,11 +457,13 @@ export async function handler(): Promise<SeedSummary> {
     reseedAgentsChecked,
     reseedAgentsRewritten,
     reseedFilesRewritten,
+    defaultSkillsPublished,
+    defaultSkillsInstalled,
     results,
   };
 
   console.log(
-    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${spacesCheckedForSpaceMd} Space(s) checked for SPACE.md, ${spaceMdFilesWritten} SPACE.md file(s) written, ${reseedFilesRewritten} governance file(s) reseeded across ${reseedAgentsRewritten}/${reseedAgentsChecked} agent(s), ${errors} error(s)`,
+    `[seed-defaults] Done: ${seeded} seeded, ${alreadyCurrent} already current, ${defaultTemplatesPatched} default template(s) patched, ${customerOnboardingSpacesChecked} customer onboarding Space(s) checked, ${customerOnboardingSourceFilesWritten} customer onboarding source file(s) written, ${spacesCheckedForSpaceMd} Space(s) checked for SPACE.md, ${spaceMdFilesWritten} SPACE.md file(s) written, ${reseedFilesRewritten} governance file(s) reseeded across ${reseedAgentsRewritten}/${reseedAgentsChecked} agent(s), ${defaultSkillsPublished} default skill(s) published + ${defaultSkillsInstalled} installed, ${errors} error(s)`,
   );
 
   return summary;

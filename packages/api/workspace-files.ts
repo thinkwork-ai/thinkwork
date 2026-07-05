@@ -146,6 +146,7 @@ import {
 } from "./src/lib/skill-trust/signing.js";
 import { runSkillSpectorForFiles } from "./src/lib/skill-trust/skillspector.js";
 import { SKILL_TRUST_PIPELINE_VERSION } from "./src/lib/skill-trust/runtime-gate.js";
+import { persistCatalogSkillTrustReport } from "./src/lib/skill-trust/persist-catalog-trust.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
   parseCatalogSkillArchive,
@@ -2368,35 +2369,10 @@ async function persistSkillTrustReport(input: {
   catalogContentSha: string;
   signedByUserId: string | null;
 }) {
-  const signatureVerified = input.report.evidence.signature === "verified";
-  await db
-    .update(skillCatalog)
-    .set({
-      trust_report: input.report,
-      trust_report_content_sha: input.catalogContentSha,
-      trust_report_pipeline_version: SKILL_TRUST_PIPELINE_VERSION,
-      trust_report_updated_at: sql`now()`,
-      signature_status: input.report.evidence.signature,
-      signature_payload: {
-        artifactPath: input.report.artifactPaths.signature ?? null,
-        signedPayloadHash: input.report.signedPayloadHash ?? null,
-        status: input.report.evidence.signature,
-      },
-      signed_content_sha: signatureVerified ? input.catalogContentSha : null,
-      signed_payload_hash: signatureVerified
-        ? (input.report.signedPayloadHash ?? null)
-        : null,
-      signed_at: signatureVerified ? sql`now()` : null,
-      signed_by_user_id:
-        signatureVerified && input.signedByUserId ? input.signedByUserId : null,
-      updated_at: sql`now()`,
-    })
-    .where(
-      and(
-        eq(skillCatalog.tenant_id, input.tenantId),
-        eq(skillCatalog.slug, input.slug),
-      ),
-    );
+  // Single write shape lives in the shared lib so the deploy-time default-skill
+  // seeder and these interactive actions never drift apart. Pass this module's
+  // db so test mocks of ../graphql/utils.js still intercept the write.
+  await persistCatalogSkillTrustReport({ ...input, db });
 }
 
 async function persistSkillDraftTrustReport(input: {
