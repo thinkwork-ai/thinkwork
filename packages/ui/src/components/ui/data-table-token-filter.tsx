@@ -316,6 +316,96 @@ export function DataTableTokenFilter<TData extends RowData>({
   );
 }
 
+/**
+ * Pinned single-select token (static scope bars, THINK-173): identical
+ * chrome to the removable FilterToken minus removal — no \u2715, the
+ * operator is fixed to "is" — whose label and value segments open the
+ * standard FilterValueEditor popover (search input + option rows).
+ */
+export function StaticTokenFilter({
+  column,
+  selected,
+  onSelect,
+  "data-testid": testId,
+}: {
+  column: DataTableTokenFilterColumn;
+  /** The selected option value — static tokens are always populated. */
+  selected: string;
+  onSelect: (value: string) => void;
+  "data-testid"?: string;
+}) {
+  const [valueOpen, setValueOpen] = React.useState(false);
+  const value: DataTableTokenFilterValue = { operator: "is", value: selected };
+  const label = getValueLabel(column, selected);
+  const valueIcons = getSelectedOptionIcons(column, selected);
+
+  return (
+    <div
+      aria-label={`${column.label} filter`}
+      data-token-filter-static
+      data-testid={testId}
+      className="flex h-8 max-w-full items-stretch overflow-hidden rounded-full border bg-background shadow-sm"
+    >
+      <Popover open={valueOpen} onOpenChange={setValueOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            data-token-filter-subject
+            className="flex min-w-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            aria-label={`Edit ${column.label} filter`}
+          >
+            {column.icon ? (
+              <span className="text-muted-foreground">{column.icon}</span>
+            ) : null}
+            <span className="truncate">{column.label}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 p-2">
+          <FilterValueEditor
+            column={column}
+            value={value}
+            showOperators={false}
+            onApply={(nextValue) => {
+              const raw = Array.isArray(nextValue.value)
+                ? nextValue.value[0]
+                : nextValue.value;
+              if (typeof raw === "string") onSelect(raw);
+              setValueOpen(false);
+            }}
+            onCancel={() => setValueOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
+      <span
+        aria-hidden="true"
+        className="flex items-center whitespace-nowrap border-l px-3 text-sm font-medium text-muted-foreground"
+      >
+        is
+      </span>
+      <button
+        type="button"
+        data-token-filter-value
+        className="min-w-0 max-w-56 whitespace-nowrap border-l px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+        onClick={() => setValueOpen(true)}
+        aria-label={`Edit ${column.label} values`}
+      >
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          {valueIcons.map((icon, index) => (
+            // eslint-disable-next-line react/no-array-index-key
+            <span
+              key={index}
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground"
+            >
+              {icon}
+            </span>
+          ))}
+          <span className="truncate">{label}</span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function FilterSubjectList({
   columns,
   onSelect,
