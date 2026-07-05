@@ -157,6 +157,7 @@ import {
   ArtifactCard,
   bornCanvasStablePartId,
   isSafetyNetPartId,
+  isSavedCanvasStatus,
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import { ThreadArtifactPanel } from "@/components/artifacts/ThreadArtifactPanel";
@@ -368,9 +369,11 @@ export interface SavedCanvasSummaryLite {
  * TranscriptMessage's per-message card rules — keep the two in sync:
  *   - json-render emissions resolve via savedCanvases (checkout-aware) or
  *     the message's own born-canvas durableArtifact; safety-net part ids
- *     are transcript furniture and NEVER become cards
+ *     are transcript furniture and only become cards once deliberately
+ *     SAVED (status past draft)
  *   - born-canvas durables with a safety-net stablePartId are excluded
- *     (the auto-minted "Table" drafts)
+ *     while still drafts (the auto-minted "Table" drafts) — a saved one
+ *     renders its card like any other canvas
  *   - documents and generic/app durables render DocumentCard /
  *     GeneratedArtifactCard respectively — included
  * Returned in message order (deduped by artifact id) — `.at(-1)` is the
@@ -413,16 +416,27 @@ export function deriveCardRenderedArtifacts(
     for (const part of message.parts ?? []) {
       if (part.type !== "data-json-render") continue;
       const partId = (part as { id?: string }).id;
-      if (!partId || isSafetyNetPartId(partId)) continue;
+      if (!partId) continue;
       const resolved =
         canvasesByPartId.get(partId) ??
         (durableCard && durablePartId === partId ? durableCard : null);
-      if (resolved) add(resolved);
+      if (!resolved) continue;
+      // Safety-net-born canvases stay transcript furniture while drafts;
+      // a deliberately SAVED one is a real artifact and gets its card.
+      if (isSafetyNetPartId(partId) && !isSavedCanvasStatus(resolved.status)) {
+        continue;
+      }
+      add(resolved);
     }
     if (durableCard) {
       if (durablePartId) {
-        // Born canvas: card only when NOT safety-net-born.
-        if (!isSafetyNetPartId(durablePartId)) add(durableCard);
+        // Born canvas: card unless it is a still-draft safety-net conversion.
+        if (
+          !isSafetyNetPartId(durablePartId) ||
+          isSavedCanvasStatus(durableCard.status)
+        ) {
+          add(durableCard);
+        }
       } else {
         // Document (DocumentCard) or generic/app (GeneratedArtifactCard).
         add(durableCard);
@@ -2748,10 +2762,11 @@ function TranscriptMessage({
   // R13, so it never surfaces as this message's durableArtifact) or the
   // message's own durable draft canvas. A compact ArtifactCard renders at
   // the end of the message instead. Safety-net table conversions are
-  // transient transcript furniture: they keep rendering inline and never
-  // become cards, even though the born-as-artifact upsert mints a draft row
-  // for them (generic titles like "Table"). Transient GenUI with no artifact
-  // is untouched.
+  // transient transcript furniture while they remain drafts: they keep
+  // rendering inline even though the born-as-artifact upsert mints a draft
+  // row for them (generic titles like "Table"). Once one is deliberately
+  // SAVED (status past draft) it collapses to a card like any other canvas.
+  // Transient GenUI with no artifact is untouched.
   const durableArtifact = !isUser ? (message.durableArtifact ?? null) : null;
   const durableCanvasPartId = durableArtifact
     ? bornCanvasStablePartId(durableArtifact)
@@ -2762,7 +2777,7 @@ function TranscriptMessage({
     for (const part of typedParts) {
       if (part.type !== "data-json-render") continue;
       const partId = (part as { id?: string }).id;
-      if (!partId || isSafetyNetPartId(partId)) continue;
+      if (!partId) continue;
       const resolved =
         canvasesByStablePartId?.get(partId) ??
         (durableArtifact && durableCanvasPartId === partId
@@ -2776,6 +2791,11 @@ function TranscriptMessage({
             }
           : null);
       if (!resolved) continue;
+      // Safety-net conversions keep rendering inline while drafts; a saved
+      // one collapses to its card like any other canvas.
+      if (isSafetyNetPartId(partId) && !isSavedCanvasStatus(resolved.status)) {
+        continue;
+      }
       suppressedPartIds.add(partId);
       if (!canvasCards.some((card) => card.artifact.id === resolved.id)) {
         canvasCards.push({ partId, artifact: resolved });
@@ -2783,11 +2803,12 @@ function TranscriptMessage({
     }
     // Durable canvas with no matching emission in this message (re-emitted
     // elsewhere or part trimmed): still surface its card — unless it was born
-    // from a safety-net conversion.
+    // from a safety-net conversion and is still a draft.
     if (
       durableArtifact &&
       durableCanvasPartId &&
-      !isSafetyNetPartId(durableCanvasPartId) &&
+      (!isSafetyNetPartId(durableCanvasPartId) ||
+        isSavedCanvasStatus(durableArtifact.status)) &&
       !canvasCards.some((card) => card.artifact.id === durableArtifact.id)
     ) {
       canvasCards.push({

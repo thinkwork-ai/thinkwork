@@ -101,6 +101,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 
 import {
   actionRowsForTurn,
+  deriveCardRenderedArtifacts,
   normalizePersistedParts,
   TaskThreadView,
 } from "./TaskThreadView";
@@ -520,6 +521,96 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("Pipeline health")).toBeTruthy();
     expect(screen.queryByTestId("artifact-card")).toBeNull();
     expect(screen.queryByLabelText("Open artifact Table")).toBeNull();
+  });
+
+  it("renders a card for a SAVED safety-net-born canvas (deliberate save)", () => {
+    // The emit → "save this as a canvas artifact" flow: the emission was a
+    // safety-net conversion, but the user deliberately saved it (status is
+    // past draft). The saved canvas must surface a card — otherwise there is
+    // no click-path into the docked panel at all (THINK-164 seam).
+    const safetyNetPart = {
+      ...createPrimitiveJsonRenderFixture(),
+      id: "json-render:safety-net:json-render-fnv1a:576ab45d",
+    };
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-saved-safety-net",
+          title: "Saved safety net",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Here's the data as a table.",
+              parts: [safetyNetPart],
+            },
+          ],
+        }}
+        savedCanvases={[
+          {
+            artifactId: "artifact-saved-safety-net",
+            title: "Largest US States",
+            status: "FINAL",
+            headVersion: 1,
+            stablePartId: "json-render:safety-net:json-render-fnv1a:576ab45d",
+          },
+        ]}
+      />,
+    );
+
+    // The saved canvas collapses the emission to its card…
+    expect(screen.queryByText("Pipeline health")).toBeNull();
+    const cards = screen.getAllByTestId("artifact-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0].getAttribute("aria-label")).toBe("Open Largest US States");
+    expect(screen.getByText("Largest US States")).toBeTruthy();
+  });
+
+  it("deriveCardRenderedArtifacts includes saved safety-net canvases and excludes draft ones", () => {
+    const savedPartId = "json-render:safety-net:json-render-fnv1a:576ab45d";
+    const draftPartId = "json-render:safety-net:json-render-fnv1a:2ad8b1e0";
+    const thread = {
+      id: "thread-derive",
+      title: "Derive",
+      lifecycleStatus: "COMPLETED",
+      messages: [
+        {
+          id: "message-1",
+          role: "ASSISTANT",
+          content: "saved",
+          parts: [{ type: "data-json-render", id: savedPartId, data: {} }],
+        },
+        {
+          id: "message-2",
+          role: "ASSISTANT",
+          content: "draft",
+          parts: [{ type: "data-json-render", id: draftPartId, data: {} }],
+          durableArtifact: {
+            id: "artifact-draft",
+            title: "Table",
+            type: "DATA_VIEW",
+            status: "DRAFT",
+            metadata: {
+              kind: "json_render_canvas",
+              stablePartId: draftPartId,
+            },
+          },
+        },
+      ],
+    } as unknown as Parameters<typeof deriveCardRenderedArtifacts>[0];
+
+    const cards = deriveCardRenderedArtifacts(thread, [
+      {
+        artifactId: "artifact-saved",
+        title: "Largest US States",
+        status: "FINAL",
+        headVersion: 1,
+        stablePartId: savedPartId,
+      },
+    ]);
+
+    expect(cards.map((card) => card.id)).toEqual(["artifact-saved"]);
   });
 
   it("passes the selected approved model through follow-up submit", async () => {
