@@ -568,6 +568,18 @@ export function SettingsCapabilities({
       ),
     [folderCapabilityManifest],
   );
+  // R18 recovery: approved-then-edited (or envelope-broken) folders need a
+  // visible way back — re-approving signs the current bytes as reviewed.
+  const folderDrifted = useMemo(
+    () =>
+      (folderCapabilityManifest?.withheld ?? []).filter(
+        (entry) =>
+          (entry.reason === "definition_drift" ||
+            entry.reason === "invalid_signature") &&
+          (entry.class === "connection" || entry.class === "tool"),
+      ),
+    [folderCapabilityManifest],
+  );
 
   const divergence = result?.divergence ?? null;
   const deltas = useMemo(
@@ -1552,6 +1564,46 @@ export function SettingsCapabilities({
                     title="Approving signs the definition as reviewed"
                   >
                     Approve
+                  </Button>
+                ) : null}
+              </span>
+            ))}
+          </span>
+        ) : null}
+        {folderDrifted.length > 0 ? (
+          <span
+            className="flex flex-wrap items-center gap-2"
+            data-testid="drifted-capabilities"
+          >
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            >
+              {folderDrifted.length} changed since approval
+            </Badge>
+            {folderDrifted.map((entry) => (
+              <span
+                key={`${entry.class}:${entry.slug}`}
+                className="flex items-center gap-1"
+              >
+                <span className="font-mono">
+                  {entry.class}s/{entry.slug}
+                </span>
+                {writeScope ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() =>
+                      void approveFolderCapability(
+                        entry.class as "connection" | "tool",
+                        entry.slug,
+                      )
+                    }
+                    data-testid={`reapprove-proposal-${entry.class}-${entry.slug}`}
+                    title="Re-approving signs the current definition as reviewed"
+                  >
+                    Re-approve
                   </Button>
                 ) : null}
               </span>

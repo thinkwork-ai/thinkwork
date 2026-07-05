@@ -51,6 +51,15 @@ import {
 } from "./sidecar-signing.js";
 
 export const CAPABILITIES_MANIFEST_VERSION = 1;
+/**
+ * Compiler behavior revision — part of the INPUT signature only (never
+ * the manifest body). Bump when compile logic changes so previously
+ * rendered manifests recompile even though no capability file changed
+ * (e.g. rev 2: capability slugs allow consecutive hyphens, fixing the
+ * plugin-namespaced `<key>--<slug>` backfill folders that compiled as
+ * invalid_definition under rev 1).
+ */
+export const CAPABILITY_COMPILE_REVISION = 2;
 export const CAPABILITIES_LATEST_PATH = "capabilities.json";
 
 export function capabilitiesManifestPath(fingerprint: string): string {
@@ -173,6 +182,7 @@ export function computeCapabilityInputSignature(input: {
 }): string {
   const canonical = canonicalizePayload({
     v: CAPABILITIES_MANIFEST_VERSION,
+    rev: CAPABILITY_COMPILE_REVISION,
     objects: input.capabilityObjects
       .map((object) => [object.key, object.etag ?? ""])
       .sort((a, b) => (a[0]! < b[0]! ? -1 : 1)),

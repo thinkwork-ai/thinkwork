@@ -42,6 +42,8 @@ import { useClient } from "urql";
 import {
   ChevronRight,
   ClipboardPaste,
+  Eye,
+  EyeOff,
   FilePlus,
   FileText,
   Folder,
@@ -411,6 +413,16 @@ function mcpSlugForFolder(node: TreeNode): string | null {
 }
 
 /** Connection slug for a `connections/<slug>` folder node (THINK-173 U9). */
+/**
+ * Compiled render artifacts (THINK-173): `capabilities.json` and the
+ * content-addressed `capabilities/<sha>.json` copies are BUILD OUTPUT of
+ * the capability folders — hidden from the tree by default (Eric: "build
+ * output mixed into src") behind the Show-compiled debug toggle.
+ */
+export function isCompiledArtifactPath(path: string): boolean {
+  return path === "capabilities.json" || path.startsWith("capabilities/");
+}
+
 function connectionSlugForFolder(node: TreeNode): string | null {
   if (!node.isFolder) return null;
   const match = /^connections\/([^/]+)$/.exec(node.path);
@@ -798,8 +810,18 @@ export function ComposerWorkspaceEditor({
     if (pendingMcpSlug) paths.push(`mcp/${pendingMcpSlug}`);
     return paths;
   }, [pendingSkillSlug, pendingMcpSlug]);
+  // Debug toggle: compiled artifacts are off by default; the manifest
+  // stays inspectable through the capability sheet either way.
+  const [showCompiled, setShowCompiled] = useState(false);
+  const visibleEntries = useMemo(
+    () =>
+      showCompiled
+        ? entries
+        : entries.filter((entry) => !isCompiledArtifactPath(entry.path)),
+    [entries, showCompiled],
+  );
   const tree = useMemo(() => {
-    const nodes = buildPreviewTree(entries);
+    const nodes = buildPreviewTree(visibleEntries);
     for (const pendingPath of pendingFolderPaths) {
       if (entries.some((entry) => entry.path.startsWith(`${pendingPath}/`))) {
         continue;
@@ -826,7 +848,7 @@ export function ComposerWorkspaceEditor({
       }
     }
     return nodes;
-  }, [entries, pendingFolderPaths]);
+  }, [visibleEntries, entries, pendingFolderPaths]);
 
   // Default state is COLLAPSED at EVERY depth — every folder starts closed, only
   // root files are visible; expanding a folder reveals its immediate children
@@ -939,6 +961,16 @@ export function ComposerWorkspaceEditor({
     const canApproveFolderCapability = Boolean(
       folderCapability &&
       folderCapability.state?.reason === "unsigned" &&
+      canManageSkills &&
+      onApproveCapabilityFolder,
+    );
+    // R18 recovery: a definition edited after approval (or with a broken
+    // envelope) is withheld — re-approving signs the CURRENT bytes as
+    // reviewed via the same grant path (grant IS approve).
+    const canReapproveFolderCapability = Boolean(
+      folderCapability &&
+      (folderCapability.state?.reason === "definition_drift" ||
+        folderCapability.state?.reason === "invalid_signature") &&
       canManageSkills &&
       onApproveCapabilityFolder,
     );
@@ -1248,6 +1280,21 @@ export function ComposerWorkspaceEditor({
               (signs the definition as reviewed)…
             </ContextMenuItem>
           ) : null}
+          {canReapproveFolderCapability && folderCapability ? (
+            <ContextMenuItem
+              onSelect={() =>
+                onApproveCapabilityFolder?.(
+                  folderCapability.klass,
+                  folderCapability.slug,
+                )
+              }
+              data-testid={`menu-reapprove-${folderCapability.klass}-${folderCapability.slug}`}
+            >
+              <Pencil className="mr-2 size-4" /> Re-approve{" "}
+              {folderCapability.klass} (signs the current definition as
+              reviewed)…
+            </ContextMenuItem>
+          ) : null}
           {canRevokeFolderCapability && folderCapability ? (
             <ContextMenuItem
               variant="destructive"
@@ -1268,6 +1315,7 @@ export function ComposerWorkspaceEditor({
             canAddMcpHere ||
             canDetachMcp ||
             canApproveFolderCapability ||
+            canReapproveFolderCapability ||
             canRevokeFolderCapability) &&
           hasStdOps ? (
             <ContextMenuSeparator />
@@ -1448,17 +1496,22 @@ export function ComposerWorkspaceEditor({
     <div className="flex min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
         <FolderTree className="size-3.5" />
-        <span data-testid="composer-files-header">
-          {entries.length} {entries.length === 1 ? "file" : "files"}
-        </span>
-        {result?.noUserBaseline ? (
-          <Badge
-            variant="outline"
-            className="ml-auto px-1.5 py-0 text-[10px] text-muted-foreground"
+        <span className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCompiled((current) => !current)}
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+            title="Compiled render output (capabilities manifest) — hidden by default; the capability sheet reads it either way"
+            data-testid="composer-toggle-compiled"
           >
-            no-user baseline
-          </Badge>
-        ) : null}
+            {showCompiled ? (
+              <Eye className="size-3" />
+            ) : (
+              <EyeOff className="size-3" />
+            )}
+            compiled
+          </button>
+        </span>
       </div>
       {canEditRoot ? (
         // Right-click the blank tree background to create at the workspace ROOT.
