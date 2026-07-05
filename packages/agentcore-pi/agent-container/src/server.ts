@@ -44,6 +44,7 @@
 import http from "node:http";
 import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
+import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createArtifactsExtension,
@@ -104,6 +105,8 @@ import {
   type ToolCostRecord,
   type ToolInvocationRecord,
   type WorkspaceBaseline,
+  resolveToolNameClaims,
+  type ToolNameClaim,
 } from "@thinkwork/pi-runtime-core";
 import {
   THREAD_JSON_RENDER_PART_TYPE,
@@ -153,6 +156,12 @@ import {
   McpJsonError,
   type McpJsonConfig,
 } from "./runtime/mcp-json.js";
+import {
+  CapabilitiesJsonError,
+  readCapabilitiesManifest,
+  type CapabilitiesManifestFile,
+  type CapabilityManifestEntry,
+} from "./runtime/capabilities-json.js";
 import {
   createPiGoalExtensionFactory,
   extractGoalRunEvidence,
@@ -1200,6 +1209,16 @@ export interface InvocationResourceBundle {
     status: "connected" | "rejected_url" | "connect_failed";
     reason?: string;
   }>;
+  /**
+   * THINK-173 U6 — per-entry outcomes for manifest-mode capability
+   * registration. Empty when the invocation is not in manifest mode.
+   */
+  capabilityLoadRecord: Array<{
+    name: string;
+    kind: string;
+    status: "registered" | "skipped";
+    reason?: string;
+  }>;
 }
 
 export interface BuildInvocationResourcesArgs {
@@ -1235,6 +1254,14 @@ export interface BuildInvocationResourcesArgs {
    * and every MCP tool is reachable only through the proxy.
    */
   mcpJsonConfig: McpJsonConfig;
+  /**
+   * THINK-173 U6 — verified capabilities manifest for MANIFEST MODE
+   * invocations (payload carries `capabilities_manifest_fingerprint`).
+   * The trusted handler reads + verifies it post-bootstrap (loud 500 on
+   * any failure); null/absent = legacy capability path, byte-identical
+   * to pre-manifest behavior.
+   */
+  capabilitiesManifest?: CapabilitiesManifestFile | null;
   /**
    * Plan §006 U4 — per-invocation registry the MCP build path populates
    * with each (server, tool) pair. The proxy AgentTool reads from this
@@ -1331,8 +1358,11 @@ export async function buildInvocationResources(
   };
 
   const sandboxInterpreterId = asString(args.payload.sandbox_interpreter_id);
+  // Hoisted so manifest-mode `script` capability tools (below) can share
+  // the same sandbox factory instance as execute_code.
+  let sandboxFactory: ReturnType<typeof resolveSandboxFactory> | null = null;
   if (sandboxInterpreterId) {
-    const sandboxFactory = resolveSandboxFactory(
+    sandboxFactory = resolveSandboxFactory(
       args.payload as { sandbox_interpreter_id: string },
       {
         client: args.agentCoreClient,
@@ -1949,6 +1979,32 @@ export async function buildInvocationResources(
     }
   }
 
+  // ── THINK-173 U6: manifest-mode capability registration ────────────────
+  // Runs LAST so platform/extension validation sees the fully assembled
+  // tool + extension surface, and the collision second line (R10) can
+  // reserve every already-claimed name. `active` is the only section
+  // read — withheld entries never register (render decided; AE1/AE3).
+  const capabilityLoadRecord: InvocationResourceBundle["capabilityLoadRecord"] =
+    [];
+  if (args.capabilitiesManifest) {
+    registerManifestCapabilityTools({
+      manifest: args.capabilitiesManifest,
+      tools,
+      mcpTools,
+      builtinToolNames,
+      extensionToolNames,
+      mcpRegistry: args.mcpRegistry,
+      validatedMcpServerNames: new Set(
+        validatedConfigs.map((config) => config.serverName),
+      ),
+      sandboxFactory,
+      cleanup,
+      workspaceDir: args.env.workspaceDir,
+      identity: args.identity,
+      record: capabilityLoadRecord,
+    });
+  }
+
   return {
     tools,
     builtinToolNames,
@@ -1959,7 +2015,403 @@ export async function buildInvocationResources(
     handleStore,
     mcpProxyRegistered,
     mcpLoadRecord,
+    capabilityLoadRecord,
   };
+}
+
+// ---------------------------------------------------------------------------
+// THINK-173 U6 — manifest-mode capability registration helpers.
+// ---------------------------------------------------------------------------
+
+interface RegisterManifestCapabilityToolsArgs {
+  manifest: CapabilitiesManifestFile;
+  /** Mutated: manifest binding/script tools are appended. */
+  tools: AgentTool<any>[];
+  /** The MCP-built AgentTools — binding execution delegates to these. */
+  mcpTools: AgentTool<any>[];
+  builtinToolNames: string[];
+  extensionToolNames: string[];
+  mcpRegistry: McpToolRegistry;
+  validatedMcpServerNames: Set<string>;
+  sandboxFactory: ReturnType<typeof resolveSandboxFactory> | null;
+  cleanup: Array<() => Promise<void>>;
+  workspaceDir: string;
+  identity: IdentitySnapshot;
+  record: InvocationResourceBundle["capabilityLoadRecord"];
+}
+
+/**
+ * Register the manifest's ACTIVE tool entries. Failure semantics are R9's:
+ * a bad entry is skipped with a structured log + load-record row and the
+ * turn proceeds — only the manifest read/verify itself (upstream) is fatal.
+ * Classes builtin/skill/connection are informational here: builtins and
+ * skills load via their existing paths, connections ride the dispatch's
+ * mcp_configs payload.
+ */
+function registerManifestCapabilityTools(
+  args: RegisterManifestCapabilityToolsArgs,
+): void {
+  const skip = (
+    entry: CapabilityManifestEntry,
+    reason: string,
+    detail?: string,
+  ) => {
+    args.record.push({
+      name: entry.name,
+      kind: entry.kind ?? "unknown",
+      status: "skipped",
+      reason,
+    });
+    logStructured({
+      level: "warn",
+      event: "capability_tool_skipped",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+      toolName: entry.name,
+      kind: entry.kind ?? "unknown",
+      reason,
+      ...(detail ? { detail } : {}),
+    });
+  };
+  const registered = (entry: CapabilityManifestEntry) => {
+    args.record.push({
+      name: entry.name,
+      kind: entry.kind ?? "unknown",
+      status: "registered",
+    });
+  };
+
+  const toolEntries = args.manifest.active.filter(
+    (entry) => entry.class === "tool",
+  );
+  if (toolEntries.length === 0) return;
+
+  // Collision second line (R10): reserve every name already claimed this
+  // invocation, then judge the manifest entries with the SAME shared
+  // registry render used. Assembled tools are seeded at "platform"
+  // precedence (they exist; a manifest binding/script must never shadow
+  // them). Render should have caught any of this — defense in depth.
+  const assembledNames = [
+    ...new Set([
+      ...BUILTIN_TOOL_NAMES,
+      ...args.builtinToolNames,
+      ...args.extensionToolNames,
+      ...args.tools.map((tool) => tool.name),
+    ]),
+  ];
+  const claims: ToolNameClaim[] = [
+    ...assembledNames.map((name) => ({
+      name,
+      source: "platform" as const,
+      origin: "assembled",
+    })),
+    ...toolEntries.map((entry) => ({
+      name: entry.name,
+      source: manifestClaimSource(entry.kind),
+      origin: entry.slug,
+    })),
+  ];
+  const verdicts = resolveToolNameClaims(claims).slice(assembledNames.length);
+
+  const assembledNameSet = new Set(assembledNames);
+  toolEntries.forEach((entry, index) => {
+    const kind = entry.kind;
+    // platform/extension entries do not add new tool names — they bind
+    // an already-assembled surface, so the collision verdict does not
+    // apply to them.
+    if (kind === "platform") {
+      const platformTool = entry.platformTool ?? "";
+      if (platformTool && assembledNameSet.has(platformTool)) {
+        registered(entry);
+      } else {
+        // Container version skew (R9): skip the one entry, keep the turn.
+        skip(entry, "unknown_platform_tool", platformTool);
+      }
+      return;
+    }
+    if (kind === "extension") {
+      const extensionTool = entry.extensionTool ?? "";
+      if (extensionTool && args.extensionToolNames.includes(extensionTool)) {
+        registered(entry);
+      } else {
+        skip(entry, "extension_tool_unavailable", extensionTool);
+      }
+      return;
+    }
+
+    const verdict = verdicts[index]!;
+    if (!verdict.ok) {
+      skip(
+        entry,
+        verdict.reason === "collision" ? "collision" : "malformed_name",
+        verdict.reason === "collision"
+          ? `held by ${verdict.winner?.source ?? "unknown"}`
+          : undefined,
+      );
+      return;
+    }
+
+    if (kind === "binding") {
+      const connection = entry.connection ?? "";
+      const operation = entry.operation ?? "";
+      if (!args.validatedMcpServerNames.has(connection)) {
+        skip(entry, "connection_unavailable", connection);
+        return;
+      }
+      if (!args.mcpRegistry.get(connection, operation)) {
+        skip(entry, "operation_unavailable", `${connection}/${operation}`);
+        return;
+      }
+      const underlying = findUnderlyingMcpTool(
+        args.mcpTools,
+        connection,
+        operation,
+      );
+      if (!underlying) {
+        skip(entry, "operation_unavailable", `${connection}/${operation}`);
+        return;
+      }
+      args.tools.push(buildBindingCapabilityTool(entry, underlying));
+      registered(entry);
+      return;
+    }
+
+    if (kind === "script") {
+      if (!args.sandboxFactory) {
+        skip(entry, "sandbox_unavailable");
+        return;
+      }
+      const entryFile = entry.entry ?? "";
+      if (
+        !entryFile ||
+        entryFile.startsWith("/") ||
+        entryFile.split("/").includes("..")
+      ) {
+        skip(entry, "malformed_entry", entryFile);
+        return;
+      }
+      args.tools.push(
+        buildScriptCapabilityTool({
+          entry,
+          entryFile,
+          workspaceDir: args.workspaceDir,
+          sandboxFactory: args.sandboxFactory,
+          cleanup: args.cleanup,
+        }),
+      );
+      registered(entry);
+      return;
+    }
+
+    skip(entry, "unknown_kind", String(kind));
+  });
+}
+
+function manifestClaimSource(
+  kind: CapabilityManifestEntry["kind"],
+): ToolNameClaim["source"] {
+  switch (kind) {
+    case "platform":
+      return "platform";
+    case "extension":
+      return "extension";
+    case "script":
+      return "script";
+    case "binding":
+    default:
+      return "binding";
+  }
+}
+
+/**
+ * Locate the MCP-built AgentTool for (server, operation). Primary match
+ * is the production naming scheme (`mcp_<server>_<tool>`, sanitized +
+ * length-capped); fallback is the `"<server>: <tool>"` label both the
+ * production factory and the test fakes emit.
+ */
+function findUnderlyingMcpTool(
+  mcpTools: AgentTool<any>[],
+  server: string,
+  operation: string,
+): AgentTool<any> | null {
+  const sanitized = (value: string) =>
+    value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48);
+  const directName = `mcp_${sanitized(server)}_${sanitized(operation)}`;
+  const label = `${server}: ${operation}`;
+  return (
+    mcpTools.find((tool) => tool.name === directName) ??
+    mcpTools.find((tool) => (tool as { label?: string }).label === label) ??
+    null
+  );
+}
+
+/** Deep merge: preset args UNDER the model's arguments (model wins). */
+function mergePresetArgs(
+  preset: Record<string, unknown> | undefined,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!preset) return params;
+  const out: Record<string, unknown> = { ...preset };
+  for (const [key, value] of Object.entries(params)) {
+    const existing = out[key];
+    if (
+      existing &&
+      typeof existing === "object" &&
+      !Array.isArray(existing) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      out[key] = mergePresetArgs(
+        existing as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Binding tool (R5): a stable-named wrapper over one operation of an
+ * admitted connection, delegating to the MCP AgentTool the connect path
+ * already built (same auth handles, timeouts, record-link enrichment).
+ * `output` shaping is cosmetic in v1 — the raw result passes through
+ * unchanged; THINK-174's surface work owns real shaping.
+ */
+function buildBindingCapabilityTool(
+  entry: CapabilityManifestEntry,
+  underlying: AgentTool<any>,
+): AgentTool<any> {
+  return {
+    name: entry.name,
+    label: `${entry.connection}: ${entry.operation} (binding)`,
+    description:
+      entry.description ||
+      `Call ${entry.operation} on ${entry.connection} with preset arguments.`,
+    parameters: underlying.parameters,
+    executionMode: "sequential",
+    execute: async (toolCallId, params) => {
+      const merged = mergePresetArgs(
+        entry.presetArgs,
+        params && typeof params === "object" && !Array.isArray(params)
+          ? (params as Record<string, unknown>)
+          : {},
+      );
+      return underlying.execute(
+        toolCallId,
+        merged as never,
+        undefined as never,
+      );
+    },
+  };
+}
+
+/**
+ * Script tool (R8): executes the folder's sandbox payload through the
+ * SAME AgentCore Code Interpreter session factory as execute_code. The
+ * model's arguments reach the script as a JSON string in `TOOL_ARGS`.
+ * Registration is trust-gated upstream: render only emits ACTIVE script
+ * entries whose sidecar carries a current passed trust report.
+ */
+function buildScriptCapabilityTool(options: {
+  entry: CapabilityManifestEntry;
+  entryFile: string;
+  workspaceDir: string;
+  sandboxFactory: NonNullable<ReturnType<typeof resolveSandboxFactory>>;
+  cleanup: Array<() => Promise<void>>;
+}): AgentTool<any> {
+  let session: Awaited<
+    ReturnType<(typeof options.sandboxFactory)["createSessionEnv"]>
+  > | null = null;
+  async function getSession() {
+    if (session) return session;
+    session = await options.sandboxFactory.createSessionEnv({
+      id: `capability-script-${options.entry.slug}`,
+      cwd: "/home/user",
+    });
+    if (session.cleanup) {
+      options.cleanup.push(() => session?.cleanup?.() ?? Promise.resolve());
+    }
+    return session;
+  }
+  return {
+    name: options.entry.name,
+    label: `${options.entry.slug} (script tool)`,
+    description:
+      options.entry.description ||
+      `Run the ${options.entry.slug} workspace script tool.`,
+    parameters: Type.Object({}, { additionalProperties: true }),
+    executionMode: "sequential",
+    execute: async (_toolCallId, params) => {
+      const scriptPath = path.join(
+        options.workspaceDir,
+        "tools",
+        options.entry.slug,
+        options.entryFile,
+      );
+      const source = await readWorkspaceFile(scriptPath);
+      const env = await getSession();
+      const command = scriptSandboxCommand(
+        options.entryFile,
+        source,
+        params ?? {},
+      );
+      const result = await env.exec(command, { timeout: 120_000 });
+      const text = [
+        `exit_code: ${result.exitCode}`,
+        result.stdout ? `stdout:\n${result.stdout}` : "",
+        result.stderr ? `stderr:\n${result.stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      if (result.exitCode !== 0) {
+        throw new Error(text);
+      }
+      return {
+        content: [{ type: "text", text }],
+        details: {
+          capability_tool: options.entry.name,
+          entry: options.entryFile,
+          exit_code: result.exitCode,
+        },
+      };
+    },
+  };
+}
+
+async function readWorkspaceFile(filePath: string): Promise<string> {
+  const { readFile } = await import("node:fs/promises");
+  return readFile(filePath, "utf-8");
+}
+
+/**
+ * Build the sandbox command for a script tool. Python entries exec via
+ * base64 (mirrors execute_code's escaping-proof pattern); everything
+ * else runs as bash. TOOL_ARGS carries the model's arguments as JSON.
+ */
+function scriptSandboxCommand(
+  entryFile: string,
+  source: string,
+  params: unknown,
+): string {
+  const argsJson = JSON.stringify(params ?? {});
+  const argsB64 = Buffer.from(argsJson, "utf8").toString("base64");
+  const sourceB64 = Buffer.from(source, "utf8").toString("base64");
+  if (entryFile.endsWith(".py")) {
+    const py = [
+      "import base64, os",
+      `os.environ["TOOL_ARGS"] = base64.b64decode("${argsB64}").decode("utf-8")`,
+      `code = base64.b64decode("${sourceB64}").decode("utf-8")`,
+      'exec(compile(code, "<thinkwork-capability-script>", "exec"))',
+    ].join("; ");
+    return `python3 -c '${py}'`;
+  }
+  return (
+    `TOOL_ARGS="$(echo ${argsB64} | base64 -d)" ` +
+    `bash -c "$(echo ${sourceB64} | base64 -d)"`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2588,6 +3040,44 @@ export async function handleInvocation(
   }
   const mcpRegistry = new McpToolRegistry();
 
+  // THINK-173 U6 — MANIFEST MODE: the dispatch pinned a capabilities
+  // manifest fingerprint (only sent for capability_folder_dispatch
+  // agents). Read + verify the pinned bytes from the bootstrapped
+  // workspace. Any failure — missing file, malformed JSON, bad shape,
+  // unverifiable signature — is a structured 500 (R9: loud, never a
+  // silent legacy fallback). No fingerprint = legacy path, untouched.
+  let capabilitiesManifest: CapabilitiesManifestFile | null = null;
+  const capabilitiesManifestFingerprint = asString(
+    args.payload.capabilities_manifest_fingerprint,
+  );
+  if (capabilitiesManifestFingerprint) {
+    try {
+      capabilitiesManifest = await readCapabilitiesManifest(
+        env.workspaceDir,
+        capabilitiesManifestFingerprint,
+      );
+    } catch (err) {
+      if (err instanceof CapabilitiesJsonError) {
+        logStructured({
+          level: "error",
+          event: "capabilities_manifest_invalid",
+          tenantId: identity.tenantId,
+          agentSlug: identity.agentSlug,
+          fingerprint: capabilitiesManifestFingerprint,
+          error: err.message,
+        });
+        return {
+          statusCode: 500,
+          body: {
+            error: err.message,
+            runtime: "pi",
+          },
+        };
+      }
+      throw err;
+    }
+  }
+
   const agentCoreClient = deps.agentCoreClientFactory();
 
   // SessionStore — instantiate so failures surface here, BEFORE the agent
@@ -2686,6 +3176,7 @@ export async function handleInvocation(
       cleanup,
       handleStore,
       mcpJsonConfig,
+      capabilitiesManifest,
       mcpRegistry,
       fetchWorkspaceSourceHost,
       childModelCaller:
