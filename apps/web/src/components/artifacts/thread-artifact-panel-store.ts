@@ -57,6 +57,46 @@ export interface ThreadArtifactPanelHandle {
   close: () => void;
 }
 
+/**
+ * Panel width persistence — ONE global width (not per-thread): the split is
+ * an ergonomic preference about how much room artifacts get on this screen,
+ * not a property of any particular thread. localStorage-backed so it also
+ * survives reloads; a module fallback keeps environments without
+ * localStorage (tests) working.
+ */
+const PANEL_WIDTH_STORAGE_KEY = "thinkwork.thread-artifact-panel.width";
+export const DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX = 480;
+export const MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX = 360;
+
+let panelWidthFallbackPx = DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX;
+
+export function getStoredThreadArtifactPanelWidthPx(): number {
+  try {
+    const raw = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY);
+    const parsed = raw === null ? NaN : Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.max(MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX, Math.round(parsed));
+    }
+  } catch {
+    // fall through to the module fallback
+  }
+  return panelWidthFallbackPx;
+}
+
+export function storeThreadArtifactPanelWidthPx(widthPx: number) {
+  if (!Number.isFinite(widthPx) || widthPx <= 0) return;
+  const rounded = Math.max(
+    MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+    Math.round(widthPx),
+  );
+  panelWidthFallbackPx = rounded;
+  try {
+    window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(rounded));
+  } catch {
+    // module fallback already updated
+  }
+}
+
 export function useThreadArtifactPanel(
   threadId: string | null | undefined,
 ): ThreadArtifactPanelHandle {

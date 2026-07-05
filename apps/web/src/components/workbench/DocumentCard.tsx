@@ -36,7 +36,6 @@ export function DocumentCard({
       badge={card.genre ?? null}
       statusLabel={statusLabel}
       description={card.abstract}
-      openLabel="Open document →"
       testId="document-card"
       onOpen={onOpen}
     />

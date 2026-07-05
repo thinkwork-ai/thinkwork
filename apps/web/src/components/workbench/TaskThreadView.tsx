@@ -30,6 +30,9 @@ import {
   DialogHeader,
   DialogTitle,
   Label,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
   Textarea,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
@@ -40,6 +43,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   Children,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -157,7 +161,12 @@ import {
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import { ThreadArtifactPanel } from "@/components/artifacts/ThreadArtifactPanel";
-import { useThreadArtifactPanel } from "@/components/artifacts/thread-artifact-panel-store";
+import {
+  getStoredThreadArtifactPanelWidthPx,
+  MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+  storeThreadArtifactPanelWidthPx,
+  useThreadArtifactPanel,
+} from "@/components/artifacts/thread-artifact-panel-store";
 import {
   SkillDraftStatusCard,
   type SkillDraftStatusData,
@@ -589,6 +598,17 @@ export function TaskThreadView({
   // Docked artifact panel (THINK-168): per-thread selection in a module
   // store, so it survives message sends / refetch-driven remounts.
   const canvasPanel = useThreadArtifactPanel(thread?.id ?? null);
+  // Panel width: read the persisted global width once per mount (the panel's
+  // ResizablePanel consumes it as defaultSize) and persist every drag.
+  const [panelDefaultWidthPx] = useState(() =>
+    getStoredThreadArtifactPanelWidthPx(),
+  );
+  const handleArtifactPanelResize = useCallback(
+    (size: { inPixels: number }) => {
+      storeThreadArtifactPanelWidthPx(size.inPixels);
+    },
+    [],
+  );
 
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
@@ -644,123 +664,159 @@ export function TaskThreadView({
 
   return (
     <main className="relative flex h-full w-full overflow-hidden bg-background">
-      <section
-        className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
-        aria-label="Thread conversation"
+      {/* The conversation column and the docked artifact panel share a
+          resizable split (THINK-168). The group stays mounted regardless of
+          panel state so opening/closing the panel never remounts the
+          transcript (which would drop scroll position). */}
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 min-w-0 flex-1"
       >
-        <Conversation
-          // Leave the outer StickToBottom div as a layout container only.
-          // The library's inner scroll wrapper (set up in StickToBottom.Content
-          // with overflow:auto + scrollbarGutter "stable both-edges") owns
-          // scrolling. Adding overflow-y-auto here forces a second scroll
-          // container and produces visible double scrollbars at the right
-          // edge of the conversation column once the artifact side panel
-          // narrows it.
-          className="flex-1"
-          aria-label="Thread transcript"
-        >
-          <ConversationContent
-            data-testid="thread-conversation-content"
-            className={cn(
-              "w-full gap-0 px-4 pt-4 sm:px-6",
-              infoPanelOpen && "md:pr-[336px]",
-            )}
-            style={{ paddingBottom: composerBottomInsetPx }}
+        <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
+          <section
+            className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
+            aria-label="Thread conversation"
           >
-            <div
-              data-testid="thread-conversation-column"
-              className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
+            <Conversation
+              // Leave the outer StickToBottom div as a layout container only.
+              // The library's inner scroll wrapper (set up in StickToBottom.Content
+              // with overflow:auto + scrollbarGutter "stable both-edges") owns
+              // scrolling. Adding overflow-y-auto here forces a second scroll
+              // container and produces visible double scrollbars at the right
+              // edge of the conversation column once the artifact side panel
+              // narrows it.
+              className="flex-1"
+              aria-label="Thread transcript"
             >
-              {transcriptMessages.length === 0 ? (
-                <ThinkingRow
-                  title="Working…"
-                  running
-                  detail="ThinkWork is preparing this thread."
-                />
-              ) : (
-                transcriptMessages.map((message, index) => {
-                  const turn = turnByUserMessageId.get(message.id);
-                  return (
-                    <TranscriptSegment
-                      key={message.id}
-                      message={message}
-                      turn={turn}
-                      documentCards={documentCardsByMessageId.get(message.id)}
-                      canvasesByStablePartId={canvasesByStablePartId}
-                      threadId={thread.id}
-                      latestProjection={latestProjection}
-                      isLatestUser={index === latestUserIndex}
-                      streamingChunks={
-                        index === latestUserIndex && showStreamingBuffer
-                          ? streamingChunks
-                          : []
-                      }
-                      streamState={
-                        index === latestUserIndex && showStreamingBuffer
-                          ? streamState
-                          : undefined
-                      }
-                      onOpenArtifact={artifactPanelState?.onSelectArtifact}
-                      onOpenArtifactPanel={canvasPanel.open}
-                      onSendFollowUp={onSendFollowUp}
-                      isSending={isSending}
-                      threadAttachments={infoPanelState?.attachments ?? []}
-                      onDownloadAttachment={
-                        infoPanelState?.onDownloadAttachment
-                      }
-                      currentUser={currentUser}
-                      mentionTargets={mentionTargets}
-                      skillCatalog={skillCatalog}
-                      viewerIsOperator={isOperator}
-                      onFlagTurn={onFlagTurn}
-                      onJsonRenderActionSuccess={onJsonRenderActionSuccess}
-                      onRetryDispatch={onRetryDispatch}
+              <ConversationContent
+                data-testid="thread-conversation-content"
+                className={cn(
+                  "w-full gap-0 px-4 pt-4 sm:px-6",
+                  infoPanelOpen && "md:pr-[336px]",
+                )}
+                style={{ paddingBottom: composerBottomInsetPx }}
+              >
+                <div
+                  data-testid="thread-conversation-column"
+                  className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
+                >
+                  {transcriptMessages.length === 0 ? (
+                    <ThinkingRow
+                      title="Working…"
+                      running
+                      detail="ThinkWork is preparing this thread."
                     />
-                  );
+                  ) : (
+                    transcriptMessages.map((message, index) => {
+                      const turn = turnByUserMessageId.get(message.id);
+                      return (
+                        <TranscriptSegment
+                          key={message.id}
+                          message={message}
+                          turn={turn}
+                          documentCards={documentCardsByMessageId.get(
+                            message.id,
+                          )}
+                          canvasesByStablePartId={canvasesByStablePartId}
+                          threadId={thread.id}
+                          latestProjection={latestProjection}
+                          isLatestUser={index === latestUserIndex}
+                          streamingChunks={
+                            index === latestUserIndex && showStreamingBuffer
+                              ? streamingChunks
+                              : []
+                          }
+                          streamState={
+                            index === latestUserIndex && showStreamingBuffer
+                              ? streamState
+                              : undefined
+                          }
+                          onOpenArtifact={artifactPanelState?.onSelectArtifact}
+                          onOpenArtifactPanel={canvasPanel.open}
+                          onSendFollowUp={onSendFollowUp}
+                          isSending={isSending}
+                          threadAttachments={infoPanelState?.attachments ?? []}
+                          onDownloadAttachment={
+                            infoPanelState?.onDownloadAttachment
+                          }
+                          currentUser={currentUser}
+                          mentionTargets={mentionTargets}
+                          skillCatalog={skillCatalog}
+                          viewerIsOperator={isOperator}
+                          onFlagTurn={onFlagTurn}
+                          onJsonRenderActionSuccess={onJsonRenderActionSuccess}
+                          onRetryDispatch={onRetryDispatch}
+                        />
+                      );
+                    })
+                  )}
+                </div>
+              </ConversationContent>
+            </Conversation>
+
+            <ThreadInfoPanel
+              state={infoPanelState}
+              onTaskPrompt={(task) =>
+                setComposerPrefill({
+                  text: `${task.title}: `,
+                  token: Date.now(),
                 })
-              )}
-            </div>
-          </ConversationContent>
-        </Conversation>
-
-        <ThreadInfoPanel
-          state={infoPanelState}
-          onTaskPrompt={(task) =>
-            setComposerPrefill({
-              text: `${task.title}: `,
-              token: Date.now(),
-            })
-          }
-        />
-
-        <div
-          ref={composerDockRef}
-          data-testid="follow-up-composer-dock"
-          className={cn(
-            "pointer-events-none shrink-0 px-4 sm:px-6",
-            infoPanelOpen && "md:pr-[336px]",
-          )}
-        >
-          <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
-            <FollowUpComposer
-              threadId={thread.id}
-              taskQueue={promptTaskQueue}
-              disabled={!onSendFollowUp || isSending}
-              isSending={isSending}
-              mentionTargets={mentionTargets}
-              skillCatalog={skillCatalog}
-              approvedModels={approvedModels}
-              selectedModelId={selectedModelId}
-              onSelectedModelChange={onSelectedModelChange}
-              threadMessages={thread.messages}
-              currentUserId={currentUser?.id ?? null}
-              serverMode={threadMode}
-              prefill={composerPrefill}
-              onSubmit={onSendFollowUp}
+              }
             />
-          </div>
-        </div>
-      </section>
+
+            <div
+              ref={composerDockRef}
+              data-testid="follow-up-composer-dock"
+              className={cn(
+                "pointer-events-none shrink-0 px-4 sm:px-6",
+                infoPanelOpen && "md:pr-[336px]",
+              )}
+            >
+              <div className="pointer-events-auto mx-auto w-full max-w-[750px] bg-background pb-4">
+                <FollowUpComposer
+                  threadId={thread.id}
+                  taskQueue={promptTaskQueue}
+                  disabled={!onSendFollowUp || isSending}
+                  isSending={isSending}
+                  mentionTargets={mentionTargets}
+                  skillCatalog={skillCatalog}
+                  approvedModels={approvedModels}
+                  selectedModelId={selectedModelId}
+                  onSelectedModelChange={onSelectedModelChange}
+                  threadMessages={thread.messages}
+                  currentUserId={currentUser?.id ?? null}
+                  serverMode={threadMode}
+                  prefill={composerPrefill}
+                  onSubmit={onSendFollowUp}
+                />
+              </div>
+            </div>
+          </section>
+        </ResizablePanel>
+        {canvasPanel.artifactId ? (
+          <>
+            {/* Drag handle: resizes the chat/artifact split. Width persists
+                globally (storeThreadArtifactPanelWidthPx) so it survives
+                sends, remounts, and reloads. Hidden below md alongside the
+                panel itself. */}
+            <ResizableHandle className="hidden md:flex" />
+            <ResizablePanel
+              defaultSize={`${panelDefaultWidthPx}px`}
+              minSize={`${MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX}px`}
+              maxSize="70vw"
+              onResize={handleArtifactPanelResize}
+              className="hidden min-h-0 min-w-0 md:flex"
+            >
+              <ThreadArtifactPanel
+                key={canvasPanel.artifactId}
+                artifactId={canvasPanel.artifactId}
+                onClose={canvasPanel.close}
+                jsonRenderPartVersions={jsonRenderPartVersions}
+              />
+            </ResizablePanel>
+          </>
+        ) : null}
+      </ResizablePanelGroup>
 
       {/* Docked artifact panel wins the right edge when open — the legacy
           generated-artifact side panel yields rather than double-docking. */}
@@ -769,14 +825,6 @@ export function TaskThreadView({
         open={artifactPanelOpen && !canvasPanel.artifactId}
         fullscreen={artifactPanelState?.isFullscreen ?? false}
       />
-      {canvasPanel.artifactId ? (
-        <ThreadArtifactPanel
-          key={canvasPanel.artifactId}
-          artifactId={canvasPanel.artifactId}
-          onClose={canvasPanel.close}
-          jsonRenderPartVersions={jsonRenderPartVersions}
-        />
-      ) : null}
     </main>
   );
 }

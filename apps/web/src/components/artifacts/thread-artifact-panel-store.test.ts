@@ -2,15 +2,43 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   closeThreadArtifactPanel,
+  DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX,
   getOpenThreadArtifactId,
+  getStoredThreadArtifactPanelWidthPx,
+  MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
   openThreadArtifactPanel,
   resetThreadArtifactPanels,
+  storeThreadArtifactPanelWidthPx,
   subscribeThreadArtifactPanel,
   useThreadArtifactPanel,
 } from "./thread-artifact-panel-store";
 
 afterEach(() => {
   resetThreadArtifactPanels();
+  window.localStorage.clear();
+});
+
+describe("thread artifact panel width persistence", () => {
+  it("defaults, persists, and clamps to the minimum", () => {
+    expect(getStoredThreadArtifactPanelWidthPx()).toBe(
+      DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+    );
+
+    storeThreadArtifactPanelWidthPx(612.4);
+    expect(getStoredThreadArtifactPanelWidthPx()).toBe(612);
+
+    // Below-minimum drags clamp so a stray resize can't wedge the panel shut.
+    storeThreadArtifactPanelWidthPx(100);
+    expect(getStoredThreadArtifactPanelWidthPx()).toBe(
+      MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+    );
+
+    // Junk input is ignored.
+    storeThreadArtifactPanelWidthPx(NaN);
+    expect(getStoredThreadArtifactPanelWidthPx()).toBe(
+      MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+    );
+  });
 });
 
 describe("thread-artifact-panel-store", () => {

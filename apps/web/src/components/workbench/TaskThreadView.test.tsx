@@ -44,6 +44,22 @@ vi.mock("urql", async () => {
   };
 });
 
+// react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+// plain passthroughs so the chat/panel split mounts deterministically
+// (same workaround as ComposerWorkspaceEditor.test.tsx).
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
+  };
+});
+
 // The Info Panel "Open thread detail" link is the only @tanstack/react-router
 // usage in TaskThreadView; stub Link to a plain anchor so these provider-less
 // render tests can assert it without mounting a RouterProvider.
@@ -302,15 +318,13 @@ describe("TaskThreadView", () => {
     // …the full inline widget does NOT…
     expect(screen.queryByTestId("genui-task-review")).toBeNull();
     // …and a single compact card renders, titled by the artifact (never the
-    // widget/component type). In a thread the card's primary click opens the
-    // docked panel (THINK-168); the full page stays one explicit link away.
+    // widget/component type). In a thread the card is a button opening the
+    // docked panel (THINK-168); full-page access lives in the panel header.
     const card = screen.getByTestId("artifact-card");
-    expect(
-      within(card).getByTestId("artifact-card-panel-trigger"),
-    ).toBeTruthy();
-    expect(
-      within(card).getByTestId("artifact-card-full-page").getAttribute("href"),
-    ).toBe("/artifacts/artifact-canvas-1");
+    expect(card.tagName).toBe("BUTTON");
+    expect(card.getAttribute("aria-label")).toBe(
+      "Open Onboarding review canvas",
+    );
     expect(screen.getByText("Onboarding review canvas")).toBeTruthy();
     expect(screen.getByText("Draft")).toBeTruthy();
     // The old generic artifact card (button/side-panel variant) is gone.
@@ -443,11 +457,10 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("genui-task-review")).toBeNull();
     const cards = screen.getAllByTestId("artifact-card");
     expect(cards).toHaveLength(1);
-    expect(
-      within(cards[0])
-        .getByTestId("artifact-card-full-page")
-        .getAttribute("href"),
-    ).toBe("/artifacts/artifact-checked-out");
+    expect(cards[0].tagName).toBe("BUTTON");
+    expect(cards[0].getAttribute("aria-label")).toBe(
+      "Open CRM Tasks by Status",
+    );
     expect(screen.getByText("CRM Tasks by Status")).toBeTruthy();
     expect(screen.getByText("Final · v3")).toBeTruthy();
     // …the safety-net conversion keeps rendering inline…

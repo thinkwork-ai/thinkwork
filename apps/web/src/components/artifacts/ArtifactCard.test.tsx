@@ -43,7 +43,7 @@ afterEach(() => {
 });
 
 describe("ArtifactCard", () => {
-  it("renders title, type badge, status · vN, and an Open link to /artifacts/$id", () => {
+  it("renders title, status · vN, and links the card to /artifacts/$id; badge fills the second line when there is no summary", () => {
     render(
       <ArtifactCard
         artifact={{
@@ -61,10 +61,29 @@ describe("ArtifactCard", () => {
     expect(screen.getByText("Q3 pipeline table")).toBeTruthy();
     expect(screen.getByText("DATA_VIEW")).toBeTruthy();
     expect(screen.getByText("Final · v3")).toBeTruthy();
-    expect(screen.getByText("Open →")).toBeTruthy();
+    // No footer affordance line (THINK-168 declutter).
+    expect(screen.queryByText(/Open/)).toBeNull();
   });
 
-  it("onOpen mode: primary click opens the panel; full page stays an explicit link (THINK-168)", () => {
+  it("shows the summary on the second line (badge stays on the title row) when a description exists", () => {
+    render(
+      <ArtifactCard
+        artifact={{
+          id: "artifact-1",
+          title: "Q3 pipeline table",
+          type: "DATA_VIEW",
+        }}
+        description="Quarterly pipeline broken down by owner."
+      />,
+    );
+
+    expect(
+      screen.getByText("Quarterly pipeline broken down by owner."),
+    ).toBeTruthy();
+    expect(screen.getByText("DATA_VIEW")).toBeTruthy();
+  });
+
+  it("onOpen mode: the card is a button that opens the panel; no full-page footer link (THINK-168)", () => {
     const onOpen = vi.fn();
     render(
       <ArtifactCard
@@ -78,13 +97,13 @@ describe("ArtifactCard", () => {
     );
 
     const card = screen.getByTestId("artifact-card");
-    // Not a link root anymore — a cover button owns the primary click.
-    expect(card.getAttribute("href")).toBeNull();
-    screen.getByTestId("artifact-card-panel-trigger").click();
+    expect(card.tagName).toBe("BUTTON");
+    expect(card.getAttribute("aria-label")).toBe("Open Q3 pipeline table");
+    card.click();
     expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByTestId("artifact-card-full-page").getAttribute("href"),
-    ).toBe("/artifacts/artifact-1");
+    // Full-page access lives in the panel header now, not on the card.
+    expect(screen.queryByText(/full page/i)).toBeNull();
+    expect(document.querySelector("a")).toBeNull();
   });
 
   it("renders unknown plugin type strings verbatim (open string, no enum switch)", () => {
@@ -192,7 +211,8 @@ describe("DocumentCard (delegates to ArtifactCard)", () => {
     expect(screen.getByText("guide")).toBeTruthy();
     expect(screen.getByText("Final · v2")).toBeTruthy();
     expect(screen.getByText("How to onboard.")).toBeTruthy();
-    expect(screen.getByText("Open document →")).toBeTruthy();
+    // No footer affordance line — the card itself is the link.
+    expect(screen.queryByText("Open document →")).toBeNull();
   });
 
   it("shows Draft with no badge when genre is missing", () => {

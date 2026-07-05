@@ -33,7 +33,6 @@ export function ArtifactCard({
   badge,
   statusLabel,
   description,
-  openLabel = "Open →",
   testId = "artifact-card",
   onOpen,
 }: {
@@ -46,14 +45,12 @@ export function ArtifactCard({
   /** Overrides the derived "Status · vN" label. */
   statusLabel?: string | null;
   description?: string | null;
-  openLabel?: string;
   testId?: string;
   /**
-   * THINK-168: when set, the card's PRIMARY click opens the artifact in the
-   * thread's docked panel (via this callback) instead of navigating; the
-   * full-page route stays reachable through an explicit "Open full page →"
-   * link at the card's foot. Omitted (list surfaces, hosts without a panel)
-   * → the whole card stays a /artifacts/$id link.
+   * THINK-168: when set, the card's click opens the artifact in the thread's
+   * docked panel (via this callback) instead of navigating; the full page is
+   * reachable from the panel header. Omitted (list surfaces, hosts without a
+   * panel) → the whole card stays a /artifacts/$id link.
    */
   onOpen?: () => void;
 }) {
@@ -64,9 +61,19 @@ export function ArtifactCard({
       ? null
       : (statusLabel ??
         deriveStatusLabel(artifact.status, artifact.headVersion));
+  const summary = description?.trim() || null;
   const rootClassName =
     "not-prose group my-1 flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40";
 
+  const badgeChip = badgeLabel ? (
+    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      {badgeLabel}
+    </span>
+  ) : null;
+
+  // Second line under the title: the artifact's summary when it has one
+  // (truncated to one line), otherwise the type badge moves down here so no
+  // card renders a dangling footer or an empty second line (THINK-168).
   const cardBody = (
     <>
       <div className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground group-hover:text-foreground">
@@ -77,54 +84,37 @@ export function ArtifactCard({
           <span className="truncate text-sm font-medium text-foreground">
             {artifact.title}
           </span>
-          {badgeLabel ? (
-            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {badgeLabel}
-            </span>
-          ) : null}
+          {summary ? badgeChip : null}
           {resolvedStatus ? (
             <span className="shrink-0 text-[10px] text-muted-foreground">
               {resolvedStatus}
             </span>
           ) : null}
         </div>
-        {description ? (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-            {description}
+        {summary ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {summary}
           </p>
+        ) : badgeChip ? (
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            {badgeChip}
+          </div>
         ) : null}
-        {onOpen ? (
-          <Link
-            to="/artifacts/$id"
-            params={{ id: artifact.id }}
-            className="relative z-10 mt-1 inline-block text-xs font-medium text-primary hover:underline"
-            data-testid={`${testId}-full-page`}
-          >
-            Open full page →
-          </Link>
-        ) : (
-          <span className="mt-1 inline-block text-xs font-medium text-primary">
-            {openLabel}
-          </span>
-        )}
       </div>
     </>
   );
 
   if (onOpen) {
-    // A cover button (not a wrapping <button>) keeps the nested full-page
-    // Link valid HTML while the rest of the card surface opens the panel.
     return (
-      <div className={cn(rootClassName, "relative")} data-testid={testId}>
-        <button
-          type="button"
-          aria-label={`Open ${artifact.title || "artifact"}`}
-          className="absolute inset-0 z-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={onOpen}
-          data-testid={`${testId}-panel-trigger`}
-        />
+      <button
+        type="button"
+        aria-label={`Open ${artifact.title?.trim() || "artifact"}`}
+        className={cn(rootClassName, "cursor-pointer")}
+        onClick={onOpen}
+        data-testid={testId}
+      >
         {cardBody}
-      </div>
+      </button>
     );
   }
 

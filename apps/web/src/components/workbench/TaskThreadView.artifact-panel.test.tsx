@@ -33,6 +33,22 @@ vi.mock("urql", async () => {
   };
 });
 
+// react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+// plain passthroughs so the chat/panel split mounts deterministically
+// (same workaround as ComposerWorkspaceEditor.test.tsx).
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
+  };
+});
+
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   Link: ({
@@ -140,7 +156,7 @@ describe("TaskThreadView docked artifact panel (THINK-168)", () => {
     render(<TaskThreadView thread={bornCanvasThread()} />);
 
     expect(screen.queryByTestId("panel-stub")).toBeNull();
-    fireEvent.click(screen.getByTestId("artifact-card-panel-trigger"));
+    fireEvent.click(screen.getByTestId("artifact-card"));
 
     const panel = screen.getByTestId("panel-stub");
     expect(panel.dataset.artifactId).toBe("artifact-canvas-1");
@@ -154,7 +170,7 @@ describe("TaskThreadView docked artifact panel (THINK-168)", () => {
 
   it("panel state survives re-renders with new messages (message send / refetch)", () => {
     const { rerender } = render(<TaskThreadView thread={bornCanvasThread()} />);
-    fireEvent.click(screen.getByTestId("artifact-card-panel-trigger"));
+    fireEvent.click(screen.getByTestId("artifact-card"));
     expect(screen.getByTestId("panel-stub")).toBeTruthy();
 
     // A refetch after sending a message replaces the thread object and adds
@@ -173,7 +189,7 @@ describe("TaskThreadView docked artifact panel (THINK-168)", () => {
 
   it("panel state survives a full unmount/remount of the thread view", () => {
     const { unmount } = render(<TaskThreadView thread={bornCanvasThread()} />);
-    fireEvent.click(screen.getByTestId("artifact-card-panel-trigger"));
+    fireEvent.click(screen.getByTestId("artifact-card"));
     unmount();
 
     render(<TaskThreadView thread={bornCanvasThread()} />);
@@ -184,7 +200,7 @@ describe("TaskThreadView docked artifact panel (THINK-168)", () => {
 
   it("panel state is per-thread — another thread renders without a panel", () => {
     render(<TaskThreadView thread={bornCanvasThread("thread-1")} />);
-    fireEvent.click(screen.getByTestId("artifact-card-panel-trigger"));
+    fireEvent.click(screen.getByTestId("artifact-card"));
     cleanup();
 
     render(<TaskThreadView thread={bornCanvasThread("thread-2")} />);

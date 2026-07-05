@@ -120,6 +120,22 @@ vi.mock("@/lib/api-fetch", () => ({
   apiFetch: apiFetchMock.apiFetch,
 }));
 
+// react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+// plain passthroughs so TaskThreadView's chat/panel split mounts
+// deterministically (same workaround as ComposerWorkspaceEditor.test.tsx).
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
+  };
+});
+
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
 const reexecuteWorkItemsQuery = vi.fn();

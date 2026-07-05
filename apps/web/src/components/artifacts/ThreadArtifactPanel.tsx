@@ -103,7 +103,9 @@ export function ThreadArtifactPanel({
 
   return (
     <aside
-      className="relative hidden h-full w-[min(560px,44vw)] shrink-0 flex-col border-l border-border bg-background md:flex"
+      // Fills its ResizablePanel — TaskThreadView owns the split and the
+      // drag handle (which draws the divider line, so no border-l here).
+      className="relative flex h-full w-full min-w-0 flex-col bg-background"
       aria-label="Artifact panel"
       data-testid="thread-artifact-panel"
     >
