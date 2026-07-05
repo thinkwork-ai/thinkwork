@@ -19,13 +19,18 @@
  * literal secret material at parse time.
  */
 
-import {
-  splitFrontmatter,
-  NAME_PATTERN,
-  MAX_DESCRIPTION_LEN,
-} from "../skill-md-parser.js";
+import { splitFrontmatter, MAX_DESCRIPTION_LEN } from "../skill-md-parser.js";
 import { parse as parseYaml } from "yaml";
 import type { CapabilitySignatureEnvelope } from "./sidecar-signing.js";
+
+/**
+ * Capability slug shape. Deliberately LOOSER than the skill NAME_PATTERN:
+ * consecutive hyphens are legal because plugin-namespaced registry slugs
+ * (`lastmile--crm`, `twenty--crm` — the `<key>--<slug>` convention) are
+ * first-class capability identities, and the runtime's TOOL_NAME_RE has
+ * no consecutive-hyphen restriction either. No leading/trailing hyphen.
+ */
+export const CAPABILITY_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 export const CONNECTION_DEFINITION_FILE = "CONNECTION.md";
 export const TOOL_DEFINITION_FILE = "TOOL.md";
@@ -593,10 +598,10 @@ function requireSlug(
     });
     return null;
   }
-  if (!NAME_PATTERN.test(raw)) {
+  if (!CAPABILITY_SLUG_PATTERN.test(raw)) {
     errors.push({
       kind: "FieldShape",
-      message: `${path} field '${field}' must match ${NAME_PATTERN.source} (got "${raw}")`,
+      message: `${path} field '${field}' must match ${CAPABILITY_SLUG_PATTERN.source} (got "${raw}")`,
       details: { path, field, value: raw },
     });
     return null;

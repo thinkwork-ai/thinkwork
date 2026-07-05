@@ -81,6 +81,21 @@ describe("parseConnectionDefinition", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("accepts plugin-namespaced double-hyphen slugs (lastmile--crm)", () => {
+    const result = parseConnectionDefinition(
+      md("name: lastmile--crm\ndescription: LastMile CRM.\ntype: mcp"),
+      "connections/lastmile--crm/CONNECTION.md",
+    );
+    expect(result.valid).toBe(true);
+    // Leading/trailing hyphens stay illegal.
+    expect(
+      parseConnectionDefinition(
+        md("name: -bad\ndescription: d\ntype: mcp"),
+        "c/CONNECTION.md",
+      ).valid,
+    ).toBe(false);
+  });
+
   it("rejects missing frontmatter and bad type", () => {
     expect(
       parseConnectionDefinition("just prose", "c/CONNECTION.md").valid,
