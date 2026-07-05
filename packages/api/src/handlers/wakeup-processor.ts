@@ -2087,6 +2087,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             (extension) => extension.assignmentId,
           ),
         })),
+        // Folder capabilities (THINK-173) enter the wakeup projection in
+        // U5's credential-resolver split; until the per-agent flag path
+        // lands, both dispatch builders hash them empty.
+        connections: [],
+        tools: [],
       },
     );
 
