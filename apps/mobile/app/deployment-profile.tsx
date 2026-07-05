@@ -1,119 +1,99 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Image, Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Upload } from "lucide-react-native";
+import { useColorScheme } from "nativewind";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Text } from "@/components/ui/typography";
+import { Text, H2, Muted } from "@/components/ui/typography";
+import { COLORS } from "@/lib/theme";
+import { setupEnvironmentFromDeploymentProfileLink } from "@/lib/environments/setup-flow";
 import { useAuth } from "@/lib/auth-context";
 
+/**
+ * Deep-link target for the web "Set up mobile" QR
+ * (thinkwork://deployment-profile?profile=<base64url>). Imports the payload
+ * as a saved environment and lands on its login screen. Environments carry
+ * their own sessions, so no sign-out is required and the raw payload is
+ * never shown.
+ */
 export default function DeploymentProfileScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
   const params = useLocalSearchParams<{
     profile?: string | string[];
     json?: string | string[];
   }>();
-  const { importDeploymentProfile, deploymentConfig } = useAuth();
-  const initialPayload = useMemo(
-    () => profilePayloadFromParams(params),
-    [params],
-  );
-  const [profileInput, setProfileInput] = useState(initialPayload);
+  const { rescopeAuthForEnvironmentChange } = useAuth();
+  const payload = useMemo(() => profilePayloadFromParams(params), [params]);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
 
-  const handleImport = useCallback(
-    async (input = profileInput) => {
-      if (!input.trim()) {
-        setError("Paste a deployment profile first");
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        await importDeploymentProfile(input);
-        router.replace("/sign-in");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message || "Deployment profile import failed.");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [importDeploymentProfile, profileInput, router],
-  );
+  const handleImport = useCallback(async () => {
+    if (!payload) {
+      setError("This setup link is missing its environment data.");
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    try {
+      await setupEnvironmentFromDeploymentProfileLink(payload);
+      const restored = await rescopeAuthForEnvironmentChange();
+      router.replace(restored ? "/" : "/sign-in");
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Environment setup failed.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  }, [payload, rescopeAuthForEnvironmentChange, router]);
 
   useEffect(() => {
-    if (!initialPayload) return;
-    void handleImport(initialPayload);
-  }, [handleImport, initialPayload]);
+    void handleImport();
+  }, [handleImport]);
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white dark:bg-neutral-950"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 16,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Card className="w-[90%] max-w-md">
-          <CardHeader>
-            <CardTitle>Deployment</CardTitle>
-            <Text size="sm" variant="muted">
-              {deploymentConfig.deployment.displayName}
-            </Text>
-          </CardHeader>
-          <CardContent className="gap-4">
-            <TextInput
-              value={profileInput}
-              onChangeText={setProfileInput}
-              placeholder="Deployment profile JSON or link"
-              placeholderTextColor="#a3a3a3"
-              multiline
-              numberOfLines={8}
-              className="min-h-40 rounded-xl border border-neutral-300 px-3 py-2 text-sm text-neutral-900 dark:border-neutral-700 dark:text-neutral-100"
-              style={
-                Platform.OS === "android"
-                  ? { textAlignVertical: "top" as const }
-                  : undefined
-              }
-            />
-            {error && (
-              <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
-                <Text size="sm" className="text-destructive">
-                  {error}
-                </Text>
-              </View>
-            )}
-            <Button onPress={() => void handleImport()} loading={loading}>
-              <Upload size={18} color="white" />
-              <Text className="font-semibold text-primary-foreground">
-                Import
+    <View className="flex-1 items-center justify-center bg-white p-6 dark:bg-neutral-950">
+      <View className="w-full max-w-md items-center gap-6">
+        <Image
+          source={require("@/assets/logo.png")}
+          style={{ width: 96, height: 78 }}
+          resizeMode="contain"
+        />
+        <H2 className="text-center">Add environment</H2>
+
+        {importing && (
+          <View className="items-center gap-3">
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
+            <Muted className="text-center">Setting up your environment…</Muted>
+          </View>
+        )}
+
+        {!importing && error && (
+          <View className="w-full gap-4">
+            <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+              <Text size="sm" className="text-destructive">
+                {error}
               </Text>
-            </Button>
-            <Button
-              variant="ghost"
-              onPress={() => router.replace("/sign-in")}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-          </CardContent>
-        </Card>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            </View>
+            <Button onPress={() => void handleImport()}>Try again</Button>
+          </View>
+        )}
+
+        <Pressable
+          className="py-2"
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace("/sign-in")
+          }
+        >
+          <Text size="sm" variant="muted" className="text-center">
+            Back to sign in
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 

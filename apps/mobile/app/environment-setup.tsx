@@ -17,9 +17,11 @@ import {
   setupEnvironmentFromUrl,
 } from "@/lib/environments/setup-flow";
 import { canLeaveEnvironmentSetup } from "@/lib/environments/routing";
+import { useAuth } from "@/lib/auth-context";
 
 export default function EnvironmentSetupScreen() {
   const router = useRouter();
+  const { rescopeAuthForEnvironmentChange } = useAuth();
   const canLeave = canLeaveEnvironmentSetup();
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -48,7 +50,8 @@ export default function EnvironmentSetupScreen() {
         setError(result.message);
         return;
       }
-      router.replace("/sign-in");
+      const restored = await rescopeAuthForEnvironmentChange();
+      router.replace(restored ? "/" : "/sign-in");
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -69,7 +72,8 @@ export default function EnvironmentSetupScreen() {
     setError(null);
     try {
       await setupEnvironmentFromDeploymentProfileLink(profileLink);
-      router.replace("/sign-in");
+      const restored = await rescopeAuthForEnvironmentChange();
+      router.replace(restored ? "/" : "/sign-in");
     } catch (pasteError) {
       setError(
         pasteError instanceof Error

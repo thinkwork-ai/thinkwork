@@ -307,8 +307,27 @@ type AgentWorkspace {
   purpose: String
 }
 
+"""
+Member-safe view of the tenant's platform agent: display fields only, no
+configuration (system prompt, adapter/runtime config, budgets). End-user
+surfaces (mobile home) read this; the full Agent stays admin-gated via
+tenantAgent.
+"""
+type TenantAgentSummary {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String
+  role: String
+  type: AgentType!
+  status: AgentStatus!
+  runtime: AgentRuntime!
+  avatarUrl: String
+}
+
 extend type Query {
   tenantAgent(tenantId: ID!): Agent!
+  tenantAgentSummary(tenantId: ID!): TenantAgentSummary!
   modelCatalog: [ModelCatalogEntry!]!
   tenantModelCatalog(
     tenantId: ID!

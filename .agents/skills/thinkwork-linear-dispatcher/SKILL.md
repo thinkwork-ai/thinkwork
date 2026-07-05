@@ -3,9 +3,17 @@ name: thinkwork-linear-dispatcher
 description: Route ThinkWork Linear issues through Codex automation. Use when acting as the ThinkWork `linear-agent-dispatcher` heartbeat, when asked to inspect ThinkWork Linear automation state, or when deciding whether to launch/continue Codex workers for ThinkWork issues labeled Codex/LFG.
 ---
 
-# ThinkWork Linear Dispatcher
+# ThinkWork Linear Dispatcher — Codex Lane
 
-Use this skill as the executable contract for the ThinkWork Linear dispatcher.
+Use this skill as the executable contract for the Codex-lane ThinkWork Linear
+dispatcher. A parallel Claude lane exists
+(`.claude/skills/linear-dispatch/SKILL.md`); both lanes share the routing
+contract and launch prompts in this skill's `references/` folder. This
+dispatcher routes only issues labeled `Codex`; issues labeled `Claude` belong
+to the Claude lane, and **issues in `Verification` status belong to the Claude
+lane regardless of lane label** (verification needs a real browser and
+operator auth against deployed dev).
+
 The dispatcher is a router, not an implementation worker. Do not make product
 or documentation changes in the dispatcher thread except when explicitly asked
 to update this skill or its runbook.
@@ -14,8 +22,9 @@ to update this skill or its runbook.
 
 Before routing issues, load these files from this skill folder:
 
-1. `references/routing-contract.md` for label/status behavior, duplicate
-   detection, ledgers, verification rebound, and cleanup rules.
+1. `references/routing-contract.md` for lane rules, label/status behavior,
+   goal handoffs, question protocol, duplicate detection, ledgers,
+   verification rebound, and cleanup rules.
 2. `references/launch-prompts.md` before creating or repairing any Codex worker.
 
 If either reference is unavailable, update the affected issue's rolling ledger
@@ -26,7 +35,10 @@ with the missing-skill-resource blocker and stop. Do not fall back to memory.
 1. Load Linear and thread-management tools. Use tool discovery if needed for
    Linear issue/comment tools and Codex thread tools such as `create_thread`,
    `read_thread`, `send_message_to_thread`, and `set_thread_title`.
-2. Find active ThinkWork issues labeled `Codex`.
+2. Find active ThinkWork issues labeled `Codex`. Skip issues also labeled
+   `Claude` (lane conflict: apply the routing contract's lane-conflict rule).
+   Treat issues in `Verification` status as `waiting` — the Claude lane owns
+   verification.
 3. Ignore Backlog, Canceled, Duplicate, and Done, except for the `LFG` Done
    compounding gate.
 4. Ignore issues with true blocker labels: `Needs User`, `Needs Credentials`,
@@ -51,10 +63,14 @@ with the missing-skill-resource blocker and stop. Do not fall back to memory.
    Keep it short: current router state, active worker id/pendingWorktreeId,
    current PR/branch/worktree, blocker summary, and a link to the progress
    document. Update it in place when possible.
-8. Locate worker handoff comments marked
-   `dispatcher:<ISSUE_ID>:<PHASE>:Codex`.
+8. Locate worker launch comments marked
+   `dispatcher:<ISSUE_ID>:<PHASE>:Codex` and the newest goal handoff comment
+   `handoff:<ISSUE_ID>:<PHASE>` for the current phase. If the phase was
+   entered without a handoff comment, synthesize one from the Progress
+   document and issue history, post it, then proceed. Include the newest
+   handoff comment verbatim in any worker launch prompt.
 9. Run the duplicate-worker gate below. Do this even when Linear comments do
-   not mention a worker; missing handoff comments are not proof that no worker
+   not mention a worker; missing launch comments are not proof that no worker
    exists.
 10. Route the issue according to `references/routing-contract.md`, with the
     progress document as the authoritative implementation loop state.

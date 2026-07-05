@@ -4,6 +4,7 @@ import { myApprovedModelCatalog } from "./myApprovedModelCatalog.query.js";
 import { modelCatalog } from "./modelCatalog.query.js";
 import { setUserModelApproval } from "./setUserModelApproval.mutation.js";
 import { tenantAgent } from "./tenantAgent.query.js";
+import { tenantAgentSummary } from "./tenantAgentSummary.query.js";
 import { tenantModelCatalog } from "./tenantModelCatalog.query.js";
 import { updateTenantAgent } from "./updateTenantAgent.mutation.js";
 import { updateTenantModelCatalogEntry } from "./updateTenantModelCatalogEntry.mutation.js";
@@ -14,6 +15,7 @@ export const tenantAgentQueries = {
   myApprovedModelCatalog,
   modelCatalog,
   tenantAgent,
+  tenantAgentSummary,
   tenantModelCatalog,
   userModelCatalog,
 };

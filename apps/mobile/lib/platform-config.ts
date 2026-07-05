@@ -156,7 +156,10 @@ function runtimePlatformConfig(
     stage: runtime.stage,
     apiUrl: runtime.apiUrl,
     graphqlHttpUrl: runtime.graphqlHttpUrl,
-    graphqlUrl: runtime.graphqlUrl,
+    // Queries must ride the HTTP API. Profile-sourced runtime configs carry
+    // web semantics where graphqlUrl is the subscription-only AppSync
+    // endpoint — prefer the HTTP URL whenever it exists.
+    graphqlUrl: runtime.graphqlHttpUrl?.trim() || runtime.graphqlUrl,
     graphqlWsUrl: runtime.graphqlWsUrl,
     graphqlApiKey: runtime.graphqlApiKey?.trim() || graphqlApiKeyFallback,
     cognitoUserPoolId: runtime.cognitoUserPoolId,

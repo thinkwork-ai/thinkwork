@@ -104,7 +104,7 @@ function ThreadRowItem({
   };
 
   const assignee = thread.computerId
-    ? computerName || "Computer"
+    ? computerName || "Agent"
     : getAgentName(thread.agentId) || "Agent";
 
   return (
@@ -257,7 +257,7 @@ function CreateThreadModal({
                       }}
                     >
                       <Text className="text-neutral-900 dark:text-neutral-100">
-                        {item.name || item.slug || "Computer"}
+                        {item.name || item.slug || "Agent"}
                       </Text>
                     </Pressable>
                   );
@@ -381,7 +381,7 @@ export default function ThreadsScreen() {
 
   const getAssigneeName = useCallback(
     (thread: Thread) => {
-      if (thread.computerId) return selectedComputer?.name || "Computer";
+      if (thread.computerId) return selectedComputer?.name || "Agent";
       const agentId = thread.agentId;
       if (!agentId) return "\u2014";
       const a = agents?.find((a: any) => a.id === agentId);

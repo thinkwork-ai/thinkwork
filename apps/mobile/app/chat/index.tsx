@@ -243,7 +243,7 @@ export default function ChatRoute() {
         baseUrl=""
         token="graphql"
         agentType="computer"
-        agentName={selectedComputer.name || "Computer"}
+        agentName={selectedComputer.name || "Agent"}
         agents={[]}
         selectedAgentId=""
         threadId={activeThread?.id}

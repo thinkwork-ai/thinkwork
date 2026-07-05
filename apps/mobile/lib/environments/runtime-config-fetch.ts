@@ -81,7 +81,13 @@ function mapEnvironmentRuntimeConfig(raw: unknown): EnvironmentRuntimeConfig {
     graphqlHttpUrl:
       pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") ||
       pick(record, "graphqlHttpUrl"),
-    graphqlUrl: pick(viteEnv, "VITE_GRAPHQL_URL") || pick(record, "appsyncUrl"),
+    // Mobile's graphqlUrl is the QUERY endpoint (HTTP API Gateway). Web's
+    // VITE_GRAPHQL_URL is the AppSync endpoint, whose schema is
+    // subscription-only — routing queries there fails every one with
+    // FieldUndefined. Subscriptions use graphqlWsUrl below.
+    graphqlUrl:
+      pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") ||
+      pick(record, "graphqlHttpUrl"),
     graphqlWsUrl:
       pick(viteEnv, "VITE_GRAPHQL_WS_URL") ||
       pick(record, "appsyncRealtimeUrl"),
