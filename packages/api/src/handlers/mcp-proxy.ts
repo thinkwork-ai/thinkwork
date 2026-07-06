@@ -59,8 +59,21 @@ import {
   type McpToolDefinition,
 } from "../lib/mcp-client-call.js";
 import { cacheDiscoveredMcpTools } from "../lib/mcp-tool-cache.js";
+import type { CapabilitiesManifest } from "../lib/capabilities/manifest-compile.js";
 
 const { users, agents } = schema;
+
+/**
+ * The Space a spaceless turn renders in (agents.runtime_config.defaultSpaceId)
+ * — mirrors workspacePreview.query.ts's selection resolution.
+ */
+function defaultSpaceIdFromRuntimeConfig(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
+  return typeof defaultSpaceId === "string" && defaultSpaceId.trim()
+    ? defaultSpaceId
+    : null;
+}
 
 const LOG_PREFIX = "[mcp-proxy]";
 
@@ -151,7 +164,11 @@ export async function handler(
   // Agent must exist AND belong to the caller's tenant (guards cross-tenant
   // tool access). 404 like record-turn's cross-tenant thread guard.
   const [agent] = await db
-    .select({ id: agents.id })
+    .select({
+      id: agents.id,
+      capability_folder_dispatch: agents.capability_folder_dispatch,
+      runtime_config: agents.runtime_config,
+    })
     .from(agents)
     .where(and(eq(agents.id, body.agentId), eq(agents.tenant_id, tenantId)))
     .limit(1);
@@ -161,12 +178,48 @@ export async function handler(
   // CALLER — for both halves of the dispatch identity: direct
   // per_user_oauth servers resolve user_mcp_tokens by the caller, and
   // plugin-managed servers resolve activation tokens by the caller.
+  //
+  // THINK-173 U5 (R20): a folder-dispatch agent's attached connection set
+  // comes exclusively from the compiled capabilities manifest, and
+  // buildMcpConfigs refuses folder-unaware callers for flag-on agents.
+  // The proxy has no thread, so it resolves the agent's CURRENT manifest
+  // through a read-only tuple render (persist:false — the same
+  // resolution workspacePreview uses), rendered in the agent's default
+  // Space from the caller's perspective. Render faults surface as 502,
+  // never a silent legacy fallback.
   let configs: McpServerConfig[];
   try {
+    let folderCapabilities:
+      | { manifest: CapabilitiesManifest | null }
+      | undefined;
+    if (agent.capability_folder_dispatch === true) {
+      const spaceId = defaultSpaceIdFromRuntimeConfig(agent.runtime_config);
+      if (!spaceId) {
+        console.error(
+          `${LOG_PREFIX} folder-dispatch agent ${body.agentId} has no default Space configured — cannot render a capabilities manifest`,
+        );
+        return error("Failed to resolve MCP servers", 502);
+      }
+      const { renderWorkspaceTuple } =
+        await import("../lib/workspace-renderer/compose-tuple.js");
+      const rendered = await renderWorkspaceTuple(
+        {
+          tenantId,
+          agentId: body.agentId,
+          spaceId,
+          userId: userRow.id,
+        },
+        { persist: false },
+      );
+      folderCapabilities = {
+        manifest: rendered.capabilities?.manifest ?? null,
+      };
+    }
     configs = await buildMcpConfigs(
       body.agentId,
       { humanPairId: userRow.id, requesterUserId: userRow.id },
       LOG_PREFIX,
+      folderCapabilities ? { folderCapabilities } : undefined,
     );
   } catch (err) {
     console.error(`${LOG_PREFIX} buildMcpConfigs failed:`, err);

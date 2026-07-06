@@ -8,6 +8,7 @@ const {
   mockListTools,
   mockCallTool,
   mockCacheTools,
+  mockRenderTuple,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
   mockSelectLimit: vi.fn(),
@@ -15,6 +16,7 @@ const {
   mockListTools: vi.fn(),
   mockCallTool: vi.fn(),
   mockCacheTools: vi.fn(),
+  mockRenderTuple: vi.fn(),
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
@@ -44,6 +46,10 @@ vi.mock("../lib/mcp-configs.js", () => ({
 
 vi.mock("../lib/mcp-tool-cache.js", () => ({
   cacheDiscoveredMcpTools: mockCacheTools,
+}));
+
+vi.mock("../lib/workspace-renderer/compose-tuple.js", () => ({
+  renderWorkspaceTuple: mockRenderTuple,
 }));
 
 // Reuse the real McpTransportError so `instanceof` checks in the handler match.
@@ -110,6 +116,7 @@ beforeEach(() => {
   mockCallTool.mockReset();
   mockCacheTools.mockReset();
   mockCacheTools.mockResolvedValue(true);
+  mockRenderTuple.mockReset();
 
   // Google-federated caller: JWT tenantId is null, resolved by email.
   mockAuthenticate.mockResolvedValue({
@@ -156,6 +163,83 @@ describe("mcp-proxy handler", () => {
       "ag1",
       { humanPairId: "u1", requesterUserId: "u1" },
       expect.any(String),
+      undefined,
+    );
+  });
+
+  it("folder-dispatch agent: renders the tuple read-only and passes the manifest (R20)", async () => {
+    mockSelectLimit.mockReset();
+    mockSelectLimit
+      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
+      .mockReturnValueOnce([
+        {
+          id: "ag1",
+          capability_folder_dispatch: true,
+          runtime_config: { defaultSpaceId: "sp1" },
+        },
+      ]);
+    const manifest = { fingerprint: "f".repeat(64), active: [], withheld: [] };
+    mockRenderTuple.mockResolvedValue({ capabilities: { manifest } });
+    mockListTools.mockResolvedValue([{ name: "list_object_metadata_names" }]);
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    // Read-only render in the agent's default Space, caller perspective.
+    expect(mockRenderTuple).toHaveBeenCalledWith(
+      { tenantId: "t1", agentId: "ag1", spaceId: "sp1", userId: "u1" },
+      { persist: false },
+    );
+    // The manifest reaches buildMcpConfigs — the caller is folder-aware.
+    expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
+      "ag1",
+      { humanPairId: "u1", requesterUserId: "u1" },
+      expect.any(String),
+      { folderCapabilities: { manifest } },
+    );
+  });
+
+  it("folder-dispatch agent without a default Space → 502, render never attempted", async () => {
+    mockSelectLimit.mockReset();
+    mockSelectLimit
+      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
+      .mockReturnValueOnce([
+        { id: "ag1", capability_folder_dispatch: true, runtime_config: {} },
+      ]);
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(502);
+    expect(mockRenderTuple).not.toHaveBeenCalled();
+    expect(mockBuildMcpConfigs).not.toHaveBeenCalled();
+  });
+
+  it("folder-dispatch render fault → 502 (no silent legacy fallback)", async () => {
+    mockSelectLimit.mockReset();
+    mockSelectLimit
+      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
+      .mockReturnValueOnce([
+        {
+          id: "ag1",
+          capability_folder_dispatch: true,
+          runtime_config: { defaultSpaceId: "sp1" },
+        },
+      ]);
+    mockRenderTuple.mockRejectedValue(new Error("render boom"));
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(502);
+    expect(mockBuildMcpConfigs).not.toHaveBeenCalled();
+  });
+
+  it("flag-off agent keeps the legacy call shape (no folderCapabilities)", async () => {
+    mockListTools.mockResolvedValue([{ name: "create_lead" }]);
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    expect(mockRenderTuple).not.toHaveBeenCalled();
+    expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
+      "ag1",
+      { humanPairId: "u1", requesterUserId: "u1" },
+      expect.any(String),
+      undefined,
     );
   });
 
