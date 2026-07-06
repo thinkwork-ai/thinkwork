@@ -256,6 +256,21 @@ describe("content contract helpers (THINK-188)", () => {
     ]);
   });
 
+  it("parses AWSJSON in BOTH wire shapes — pre-parsed values and JSON strings", () => {
+    const arr = [
+      {
+        id: "summary",
+        title: "Summary",
+        tier: "required",
+        guidance: "g",
+        source: "tenant",
+      },
+    ];
+    // Deployed scalar returns parsed values; unit paths see strings.
+    expect(parseContractSections(arr as never)).toHaveLength(1);
+    expect(parseContractSections(JSON.stringify(arr))).toHaveLength(1);
+  });
+
   it("parseContractSections degrades junk to [] and keeps annotations", () => {
     expect(parseContractSections(null)).toEqual([]);
     expect(parseContractSections("not json")).toEqual([]);
