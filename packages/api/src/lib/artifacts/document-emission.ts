@@ -43,6 +43,7 @@ import {
   eq,
   sql,
 } from "../../graphql/utils.js";
+import { creatorUserIdForThread } from "./artifact-creator.js";
 import { hasSpaceWriteRole } from "./canvas-access.js";
 import {
   compileDocument,
@@ -354,6 +355,8 @@ function defaultDeps(): DocumentEmissionDeps {
       };
       const title = boundedCanvasText(input.title, 160);
       const summary = boundedCanvasText(input.abstract || input.title, 500);
+      const createdByUserId =
+        input.actingUserId ?? (await creatorUserIdForThread(input.threadId));
       await db
         .insert(artifacts)
         .values({
@@ -361,6 +364,7 @@ function defaultDeps(): DocumentEmissionDeps {
           tenant_id: input.tenantId,
           agent_id: input.agentId,
           thread_id: input.threadId,
+          created_by_user_id: createdByUserId,
           title,
           type: input.genre,
           status: "draft",

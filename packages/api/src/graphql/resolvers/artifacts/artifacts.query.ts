@@ -79,47 +79,75 @@ export const artifacts_ = async (
     .where(and(...conditions))
     .orderBy(desc(orderColumn))
     .limit(limit);
-  const userNameByThread = await resolveUserNamesByThread(rows);
+  const userNames = await resolveArtifactUserNames(rows);
   return rows.map((row) => ({
     ...artifactToCamel(row),
-    userName: row.thread_id
-      ? (userNameByThread.get(row.thread_id) ?? null)
-      : null,
+    userName: userNames.get(row.id) ?? null,
   }));
 };
 
 /**
- * Batch-resolve the generating user's display name for a page of artifacts via
- * the source thread (`artifacts.thread_id -> threads.user_id -> users`) — one
- * query per page, not per row. Artifacts without a thread, or whose thread has
- * no user, are simply absent from the map (the row then shows no user).
+ * Batch-resolve the generating user's display name for a page of artifacts —
+ * at most two queries per page, never per row. `created_by_user_id` (stamped
+ * at creation, backfilled by drizzle/0220) is authoritative; rows still
+ * missing it fall back to the source thread's owner
+ * (`thread_id -> threads.user_id -> users`).
  */
-async function resolveUserNamesByThread(
-  rows: Array<{ thread_id: string | null }>,
+async function resolveArtifactUserNames(
+  rows: Array<{
+    id: string;
+    created_by_user_id: string | null;
+    thread_id: string | null;
+  }>,
 ): Promise<Map<string, string>> {
-  const threadIds = [
+  const names = new Map<string, string>();
+
+  const userIds = [
     ...new Set(
       rows
-        .map((row) => row.thread_id)
+        .map((row) => row.created_by_user_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     ),
   ];
-  if (threadIds.length === 0) return new Map();
-
-  const userRows = await db
-    .select({
-      threadId: threads.id,
-      name: users.name,
-      email: users.email,
-    })
-    .from(threads)
-    .innerJoin(users, eq(threads.user_id, users.id))
-    .where(inArray(threads.id, threadIds));
-
-  const byThread = new Map<string, string>();
-  for (const row of userRows) {
-    const label = row.name ?? row.email;
-    if (label) byThread.set(row.threadId, label);
+  const nameByUser = new Map<string, string>();
+  if (userIds.length > 0) {
+    const userRows = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(inArray(users.id, userIds));
+    for (const row of userRows) {
+      const label = row.name ?? row.email;
+      if (label) nameByUser.set(row.id, label);
+    }
   }
-  return byThread;
+
+  const fallbackThreadIds = [
+    ...new Set(
+      rows
+        .filter((row) => !row.created_by_user_id && row.thread_id)
+        .map((row) => row.thread_id as string),
+    ),
+  ];
+  const nameByThread = new Map<string, string>();
+  if (fallbackThreadIds.length > 0) {
+    const threadRows = await db
+      .select({ threadId: threads.id, name: users.name, email: users.email })
+      .from(threads)
+      .innerJoin(users, eq(threads.user_id, users.id))
+      .where(inArray(threads.id, fallbackThreadIds));
+    for (const row of threadRows) {
+      const label = row.name ?? row.email;
+      if (label) nameByThread.set(row.threadId, label);
+    }
+  }
+
+  for (const row of rows) {
+    const label = row.created_by_user_id
+      ? nameByUser.get(row.created_by_user_id)
+      : row.thread_id
+        ? nameByThread.get(row.thread_id)
+        : undefined;
+    if (label) names.set(row.id, label);
+  }
+  return names;
 }

@@ -14,7 +14,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core";
+import { tenants, users } from "./core";
 import { agents } from "./agents";
 import { threads } from "./threads";
 import { spaces } from "./spaces";
@@ -35,6 +35,13 @@ export const artifacts = pgTable(
       .notNull(),
     agent_id: uuid("agent_id").references(() => agents.id),
     thread_id: uuid("thread_id").references(() => threads.id),
+
+    // The user the artifact was generated for/by, stamped at creation (from
+    // the source thread's owner or the acting caller). Nullable: system jobs
+    // with no user context, plus legacy rows predating the backfill
+    // (drizzle/0220, hand-applied). Column added via hand-rolled migration —
+    // db:generate is not in use.
+    created_by_user_id: uuid("created_by_user_id").references(() => users.id),
 
     // Living Artifacts (THINK-145): a saved canvas belongs to a space; its
     // originating thread is provenance, not its home. FK is ON DELETE RESTRICT
