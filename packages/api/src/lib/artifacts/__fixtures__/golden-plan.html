@@ -53,6 +53,18 @@ code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);paddi
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
 .stat .n{font-size:1.35em;font-weight:700}
 .stat .l{font-size:.78em;color:var(--muted)}
+.timeline{display:flex;flex-wrap:wrap;margin:18px 0 6px}
+.timeline .t-item{flex:1 1 0;min-width:120px;max-width:220px;text-align:center;padding:0 6px;position:relative}
+.timeline .t-label{font-size:.92em;font-weight:600;overflow-wrap:break-word}
+.timeline .t-track{position:relative;height:22px;margin:6px 0}
+.timeline .t-track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:var(--line)}
+.timeline .t-item:first-child .t-track::before{left:50%}
+.timeline .t-item:last-child .t-track::before{right:50%}
+.timeline .t-dot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:999px;background:var(--card);border:2px solid var(--accent)}
+.timeline .t-item.current .t-dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.timeline .t-item.current .t-label{font-weight:800}
+.timeline .t-caption{font-size:.8em;color:var(--muted)}
+.timeline .t-date{font-size:.75em;color:var(--muted)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .card .q{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -80,6 +92,7 @@ svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-ser
   body{background:#fff;color:#111}
   main{max-width:none;padding:0}
   article.item,.card,.stat,figure,table{break-inside:avoid}
+  .timeline .t-item{break-inside:avoid}
 }
 </style>
 </head>

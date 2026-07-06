@@ -108,6 +108,34 @@ describe("compileDocument", () => {
     }
   });
 
+  it("compiles tw:timeline onto the report plate and preserves sanitizer-safe classes", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "Launch — Report",
+      abstract: "Milestone sequence.",
+      markdownBody: `## Timeline
+
+\`\`\`tw:timeline
+items:
+  - { label: Kickoff, caption: Contract signed }
+  - { label: Build, caption: Core implementation, current: true }
+  - { label: Launch, date: Q4 }
+\`\`\`
+`,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain('<div class="timeline">');
+    expect(result.renderHtml).toContain('class="t-item current"');
+    expect(result.renderHtml).toContain("t-dot");
+    expect(result.renderHtml).toContain(".timeline{");
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: "# d",
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
   it("drops unknown frontmatter keys with a warning naming the allowed set (KTD7)", () => {
     const result = compileOk(
       `---\neyebrow: WEEKLY\nbanana: split\n---\n\n## Body\n\nText.\n`,
@@ -313,6 +341,20 @@ describe("plate-driven compilation (THINK-153)", () => {
         "## Body\n\n```tw:stats\nitems:\n  - { value: 1, label: a }\n```\n",
     });
     expect(allowed.ok).toBe(true);
+  });
+
+  it("plate excluding timeline rejects it with DIRECTIVE_GENRE_RESTRICTED (AE5)", () => {
+    const result = compileDocument({
+      plate: tenantPlate,
+      title: "T",
+      abstract: "",
+      markdownBody:
+        "## Body\n\n```tw:timeline\nitems:\n  - { label: Kickoff }\n  - { label: Build, current: true }\n  - { label: Launch }\n```\n",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].code).toBe("DIRECTIVE_GENRE_RESTRICTED");
+    }
   });
 });
 

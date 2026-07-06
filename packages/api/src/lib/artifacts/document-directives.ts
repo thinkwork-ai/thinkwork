@@ -182,6 +182,92 @@ const verdictGridSpec: DirectiveSpec = {
 };
 
 // ---------------------------------------------------------------------------
+// tw:timeline — the plate milestone track (ordered labels on a horizontal rail)
+// ---------------------------------------------------------------------------
+
+const timelineSpec: DirectiveSpec = {
+  kind: "timeline",
+  genres: "all",
+  schema:
+    "items: list of { label: string, caption?: string, date?: string, current?: boolean } (1-8 items, at most one current: true)",
+  example: `items:
+  - { label: Kickoff, caption: Contract signed, date: Jan 2026 }
+  - { label: Build, caption: Core implementation, current: true }
+  - { label: Launch, date: Q4 }`,
+  render: ({ data }) => {
+    const root = asRecord(data);
+    const items = root?.items;
+    if (!Array.isArray(items) || items.length === 0 || items.length > 8) {
+      return reject(
+        "timeline",
+        "tw:timeline needs an `items` list with 1-8 entries — split the sequence or aggregate phases if you have more.",
+        timelineSpec,
+      );
+    }
+    const rendered: string[] = [];
+    const currentIndices: number[] = [];
+    for (const [i, item] of items.entries()) {
+      const rec = asRecord(item);
+      if (!rec) {
+        return reject(
+          "timeline",
+          `items[${i}] must be a mapping with a \`label\`.`,
+          timelineSpec,
+        );
+      }
+      const label = textOf(rec.label);
+      if (label === null) {
+        return reject(
+          "timeline",
+          `items[${i}] must have a \`label\`.`,
+          timelineSpec,
+        );
+      }
+      const caption = "caption" in rec ? textOf(rec.caption) : undefined;
+      if (caption === null) {
+        return reject(
+          "timeline",
+          `items[${i}] has an invalid \`caption\`.`,
+          timelineSpec,
+        );
+      }
+      const date = "date" in rec ? textOf(rec.date) : undefined;
+      if (date === null) {
+        return reject(
+          "timeline",
+          `items[${i}] has an invalid \`date\`.`,
+          timelineSpec,
+        );
+      }
+      const current = rec.current;
+      if ("current" in rec && typeof current !== "boolean") {
+        return reject(
+          "timeline",
+          `items[${i}] has an invalid \`current\`; it must be a boolean.`,
+          timelineSpec,
+        );
+      }
+      if (current === true) currentIndices.push(i);
+      rendered.push(
+        `<div class="t-item${current === true ? " current" : ""}"><div class="t-label">${escapeHtml(label)}</div><div class="t-track"><span class="t-dot"></span></div>${caption !== undefined ? `<div class="t-caption">${escapeHtml(caption)}</div>` : ""}${date !== undefined ? `<div class="t-date">${escapeHtml(date)}</div>` : ""}</div>`,
+      );
+    }
+    if (currentIndices.length > 1) {
+      return reject(
+        "timeline",
+        `at most one item may be marked \`current: true\` (items[${currentIndices[0]}] and items[${currentIndices[1]}] both are).`,
+        timelineSpec,
+      );
+    }
+    return {
+      ok: true,
+      html: `<div class="timeline">${rendered.join("")}</div>`,
+      containsSvg: false,
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // tw:chart — declarative data drawn by the house SVG chart renderer (U3).
 // The shell validates shape here; rendering is injected to keep the registry
 // testable and let U3 land as its own unit.
@@ -596,6 +682,7 @@ const DEFAULT_REGISTRY: readonly DirectiveSpec[] = [
   statsSpec,
   verdictGridSpec,
   makeChartSpec(renderChart),
+  timelineSpec,
 ];
 
 /** Canonical directive kinds — the plate registry's availability vocabulary. */
