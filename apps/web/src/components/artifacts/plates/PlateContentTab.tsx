@@ -38,7 +38,7 @@ import {
 import { PlateAnalysisPicker } from "./PlateAnalysisPicker";
 
 const FLOOR_LOCK_EXPLANATION =
-  "Platform floor section: it cannot be removed or retitled, and its tier can only be raised. Guidance and suggested widgets are yours to adapt.";
+  "This section comes with the plate: it can't be removed or retitled, and its tier can only be raised. Guidance and suggested widgets are yours to adapt.";
 
 export interface PlateContentTabProps {
   sections: SectionRowState[];
@@ -107,7 +107,7 @@ export function PlateContentTab({
         <div className="text-sm font-medium">Sections</div>
         <p className="text-xs text-muted-foreground">
           {isPlatform
-            ? "Platform floor sections are enforced on every document in this plate. Adapt their guidance, raise a tier, or add your own sections below."
+            ? "These sections are enforced on every document in this plate. Adapt their guidance, raise a tier, or add your own sections below."
             : "Documents in this plate must contain each required section (or explicitly waive it). Suggested sections guide without blocking."}
         </p>
         {sections.length === 0 ? (
@@ -196,14 +196,7 @@ function SectionRow({
           className="h-8"
           data-testid="plate-section-title"
         />
-        {isFloor ? (
-          <span
-            className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
-            data-testid="plate-section-floor-badge"
-          >
-            Platform floor
-          </span>
-        ) : (
+        {isFloor ? null : (
           <>
             <Button
               type="button"
@@ -324,8 +317,7 @@ function DivergenceMarker({
       data-testid={`plate-section-diverged-${field}`}
       title="Customized — platform updates paused for this field."
     >
-      <span className="size-1.5 shrink-0 rounded-full bg-primary/60" />
-      <span>Customized</span>
+      <span className="text-amber-600 dark:text-amber-500">Customized</span>
       <span aria-hidden>·</span>
       <button
         type="button"

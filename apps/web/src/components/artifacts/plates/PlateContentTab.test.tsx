@@ -66,9 +66,8 @@ describe("PlateContentTab — floor governance (R5 UI half)", () => {
     const describedBy = floorTitle.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
     expect(document.getElementById(describedBy!)?.textContent).toMatch(
-      /cannot be removed or retitled/,
+      /can't be removed or retitled/,
     );
-    expect(screen.getByTestId("plate-section-floor-badge")).toBeTruthy();
     // Exactly one remove control — the addition's.
     expect(screen.getAllByTestId("plate-section-remove")).toHaveLength(1);
   });
@@ -184,7 +183,6 @@ describe("PlateAnalysisPicker (U6)", () => {
         onAnalysesChange={onChange}
       />,
     );
-    expect(screen.getByTestId("plate-analysis-floor-badge")).toBeTruthy();
     expect(screen.queryByTestId("plate-analysis-remove")).toBeNull();
     fireEvent.click(screen.getByTestId("plate-analysis-add"));
     fireEvent.click(screen.getByTestId("plate-analysis-template-ratio_pct"));

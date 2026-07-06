@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { Lock, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Button,
   Input,
@@ -123,14 +123,7 @@ export function PlateAnalysisPicker({
                 <span className="grow font-medium">
                   {template?.label ?? row.op}
                 </span>
-                {isFloor ? (
-                  <span
-                    className="inline-flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
-                    data-testid="plate-analysis-floor-badge"
-                  >
-                    <Lock className="size-3" /> Platform floor
-                  </span>
-                ) : (
+                {isFloor ? null : (
                   <Button
                     type="button"
                     variant="ghost"
