@@ -52,9 +52,9 @@ variable "consolidation_dedup_threshold" {
 }
 
 variable "retain_llm_model" {
-  description = "Bedrock model id for Hindsight's retain/extraction pass. Default chosen by the THINK-198 memory-quality eval (2026-07-06): Haiku 4.5 cut the dangling-referent rate 39% vs gpt-oss-20b (37.9% -> 23.2%) with usefulness +20% and faithfulness at ceiling; larger gpt-oss (120b) was no better than 20b, and per-bank retain_custom_instructions made referent quality worse, not better."
+  description = "Bedrock model id for Hindsight's retain/extraction pass. The THINK-198 eval picked Haiku 4.5 (dangling referents 37.9% -> 23.2%), but the DEPLOYED retain path rejects Claude models: Hindsight's extraction tool schema carries number minimum/maximum, which Bedrock's Anthropic API refuses ('For number type, properties maximum, minimum are not supported'), so extraction silently no-ops and NOTHING is retained (observed live 2026-07-06 18:09-18:40Z; reverted via task-def hotfix). Do not point this at an anthropic.* model until THINK-201 resolves the schema incompatibility."
   type        = string
-  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  default     = "openai.gpt-oss-20b-1:0"
 }
 
 variable "observations_mission" {
