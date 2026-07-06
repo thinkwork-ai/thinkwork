@@ -651,7 +651,6 @@ export function SettingsEvaluations() {
                 ? `${(s.latestPassRate * 100).toFixed(1)}%`
                 : "No score"
             }
-            subtitle="Over clean executions — errors excluded"
             icon={<ShieldCheck className="h-4 w-4" />}
             className={
               s?.latestPassRate != null
@@ -666,7 +665,6 @@ export function SettingsEvaluations() {
                 ? `${(s.avgPassRate * 100).toFixed(1)}%`
                 : "No score"
             }
-            subtitle="Over clean executions — errors excluded"
             icon={<ShieldCheck className="h-4 w-4" />}
           />
           <MetricCard
