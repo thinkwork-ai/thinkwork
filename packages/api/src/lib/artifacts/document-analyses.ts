@@ -58,6 +58,12 @@ export interface AnalysisOpSpec {
   schema: string;
   /** Corrected minimal example (KTD7 self-repair posture). */
   example: string;
+  /**
+   * Curated, realistic sample inputs for the plate preview (THINK-188 R10):
+   * convincing labels and magnitudes, platform-owned, never operator text.
+   * Must compute clean through `compute` (pinned by tests).
+   */
+  sampleInputs: Record<string, unknown>;
   compute: (inputs: unknown, params: unknown) => AnalysisComputeResult;
 }
 
@@ -142,6 +148,14 @@ const funnelConversionSpec: AnalysisOpSpec = {
 stages:
   - { label: Leads, count: 120 }
   - { label: Qualified, count: 80 }`,
+  sampleInputs: {
+    stages: [
+      { label: "Prospects", count: 145 },
+      { label: "Qualified", count: 88 },
+      { label: "Proposal sent", count: 34 },
+      { label: "Closed-won", count: 13 },
+    ],
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const parsed = parsePoints(root?.stages, "count");
@@ -209,6 +223,11 @@ const ratioPctSpec: AnalysisOpSpec = {
 numerator: 82
 denominator: 100
 label: Quota attainment`,
+  sampleInputs: {
+    numerator: 412000,
+    denominator: 500000,
+    label: "Quota attainment",
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const numerator = finiteNumber(root?.numerator);
@@ -252,6 +271,11 @@ const varianceVsPriorSpec: AnalysisOpSpec = {
 current: 118
 prior: 104
 label: Closed-won deals`,
+  sampleInputs: {
+    current: 118,
+    prior: 104,
+    label: "Closed-won deals",
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const current = finiteNumber(root?.current);
@@ -295,6 +319,12 @@ const groupCountSpec: AnalysisOpSpec = {
   schema: "values: list of strings (1–500 entries, at most 24 distinct groups)",
   example: `analysis: <declared key>
 values: [Discovery, Discovery, Negotiation, Closed]`,
+  sampleInputs: {
+    values: [
+      "Discovery", "Discovery", "Discovery", "Negotiation", "Negotiation",
+      "Proposal", "Proposal", "Proposal", "Proposal", "Closed-won",
+    ],
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const values = root?.values;
@@ -361,6 +391,17 @@ items:
   - { label: Globex, value: 30500 }
   - { label: Initech, value: 12000 }
   - { label: Umbrella, value: 8000 }`,
+  sampleInputs: {
+    n: 5,
+    items: [
+      { label: "Northwind Traders", value: 86000 },
+      { label: "Acme Corp", value: 64500 },
+      { label: "Globex", value: 51200 },
+      { label: "Initech", value: 38900 },
+      { label: "Stark Industries", value: 27400 },
+      { label: "Umbrella Corp", value: 19800 },
+    ],
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const parsed = parsePoints(root?.items, "value");
@@ -419,6 +460,16 @@ points:
   - { label: Apr, value: 92 }
   - { label: May, value: 104 }
   - { label: Jun, value: 118 }`,
+  sampleInputs: {
+    points: [
+      { label: "Jan", value: 82 },
+      { label: "Feb", value: 91 },
+      { label: "Mar", value: 87 },
+      { label: "Apr", value: 104 },
+      { label: "May", value: 112 },
+      { label: "Jun", value: 126 },
+    ],
+  },
   compute: (inputs) => {
     const root = asRecord(inputs);
     const parsed = parsePoints(root?.points, "value");

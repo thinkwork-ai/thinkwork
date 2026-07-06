@@ -874,3 +874,95 @@ A closing paragraph wraps up the narrative and points at the decision or action 
     markdownBody,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Contract preview exemplar (THINK-188 KTD4/R9) — the "see it in action"
+// document the operator previews. The SAVE gates keep compiling
+// buildPlateExemplar above byte-identically; this richer builder is display
+// only: every manifest section with representative prose, every declared
+// analysis computed from the op registry's curated sampleInputs, and one
+// waived-section demo (the last enforced section, heading omitted — the
+// SECTION_WAIVER_CONFLICT check rejects waiving a present section).
+// ---------------------------------------------------------------------------
+
+const WAIVER_DEMO_REASON =
+  "Preview example — this is how an explicitly waived section renders when its backing data is unavailable.";
+
+function yamlScalar(v: unknown): string {
+  if (typeof v === "string") return JSON.stringify(v);
+  return String(v);
+}
+
+/** Minimal deterministic YAML rendering for sampleInputs (flat + one list level). */
+function sampleInputsToYaml(inputs: Record<string, unknown>): string {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(inputs)) {
+    if (Array.isArray(value)) {
+      lines.push(`${key}:`);
+      for (const entry of value) {
+        if (entry !== null && typeof entry === "object") {
+          const fields = Object.entries(entry as Record<string, unknown>)
+            .map(([k, v]) => `${k}: ${yamlScalar(v)}`)
+            .join(", ");
+          lines.push(`  - { ${fields} }`);
+        } else {
+          lines.push(`  - ${yamlScalar(entry)}`);
+        }
+      }
+    } else {
+      lines.push(`${key}: ${yamlScalar(value)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export function buildContractPreviewExemplar(
+  plate: ResolvedPlate,
+): PlateExemplar {
+  const base = buildPlateExemplar(plate);
+  const sections = plate.sections ?? [];
+  const analyses = plate.analyses ?? [];
+  if (sections.length === 0 && analyses.length === 0) return base;
+
+  const analysisBlocks = analyses
+    .map((analysis) => {
+      const spec = getAnalysisOp(analysis.op);
+      if (!spec) return null;
+      return `\`\`\`tw:analysis\nanalysis: ${analysis.key}\n${sampleInputsToYaml(spec.sampleInputs)}\n\`\`\``;
+    })
+    .filter((b): b is string => b !== null);
+
+  // Waiver demo target: the LAST enforced section, preferring
+  // required-if-material (waiving is its expected common case).
+  const enforced = sections.filter((s) => s.tier !== "suggested");
+  const demoTarget =
+    [...enforced].reverse().find((s) => s.tier === "required-if-material") ??
+    enforced.at(-1);
+
+  const sectionBlocks = sections.map((section) => {
+    if (section.id === demoTarget?.id) {
+      return `\`\`\`tw:waiver\nsection: ${section.id}\nreason: ${WAIVER_DEMO_REASON}\n\`\`\``;
+    }
+    return `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`;
+  });
+
+  const markdownBody = `---
+date: Q3 2026
+context: Contract preview — every declared section and analysis, in action
+---
+
+## Where things stand
+
+This preview compiles the **${plate.displayName}** plate's full content contract: every declared section with representative content, every declared analysis computed by the platform from realistic sample data${demoTarget ? ", and one explicitly waived section so you can see how honest omission renders" : ""}.
+
+${analysisBlocks.join("\n\n")}
+
+${sectionBlocks.join("\n\n")}
+`;
+
+  return {
+    title: base.title,
+    abstract: `The "${plate.slug}" plate's content contract in action — sections, computed analyses, and waiver rendering.`,
+    markdownBody,
+  };
+}

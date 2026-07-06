@@ -1,12 +1,16 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
+  buildContractPreviewExemplar,
   resolveCandidatePlate,
   resolvePlate,
   drizzlePlateStore,
   type ResolvedPlate,
 } from "../../../lib/artifacts/plate-registry.js";
+import { getPlatformPlate } from "../../../lib/artifacts/plate-definitions.js";
+import { compileDocument } from "../../../lib/artifacts/document-compositor.js";
 import {
+  boundedSectionOverrides,
   enforcePreviewRateLimit,
   notFound,
   parseDraftConfig,
@@ -57,6 +61,16 @@ export async function documentPlatePreview(
     draft = parseDraftConfig(args.draftConfig);
     const origin =
       base && base.origin === "platform" ? "platform_override" : "tenant";
+    // THINK-188: platform drafts may patch floor sections; validate the
+    // overrides against the plate's actual floor (same bound the save uses).
+    const rawDraft = args.draftConfig as Record<string, unknown>;
+    const sectionOverrides =
+      origin === "platform_override"
+        ? boundedSectionOverrides(
+            rawDraft.sectionOverrides,
+            getPlatformPlate(args.slug)?.sections ?? [],
+          )
+        : undefined;
     const merged = await resolveCandidatePlate(
       tenantId,
       args.slug,
@@ -72,6 +86,9 @@ export async function documentPlatePreview(
           paletteLight: draft.paletteLight,
           paletteDark: draft.paletteDark,
           allowedDirectives: draft.allowedDirectives,
+          sections: draft.sections,
+          analyses: draft.analyses,
+          ...(sectionOverrides ? { sectionOverrides } : {}),
         },
         hidden: base?.hidden ?? false,
       },
@@ -88,7 +105,19 @@ export async function documentPlatePreview(
     light: draft.paletteLight,
     dark: draft.paletteDark,
   });
-  return result.ok
-    ? { html: result.html, diagnostics: [] }
-    : { html: null, diagnostics: result.diagnostics };
+  if (!result.ok) {
+    return { html: null, diagnostics: result.diagnostics };
+  }
+  // THINK-188 KTD4/R9: the DISPLAYED preview is the richer "contract in
+  // action" document (sample-data analyses + waiver demo); the gates above
+  // validated the lean save exemplar unchanged. Falls back to the gate HTML
+  // if the preview compile ever fails (defensive — both share the compiler).
+  const preview = buildContractPreviewExemplar(candidate);
+  const compiled = compileDocument({
+    plate: candidate,
+    title: preview.title,
+    abstract: preview.abstract,
+    markdownBody: preview.markdownBody,
+  });
+  return { html: compiled.ok ? compiled.renderHtml : result.html, diagnostics: [] };
 }

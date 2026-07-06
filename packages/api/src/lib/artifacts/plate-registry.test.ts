@@ -10,6 +10,7 @@ import {
   getPlatformPlate,
 } from "./plate-definitions.js";
 import {
+  buildContractPreviewExemplar,
   buildPlateExemplar,
   listPlates,
   parseTenantDocumentPalette,
@@ -824,5 +825,136 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
     const floorDef = getPlatformPlate("sales-rep-review")!;
     expect(plate.sections).toEqual(floorDef.sections);
     expect(plate.analyses).toEqual(floorDef.analyses);
+  });
+});
+
+describe("contract preview exemplar (THINK-188 U3)", () => {
+  it("every op's sampleInputs computes clean (R10 pin, all six ops)", async () => {
+    const { computeAnalysis, getAnalysisOp, ANALYSIS_OPS } = await import(
+      "./document-analyses.js"
+    );
+    for (const op of ANALYSIS_OPS) {
+      const spec = getAnalysisOp(op)!;
+      const result = computeAnalysis({ op, inputs: spec.sampleInputs });
+      expect(result.ok, `${op} sampleInputs must compute clean`).toBe(true);
+      if (result.ok) {
+        for (const stat of result.stats) {
+          expect(stat.value, `${op} stat`).not.toMatch(/NaN|Infinity|n\/a/);
+        }
+      }
+    }
+  });
+
+  it("covers AE5: the SRR preview renders every non-waived section, a computed funnel, and the waiver demo; passes preflight", async () => {
+    const { runDocumentPreflight } = await import("./document-preflight.js");
+    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const preview = buildContractPreviewExemplar(plate);
+    // The demo waives the LAST required-if-material section (pipeline-health);
+    // quota-attainment (also RIM but earlier) renders normally.
+    expect(preview.markdownBody).toContain("## Quota Attainment");
+    expect(preview.markdownBody).toContain("## Coaching Notes");
+    expect(preview.markdownBody).toContain("tw:waiver");
+    expect(preview.markdownBody).toContain("section: pipeline-health");
+    expect(preview.markdownBody).not.toContain("## Pipeline Health");
+    const compiled = compileDocument({
+      plate,
+      title: preview.title,
+      abstract: preview.abstract,
+      markdownBody: preview.markdownBody,
+    });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    // Funnel computed from curated sample data: 88/145 = 60.7%.
+    expect(compiled.renderHtml).toContain("60.7%");
+    expect(compiled.renderHtml).toContain("Section omitted");
+    expect(compiled.renderHtml).toContain("Section waived:");
+    expect(
+      runDocumentPreflight({
+        renderHtml: compiled.renderHtml,
+        digestMarkdown: preview.markdownBody,
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("a contract with only required + suggested sections still gets a waiver demo (falls back to last required)", async () => {
+    const store = fakeStore([
+      {
+        slug: "deal-desk",
+        origin: "tenant",
+        config: {
+          displayName: "Deal Desk",
+          useFor: "Deal desk review",
+          sections: [
+            { id: "summary", title: "Summary", tier: "required", guidance: "Headline." },
+            { id: "risks", title: "Risks", tier: "required", guidance: "What could kill it." },
+            { id: "notes", title: "Notes", tier: "suggested", guidance: "Anything else." },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = (await resolvePlate(TENANT, "deal-desk", store))!;
+    const preview = buildContractPreviewExemplar(plate);
+    expect(preview.markdownBody).toContain("section: risks");
+    expect(preview.markdownBody).not.toContain("## Risks");
+    const compiled = compileDocument({
+      plate,
+      title: preview.title,
+      abstract: preview.abstract,
+      markdownBody: preview.markdownBody,
+    });
+    expect(compiled.ok).toBe(true);
+  });
+
+  it("zero enforced sections → no waiver demo, no conflict; compiles clean", async () => {
+    const store = fakeStore([
+      {
+        slug: "scratch",
+        origin: "tenant",
+        config: {
+          displayName: "Scratch",
+          useFor: "Loose notes",
+          sections: [
+            { id: "notes", title: "Notes", tier: "suggested", guidance: "Anything." },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = (await resolvePlate(TENANT, "scratch", store))!;
+    const preview = buildContractPreviewExemplar(plate);
+    expect(preview.markdownBody).not.toContain("tw:waiver");
+    expect(preview.markdownBody).toContain("## Notes");
+    const compiled = compileDocument({
+      plate,
+      title: preview.title,
+      abstract: preview.abstract,
+      markdownBody: preview.markdownBody,
+    });
+    expect(compiled.ok).toBe(true);
+  });
+
+  it("contract-less plates degrade to the save exemplar byte-identically", async () => {
+    const plate = (await resolvePlate(TENANT, "report", fakeStore()))!;
+    expect(buildContractPreviewExemplar(plate)).toEqual(
+      buildPlateExemplar(plate),
+    );
+  });
+
+  it("gate-exemplar pin: buildPlateExemplar output for every platform plate is unchanged by U3", async () => {
+    // The save gates must keep compiling the SAME lean exemplar — the rich
+    // preview is display-only. Pin the shape signals the gates depend on.
+    for (const def of PLATFORM_PLATES) {
+      const plate = (await resolvePlate(TENANT, def.slug, fakeStore()))!;
+      const exemplar = buildPlateExemplar(plate);
+      expect(exemplar.markdownBody).toContain("## Where things stand");
+      expect(exemplar.markdownBody).toContain("## Detail by area");
+      // The rich-preview-only artifacts never leak into the gate exemplar.
+      expect(exemplar.markdownBody).not.toContain("tw:waiver");
+      expect(exemplar.markdownBody).not.toContain("Contract preview");
+      for (const section of def.sections ?? []) {
+        expect(exemplar.markdownBody).toContain(`## ${section.title}`);
+      }
+    }
   });
 });
