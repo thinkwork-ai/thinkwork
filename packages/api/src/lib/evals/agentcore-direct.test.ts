@@ -32,6 +32,13 @@ vi.mock("../resolve-agent-runtime-config.js", () => ({
   resolveAgentRuntimeConfig: vi.fn(),
 }));
 
+const resolveCurrentCapabilitiesManifestMock = vi.hoisted(() =>
+  vi.fn(async () => undefined as unknown),
+);
+vi.mock("../capabilities/current-manifest.js", () => ({
+  resolveCurrentCapabilitiesManifest: resolveCurrentCapabilitiesManifestMock,
+}));
+
 vi.mock("../resolve-runtime-function-name.js", () => ({
   resolveRuntimeFunctionName: () => "thinkwork-test-agentcore-pi",
 }));
@@ -482,6 +489,69 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
   beforeEach(() => {
     lambdaSendMock.mockReset();
     vi.mocked(resolveAgentRuntimeConfig).mockResolvedValue(runtimeConfig);
+    resolveCurrentCapabilitiesManifestMock.mockReset();
+    resolveCurrentCapabilitiesManifestMock.mockResolvedValue(undefined);
+  });
+
+  it("folder-dispatch agents resolve as folder-AWARE callers — the current manifest reaches runtime-config resolution (THINK-179)", async () => {
+    lambdaSendMock.mockResolvedValueOnce(lambdaResponse({ response: "ok" }));
+    const manifest = { version: 1, active: [], withheld: [] };
+    resolveCurrentCapabilitiesManifestMock.mockResolvedValue(manifest);
+
+    await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "what are the last 5 opportunities in the CRM?",
+      model: null,
+      replayRequesterUserId: "owner-user-1",
+    });
+
+    expect(resolveCurrentCapabilitiesManifestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        userId: "owner-user-1",
+      }),
+    );
+    expect(vi.mocked(resolveAgentRuntimeConfig)).toHaveBeenCalledWith(
+      expect.objectContaining({ capabilitiesManifest: manifest }),
+    );
+  });
+
+  it("flag-off agents (undefined manifest) omit capabilitiesManifest — legacy path unchanged", async () => {
+    lambdaSendMock.mockResolvedValueOnce(lambdaResponse({ response: "ok" }));
+
+    await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+    });
+
+    const opts = vi.mocked(resolveAgentRuntimeConfig).mock.calls.at(-1)?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(opts).toBeDefined();
+    expect("capabilitiesManifest" in (opts ?? {})).toBe(false);
+  });
+
+  it("a rendered-but-empty manifest (null) still reaches resolution — folder-aware, not defer", async () => {
+    lambdaSendMock.mockResolvedValueOnce(lambdaResponse({ response: "ok" }));
+    resolveCurrentCapabilitiesManifestMock.mockResolvedValue(null);
+
+    await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+    });
+
+    expect(vi.mocked(resolveAgentRuntimeConfig)).toHaveBeenCalledWith(
+      expect.objectContaining({ capabilitiesManifest: null }),
+    );
   });
 
   it("flagged-thread replay passes the source thread owner as currentUserId (THINK-179)", async () => {
