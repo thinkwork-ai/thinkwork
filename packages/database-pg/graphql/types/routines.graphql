@@ -466,6 +466,24 @@ input DecideRoutineApprovalInput {
   decision: AWSJSON!
 }
 
+# --- git_python routine source (deterministic routines v1) ---
+
+# One file read from the routine's GitHub repo.
+type RoutineSourceFile {
+  path: String!
+  content: String!
+  # Coarse language hint for the editor: python | json | typescript | text.
+  language: String!
+}
+
+# The module + fixture files backing a git_python routine, read at `ref`.
+type RoutineSource {
+  routineId: ID!
+  # The commit sha or branch the files were read at (validated sha when set).
+  ref: String!
+  files: [RoutineSourceFile!]!
+}
+
 # --- Query / Mutation extensions ---
 
 extend type Query {
@@ -485,6 +503,12 @@ extend type Query {
   routineDefinition(routineId: ID!): RoutineDefinition
   routineRecipeCatalog(tenantId: ID!): [RoutineRecipe!]!
   tenantToolInventory(tenantId: ID!): TenantToolInventory!
+  # Deterministic routines v1 — read the git_python routine's source files
+  # (module + fixtures) from the connected GitHub repo, at the validated
+  # commit when present (else the repo branch HEAD), so the web app can show
+  # the code in-app. Operator-gated; GitHub is read live via the stored
+  # routine-repo credential.
+  routineSource(routineId: ID!): RoutineSource!
 }
 
 extend type Mutation {

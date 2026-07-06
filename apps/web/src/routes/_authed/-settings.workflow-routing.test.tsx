@@ -25,6 +25,9 @@ const routineDetailRoute = read(
 const routineExecutionRoute = read(
   "src/routes/_authed/settings.routines.$routineId_.executions.$executionId.tsx",
 );
+const routineRedirects = read(
+  "src/components/workflows/RoutineWorkflowRedirects.tsx",
+);
 
 describe("Settings workflow routing", () => {
   it("exposes both Workflows (step_functions) and Routines (git_python) as settings surfaces", () => {
@@ -58,9 +61,13 @@ describe("Settings workflow routing", () => {
     // The list route is now the real deterministic Routines page.
     expect(routineListRoute).toContain("SettingsRoutines");
     expect(routineListRoute).not.toContain("redirect({");
-    // step_functions routine detail/execution URLs still fall back to the
-    // Workflows surface.
-    expect(routineDetailRoute).toContain("RoutineWorkflowDetailRedirect");
+    // The detail route now goes through RoutineDetailRouter, which renders
+    // the in-app git detail for git_python routines and still falls back to
+    // the Workflows redirect for legacy step_functions routines.
+    expect(routineDetailRoute).toContain("RoutineDetailRouter");
+    expect(routineRedirects).toContain("RoutineWorkflowDetailRedirect");
+    expect(routineRedirects).toContain("SettingsGitRoutineDetail");
+    // step_functions routine execution URLs still fall back to Workflows.
     expect(routineExecutionRoute).toContain("RoutineWorkflowRunRedirect");
   });
 });

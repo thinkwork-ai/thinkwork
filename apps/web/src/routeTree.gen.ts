@@ -112,6 +112,7 @@ import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from ".
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
 import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$pluginKey.$appRouteSegment";
+import { Route as AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
@@ -702,6 +703,12 @@ const AuthedShellAppsPluginKeyAppRouteSegmentRoute =
     path: "/apps/$pluginKey/$appRouteSegment",
     getParentRoute: () => AuthedShellRoute,
   } as any);
+const AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute =
+  AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport.update({
+    id: "/routines/$routineId_/executions/",
+    path: "/routines/$routineId/executions/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute =
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport.update({
     id: "/workflows/$workflowId_/runs/$runId",
@@ -854,6 +861,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
+  "/settings/routines/$routineId/executions/": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -959,6 +967,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
+  "/settings/routines/$routineId/executions": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -1072,6 +1081,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/_authed/settings/routines/$routineId_/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/_authed/settings/workflows/$workflowId_/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
+  "/_authed/settings/routines/$routineId_/executions/": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -1183,7 +1193,8 @@ export interface FileRouteTypes {
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId"
-    | "/settings/workflows/$workflowId/runs/$runId";
+    | "/settings/workflows/$workflowId/runs/$runId"
+    | "/settings/routines/$routineId/executions/";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -1288,7 +1299,8 @@ export interface FileRouteTypes {
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId"
-    | "/settings/workflows/$workflowId/runs/$runId";
+    | "/settings/workflows/$workflowId/runs/$runId"
+    | "/settings/routines/$routineId/executions";
   id:
     | "__root__"
     | "/"
@@ -1400,7 +1412,8 @@ export interface FileRouteTypes {
     | "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
     | "/_authed/settings/routines/$routineId_/executions/$executionId"
-    | "/_authed/settings/workflows/$workflowId_/runs/$runId";
+    | "/_authed/settings/workflows/$workflowId_/runs/$runId"
+    | "/_authed/settings/routines/$routineId_/executions/";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -2137,6 +2150,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/settings/routines/$routineId_/executions/": {
+      id: "/_authed/settings/routines/$routineId_/executions/";
+      path: "/routines/$routineId/executions";
+      fullPath: "/settings/routines/$routineId/executions/";
+      preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/workflows/$workflowId_/runs/$runId": {
       id: "/_authed/settings/workflows/$workflowId_/runs/$runId";
       path: "/workflows/$workflowId/runs/$runId";
@@ -2471,6 +2491,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
+  AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
 }
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
@@ -2548,6 +2569,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute,
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute:
     AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute,
+  AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute:
+    AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute,
 };
 
 const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(

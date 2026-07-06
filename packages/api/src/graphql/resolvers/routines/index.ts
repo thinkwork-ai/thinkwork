@@ -5,6 +5,7 @@ import { publishRoutineVersion } from "./publishRoutineVersion.mutation.js";
 import { rebuildRoutineVersion } from "./rebuildRoutineVersion.mutation.js";
 import { routineDefinition } from "./routineDefinition.query.js";
 import { routineRecipeCatalog } from "./routineRecipeCatalog.query.js";
+import { routineSource } from "./routineSource.query.js";
 import {
   routineAslVersion,
   routineExecution,
@@ -25,6 +26,7 @@ export const routineQueries = {
   routineAslVersion,
   routineDefinition,
   routineRecipeCatalog,
+  routineSource,
   tenantToolInventory,
 };
 
