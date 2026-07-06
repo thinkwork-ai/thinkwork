@@ -38,7 +38,7 @@ import {
 import { PlateAnalysisPicker } from "./PlateAnalysisPicker";
 
 const FLOOR_LOCK_EXPLANATION =
-  "Platform floor section: it cannot be removed or retitled, and its tier can only be raised. Guidance and suggested widgets are yours to adapt.";
+  "This section comes with the plate: it can't be removed or retitled, and its tier can only be raised. Guidance and suggested widgets are yours to adapt.";
 
 export interface PlateContentTabProps {
   sections: SectionRowState[];
@@ -107,7 +107,7 @@ export function PlateContentTab({
         <div className="text-sm font-medium">Sections</div>
         <p className="text-xs text-muted-foreground">
           {isPlatform
-            ? "Platform floor sections are enforced on every document in this plate. Adapt their guidance, raise a tier, or add your own sections below."
+            ? "These sections are enforced on every document in this plate. Adapt their guidance, raise a tier, or add your own sections below."
             : "Documents in this plate must contain each required section (or explicitly waive it). Suggested sections guide without blocking."}
         </p>
         {sections.length === 0 ? (
@@ -196,14 +196,7 @@ function SectionRow({
           className="h-8"
           data-testid="plate-section-title"
         />
-        {isFloor ? (
-          <span
-            className="shrink-0 rounded border border-amber-500/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400"
-            data-testid="plate-section-floor-badge"
-          >
-            Platform floor
-          </span>
-        ) : (
+        {isFloor ? null : (
           <>
             <Button
               type="button"
@@ -257,7 +250,7 @@ function SectionRow({
       ) : null}
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <Label className="text-xs text-muted-foreground">Tier</Label>
-        <div className="flex items-center gap-2">
+        <div className="space-y-1">
           <Select
             value={row.tier}
             onValueChange={(tier) =>
@@ -319,19 +312,21 @@ function DivergenceMarker({
   onRevert: () => void;
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+    <div
+      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
       data-testid={`plate-section-diverged-${field}`}
+      title="Customized — platform updates paused for this field."
     >
-      Customized — platform updates paused for this field.
+      <span className="text-amber-600 dark:text-amber-500">Customized</span>
+      <span aria-hidden>·</span>
       <button
         type="button"
-        className="inline-flex items-center gap-0.5 underline underline-offset-2"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap underline underline-offset-2 hover:text-foreground"
         onClick={onRevert}
         data-testid={`plate-section-revert-${field}`}
       >
-        <RotateCcw className="size-3" /> Revert to platform
+        <RotateCcw className="size-3" /> Revert to default
       </button>
-    </span>
+    </div>
   );
 }

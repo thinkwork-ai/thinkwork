@@ -83,10 +83,22 @@ export interface PlateItem {
   analyses: PlateContractAnalysis[];
 }
 
-function parseJsonObject(value: unknown): Record<string, string> {
-  if (typeof value !== "string" || value.length === 0) return {};
+/**
+ * AWSJSON tolerance: the deployed scalar returns PARSED values over the wire
+ * while unit paths see the resolver's JSON strings — accept both shapes.
+ */
+function jsonish(value: unknown): unknown {
+  if (typeof value !== "string" || value.length === 0) return value;
   try {
-    const parsed = JSON.parse(value);
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseJsonObject(value: unknown): Record<string, string> {
+  {
+    const parsed = jsonish(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const out: Record<string, string> = {};
       for (const [key, raw] of Object.entries(parsed)) {
@@ -94,21 +106,14 @@ function parseJsonObject(value: unknown): Record<string, string> {
       }
       return out;
     }
-  } catch {
-    // fall through
   }
   return {};
 }
 
 function parseOverrides(value: unknown): PlateOverrides | null {
-  if (typeof value !== "string" || value.length === 0) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as PlateOverrides;
-    }
-  } catch {
-    // fall through
+  const parsed = jsonish(value);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as PlateOverrides;
   }
   return null;
 }
@@ -278,9 +283,8 @@ function isTier(v: unknown): v is PlateSectionTier {
 
 /** Parse the annotated AWSJSON contract sections; junk degrades to []. */
 export function parseContractSections(value: unknown): PlateContractSection[] {
-  if (typeof value !== "string" || value.length === 0) return [];
-  try {
-    const parsed = JSON.parse(value);
+  {
+    const parsed = jsonish(value);
     if (!Array.isArray(parsed)) return [];
     const out: PlateContractSection[] = [];
     for (const entry of parsed) {
@@ -314,16 +318,13 @@ export function parseContractSections(value: unknown): PlateContractSection[] {
       });
     }
     return out;
-  } catch {
-    return [];
   }
 }
 
 /** Parse the annotated AWSJSON contract analyses; junk degrades to []. */
 export function parseContractAnalyses(value: unknown): PlateContractAnalysis[] {
-  if (typeof value !== "string" || value.length === 0) return [];
-  try {
-    const parsed = JSON.parse(value);
+  {
+    const parsed = jsonish(value);
     if (!Array.isArray(parsed)) return [];
     const out: PlateContractAnalysis[] = [];
     for (const entry of parsed) {
@@ -354,8 +355,6 @@ export function parseContractAnalyses(value: unknown): PlateContractAnalysis[] {
       });
     }
     return out;
-  } catch {
-    return [];
   }
 }
 

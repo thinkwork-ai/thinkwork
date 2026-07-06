@@ -437,24 +437,24 @@ export function PlateEditDialog({
             className="min-h-0 space-y-4 overflow-y-auto border-b border-border p-6 md:border-b-0 md:border-r"
             data-testid="plate-edit-form"
           >
-            <Tabs defaultValue="style">
+            <Tabs defaultValue="content">
               <TabsList
                 variant="line"
                 className="w-full justify-start border-b"
               >
-                <TabsTrigger
-                  value="style"
-                  className="flex-none px-3"
-                  data-testid="plate-tab-style"
-                >
-                  Style
-                </TabsTrigger>
                 <TabsTrigger
                   value="content"
                   className="flex-none px-3"
                   data-testid="plate-tab-content"
                 >
                   Content
+                </TabsTrigger>
+                <TabsTrigger
+                  value="style"
+                  className="flex-none px-3"
+                  data-testid="plate-tab-style"
+                >
+                  Style
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="style" className="mt-4 space-y-5">
