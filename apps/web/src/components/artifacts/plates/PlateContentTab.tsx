@@ -257,7 +257,7 @@ function SectionRow({
       ) : null}
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <Label className="text-xs text-muted-foreground">Tier</Label>
-        <div className="flex items-center gap-2">
+        <div className="space-y-1">
           <Select
             value={row.tier}
             onValueChange={(tier) =>
@@ -319,19 +319,19 @@ function DivergenceMarker({
   onRevert: () => void;
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+    <div
+      className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground"
       data-testid={`plate-section-diverged-${field}`}
     >
-      Customized — platform updates paused for this field.
+      <span>Customized — platform updates paused for this field.</span>
       <button
         type="button"
-        className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-foreground underline underline-offset-2"
         onClick={onRevert}
         data-testid={`plate-section-revert-${field}`}
       >
         <RotateCcw className="size-3" /> Revert to platform
       </button>
-    </span>
+    </div>
   );
 }
