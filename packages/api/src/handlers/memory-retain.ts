@@ -20,6 +20,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
+import { isEvalTrafficMetadata } from "../lib/memory/eval-traffic.js";
 import {
   buildDailyMemoryRetainOptions,
   buildHighConfidenceFactRetainOptions,
@@ -1022,17 +1023,6 @@ function stringField(value: unknown): string {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
-/**
- * Eval/test traffic marker (THINK-133 U3, KTD-5). Stamped by the runtime's
- * retain client (`evalTraffic` metadata) or directly by smoke/eval fixtures
- * that invoke this Lambda. Marked events retain the conversation document —
- * with the marker propagated into Hindsight document metadata — but skip
- * high-confidence-fact extraction and wiki compile.
- */
-export function isEvalTrafficMetadata(metadata: unknown): boolean {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return false;
-  }
-  const value = (metadata as { evalTraffic?: unknown }).evalTraffic;
-  return value === true || value === "true";
-}
+// Relocated to lib so non-handler pipelines (document-artifact ingest) share
+// the single definition; re-exported here for existing importers.
+export { isEvalTrafficMetadata } from "../lib/memory/eval-traffic.js";
