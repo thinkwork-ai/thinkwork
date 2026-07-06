@@ -484,6 +484,43 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
     vi.mocked(resolveAgentRuntimeConfig).mockResolvedValue(runtimeConfig);
   });
 
+  it("flagged-thread replay passes the source thread owner as currentUserId (THINK-179)", async () => {
+    lambdaSendMock.mockResolvedValueOnce(lambdaResponse({ response: "ok" }));
+
+    await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "what are the last 5 opportunities in the CRM?",
+      model: null,
+      messagesHistory: [{ role: "user", content: "hi" }],
+      replayRequesterUserId: "owner-user-1",
+    });
+
+    expect(vi.mocked(resolveAgentRuntimeConfig)).toHaveBeenCalledWith(
+      expect.objectContaining({ currentUserId: "owner-user-1" }),
+    );
+  });
+
+  it("synthetic replay (no owner) resolves without a currentUserId — fail-closed unchanged", async () => {
+    lambdaSendMock.mockResolvedValueOnce(lambdaResponse({ response: "ok" }));
+
+    await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "red team case",
+      model: null,
+      replayRequesterUserId: null,
+    });
+
+    const opts = vi.mocked(resolveAgentRuntimeConfig).mock.calls.at(-1)?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(opts).toBeDefined();
+    expect("currentUserId" in (opts ?? {})).toBe(false);
+  });
+
   it("retries empty responses in-process with a fresh session and succeeds without SQS involvement", async () => {
     lambdaSendMock
       .mockResolvedValueOnce(lambdaResponse({ response: "" }))

@@ -22,6 +22,7 @@ import {
   evalRuns,
   evalTestCases,
   tenants,
+  threads,
 } from "@thinkwork/database-pg/schema";
 import {
   CURRENT_EVAL_SCORING_VERSION,
@@ -159,6 +160,15 @@ export interface ExecutionCase {
    * row shape. Undefined for synthetic cases (single-message replay).
    */
   messages_history?: EvalReplayHistoryMessage[];
+  /**
+   * Flagged-thread replay identity (THINK-179): the SOURCE thread's
+   * owner, resolved from the case's provenance at execution time. Per-
+   * user OAuth MCP servers resolve for this user exactly as their own
+   * chat turns would. Undefined/null for synthetic cases and when the
+   * source thread no longer resolves — the replay then keeps the
+   * no-requester fail-closed behavior (plugin OAuth servers drop).
+   */
+  replay_requester_user_id?: string | null;
 }
 
 let snapshotStorageForTests: DatasetStorage | undefined;
@@ -658,6 +668,24 @@ async function loadPinnedCase(
     );
     if (!replay.ok) return replay;
     executionCase.messages_history = replay.messagesHistory;
+    // Replay as the source thread's owner (THINK-179): per-user OAuth
+    // MCP servers resolve like that user's own chat turns. Provenance
+    // is informational-only (AE5: the thread may be deleted), so a
+    // missing thread/owner degrades to the synthetic no-requester
+    // behavior rather than failing the case.
+    const sourceThreadId = parsed.core.source?.source_thread_id;
+    if (sourceThreadId) {
+      const [sourceThread] = await db
+        .select({ user_id: threads.user_id })
+        .from(threads)
+        .where(
+          and(
+            eq(threads.id, sourceThreadId),
+            eq(threads.tenant_id, run.tenant_id),
+          ),
+        );
+      executionCase.replay_requester_user_id = sourceThread?.user_id ?? null;
+    }
   }
 
   return { ok: true, executionCase };
@@ -876,6 +904,7 @@ async function executeCase(
         // synthetic single-message cases.
         messagesHistory: tc.messages_history,
         replayToolOverrides,
+        replayRequesterUserId: tc.replay_requester_user_id ?? null,
       });
       actualOutput = inv.output;
       durationMs = inv.durationMs;
