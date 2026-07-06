@@ -3,7 +3,7 @@
  * assembly. All through the injectable PlateStore seam — no live DB.
  */
 import { describe, expect, it } from "vitest";
-import { compileDocument } from "./document-compositor.js";
+import { compileDocument, headingSlug } from "./document-compositor.js";
 import {
   CORE_PLATE_SLUGS,
   PLATFORM_PLATES,
@@ -366,7 +366,7 @@ describe("content contract resolution (THINK-183 U2)", () => {
   ];
 
   it("a plate with no contract keys resolves with sections/analyses absent (R3)", async () => {
-    const plate = await resolvePlate(TENANT, "qbr", fakeStore());
+    const plate = await resolvePlate(TENANT, "report", fakeStore());
     expect(plate!.sections).toBeUndefined();
     expect(plate!.analyses).toBeUndefined();
   });
@@ -539,12 +539,133 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
 
   it("a contract-less plate's summary keeps the original three-field shape", async () => {
     const summaries = visiblePlateSummaries(await listPlates(TENANT, fakeStore()));
-    for (const summary of summaries) {
+    for (const summary of summaries.filter((p) =>
+      (CORE_PLATE_SLUGS as readonly string[]).includes(p.slug),
+    )) {
       expect(Object.keys(summary).sort()).toEqual([
         "displayName",
         "slug",
         "useFor",
       ]);
     }
+  });
+});
+
+describe("platform plate contracts (THINK-183 U7 — the live swap)", () => {
+  const BUSINESS_SLUGS = [
+    "qbr",
+    "proposal",
+    "weekly-status",
+    "sales-rep-review",
+    "opportunity-review",
+  ];
+
+  it("every business plate carries a manifest and at least one analysis; manifests are pairwise distinct (R12)", () => {
+    const manifests = BUSINESS_SLUGS.map((slug) => {
+      const plate = getPlatformPlate(slug)!;
+      expect(plate.sections?.length, slug).toBeGreaterThan(0);
+      expect(plate.analyses?.length, slug).toBeGreaterThan(0);
+      return JSON.stringify(plate.sections!.map((s) => s.id));
+    });
+    expect(new Set(manifests).size).toBe(manifests.length);
+  });
+
+  it("core plates stay contract-less (inert path preserved)", () => {
+    for (const slug of CORE_PLATE_SLUGS) {
+      const plate = getPlatformPlate(slug)!;
+      expect(plate.sections).toBeUndefined();
+      expect(plate.analyses).toBeUndefined();
+    }
+  });
+
+  it("every section id equals the heading slug of its title (KTD6)", () => {
+    for (const plate of PLATFORM_PLATES) {
+      for (const section of plate.sections ?? []) {
+        expect(headingSlug(section.title), `${plate.slug}/${section.id}`).toBe(
+          section.id,
+        );
+        expect(section.guidance.length).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it("Sales Rep Review: pipeline-health is required-if-material with a funnel suggestion backed by funnel_conversion (AE1 contract)", () => {
+    const srr = getPlatformPlate("sales-rep-review")!;
+    const pipeline = srr.sections!.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.tier).toBe("required-if-material");
+    expect(pipeline.suggestedDirectives).toEqual([
+      { kind: "chart", chartType: "funnel" },
+    ]);
+    const analysis = srr.analyses!.find(
+      (a) => a.key === "pipeline-conversion",
+    )!;
+    expect(analysis.op).toBe("funnel_conversion");
+    expect(analysis.presentation).toEqual({
+      directive: "chart",
+      chartType: "funnel",
+    });
+  });
+
+  it("Proposal declares no chart-presenting analyses and its suggestions respect its directive restriction", () => {
+    const proposal = getPlatformPlate("proposal")!;
+    for (const analysis of proposal.analyses!) {
+      expect(analysis.presentation.directive).not.toBe("chart");
+      expect(proposal.allowedDirectives).toContain(
+        analysis.presentation.directive,
+      );
+    }
+    for (const section of proposal.sections!) {
+      for (const d of section.suggestedDirectives ?? []) {
+        expect(proposal.allowedDirectives).toContain(d.kind);
+      }
+    }
+  });
+
+  it("all five business exemplars compile clean and pass preflight (gates 2+3)", async () => {
+    const { runDocumentPreflight } = await import("./document-preflight.js");
+    for (const slug of BUSINESS_SLUGS) {
+      const plate = (await resolvePlate(TENANT, slug, fakeStore()))!;
+      const exemplar = buildPlateExemplar(plate);
+      const compiled = compileDocument({
+        plate,
+        title: exemplar.title,
+        abstract: exemplar.abstract,
+        markdownBody: exemplar.markdownBody,
+      });
+      expect(compiled.ok, `${slug} exemplar compile`).toBe(true);
+      if (!compiled.ok) continue;
+      const preflight = runDocumentPreflight({
+        renderHtml: compiled.renderHtml,
+        digestMarkdown: exemplar.markdownBody,
+      });
+      expect(preflight.ok, `${slug} exemplar preflight`).toBe(true);
+    }
+  });
+
+  it("AE1 end-to-end at the lib level: a Sales Rep Review without pipeline-health and without a waiver rejects", async () => {
+    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const digest = `## Quota Attainment
+
+Attainment held at 82% of target.
+
+## Coaching Notes
+
+Keep the discovery call cadence; tighten follow-up notes.
+`;
+    const result = compileDocument({
+      plate,
+      title: "Q3 Rep Review",
+      abstract: "Quarterly rep review.",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].code).toBe("REQUIRED_SECTION_MISSING");
+    expect(result.diagnostics[0].message).toContain("Pipeline Health");
+    expect(result.diagnostics[0].message).toContain("tw:chart (funnel)");
+    expect(result.diagnostics[0].message).toContain(
+      "waiving is the expected path",
+    );
   });
 });

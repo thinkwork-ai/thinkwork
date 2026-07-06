@@ -136,6 +136,13 @@ const CORE_PLATES: readonly PlateDefinition[] = [
  * The business library (R14): five plates with designed accents. Each
  * overrides only the accent triad — brand-neutral surfaces stay on the base
  * palette so tenant document palettes (R8) show through everywhere else.
+ *
+ * THINK-183 (R12): each business plate carries a content contract — a tiered
+ * section manifest plus declared server-computed analyses — so the plates are
+ * distinguishable by substance, not just palette. Section ids MUST equal the
+ * heading slug of their titles (KTD6; pinned by the platform-definitions
+ * tests), and analysis presentations must respect the plate's
+ * allowedDirectives (gate 1b).
  */
 const BUSINESS_PLATES: readonly PlateDefinition[] = [
   {
@@ -156,6 +163,53 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
       "--accent-text": "#aebfef",
     },
     allowedDirectives: "all",
+    sections: [
+      {
+        id: "business-outcomes",
+        title: "Business Outcomes",
+        tier: "required",
+        guidance:
+          "The quarter's goals against results — what was committed, what landed, and the delta, stated in the client's terms.",
+        suggestedDirectives: [{ kind: "stats" }],
+      },
+      {
+        id: "usage-trend",
+        title: "Usage Trend",
+        tier: "required-if-material",
+        guidance:
+          "Adoption or usage over the quarter as an ordered series (monthly or weekly). Waive if no usage telemetry exists for this account.",
+        suggestedDirectives: [{ kind: "chart", chartType: "line" }],
+      },
+      {
+        id: "account-health",
+        title: "Account Health",
+        tier: "required",
+        guidance:
+          "Relationship, risk, and renewal posture — a verdict per dimension with a one-line justification.",
+        suggestedDirectives: [{ kind: "verdict-grid" }],
+      },
+      {
+        id: "next-quarter-plan",
+        title: "Next Quarter Plan",
+        tier: "required",
+        guidance:
+          "Commitments for the coming quarter: owners, milestones, and the success measure for each.",
+      },
+    ],
+    analyses: [
+      {
+        key: "usage-trend",
+        op: "trend",
+        presentation: { directive: "chart", chartType: "line" },
+        source: "model-supplied",
+      },
+      {
+        key: "outcome-variance",
+        op: "variance_vs_prior",
+        presentation: { directive: "stats" },
+        source: "model-supplied",
+      },
+    ],
   },
   {
     slug: "proposal",
@@ -178,6 +232,40 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
     // padding in a commercial document (and this gives the library a live
     // example of directive restriction, AE4).
     allowedDirectives: ["stats", "verdict-grid"],
+    sections: [
+      {
+        id: "scope-of-work",
+        title: "Scope of Work",
+        tier: "required",
+        guidance:
+          "What is being delivered, phase by phase, with what is explicitly out of scope.",
+      },
+      {
+        id: "pricing",
+        title: "Pricing",
+        tier: "required",
+        guidance:
+          "The commercial terms as a table: line items, quantities, and totals. Headline figures work well as stat tiles.",
+        suggestedDirectives: [{ kind: "stats" }],
+      },
+      {
+        id: "terms-and-assumptions",
+        title: "Terms and Assumptions",
+        tier: "required-if-material",
+        guidance:
+          "Assumptions the pricing depends on, payment terms, and validity window. Waive only when the engagement letter carries them.",
+      },
+    ],
+    // No chart presentations: the plate's directive restriction is a plate
+    // identity, and gate 1b enforces that analyses respect it.
+    analyses: [
+      {
+        key: "discount-rate",
+        op: "ratio_pct",
+        presentation: { directive: "stats" },
+        source: "model-supplied",
+      },
+    ],
   },
   {
     slug: "weekly-status",
@@ -197,6 +285,44 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
       "--accent-text": "#92d4df",
     },
     allowedDirectives: "all",
+    sections: [
+      {
+        id: "progress",
+        title: "Progress",
+        tier: "required",
+        guidance:
+          "What moved this week against the plan — shipped, advanced, or decided.",
+      },
+      {
+        id: "metrics",
+        title: "Metrics",
+        tier: "required-if-material",
+        guidance:
+          "The week's numbers against the prior period. Waive when no metrics source is connected for this workstream.",
+        suggestedDirectives: [{ kind: "stats" }],
+      },
+      {
+        id: "blockers",
+        title: "Blockers",
+        tier: "required",
+        guidance:
+          "What is stuck, who can unstick it, and what was already tried. 'None' is a valid entry — say it explicitly.",
+      },
+      {
+        id: "next-steps",
+        title: "Next Steps",
+        tier: "required",
+        guidance: "Concrete commitments for next week with owners.",
+      },
+    ],
+    analyses: [
+      {
+        key: "metrics-vs-prior",
+        op: "variance_vs_prior",
+        presentation: { directive: "stats" },
+        source: "model-supplied",
+      },
+    ],
   },
   {
     slug: "sales-rep-review",
@@ -216,6 +342,49 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
       "--accent-text": "#ecc08a",
     },
     allowedDirectives: "all",
+    // The plate whose miss started THINK-183: a rep review shipped without a
+    // funnel because nothing said one belonged there. pipeline-health is
+    // required-if-material deliberately — thin-data reps must waive, not
+    // fabricate stage counts.
+    sections: [
+      {
+        id: "quota-attainment",
+        title: "Quota Attainment",
+        tier: "required-if-material",
+        guidance:
+          "Attainment against target for the period, computed — not narrated from memory. Waive when no quota target is set for this rep.",
+        suggestedDirectives: [{ kind: "stats" }],
+      },
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        guidance:
+          "The rep's pipeline as an ordered funnel with stage-to-stage conversion. Waive when stage-level pipeline data is unavailable.",
+        suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+      },
+      {
+        id: "coaching-notes",
+        title: "Coaching Notes",
+        tier: "required",
+        guidance:
+          "Specific, observable behaviors to keep or change, each tied to evidence from the period.",
+      },
+    ],
+    analyses: [
+      {
+        key: "pipeline-conversion",
+        op: "funnel_conversion",
+        presentation: { directive: "chart", chartType: "funnel" },
+        source: "model-supplied",
+      },
+      {
+        key: "quota-attainment",
+        op: "ratio_pct",
+        presentation: { directive: "stats" },
+        source: "model-supplied",
+      },
+    ],
   },
   {
     slug: "opportunity-review",
@@ -235,6 +404,46 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
       "--accent-text": "#edaac6",
     },
     allowedDirectives: "all",
+    sections: [
+      {
+        id: "deal-snapshot",
+        title: "Deal Snapshot",
+        tier: "required",
+        guidance:
+          "Stage, value, close date, and how each has moved since the last review.",
+        suggestedDirectives: [{ kind: "stats" }],
+      },
+      {
+        id: "stakeholders",
+        title: "Stakeholders",
+        tier: "required",
+        guidance:
+          "Who decides, who champions, who blocks — and the engagement state of each.",
+      },
+      {
+        id: "risks",
+        title: "Risks",
+        tier: "required",
+        guidance:
+          "What could kill the deal, with a verdict per risk and the mitigation in play.",
+        suggestedDirectives: [{ kind: "verdict-grid" }],
+      },
+      {
+        id: "close-plan",
+        title: "Close Plan",
+        tier: "required",
+        guidance:
+          "The path to signature: remaining steps, owners on both sides, and dates.",
+      },
+    ],
+    analyses: [
+      {
+        key: "value-vs-initial",
+        op: "variance_vs_prior",
+        presentation: { directive: "stats" },
+        source: "model-supplied",
+      },
+    ],
   },
 ];
 
