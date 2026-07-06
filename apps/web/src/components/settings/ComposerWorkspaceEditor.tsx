@@ -50,6 +50,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderTree,
+  Loader2,
   Pencil,
   Plus,
   Scissors,
@@ -159,6 +160,12 @@ export interface ComposerWorkspaceEditorProps {
   removingMcpSlug?: string | null;
   /** Open the Add-MCP-server picker (context menu on the `mcp/` folder). */
   onAddMcpServer?: () => void;
+  /**
+   * Open the Add-connection picker (context menu on the `connections/`
+   * root). Connections subsume MCP servers post-THINK-173, so this opens
+   * the same registry-backed picker the legacy `mcp/` root used.
+   */
+  onAddConnection?: () => void;
   /** Open the destructive detach confirm for an `mcp/<slug>/` folder. */
   onDetachMcpServer?: (slug: string) => void;
   /**
@@ -418,9 +425,21 @@ function mcpSlugForFolder(node: TreeNode): string | null {
  * content-addressed `capabilities/<sha>.json` copies are BUILD OUTPUT of
  * the capability folders — hidden from the tree by default (Eric: "build
  * output mixed into src") behind the Show-compiled debug toggle.
+ *
+ * `mcp/<slug>/.assignment.json` records live behind the same toggle: since
+ * #3409 they are platform-managed assignment state (never agent-authored
+ * content), and every attached server ALSO renders as its
+ * `connections/<slug>/` folder — showing both duplicate-lists the same
+ * capability surface. `connections/` is the tree's one capability surface;
+ * the raw records stay reachable for debugging via the toggle.
  */
 export function isCompiledArtifactPath(path: string): boolean {
-  return path === "capabilities.json" || path.startsWith("capabilities/");
+  return (
+    path === "capabilities.json" ||
+    path.startsWith("capabilities/") ||
+    path === "mcp" ||
+    path.startsWith("mcp/")
+  );
 }
 
 function connectionSlugForFolder(node: TreeNode): string | null {
@@ -510,6 +529,8 @@ interface DeleteConfirmState {
    * deleted. undefined = not applicable, null = still loading.
    */
   automationRefs?: number | null;
+  /** True while the delete mutation is in flight (spinner + disabled). */
+  busy?: boolean;
 }
 
 interface ManifestState {
@@ -544,6 +565,7 @@ export function ComposerWorkspaceEditor({
   pendingMcpSlug = null,
   removingMcpSlug = null,
   onAddMcpServer,
+  onAddConnection,
   onDetachMcpServer,
   onConfigureAgentProfile,
   onCreateAgentProfile,
@@ -729,9 +751,13 @@ export function ComposerWorkspaceEditor({
   }, [nameDialog, srcForPath, loadManifest, selectedPath]);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteConfirm) return;
+    if (!deleteConfirm || deleteConfirm.busy) return;
     const { path, isFolder } = deleteConfirm;
-    setDeleteConfirm(null);
+    // Keep the dialog open and mark it busy so the button spins and the
+    // controls disable — the tree can take a moment to remove a folder.
+    setDeleteConfirm((current) =>
+      current && current.path === path ? { ...current, busy: true } : current,
+    );
     try {
       const targets = isFolder
         ? entries
@@ -750,9 +776,15 @@ export function ComposerWorkspaceEditor({
       ) {
         setSelectedPath(null);
       }
+      setDeleteConfirm(null);
     } catch (err) {
       toast.error(
         `Delete failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      setDeleteConfirm((current) =>
+        current && current.path === path
+          ? { ...current, busy: false }
+          : current,
       );
     }
   }, [deleteConfirm, entries, srcForPath, loadManifest, selectedPath]);
@@ -1016,6 +1048,9 @@ export function ComposerWorkspaceEditor({
       causeKind === "space" ? "Open space source" : "Open user source";
     const isSkillsRoot = node.isFolder && node.path === "skills";
     const isMcpRoot = node.isFolder && node.path === "mcp";
+    // connections/ is managed like skills/ and mcp/ — folders arrive via
+    // the Add-connection picker or agent proposals, never raw file ops.
+    const isConnectionsRoot = node.isFolder && node.path === "connections";
     const canDetachThis = Boolean(
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
     );
@@ -1026,6 +1061,9 @@ export function ComposerWorkspaceEditor({
     );
     const canAddMcpHere = Boolean(
       isMcpRoot && canManageSkills && onAddMcpServer,
+    );
+    const canAddConnectionHere = Boolean(
+      isConnectionsRoot && canManageSkills && onAddConnection,
     );
 
     // Standard file-tree ops (v1.1), routed through the owning SOURCE layer.
@@ -1040,6 +1078,7 @@ export function ComposerWorkspaceEditor({
       !isSpacesContainer &&
       !isSkillsRoot &&
       !isMcpRoot &&
+      !isConnectionsRoot &&
       !isAgentsRoot,
     );
     const canNewInside = stdEligible; // create inside any editable folder (incl. skill folder)
@@ -1071,6 +1110,7 @@ export function ComposerWorkspaceEditor({
       canAddHere ||
       canDetachMcp ||
       canAddMcpHere ||
+      canAddConnectionHere ||
       canApproveFolderCapability ||
       canRevokeFolderCapability ||
       canConfigureProfile ||
@@ -1196,7 +1236,7 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onCreateAgentProfile?.()}
               data-testid="menu-add-agent-profile"
             >
-              <Plus className="mr-2 size-4" /> Add New Agent…
+              <Plus className="mr-2 size-4" /> Add Sub-Agent
             </ContextMenuItem>
           ) : null}
           {canConfigureProfile ? (
@@ -1252,6 +1292,17 @@ export function ComposerWorkspaceEditor({
               {profileScopeName
                 ? `Add MCP server for ${profileScopeName}…`
                 : "Add MCP server…"}
+            </ContextMenuItem>
+          ) : null}
+          {canAddConnectionHere ? (
+            <ContextMenuItem
+              onSelect={() => onAddConnection?.()}
+              data-testid="menu-add-connection"
+            >
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add connection for ${profileScopeName}…`
+                : "Add connection…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (
@@ -1313,6 +1364,7 @@ export function ComposerWorkspaceEditor({
           {(canAddHere ||
             canDetachThis ||
             canAddMcpHere ||
+            canAddConnectionHere ||
             canDetachMcp ||
             canApproveFolderCapability ||
             canReapproveFolderCapability ||
@@ -1416,6 +1468,7 @@ export function ComposerWorkspaceEditor({
           {(canAddHere ||
             canDetachThis ||
             canAddMcpHere ||
+            canAddConnectionHere ||
             canDetachMcp ||
             hasStdOps) &&
           canOpenSource ? (
@@ -1673,7 +1726,9 @@ export function ComposerWorkspaceEditor({
       {/* Standard-menu delete confirm (v1.1). */}
       <AlertDialog
         open={deleteConfirm !== null}
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onOpenChange={(open) =>
+          !open && !deleteConfirm?.busy && setDeleteConfirm(null)
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1701,12 +1756,26 @@ export function ComposerWorkspaceEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteConfirm?.busy}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               data-testid="composer-delete-confirm"
-              onClick={() => void confirmDelete()}
+              disabled={deleteConfirm?.busy}
+              onClick={(event) => {
+                // Keep the dialog mounted through the async delete; Radix
+                // otherwise closes it on click.
+                event.preventDefault();
+                void confirmDelete();
+              }}
             >
-              Delete
+              {deleteConfirm?.busy ? (
+                <Loader2
+                  className="mr-2 size-4 animate-spin"
+                  data-testid="composer-delete-spinner"
+                />
+              ) : null}
+              {deleteConfirm?.busy ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

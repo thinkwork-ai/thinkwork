@@ -355,7 +355,7 @@ export function SettingsCapabilities({
     Record<string, string>
   >({});
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
-  // Tree context-menu profile ops: "Add New Agent…" (create counter handed to
+  // Tree context-menu profile ops: "Add Sub-Agent" (create counter handed to
   // the Profiles sheet) and "Delete Agent Profile" (destructive confirm here).
   const [profilesCreateRequest, setProfilesCreateRequest] = useState(0);
   const [deleteProfileTarget, setDeleteProfileTarget] = useState<{
@@ -1467,6 +1467,7 @@ export function SettingsCapabilities({
           pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
+          onAddConnection={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
           connectionStateBySlug={folderStateBySlug.connection}
           toolStateBySlug={folderStateBySlug.tool}
@@ -1814,11 +1815,11 @@ export function SettingsCapabilities({
       <Dialog open={addMcpOpen} onOpenChange={setAddMcpOpen}>
         <DialogContent data-testid="add-mcp-dialog">
           <DialogHeader>
-            <DialogTitle>Add an MCP server</DialogTitle>
+            <DialogTitle>Add a connection</DialogTitle>
             <DialogDescription>
-              MCP servers registered for this tenant. Attaching ends on the
-              server&apos;s live state — an honest gate reason (OAuth,
-              activation…) shows if it&apos;s held.
+              MCP servers registered for this tenant attach as connections.
+              Attaching ends on the server&apos;s live state — an honest gate
+              reason (OAuth, activation…) shows if it&apos;s held.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-80 overflow-y-auto">
