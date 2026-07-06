@@ -158,8 +158,27 @@ function workspaceBucket(): string | null {
 }
 
 export interface McpAssignmentStateDeps {
-  s3?: S3Client;
+  s3?: Pick<S3Client, "send">;
   bucket?: string;
+}
+
+/**
+ * THINK-190 fork probe: a `capability_folder_dispatch` agent's MCP
+ * assignment record is the signed `connections/<slug>/.assignment.json`
+ * sidecar (`../capabilities/connection-assignments.ts`) — its legacy
+ * `mcp/<slug>/` mirror is retired: readers repoint, writers skip it, and
+ * the U11 backfill scrubs the folders. Un-flipped agents (customer stages
+ * pre-cutover) still live entirely on the `mcp/` files.
+ */
+export async function agentUsesFolderDispatch(
+  agentId: string,
+): Promise<boolean> {
+  const [agent] = await db
+    .select({ capability_folder_dispatch: agents.capability_folder_dispatch })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  return agent?.capability_folder_dispatch === true;
 }
 
 /**
@@ -394,7 +413,9 @@ export async function materializeMcpAssignmentFolder(
 /**
  * Materialize one server's `mcp/<slug>/.assignment.json` for several agents
  * (plugin/managed default-agent assignment). Registry-read only. Returns the
- * count of files written.
+ * count of files written. THINK-190: flipped agents are skipped — their
+ * assignment record is the signed connection folder the same provisioners
+ * already write; the mirror must never be resurrected for them.
  */
 export async function materializeMcpAssignmentFoldersForAgents(
   input: {
@@ -408,6 +429,7 @@ export async function materializeMcpAssignmentFoldersForAgents(
   if (!bucket) return 0;
   let written = 0;
   for (const agentId of input.agentIds) {
+    if (await agentUsesFolderDispatch(agentId)) continue;
     const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
     if (!targetPrefix) continue;
     if (
@@ -506,4 +528,30 @@ export async function removeMcpAssignmentForAgentServer(
   const targetPrefix = await resolveAgentWorkspacePrefix(input.agentId);
   if (!targetPrefix) return false;
   return removeMcpAssignmentFolder(targetPrefix, slug, { ...deps, bucket });
+}
+
+/**
+ * Remove EVERY legacy `mcp/<slug>/` folder under an agent workspace prefix
+ * (THINK-190 migration: for `capability_folder_dispatch` agents the
+ * connection sidecar is the single assignment record, so the superseded
+ * mirror only duplicate-renders in Composer). Only ever call this for
+ * flipped agents. Best-effort per folder; returns the slugs removed.
+ */
+export async function removeLegacyMcpFolders(
+  targetPrefix: string,
+  deps: McpAssignmentStateDeps = {},
+): Promise<string[]> {
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return [];
+  const slugs = await listWorkspaceMcpSlugs(targetPrefix, { ...deps, bucket });
+  if (!slugs || slugs.length === 0) return [];
+  const removed: string[] = [];
+  for (const slug of slugs) {
+    if (
+      await removeMcpAssignmentFolder(targetPrefix, slug, { ...deps, bucket })
+    ) {
+      removed.push(slug);
+    }
+  }
+  return removed;
 }

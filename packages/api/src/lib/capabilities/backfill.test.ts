@@ -156,6 +156,15 @@ function fakeS3() {
         objects.delete(key);
         return {};
       }
+      if (name === "ListObjectsV2Command") {
+        const prefix = command.input.Prefix as string;
+        return {
+          Contents: [...objects.keys()]
+            .filter((k) => k.startsWith(prefix))
+            .map((Key) => ({ Key })),
+          IsTruncated: false,
+        };
+      }
       throw new Error(`unexpected ${name}`);
     }),
   };
@@ -308,6 +317,9 @@ describe("runCapabilityFolderBackfill", () => {
 
   it("matching surfaces flip the flag atomically per agent (R20)", async () => {
     const s3 = fakeS3();
+    // Legacy mirror folders present pre-flip — the flip must scrub them.
+    s3.objects.set(`${PREFIX}mcp/linear/.assignment.json`, "{}");
+    s3.objects.set(`${PREFIX}mcp/github/.assignment.json`, "{}");
     const report = await runCapabilityFolderBackfill({
       tenantId: "T1",
       apply: true,
@@ -321,6 +333,40 @@ describe("runCapabilityFolderBackfill", () => {
     expect(mockUpdates.mock.calls[0]?.[0].values).toEqual({
       capability_folder_dispatch: true,
     });
+    // THINK-190 flip follow-up: the superseded mcp/ mirror is gone;
+    // connection folders stay (they are the record now).
+    expect(agent.legacyMcpRemoved).toEqual(["github", "linear"]);
+    expect(
+      [...s3.objects.keys()].filter((key) => key.includes("/mcp/")),
+    ).toEqual([]);
+    expect(
+      [...s3.objects.keys()].some((key) => key.includes("/connections/")),
+    ).toBe(true);
+  });
+
+  it("an already-flipped agent gets its legacy mcp/ mirror scrubbed on re-run", async () => {
+    const s3 = fakeS3();
+    mockAgentRows.mockReturnValue([
+      { ...AGENT, capability_folder_dispatch: true },
+    ]);
+    s3.objects.set(`${PREFIX}mcp/linear/.assignment.json`, "{}");
+    // Seed matching folders so the divergence check passes.
+    await runCapabilityFolderBackfill({
+      tenantId: "T1",
+      apply: true,
+      deps: deps(s3),
+    });
+    const report = await runCapabilityFolderBackfill({
+      tenantId: "T1",
+      flip: true,
+      deps: deps(s3),
+    });
+    expect(report.agents[0]?.alreadyFlipped).toBe(true);
+    expect(report.agents[0]?.legacyMcpRemoved).toEqual(["linear"]);
+    expect(report.summary.legacyMcpRemoved).toBe(1);
+    expect(
+      [...s3.objects.keys()].filter((key) => key.includes("/mcp/")),
+    ).toEqual([]);
   });
 
   it("divergence blocks the flip with diff output (R20)", async () => {

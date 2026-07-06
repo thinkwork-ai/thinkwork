@@ -2458,8 +2458,11 @@ function extractTokenFromSecretString(secretString?: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// MCP Server — Agent Assignment (workspace `mcp/<slug>/.assignment.json`
-// files are the assignment state; agent_mcp_servers is retired)
+// MCP Server — Agent Assignment (workspace files are the assignment state;
+// agent_mcp_servers is retired). THINK-190: which file depends on the
+// agent's migration flag — `connections/<slug>/.assignment.json` sidecars
+// for `capability_folder_dispatch` agents, legacy `mcp/<slug>/` files for
+// un-flipped agents (customer stages pre-cutover).
 // ---------------------------------------------------------------------------
 
 /**
@@ -2486,21 +2489,48 @@ async function readAgentMcpAssignments(agentId: string): Promise<Array<{
   } | null;
 }> | null> {
   const {
+    agentUsesFolderDispatch,
     listWorkspaceMcpSlugs,
     readMcpAssignmentState,
     resolveAgentWorkspacePrefix,
   } = await import("../lib/mcp/assignment-state.js");
   const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
   if (!targetPrefix) return null;
-  const slugs = await listWorkspaceMcpSlugs(targetPrefix);
-  if (slugs === null) return null;
   const entries: Array<{
     slug: string;
     state: import("../lib/mcp/assignment-state.js").McpAssignmentState;
   }> = [];
-  for (const slug of slugs) {
-    const state = await readMcpAssignmentState(targetPrefix, slug);
-    if (state) entries.push({ slug, state });
+  if (await agentUsesFolderDispatch(agentId)) {
+    // THINK-190: the connection sidecar is the single assignment record.
+    // Synthesize the state shape callers consume (enabled/enabledTools);
+    // display fields come from the registry join below either way.
+    const { listConnectionAssignments } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
+    const records = await listConnectionAssignments(targetPrefix);
+    if (records === null) return null;
+    for (const record of records) {
+      entries.push({
+        slug: record.slug,
+        state: {
+          slug: record.slug,
+          name: record.slug,
+          registryServerId: record.registryServerId,
+          ...(record.operations.length > 0
+            ? { enabledTools: record.operations }
+            : {}),
+          ...(record.enabled ? {} : { enabled: false }),
+          updated_at: record.updated_at ?? "",
+        },
+      });
+    }
+  } else {
+    const slugs = await listWorkspaceMcpSlugs(targetPrefix);
+    if (slugs === null) return null;
+    for (const slug of slugs) {
+      const state = await readMcpAssignmentState(targetPrefix, slug);
+      if (state) entries.push({ slug, state });
+    }
   }
   const registryIds = [
     ...new Set(entries.map((entry) => entry.state.registryServerId)),
@@ -2589,39 +2619,57 @@ async function mcpAssignToAgent(
     );
   if (!server) return error("MCP server not found in this tenant", 404);
 
-  // The workspace files ARE the assignment (agent_mcp_servers retired):
-  // write the `mcp/<slug>/.assignment.json` state file plus the signed
-  // `connections/<slug>/` folder. A failed write is a failed assign.
+  // The workspace files ARE the assignment (agent_mcp_servers retired).
+  // THINK-190 fork: a flipped agent's single record is the signed
+  // `connections/<slug>/` folder — the legacy mcp/ mirror is never written
+  // for it. Un-flipped agents keep the mcp/ file as the record plus the
+  // connection dual-write.
   const {
+    agentUsesFolderDispatch,
     materializeMcpAssignmentFolder,
     readMcpAssignmentState,
     resolveAgentWorkspacePrefix,
   } = await import("../lib/mcp/assignment-state.js");
   const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
   if (!targetPrefix) return error("Agent workspace unresolvable", 500);
+  const flipped = await agentUsesFolderDispatch(agentId);
 
   const [serverRow] = await db
     .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
     .from(tenantMcpServers)
     .where(eq(tenantMcpServers.id, mcpServerId));
   const folderSlug = serverRow ? (serverRow.slug ?? serverRow.name) : null;
-  const existed =
-    folderSlug != null
-      ? (await readMcpAssignmentState(targetPrefix, folderSlug)) != null
-      : false;
+  // Connection folder name (folder-write's sanitize rule).
+  const connectionSlug = folderSlug
+    ? folderSlug.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
+    : null;
+  let existed = false;
+  if (flipped && connectionSlug) {
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
+    existed =
+      (await readConnectionAssignment(targetPrefix, connectionSlug)) != null;
+  } else if (folderSlug != null) {
+    existed = (await readMcpAssignmentState(targetPrefix, folderSlug)) != null;
+  }
 
-  const materialized = await materializeMcpAssignmentFolder({
-    targetPrefix,
-    registryServerId: mcpServerId,
-    tenantId: agentRow.tenant_id,
-    agentConfig: (config as { toolAllowlist?: unknown } | null) || null,
-  });
-  if (!materialized) {
-    return error("Failed to write MCP assignment to agent workspace", 500);
+  if (!flipped) {
+    const materialized = await materializeMcpAssignmentFolder({
+      targetPrefix,
+      registryServerId: mcpServerId,
+      tenantId: agentRow.tenant_id,
+      agentConfig: (config as { toolAllowlist?: unknown } | null) || null,
+    });
+    if (!materialized) {
+      return error("Failed to write MCP assignment to agent workspace", 500);
+    }
   }
 
   // Signed connection folder — same registration surface the Composer
   // grant writes, provenance `plugin-reconciler` (server-side REST path).
+  // For a flipped agent this write IS the assignment, so its failure is
+  // the request's failure; for un-flipped it stays a best-effort shadow.
   try {
     const { writeConnectionFoldersForAgents } =
       await import("../lib/capabilities/reconcile-connection-folders.js");
@@ -2641,6 +2689,23 @@ async function mcpAssignToAgent(
       "[skills] connection-folder write failed:",
       err instanceof Error ? err.message : err,
     );
+    if (flipped) {
+      return error("Failed to write MCP assignment to agent workspace", 500);
+    }
+  }
+  if (flipped) {
+    // The shared writer is best-effort by contract (it swallows per-agent
+    // failures), but for a flipped agent this write IS the assignment —
+    // read the record back and fail the request if it did not land.
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
+    const landed = connectionSlug
+      ? await readConnectionAssignment(targetPrefix, connectionSlug)
+      : null;
+    if (!landed) {
+      return error("Failed to write MCP assignment to agent workspace", 500);
+    }
   }
 
   return existed
@@ -2653,9 +2718,15 @@ async function mcpUnassignFromAgent(
   mcpServerId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   // The workspace folder is the assignment record (agent_mcp_servers
-  // retired) — existence check + removal are both against the files.
-  const { readMcpAssignmentState, resolveAgentWorkspacePrefix } =
-    await import("../lib/mcp/assignment-state.js");
+  // retired). THINK-190 fork: flipped agents check + remove the connection
+  // sidecar (their single record; the mcp/ mirror removal is best-effort
+  // stale cleanup); un-flipped agents keep the mcp/ file as the record.
+  const {
+    agentUsesFolderDispatch,
+    readMcpAssignmentState,
+    removeMcpAssignmentForAgentServer,
+    resolveAgentWorkspacePrefix,
+  } = await import("../lib/mcp/assignment-state.js");
   const [serverRow] = await db
     .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
     .from(tenantMcpServers)
@@ -2665,20 +2736,34 @@ async function mcpUnassignFromAgent(
   if (!targetPrefix || !folderSlug) {
     return notFound("MCP server assignment not found");
   }
-  const existing = await readMcpAssignmentState(targetPrefix, folderSlug);
-  if (!existing) return notFound("MCP server assignment not found");
+  const flipped = await agentUsesFolderDispatch(agentId);
+  const connectionSlug = folderSlug
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-");
+  if (flipped) {
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
+    const existing = await readConnectionAssignment(
+      targetPrefix,
+      connectionSlug,
+    );
+    if (!existing) return notFound("MCP server assignment not found");
+  } else {
+    const existing = await readMcpAssignmentState(targetPrefix, folderSlug);
+    if (!existing) return notFound("MCP server assignment not found");
+  }
 
-  const { removeMcpAssignmentForAgentServer } =
-    await import("../lib/mcp/assignment-state.js");
   const removed = await removeMcpAssignmentForAgentServer({
     agentId,
     registryServerId: mcpServerId,
   });
-  if (!removed) {
+  if (!removed && !flipped) {
     return error("Failed to remove MCP assignment from agent workspace", 500);
   }
 
-  // Remove the signed connection folder too (parity with Composer detach).
+  // Remove the signed connection folder — the record itself for a flipped
+  // agent (verified below), a Composer-detach-parity shadow otherwise.
   try {
     const { removeConnectionFoldersForAgents } =
       await import("../lib/capabilities/reconcile-connection-folders.js");
@@ -2691,6 +2776,17 @@ async function mcpUnassignFromAgent(
       "[skills] connection-folder removal failed:",
       err instanceof Error ? err.message : err,
     );
+  }
+  if (flipped) {
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
+    if (await readConnectionAssignment(targetPrefix, connectionSlug)) {
+      return error(
+        "Failed to remove MCP assignment from agent workspace",
+        500,
+      );
+    }
   }
 
   return json({ ok: true });
