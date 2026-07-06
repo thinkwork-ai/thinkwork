@@ -22,7 +22,10 @@ import {
   DIRECTIVE_KINDS,
 } from "../../../lib/artifacts/document-directives.js";
 import { runDocumentPreflight } from "../../../lib/artifacts/document-preflight.js";
-import { PLATE_SECTION_TIERS } from "../../../lib/artifacts/plate-definitions.js";
+import {
+  getPlatformPlate,
+  PLATE_SECTION_TIERS,
+} from "../../../lib/artifacts/plate-definitions.js";
 import {
   buildPlateExemplar,
   validatePlatePalette,
@@ -178,6 +181,20 @@ function asObject(v: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * AWSJSON tolerance: contract fields arrive as JSON strings over the wire
+ * (like palettes) but as plain values from internal callers/tests. A parse
+ * failure falls through to the bound's own shape error.
+ */
+export function parseJsonish(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
 function boundedSuggestedDirectives(
   value: unknown,
   where: string,
@@ -222,6 +239,7 @@ function boundedSuggestedDirectives(
 export function boundedSections(
   value: unknown,
 ): PlateDraftSection[] | undefined {
+  value = parseJsonish(value);
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
     throw badInput("sections must be a list of section manifest entries");
@@ -308,6 +326,7 @@ export function boundedSectionOverrides(
   value: unknown,
   platformSections: ReadonlyArray<{ id: string; tier: string }>,
 ): Record<string, PlateDraftSectionOverride> | undefined {
+  value = parseJsonish(value);
   if (value === undefined || value === null) return undefined;
   const rec = asObject(value);
   if (!rec) {
@@ -379,6 +398,7 @@ export function boundedSectionOverrides(
 export function boundedAnalyses(
   value: unknown,
 ): PlateDraftAnalysis[] | undefined {
+  value = parseJsonish(value);
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
     throw badInput("analyses must be a list of declared analyses");
@@ -570,10 +590,54 @@ export function validateCandidatePlate(
 // GraphQL mapping
 // ---------------------------------------------------------------------------
 
+/**
+ * Annotate the resolved contract with floor provenance (THINK-188 R5/U4):
+ * each entry carries `source` ("platform" floor vs "tenant" addition) and,
+ * for floor sections, an `overridden` flag map naming which fields the
+ * tenant patched — the editor's lock/divergence/revert affordances key on it.
+ */
+function annotatedSections(plate: ResolvedPlate): unknown[] | null {
+  if (!plate.sections || plate.sections.length === 0) return null;
+  const floorDef =
+    plate.origin === "platform" ? getPlatformPlate(plate.slug) : null;
+  const floor = new Map((floorDef?.sections ?? []).map((s) => [s.id, s]));
+  return plate.sections.map((section) => {
+    const base = floor.get(section.id);
+    if (!base) return { ...section, source: "tenant" };
+    const overridden: Record<string, boolean> = {};
+    if (section.guidance !== base.guidance) overridden.guidance = true;
+    if (section.tier !== base.tier) overridden.tier = true;
+    if (
+      JSON.stringify(section.suggestedDirectives ?? null) !==
+      JSON.stringify(base.suggestedDirectives ?? null)
+    ) {
+      overridden.suggestedDirectives = true;
+    }
+    return {
+      ...section,
+      source: "platform",
+      ...(Object.keys(overridden).length > 0 ? { overridden } : {}),
+    };
+  });
+}
+
+function annotatedAnalyses(plate: ResolvedPlate): unknown[] | null {
+  if (!plate.analyses || plate.analyses.length === 0) return null;
+  const floorDef =
+    plate.origin === "platform" ? getPlatformPlate(plate.slug) : null;
+  const floorKeys = new Set((floorDef?.analyses ?? []).map((a) => a.key));
+  return plate.analyses.map((analysis) => ({
+    ...analysis,
+    source: floorKeys.has(analysis.key) ? "platform" : "tenant",
+  }));
+}
+
 export function plateToGraphql(
   plate: ResolvedPlate,
   overrides: Record<string, unknown> | null,
 ): Record<string, unknown> {
+  const sections = annotatedSections(plate);
+  const analyses = annotatedAnalyses(plate);
   return {
     slug: plate.slug,
     displayName: plate.displayName,
@@ -588,6 +652,8 @@ export function plateToGraphql(
     hidden: plate.hidden,
     customized: plate.customized,
     overrides: overrides ? JSON.stringify(overrides) : null,
+    sections: sections ? JSON.stringify(sections) : null,
+    analyses: analyses ? JSON.stringify(analyses) : null,
   };
 }
 

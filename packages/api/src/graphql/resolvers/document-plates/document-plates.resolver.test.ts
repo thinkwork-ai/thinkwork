@@ -829,3 +829,150 @@ describe("floor save gates (THINK-188 U2)", () => {
     ).rejects.toThrow(/applies only to platform plates/);
   });
 });
+
+describe("GraphQL contract surface (THINK-188 U4)", () => {
+  it("annotates floor provenance: platform sections carry source + overridden flags, additions carry tenant", async () => {
+    mocks.rows = [
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: {
+          sectionOverrides: {
+            "quota-attainment": { guidance: "Fiscal-year attainment." },
+          },
+          sections: [
+            {
+              id: "territory-notes",
+              title: "Territory Notes",
+              tier: "suggested",
+              guidance: "Coverage notes.",
+            },
+          ],
+        },
+        hidden: false,
+      },
+    ];
+    const plates = (await documentPlates(
+      {},
+      { tenantId: TENANT },
+      ctx,
+    )) as Array<{ slug: string; sections: string | null }>;
+    const srr = plates.find((p) => p.slug === "sales-rep-review")!;
+    const sections = JSON.parse(srr.sections!) as Array<{
+      id: string;
+      source: string;
+      overridden?: Record<string, boolean>;
+    }>;
+    const quota = sections.find((s) => s.id === "quota-attainment")!;
+    expect(quota.source).toBe("platform");
+    expect(quota.overridden).toEqual({ guidance: true });
+    const pipeline = sections.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.source).toBe("platform");
+    expect(pipeline.overridden).toBeUndefined();
+    const territory = sections.find((s) => s.id === "territory-notes")!;
+    expect(territory.source).toBe("tenant");
+  });
+
+  it("a pristine platform plate carries annotated sections with no overridden markers; contract-less plates return null", async () => {
+    const plates = (await documentPlates(
+      {},
+      { tenantId: TENANT },
+      ctx,
+    )) as Array<{ slug: string; sections: string | null; analyses: string | null }>;
+    const srr = plates.find((p) => p.slug === "sales-rep-review")!;
+    const sections = JSON.parse(srr.sections!) as Array<{
+      source: string;
+      overridden?: unknown;
+    }>;
+    expect(sections.every((s) => s.source === "platform")).toBe(true);
+    expect(sections.every((s) => s.overridden === undefined)).toBe(true);
+    const analyses = JSON.parse(srr.analyses!) as Array<{ source: string }>;
+    expect(analyses.every((a) => a.source === "platform")).toBe(true);
+    const report = plates.find((p) => p.slug === "report")!;
+    expect(report.sections).toBeNull();
+    expect(report.analyses).toBeNull();
+  });
+
+  it("save accepts AWSJSON string-encoded contract fields (wire shape) and persists the delta", async () => {
+    const result = (await saveDocumentPlate(
+      {},
+      {
+        input: {
+          slug: "sales-rep-review",
+          sections: JSON.stringify([
+            {
+              id: "territory-notes",
+              title: "Territory Notes",
+              tier: "suggested",
+              guidance: "Coverage notes.",
+            },
+          ]),
+          sectionOverrides: JSON.stringify({
+            "quota-attainment": { tier: "required" },
+          }),
+        },
+      },
+      ctx,
+    )) as { sections: string | null };
+    const config = mocks.inserted.at(-1)!.config as Record<string, unknown>;
+    expect(
+      (config.sections as Array<{ id: string }>).map((s) => s.id),
+    ).toEqual(["territory-notes"]);
+    expect(config.sectionOverrides).toEqual({
+      "quota-attainment": { tier: "required" },
+    });
+    // The mutation returns the resolved, annotated contract.
+    const sections = JSON.parse(result.sections!) as Array<{
+      id: string;
+      tier: string;
+      overridden?: Record<string, boolean>;
+    }>;
+    expect(
+      sections.find((s) => s.id === "quota-attainment")!.overridden,
+    ).toEqual({ tier: true });
+    expect(sections.map((s) => s.id)).toContain("territory-notes");
+  });
+
+  it("preview draftConfig with contract fields compiles the draft contract, not the stored one", async () => {
+    mocks.requireTenantMember.mockResolvedValue("admin");
+    const result = (await documentPlatePreview(
+      {},
+      {
+        tenantId: TENANT,
+        slug: "deal-desk",
+        draftConfig: {
+          displayName: "Deal Desk",
+          useFor: "Deal desk reviews.",
+          sections: JSON.stringify([
+            {
+              id: "summary",
+              title: "Summary",
+              tier: "required",
+              guidance: "Headline outcome.",
+            },
+            {
+              id: "risks",
+              title: "Risks",
+              tier: "required-if-material",
+              guidance: "What could kill the deal.",
+            },
+          ]),
+          analyses: JSON.stringify([
+            {
+              key: "win-rate",
+              op: "ratio_pct",
+              presentation: { directive: "stats" },
+            },
+          ]),
+        },
+      },
+      ctx,
+    )) as { html: string | null; diagnostics: unknown[] };
+    expect(result.diagnostics).toEqual([]);
+    expect(result.html).toContain('id="summary"');
+    // Rich preview: computed sample analysis (82.4%) + waiver demo on the
+    // last enforced (required-if-material) section.
+    expect(result.html).toContain("82.4%");
+    expect(result.html).toContain("Section omitted");
+  });
+});
