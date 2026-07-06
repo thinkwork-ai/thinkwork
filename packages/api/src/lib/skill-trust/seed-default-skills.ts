@@ -93,11 +93,10 @@ export interface DefaultCatalogSkill {
  */
 export const DEFAULT_CATALOG_SKILLS: DefaultCatalogSkill[] = [
   { slug: "artifact-builder", autoGrant: true },
-  // THINK-177: document-composer must reseed whenever its plates change —
-  // the DocSpector PLATE gate enforces the plate marker, so a tenant left on
-  // stale plate content cannot emit documents at all. Auto-grant for the same
-  // reason as artifact-builder: the platform agent must render document
-  // plates out of the box.
+  // THINK-154: document-composer must reseed whenever its authoring guidance
+  // changes — the skill teaches the markdown + tw: directive contract the
+  // compositor compiles. Auto-grant for the same reason as artifact-builder:
+  // the platform agent must compose documents out of the box.
   { slug: "document-composer", autoGrant: true },
   { slug: "automation-loop-designer", autoGrant: false },
 ];

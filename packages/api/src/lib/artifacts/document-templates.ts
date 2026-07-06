@@ -8,9 +8,9 @@
  * this constant in sync with the plate files while both exist; once the skill
  * stops shipping plate HTML the compiler copy is the single source of truth.
  *
- * The `tw-plate` meta marker is retained in compiled output: legacy tooling
- * and the transition-period PLATE gate recognize it, and it identifies the
- * genre a render was compiled for.
+ * The `tw-plate` meta marker is retained in compiled output: it identifies
+ * the genre a render was compiled for (the runtime PLATE gate itself is
+ * retired — compiler output is plate-conformant by construction).
  */
 
 import type { DocumentGenre } from "./document-emission.js";

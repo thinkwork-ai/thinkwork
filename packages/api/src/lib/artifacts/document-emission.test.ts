@@ -27,10 +27,15 @@ const VALID_DOCUMENT = {
   genre: "report",
   title: "Q3 Report",
   abstract: "Numbers are up.",
-  digestMarkdown: "# Q3 Report\n\nNumbers are up.",
+  digestMarkdown: "## Summary\n\nNumbers are up 18% this quarter.",
+  status: "draft",
+};
+
+/** THINK-154 retirement: the legacy dual-body shape, kept ONLY to prove it rejects. */
+const LEGACY_DUAL_BODY = {
+  ...VALID_DOCUMENT,
   renderHtml:
     '<!DOCTYPE html><html><head><title>Q3</title></head><body><h1 id="t">Q3</h1></body></html>',
-  status: "draft",
 };
 
 interface Recorded {
@@ -126,9 +131,8 @@ describe("parseDocumentEmitInput", () => {
     expect(
       parseDocumentEmitInput({ ...VALID_DOCUMENT, digestMarkdown: "" }).ok,
     ).toBe(false);
-    expect(
-      parseDocumentEmitInput({ ...VALID_DOCUMENT, renderHtml: " " }).ok,
-    ).toBe(false);
+    // THINK-154 retirement: any renderHtml — even a non-empty one — rejects.
+    expect(parseDocumentEmitInput(LEGACY_DUAL_BODY).ok).toBe(false);
     expect(
       parseDocumentEmitInput({ ...VALID_DOCUMENT, spaceId: SPACE_ID }).ok,
     ).toBe(false);
@@ -167,7 +171,7 @@ describe("handleDocumentEmission", () => {
     expect(JSON.stringify(recorded.cards[0])).not.toContain("<!DOCTYPE");
   });
 
-  it("returns diagnostics and persists nothing on preflight reject (AE1/F2)", async () => {
+  it("preflight failure on compiled output is a platform error and persists nothing (R6)", async () => {
     const diagnostics = [
       { code: "EXTERNAL_REF" as const, message: "x", location: "line 1" },
     ];
@@ -176,10 +180,10 @@ describe("handleDocumentEmission", () => {
     });
     const result = await emit(VALID_DOCUMENT, deps);
 
-    expect(result.statusCode).toBe(200);
+    expect(result.statusCode).toBe(500);
     expect(result.body.ok).toBe(false);
-    expect(result.body.code).toBe("PREFLIGHT_REJECTED");
-    expect(result.body.diagnostics).toEqual(diagnostics);
+    expect(result.body.code).toBe("COMPILER_DEFECT");
+    expect(result.body.diagnostics).toBeUndefined();
     expect(recorded.s3Writes).toHaveLength(0);
     expect(recorded.upserts).toHaveLength(0);
     expect(recorded.cards).toHaveLength(0);
@@ -308,7 +312,7 @@ describe("dual-shape emission (THINK-154 U4)", () => {
     expect(recorded.cards).toHaveLength(1);
   });
 
-  it("markdown-only path skips the PLATE gate but runs the rest of preflight (R6/R10)", async () => {
+  it("runs the retained runtime preflight on compiled output (R6)", async () => {
     const preflight = vi.fn<DocumentEmissionDeps["preflight"]>(() => ({
       ok: true,
     }));
@@ -316,36 +320,19 @@ describe("dual-shape emission (THINK-154 U4)", () => {
     await emit(V2_DOCUMENT, deps);
     expect(preflight).toHaveBeenCalledTimes(1);
     const arg = preflight.mock.calls[0][0];
-    expect(arg.genre).toBe("report");
-    expect(arg.skipPlateGate).toBe(true);
     expect(arg.renderHtml).toContain("tw-plate");
+    expect(arg.digestMarkdown).toContain("Numbers are up");
   });
 
-  it("legacy dual-body with off-plate HTML still rejects via PLATE exactly as today (AE3/F2)", async () => {
-    const { deps, recorded } = makeDeps({ preflight: runDocumentPreflight });
-    const offPlate = {
-      ...VALID_DOCUMENT,
-      renderHtml:
-        '<!DOCTYPE html><html><head><title>Q3</title><style>@media (prefers-color-scheme: dark){:root{--bg:#000}}</style></head><body><h1 id="t">Q3</h1></body></html>',
-    };
-    const result = await emit(offPlate, deps);
+  it("THINK-154 retirement: the legacy dual-body shape is rejected with a self-repair error", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(LEGACY_DUAL_BODY, deps);
+    expect(result.statusCode).toBe(400);
     expect(result.body.ok).toBe(false);
-    expect(result.body.code).toBe("PREFLIGHT_REJECTED");
-    const codes = (result.body.diagnostics as Array<{ code: string }>).map(
-      (d) => d.code,
-    );
-    expect(codes).toContain("PLATE");
+    expect(String(result.body.error)).toContain("no longer accepted");
+    expect(String(result.body.error)).toContain("digest_markdown");
     expect(recorded.s3Writes).toHaveLength(0);
-  });
-
-  it("legacy dual-body never invokes the compiler", async () => {
-    const compile = vi.fn();
-    const { deps } = makeDeps({
-      compile: compile as unknown as DocumentEmissionDeps["compile"],
-    });
-    const result = await emit(VALID_DOCUMENT, deps);
-    expect(result.body.ok).toBe(true);
-    expect(compile).not.toHaveBeenCalled();
+    expect(recorded.upserts).toHaveLength(0);
   });
 
   it("compile rejection (unknown directive) persists nothing and returns diagnostics in-turn", async () => {

@@ -230,7 +230,6 @@ Prose after components.
       const preflight = runDocumentPreflight({
         renderHtml: result.renderHtml,
         digestMarkdown: "# d",
-        genre,
       });
       expect(preflight.ok).toBe(true);
     }
