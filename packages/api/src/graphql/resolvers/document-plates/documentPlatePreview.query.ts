@@ -119,5 +119,8 @@ export async function documentPlatePreview(
     abstract: preview.abstract,
     markdownBody: preview.markdownBody,
   });
-  return { html: compiled.ok ? compiled.renderHtml : result.html, diagnostics: [] };
+  return {
+    html: compiled.ok ? compiled.renderHtml : result.html,
+    diagnostics: [],
+  };
 }

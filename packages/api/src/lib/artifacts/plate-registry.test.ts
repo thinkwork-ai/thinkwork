@@ -719,7 +719,10 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
     const floorDef = getPlatformPlate("sales-rep-review")!;
     const ids = plate.sections!.map((s) => s.id);
     // Floor order preserved, addition appended last.
-    expect(ids).toEqual([...floorDef.sections!.map((s) => s.id), "territory-notes"]);
+    expect(ids).toEqual([
+      ...floorDef.sections!.map((s) => s.id),
+      "territory-notes",
+    ]);
     const quota = plate.sections!.find((s) => s.id === "quota-attainment")!;
     expect(quota.guidance).toBe("Attainment vs our fiscal-year plan.");
     // A non-overridden floor field still reads the PLATFORM value — a
@@ -750,9 +753,9 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
       }),
     ))!;
     // coaching-notes is required on the platform floor; the clamp holds.
-    expect(
-      lowered.sections!.find((s) => s.id === "coaching-notes")!.tier,
-    ).toBe("required");
+    expect(lowered.sections!.find((s) => s.id === "coaching-notes")!.tier).toBe(
+      "required",
+    );
   });
 
   it("drops overrides keyed to unknown floor ids and additions colliding with floor ids", async () => {
@@ -802,7 +805,11 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
       }),
     ))!;
     const keys = plate.analyses!.map((a) => a.key);
-    expect(keys).toEqual(["pipeline-conversion", "quota-attainment", "win-rate"]);
+    expect(keys).toEqual([
+      "pipeline-conversion",
+      "quota-attainment",
+      "win-rate",
+    ]);
     // The colliding addition did not replace the floor analysis.
     expect(
       plate.analyses!.find((a) => a.key === "pipeline-conversion")!.op,
@@ -810,7 +817,11 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
   });
 
   it("inert proof: a platform plate with no row resolves its code-defined contract unchanged", async () => {
-    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      fakeStore(),
+    ))!;
     const floorDef = getPlatformPlate("sales-rep-review")!;
     expect(plate.sections).toEqual(floorDef.sections);
     expect(plate.analyses).toEqual(floorDef.analyses);
@@ -830,9 +841,8 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
 
 describe("contract preview exemplar (THINK-188 U3)", () => {
   it("every op's sampleInputs computes clean (R10 pin, all six ops)", async () => {
-    const { computeAnalysis, getAnalysisOp, ANALYSIS_OPS } = await import(
-      "./document-analyses.js"
-    );
+    const { computeAnalysis, getAnalysisOp, ANALYSIS_OPS } =
+      await import("./document-analyses.js");
     for (const op of ANALYSIS_OPS) {
       const spec = getAnalysisOp(op)!;
       const result = computeAnalysis({ op, inputs: spec.sampleInputs });
@@ -847,7 +857,11 @@ describe("contract preview exemplar (THINK-188 U3)", () => {
 
   it("covers AE5: the SRR preview renders every non-waived section, a computed funnel, and the waiver demo; passes preflight", async () => {
     const { runDocumentPreflight } = await import("./document-preflight.js");
-    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      fakeStore(),
+    ))!;
     const preview = buildContractPreviewExemplar(plate);
     // The demo waives the LAST required-if-material section (pipeline-health);
     // quota-attainment (also RIM but earlier) renders normally.
@@ -885,9 +899,24 @@ describe("contract preview exemplar (THINK-188 U3)", () => {
           displayName: "Deal Desk",
           useFor: "Deal desk review",
           sections: [
-            { id: "summary", title: "Summary", tier: "required", guidance: "Headline." },
-            { id: "risks", title: "Risks", tier: "required", guidance: "What could kill it." },
-            { id: "notes", title: "Notes", tier: "suggested", guidance: "Anything else." },
+            {
+              id: "summary",
+              title: "Summary",
+              tier: "required",
+              guidance: "Headline.",
+            },
+            {
+              id: "risks",
+              title: "Risks",
+              tier: "required",
+              guidance: "What could kill it.",
+            },
+            {
+              id: "notes",
+              title: "Notes",
+              tier: "suggested",
+              guidance: "Anything else.",
+            },
           ],
         } as never,
         hidden: false,
@@ -915,7 +944,12 @@ describe("contract preview exemplar (THINK-188 U3)", () => {
           displayName: "Scratch",
           useFor: "Loose notes",
           sections: [
-            { id: "notes", title: "Notes", tier: "suggested", guidance: "Anything." },
+            {
+              id: "notes",
+              title: "Notes",
+              tier: "suggested",
+              guidance: "Anything.",
+            },
           ],
         } as never,
         hidden: false,

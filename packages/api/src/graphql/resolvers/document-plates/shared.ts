@@ -616,7 +616,18 @@ function annotatedSections(plate: ResolvedPlate): unknown[] | null {
     return {
       ...section,
       source: "platform",
-      ...(Object.keys(overridden).length > 0 ? { overridden } : {}),
+      ...(Object.keys(overridden).length > 0
+        ? {
+            overridden,
+            // The pristine platform values, so the editor's per-field
+            // revert-to-platform affordance (R13) can restore them locally.
+            platformBaseline: {
+              guidance: base.guidance,
+              tier: base.tier,
+              suggestedDirectives: base.suggestedDirectives ?? null,
+            },
+          }
+        : {}),
     };
   });
 }

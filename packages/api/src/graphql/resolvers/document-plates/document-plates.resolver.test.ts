@@ -878,7 +878,11 @@ describe("GraphQL contract surface (THINK-188 U4)", () => {
       {},
       { tenantId: TENANT },
       ctx,
-    )) as Array<{ slug: string; sections: string | null; analyses: string | null }>;
+    )) as Array<{
+      slug: string;
+      sections: string | null;
+      analyses: string | null;
+    }>;
     const srr = plates.find((p) => p.slug === "sales-rep-review")!;
     const sections = JSON.parse(srr.sections!) as Array<{
       source: string;
@@ -915,9 +919,9 @@ describe("GraphQL contract surface (THINK-188 U4)", () => {
       ctx,
     )) as { sections: string | null };
     const config = mocks.inserted.at(-1)!.config as Record<string, unknown>;
-    expect(
-      (config.sections as Array<{ id: string }>).map((s) => s.id),
-    ).toEqual(["territory-notes"]);
+    expect((config.sections as Array<{ id: string }>).map((s) => s.id)).toEqual(
+      ["territory-notes"],
+    );
     expect(config.sectionOverrides).toEqual({
       "quota-attainment": { tier: "required" },
     });

@@ -321,8 +321,16 @@ const groupCountSpec: AnalysisOpSpec = {
 values: [Discovery, Discovery, Negotiation, Closed]`,
   sampleInputs: {
     values: [
-      "Discovery", "Discovery", "Discovery", "Negotiation", "Negotiation",
-      "Proposal", "Proposal", "Proposal", "Proposal", "Closed-won",
+      "Discovery",
+      "Discovery",
+      "Discovery",
+      "Negotiation",
+      "Negotiation",
+      "Proposal",
+      "Proposal",
+      "Proposal",
+      "Proposal",
+      "Closed-won",
     ],
   },
   compute: (inputs) => {

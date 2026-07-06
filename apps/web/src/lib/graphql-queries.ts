@@ -2751,6 +2751,8 @@ export const DocumentPlatesListQuery = gql`
       hidden
       customized
       overrides
+      sections
+      analyses
     }
   }
 `;
@@ -2799,6 +2801,8 @@ export const SaveDocumentPlateMutation = gql`
       hidden
       customized
       overrides
+      sections
+      analyses
     }
   }
 `;
