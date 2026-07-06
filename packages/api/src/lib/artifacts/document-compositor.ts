@@ -28,8 +28,15 @@ import { createHash } from "node:crypto";
 import { Marked, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { parse as parseYaml } from "yaml";
-import { renderDocumentDirective } from "./document-directives.js";
+import {
+  renderAnalysisDirective,
+  renderDocumentDirective,
+  renderWaiverDirective,
+  type CollectedWaiver,
+} from "./document-directives.js";
 import { renderDocumentShell } from "./document-templates.js";
+
+export type { CollectedWaiver } from "./document-directives.js";
 
 /** Mirrors the DocSpector diagnostic shape so rejects surface in-turn (R2). */
 export interface CompositorDiagnostic {
@@ -40,7 +47,13 @@ export interface CompositorDiagnostic {
 }
 
 export type CompositorResult =
-  | { ok: true; renderHtml: string; warnings: CompositorDiagnostic[] }
+  | {
+      ok: true;
+      renderHtml: string;
+      warnings: CompositorDiagnostic[];
+      /** Suitability waivers collected from tw:waiver blocks (THINK-183). */
+      waivers: CollectedWaiver[];
+    }
   | { ok: false; diagnostics: CompositorDiagnostic[] };
 
 /**
@@ -65,6 +78,23 @@ export type DirectiveEngine = (input: {
  * satisfied by the registry's ResolvedPlate; the compositor stays decoupled
  * from resolution.
  */
+/** Manifest section as the compiler consumes it (THINK-183). */
+export interface CompositorPlateSection {
+  id: string;
+  title: string;
+  tier: "required" | "required-if-material" | "suggested";
+  guidance: string;
+  suggestedDirectives?: readonly { kind: string; chartType?: string }[];
+}
+
+/** Declared analysis as the compiler consumes it (THINK-183). */
+export interface CompositorPlateAnalysis {
+  key: string;
+  op: string;
+  params?: Readonly<Record<string, unknown>>;
+  presentation: { directive: string; chartType?: string };
+}
+
 export interface CompositorPlate {
   slug: string;
   eyebrow: string;
@@ -72,6 +102,10 @@ export interface CompositorPlate {
   tokensDark: Record<string, string>;
   /** Directive kinds documents in this plate may use; "all" = unrestricted. */
   allowedDirectives: readonly string[] | "all";
+  /** Content contract: tiered section manifest (THINK-183; absent = none). */
+  sections?: readonly CompositorPlateSection[];
+  /** Content contract: declared analyses (THINK-183; absent = none). */
+  analyses?: readonly CompositorPlateAnalysis[];
 }
 
 /** Fence info-string prefix that routes a fenced block to the engine. */
@@ -164,17 +198,28 @@ function parseFrontmatter(markdown: string): {
   return { frontmatter, body, warnings };
 }
 
+/**
+ * The undeduped heading-slug transform. Exported so plate save gates can
+ * verify a manifest section's `title` slugs to its `id` (THINK-183 KTD6) —
+ * one transform, no drift between save-time validation and compile-time
+ * presence checking.
+ */
+export function headingSlug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/&[a-z#0-9]+;/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "section"
+  );
+}
+
 /** Deterministic ASCII slug for heading ids, deduped per document. */
 function makeSlugger(): (text: string) => string {
   const seen = new Map<string, number>();
   return (text: string) => {
-    const base =
-      text
-        .toLowerCase()
-        .replace(/&[a-z#0-9]+;/g, "")
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 64) || "section";
+    const base = headingSlug(text);
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
     return n === 0 ? base : `${base}-${n}`;
@@ -201,6 +246,10 @@ interface CompileState {
   tokenFor: (index: number) => string;
   nextPlaceholder: number;
   slug: (text: string) => string;
+  /** Emitted heading ids, for the section-manifest check (THINK-183 KTD6). */
+  headingIds: string[];
+  /** Waivers collected from tw:waiver blocks (THINK-183 KTD3). */
+  waivers: CollectedWaiver[];
 }
 
 function buildMarked(state: CompileState): Marked {
@@ -211,7 +260,9 @@ function buildMarked(state: CompileState): Marked {
         const inner = this.parser.parseInline(tokens);
         // The shell owns the single H1; body headings start at h2.
         const level = Math.min(6, Math.max(2, depth === 1 ? 2 : depth));
-        return `<h${level} id="${state.slug(text)}">${inner}</h${level}>\n`;
+        const id = state.slug(text);
+        state.headingIds.push(id);
+        return `<h${level} id="${id}">${inner}</h${level}>\n`;
       },
       code({ text, lang }: Tokens.Code) {
         const info = (lang ?? "").trim();
@@ -397,19 +448,86 @@ export function compileDocument(
   const inputHash = createHash("sha256")
     .update(`${input.plate.slug}\n${input.title}\n${input.markdownBody}`)
     .digest("hex");
+
+  // Structural contract directives (THINK-183 KTD11): tw:analysis (and
+  // tw:waiver, U4) route BEFORE the plate's allowedDirectives gate — their
+  // own validation (declared-analysis lookup, manifest membership) is the
+  // real gate, so a plate with a restricted directive list can still carry
+  // its contract.
+  const gated = gateEngineOnPlate(engine, input.plate);
+  const engineWithStructural: DirectiveEngine = (directiveInput) => {
+    if (directiveInput.kind === "analysis") {
+      return renderAnalysisDirective({
+        body: directiveInput.body,
+        analyses: input.plate.analyses,
+      });
+    }
+    if (directiveInput.kind === "waiver") {
+      const result = renderWaiverDirective({
+        body: directiveInput.body,
+        sections: input.plate.sections,
+      });
+      if (!result.ok) return result;
+      state.waivers.push(result.waiver);
+      return { ok: true, html: result.html, containsSvg: false };
+    }
+    return gated(directiveInput);
+  };
+
   const state: CompileState = {
     genre: input.plate.slug,
-    engine: gateEngineOnPlate(engine, input.plate),
+    engine: engineWithStructural,
     errors: [],
     warnings,
     placeholders: new Map(),
     tokenFor: (index) => `tw-directive-slot-${inputHash.slice(0, 24)}-${index}`,
     nextPlaceholder: 0,
     slug: makeSlugger(),
+    headingIds: [],
+    waivers: [],
   };
 
   const marked = buildMarked(state);
   const rawBody = marked.parse(body, { async: false }) as string;
+
+  // Post-parse contract check (THINK-183 KTD1/KTD6): every required or
+  // required-if-material manifest section must be present as a heading id or
+  // explicitly waived. Diagnostics append to the same array directive
+  // rejections use, so enforcement rides the COMPILE_REJECTED self-repair
+  // path. No manifest → no new code paths execute (AE4).
+  const manifest = input.plate.sections ?? [];
+  if (manifest.length > 0) {
+    const headingIds = new Set(state.headingIds);
+    for (const waiver of state.waivers) {
+      if (headingIds.has(waiver.sectionId)) {
+        state.errors.push({
+          code: "SECTION_WAIVER_CONFLICT",
+          message: `The document waives section "${waiver.sectionId}" but also contains that heading. Remove the tw:waiver block (the section is present) or remove the section (the waiver stands).`,
+          location: `tw:waiver`,
+        });
+      }
+    }
+    const waivedIds = new Set(state.waivers.map((w) => w.sectionId));
+    for (const section of manifest) {
+      if (section.tier === "suggested") continue; // R11: never checked.
+      if (headingIds.has(section.id) || waivedIds.has(section.id)) continue;
+      const suggested = (section.suggestedDirectives ?? [])
+        .map((d) =>
+          d.chartType ? `tw:${d.kind} (${d.chartType})` : `tw:${d.kind}`,
+        )
+        .join(", ");
+      const waiverPath =
+        section.tier === "required-if-material"
+          ? `If the data to back it is genuinely unavailable, waiving is the expected path: add a \`\`\`tw:waiver\`\`\` block with \`section: ${section.id}\` and a reason.`
+          : `If the data to back it is genuinely unavailable, add a \`\`\`tw:waiver\`\`\` block with \`section: ${section.id}\` and a reason instead.`;
+      state.errors.push({
+        code: "REQUIRED_SECTION_MISSING",
+        message: `This plate requires a "${section.title}" section and the document has neither the heading nor a waiver. Author a "## ${section.title}" heading (its id compiles to "${section.id}"). Guidance: ${section.guidance}${suggested ? ` Suggested directives: ${suggested}.` : ""} ${waiverPath}`,
+        location: `section:${section.id}`,
+      });
+    }
+  }
+
   if (state.errors.length > 0) {
     return { ok: false, diagnostics: state.errors };
   }
@@ -442,7 +560,15 @@ export function compileDocument(
       .filter(Boolean)
       .join("\n") || null;
 
-  const footerHtml = `<footer class="composition-signal">Composed by the ThinkWork document compositor · ${escapeHtml(input.plate.slug)}${frontmatter.date ? ` · ${escapeHtml(frontmatter.date)}` : ""}</footer>`;
+  // Provenance footer (THINK-183 R9): waived sections are named with their
+  // reasons — loud omission, recorded where every reader sees it.
+  const waiverFooterLines = state.waivers
+    .map(
+      (w) =>
+        `<div class="waived">Section waived: ${escapeHtml(w.title)} — ${escapeHtml(w.reason)}</div>`,
+    )
+    .join("");
+  const footerHtml = `<footer class="composition-signal">Composed by the ThinkWork document compositor · ${escapeHtml(input.plate.slug)}${frontmatter.date ? ` · ${escapeHtml(frontmatter.date)}` : ""}${waiverFooterLines}</footer>`;
 
   const renderHtml = renderDocumentShell({
     plateSlug: input.plate.slug,
@@ -455,5 +581,10 @@ export function compileDocument(
     tokensDark: input.plate.tokensDark,
   });
 
-  return { ok: true, renderHtml, warnings: state.warnings };
+  return {
+    ok: true,
+    renderHtml,
+    warnings: state.warnings,
+    waivers: state.waivers,
+  };
 }
