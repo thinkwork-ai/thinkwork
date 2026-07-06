@@ -33,6 +33,7 @@ import {
   Bot,
   Info,
   ListChecks,
+  Loader2,
   Puzzle,
   RefreshCw,
   ScanSearch,
@@ -366,7 +367,6 @@ export function SettingsCapabilities({
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
   // Tree context-menu profile ops: "Add Sub-Agent" (create counter handed to
   // the Profiles sheet) and "Delete Agent Profile" (destructive confirm here).
-  const [profilesCreateRequest, setProfilesCreateRequest] = useState(0);
   const [deleteProfileTarget, setDeleteProfileTarget] = useState<{
     id: string;
     name: string;
@@ -958,6 +958,20 @@ export function SettingsCapabilities({
     if (item) setDetachTarget(item);
   }
 
+  // "Remove connection…" (editor delete-confirm hook): sever the assignment
+  // record via the MCP_SERVER detach when the connection is registry-backed
+  // — without this a reconciler resurrects the folder the editor deletes.
+  // A non-registry connection (agent draft / API type) has no record to
+  // sever; the editor's file delete is the whole removal.
+  async function removeConnectionRecord(slug: string) {
+    const item = items.find(
+      (candidate) =>
+        candidate.capabilityClass === "mcp_server" &&
+        connectionSlugFor(candidate.capabilityId) === slug,
+    );
+    if (item) await runMutation("detach", item);
+  }
+
   // MCP mirror (U9c): same confirm dialog + detach mutation, second class.
   function requestDetachMcp(slug: string) {
     const item = items.find(
@@ -1243,12 +1257,23 @@ export function SettingsCapabilities({
       ? confirmation.rowKey.slice("skill:".length)
       : null;
   // THINK-190: attach materializes a connections/<slug>/ folder (the mcp/
-  // mirror is retired for folder-dispatch agents), so the pending ghost
+  // mirror is retired for folder-dispatch agents), so the sync status
   // carries the CONNECTION folder slug.
   const pendingMcpSlug =
     confirmation?.syncPending && confirmation.rowKey.startsWith("mcp_server:")
       ? connectionSlugFor(confirmation.rowKey.slice("mcp_server:".length))
       : null;
+  // Attach/detach progress surfaces HERE (footer, lower right) — not as
+  // ghost nodes or badges inside the tree.
+  const syncStatusLabel = pendingMcpSlug
+    ? `Syncing MCP server ${pendingMcpSlug}…`
+    : pendingSkillSlug
+      ? `Syncing skill ${pendingSkillSlug}…`
+      : removingMcpSlug
+        ? `Removing MCP server ${removingMcpSlug}…`
+        : removingSkillSlug
+          ? `Removing skill ${removingSkillSlug}…`
+          : null;
 
   // Agent page merge U12: page actions live in the header bar as muted icons
   // (Evaluations pattern) — the in-body row keeps only search + filters.
@@ -1484,7 +1509,6 @@ export function SettingsCapabilities({
           spaceId={spaceId}
           perspectiveUserId={perspectiveUserId}
           refreshToken={previewRefreshToken}
-          pendingSkillSlug={pendingSkillSlug}
           removingSkillSlug={removingSkillSlug}
           onFocusCapabilityRow={focusCapabilityRow}
           skillStateBySlug={skillStateBySlug}
@@ -1492,13 +1516,13 @@ export function SettingsCapabilities({
           profileScopeName={selectedProfileName}
           onAddSkill={() => setAddSkillOpen(true)}
           onDetachSkill={requestDetachSkill}
-          pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
           onAddConnection={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
           connectionStateBySlug={folderStateBySlug.connection}
           toolStateBySlug={folderStateBySlug.tool}
+          onRemoveConnection={removeConnectionRecord}
           onApproveCapabilityFolder={(klass, slug) =>
             void approveFolderCapability(klass, slug)
           }
@@ -1511,10 +1535,7 @@ export function SettingsCapabilities({
             );
             requestSheet("profiles", { profileId: match?.id ?? null });
           }}
-          onCreateAgentProfile={() => {
-            setProfilesCreateRequest((count) => count + 1);
-            requestSheet("profiles");
-          }}
+          onCreateAgentProfile={() => requestSheet("profiles")}
           onDeleteAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
               (profile) => profile.slug === slug,
@@ -1625,6 +1646,15 @@ export function SettingsCapabilities({
             ))}
           </span>
         ) : null}
+        {syncStatusLabel ? (
+          <span
+            className="ml-auto flex items-center gap-1.5 text-sky-700 dark:text-sky-400"
+            data-testid="composer-sync-status"
+          >
+            <Loader2 className="size-3.5 animate-spin" />
+            {syncStatusLabel}
+          </span>
+        ) : null}
       </div>
 
       <AgentProfilesSheet
@@ -1636,7 +1666,6 @@ export function SettingsCapabilities({
           )
         }
         initialProfileId={profilesSheet.profileId}
-        createRequest={profilesCreateRequest}
       />
 
       {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
