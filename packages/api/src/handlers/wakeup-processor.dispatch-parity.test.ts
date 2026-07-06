@@ -144,6 +144,21 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(legacy.capabilities_manifest_fingerprint).toBeUndefined();
   });
 
+  it("all three builders pass the tenant plate list into the shared helper (THINK-153 KTD4)", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    const chatSource = handlerSource("chat-agent-invoke.ts");
+    // Both wakeup builders (initial + turn-loop re-invoke) reuse the one
+    // effectiveDocumentPlates read; chat resolves per dispatch.
+    expect(
+      wakeupSource.match(/documentPlates: effectiveDocumentPlates,/g),
+    ).toHaveLength(2);
+    expect(
+      chatSource.match(
+        /documentPlates: await documentPlatesForDispatch\(tenantId\),/g,
+      ),
+    ).toHaveLength(1);
+  });
+
   it("wakeup payloads carry the extension-gate wiring (api url/secret + turn id)", () => {
     const fields = buildAgentDispatchControlFields(baseArgs());
     expect(fields.thinkwork_api_url).toBe("https://api.example.com");

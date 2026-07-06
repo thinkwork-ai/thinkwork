@@ -67,6 +67,7 @@ import { validateTemplateContextEngine } from "../lib/templates/context-engine-c
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { validateTemplateWebExtract } from "../lib/templates/web-extract-config.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
+import { documentPlatesForDispatch } from "../lib/artifacts/plate-registry.js";
 import { resolveWebSearchConfigFromSkills } from "../lib/web-search-config.js";
 import { loadTenantWebExtractConfig } from "../lib/builtin-tools/web-extract.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
@@ -1852,6 +1853,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     sendEmailConfig && isAnyToolAllowed(...toolPolicyAliases("send_email"))
       ? sendEmailConfig
       : undefined;
+  // THINK-153 KTD4: registered plates ride the dispatch payload (BOTH
+  // builders — payload-parity rule with chat-agent-invoke). Never throws;
+  // undefined degrades the extension to its core-4 fallback.
+  const effectiveDocumentPlates = await documentPlatesForDispatch(
+    wakeup.tenant_id,
+  );
   const effectiveContextEngineEnabled =
     contextEngineEnabled &&
     isAnyToolAllowed(...toolPolicyAliases("context_engine"));
@@ -2215,6 +2222,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       // includeFinalizeCallback stays false: this path invokes
       // RequestResponse and owns writeback from the synchronous body.
       ...buildAgentDispatchControlFields({
+        documentPlates: effectiveDocumentPlates,
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret: getApiAuthSecret(),
         threadId: resolvedThreadId || undefined,
@@ -2874,6 +2882,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             // above — the re-invoked turn must not lose extension tools or
             // model governance mid-loop (#2395 bug class).
             ...buildAgentDispatchControlFields({
+              documentPlates: effectiveDocumentPlates,
               thinkworkApiUrl: thinkworkApiUrl(),
               apiAuthSecret: getApiAuthSecret(),
               threadId: resolvedThreadId || undefined,

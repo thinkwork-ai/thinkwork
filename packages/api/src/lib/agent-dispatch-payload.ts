@@ -47,6 +47,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "activity_callback_url",
   "activity_callback_secret",
   "okf_wiki_navigator_enabled",
+  "document_plates",
 ] as const;
 
 export type RequiredDispatchField = (typeof REQUIRED_DISPATCH_FIELDS)[number];
@@ -87,6 +88,18 @@ export interface AgentDispatchControlFieldArgs {
    * wakeup response path understands `finalize_dispatched`.
    */
   includeFinalizeCallback: boolean;
+  /**
+   * THINK-153 KTD4: the tenant's visible registered plates
+   * ([{slug, displayName, useFor}]) for the emit_document tool surface.
+   * Fresh per dispatch; undefined (registry read failure or older caller)
+   * degrades the Pi extension to its core-4 fallback — server-side registry
+   * validation stays authoritative either way.
+   */
+  documentPlates?: Array<{
+    slug: string;
+    displayName: string;
+    useFor: string;
+  }>;
   /**
    * Resolved-config fingerprint (capability-mapping plan U12, KTD-3):
    * computeConfigFingerprint over the dispatch's resolved runtime config +
@@ -173,5 +186,6 @@ export function buildAgentDispatchControlFields(
     activity_callback_secret:
       args.apiAuthSecret && args.threadTurnId ? args.apiAuthSecret : undefined,
     okf_wiki_navigator_enabled: args.okfWikiNavigatorEnabled || undefined,
+    document_plates: args.documentPlates,
   };
 }

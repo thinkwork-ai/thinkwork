@@ -454,6 +454,29 @@ export async function resolvePlateForEmission(
     : { ok: false, visibleSlugs };
 }
 
+/**
+ * Dispatch-payload helper (KTD4): the tenant's visible plates as discovery
+ * summaries for `document_plates`. Never throws — a registry read failure
+ * degrades to undefined so dispatch proceeds and the Pi extension falls back
+ * to the core four (server-side validation stays authoritative).
+ */
+export async function documentPlatesForDispatch(
+  tenantId: string,
+  store: PlateStore = drizzlePlateStore(),
+): Promise<
+  Array<{ slug: string; displayName: string; useFor: string }> | undefined
+> {
+  try {
+    return visiblePlateSummaries(await listPlates(tenantId, store));
+  } catch (err) {
+    console.error(
+      "[plate-registry] dispatch plate list failed (extension falls back to core four):",
+      err,
+    );
+    return undefined;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Exemplar builder (KTD7) — the canned document for validation and preview
 // ---------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDocumentComposerExtension,
-  DOCUMENT_GENRES,
+  FALLBACK_PLATES,
+  normalizeDocumentPlates,
   EMIT_DOCUMENT_TOOL_NAME,
   EMIT_DOCUMENT_DIGEST_MAX_BYTES,
 } from "../src/document-composer.js";
@@ -161,14 +162,114 @@ describe("createDocumentComposerExtension", () => {
     ).toHaveLength(0);
   });
 
-  it("rejects an unknown genre locally", async () => {
+  it("soft genre check: malformed slug rejects locally, unlisted slug still ships (R11)", async () => {
+    const fetchImpl = okFetch({
+      ok: false,
+      code: "COMPILE_REJECTED",
+      diagnostics: [
+        {
+          code: "UNKNOWN_GENRE",
+          message:
+            'Genre "novel" is not registered. Valid genres: report, plan.',
+          location: "genre",
+        },
+      ],
+    });
     const { tools } = register({
       documentComposerConfig: CONFIG,
+      fetchImpl,
+    });
+    // Shape violation fails fast locally...
+    await expect(
+      tools[0].execute("call-1", { ...VALID_PARAMS, genre: "Not A Slug" }),
+    ).rejects.toThrow(/lowercase slug/);
+    // ...but a well-formed unlisted slug goes to the server, whose
+    // self-repair rejection surfaces verbatim through the failure path.
+    const result = await tools[0].execute("call-1", {
+      ...VALID_PARAMS,
+      genre: "novel",
+    });
+    expect(result.content[0].text).toContain("UNKNOWN_GENRE");
+    expect(result.content[0].text).toContain("Valid genres: report, plan");
+  });
+
+  it("composes the tool surface from payload plates (KTD4)", () => {
+    const { tools } = register({
+      documentComposerConfig: {
+        ...CONFIG,
+        documentPlates: [
+          {
+            slug: "qbr",
+            displayName: "QBR",
+            useFor: "Quarterly business review for a client.",
+          },
+          {
+            slug: "proposal",
+            displayName: "Proposal",
+            useFor: "A commercial proposal.",
+          },
+        ],
+      },
       fetchImpl: okFetch({ ok: true }),
     });
-    await expect(
-      tools[0].execute("call-1", { ...VALID_PARAMS, genre: "novel" }),
-    ).rejects.toThrow(DOCUMENT_GENRES.join(", "));
+    const tool = tools[0] as unknown as {
+      description: string;
+      parameters: { properties: { genre: { description: string } } };
+    };
+    expect(tool.description).toContain("qbr");
+    expect(tool.description).toContain("proposal");
+    expect(tool.parameters.properties.genre.description).toContain(
+      "Quarterly business review for a client.",
+    );
+    expect(tool.parameters.properties.genre.description).not.toContain(
+      "ideation",
+    );
+  });
+
+  it("payload absent → core-4 fallback + structured log event", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { tools } = register({
+        documentComposerConfig: CONFIG,
+        fetchImpl: okFetch({ ok: true }),
+      });
+      const tool = tools[0] as unknown as {
+        parameters: { properties: { genre: { description: string } } };
+      };
+      for (const plate of FALLBACK_PLATES) {
+        expect(tool.parameters.properties.genre.description).toContain(
+          plate.slug,
+        );
+      }
+      const logged = logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .find((line) => line.includes("document_plates_missing_from_payload"));
+      expect(logged).toBeTruthy();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("malformed plates field is treated as absent, not a throw", () => {
+    expect(normalizeDocumentPlates("junk")).toBeNull();
+    expect(normalizeDocumentPlates({ slug: "x" })).toBeNull();
+    expect(normalizeDocumentPlates([{ slug: "NOT VALID" }, 42])).toBeNull();
+    expect(
+      normalizeDocumentPlates([
+        { slug: "qbr", displayName: "QBR", useFor: "x" },
+        "garbage",
+      ]),
+    ).toEqual([{ slug: "qbr", displayName: "QBR", useFor: "x" }]);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { tools } = register({
+        documentComposerConfig: { ...CONFIG, documentPlates: "garbage" },
+        fetchImpl: okFetch({ ok: true }),
+      });
+      expect(tools).toHaveLength(1);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("surfaces FORBIDDEN refusals as text, and throws on HTTP failure", async () => {
