@@ -23,6 +23,11 @@ type Artifact {
   summary: String
   sourceMessageId: ID
   metadata: AWSJSON
+  # Display name of the user who generated the artifact, resolved through the
+  # source thread (thread_id -> threads.user_id -> users). Populated by the
+  # `artifacts` list query; null when the artifact has no thread or the thread
+  # has no user.
+  userName: String
   favoritedAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
