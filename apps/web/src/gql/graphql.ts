@@ -805,6 +805,7 @@ export type Artifact = {
   title: Scalars["String"]["output"];
   type: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+  userName?: Maybe<Scalars["String"]["output"]>;
   versions: Array<ArtifactVersion>;
 };
 

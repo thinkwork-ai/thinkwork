@@ -7,7 +7,10 @@ import {
   desc,
   lt,
   sql,
+  inArray,
   artifacts,
+  threads,
+  users,
   artifactToCamel,
 } from "../../utils.js";
 import { hasServiceSecret } from "../core/authz.js";
@@ -76,5 +79,47 @@ export const artifacts_ = async (
     .where(and(...conditions))
     .orderBy(desc(orderColumn))
     .limit(limit);
-  return rows.map(artifactToCamel);
+  const userNameByThread = await resolveUserNamesByThread(rows);
+  return rows.map((row) => ({
+    ...artifactToCamel(row),
+    userName: row.thread_id
+      ? (userNameByThread.get(row.thread_id) ?? null)
+      : null,
+  }));
 };
+
+/**
+ * Batch-resolve the generating user's display name for a page of artifacts via
+ * the source thread (`artifacts.thread_id -> threads.user_id -> users`) — one
+ * query per page, not per row. Artifacts without a thread, or whose thread has
+ * no user, are simply absent from the map (the row then shows no user).
+ */
+async function resolveUserNamesByThread(
+  rows: Array<{ thread_id: string | null }>,
+): Promise<Map<string, string>> {
+  const threadIds = [
+    ...new Set(
+      rows
+        .map((row) => row.thread_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (threadIds.length === 0) return new Map();
+
+  const userRows = await db
+    .select({
+      threadId: threads.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(threads)
+    .innerJoin(users, eq(threads.user_id, users.id))
+    .where(inArray(threads.id, threadIds));
+
+  const byThread = new Map<string, string>();
+  for (const row of userRows) {
+    const label = row.name ?? row.email;
+    if (label) byThread.set(row.threadId, label);
+  }
+  return byThread;
+}
