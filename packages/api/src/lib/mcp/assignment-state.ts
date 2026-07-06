@@ -13,12 +13,13 @@
  * `auth_config` rather than spreading it, so an inline credential (should
  * one ever appear) cannot leak into S3.
  *
- * Migration posture (U9a): this is a DUAL-WRITE that ships INERT. The
- * `agent_mcp_servers` row stays authoritative for the runtime; the file is
- * visibility-only until U9b repoints the runtime and demotes the DB row.
- * Every write is best-effort against the DB write it shadows: a failed S3
- * put logs loudly and returns false — it must never fail the grant/detach
- * mutation the DB row already committed.
+ * Migration posture (THINK-173 retirement): the workspace file IS the
+ * assignment state. The `agent_mcp_servers` table is retired — no code
+ * writes new rows or reads them at runtime; the sole remaining reader is
+ * the U11 backfill (`../capabilities/backfill.ts`), which materializes
+ * pre-retirement rows into folders on stages that have not cut over yet
+ * (customer stages). Teardown paths still DELETE rows so the frozen
+ * migration snapshot stays hygienic until the table is dropped.
  */
 
 import {
@@ -37,7 +38,6 @@ import {
   tenants,
   tenantMcpServers,
 } from "../../graphql/utils.js";
-import { agentMcpServers } from "@thinkwork/database-pg/schema";
 
 export const MCP_ASSIGNMENT_STATE_FILE = ".assignment.json";
 
@@ -383,114 +383,45 @@ export async function materializeMcpAssignmentFolder(
   return writeMcpAssignmentState(input.targetPrefix, state, deps);
 }
 
-/**
- * Backfill reconcile (U9a): materialize `mcp/<slug>/.assignment.json` for
- * every currently-attached MCP server of an agent that does not yet have
- * one. Idempotent — write-if-absent, so a second run is a pure no-op.
- *
- * Wired into the MCP grant/detach mutation (the least-new-machinery hook —
- * it runs on the same config change that already touches the workspace), so
- * the first MCP mutation on a pre-existing agent materializes its whole set.
- * Also exported so an operator/ops path can backfill without a mutation.
- *
- * Returns the count of files written (0 when everything already present or
- * the workspace is unresolvable).
- */
-export async function reconcileMcpAssignmentFolders(
-  input: { agentId: string; tenantId: string; targetPrefix?: string },
-  deps: McpAssignmentStateDeps = {},
-): Promise<number> {
-  const bucket = deps.bucket ?? workspaceBucket();
-  if (!bucket) return 0;
-  const targetPrefix =
-    input.targetPrefix ?? (await resolveAgentWorkspacePrefix(input.agentId));
-  if (!targetPrefix) return 0;
-
-  const attached = await db
-    .select({
-      registryId: tenantMcpServers.id,
-      slug: tenantMcpServers.slug,
-      name: tenantMcpServers.name,
-      transport: tenantMcpServers.transport,
-      auth_type: tenantMcpServers.auth_type,
-      auth_config: tenantMcpServers.auth_config,
-      config: agentMcpServers.config,
-      enabled: agentMcpServers.enabled,
-    })
-    .from(agentMcpServers)
-    .innerJoin(
-      tenantMcpServers,
-      eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
-    )
-    .where(eq(agentMcpServers.agent_id, input.agentId));
-
-  const present = await listWorkspaceMcpSlugs(targetPrefix, {
-    ...deps,
-    bucket,
-  });
-  const presentSet = new Set(present ?? []);
-
-  let written = 0;
-  for (const row of attached) {
-    const slug = row.slug ?? row.name;
-    if (presentSet.has(slug)) continue;
-    const state = buildMcpAssignmentState({
-      registry: {
-        id: row.registryId,
-        slug: row.slug,
-        name: row.name,
-        transport: row.transport,
-        auth_type: row.auth_type,
-        auth_config: row.auth_config,
-      },
-      agentConfig: row.config as { toolAllowlist?: unknown } | null,
-      enabled: row.enabled,
-    });
-    if (
-      await writeMcpAssignmentState(targetPrefix, state, { ...deps, bucket })
-    ) {
-      written += 1;
-    }
-  }
-  return written;
-}
-
-// ── Parity helpers for the non-grantCapability writers (Composer U9
-// follow-up) ────────────────────────────────────────────────────────────────
+// ── Attach/teardown helpers for the non-Composer writers ───────────────────
 //
-// Every other writer of `agent_mcp_servers` (plugin/managed provisioning,
-// direct REST assign, server teardown) must keep the workspace files in step
-// or a plugin/managed server silently drops from an agent that already has
-// other `mcp/` files (the non-empty listing wins in `buildMcpConfigs`, no DB
-// fallback). These helpers mirror the U9a grant/detach dual-write:
-//
-//  - ATTACH (insert/upsert): reconcile the agent's WHOLE attached set so the
-//    just-added server materializes AND any pre-existing DB-only attachments
-//    are backfilled (never flip an agent to the file path with a partial set).
-//  - DETACH / server teardown: remove the per-agent `mcp/<slug>/` folder(s).
-//
-// All are bucket-gated at the top: with no workspace bucket they return early
-// BEFORE any DB read, so DB-mocked unit tests are unaffected. Best-effort by
-// contract — the `agent_mcp_servers` row stays authoritative until retirement.
+// Post-retirement, the plugin/managed provisioners and the direct REST
+// assign write the workspace file DIRECTLY as the assignment record — there
+// is no DB row behind it. Teardown removes the per-agent `mcp/<slug>/`
+// folder(s). All are bucket-gated at the top: with no workspace bucket they
+// return early BEFORE any DB read, so DB-mocked unit tests are unaffected.
 
 /**
- * Reconcile the assignment folders of several agents after a server was
- * attached to them (plugin/managed default-agent assignment, direct assign).
- * Per-agent {@link reconcileMcpAssignmentFolders}, so the new server AND the
- * agent's existing attached set both get files. Returns files written.
+ * Materialize one server's `mcp/<slug>/.assignment.json` for several agents
+ * (plugin/managed default-agent assignment). Registry-read only. Returns the
+ * count of files written.
  */
-export async function reconcileMcpAssignmentFoldersForAgents(
-  input: { agentIds: readonly string[]; tenantId: string },
+export async function materializeMcpAssignmentFoldersForAgents(
+  input: {
+    agentIds: readonly string[];
+    tenantId: string;
+    registryServerId: string;
+  },
   deps: McpAssignmentStateDeps = {},
 ): Promise<number> {
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return 0;
   let written = 0;
   for (const agentId of input.agentIds) {
-    written += await reconcileMcpAssignmentFolders(
-      { agentId, tenantId: input.tenantId },
-      { ...deps, bucket },
-    );
+    const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
+    if (!targetPrefix) continue;
+    if (
+      await materializeMcpAssignmentFolder(
+        {
+          targetPrefix,
+          registryServerId: input.registryServerId,
+          tenantId: input.tenantId,
+        },
+        { ...deps, bucket },
+      )
+    ) {
+      written += 1;
+    }
   }
   return written;
 }
@@ -509,11 +440,14 @@ async function resolveMcpServerSlug(
 }
 
 /**
- * Snapshot the agents attached to a server (and the server's folder slug)
- * BEFORE a server-wide teardown deletes the `agent_mcp_servers` rows — the
- * caller feeds the result to {@link removeMcpAssignmentFoldersForAgents} after
- * the DB delete commits. Bucket-gated: returns null (no DB read) with no
- * workspace bucket.
+ * Snapshot the server's folder slug + the tenant's agents BEFORE a
+ * server-wide teardown, so the caller can feed the result to
+ * {@link removeMcpAssignmentFoldersForAgents} after the DB delete commits.
+ * Post-retirement there is no assignment table to enumerate, so this lists
+ * ALL tenant agents — folder removal is a cheap no-op for agents that never
+ * had the server. Bucket-gated: returns null (no DB read) with no workspace
+ * bucket. The registry slug must be resolved BEFORE the registry row is
+ * deleted (hence "snapshot").
  */
 export async function snapshotMcpServerAttachment(
   input: { tenantId: string; registryServerId: string },
@@ -524,14 +458,9 @@ export async function snapshotMcpServerAttachment(
   const slug = await resolveMcpServerSlug(input.registryServerId);
   if (!slug) return null;
   const rows = (await db
-    .select({ agent_id: agentMcpServers.agent_id })
-    .from(agentMcpServers)
-    .where(
-      and(
-        eq(agentMcpServers.mcp_server_id, input.registryServerId),
-        eq(agentMcpServers.tenant_id, input.tenantId),
-      ),
-    )) as { agent_id: string }[];
+    .select({ agent_id: agents.id })
+    .from(agents)
+    .where(eq(agents.tenant_id, input.tenantId))) as { agent_id: string }[];
   return { slug, agentIds: rows.map((r) => r.agent_id) };
 }
 

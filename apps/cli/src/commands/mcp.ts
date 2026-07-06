@@ -669,7 +669,7 @@ old one.
   //
   // Mints a fresh tkm_ token, stores it in Secrets Manager, and upserts the
   // tenant_mcp_servers row so the runtime picks up the admin-ops MCP for any
-  // agent that gets it assigned via agent_mcp_servers. Safe to re-run —
+  // agent that gets it assigned (workspace mcp/ folder). Safe to re-run —
   // rotates the key + retires the previous token.
   // ---------------------------------------------------------------------------
 

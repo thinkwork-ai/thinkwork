@@ -46,10 +46,7 @@ import {
   skillCatalog,
   tenantMcpServers,
 } from "../../utils.js";
-import {
-  agentMcpServers,
-  piExtensionAssignments,
-} from "@thinkwork/database-pg/schema";
+import { piExtensionAssignments } from "@thinkwork/database-pg/schema";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { emitAuditEvent } from "../../../lib/compliance/emit.js";
@@ -450,7 +447,8 @@ async function skillProfileMutation(
   });
 }
 
-// ─── mcp_server @ agent: agent_mcp_servers upsert / delete ─────────────────
+// ─── mcp_server @ agent: workspace file + signed connection folder ─────────
+// (agent_mcp_servers is retired — the files are the assignment state.)
 
 interface TenantMcpServerRow {
   id: string;
@@ -498,182 +496,145 @@ async function mcpAgentMutation(
   );
   const itemId = server.slug ?? server.name;
 
-  // Captured out of the transaction so the S3 dual-write (below) runs
-  // AFTER the DB row commits — S3 side effects never ride a DB tx.
-  let appliedGrantConfig: Record<string, unknown> | null | undefined;
-  let appliedDetach = false;
+  // Post-retirement (THINK-173 U11 follow-up) the workspace files ARE the
+  // assignment state — no `agent_mcp_servers` row exists behind them. The
+  // S3 writes are the mutation itself, so a failed write is a failed
+  // mutation (thrown), exactly like the connection/tool folder classes.
+  // The shared driver emits the audit event after the write commits.
+  const {
+    materializeMcpAssignmentFolder,
+    readMcpAssignmentState,
+    removeMcpAssignmentFolder,
+  } = await import("../../../lib/mcp/assignment-state.js");
+  const {
+    connectionDefinitionFromRegistryRow,
+    putCapabilityFolder,
+    removeCapabilityFolder,
+  } = await import("../../../lib/capabilities/folder-write.js");
 
-  const outcome = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({
-        id: agentMcpServers.id,
-        enabled: agentMcpServers.enabled,
-        config: agentMcpServers.config,
-      })
-      .from(agentMcpServers)
-      .where(
-        and(
-          eq(agentMcpServers.agent_id, target.agentId),
-          eq(agentMcpServers.mcp_server_id, server.id),
-        ),
-      )
-      .limit(1);
+  const existing = await readMcpAssignmentState(target.targetPrefix, itemId);
+  const generated = connectionDefinitionFromRegistryRow(server);
 
-    if (mode === "detach") {
-      if (!existing) {
-        return { outcome: "noop" as const, auditEmitted: true, itemId };
-      }
-      await tx
-        .delete(agentMcpServers)
-        .where(eq(agentMcpServers.id, existing.id));
-      appliedDetach = true;
-      await emitAuditEvent(
-        tx,
-        audit({
-          eventType: AUDIT_EVENT_TYPES.mcp_server.detach,
-          before: {
-            assigned: true,
-            enabled: existing.enabled,
-            config: existing.config ?? null,
-          },
-          after: { assigned: false },
-        }),
-      );
-      return { outcome: "applied" as const, auditEmitted: true, itemId };
+  if (mode === "detach") {
+    if (!existing) {
+      return { outcome: "noop" as const, auditEmitted: false, itemId };
     }
-
-    const nextConfig =
-      input.toolAllowlist && input.toolAllowlist.length > 0
-        ? { toolAllowlist: input.toolAllowlist }
-        : ((existing?.config as Record<string, unknown> | null) ?? null);
-    if (
-      existing?.enabled &&
-      JSON.stringify(existing.config ?? null) === JSON.stringify(nextConfig)
-    ) {
-      return { outcome: "noop" as const, auditEmitted: true, itemId };
-    }
-    if (existing) {
-      await tx
-        .update(agentMcpServers)
-        .set({ enabled: true, config: nextConfig, updated_at: new Date() })
-        .where(eq(agentMcpServers.id, existing.id));
-    } else {
-      await tx.insert(agentMcpServers).values({
-        agent_id: target.agentId,
-        tenant_id: input.tenantId,
-        mcp_server_id: server.id,
-        config: nextConfig,
-      });
-    }
-    appliedGrantConfig = nextConfig;
-    await emitAuditEvent(
-      tx,
-      audit({
-        eventType: AUDIT_EVENT_TYPES.mcp_server.grant,
-        before: existing
-          ? {
-              assigned: true,
-              enabled: existing.enabled,
-              config: existing.config ?? null,
-            }
-          : { assigned: false },
-        after: { assigned: true, enabled: true, config: nextConfig },
-      }),
+    const folderRemoved = await removeMcpAssignmentFolder(
+      target.targetPrefix,
+      itemId,
     );
-    return { outcome: "applied" as const, auditEmitted: true, itemId };
-  });
-
-  // ── Workspace-folder dual-write (Composer U9a), AFTER the DB commit.
-  // Ships INERT: the agent_mcp_servers row stays authoritative for the
-  // runtime (U9b repoints it). Every S3 op is best-effort — a failure logs
-  // and is swallowed so it never fails the grant/detach the DB already
-  // recorded. On an applied grant we materialize the target's manifest and
-  // reconcile the rest of the agent's attached set (the backfill hook that
-  // rides this config change); on an applied detach we remove the folder.
-  if (outcome.outcome === "applied") {
-    try {
-      const {
-        materializeMcpAssignmentFolder,
-        removeMcpAssignmentFolder,
-        reconcileMcpAssignmentFolders,
-      } = await import("../../../lib/mcp/assignment-state.js");
-      // THINK-173 U7 DualWrite window: the same grant/detach also
-      // mirrors a signed connections/<slug>/ folder so the folder path
-      // stays convergent with the DB rows until each agent's U11 flip.
-      // Best-effort like the mcp/ mirror — the DB row stays the read
-      // source while the agent's capability_folder_dispatch flag is off.
-      const {
-        connectionDefinitionFromRegistryRow,
-        putCapabilityFolder,
-        removeCapabilityFolder,
-      } = await import("../../../lib/capabilities/folder-write.js");
-      if (appliedDetach) {
-        await removeMcpAssignmentFolder(target.targetPrefix, itemId);
-        const removed = await removeCapabilityFolder({
-          targetPrefix: target.targetPrefix,
-          klass: "connection",
-          slug: connectionDefinitionFromRegistryRow(server).slug,
-        });
-        if (!removed.ok) {
-          console.warn(
-            `${LOG_PREFIX} connection-folder dual-delete failed for '${itemId}': ${removed.reason}`,
-          );
-        }
-      } else {
-        await materializeMcpAssignmentFolder({
-          targetPrefix: target.targetPrefix,
-          registryServerId: server.id,
-          tenantId: input.tenantId,
-          agentConfig: appliedGrantConfig as {
-            toolAllowlist?: unknown;
-          } | null,
-        });
-        await reconcileMcpAssignmentFolders({
-          agentId: target.agentId,
-          tenantId: input.tenantId,
-          targetPrefix: target.targetPrefix,
-        });
-        const generated = connectionDefinitionFromRegistryRow(server);
-        const allowlist = (
-          appliedGrantConfig as {
-            toolAllowlist?: unknown;
-          } | null
-        )?.toolAllowlist;
-        const written = await putCapabilityFolder({
-          targetPrefix: target.targetPrefix,
-          klass: "connection",
-          slug: generated.slug,
-          definition: generated.definition,
-          sidecar: {
-            enabled: true,
-            ...(Array.isArray(allowlist) && allowlist.length > 0
-              ? {
-                  permissions: {
-                    operations: allowlist.filter(
-                      (op): op is string => typeof op === "string",
-                    ),
-                  },
-                }
-              : {}),
-            config: { registryServerId: server.id },
-          },
-          signedBy,
-        });
-        if (!written.ok) {
-          console.warn(
-            `${LOG_PREFIX} connection-folder dual-write failed for '${itemId}': ${written.reason} (agent_mcp_servers row remains authoritative)`,
-          );
-        }
-      }
-    } catch (err) {
-      console.error(
-        `${LOG_PREFIX} MCP workspace-folder dual-write failed for '${itemId}' (agent_mcp_servers row remains authoritative):`,
-        err instanceof Error ? err.message : err,
+    if (!folderRemoved) {
+      throw new GraphQLError(
+        `failed to detach MCP server '${itemId}': workspace folder removal failed`,
+        { extensions: { code: "INTERNAL_SERVER_ERROR" } },
       );
     }
+    const removed = await removeCapabilityFolder({
+      targetPrefix: target.targetPrefix,
+      klass: "connection",
+      slug: generated.slug,
+    });
+    if (!removed.ok) {
+      throw new GraphQLError(
+        `failed to detach MCP server '${itemId}': connection folder removal failed (${removed.reason})`,
+        { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+      );
+    }
+    return {
+      outcome: "applied" as const,
+      auditEmitted: false,
+      itemId,
+      audit: {
+        eventType: AUDIT_EVENT_TYPES.mcp_server.detach,
+        before: {
+          assigned: true,
+          enabled: existing.enabled !== false,
+          config:
+            existing.enabledTools && existing.enabledTools.length > 0
+              ? { toolAllowlist: existing.enabledTools }
+              : null,
+        },
+        after: { assigned: false },
+      },
+    };
   }
 
-  return outcome;
+  const nextAllowlist =
+    input.toolAllowlist && input.toolAllowlist.length > 0
+      ? input.toolAllowlist
+      : (existing?.enabledTools ?? null);
+  const nextConfig =
+    nextAllowlist && nextAllowlist.length > 0
+      ? { toolAllowlist: nextAllowlist }
+      : null;
+  if (
+    existing &&
+    existing.enabled !== false &&
+    JSON.stringify(existing.enabledTools ?? null) ===
+      JSON.stringify(
+        nextAllowlist && nextAllowlist.length > 0 ? nextAllowlist : null,
+      )
+  ) {
+    return { outcome: "noop" as const, auditEmitted: false, itemId };
+  }
+
+  const materialized = await materializeMcpAssignmentFolder({
+    targetPrefix: target.targetPrefix,
+    registryServerId: server.id,
+    tenantId: input.tenantId,
+    agentConfig: nextConfig,
+  });
+  if (!materialized) {
+    throw new GraphQLError(
+      `failed to grant MCP server '${itemId}': workspace assignment write failed`,
+      { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+    );
+  }
+  const written = await putCapabilityFolder({
+    targetPrefix: target.targetPrefix,
+    klass: "connection",
+    slug: generated.slug,
+    definition: generated.definition,
+    sidecar: {
+      enabled: true,
+      ...(nextAllowlist && nextAllowlist.length > 0
+        ? {
+            permissions: {
+              operations: nextAllowlist.filter(
+                (op): op is string => typeof op === "string",
+              ),
+            },
+          }
+        : {}),
+      config: { registryServerId: server.id },
+    },
+    signedBy,
+  });
+  if (!written.ok) {
+    throw new GraphQLError(
+      `failed to grant MCP server '${itemId}': connection folder write failed (${written.reason})`,
+      { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+    );
+  }
+  return {
+    outcome: "applied" as const,
+    auditEmitted: false,
+    itemId,
+    audit: {
+      eventType: AUDIT_EVENT_TYPES.mcp_server.grant,
+      before: existing
+        ? {
+            assigned: true,
+            enabled: existing.enabled !== false,
+            config:
+              existing.enabledTools && existing.enabledTools.length > 0
+                ? { toolAllowlist: existing.enabledTools }
+                : null,
+          }
+        : { assigned: false },
+      after: { assigned: true, enabled: true, config: nextConfig },
+    },
+  };
 }
 
 // ─── connection/tool @ agent: signed workspace-folder sidecars ─────────────

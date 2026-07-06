@@ -1,9 +1,9 @@
 /**
- * MCP workspace assignment-state file tests (Composer plan U9a).
+ * MCP workspace assignment-state file tests.
  *
  * Contract: references-only manifests (NEVER tokens), fail-soft reads,
- * never-throw writes (the agent_mcp_servers row stays authoritative until
- * U9b), and an idempotent write-if-absent backfill reconcile.
+ * never-throw writes. Post-retirement the workspace file IS the assignment
+ * state (`agent_mcp_servers` is retired).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,25 +14,16 @@ const { store, dbRows, putSpy } = vi.hoisted(() => ({
   putSpy: vi.fn<(key: string) => void>(),
 }));
 
-// db is only touched by materialize/reconcile. materialize reads the
-// registry row; reconcile reads the attached set via innerJoin.
+// db is only touched by materialize — it reads the registry row.
 vi.mock("../../graphql/utils.js", () => {
   const registryChain = {
     from: () => ({
       where: () => ({ limit: () => Promise.resolve(dbRows.registry) }),
     }),
   };
-  const attachedChain = {
-    from: () => ({
-      innerJoin: () => ({ where: () => Promise.resolve(dbRows.attached) }),
-    }),
-  };
   return {
     db: {
-      // materialize selects the registry row (chain ends in .limit);
-      // reconcile selects the attached set (chain has .innerJoin). Each
-      // test exercises exactly one, so route by which rows are staged.
-      select: () => (dbRows.registry.length ? registryChain : attachedChain),
+      select: () => registryChain,
     },
     eq: vi.fn(),
     and: vi.fn(),
@@ -41,8 +32,6 @@ vi.mock("../../graphql/utils.js", () => {
     tenantMcpServers: {},
   };
 });
-
-vi.mock("@thinkwork/database-pg/schema", () => ({ agentMcpServers: {} }));
 
 vi.mock("@thinkwork/runtime-config", () => ({
   getConfig: () => "workspace-bucket",
@@ -106,7 +95,6 @@ import {
   mcpAssignmentStateKey,
   materializeMcpAssignmentFolder,
   readMcpAssignmentState,
-  reconcileMcpAssignmentFolders,
   removeMcpAssignmentFolder,
   writeMcpAssignmentState,
 } from "./assignment-state.js";
@@ -266,55 +254,5 @@ describe("materializeMcpAssignmentFolder (grant target)", () => {
     expect(ok).toBe(true);
     const read = await readMcpAssignmentState(PREFIX, "github", DEPS);
     expect(read).toMatchObject({ slug: "github", enabledTools: ["a"] });
-  });
-});
-
-describe("reconcileMcpAssignmentFolders (backfill, write-if-absent)", () => {
-  it("materializes files for existing attachments and no-ops on second run", async () => {
-    dbRows.attached = [
-      {
-        registryId: "srv-1",
-        slug: "github",
-        name: "GitHub",
-        transport: "streamable-http",
-        auth_type: "none",
-        auth_config: null,
-        config: null,
-        enabled: true,
-      },
-      {
-        registryId: "srv-2",
-        slug: "slack",
-        name: "Slack",
-        transport: "streamable-http",
-        auth_type: "tenant_api_key",
-        auth_config: { secretRef: "arn:slack" },
-        config: { toolAllowlist: ["post"] },
-        enabled: true,
-      },
-    ];
-
-    const first = await reconcileMcpAssignmentFolders(
-      { agentId: "agent-1", tenantId: "t-1", targetPrefix: PREFIX },
-      DEPS,
-    );
-    expect(first).toBe(2);
-    expect(await listWorkspaceMcpSlugs(PREFIX, DEPS)).toEqual([
-      "github",
-      "slack",
-    ]);
-    const slack = await readMcpAssignmentState(PREFIX, "slack", DEPS);
-    expect(slack).toMatchObject({
-      secretRef: "arn:slack",
-      enabledTools: ["post"],
-    });
-
-    putSpy.mockClear();
-    const second = await reconcileMcpAssignmentFolders(
-      { agentId: "agent-1", tenantId: "t-1", targetPrefix: PREFIX },
-      DEPS,
-    );
-    expect(second).toBe(0);
-    expect(putSpy).not.toHaveBeenCalled();
   });
 });

@@ -117,7 +117,15 @@ export const tenantMcpServers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// agent_mcp_servers — per-agent MCP enablement (synced from template)
+// agent_mcp_servers — RETIRED (THINK-173): assignment state lives in
+// workspace `mcp/<slug>/.assignment.json` + signed `connections/<slug>/`
+// folders. No code writes new rows; the SOLE remaining reader is the U11
+// capability backfill (packages/api/src/lib/capabilities/backfill.ts),
+// which migrates pre-retirement rows on stages that have not cut over yet
+// (customer stages). Teardown paths still DELETE rows to keep that frozen
+// migration snapshot hygienic. Drop the table (and this def) only after
+// every customer stage has run `thinkwork capabilities backfill --apply
+// --flip` — the def-removal must DEPLOY before the psql DROP.
 // ---------------------------------------------------------------------------
 
 export const agentMcpServers = pgTable(

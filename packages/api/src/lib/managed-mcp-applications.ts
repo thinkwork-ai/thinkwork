@@ -339,35 +339,30 @@ async function ensureManagedMcpDefaultAgentAssignments(
       and(eq(agents.tenant_id, tenantId), eq(agents.is_platform_default, true)),
     )) as { id: string }[];
 
-  for (const agent of platformAgents) {
-    await db
-      .insert(agentMcpServers)
-      .values({
-        agent_id: agent.id,
-        tenant_id: tenantId,
-        mcp_server_id: serverId,
-        enabled: true,
-      })
-      .onConflictDoUpdate({
-        target: [agentMcpServers.agent_id, agentMcpServers.mcp_server_id],
-        set: { enabled: true, updated_at: new Date() },
-      });
-  }
-
-  // Workspace-folder parity (Composer U9 follow-up): materialize the managed
-  // server's `mcp/<slug>/.assignment.json` (and backfill the agent's existing
-  // attached set) so it does not silently drop from an agent that already has
-  // other mcp/ files. Best-effort, bucket-gated — a no-op in DB-mocked tests.
+  // The workspace files ARE the assignment (agent_mcp_servers retired):
+  // materialize the managed server's `mcp/<slug>/.assignment.json` plus the
+  // signed `connections/<slug>/` folder on each platform agent. Best-effort,
+  // bucket-gated — a no-op in DB-mocked tests.
+  const agentIds = platformAgents.map((agent) => agent.id);
   try {
-    const { reconcileMcpAssignmentFoldersForAgents } =
+    const { materializeMcpAssignmentFoldersForAgents } =
       await import("./mcp/assignment-state.js");
-    await reconcileMcpAssignmentFoldersForAgents({
-      agentIds: platformAgents.map((agent) => agent.id),
+    await materializeMcpAssignmentFoldersForAgents({
+      agentIds,
       tenantId,
+      registryServerId: serverId,
+    });
+    const { writeConnectionFoldersForAgents } =
+      await import("./capabilities/reconcile-connection-folders.js");
+    await writeConnectionFoldersForAgents({
+      agentIds,
+      tenantId,
+      registryServerId: serverId,
+      signedBy: "plugin-reconciler",
     });
   } catch (err) {
     console.error(
-      "[managed-mcp] MCP workspace-folder materialization failed (agent_mcp_servers rows remain authoritative):",
+      "[managed-mcp] MCP workspace-folder materialization failed:",
       err instanceof Error ? err.message : err,
     );
   }
@@ -495,10 +490,10 @@ async function setManagedMcpAssignmentsEnabled(
   serverId: string,
   enabled: boolean,
 ) {
-  await db
-    .update(agentMcpServers)
-    .set({ enabled, updated_at: new Date() })
-    .where(eq(agentMcpServers.mcp_server_id, serverId));
+  // Per-agent assignment state lives in workspace files now; server-wide
+  // enable/disable is enforced by the registry row's `enabled` flag
+  // (setManagedMcpEnabled) — dispatch and manifest compile both withhold
+  // on a disabled registry row, so no per-agent write is needed here.
   await db
     .update(agentTemplateMcpServers)
     .set({ enabled, updated_at: new Date() })
@@ -592,6 +587,12 @@ async function destroyTwentyManagedMcp(
       const { removeMcpAssignmentFoldersForAgents } =
         await import("./mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+      const { removeConnectionFoldersForAgents } =
+        await import("./capabilities/reconcile-connection-folders.js");
+      await removeConnectionFoldersForAgents({
+        agentIds: folderSnapshot.agentIds,
+        registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+      });
     } catch (err) {
       console.warn(
         "[managed-mcp] MCP workspace-folder removal failed:",

@@ -204,6 +204,12 @@ export function createDefaultTwentyCutoverDeps(
           const { removeMcpAssignmentFoldersForAgents } =
             await import("../../mcp/assignment-state.js");
           await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+          const { removeConnectionFoldersForAgents } =
+            await import("../../capabilities/reconcile-connection-folders.js");
+          await removeConnectionFoldersForAgents({
+            agentIds: folderSnapshot.agentIds,
+            registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+          });
         } catch (err) {
           console.warn(
             "[twenty-cutover] MCP workspace-folder removal failed:",

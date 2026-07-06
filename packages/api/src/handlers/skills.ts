@@ -1620,6 +1620,12 @@ async function mcpDeleteServer(
       const { removeMcpAssignmentFoldersForAgents } =
         await import("../lib/mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+      const { removeConnectionFoldersForAgents } =
+        await import("../lib/capabilities/reconcile-connection-folders.js");
+      await removeConnectionFoldersForAgents({
+        agentIds: folderSnapshot.agentIds,
+        registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+      });
     } catch (err) {
       console.warn(
         "[skills] MCP workspace-folder removal failed:",
@@ -2517,48 +2523,105 @@ function extractTokenFromSecretString(secretString?: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// MCP Server — Agent Assignment (uses agent_mcp_servers table)
+// MCP Server — Agent Assignment (workspace `mcp/<slug>/.assignment.json`
+// files are the assignment state; agent_mcp_servers is retired)
 // ---------------------------------------------------------------------------
+
+/**
+ * Read an agent's attached servers from its workspace files, joined with
+ * the tenant registry rows the files reference. Returns null when the
+ * workspace is unresolvable (no bucket / missing slugs).
+ */
+async function readAgentMcpAssignments(agentId: string): Promise<Array<{
+  slug: string;
+  state: import("../lib/mcp/assignment-state.js").McpAssignmentState;
+  registry: {
+    id: string;
+    name: string;
+    slug: string | null;
+    url: string;
+    transport: string | null;
+    auth_type: string | null;
+    oauth_provider: string | null;
+    tools: unknown;
+    server_enabled: boolean | null;
+    status: string | null;
+    management_source: string | null;
+    managed_application_key: string | null;
+  } | null;
+}> | null> {
+  const {
+    listWorkspaceMcpSlugs,
+    readMcpAssignmentState,
+    resolveAgentWorkspacePrefix,
+  } = await import("../lib/mcp/assignment-state.js");
+  const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
+  if (!targetPrefix) return null;
+  const slugs = await listWorkspaceMcpSlugs(targetPrefix);
+  if (slugs === null) return null;
+  const entries: Array<{
+    slug: string;
+    state: import("../lib/mcp/assignment-state.js").McpAssignmentState;
+  }> = [];
+  for (const slug of slugs) {
+    const state = await readMcpAssignmentState(targetPrefix, slug);
+    if (state) entries.push({ slug, state });
+  }
+  const registryIds = [
+    ...new Set(entries.map((entry) => entry.state.registryServerId)),
+  ];
+  const registryRows =
+    registryIds.length > 0
+      ? await db
+          .select({
+            id: tenantMcpServers.id,
+            name: tenantMcpServers.name,
+            slug: tenantMcpServers.slug,
+            url: tenantMcpServers.url,
+            transport: tenantMcpServers.transport,
+            auth_type: tenantMcpServers.auth_type,
+            oauth_provider: tenantMcpServers.oauth_provider,
+            tools: tenantMcpServers.tools,
+            server_enabled: tenantMcpServers.enabled,
+            status: tenantMcpServers.status,
+            management_source: tenantMcpServers.management_source,
+            managed_application_key: tenantMcpServers.managed_application_key,
+          })
+          .from(tenantMcpServers)
+          .where(inArray(tenantMcpServers.id, registryIds))
+      : [];
+  const registryById = new Map(registryRows.map((row) => [row.id, row]));
+  return entries.map((entry) => ({
+    ...entry,
+    registry: registryById.get(entry.state.registryServerId) ?? null,
+  }));
+}
 
 async function mcpListAgentServers(
   agentId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const rows = await db
-    .select({
-      id: agentMcpServers.id,
-      mcp_server_id: agentMcpServers.mcp_server_id,
-      enabled: agentMcpServers.enabled,
-      config: agentMcpServers.config,
-      name: tenantMcpServers.name,
-      slug: tenantMcpServers.slug,
-      url: tenantMcpServers.url,
-      transport: tenantMcpServers.transport,
-      auth_type: tenantMcpServers.auth_type,
-      oauth_provider: tenantMcpServers.oauth_provider,
-      tools: tenantMcpServers.tools,
-      server_enabled: tenantMcpServers.enabled,
-    })
-    .from(agentMcpServers)
-    .innerJoin(
-      tenantMcpServers,
-      eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
-    )
-    .where(eq(agentMcpServers.agent_id, agentId));
+  const assignments = (await readAgentMcpAssignments(agentId)) ?? [];
 
   return json({
-    servers: rows.map((r) => ({
-      id: r.id,
-      mcpServerId: r.mcp_server_id,
-      name: r.name,
-      slug: r.slug,
-      url: r.url,
-      transport: r.transport,
-      authType: r.auth_type,
-      oauthProvider: r.oauth_provider,
-      tools: r.tools,
-      enabled: r.enabled && r.server_enabled,
-      config: r.config,
-    })),
+    servers: assignments
+      .filter((entry) => entry.registry)
+      .map(({ slug, state, registry }) => ({
+        // The workspace folder is the assignment record — no row id exists.
+        id: `${agentId}:${slug}`,
+        mcpServerId: registry!.id,
+        name: registry!.name,
+        slug: registry!.slug,
+        url: registry!.url,
+        transport: registry!.transport,
+        authType: registry!.auth_type,
+        oauthProvider: registry!.oauth_provider,
+        tools: registry!.tools,
+        enabled: state.enabled !== false && registry!.server_enabled === true,
+        config:
+          state.enabledTools && state.enabledTools.length > 0
+            ? { toolAllowlist: state.enabledTools }
+            : null,
+      })),
   });
 }
 
@@ -2591,88 +2654,106 @@ async function mcpAssignToAgent(
     );
   if (!server) return error("MCP server not found in this tenant", 404);
 
-  // Upsert
-  const [existing] = await db
-    .select({ id: agentMcpServers.id })
-    .from(agentMcpServers)
-    .where(
-      and(
-        eq(agentMcpServers.agent_id, agentId),
-        eq(agentMcpServers.mcp_server_id, mcpServerId),
-      ),
-    );
+  // The workspace files ARE the assignment (agent_mcp_servers retired):
+  // write the `mcp/<slug>/.assignment.json` state file plus the signed
+  // `connections/<slug>/` folder. A failed write is a failed assign.
+  const {
+    materializeMcpAssignmentFolder,
+    readMcpAssignmentState,
+    resolveAgentWorkspacePrefix,
+  } = await import("../lib/mcp/assignment-state.js");
+  const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
+  if (!targetPrefix) return error("Agent workspace unresolvable", 500);
 
-  // Workspace-folder parity (Composer U9 follow-up): reconcile the agent's
-  // whole attached set after the assign so the newly-attached server
-  // materializes its `mcp/<slug>/.assignment.json` (and any pre-existing
-  // DB-only attachments are backfilled). Best-effort, bucket-gated.
-  const reconcileAgentMcpFolders = async () => {
-    try {
-      const { reconcileMcpAssignmentFolders } =
-        await import("../lib/mcp/assignment-state.js");
-      await reconcileMcpAssignmentFolders({
-        agentId,
-        tenantId: agentRow.tenant_id,
-      });
-    } catch (err) {
-      console.warn(
-        "[skills] MCP workspace-folder materialization failed:",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  };
+  const [serverRow] = await db
+    .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
+    .from(tenantMcpServers)
+    .where(eq(tenantMcpServers.id, mcpServerId));
+  const folderSlug = serverRow ? (serverRow.slug ?? serverRow.name) : null;
+  const existed =
+    folderSlug != null
+      ? (await readMcpAssignmentState(targetPrefix, folderSlug)) != null
+      : false;
 
-  if (existing) {
-    await db
-      .update(agentMcpServers)
-      .set({ enabled: true, config: config || null, updated_at: new Date() })
-      .where(eq(agentMcpServers.id, existing.id));
-    await reconcileAgentMcpFolders();
-    return json({ id: existing.id, updated: true });
+  const materialized = await materializeMcpAssignmentFolder({
+    targetPrefix,
+    registryServerId: mcpServerId,
+    tenantId: agentRow.tenant_id,
+    agentConfig: (config as { toolAllowlist?: unknown } | null) || null,
+  });
+  if (!materialized) {
+    return error("Failed to write MCP assignment to agent workspace", 500);
   }
 
-  const [inserted] = await db
-    .insert(agentMcpServers)
-    .values({
-      agent_id: agentId,
-      tenant_id: agentRow.tenant_id,
-      mcp_server_id: mcpServerId,
-      config: config || null,
-    })
-    .returning({ id: agentMcpServers.id });
+  // Signed connection folder — same registration surface the Composer
+  // grant writes, provenance `plugin-reconciler` (server-side REST path).
+  try {
+    const { writeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
+    const allowlist = (config as { toolAllowlist?: unknown } | null)
+      ?.toolAllowlist;
+    await writeConnectionFoldersForAgents({
+      agentIds: [agentId],
+      tenantId: agentRow.tenant_id,
+      registryServerId: mcpServerId,
+      operations: Array.isArray(allowlist)
+        ? allowlist.filter((op): op is string => typeof op === "string")
+        : undefined,
+      signedBy: "plugin-reconciler",
+    });
+  } catch (err) {
+    console.warn(
+      "[skills] connection-folder write failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
-  await reconcileAgentMcpFolders();
-  return json({ id: inserted.id, created: true });
+  return existed
+    ? json({ id: `${agentId}:${folderSlug}`, updated: true })
+    : json({ id: `${agentId}:${folderSlug ?? mcpServerId}`, created: true });
 }
 
 async function mcpUnassignFromAgent(
   agentId: string,
   mcpServerId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const deleted = await db
-    .delete(agentMcpServers)
-    .where(
-      and(
-        eq(agentMcpServers.agent_id, agentId),
-        eq(agentMcpServers.mcp_server_id, mcpServerId),
-      ),
-    )
-    .returning({ id: agentMcpServers.id });
+  // The workspace folder is the assignment record (agent_mcp_servers
+  // retired) — existence check + removal are both against the files.
+  const { readMcpAssignmentState, resolveAgentWorkspacePrefix } =
+    await import("../lib/mcp/assignment-state.js");
+  const [serverRow] = await db
+    .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
+    .from(tenantMcpServers)
+    .where(eq(tenantMcpServers.id, mcpServerId));
+  const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
+  const folderSlug = serverRow ? (serverRow.slug ?? serverRow.name) : null;
+  if (!targetPrefix || !folderSlug) {
+    return notFound("MCP server assignment not found");
+  }
+  const existing = await readMcpAssignmentState(targetPrefix, folderSlug);
+  if (!existing) return notFound("MCP server assignment not found");
 
-  if (deleted.length === 0) return notFound("MCP server assignment not found");
+  const { removeMcpAssignmentForAgentServer } =
+    await import("../lib/mcp/assignment-state.js");
+  const removed = await removeMcpAssignmentForAgentServer({
+    agentId,
+    registryServerId: mcpServerId,
+  });
+  if (!removed) {
+    return error("Failed to remove MCP assignment from agent workspace", 500);
+  }
 
-  // Remove the agent's `mcp/<slug>/` folder for this server (Composer U9
-  // follow-up). Best-effort, bucket-gated.
+  // Remove the signed connection folder too (parity with Composer detach).
   try {
-    const { removeMcpAssignmentForAgentServer } =
-      await import("../lib/mcp/assignment-state.js");
-    await removeMcpAssignmentForAgentServer({
-      agentId,
-      registryServerId: mcpServerId,
+    const { removeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
+    await removeConnectionFoldersForAgents({
+      agentIds: [agentId],
+      registry: { slug: serverRow.slug, name: serverRow.name },
     });
   } catch (err) {
     console.warn(
-      "[skills] MCP workspace-folder removal failed:",
+      "[skills] connection-folder removal failed:",
       err instanceof Error ? err.message : err,
     );
   }
@@ -2905,31 +2986,42 @@ async function mcpListUserServers(
 
   const agentIds = userAgents.map((a) => a.id);
 
-  // Get all MCP servers assigned to these agents
-  const assignedRows =
-    agentIds.length > 0
-      ? await db
-          .select({
-            assignment_id: agentMcpServers.id,
-            agent_id: agentMcpServers.agent_id,
-            mcp_server_id: agentMcpServers.mcp_server_id,
-            enabled: agentMcpServers.enabled,
-            name: tenantMcpServers.name,
-            slug: tenantMcpServers.slug,
-            url: tenantMcpServers.url,
-            auth_type: tenantMcpServers.auth_type,
-            tools: tenantMcpServers.tools,
-            server_enabled: tenantMcpServers.enabled,
-            management_source: tenantMcpServers.management_source,
-            managed_application_key: tenantMcpServers.managed_application_key,
-          })
-          .from(agentMcpServers)
-          .innerJoin(
-            tenantMcpServers,
-            eq(agentMcpServers.mcp_server_id, tenantMcpServers.id),
-          )
-          .where(inArray(agentMcpServers.agent_id, agentIds))
-      : [];
+  // Get all MCP servers assigned to these agents — from the workspace
+  // `mcp/<slug>/.assignment.json` files (agent_mcp_servers is retired).
+  const assignedRows: Array<{
+    assignment_id: string | null;
+    agent_id: string | null;
+    mcp_server_id: string;
+    enabled: boolean;
+    name: string;
+    slug: string | null;
+    url: string;
+    auth_type: string | null;
+    tools: unknown;
+    server_enabled: boolean | null;
+    management_source: string | null;
+    managed_application_key: string | null;
+  }> = [];
+  for (const agentId of agentIds) {
+    const assignments = (await readAgentMcpAssignments(agentId)) ?? [];
+    for (const { slug, state, registry } of assignments) {
+      if (!registry) continue;
+      assignedRows.push({
+        assignment_id: `${agentId}:${slug}`,
+        agent_id: agentId,
+        mcp_server_id: registry.id,
+        enabled: state.enabled !== false,
+        name: registry.name,
+        slug: registry.slug,
+        url: registry.url,
+        auth_type: registry.auth_type,
+        tools: registry.tools,
+        server_enabled: registry.server_enabled,
+        management_source: registry.management_source,
+        managed_application_key: registry.managed_application_key,
+      });
+    }
+  }
 
   const tenantOauthRows = await db
     .select({

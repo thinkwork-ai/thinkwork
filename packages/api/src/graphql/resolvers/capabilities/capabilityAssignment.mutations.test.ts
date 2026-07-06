@@ -27,7 +27,9 @@ const {
   mockS3Send,
   mockMaterializeMcp,
   mockRemoveMcp,
-  mockReconcileMcp,
+  mockReadMcp,
+  mockPutCapabilityFolder,
+  mockRemoveCapabilityFolder,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
   txOps: [] as Array<{ op: string; tx: unknown; args: unknown }>,
@@ -44,7 +46,9 @@ const {
   mockS3Send: vi.fn(),
   mockMaterializeMcp: vi.fn(),
   mockRemoveMcp: vi.fn(),
-  mockReconcileMcp: vi.fn(),
+  mockReadMcp: vi.fn(),
+  mockPutCapabilityFolder: vi.fn(),
+  mockRemoveCapabilityFolder: vi.fn(),
 }));
 
 function takeRows(): unknown[] {
@@ -223,15 +227,30 @@ vi.mock("../../../lib/wiring-md.js", () => ({
   parseWiringMd: mockParseWiringMd,
 }));
 
-// Composer U9a: the MCP workspace-folder dual-write. Spied here — its own
-// suite (`lib/mcp/assignment-state.test.ts`) covers the file mechanics; the
-// mutation only needs to prove it calls materialize+reconcile on grant and
-// remove on detach, after the DB commit, and never on a no-op.
+// Post-retirement: the workspace files ARE the MCP assignment state. The
+// mutation reads the existing file, then materializes/removes the mcp/
+// state file and the signed connection folder. Spied here — their own
+// suites cover the file mechanics.
 vi.mock("../../../lib/mcp/assignment-state.js", () => ({
   materializeMcpAssignmentFolder: mockMaterializeMcp,
   removeMcpAssignmentFolder: mockRemoveMcp,
-  reconcileMcpAssignmentFolders: mockReconcileMcp,
+  readMcpAssignmentState: mockReadMcp,
 }));
+
+// The connection-folder write path used by the MCP grant/detach. The real
+// module needs a configured Ed25519 signer; the mutation only needs to
+// prove it calls put/remove with the right shape and throws on failure.
+vi.mock("../../../lib/capabilities/folder-write.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../lib/capabilities/folder-write.js")
+    >();
+  return {
+    ...actual,
+    putCapabilityFolder: mockPutCapabilityFolder,
+    removeCapabilityFolder: mockRemoveCapabilityFolder,
+  };
+});
 
 import {
   grantCapability,
@@ -293,7 +312,9 @@ beforeEach(() => {
   });
   mockMaterializeMcp.mockResolvedValue(true);
   mockRemoveMcp.mockResolvedValue(true);
-  mockReconcileMcp.mockResolvedValue(0);
+  mockReadMcp.mockResolvedValue(null);
+  mockPutCapabilityFolder.mockResolvedValue({ ok: true });
+  mockRemoveCapabilityFolder.mockResolvedValue({ ok: true });
 });
 
 describe("matrix conformance (R2)", () => {
@@ -813,14 +834,20 @@ describe("mcp_server @ profile (tool_policy subset)", () => {
   });
 });
 
-describe("mcp_server @ agent (assignment row)", () => {
-  it("detach deletes the assignment and audits; re-detach is a no-op", async () => {
+describe("mcp_server @ agent (workspace files are the assignment)", () => {
+  it("detach removes the mcp/ folder + connection folder and audits; re-detach is a no-op", async () => {
     rowsQueue.push(
       [AGENT_ROW],
       [TENANT_ROW],
-      [{ id: SERVER_ID, slug: "github", name: "GitHub" }],
-      [{ id: "assign-1", enabled: true, config: null }], // existing row (tx)
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
     );
+    // Existing assignment file → detach applies.
+    mockReadMcp.mockResolvedValueOnce({
+      slug: "github",
+      name: "GitHub",
+      registryServerId: SERVER_ID,
+      updated_at: "2026-07-05T00:00:00.000Z",
+    });
 
     const result = await detachCapability(
       null,
@@ -835,28 +862,36 @@ describe("mcp_server @ agent (assignment row)", () => {
       },
       ctx,
     );
-    expect(txOps.some((op) => op.op === "delete")).toBe(true);
     expect(result.outcome).toBe("applied");
     expect(
       (mockEmitAuditEvent.mock.calls[0][1] as { eventType: string }).eventType,
     ).toBe("mcp.detached");
-    // U9a: applied detach removes the workspace folder, materializes nothing.
     expect(mockRemoveMcp).toHaveBeenCalledWith(
       "tenants/acme/agents/ada/",
       "github",
     );
+    expect(mockRemoveCapabilityFolder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetPrefix: "tenants/acme/agents/ada/",
+        klass: "connection",
+        slug: "github",
+      }),
+    );
     expect(mockMaterializeMcp).not.toHaveBeenCalled();
+    // No DB write remains on this path — the table is retired.
+    expect(txOps.some((op) => op.op === "delete")).toBe(false);
 
-    // Re-detach: no assignment row → noop, no event.
+    // Re-detach: no assignment file → noop, no event, no removals.
     mockRemoveMcp.mockClear();
+    mockRemoveCapabilityFolder.mockClear();
     mockEmitAuditEvent.mockClear();
     txOps.length = 0;
     rowsQueue.push(
       [AGENT_ROW],
       [TENANT_ROW],
-      [{ id: SERVER_ID, slug: "github", name: "GitHub" }],
-      [], // no existing row
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
     );
+    mockReadMcp.mockResolvedValueOnce(null);
     const second = await detachCapability(
       null,
       {
@@ -871,19 +906,18 @@ describe("mcp_server @ agent (assignment row)", () => {
       ctx,
     );
     expect(second.outcome).toBe("noop");
-    expect(txOps.some((op) => op.op === "delete")).toBe(false);
     expect(mockEmitAuditEvent).not.toHaveBeenCalled();
-    // U9a: a no-op detach touches no workspace folder.
     expect(mockRemoveMcp).not.toHaveBeenCalled();
+    expect(mockRemoveCapabilityFolder).not.toHaveBeenCalled();
   });
 
-  it("grant upserts with the tool allowlist and defaults the agent to the platform default", async () => {
+  it("grant writes the assignment file + signed connection folder with the allowlist", async () => {
     rowsQueue.push(
       [AGENT_ROW], // platform-default lookup (no agentId passed)
       [TENANT_ROW],
-      [{ id: SERVER_ID, slug: "github", name: "GitHub" }],
-      [], // no existing assignment (tx)
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
     );
+    mockReadMcp.mockResolvedValueOnce(null); // not yet assigned
 
     const result = await grantCapability(
       null,
@@ -898,19 +932,11 @@ describe("mcp_server @ agent (assignment row)", () => {
       },
       ctx,
     );
-    const insert = txOps.find((op) => op.op === "insert");
-    expect(
-      (insert!.args as { values: Record<string, unknown> }).values,
-    ).toMatchObject({
-      agent_id: AGENT_ID,
-      tenant_id: TENANT_ID,
-      mcp_server_id: SERVER_ID,
-      config: { toolAllowlist: ["issues_read"] },
-    });
     expect(result.outcome).toBe("applied");
-    expect(mockEmitAuditEvent.mock.calls[0][0]).toBe(insert!.tx);
-    // U9a: applied grant materializes the target's manifest and reconciles
-    // the rest of the agent's attached set (the backfill hook).
+    // No DB write remains on this path — the table is retired.
+    expect(txOps.some((op) => op.op === "insert" || op.op === "update")).toBe(
+      false,
+    );
     expect(mockMaterializeMcp).toHaveBeenCalledWith(
       expect.objectContaining({
         targetPrefix: "tenants/acme/agents/ada/",
@@ -919,26 +945,67 @@ describe("mcp_server @ agent (assignment row)", () => {
         agentConfig: { toolAllowlist: ["issues_read"] },
       }),
     );
-    expect(mockReconcileMcp).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: AGENT_ID, tenantId: TENANT_ID }),
+    expect(mockPutCapabilityFolder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        klass: "connection",
+        slug: "github",
+        sidecar: expect.objectContaining({
+          enabled: true,
+          permissions: { operations: ["issues_read"] },
+          config: { registryServerId: SERVER_ID },
+        }),
+        signedBy: `operator:${USER_ID}`,
+      }),
     );
+    expect(
+      (mockEmitAuditEvent.mock.calls[0][1] as { eventType: string }).eventType,
+    ).toBe("mcp.granted");
     expect(mockRemoveMcp).not.toHaveBeenCalled();
   });
 
-  it("idempotent re-grant is a no-op file-wise (no materialize, no reconcile, no remove)", async () => {
+  it("grant throws (and emits no audit) when the workspace write fails", async () => {
     rowsQueue.push(
       [AGENT_ROW],
       [TENANT_ROW],
-      [{ id: SERVER_ID, slug: "github", name: "GitHub" }],
-      // Existing enabled row with identical config → grant no-ops.
-      [
-        {
-          id: "assign-1",
-          enabled: true,
-          config: { toolAllowlist: ["issues_read"] },
-        },
-      ],
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
     );
+    mockReadMcp.mockResolvedValueOnce(null);
+    mockMaterializeMcp.mockResolvedValueOnce(false);
+
+    await expect(
+      grantCapability(
+        null,
+        {
+          input: {
+            tenantId: TENANT_ID,
+            capabilityClass: "MCP_SERVER",
+            scope: "AGENT",
+            agentId: AGENT_ID,
+            capabilityRef: "github",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "INTERNAL_SERVER_ERROR" },
+    });
+    expect(mockEmitAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("idempotent re-grant is a no-op file-wise (no materialize, no put, no remove)", async () => {
+    rowsQueue.push(
+      [AGENT_ROW],
+      [TENANT_ROW],
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
+    );
+    // Existing enabled file with identical allowlist → grant no-ops.
+    mockReadMcp.mockResolvedValueOnce({
+      slug: "github",
+      name: "GitHub",
+      registryServerId: SERVER_ID,
+      enabledTools: ["issues_read"],
+      updated_at: "2026-07-05T00:00:00.000Z",
+    });
     mockCapabilityInspector.mockResolvedValue(
       cannedInspection([
         { capabilityClass: "mcp_server", capabilityId: "github", active: true },
@@ -961,7 +1028,7 @@ describe("mcp_server @ agent (assignment row)", () => {
     );
     expect(result.outcome).toBe("noop");
     expect(mockMaterializeMcp).not.toHaveBeenCalled();
-    expect(mockReconcileMcp).not.toHaveBeenCalled();
+    expect(mockPutCapabilityFolder).not.toHaveBeenCalled();
     expect(mockRemoveMcp).not.toHaveBeenCalled();
   });
 });
