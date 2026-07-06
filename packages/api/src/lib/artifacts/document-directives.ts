@@ -337,6 +337,11 @@ const DEFAULT_REGISTRY: readonly DirectiveSpec[] = [
   makeChartSpec(renderChart),
 ];
 
+/** Canonical directive kinds — the plate registry's availability vocabulary. */
+export const DIRECTIVE_KINDS: readonly string[] = DEFAULT_REGISTRY.map(
+  (s) => s.kind,
+);
+
 export function buildDirectiveEngine(
   registry: readonly DirectiveSpec[] = DEFAULT_REGISTRY,
 ): DirectiveEngine {

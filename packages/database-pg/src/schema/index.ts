@@ -82,3 +82,4 @@ export * from "./plugins";
 export * from "./plugin-app-overlays";
 export * from "./pi-extensions";
 export * from "./n8n-agent-step-runs";
+export * from "./document-plates";

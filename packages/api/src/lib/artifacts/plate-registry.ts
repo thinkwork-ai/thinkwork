@@ -1,0 +1,482 @@
+/**
+ * Plate registry (THINK-153): resolution, token guard, and exemplar builder.
+ *
+ * One resolution path (KTD2): `resolvePlate` merges platform plate definition
+ * → tenant document palette → per-plate tenant overrides into a ResolvedPlate
+ * the compositor consumes. The same function serves emission, save-time
+ * validation, preview, and the dispatch-payload plate list — one code path,
+ * no drift.
+ *
+ * Layering rules:
+ * - `origin: "tenant"` rows are full definitions; a tenant row whose slug
+ *   collides with a platform plate SHADOWS the platform definition (KTD1).
+ * - `origin: "platform_override"` rows carry deltas merged over the platform
+ *   definition (R4: token overrides + hidden; save enforces the field set).
+ * - The tenant document palette (tenant_settings.features.documentPalette)
+ *   sits beneath every plate's own palette overrides (R8).
+ *
+ * Defense in depth: stored token maps are re-filtered through the guard at
+ * resolution time, so a row that predates a guard tightening can never leak
+ * an unsafe value into compiled CSS.
+ */
+
+import { getDb } from "@thinkwork/database-pg";
+import {
+  documentPlates,
+  tenantSettings,
+  type DocumentPlateConfig,
+  type DocumentPlateOrigin,
+} from "@thinkwork/database-pg/schema";
+import { and, eq } from "drizzle-orm";
+import { DIRECTIVE_KINDS } from "./document-directives.js";
+import {
+  getPlatformPlate,
+  PLATFORM_PLATES,
+  type PlateDefinition,
+  type PlatePalette,
+} from "./plate-definitions.js";
+
+// ---------------------------------------------------------------------------
+// Token guard (R7) — server port of apps/web/src/applets/theme-tokens.ts
+// ---------------------------------------------------------------------------
+
+/** The plate CSS custom-property vocabulary (R7). Nothing else is accepted. */
+export const PLATE_TOKEN_VOCABULARY = [
+  "--bg",
+  "--ink",
+  "--muted",
+  "--line",
+  "--card",
+  "--accent",
+  "--accent-soft",
+  "--accent-text",
+  "--info",
+  "--info-soft",
+  "--info-text",
+  "--warn",
+  "--warn-soft",
+  "--warn-text",
+  "--bad",
+  "--bad-soft",
+  "--bad-text",
+  "--mono",
+] as const;
+
+const VOCABULARY_SET: ReadonlySet<string> = new Set(PLATE_TOKEN_VOCABULARY);
+
+const SAFE_TOKEN_NAME = /^--[a-z0-9-]+$/i;
+const UNSAFE_TOKEN_VALUE =
+  /[{};<>]|url\s*\(|expression\s*\(|@import|javascript:/i;
+
+export function isSafePlateTokenValue(value: string): boolean {
+  if (!value || value.length > 180) return false;
+  return !UNSAFE_TOKEN_VALUE.test(value);
+}
+
+export interface PaletteValidation {
+  ok: boolean;
+  /** Model/operator-actionable messages, one per offending entry. */
+  errors: string[];
+}
+
+/** Validate a palette map against the vocabulary and value guard (R7/AE3). */
+export function validatePlatePalette(
+  palette: Record<string, unknown>,
+): PaletteValidation {
+  const errors: string[] = [];
+  for (const [name, value] of Object.entries(palette)) {
+    if (!SAFE_TOKEN_NAME.test(name) || !VOCABULARY_SET.has(name)) {
+      errors.push(
+        `Unknown palette token "${name}". Allowed tokens: ${PLATE_TOKEN_VOCABULARY.join(", ")}.`,
+      );
+      continue;
+    }
+    if (typeof value !== "string" || !isSafePlateTokenValue(value)) {
+      errors.push(
+        `Token "${name}" has an unsafe or invalid value. Values must be plain CSS values ≤180 chars with no url(), expression(), @import, javascript:, braces, or angle brackets.`,
+      );
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+/** Keep only vocabulary tokens with safe values (resolution-time re-filter). */
+function filterPalette(palette: unknown): Record<string, string> {
+  if (
+    palette === null ||
+    typeof palette !== "object" ||
+    Array.isArray(palette)
+  ) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(
+    palette as Record<string, unknown>,
+  )) {
+    if (!SAFE_TOKEN_NAME.test(name) || !VOCABULARY_SET.has(name)) continue;
+    if (typeof value !== "string" || !isSafePlateTokenValue(value)) continue;
+    out[name] = value;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Resolution (KTD2)
+// ---------------------------------------------------------------------------
+
+export interface ResolvedPlate {
+  slug: string;
+  displayName: string;
+  useFor: string;
+  eyebrow: string;
+  titleSuffix: string;
+  /** Effective CSS custom-property overrides (may be empty = base defaults). */
+  tokensLight: Record<string, string>;
+  tokensDark: Record<string, string>;
+  /** Directive kinds documents in this plate may use; "all" = unrestricted. */
+  allowedDirectives: readonly string[] | "all";
+  /** "platform" (code-defined, possibly overridden) or "tenant" (row-owned). */
+  origin: "platform" | "tenant";
+  hidden: boolean;
+  /** True when a platform plate has a tenant delta row. */
+  customized: boolean;
+}
+
+export interface PlateRow {
+  slug: string;
+  origin: DocumentPlateOrigin;
+  config: DocumentPlateConfig;
+  hidden: boolean;
+  updatedAt?: Date | null;
+}
+
+export interface TenantDocumentPalette {
+  light: Record<string, string>;
+  dark: Record<string, string>;
+}
+
+/** Injectable store seam so tests exercise resolution without a live DB. */
+export interface PlateStore {
+  getPlateRow(tenantId: string, slug: string): Promise<PlateRow | null>;
+  listPlateRows(tenantId: string): Promise<PlateRow[]>;
+  getTenantDocumentPalette(tenantId: string): Promise<TenantDocumentPalette>;
+}
+
+const EMPTY_PALETTE: TenantDocumentPalette = { light: {}, dark: {} };
+
+export function drizzlePlateStore(): PlateStore {
+  return {
+    getPlateRow: async (tenantId, slug) => {
+      const rows = await getDb()
+        .select()
+        .from(documentPlates)
+        .where(
+          and(
+            eq(documentPlates.tenant_id, tenantId),
+            eq(documentPlates.slug, slug),
+          ),
+        )
+        .limit(1);
+      const row = rows[0];
+      return row
+        ? {
+            slug: row.slug,
+            origin: row.origin as DocumentPlateOrigin,
+            config: row.config ?? {},
+            hidden: row.hidden,
+            updatedAt: row.updated_at,
+          }
+        : null;
+    },
+    listPlateRows: async (tenantId) => {
+      const rows = await getDb()
+        .select()
+        .from(documentPlates)
+        .where(eq(documentPlates.tenant_id, tenantId));
+      return rows.map((row) => ({
+        slug: row.slug,
+        origin: row.origin as DocumentPlateOrigin,
+        config: row.config ?? {},
+        hidden: row.hidden,
+        updatedAt: row.updated_at,
+      }));
+    },
+    getTenantDocumentPalette: async (tenantId) => {
+      const rows = await getDb()
+        .select({ features: tenantSettings.features })
+        .from(tenantSettings)
+        .where(eq(tenantSettings.tenant_id, tenantId))
+        .limit(1);
+      return parseTenantDocumentPalette(rows[0]?.features);
+    },
+  };
+}
+
+/** Parse `features.documentPalette` defensively; garbage → empty palette. */
+export function parseTenantDocumentPalette(
+  features: unknown,
+): TenantDocumentPalette {
+  if (
+    features === null ||
+    typeof features !== "object" ||
+    Array.isArray(features)
+  ) {
+    return EMPTY_PALETTE;
+  }
+  const palette = (features as Record<string, unknown>).documentPalette;
+  if (
+    palette === null ||
+    typeof palette !== "object" ||
+    Array.isArray(palette)
+  ) {
+    return EMPTY_PALETTE;
+  }
+  const p = palette as Record<string, unknown>;
+  return {
+    light: filterPalette(p.light),
+    dark: filterPalette(p.dark),
+  };
+}
+
+function normalizeAllowedDirectives(
+  raw: unknown,
+): readonly string[] | "all" | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (raw === "all") return "all";
+  if (!Array.isArray(raw)) return undefined;
+  const kinds = raw.filter(
+    (k): k is string => typeof k === "string" && DIRECTIVE_KINDS.includes(k),
+  );
+  return kinds;
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+}
+
+function resolveFromLayers(input: {
+  slug: string;
+  platform: PlateDefinition | null;
+  row: PlateRow | null;
+  tenantPalette: TenantDocumentPalette;
+}): ResolvedPlate | null {
+  const { slug, platform, row, tenantPalette } = input;
+
+  // KTD1 collision rule: a tenant-created row shadows the platform definition.
+  if (row && row.origin === "tenant") {
+    const c = row.config ?? {};
+    return {
+      slug,
+      displayName: str(c.displayName) ?? slug,
+      useFor: str(c.useFor) ?? "",
+      eyebrow: str(c.eyebrow) ?? slug.toUpperCase().replace(/-/g, " "),
+      titleSuffix: str(c.titleSuffix) ?? str(c.displayName) ?? slug,
+      tokensLight: {
+        ...tenantPalette.light,
+        ...filterPalette(c.paletteLight),
+      },
+      tokensDark: { ...tenantPalette.dark, ...filterPalette(c.paletteDark) },
+      allowedDirectives:
+        normalizeAllowedDirectives(c.allowedDirectives) ?? "all",
+      origin: "tenant",
+      hidden: row.hidden,
+      customized: false,
+    };
+  }
+
+  if (!platform) return null;
+
+  const c = row?.config ?? {};
+  return {
+    slug,
+    displayName: str(c.displayName) ?? platform.displayName,
+    useFor: str(c.useFor) ?? platform.useFor,
+    eyebrow: str(c.eyebrow) ?? platform.eyebrow,
+    titleSuffix: str(c.titleSuffix) ?? platform.titleSuffix,
+    tokensLight: {
+      ...filterPalette(platform.paletteLight as PlatePalette),
+      ...tenantPalette.light,
+      ...filterPalette(c.paletteLight),
+    },
+    tokensDark: {
+      ...filterPalette(platform.paletteDark as PlatePalette),
+      ...tenantPalette.dark,
+      ...filterPalette(c.paletteDark),
+    },
+    allowedDirectives:
+      normalizeAllowedDirectives(c.allowedDirectives) ??
+      platform.allowedDirectives,
+    origin: "platform",
+    hidden: row?.hidden ?? false,
+    customized:
+      row !== null && (row.hidden || Object.keys(row.config ?? {}).length > 0),
+  };
+}
+
+/**
+ * Resolve one plate for a tenant (KTD2). Returns null for an unknown slug —
+ * callers own the rejection shape (emission: self-repair error; GraphQL:
+ * not-found).
+ */
+export async function resolvePlate(
+  tenantId: string,
+  slug: string,
+  store: PlateStore = drizzlePlateStore(),
+): Promise<ResolvedPlate | null> {
+  const [row, tenantPalette] = await Promise.all([
+    store.getPlateRow(tenantId, slug),
+    store.getTenantDocumentPalette(tenantId),
+  ]);
+  return resolveFromLayers({
+    slug,
+    platform: getPlatformPlate(slug),
+    row,
+    tenantPalette,
+  });
+}
+
+/**
+ * All plates for a tenant, resolved: platform library (minus shadowed slugs,
+ * with overrides applied) in definition order, then tenant-created plates by
+ * slug. Includes hidden plates — callers filter for agent-facing surfaces.
+ */
+export async function listPlates(
+  tenantId: string,
+  store: PlateStore = drizzlePlateStore(),
+): Promise<ResolvedPlate[]> {
+  const [rows, tenantPalette] = await Promise.all([
+    store.listPlateRows(tenantId),
+    store.getTenantDocumentPalette(tenantId),
+  ]);
+  const rowsBySlug = new Map(rows.map((r) => [r.slug, r]));
+
+  const resolved: ResolvedPlate[] = [];
+  for (const platform of PLATFORM_PLATES) {
+    const plate = resolveFromLayers({
+      slug: platform.slug,
+      platform,
+      row: rowsBySlug.get(platform.slug) ?? null,
+      tenantPalette,
+    });
+    if (plate) resolved.push(plate);
+    rowsBySlug.delete(platform.slug);
+  }
+  const tenantRows = [...rowsBySlug.values()]
+    .filter((r) => r.origin === "tenant")
+    .sort((a, b) => a.slug.localeCompare(b.slug));
+  for (const row of tenantRows) {
+    const plate = resolveFromLayers({
+      slug: row.slug,
+      platform: null,
+      row,
+      tenantPalette,
+    });
+    if (plate) resolved.push(plate);
+  }
+  return resolved;
+}
+
+/** The agent-facing subset (R10): visible plates only, discovery fields only. */
+export function visiblePlateSummaries(
+  plates: readonly ResolvedPlate[],
+): Array<{ slug: string; displayName: string; useFor: string }> {
+  return plates
+    .filter((p) => !p.hidden)
+    .map((p) => ({
+      slug: p.slug,
+      displayName: p.displayName,
+      useFor: p.useFor,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Exemplar builder (KTD7) — the canned document for validation and preview
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-directive snippet library. The exemplar includes one block per
+ * directive the plate ALLOWS, so validation and preview always compile
+ * exactly what the plate permits — a plate that excludes tw:chart validates
+ * without a chart block instead of self-rejecting on
+ * DIRECTIVE_GENRE_RESTRICTED.
+ */
+const EXEMPLAR_DIRECTIVE_SNIPPETS: Record<string, string> = {
+  stats: `\`\`\`tw:stats
+items:
+  - { value: 12, label: initiatives on track }
+  - { value: "94%", label: renewal rate }
+  - { value: "+18%", label: quarter over quarter }
+\`\`\``,
+  "verdict-grid": `\`\`\`tw:verdict-grid
+cards:
+  - { question: Overall health, answer: Strong, note: All commitments met this period, tone: acc }
+  - { question: Attention needed, answer: One item, note: Renewal paperwork pending signature, tone: warn }
+\`\`\``,
+  chart: `\`\`\`tw:chart
+type: bar
+title: Quarterly momentum
+qualifier: closed items per month
+series:
+  - { label: Month 1, value: 14 }
+  - { label: Month 2, value: 18 }
+  - { label: Month 3, value: 23 }
+caption: Delivery pace accelerated through the quarter.
+\`\`\``,
+};
+
+export interface PlateExemplar {
+  title: string;
+  abstract: string;
+  markdownBody: string;
+}
+
+/**
+ * Assemble the representative document for a plate: fixed prose base plus one
+ * block per allowed directive. Deterministic — same plate config, same
+ * exemplar.
+ */
+export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
+  const allowed =
+    plate.allowedDirectives === "all"
+      ? Object.keys(EXEMPLAR_DIRECTIVE_SNIPPETS)
+      : plate.allowedDirectives;
+  const directiveBlocks = allowed
+    .map((kind) => EXEMPLAR_DIRECTIVE_SNIPPETS[kind])
+    .filter(Boolean);
+
+  const markdownBody = `---
+date: Q3 2026
+context: Sample document — compiled to validate and preview this plate
+---
+
+## Where things stand
+
+This is a representative document compiled with the **${plate.displayName}** plate. It exercises the elements a real document uses: prose, emphasis, lists, a table, and the plate's component vocabulary, so what you see is what documents in this plate will look like.
+
+- The first point carries the headline finding.
+- The second point adds supporting detail with \`inline code\`.
+- The third point notes an open question.
+
+## Detail by area
+
+| Area | Status | Note |
+| --- | --- | --- |
+| Delivery | On track | Milestones met through this period |
+| Adoption | Improving | Weekly active usage up steadily |
+| Risks | Watch | One dependency pending external review |
+
+${directiveBlocks.join("\n\n")}
+
+## What happens next
+
+> The takeaway sits here: a short, quotable summary of the recommendation and the immediate next step.
+
+A closing paragraph wraps up the narrative and points at the decision or action the document exists to drive.
+`;
+
+  return {
+    title: `Acme Corp — Sample ${plate.displayName}`,
+    abstract: `A representative ${plate.displayName} used to validate and preview the "${plate.slug}" plate.`,
+    markdownBody,
+  };
+}
