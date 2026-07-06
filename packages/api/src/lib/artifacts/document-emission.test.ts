@@ -10,7 +10,8 @@ import {
 } from "./document-emission.js";
 import { compileDocument } from "./document-compositor.js";
 import { PLATFORM_PLATES } from "./plate-definitions.js";
-import { resolvePlatformPlate } from "./plate-registry.js";
+import { resolvePlate, resolvePlatformPlate } from "./plate-registry.js";
+import { summarizePlateWaivers } from "./document-waivers.js";
 import {
   DOCUMENT_CARD_MAX_BYTES,
   runDocumentPreflight,
@@ -46,6 +47,7 @@ interface Recorded {
   upserts: Array<Record<string, unknown>>;
   pins: Array<Record<string, unknown>>;
   cards: Array<Record<string, unknown>>;
+  waiverWrites: Array<Record<string, unknown>>;
 }
 
 function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
@@ -58,6 +60,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     upserts: [],
     pins: [],
     cards: [],
+    waiverWrites: [],
   };
   const row: DocumentRow = {
     id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
@@ -95,6 +98,9 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     findExistingDraftDocument: vi.fn(async () => null),
     upsertDocumentRow: vi.fn(async (input) => {
       recorded.upserts.push(input as unknown as Record<string, unknown>);
+    }),
+    replaceSectionWaivers: vi.fn(async (input) => {
+      recorded.waiverWrites.push(input as unknown as Record<string, unknown>);
     }),
     loadDocumentRow: vi.fn(async () => row),
     hasSpaceWriteRole: vi.fn(async () => true),
@@ -474,5 +480,158 @@ describe("dual-shape emission (THINK-154 U4)", () => {
       parseDocumentEmitInput({ ...V2_DOCUMENT, digestMarkdown: undefined }).ok,
     ).toBe(false);
     expect(parseDocumentEmitInput(V2_DOCUMENT).ok).toBe(true);
+  });
+});
+
+describe("waiver persistence (THINK-183 U5)", () => {
+  const MANIFEST_PLATE_ROW = {
+    slug: "sales-rep-review",
+    origin: "platform_override" as const,
+    config: {
+      sections: [
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "required-if-material",
+          guidance: "Stage-by-stage funnel.",
+        },
+        {
+          id: "summary",
+          title: "Summary",
+          tier: "required",
+          guidance: "Headline outcome.",
+        },
+      ],
+    },
+    hidden: false,
+  };
+
+  function manifestDeps(overrides: Partial<DocumentEmissionDeps> = {}) {
+    return makeDeps({
+      resolvePlate: vi.fn(async ({ tenantId, slug }) => {
+        const plate = await resolvePlate(tenantId, slug, {
+          getPlateRow: async (_t: string, s: string) =>
+            s === "sales-rep-review" ? (MANIFEST_PLATE_ROW as never) : null,
+          listPlateRows: async () => [MANIFEST_PLATE_ROW as never],
+          getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
+        });
+        const visibleSlugs = PLATFORM_PLATES.map((p) => p.slug);
+        return plate
+          ? ({ ok: true, plate, visibleSlugs } as const)
+          : ({ ok: false, visibleSlugs } as const);
+      }),
+      ...overrides,
+    });
+  }
+
+  const WAIVED_DOC = {
+    documentId: "doc-1",
+    genre: "sales-rep-review",
+    title: "Rep Review — Q3",
+    abstract: "Quarterly review with a waived pipeline section.",
+    status: "draft",
+    digestMarkdown: `## Summary
+
+Attainment held at 82% of target.
+
+\`\`\`tw:waiver
+section: pipeline-health
+reason: No stage-level pipeline data is connected for this rep.
+\`\`\`
+`,
+  };
+
+  it("records waiver rows with plate slug, section id, reason; final persists as final (AE3)", async () => {
+    const { deps, recorded } = manifestDeps();
+    const result = await emit({ ...WAIVED_DOC, status: "final" }, deps);
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, status: "final" });
+    expect(recorded.waiverWrites).toHaveLength(1);
+    expect(recorded.waiverWrites[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      plateSlug: "sales-rep-review",
+      waivers: [
+        {
+          sectionId: "pipeline-health",
+          tier: "required-if-material",
+          reason: "No stage-level pipeline data is connected for this rep.",
+        },
+      ],
+    });
+  });
+
+  it("re-emission without waivers still rewrites (clears) the rows — head semantics", async () => {
+    const { deps, recorded } = manifestDeps();
+    const fullDoc = {
+      ...WAIVED_DOC,
+      digestMarkdown: `## Summary
+
+All good.
+
+## Pipeline Health
+
+Funnel narrative.
+`,
+    };
+    const result = await emit(fullDoc, deps);
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true });
+    expect(recorded.waiverWrites).toHaveLength(1);
+    expect(recorded.waiverWrites[0]).toMatchObject({ waivers: [] });
+  });
+
+  it("a rejected emission writes no waiver rows", async () => {
+    const { deps, recorded } = manifestDeps();
+    const silentOmission = {
+      ...WAIVED_DOC,
+      digestMarkdown: `## Summary
+
+No pipeline section, no waiver.
+`,
+    };
+    const result = await emit(silentOmission, deps);
+    expect(result.body).toMatchObject({ ok: false, code: "COMPILE_REJECTED" });
+    expect(recorded.waiverWrites).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+  });
+
+  it("a contract-less plate emission never touches the waiver table", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body).toMatchObject({ ok: true });
+    expect(recorded.waiverWrites).toHaveLength(0);
+  });
+});
+
+describe("summarizePlateWaivers (THINK-189 seam)", () => {
+  const ROWS = [
+    { artifactId: "a1", plateSlug: "sales-rep-review", sectionId: "pipeline-health", tier: "required-if-material", reason: "no data", createdAt: new Date(0) },
+    { artifactId: "a2", plateSlug: "sales-rep-review", sectionId: "pipeline-health", tier: "required-if-material", reason: "still no data", createdAt: new Date(0) },
+    { artifactId: "a2", plateSlug: "sales-rep-review", sectionId: "summary", tier: "required", reason: "n/a", createdAt: new Date(0) },
+    { artifactId: "a3", plateSlug: "weekly-status", sectionId: "metrics", tier: "required", reason: "no metrics source connected", createdAt: new Date(0) },
+  ];
+  const store = {
+    listByTenant: async (_tenant: string, plateSlug?: string) =>
+      plateSlug ? ROWS.filter((r) => r.plateSlug === plateSlug) : ROWS,
+  };
+
+  it("aggregates count, document count, and reasons per plate", async () => {
+    const summaries = await summarizePlateWaivers(TENANT_ID, undefined, store);
+    expect(summaries.map((s) => s.plateSlug)).toEqual([
+      "sales-rep-review",
+      "weekly-status",
+    ]);
+    expect(summaries[0]).toMatchObject({ count: 3, documentCount: 2 });
+    expect(summaries[1].waivers[0].reason).toBe("no metrics source connected");
+  });
+
+  it("scopes to a single plate when asked", async () => {
+    const summaries = await summarizePlateWaivers(
+      TENANT_ID,
+      "weekly-status",
+      store,
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({ plateSlug: "weekly-status", count: 1 });
   });
 });

@@ -31,7 +31,10 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
-import { messages } from "@thinkwork/database-pg/schema";
+import {
+  documentSectionWaivers,
+  messages,
+} from "@thinkwork/database-pg/schema";
 import {
   and,
   artifacts,
@@ -247,6 +250,21 @@ export interface DocumentEmissionDeps {
     digestKey: string;
     actingUserId: string | null;
   }) => Promise<void>;
+  /**
+   * THINK-183 U5: rewrite the artifact's section-waiver rows (delete +
+   * reinsert, head semantics). Called only for manifest-bearing plates — a
+   * contract-less emission never touches the waiver table.
+   */
+  replaceSectionWaivers: (input: {
+    tenantId: string;
+    artifactId: string;
+    plateSlug: string;
+    waivers: ReadonlyArray<{
+      sectionId: string;
+      tier: "required" | "required-if-material";
+      reason: string;
+    }>;
+  }) => Promise<void>;
   loadDocumentRow: (artifactId: string) => Promise<DocumentRow | null>;
   hasSpaceWriteRole: typeof hasSpaceWriteRole;
   pinDocumentHead: typeof pinDocumentHead;
@@ -354,6 +372,33 @@ function defaultDeps(): DocumentEmissionDeps {
             updated_at: new Date(),
           },
         });
+    },
+    replaceSectionWaivers: async ({
+      tenantId,
+      artifactId,
+      plateSlug,
+      waivers,
+    }) => {
+      await db
+        .delete(documentSectionWaivers)
+        .where(
+          and(
+            eq(documentSectionWaivers.tenant_id, tenantId),
+            eq(documentSectionWaivers.artifact_id, artifactId),
+          ),
+        );
+      if (waivers.length > 0) {
+        await db.insert(documentSectionWaivers).values(
+          waivers.map((w) => ({
+            tenant_id: tenantId,
+            artifact_id: artifactId,
+            plate_slug: plateSlug,
+            section_id: w.sectionId,
+            tier: w.tier,
+            reason: w.reason,
+          })),
+        );
+      }
     },
     loadDocumentRow: async (artifactId) => {
       const rows = await db
@@ -728,6 +773,18 @@ export async function handleDocumentEmission(
     digestKey,
     actingUserId,
   });
+
+  // THINK-183 U5: head-semantics waiver rewrite. Only manifest-bearing plates
+  // touch the table — a re-emission with zero waivers clears prior rows, and
+  // a contract-less plate issues no statement at all (AE4 inert path).
+  if ((plate.sections?.length ?? 0) > 0) {
+    await deps.replaceSectionWaivers({
+      tenantId: input.tenantId,
+      artifactId,
+      plateSlug: plate.slug,
+      waivers: compiled.waivers,
+    });
+  }
 
   // ---- Finalize: pin both bodies + flip (KTD8) ----------------------------
   let headVersion = 0;
