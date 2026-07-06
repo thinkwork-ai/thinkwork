@@ -7,12 +7,14 @@ const {
   mockBuildMcpConfigs,
   mockListTools,
   mockCallTool,
+  mockCacheTools,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
   mockSelectLimit: vi.fn(),
   mockBuildMcpConfigs: vi.fn(),
   mockListTools: vi.fn(),
   mockCallTool: vi.fn(),
+  mockCacheTools: vi.fn(),
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
@@ -38,6 +40,10 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("../lib/mcp-configs.js", () => ({
   buildMcpConfigs: mockBuildMcpConfigs,
+}));
+
+vi.mock("../lib/mcp-tool-cache.js", () => ({
+  cacheDiscoveredMcpTools: mockCacheTools,
 }));
 
 // Reuse the real McpTransportError so `instanceof` checks in the handler match.
@@ -102,6 +108,8 @@ beforeEach(() => {
   mockBuildMcpConfigs.mockReset();
   mockListTools.mockReset();
   mockCallTool.mockReset();
+  mockCacheTools.mockReset();
+  mockCacheTools.mockResolvedValue(true);
 
   // Google-federated caller: JWT tenantId is null, resolved by email.
   mockAuthenticate.mockResolvedValue({
@@ -149,6 +157,54 @@ describe("mcp-proxy handler", () => {
       { humanPairId: "u1", requesterUserId: "u1" },
       expect.any(String),
     );
+  });
+
+  it("tools/list lazily caches discovery for servers with an empty registry cache (THINK-179)", async () => {
+    const defs = [
+      { name: "list_object_metadata_names" },
+      { name: "learn_tools" },
+    ];
+    mockListTools.mockResolvedValue(defs);
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    // SERVER_A carries no availableTools → cache was empty → write-back fires
+    // with the caller-tenant + config identity + full discovered defs.
+    expect(mockCacheTools).toHaveBeenCalledTimes(1);
+    expect(mockCacheTools).toHaveBeenCalledWith({
+      tenantId: "t1",
+      serverConfigName: "crm",
+      defs,
+    });
+  });
+
+  it("tools/list does NOT rewrite an already-populated registry cache", async () => {
+    mockBuildMcpConfigs.mockResolvedValue([
+      { ...SERVER_A, availableTools: ["create_lead"] },
+    ]);
+    mockListTools.mockResolvedValue([{ name: "create_lead" }]);
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    expect(mockCacheTools).not.toHaveBeenCalled();
+  });
+
+  it("tools/list does not cache when discovery fails or returns nothing", async () => {
+    mockBuildMcpConfigs.mockResolvedValue([
+      SERVER_A,
+      {
+        name: "empty",
+        url: "https://mcp.example.com/empty",
+        transport: "streamable-http" as const,
+      },
+    ]);
+    mockListTools
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce([]);
+
+    const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
+    expect(res.statusCode).toBe(200);
+    expect(mockCacheTools).not.toHaveBeenCalled();
   });
 
   it("tools/list reports per-server discovery failures without failing the whole catalog", async () => {
