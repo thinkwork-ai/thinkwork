@@ -28,7 +28,10 @@ import { createHash } from "node:crypto";
 import { Marked, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { parse as parseYaml } from "yaml";
-import { renderDocumentDirective } from "./document-directives.js";
+import {
+  renderAnalysisDirective,
+  renderDocumentDirective,
+} from "./document-directives.js";
 import { renderDocumentShell } from "./document-templates.js";
 
 /** Mirrors the DocSpector diagnostic shape so rejects surface in-turn (R2). */
@@ -65,6 +68,23 @@ export type DirectiveEngine = (input: {
  * satisfied by the registry's ResolvedPlate; the compositor stays decoupled
  * from resolution.
  */
+/** Manifest section as the compiler consumes it (THINK-183). */
+export interface CompositorPlateSection {
+  id: string;
+  title: string;
+  tier: "required" | "required-if-material" | "suggested";
+  guidance: string;
+  suggestedDirectives?: readonly { kind: string; chartType?: string }[];
+}
+
+/** Declared analysis as the compiler consumes it (THINK-183). */
+export interface CompositorPlateAnalysis {
+  key: string;
+  op: string;
+  params?: Readonly<Record<string, unknown>>;
+  presentation: { directive: string; chartType?: string };
+}
+
 export interface CompositorPlate {
   slug: string;
   eyebrow: string;
@@ -72,6 +92,10 @@ export interface CompositorPlate {
   tokensDark: Record<string, string>;
   /** Directive kinds documents in this plate may use; "all" = unrestricted. */
   allowedDirectives: readonly string[] | "all";
+  /** Content contract: tiered section manifest (THINK-183; absent = none). */
+  sections?: readonly CompositorPlateSection[];
+  /** Content contract: declared analyses (THINK-183; absent = none). */
+  analyses?: readonly CompositorPlateAnalysis[];
 }
 
 /** Fence info-string prefix that routes a fenced block to the engine. */
@@ -408,9 +432,26 @@ export function compileDocument(
   const inputHash = createHash("sha256")
     .update(`${input.plate.slug}\n${input.title}\n${input.markdownBody}`)
     .digest("hex");
+
+  // Structural contract directives (THINK-183 KTD11): tw:analysis (and
+  // tw:waiver, U4) route BEFORE the plate's allowedDirectives gate — their
+  // own validation (declared-analysis lookup, manifest membership) is the
+  // real gate, so a plate with a restricted directive list can still carry
+  // its contract.
+  const gated = gateEngineOnPlate(engine, input.plate);
+  const engineWithStructural: DirectiveEngine = (directiveInput) => {
+    if (directiveInput.kind === "analysis") {
+      return renderAnalysisDirective({
+        body: directiveInput.body,
+        analyses: input.plate.analyses,
+      });
+    }
+    return gated(directiveInput);
+  };
+
   const state: CompileState = {
     genre: input.plate.slug,
-    engine: gateEngineOnPlate(engine, input.plate),
+    engine: engineWithStructural,
     errors: [],
     warnings,
     placeholders: new Map(),

@@ -29,7 +29,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { and, eq } from "drizzle-orm";
 import { ANALYSIS_OPS, getAnalysisOp } from "./document-analyses.js";
-import { CHART_TYPES, DIRECTIVE_KINDS } from "./document-directives.js";
+import {
+  ANALYSIS_PRESENTATION_DIRECTIVES,
+  CHART_TYPES,
+  DIRECTIVE_KINDS,
+} from "./document-directives.js";
 import {
   getPlatformPlate,
   PLATFORM_PLATES,
@@ -358,7 +362,9 @@ function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
       typeof op !== "string" ||
       !ANALYSIS_OPS.includes(op) ||
       typeof directive !== "string" ||
-      !DIRECTIVE_KINDS.includes(directive)
+      !(ANALYSIS_PRESENTATION_DIRECTIVES as readonly string[]).includes(
+        directive,
+      )
     ) {
       continue;
     }

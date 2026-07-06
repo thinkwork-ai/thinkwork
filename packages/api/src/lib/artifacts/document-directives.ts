@@ -16,6 +16,11 @@
  */
 
 import { parse as parseYaml } from "yaml";
+import {
+  ANALYSIS_OPS,
+  computeAnalysis,
+  getAnalysisOp,
+} from "./document-analyses.js";
 import { renderChart } from "./document-charts.js";
 import type {
   CompositorDiagnostic,
@@ -309,22 +314,172 @@ export const makeChartSpec = (
       caption: textOf(root.caption) ?? undefined,
       max: max as number | undefined,
     };
-    const svg = chartRenderer(chartData);
-    // Per authoring-rules.md: every chart pairs with a <details> data table —
-    // the static medium's drill-down and accessibility fallback.
-    const rows = series
-      .map(
-        (p) =>
-          `<tr><td>${escapeHtml(p.label)}</td><td>${escapeHtml(String(p.value))}</td></tr>`,
-      )
-      .join("");
-    const caption = chartData.caption
-      ? `<figcaption>${escapeHtml(chartData.caption)}</figcaption>`
-      : "";
-    const html = `<figure>${svg}${caption}</figure><details><summary>Chart data</summary><table><tr><th>${escapeHtml("Label")}</th><th>${escapeHtml(chartData.title)}</th></tr>${rows}</table></details>`;
+    const html = chartFigureHtml(chartRenderer(chartData), chartData);
     return { ok: true, html, containsSvg: true };
   },
 });
+
+/**
+ * Figure + fallback data table assembly, shared by tw:chart and tw:analysis
+ * chart presentations. Per authoring-rules.md: every chart pairs with a
+ * <details> data table — the static medium's drill-down and accessibility
+ * fallback.
+ */
+function chartFigureHtml(svg: string, chartData: ChartDirectiveData): string {
+  const rows = chartData.series
+    .map(
+      (p) =>
+        `<tr><td>${escapeHtml(p.label)}</td><td>${escapeHtml(String(p.value))}</td></tr>`,
+    )
+    .join("");
+  const caption = chartData.caption
+    ? `<figcaption>${escapeHtml(chartData.caption)}</figcaption>`
+    : "";
+  return `<figure>${svg}${caption}</figure><details><summary>Chart data</summary><table><tr><th>${escapeHtml("Label")}</th><th>${escapeHtml(chartData.title)}</th></tr>${rows}</table></details>`;
+}
+
+// ---------------------------------------------------------------------------
+// tw:analysis — plate-declared, server-computed analysis (THINK-183 U3).
+//
+// A STRUCTURAL contract directive (KTD11): it is not in DIRECTIVE_KINDS, is
+// exempt from per-plate allowedDirectives gating (the compositor routes it
+// here before the plate gate), and its real gate is the declared-analysis
+// lookup — a tw:analysis block only compiles when the plate declares the
+// referenced key. The model supplies RAW INPUTS; the server computes via the
+// op registry and renders through the analysis's declared presentation, so
+// every rendered number is server-arithmetic (R5).
+// ---------------------------------------------------------------------------
+
+/** The presentation surfaces an analysis result can render through. */
+export const ANALYSIS_PRESENTATION_DIRECTIVES = ["chart", "stats"] as const;
+
+export interface PlateAnalysisDeclaration {
+  key: string;
+  op: string;
+  params?: Readonly<Record<string, unknown>>;
+  presentation: { directive: string; chartType?: string };
+}
+
+const ANALYSIS_EXAMPLE = `analysis: <declared key>
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Qualified, count: 80 }`;
+
+function rejectAnalysis(message: string): DirectiveRender {
+  return {
+    ok: false,
+    diagnostics: [
+      {
+        code: "DIRECTIVE_INVALID",
+        message: `${message} Corrected minimal example:\n\`\`\`tw:analysis\n${ANALYSIS_EXAMPLE}\n\`\`\``,
+        location: "tw:analysis",
+      },
+    ],
+  };
+}
+
+/** Deterministic display title for an analysis key ("pipeline-conversion" → "Pipeline conversion"). */
+function analysisTitle(key: string): string {
+  const words = key.replace(/-/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function renderAnalysisDirective(input: {
+  body: string;
+  analyses: readonly PlateAnalysisDeclaration[] | undefined;
+  chartRenderer?: ChartRenderer;
+}): DirectiveRender {
+  const declaredKeys = (input.analyses ?? []).map((a) => a.key);
+  if (declaredKeys.length === 0) {
+    return rejectAnalysis(
+      "This plate declares no analyses, so tw:analysis is not available here. Express the data as prose, a markdown table, or another directive.",
+    );
+  }
+  let data: unknown;
+  try {
+    data = parseYaml(input.body, { strict: true });
+  } catch (err) {
+    return rejectAnalysis(
+      `tw:analysis body failed to parse as YAML: ${err instanceof Error ? err.message.split("\n")[0] : "parse error"}.`,
+    );
+  }
+  const root = asRecord(data);
+  if (!root) {
+    return rejectAnalysis("tw:analysis body must be a YAML mapping.");
+  }
+  const key = textOf(root.analysis);
+  if (key === null) {
+    return rejectAnalysis(
+      `tw:analysis needs an \`analysis\` field naming a declared analysis. This plate declares: ${declaredKeys.join(", ")}.`,
+    );
+  }
+  const declared = (input.analyses ?? []).find((a) => a.key === key);
+  if (!declared) {
+    return rejectAnalysis(
+      `Analysis ${JSON.stringify(key)} is not declared by this plate. Declared analyses: ${declaredKeys.join(", ")}.`,
+    );
+  }
+  const opSpec = getAnalysisOp(declared.op);
+  if (!opSpec) {
+    // Save gates make this unreachable for validated rows; guard for rows
+    // predating an op-registry change.
+    return rejectAnalysis(
+      `Analysis "${key}" references op "${declared.op}", which is not in this release's op registry (${ANALYSIS_OPS.join(", ")}).`,
+    );
+  }
+  // Raw inputs are everything in the block except the reference fields;
+  // plate-declared params win over model-supplied values.
+  const {
+    analysis: _key,
+    title: rawTitle,
+    qualifier: rawQualifier,
+    ...rawInputs
+  } = root;
+  const result = computeAnalysis({
+    op: declared.op,
+    inputs: { ...rawInputs, ...(declared.params ?? {}) },
+    location: "tw:analysis",
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      diagnostics: result.diagnostics.map((d) => ({
+        code: d.code,
+        message: `Analysis "${key}": ${d.message}`,
+        location: d.location,
+      })),
+    };
+  }
+
+  const title = textOf(rawTitle)?.trim() || analysisTitle(key);
+  if (declared.presentation.directive === "stats") {
+    // Reuse the stats directive's tile rendering over the computed stats.
+    // Stats tiles cap at 8; computed projections are ordered most-significant
+    // first, so a deterministic truncation keeps the tiles meaningful.
+    return statsSpec.render({
+      data: {
+        items: result.stats
+          .slice(0, 8)
+          .map((s) => ({ value: s.value, label: s.label })),
+      },
+      genre: "analysis",
+    });
+  }
+
+  const chartData: ChartDirectiveData = {
+    type: (declared.presentation.chartType ?? "bar") as ChartType,
+    title,
+    qualifier: textOf(rawQualifier) ?? undefined,
+    series: result.series.slice(0, 24).map((p) => ({ ...p })),
+    caption: result.caption,
+  };
+  const renderer = input.chartRenderer ?? renderChart;
+  return {
+    ok: true,
+    html: chartFigureHtml(renderer(chartData), chartData),
+    containsSvg: true,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Registry + engine

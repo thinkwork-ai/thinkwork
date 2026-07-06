@@ -17,6 +17,7 @@ import {
   headingSlug,
 } from "../../../lib/artifacts/document-compositor.js";
 import {
+  ANALYSIS_PRESENTATION_DIRECTIVES,
   CHART_TYPES,
   DIRECTIVE_KINDS,
 } from "../../../lib/artifacts/document-directives.js";
@@ -315,10 +316,12 @@ export function boundedAnalyses(
     const directive = presentation?.directive;
     if (
       typeof directive !== "string" ||
-      !DIRECTIVE_KINDS.includes(directive)
+      !(ANALYSIS_PRESENTATION_DIRECTIVES as readonly string[]).includes(
+        directive,
+      )
     ) {
       throw badInput(
-        `analyses[${i}].presentation.directive must be one of: ${DIRECTIVE_KINDS.join(", ")}`,
+        `analyses[${i}].presentation.directive must be one of: ${ANALYSIS_PRESENTATION_DIRECTIVES.join(", ")}`,
       );
     }
     const chartType = presentation?.chartType;

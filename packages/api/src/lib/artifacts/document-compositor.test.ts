@@ -315,3 +315,241 @@ describe("plate-driven compilation (THINK-153)", () => {
     expect(allowed.ok).toBe(true);
   });
 });
+
+describe("tw:analysis — server-computed analyses (THINK-183 U3)", () => {
+  const ANALYSES = [
+    {
+      key: "pipeline-conversion",
+      op: "funnel_conversion",
+      presentation: { directive: "chart", chartType: "funnel" as const },
+    },
+    {
+      key: "quota-attainment",
+      op: "ratio_pct",
+      presentation: { directive: "stats" },
+    },
+  ];
+  const ANALYSIS_PLATE: CompositorPlate = {
+    ...REPORT_PLATE,
+    analyses: ANALYSES,
+  };
+  const FUNNEL_BLOCK = `\`\`\`tw:analysis
+analysis: pipeline-conversion
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Qualified, count: 80 }
+  - { label: Proposal, count: 30 }
+  - { label: Won, count: 12 }
+\`\`\``;
+  const DIGEST = `## Summary
+
+Pipeline narrative narrated from computed numbers.
+
+${FUNNEL_BLOCK}
+
+## Recommendations
+
+Keep qualifying harder.
+`;
+
+  it("compiles a funnel_conversion block with server-computed rates in the render (AE2)", () => {
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Pipeline — Report",
+      abstract: "Computed funnel.",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Server-computed transition rates appear (labels in SVG + fallback table).
+    expect(result.renderHtml).toContain("66.7%");
+    expect(result.renderHtml).toContain("37.5%");
+    expect(result.renderHtml).toContain("Overall conversion 10%");
+    expect(result.renderHtml).toContain("<details><summary>Chart data</summary>");
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: DIGEST,
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
+  it("model-authored numbers cannot leak: extraneous fields are ignored, rendered values are computed", () => {
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: pipeline-conversion
+rates: [99, 98, 97]
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Won, count: 12 }
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Pipeline — Report",
+      abstract: "x",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("10%");
+    expect(result.renderHtml).not.toContain("99%");
+  });
+
+  it("a stats-presented analysis renders computed stat tiles", () => {
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: quota-attainment
+numerator: 82
+denominator: 100
+label: Quota attainment
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Rep — Report",
+      abstract: "x",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain('<div class="stats">');
+    expect(result.renderHtml).toContain("82%");
+  });
+
+  it("unknown analysis key rejects, listing the plate's declared keys", () => {
+    const digest = `\`\`\`tw:analysis
+analysis: churn-rate
+stages:
+  - { label: A, count: 2 }
+  - { label: B, count: 1 }
+\`\`\``;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("pipeline-conversion");
+    expect(result.diagnostics[0].message).toContain("quota-attainment");
+  });
+
+  it("raw inputs failing the op's shape reject with the op diagnostic and corrected example", () => {
+    const digest = `\`\`\`tw:analysis
+analysis: pipeline-conversion
+stages:
+  - { label: Leads, count: 120 }
+\`\`\``;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("2–24");
+    expect(result.diagnostics[0].message).toContain("Corrected minimal example");
+    expect(result.diagnostics[0].location).toBe("tw:analysis");
+  });
+
+  it("tw:analysis on a plate declaring no analyses rejects saying so (AE4-adjacent)", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("declares no analyses");
+  });
+
+  it("a plate with analyses but no manifest can still use tw:analysis (contract halves independent)", () => {
+    const plate: CompositorPlate = { ...REPORT_PLATE, analyses: ANALYSES };
+    expect(plate.sections).toBeUndefined();
+    const result = compileDocument({
+      plate,
+      title: "t",
+      abstract: "a",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("tw:analysis bypasses a restricted allowedDirectives list (KTD11 structural directive)", () => {
+    const proposalShaped: CompositorPlate = {
+      ...REPORT_PLATE,
+      slug: "proposal",
+      allowedDirectives: ["stats", "verdict-grid"],
+      analyses: [
+        {
+          key: "quota-attainment",
+          op: "ratio_pct",
+          presentation: { directive: "stats" },
+        },
+      ],
+    };
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: quota-attainment
+numerator: 3
+denominator: 4
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: proposalShaped,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("75%");
+    // The plate gate still applies to ordinary directives.
+    const chartResult = compileDocument({
+      plate: proposalShaped,
+      title: "t",
+      abstract: "a",
+      markdownBody:
+        '```tw:chart\ntype: bar\ntitle: x\nseries:\n  - { label: a, value: 1 }\n```',
+    });
+    expect(chartResult.ok).toBe(false);
+  });
+
+  it("plate-declared params win over model-supplied inputs", () => {
+    const plate: CompositorPlate = {
+      ...REPORT_PLATE,
+      analyses: [
+        {
+          key: "top-accounts",
+          op: "top_n",
+          params: { n: 1 },
+          presentation: { directive: "chart", chartType: "bar" },
+        },
+      ],
+    };
+    const digest = `\`\`\`tw:analysis
+analysis: top-accounts
+n: 24
+items:
+  - { label: Acme, value: 10 }
+  - { label: Globex, value: 20 }
+\`\`\``;
+    const result = compileDocument({
+      plate,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("Globex");
+    // n: 1 (plate param) beat n: 24 (model input) — only one row in the table.
+    expect(result.renderHtml).not.toMatch(/<td>Acme<\/td>/);
+  });
+});

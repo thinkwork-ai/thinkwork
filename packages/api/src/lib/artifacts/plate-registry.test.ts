@@ -434,6 +434,32 @@ describe("content contract resolution (THINK-183 U2)", () => {
     expect(plate!.analyses?.map((a) => a.key)).toEqual(["pipeline-conversion"]);
   });
 
+  it("exemplar for a full contract plate (manifest + analyses) compiles clean with computed output", async () => {
+    const store = fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: { sections: SECTIONS, analyses: ANALYSES } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const exemplar = buildPlateExemplar(plate!);
+    expect(exemplar.markdownBody).toContain("tw:analysis");
+    expect(exemplar.markdownBody).toContain("analysis: pipeline-conversion");
+    const compiled = compileDocument({
+      plate: plate!,
+      title: exemplar.title,
+      abstract: exemplar.abstract,
+      markdownBody: exemplar.markdownBody,
+    });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      // The op example's stage counts (120 → 80) compute to 66.7%.
+      expect(compiled.renderHtml).toContain("66.7%");
+    }
+  });
+
   it("exemplar for a manifest-bearing plate emits every section heading and compiles through gate 2", async () => {
     const store = fakeStore([
       {
