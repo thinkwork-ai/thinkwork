@@ -43,6 +43,8 @@ function plate(overrides: Partial<PlateItem> = {}): PlateItem {
     tokensLight: {},
     tokensDark: {},
     allowedDirectives: null,
+    sections: [],
+    analyses: [],
     origin: "platform",
     hidden: false,
     customized: false,

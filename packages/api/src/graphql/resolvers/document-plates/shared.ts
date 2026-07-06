@@ -22,7 +22,10 @@ import {
   DIRECTIVE_KINDS,
 } from "../../../lib/artifacts/document-directives.js";
 import { runDocumentPreflight } from "../../../lib/artifacts/document-preflight.js";
-import { PLATE_SECTION_TIERS } from "../../../lib/artifacts/plate-definitions.js";
+import {
+  getPlatformPlate,
+  PLATE_SECTION_TIERS,
+} from "../../../lib/artifacts/plate-definitions.js";
 import {
   buildPlateExemplar,
   validatePlatePalette,
@@ -86,10 +89,15 @@ const MAX_GUIDANCE = 500;
 const MAX_SUGGESTED_DIRECTIVES = 4;
 const CONTRACT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+export type PlateDraftSectionTier =
+  | "required"
+  | "required-if-material"
+  | "suggested";
+
 export interface PlateDraftSection {
   id: string;
   title: string;
-  tier: string;
+  tier: PlateDraftSectionTier;
   guidance: string;
   suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
 }
@@ -173,6 +181,20 @@ function asObject(v: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * AWSJSON tolerance: contract fields arrive as JSON strings over the wire
+ * (like palettes) but as plain values from internal callers/tests. A parse
+ * failure falls through to the bound's own shape error.
+ */
+export function parseJsonish(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
 function boundedSuggestedDirectives(
   value: unknown,
   where: string,
@@ -217,6 +239,7 @@ function boundedSuggestedDirectives(
 export function boundedSections(
   value: unknown,
 ): PlateDraftSection[] | undefined {
+  value = parseJsonish(value);
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
     throw badInput("sections must be a list of section manifest entries");
@@ -269,7 +292,7 @@ export function boundedSections(
     out.push({
       id,
       title,
-      tier,
+      tier: tier as PlateDraftSectionTier,
       guidance: guidance.trim(),
       suggestedDirectives: boundedSuggestedDirectives(
         rec.suggestedDirectives,
@@ -280,10 +303,102 @@ export function boundedSections(
   return out;
 }
 
+/** Floor-model tier rank (THINK-188 KTD2): overrides may only raise. */
+const TIER_RANK: Record<string, number> = {
+  suggested: 0,
+  "required-if-material": 1,
+  required: 2,
+};
+
+export interface PlateDraftSectionOverride {
+  guidance?: string;
+  tier?: PlateDraftSectionTier;
+  suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
+}
+
+/**
+ * Bound and validate floor-section overrides on a platform plate (THINK-188
+ * R5/R6). Keys must name the platform floor's section ids; tier patches may
+ * raise but never lower; the patch shape carries no id/title, so removal and
+ * retitle stay unrepresentable.
+ */
+export function boundedSectionOverrides(
+  value: unknown,
+  platformSections: ReadonlyArray<{ id: string; tier: string }>,
+): Record<string, PlateDraftSectionOverride> | undefined {
+  value = parseJsonish(value);
+  if (value === undefined || value === null) return undefined;
+  const rec = asObject(value);
+  if (!rec) {
+    throw badInput(
+      "sectionOverrides must be an object keyed by platform section id",
+    );
+  }
+  const floorIds = platformSections.map((s) => s.id);
+  const out: Record<string, PlateDraftSectionOverride> = {};
+  for (const [id, raw] of Object.entries(rec)) {
+    const floor = platformSections.find((s) => s.id === id);
+    if (!floor) {
+      throw badInput(
+        `sectionOverrides["${id}"]: not a platform floor section of this plate. Floor sections: ${floorIds.join(", ") || "(none)"}.`,
+      );
+    }
+    const patch = asObject(raw);
+    if (!patch) {
+      throw badInput(`sectionOverrides["${id}"] must be an object`);
+    }
+    const allowed = new Set(["guidance", "tier", "suggestedDirectives"]);
+    for (const key of Object.keys(patch)) {
+      if (!allowed.has(key)) {
+        throw badInput(
+          `sectionOverrides["${id}"].${key} is not an overridable field. Floor sections allow: guidance, tier (raise only), suggestedDirectives.`,
+        );
+      }
+    }
+    const override: PlateDraftSectionOverride = {};
+    if (patch.guidance !== undefined) {
+      if (typeof patch.guidance !== "string" || patch.guidance.trim() === "") {
+        throw badInput(`sectionOverrides["${id}"].guidance must be non-empty`);
+      }
+      if (patch.guidance.length > MAX_GUIDANCE) {
+        throw badInput(
+          `sectionOverrides["${id}"].guidance must be ≤${MAX_GUIDANCE} characters`,
+        );
+      }
+      override.guidance = patch.guidance.trim();
+    }
+    if (patch.tier !== undefined) {
+      if (
+        typeof patch.tier !== "string" ||
+        !(PLATE_SECTION_TIERS as readonly string[]).includes(patch.tier)
+      ) {
+        throw badInput(
+          `sectionOverrides["${id}"].tier must be one of: ${PLATE_SECTION_TIERS.join(", ")}`,
+        );
+      }
+      if (TIER_RANK[patch.tier] < TIER_RANK[floor.tier]) {
+        throw badInput(
+          `sectionOverrides["${id}"].tier cannot lower the platform floor: "${id}" is ${floor.tier} on the platform plate (floor rule — tiers may only be raised, or cleared back to the floor).`,
+        );
+      }
+      override.tier = patch.tier as PlateDraftSectionTier;
+    }
+    if (patch.suggestedDirectives !== undefined) {
+      override.suggestedDirectives = boundedSuggestedDirectives(
+        patch.suggestedDirectives,
+        `sectionOverrides["${id}"]`,
+      );
+    }
+    if (Object.keys(override).length > 0) out[id] = override;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Bound and validate declared analyses (THINK-183 R13/AE5). */
 export function boundedAnalyses(
   value: unknown,
 ): PlateDraftAnalysis[] | undefined {
+  value = parseJsonish(value);
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) {
     throw badInput("analyses must be a list of declared analyses");
@@ -475,10 +590,65 @@ export function validateCandidatePlate(
 // GraphQL mapping
 // ---------------------------------------------------------------------------
 
+/**
+ * Annotate the resolved contract with floor provenance (THINK-188 R5/U4):
+ * each entry carries `source` ("platform" floor vs "tenant" addition) and,
+ * for floor sections, an `overridden` flag map naming which fields the
+ * tenant patched — the editor's lock/divergence/revert affordances key on it.
+ */
+function annotatedSections(plate: ResolvedPlate): unknown[] | null {
+  if (!plate.sections || plate.sections.length === 0) return null;
+  const floorDef =
+    plate.origin === "platform" ? getPlatformPlate(plate.slug) : null;
+  const floor = new Map((floorDef?.sections ?? []).map((s) => [s.id, s]));
+  return plate.sections.map((section) => {
+    const base = floor.get(section.id);
+    if (!base) return { ...section, source: "tenant" };
+    const overridden: Record<string, boolean> = {};
+    if (section.guidance !== base.guidance) overridden.guidance = true;
+    if (section.tier !== base.tier) overridden.tier = true;
+    if (
+      JSON.stringify(section.suggestedDirectives ?? null) !==
+      JSON.stringify(base.suggestedDirectives ?? null)
+    ) {
+      overridden.suggestedDirectives = true;
+    }
+    return {
+      ...section,
+      source: "platform",
+      ...(Object.keys(overridden).length > 0
+        ? {
+            overridden,
+            // The pristine platform values, so the editor's per-field
+            // revert-to-platform affordance (R13) can restore them locally.
+            platformBaseline: {
+              guidance: base.guidance,
+              tier: base.tier,
+              suggestedDirectives: base.suggestedDirectives ?? null,
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+function annotatedAnalyses(plate: ResolvedPlate): unknown[] | null {
+  if (!plate.analyses || plate.analyses.length === 0) return null;
+  const floorDef =
+    plate.origin === "platform" ? getPlatformPlate(plate.slug) : null;
+  const floorKeys = new Set((floorDef?.analyses ?? []).map((a) => a.key));
+  return plate.analyses.map((analysis) => ({
+    ...analysis,
+    source: floorKeys.has(analysis.key) ? "platform" : "tenant",
+  }));
+}
+
 export function plateToGraphql(
   plate: ResolvedPlate,
   overrides: Record<string, unknown> | null,
 ): Record<string, unknown> {
+  const sections = annotatedSections(plate);
+  const analyses = annotatedAnalyses(plate);
   return {
     slug: plate.slug,
     displayName: plate.displayName,
@@ -493,6 +663,8 @@ export function plateToGraphql(
     hidden: plate.hidden,
     customized: plate.customized,
     overrides: overrides ? JSON.stringify(overrides) : null,
+    sections: sections ? JSON.stringify(sections) : null,
+    analyses: analyses ? JSON.stringify(analyses) : null,
   };
 }
 

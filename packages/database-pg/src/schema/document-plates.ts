@@ -52,7 +52,28 @@ export interface DocumentPlateAnalysisConfig {
   source?: "model-supplied";
 }
 
-/** Partial for platform_override rows; full definition for tenant rows. */
+/**
+ * Tenant patch on ONE platform floor section (THINK-188 KTD1). Keyed by the
+ * floor section's id in DocumentPlateConfig.sectionOverrides. Deliberately
+ * carries no `id`/`title` — retitling a floor section is unrepresentable —
+ * and `tier` may only raise (validated at save, clamped at resolution).
+ */
+export interface DocumentPlateSectionOverrideConfig {
+  guidance?: string;
+  tier?: "required" | "required-if-material" | "suggested";
+  suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
+}
+
+/**
+ * Partial for platform_override rows; full definition for tenant rows.
+ *
+ * Contract-key semantics differ by origin (THINK-188 KTD1 — the floor model):
+ * - origin = 'tenant': `sections`/`analyses` are the FULL contract (THINK-183
+ *   semantics, unchanged).
+ * - origin = 'platform_override': `sections`/`analyses` are tenant ADDITIONS
+ *   layered onto the platform floor, and `sectionOverrides` patches floor
+ *   sections by id. Removal of a floor entry is inexpressible by shape.
+ */
 export interface DocumentPlateConfig {
   displayName?: string;
   useFor?: string;
@@ -63,10 +84,12 @@ export interface DocumentPlateConfig {
   paletteDark?: Record<string, string>;
   /** Directive kinds this plate's documents may use; absent = all. */
   allowedDirectives?: string[];
-  /** Content contract: section manifest override (wholesale per key). */
+  /** Content contract: full manifest (tenant) or additions (platform). */
   sections?: DocumentPlateSectionConfig[];
-  /** Content contract: declared analyses override (wholesale per key). */
+  /** Content contract: full analyses (tenant) or additions (platform). */
   analyses?: DocumentPlateAnalysisConfig[];
+  /** Floor-section patches by platform section id (platform rows only). */
+  sectionOverrides?: Record<string, DocumentPlateSectionOverrideConfig>;
 }
 
 export const documentPlates = pgTable(

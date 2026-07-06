@@ -485,9 +485,11 @@ describe("dual-shape emission (THINK-154 U4)", () => {
 
 describe("waiver persistence (THINK-183 U5)", () => {
   const MANIFEST_PLATE_ROW = {
-    slug: "sales-rep-review",
-    origin: "platform_override" as const,
+    slug: "rep-check",
+    origin: "tenant" as const,
     config: {
+      displayName: "Rep Check",
+      useFor: "A lightweight rep review with a two-section manifest.",
       sections: [
         {
           id: "pipeline-health",
@@ -511,7 +513,7 @@ describe("waiver persistence (THINK-183 U5)", () => {
       resolvePlate: vi.fn(async ({ tenantId, slug }) => {
         const plate = await resolvePlate(tenantId, slug, {
           getPlateRow: async (_t: string, s: string) =>
-            s === "sales-rep-review" ? (MANIFEST_PLATE_ROW as never) : null,
+            s === "rep-check" ? (MANIFEST_PLATE_ROW as never) : null,
           listPlateRows: async () => [MANIFEST_PLATE_ROW as never],
           getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
         });
@@ -526,7 +528,7 @@ describe("waiver persistence (THINK-183 U5)", () => {
 
   const WAIVED_DOC = {
     documentId: "doc-1",
-    genre: "sales-rep-review",
+    genre: "rep-check",
     title: "Rep Review — Q3",
     abstract: "Quarterly review with a waived pipeline section.",
     status: "draft",
@@ -549,7 +551,7 @@ reason: No stage-level pipeline data is connected for this rep.
     expect(recorded.waiverWrites).toHaveLength(1);
     expect(recorded.waiverWrites[0]).toMatchObject({
       tenantId: TENANT_ID,
-      plateSlug: "sales-rep-review",
+      plateSlug: "rep-check",
       waivers: [
         {
           sectionId: "pipeline-health",
