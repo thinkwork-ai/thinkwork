@@ -51,6 +51,12 @@ variable "consolidation_dedup_threshold" {
   default     = "0.97"
 }
 
+variable "retain_llm_model" {
+  description = "Bedrock model id for Hindsight's retain/extraction pass. Default chosen by the THINK-198 memory-quality eval (2026-07-06): Haiku 4.5 cut the dangling-referent rate 39% vs gpt-oss-20b (37.9% -> 23.2%) with usefulness +20% and faithfulness at ceiling; larger gpt-oss (120b) was no better than 20b, and per-bank retain_custom_instructions made referent quality worse, not better."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
 variable "observations_mission" {
   description = "Service-level default observations mission steering what consolidation synthesizes. Empty string omits the env var so the image default applies. Per-bank overrides apply on top."
   type        = string
@@ -286,7 +292,7 @@ resource "aws_ecs_task_definition" "hindsight" {
       { name = "AWS_REGION_NAME", value = data.aws_region.current.name },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
       { name = "HINDSIGHT_API_RETAIN_LLM_PROVIDER", value = "bedrock" },
-      { name = "HINDSIGHT_API_RETAIN_LLM_MODEL", value = "openai.gpt-oss-20b-1:0" },
+      { name = "HINDSIGHT_API_RETAIN_LLM_MODEL", value = var.retain_llm_model },
       { name = "HINDSIGHT_API_REFLECT_LLM_PROVIDER", value = "bedrock" },
       { name = "HINDSIGHT_API_REFLECT_LLM_MODEL", value = "openai.gpt-oss-120b-1:0" },
       { name = "HINDSIGHT_API_EMBEDDINGS_PROVIDER", value = "local" },
