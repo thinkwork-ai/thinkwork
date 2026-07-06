@@ -32,6 +32,7 @@ describe("renderDocumentDirective", () => {
       expect(d.message).toContain("tw:stats");
       expect(d.message).toContain("tw:verdict-grid");
       expect(d.message).toContain("tw:chart");
+      expect(d.message).toContain("tw:timeline");
       expect(d.message).toContain("```tw:stats");
     }
   });
@@ -124,6 +125,139 @@ describe("renderDocumentDirective", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.diagnostics[0].message).toContain("cards[0]");
+    }
+  });
+});
+
+describe("tw:timeline", () => {
+  it("renders a 3-item milestone track without SVG", () => {
+    const result = renderDocumentDirective({
+      kind: "timeline",
+      body: `items:
+  - { label: Kickoff, caption: Contract signed }
+  - { label: Build, caption: Core implementation }
+  - { label: Launch, caption: Public rollout }`,
+      genre,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.containsSvg).toBe(false);
+      expect(result.html).toContain('<div class="timeline">');
+      expect(result.html.match(/class="t-item/g)).toHaveLength(3);
+      expect(result.html).not.toContain("<svg");
+    }
+  });
+
+  it("renders dates verbatim", () => {
+    const result = renderDocumentDirective({
+      kind: "timeline",
+      body: `items:
+  - { label: Launch, date: "Q3 '26" }`,
+      genre,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.html).toContain("Q3 '26");
+    }
+  });
+
+  it("marks exactly one current item and wraps the second item's label", () => {
+    const result = renderDocumentDirective({
+      kind: "timeline",
+      body: `items:
+  - { label: Kickoff }
+  - { label: Build, current: true }
+  - { label: Launch }
+  - { label: Retrospective }`,
+      genre,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.html.match(/class="t-item current"/g)).toHaveLength(1);
+      expect(result.html).toContain(
+        '<div class="t-item current"><div class="t-label">Build</div>',
+      );
+    }
+  });
+
+  it("rejects a missing label with the offending index and corrected example", () => {
+    const result = renderDocumentDirective({
+      kind: "timeline",
+      body: `items:
+  - { label: Kickoff }
+  - { caption: Missing label }`,
+      genre,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].code).toBe("DIRECTIVE_INVALID");
+      expect(result.diagnostics[0].message).toContain("items[1]");
+      expect(result.diagnostics[0].message).toContain("```tw:timeline");
+    }
+  });
+
+  it("rejects invalid item lists, bodies, duplicate current markers, and malformed YAML", () => {
+    const cases = [
+      {
+        body: "items: []",
+        checks: ["1-8 entries"],
+      },
+      {
+        body: `items:
+  - { label: "1" }
+  - { label: "2" }
+  - { label: "3" }
+  - { label: "4" }
+  - { label: "5" }
+  - { label: "6" }
+  - { label: "7" }
+  - { label: "8" }
+  - { label: "9" }`,
+        checks: ["1-8 entries"],
+      },
+      {
+        body: `items:
+  - { label: Kickoff, current: true }
+  - { label: Build }
+  - { label: Launch, current: true }`,
+        checks: ["items[0]", "items[2]"],
+      },
+      {
+        body: "- a",
+        checks: ["1-8 entries"],
+      },
+      {
+        body: "items: [unclosed",
+        checks: ["failed to parse as YAML"],
+      },
+    ];
+    for (const c of cases) {
+      const result = renderDocumentDirective({
+        kind: "timeline",
+        body: c.body,
+        genre,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.diagnostics[0].code).toBe("DIRECTIVE_INVALID");
+        for (const check of c.checks) {
+          expect(result.diagnostics[0].message).toContain(check);
+        }
+      }
+    }
+  });
+
+  it("escapes model-authored labels", () => {
+    const result = renderDocumentDirective({
+      kind: "timeline",
+      body: `items:
+  - { label: "<b>x&y</b>" }`,
+      genre,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.html).toContain("&lt;b&gt;x&amp;y&lt;/b&gt;");
+      expect(result.html).not.toContain("<b>");
     }
   });
 });
