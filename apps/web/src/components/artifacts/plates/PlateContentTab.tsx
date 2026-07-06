@@ -320,13 +320,16 @@ function DivergenceMarker({
 }) {
   return (
     <div
-      className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground"
+      className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
       data-testid={`plate-section-diverged-${field}`}
+      title="Customized — platform updates paused for this field."
     >
-      <span>Customized — platform updates paused for this field.</span>
+      <span className="size-1.5 shrink-0 rounded-full bg-primary/60" />
+      <span>Customized</span>
+      <span aria-hidden>·</span>
       <button
         type="button"
-        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-foreground underline underline-offset-2"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap underline underline-offset-2 hover:text-foreground"
         onClick={onRevert}
         data-testid={`plate-section-revert-${field}`}
       >

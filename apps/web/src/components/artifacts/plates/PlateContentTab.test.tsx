@@ -87,7 +87,7 @@ describe("PlateContentTab — floor governance (R5 UI half)", () => {
     );
     expect(
       screen.getByTestId("plate-section-diverged-guidance").textContent,
-    ).toMatch(/platform updates paused/);
+    ).toMatch(/Customized/);
     fireEvent.click(screen.getByTestId("plate-section-revert-guidance"));
     const rows = onChange.mock.calls.at(-1)![0] as SectionRowState[];
     expect(rows[0].guidance).toBe("Stage-by-stage funnel.");
