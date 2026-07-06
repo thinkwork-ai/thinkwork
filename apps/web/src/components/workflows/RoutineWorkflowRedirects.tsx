@@ -3,12 +3,49 @@ import { useQuery } from "urql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { SettingsRoutineDetail } from "@/components/settings/SettingsRoutineDetail";
 import { SettingsRoutineExecutionDetail } from "@/components/settings/SettingsRoutineExecutionDetail";
+import {
+  SettingsGitRoutineDetail,
+  type GitRoutineTab,
+} from "@/components/settings/SettingsGitRoutineDetail";
+import { RoutineDetailQuery } from "@/lib/routine-queries";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsWorkflowRunsQuery,
   SettingsWorkflowsQuery,
 } from "@/lib/graphql-queries";
 import { jsonRecord, nestedString, type WorkflowBinding } from "./workflow-ui";
+
+/**
+ * Routine detail entry point. git_python routines get the in-app git detail
+ * (Code | Executions); legacy Step Functions routines keep the workflow-detail
+ * redirect. Splitting on engine keeps the Routines list linking to one route.
+ */
+export function RoutineDetailRouter({
+  routineId,
+  tab,
+}: {
+  routineId: string;
+  tab: GitRoutineTab;
+}) {
+  const [result] = useQuery({
+    query: RoutineDetailQuery,
+    variables: { id: routineId },
+  });
+
+  if (result.fetching && !result.data) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <LoadingShimmer />
+      </div>
+    );
+  }
+
+  if (result.data?.routine?.engine === "git_python") {
+    return <SettingsGitRoutineDetail routineId={routineId} tab={tab} />;
+  }
+
+  return <RoutineWorkflowDetailRedirect routineId={routineId} />;
+}
 
 type WorkflowRow = {
   id: string;

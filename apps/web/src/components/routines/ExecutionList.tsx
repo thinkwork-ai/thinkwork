@@ -15,7 +15,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
-import { type ColumnDef } from "@tanstack/react-table";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   ArrowRight,
   Play,
@@ -27,8 +33,14 @@ import {
 } from "lucide-react";
 import { RoutineExecutionsListQuery } from "@/lib/routine-queries";
 import { RoutineExecutionStatus } from "@/gql/graphql";
-import { Button } from "@thinkwork/ui";
-import { DataTable } from "@thinkwork/ui";
+import {
+  Button,
+  DataTable,
+  DataTableTokenFilter,
+  type DataTableTokenFilterColumn,
+  dataTableTokenFilterFns,
+} from "@thinkwork/ui";
+import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
 import { StatusBadge } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/utils";
@@ -62,6 +74,31 @@ const FILTER_PILLS: Array<{ id: StatusFilterId; label: string }> = [
   { id: "cancelled", label: "Cancelled" },
   { id: "timed_out", label: "Timed out" },
 ];
+
+// Status is server-filtered (the GraphQL `status` arg), so the token filter
+// is a single-select control over the same ids the pills used — clearing it
+// returns to "all". A tiny throwaway table satisfies DataTableTokenFilter's
+// react-table contract; the actual filtering happens server-side.
+const STATUS_FILTER_OPTIONS = FILTER_PILLS.filter((p) => p.id !== "all").map(
+  (p) => ({ value: p.id, label: p.label }),
+);
+const STATUS_FILTER_COLUMNS: ColumnDef<{ filterStatus: string }>[] = [
+  {
+    id: "filterStatus",
+    accessorKey: "filterStatus",
+    filterFn: dataTableTokenFilterFns.option,
+  },
+];
+const STATUS_TOKEN_COLUMNS: DataTableTokenFilterColumn[] = [
+  {
+    id: "filterStatus",
+    label: "Status",
+    type: "option",
+    singleSelect: true,
+    options: STATUS_FILTER_OPTIONS,
+  },
+];
+const EMPTY_FILTER_ROWS: { filterStatus: string }[] = [];
 
 function statusFilterToEnum(
   filter: StatusFilterId,
@@ -157,6 +194,42 @@ export function ExecutionList({
   const navigate = useNavigate();
   const enumStatus = statusFilterToEnum(statusFilter);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [search, setSearch] = useState("");
+
+  // The token filter's state is derived from the server-owned statusFilter;
+  // selecting/clearing routes back through onStatusFilterChange.
+  const statusColumnFilters = useMemo<ColumnFiltersState>(
+    () =>
+      statusFilter === "all"
+        ? []
+        : [
+            {
+              id: "filterStatus",
+              value: { operator: "is", value: statusFilter },
+            },
+          ],
+    [statusFilter],
+  );
+  const filterTable = useReactTable({
+    data: EMPTY_FILTER_ROWS,
+    columns: STATUS_FILTER_COLUMNS,
+    state: { columnFilters: statusColumnFilters },
+    onColumnFiltersChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(statusColumnFilters) : updater;
+      const raw = next.find((c) => c.id === "filterStatus")?.value as
+        | { value?: unknown }
+        | undefined;
+      const picked =
+        raw && typeof raw === "object" && "value" in raw
+          ? raw.value
+          : undefined;
+      const value = Array.isArray(picked) ? picked[0] : picked;
+      onStatusFilterChange(parseStatusFilter(value));
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
 
   // Cursor stack keeps prior page boundaries so the operator can step
   // back. Index 0 is the first-page cursor (always undefined). Pushing
@@ -201,6 +274,16 @@ export function ExecutionList({
       })),
     [queryResult.data],
   );
+
+  // Free-text search filters the loaded page (run id / trigger / status) —
+  // executions have no server-side text field, so this stays page-local.
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      `${r.id} ${r.triggerSource} ${r.status}`.toLowerCase().includes(q),
+    );
+  }, [rows, search]);
 
   const hasNonTerminal = rows.some(
     (r) => !TERMINAL_STATUSES.has(r.status.toLowerCase()),
@@ -353,24 +436,22 @@ export function ExecutionList({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        {FILTER_PILLS.map((pill) => {
-          const isActive = pill.id === statusFilter;
-          return (
-            <button
-              key={pill.id}
-              type="button"
-              onClick={() => onStatusFilterChange(pill.id)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                isActive
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-200 bg-transparent text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900",
-              )}
-            >
-              {pill.label}
-            </button>
-          );
-        })}
+        <CollapsedFilterSearch
+          value={search}
+          onChange={setSearch}
+          label="Search runs"
+          placeholder="Search runs…"
+        />
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={STATUS_TOKEN_COLUMNS}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
         <div className="flex-1" />
         <Button
           variant="ghost"
@@ -390,7 +471,7 @@ export function ExecutionList({
 
       <DataTable
         columns={columns}
-        data={rows}
+        data={visibleRows}
         tableClassName="table-fixed"
         pageSize={pageSize}
         totalCount={Math.max(syntheticTotalCount, 1)}
@@ -405,12 +486,14 @@ export function ExecutionList({
         }
       />
 
-      {rows.length === 0 && (
+      {visibleRows.length === 0 && (
         <div className="rounded-md border border-dashed border-border/70 py-8 text-center">
           <p className="text-sm text-muted-foreground">
-            {statusFilter === "all"
-              ? "No executions yet."
-              : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
+            {search.trim()
+              ? "No runs match your search."
+              : statusFilter === "all"
+                ? "No executions yet."
+                : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
           </p>
           {emptyCta ? <div className="mt-3">{emptyCta}</div> : null}
         </div>
