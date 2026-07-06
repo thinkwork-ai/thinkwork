@@ -462,3 +462,47 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(fields.approved_model_ids).toEqual(["us.amazon.nova-micro-v1:0"]);
   });
 });
+
+describe("plate contract floor rides both dispatch paths (THINK-183 U6)", () => {
+  it("the widened document_plates shape survives the control-field builder and JSON wire intact", () => {
+    const contractPlates = [
+      {
+        slug: "sales-rep-review",
+        displayName: "Sales Rep Review",
+        useFor: "Rep review.",
+        sections: [
+          {
+            id: "pipeline-health",
+            title: "Pipeline Health",
+            tier: "required-if-material" as const,
+          },
+        ],
+        analyses: [
+          {
+            key: "pipeline-conversion",
+            op: "funnel_conversion",
+            inputHint: "ordered stages: [{ label, count }], >=2 stages",
+          },
+        ],
+      },
+    ];
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ documentPlates: contractPlates }),
+    );
+    const wire = JSON.parse(JSON.stringify(fields)) as {
+      document_plates: typeof contractPlates;
+    };
+    expect(wire.document_plates).toEqual(contractPlates);
+  });
+
+  it("both builders still share documentPlatesForDispatch — the projection widens once", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    const chatSource = handlerSource("chat-agent-invoke.ts");
+    expect(wakeupSource).toContain("documentPlatesForDispatch(");
+    expect(chatSource).toContain("documentPlatesForDispatch(");
+    // Neither builder re-projects the summaries — no .map over the plate
+    // list that could strip the contract keys.
+    expect(wakeupSource).not.toMatch(/effectiveDocumentPlates\.map/);
+    expect(chatSource).not.toMatch(/documentPlatesForDispatch\(tenantId\)\s*\)\.map/);
+  });
+});

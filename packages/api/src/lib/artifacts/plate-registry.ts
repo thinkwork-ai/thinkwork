@@ -572,17 +572,52 @@ export async function listPlates(
   return resolved;
 }
 
-/** The agent-facing subset (R10): visible plates only, discovery fields only. */
+/**
+ * The agent-facing plate summary (R10 + THINK-183 KTD8/R14): discovery
+ * fields plus a terse contract projection — enforced section ids with their
+ * expected titles and tier, and declared analysis keys with their ops and
+ * the op's one-line input-shape hint. No guidance text (token cost scales
+ * with plate count; full guidance arrives in rejection diagnostics at point
+ * of use). Contract-less plates keep the original three-field shape.
+ */
+export interface PlateDispatchSummary {
+  slug: string;
+  displayName: string;
+  useFor: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    tier: "required" | "required-if-material";
+  }>;
+  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+}
+
 export function visiblePlateSummaries(
   plates: readonly ResolvedPlate[],
-): Array<{ slug: string; displayName: string; useFor: string }> {
+): PlateDispatchSummary[] {
   return plates
     .filter((p) => !p.hidden)
-    .map((p) => ({
-      slug: p.slug,
-      displayName: p.displayName,
-      useFor: p.useFor,
-    }));
+    .map((p) => {
+      const sections = (p.sections ?? [])
+        .filter((s) => s.tier !== "suggested")
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          tier: s.tier as "required" | "required-if-material",
+        }));
+      const analyses = (p.analyses ?? []).map((a) => ({
+        key: a.key,
+        op: a.op,
+        inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
+      }));
+      return {
+        slug: p.slug,
+        displayName: p.displayName,
+        useFor: p.useFor,
+        ...(sections.length > 0 ? { sections } : {}),
+        ...(analyses.length > 0 ? { analyses } : {}),
+      };
+    });
 }
 
 /**
@@ -616,9 +651,7 @@ export async function resolvePlateForEmission(
 export async function documentPlatesForDispatch(
   tenantId: string,
   store: PlateStore = drizzlePlateStore(),
-): Promise<
-  Array<{ slug: string; displayName: string; useFor: string }> | undefined
-> {
+): Promise<PlateDispatchSummary[] | undefined> {
   try {
     return visiblePlateSummaries(await listPlates(tenantId, store));
   } catch (err) {

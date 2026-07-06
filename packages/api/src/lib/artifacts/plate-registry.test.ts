@@ -485,3 +485,66 @@ describe("content contract resolution (THINK-183 U2)", () => {
     }
   });
 });
+
+describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () => {
+  it("a contract-bearing plate's summary includes section ids/titles and analysis keys with input hints", async () => {
+    const store = fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: {
+          sections: [
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              tier: "required-if-material",
+              guidance: "Funnel with rates.",
+            },
+            {
+              id: "coaching-notes",
+              title: "Coaching Notes",
+              tier: "suggested",
+              guidance: "Not enforced.",
+            },
+          ],
+          analyses: [
+            {
+              key: "pipeline-conversion",
+              op: "funnel_conversion",
+              presentation: { directive: "chart", chartType: "funnel" },
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "sales-rep-review")!;
+    // Suggested-tier sections are for THINK-185/189, not the dispatch floor.
+    expect(srr.sections).toEqual([
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+      },
+    ]);
+    expect(srr.analyses).toEqual([
+      {
+        key: "pipeline-conversion",
+        op: "funnel_conversion",
+        inputHint: "ordered stages: [{ label, count }], >=2 stages",
+      },
+    ]);
+  });
+
+  it("a contract-less plate's summary keeps the original three-field shape", async () => {
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, fakeStore()));
+    for (const summary of summaries) {
+      expect(Object.keys(summary).sort()).toEqual([
+        "displayName",
+        "slug",
+        "useFor",
+      ]);
+    }
+  });
+});
