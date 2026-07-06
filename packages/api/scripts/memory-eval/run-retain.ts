@@ -40,6 +40,10 @@ export interface RunRetainArgs {
   out: string;
   databaseUrl: string;
   timeoutMs: number;
+  /** Path to a JSON file of BankTemplateConfig fields (retain_mission,
+   * retain_custom_instructions, retain_extraction_mode, …) PATCHed to
+   * /v1/default/banks/{bank}/config before any retain call. */
+  bankConfig?: string;
 }
 
 export interface QueryClient {
@@ -131,6 +135,9 @@ export function parseArgs(
       case "--timeout-ms":
         args.timeoutMs = Number.parseInt(requireValue(argv, ++i, arg), 10);
         break;
+      case "--bank-config":
+        args.bankConfig = requireValue(argv, ++i, arg);
+        break;
       case "--help":
       case "-h":
         printHelp();
@@ -164,6 +171,9 @@ Options:
   --database-url <url>    Local eval Postgres URL for unit readback
                           (default ${DEFAULT_DATABASE_URL}, also EVAL_DATABASE_URL)
   --timeout-ms <n>        Per-thread sync retain timeout (default ${DEFAULT_TIMEOUT_MS})
+  --bank-config <path>    JSON file of BankTemplateConfig fields (retain_mission,
+                          retain_custom_instructions, …) PATCHed to the bank
+                          before retaining
 
 Replays every thread in the fixture through retain against ONE running
 candidate container, then reads extracted units back from
@@ -241,6 +251,32 @@ export async function fetchUnitsForDocument(
   return result.rows as MemoryUnitRow[];
 }
 
+/**
+ * PATCH BankTemplateConfig fields onto the bank before retaining. The wire
+ * shape is `{updates: {...}}` (BankConfigUpdate) — verified against the live
+ * container's /openapi.json. Fails loudly: a config that silently didn't
+ * apply would invalidate the whole candidate run.
+ */
+export async function applyBankConfig(
+  fetchImpl: FetchImpl,
+  hindsightUrl: string,
+  bank: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  const resp = await fetchImpl(
+    `${hindsightUrl}/v1/default/banks/${encodeURIComponent(bank)}/config`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates: config }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`bank config PATCH ${resp.status}: ${body.slice(0, 300)}`);
+  }
+}
+
 export async function runRetainForFixture(
   args: RunRetainArgs,
   fixture: ThreadsFixture,
@@ -258,6 +294,13 @@ export async function runRetainForFixture(
   let totalWallMs = 0;
 
   try {
+    if (args.bankConfig) {
+      const config = JSON.parse(await readFile(args.bankConfig, "utf8"));
+      await applyBankConfig(fetchImpl, args.hindsightUrl, args.bank, config);
+      console.log(
+        `[run-retain] applied bank config from ${args.bankConfig}: ${Object.keys(config).join(", ")}`,
+      );
+    }
     for (const thread of fixture.threads) {
       const content = serializeTranscript(thread.messages);
       if (!content) continue;
