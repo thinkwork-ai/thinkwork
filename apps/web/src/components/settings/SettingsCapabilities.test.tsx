@@ -779,18 +779,13 @@ describe("tree context-menu callbacks (item 4)", () => {
 });
 
 describe("MCP tree callbacks (U9c)", () => {
-  it("forwards mcp decoration state + sync/removing slugs to the editor", () => {
+  it("forwards mcp callbacks WITHOUT the retired mcp_server decoration map", () => {
     render(<SettingsCapabilities />);
     const props = editorProps();
-    const map = props?.mcpStateBySlug as Map<
-      string,
-      { active: boolean; reason: string | null }
-    >;
-    expect(map.get("github")).toEqual({ active: true, reason: null });
-    expect(map.get("slack")).toEqual({
-      active: false,
-      reason: "oauth_missing",
-    });
+    // The mcp_server inspector class never enters resolution on
+    // folder-dispatch agents, so its per-folder decoration stamped every
+    // attached server not_installed — the map is retired, not forwarded.
+    expect(props?.mcpStateBySlug).toBeUndefined();
     expect(typeof props?.onAddMcpServer).toBe("function");
     expect(typeof props?.onDetachMcpServer).toBe("function");
   });

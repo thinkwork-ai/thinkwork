@@ -655,21 +655,12 @@ export function SettingsCapabilities({
     [items],
   );
 
-  // MCP mirror (U9c): decoration state per server slug, and the Add picker
-  // pool — ALL registered mcp_server rows (state shown verbatim; Add is
-  // disabled on already-active rows).
-  const mcpStateBySlug = useMemo(() => {
-    const map = new Map<string, SkillNodeState>();
-    for (const item of items) {
-      if (item.capabilityClass !== "mcp_server") continue;
-      map.set(item.capabilityId, {
-        active: item.active,
-        reason: item.reason ?? null,
-      });
-    }
-    return map;
-  }, [items]);
-
+  // The Add-connection picker pool — ALL registered mcp_server rows (state
+  // shown verbatim; Add is disabled on already-active rows). The tree's
+  // per-folder mcp_server decoration is gone: on folder-dispatch agents the
+  // class never enters resolution (connections own dispatch), so it stamped
+  // every attached server `not_installed` — a stale-taxonomy artifact, not
+  // real state. `connections/<slug>` decoration carries the live gate state.
   const addMcpPool = useMemo(
     () => items.filter((item) => item.capabilityClass === "mcp_server"),
     [items],
@@ -1463,7 +1454,6 @@ export function SettingsCapabilities({
           profileScopeName={selectedProfileName}
           onAddSkill={() => setAddSkillOpen(true)}
           onDetachSkill={requestDetachSkill}
-          mcpStateBySlug={mcpStateBySlug}
           pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
