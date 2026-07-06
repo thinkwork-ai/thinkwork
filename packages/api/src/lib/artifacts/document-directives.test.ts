@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { compileDocument } from "./document-compositor.js";
+import { resolvePlatformPlate } from "./plate-registry.js";
 import {
   buildDirectiveEngine,
   makeChartSpec,
@@ -14,6 +15,7 @@ import {
 import { runDocumentPreflight } from "./document-preflight.js";
 
 const genre = "report" as const;
+const plate = resolvePlatformPlate("report")!;
 
 describe("renderDocumentDirective", () => {
   it("AE1: unknown directive rejects naming the directive, the vocabulary, and a corrected example", () => {
@@ -203,7 +205,7 @@ caption: Qualification is the biggest drop-off.`;
 describe("compositor + directives end-to-end", () => {
   it("non-SVG directive output passes the U1 sanitizer unchanged", () => {
     const result = compileDocument({
-      genre,
+      plate,
       title: "Q3 Report",
       abstract: "With components.",
       markdownBody: `## Summary
@@ -237,7 +239,7 @@ Prose after components.
 
   it("unknown directive inside a document is a compile rejection carrying the vocabulary (AE1)", () => {
     const result = compileDocument({
-      genre,
+      plate,
       title: "T",
       abstract: "",
       markdownBody: "## Body\n\n```tw:pivot-table\nrows: []\n```\n",

@@ -1,23 +1,12 @@
-/**
- * Document Compositor v2 (THINK-154): the compiler-owned house template.
- *
- * The base CSS below is the single source of truth for document styling
- * (THINK-153: the skill's plate-*.html files are retired — plates are now
- * registry configuration, not HTML). Plate-specific palettes arrive as
- * resolved CSS custom-property override maps (plate registry KTD2) and are
- * appended AFTER the base block, so an empty override map compiles
- * byte-identical output to the pre-registry compositor.
- *
- * The `tw-plate` meta marker is retained in compiled output: it identifies
- * the plate slug a render was compiled for (the runtime PLATE gate itself is
- * retired — compiler output is plate-conformant by construction).
- */
-
-/**
- * Shared plate CSS — byte-identical to the <style> block of every genre plate.
- * Do not edit without updating the plate files (parity-tested).
- */
-export const DOCUMENT_PLATE_CSS = `:root{
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="tw-plate" content="ideation">
+<title>Golden ideation</title>
+<style>
+:root{
   --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
   --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
   --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
@@ -91,95 +80,32 @@ svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-ser
   body{background:#fff;color:#111}
   main{max-width:none;padding:0}
   article.item,.card,.stat,figure,table{break-inside:avoid}
-}`;
-
-/**
- * Build the CSS block that layers a plate's resolved token values over the
- * base palette. Returns "" when both maps are empty (golden parity: an
- * uncustomized core plate compiles byte-identical to the pre-registry
- * output). Token names and values were guarded at save AND re-filtered at
- * resolution (plate-registry.ts) — by construction they contain no braces,
- * angle brackets, or url()/expression() vectors.
- */
-export function buildPlateTokenOverrideCss(
-  tokensLight: Record<string, string>,
-  tokensDark: Record<string, string>,
-): string {
-  const decls = (tokens: Record<string, string>): string =>
-    Object.entries(tokens)
-      .map(([name, value]) => `  ${name}:${value};`)
-      .join("\n");
-  const parts: string[] = [];
-  if (Object.keys(tokensLight).length > 0) {
-    // Light overrides ride an explicit light media query (not a bare :root):
-    // this block is appended AFTER the base CSS, so a bare :root would win
-    // over the base's @media-dark block under a dark scheme preference.
-    parts.push(
-      `@media (prefers-color-scheme: light){\n  :root{\n${decls(tokensLight)}\n  }\n}`,
-    );
-    parts.push(`:root[data-theme="light"]{\n${decls(tokensLight)}\n}`);
-  }
-  if (Object.keys(tokensDark).length > 0) {
-    parts.push(
-      `@media (prefers-color-scheme: dark){\n  :root{\n${decls(tokensDark)}\n  }\n}`,
-    );
-    parts.push(`:root[data-theme="dark"]{\n${decls(tokensDark)}\n}`);
-  }
-  return parts.join("\n");
 }
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/**
- * Assemble the full self-contained document shell around a compiled body.
- * All string inputs except `bodyHtml` and `footerHtml` are treated as
- * untrusted text and HTML-escaped; the body/footer are compiler output.
- */
-export function renderDocumentShell(input: {
-  plateSlug: string;
-  title: string;
-  eyebrow: string;
-  metaLineHtml: string | null;
-  bodyHtml: string;
-  footerHtml: string;
-  /** Resolved plate token overrides (plate registry); empty = base palette. */
-  tokensLight?: Record<string, string>;
-  tokensDark?: Record<string, string>;
-}): string {
-  const t = escapeHtml(input.title);
-  const meta = input.metaLineHtml ? `\n${input.metaLineHtml}` : "";
-  const overrideCss = buildPlateTokenOverrideCss(
-    input.tokensLight ?? {},
-    input.tokensDark ?? {},
-  );
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="tw-plate" content="${escapeHtml(input.plateSlug)}">
-<title>${t}</title>
-<style>
-${DOCUMENT_PLATE_CSS}${overrideCss ? `\n${overrideCss}` : ""}
 </style>
 </head>
 <body>
 <main>
 
-<div class="eyebrow">${escapeHtml(input.eyebrow)}</div>
-<h1 id="doc-title">${t}</h1>${meta}
+<div class="eyebrow">IDEATION</div>
+<h1 id="doc-title">Golden ideation</h1>
+<p class="meta"><strong>date</strong> Q3 2026 &nbsp;·&nbsp; Golden parity fixture</p>
+<p class="meta">Abstract for ideation.</p>
 
-${input.bodyHtml}
+<h2 id="section-one">Section one</h2>
+<p>Prose with <strong>bold</strong>, <em>em</em>, <code>code</code>, and a <a href="#section-one">link</a>.</p>
+<ul>
+<li>item one</li>
+<li>item two</li>
+</ul>
+<table class="data"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+<div class="stats"><div class="stat"><div class="n">42</div><div class="l">things</div></div><div class="stat"><div class="n">+18%</div><div class="l">delta</div></div></div>
+<div class="cards"><div class="card"><div class="q">Ship it?</div><div class="a"><span class="pill acc">Yes</span></div><p>All gates green</p></div></div>
+<div class="tw-directive-slot"><figure><svg viewBox="0 0 720 250" role="img" aria-label="Column chart: Quarterly momentum"><text x="12" y="18" font-size="12" font-weight="600" fill="var(--ink)">Quarterly momentum</text><g stroke="var(--line)" stroke-width="1"><line x1="48" y1="179" x2="708" y2="179"/><line x1="48" y1="138" x2="708" y2="138"/><line x1="48" y1="97" x2="708" y2="97"/><line x1="48" y1="56" x2="708" y2="56"/></g><g font-size="10" fill="var(--muted)" text-anchor="end"><text x="42" y="223">0</text><text x="42" y="182">5</text><text x="42" y="141">10</text><text x="42" y="100">15</text><text x="42" y="59">20</text></g><line x1="48" y1="220" x2="708" y2="220" stroke="var(--muted)" stroke-width="1"/><g fill="var(--accent)"><path d="M201,220 v-110.8 q0,-4 4,-4 h16 q4,0 4,4 v110.8 z"/><path d="M531,220 v-143.6 q0,-4 4,-4 h16 q4,0 4,4 v143.6 z"/></g><text x="543" y="64.4" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="middle">18</text><g font-size="10.5" fill="var(--muted)" text-anchor="middle"><text x="213" y="238">M1</text><text x="543" y="238">M2</text></g></svg><figcaption>Pace accelerated.</figcaption></figure><details><summary>Chart data</summary><table><tr><th>Label</th><th>Quarterly momentum</th></tr><tr><td>M1</td><td>14</td></tr><tr><td>M2</td><td>18</td></tr></table></details></div>
+<blockquote>
+<p>Closing quote.</p>
+</blockquote>
 
-${input.footerHtml}
+<footer class="composition-signal">Composed by the ThinkWork document compositor · ideation · Q3 2026</footer>
 </main>
 </body>
 </html>
-`;
-}

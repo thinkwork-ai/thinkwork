@@ -18,11 +18,12 @@
  * script (scripts/backfill-document-renders.ts) provides the live store.
  */
 
-import { compileDocument } from "./document-compositor.js";
+import {
+  compileDocument,
+  type CompositorPlate,
+} from "./document-compositor.js";
 import {
   DocumentEmissionConflict,
-  DOCUMENT_GENRES,
-  type DocumentGenre,
   type DocumentRow,
 } from "./document-emission.js";
 import { runDocumentPreflight } from "./document-preflight.js";
@@ -37,6 +38,11 @@ export interface BackfillDocumentRow extends DocumentRow {
 export interface DocumentBackfillStore {
   /** All document-kind artifact rows in scope (already tenant-filtered). */
   listDocuments(): Promise<BackfillDocumentRow[]>;
+  /**
+   * Resolve the row's genre through the plate registry (THINK-153) — tenant
+   * scoped via row.tenant_id. Null = unregistered genre (skip-and-report).
+   */
+  resolvePlate(row: BackfillDocumentRow): Promise<CompositorPlate | null>;
   /** Read the digest head (content.md) for a row. */
   readDigest(row: BackfillDocumentRow): Promise<string>;
   /** Overwrite the head render key (render.html) with compiled output. */
@@ -101,19 +107,23 @@ export async function runDocumentBackfill(
     dryRun: opts.dryRun,
   };
 
-  // Eligibility is decided without IO so `limit` means "exactly N compiled".
+  // Eligibility is decided BEFORE the limit slice so `limit` means "exactly
+  // N compiled" (plate resolution is registry IO, but still pre-batch).
   const eligible: BackfillDocumentRow[] = [];
+  const plates = new Map<string, CompositorPlate>();
   for (const row of rows) {
     if (row.status === "draft" && !opts.includeDrafts) {
       report.skippedDrafts++;
       log(`skip draft ${row.id} (no --include-drafts)`);
       continue;
     }
-    if (!(DOCUMENT_GENRES as readonly string[]).includes(row.type)) {
+    const plate = await store.resolvePlate(row);
+    if (!plate) {
       report.skippedNonGenre++;
-      log(`skip ${row.id}: unknown genre "${row.type}"`);
+      log(`skip ${row.id}: unregistered genre "${row.type}"`);
       continue;
     }
+    plates.set(row.id, plate);
     eligible.push(row);
   }
   const batch =
@@ -129,7 +139,7 @@ export async function runDocumentBackfill(
     report.processed++;
     const digest = await store.readDigest(row);
     const compiled = compileDocument({
-      genre: row.type as DocumentGenre,
+      plate: plates.get(row.id)!,
       title: row.title,
       abstract: row.summary ?? "",
       markdownBody: digest,

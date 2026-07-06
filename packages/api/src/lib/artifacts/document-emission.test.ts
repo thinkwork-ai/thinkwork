@@ -9,6 +9,8 @@ import {
   type DocumentRow,
 } from "./document-emission.js";
 import { compileDocument } from "./document-compositor.js";
+import { PLATFORM_PLATES } from "./plate-definitions.js";
+import { resolvePlatformPlate } from "./plate-registry.js";
 import {
   DOCUMENT_CARD_MAX_BYTES,
   runDocumentPreflight,
@@ -69,6 +71,13 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
   };
   const deps: DocumentEmissionDeps = {
     preflight: vi.fn(() => ({ ok: true }) as const),
+    resolvePlate: vi.fn(async ({ slug }) => {
+      const plate = resolvePlatformPlate(slug);
+      const visibleSlugs = PLATFORM_PLATES.map((p) => p.slug);
+      return plate
+        ? ({ ok: true, plate, visibleSlugs } as const)
+        : ({ ok: false, visibleSlugs } as const);
+    }),
     compile: compileDocument,
     writePayload: vi.fn(async (args) => {
       recorded.s3Writes.push({
@@ -125,8 +134,16 @@ beforeEach(() => {
 
 describe("parseDocumentEmitInput", () => {
   it("rejects bad genres, missing bodies, and spaceId on drafts", () => {
+    // THINK-153: any well-formed slug parses — registry membership is
+    // validated at emission time (UNKNOWN_GENRE), not at parse time.
     expect(
       parseDocumentEmitInput({ ...VALID_DOCUMENT, genre: "novel" }).ok,
+    ).toBe(true);
+    expect(
+      parseDocumentEmitInput({ ...VALID_DOCUMENT, genre: "Not A Slug" }).ok,
+    ).toBe(false);
+    expect(
+      parseDocumentEmitInput({ ...VALID_DOCUMENT, genre: "-bad" }).ok,
     ).toBe(false);
     expect(
       parseDocumentEmitInput({ ...VALID_DOCUMENT, digestMarkdown: "" }).ok,
@@ -137,6 +154,51 @@ describe("parseDocumentEmitInput", () => {
       parseDocumentEmitInput({ ...VALID_DOCUMENT, spaceId: SPACE_ID }).ok,
     ).toBe(false);
     expect(parseDocumentEmitInput(VALID_DOCUMENT).ok).toBe(true);
+  });
+});
+
+describe("plate registry gate (THINK-153 KTD3)", () => {
+  it("unregistered genre → COMPILE-stage rejection naming valid slugs (AE1)", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit({ ...VALID_DOCUMENT, genre: "roadmap" }, deps);
+    expect(result.statusCode).toBe(200);
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("COMPILE_REJECTED");
+    const diag = (
+      result.body.diagnostics as Array<{ code: string; message: string }>
+    )[0];
+    expect(diag.code).toBe("UNKNOWN_GENRE");
+    expect(diag.message).toContain("report");
+    expect(diag.message).toContain("qbr");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+  });
+
+  it("hidden genre → rejected for a NEW document, accepted for a revision with an existing document_id", async () => {
+    const hidden = resolvePlatformPlate("report")!;
+    const { deps, recorded } = makeDeps({
+      resolvePlate: vi.fn(async () => ({
+        ok: true as const,
+        plate: { ...hidden, hidden: true },
+        visibleSlugs: ["plan", "brief"],
+      })),
+    });
+    // New document (no documentId, no existing draft): rejected.
+    const rejected = await emit(
+      { ...VALID_DOCUMENT, documentId: undefined },
+      deps,
+    );
+    expect(rejected.body.ok).toBe(false);
+    const diag = (
+      rejected.body.diagnostics as Array<{ code: string; message: string }>
+    )[0];
+    expect(diag.code).toBe("GENRE_HIDDEN");
+    expect(recorded.upserts).toHaveLength(0);
+
+    // Revision carrying an existing document_id: compiles (loadDocumentRow
+    // returns the existing row in makeDeps).
+    const revised = await emit(VALID_DOCUMENT, deps);
+    expect(revised.body.ok).toBe(true);
   });
 });
 

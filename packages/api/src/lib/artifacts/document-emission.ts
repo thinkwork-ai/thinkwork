@@ -61,13 +61,20 @@ import {
   drizzleThreadTurnEventStore,
 } from "../thread-turn-events.js";
 import { notifyThreadTurnStep } from "../../graphql/notify.js";
+import {
+  resolvePlateForEmission,
+  type EmissionPlateResolution,
+} from "./plate-registry.js";
 
 /** `artifacts.metadata.kind` for dual-body document artifacts. */
 export const DOCUMENT_METADATA_KIND = "document" as const;
 
-/** v1 genres (KTD3): genre IS the artifact `type` (lowercase DB value). */
-export const DOCUMENT_GENRES = ["ideation", "plan", "report", "brief"] as const;
-export type DocumentGenre = (typeof DOCUMENT_GENRES)[number];
+/**
+ * Genre IS the artifact `type` (lowercase DB value). THINK-153: the genre set
+ * is registry-driven — the plate registry (plate-registry.ts) validates slugs
+ * at emission time; the old hardcoded DOCUMENT_GENRES enum is gone.
+ */
+export const DOCUMENT_GENRE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** `thread_turn_events.payload.kind` for the compact in-thread card (R4). */
 export const DOCUMENT_CARD_PAYLOAD_KIND = "document.card" as const;
@@ -125,7 +132,7 @@ export function deriveDocumentArtifactId(
 
 export interface DocumentEmitInput {
   documentId?: string;
-  genre: DocumentGenre;
+  genre: string;
   title: string;
   abstract: string;
   digestMarkdown: string;
@@ -144,13 +151,11 @@ export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
   }
   const doc = raw as Record<string, unknown>;
   const genre = doc.genre;
-  if (
-    typeof genre !== "string" ||
-    !(DOCUMENT_GENRES as readonly string[]).includes(genre)
-  ) {
+  if (typeof genre !== "string" || !DOCUMENT_GENRE_SLUG_RE.test(genre)) {
     return {
       ok: false,
-      error: `document.genre must be one of ${DOCUMENT_GENRES.join(", ")}`,
+      error:
+        'document.genre must be a lowercase slug (letters, digits, hyphens), e.g. "report". The valid genres for this workspace are listed on the emit_document tool.',
     };
   }
   const title = typeof doc.title === "string" ? doc.title.trim() : "";
@@ -196,7 +201,7 @@ export function parseDocumentEmitInput(raw: unknown): DocumentEmitParse {
     ok: true,
     value: {
       documentId: doc.documentId as string | undefined,
-      genre: genre as DocumentGenre,
+      genre,
       title,
       abstract: typeof doc.abstract === "string" ? doc.abstract.trim() : "",
       digestMarkdown: doc.digestMarkdown,
@@ -212,6 +217,11 @@ export interface DocumentEmissionDeps {
     renderHtml: string;
     digestMarkdown: string;
   }) => DocumentPreflightResult;
+  /** THINK-153 (KTD3): registry validation between parse and compile. */
+  resolvePlate: (input: {
+    tenantId: string;
+    slug: string;
+  }) => Promise<EmissionPlateResolution>;
   /** THINK-154 (KTD1): compiles the v2 markdown-only shape into the render. */
   compile: typeof compileDocument;
   writePayload: typeof writeArtifactPayloadToS3;
@@ -222,7 +232,7 @@ export interface DocumentEmissionDeps {
   findExistingDraftDocument: (input: {
     tenantId: string;
     threadId: string;
-    genre: DocumentGenre;
+    genre: string;
     title: string;
   }) => Promise<{ documentId: string } | null>;
   upsertDocumentRow: (input: {
@@ -230,7 +240,7 @@ export interface DocumentEmissionDeps {
     tenantId: string;
     threadId: string;
     agentId: string | null;
-    genre: DocumentGenre;
+    genre: string;
     title: string;
     abstract: string;
     documentId: string;
@@ -264,6 +274,8 @@ export interface DocumentRow {
 function defaultDeps(): DocumentEmissionDeps {
   return {
     preflight: runDocumentPreflight,
+    resolvePlate: ({ tenantId, slug }) =>
+      resolvePlateForEmission(tenantId, slug),
     compile: compileDocument,
     writePayload: writeArtifactPayloadToS3,
     resolveActingUserId: async ({ tenantId, triggeringMessageId }) => {
@@ -521,10 +533,64 @@ export async function handleDocumentEmission(
   }
   const doc = parsed.value;
 
+  // ---- Plate registry (THINK-153 KTD3): validate the genre between parse
+  // and compile. Unknown slug → self-repair rejection naming the valid set;
+  // hidden slug → rejected for NEW documents, but a revision turn carrying an
+  // existing document_id of that genre still compiles (hiding a plate must
+  // not strand in-flight revisions).
+  const resolution = await deps.resolvePlate({
+    tenantId: input.tenantId,
+    slug: doc.genre,
+  });
+  if (!resolution.ok) {
+    return {
+      statusCode: 200,
+      body: {
+        ok: false,
+        code: "COMPILE_REJECTED",
+        diagnostics: [
+          {
+            code: "UNKNOWN_GENRE",
+            message: `Genre "${doc.genre}" is not registered for this workspace. Valid genres: ${resolution.visibleSlugs.join(", ")}. Re-emit with one of those slugs.`,
+            location: "genre",
+          },
+        ],
+      },
+    };
+  }
+  const plate = resolution.plate;
+  if (plate.hidden) {
+    const revisionRow = doc.documentId
+      ? await deps.loadDocumentRow(
+          deriveDocumentArtifactId(
+            input.tenantId,
+            input.threadId,
+            doc.documentId,
+          ),
+        )
+      : null;
+    if (!revisionRow) {
+      return {
+        statusCode: 200,
+        body: {
+          ok: false,
+          code: "COMPILE_REJECTED",
+          diagnostics: [
+            {
+              code: "GENRE_HIDDEN",
+              message: `Genre "${doc.genre}" is hidden for this workspace and cannot start a new document. Valid genres: ${resolution.visibleSlugs.join(", ")}. Re-emit with one of those slugs.`,
+              location: "genre",
+            },
+          ],
+        },
+      };
+    }
+  }
+
   // ---- Compositor (THINK-154 KTD1): compile the markdown into the house
   // render between parse and preflight — the only emission path. -----------
   const compiled = deps.compile({
-    genre: doc.genre,
+    plate,
     title: doc.title,
     abstract: doc.abstract,
     markdownBody: doc.digestMarkdown,
@@ -746,7 +812,7 @@ export async function handleDocumentEmission(
 export function buildDocumentCard(input: {
   artifactId: string;
   title: string;
-  genre: DocumentGenre;
+  genre: string;
   abstract: string;
   status: "draft" | "final";
   headVersion: number;

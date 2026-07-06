@@ -22,7 +22,6 @@ import type {
   DirectiveEngine,
   DirectiveRender,
 } from "./document-compositor.js";
-import type { DocumentGenre } from "./document-emission.js";
 
 function escapeHtml(s: string): string {
   return s
@@ -35,12 +34,12 @@ function escapeHtml(s: string): string {
 interface DirectiveSpec {
   kind: string;
   /** Genres the component is available in; "all" for no restriction. */
-  genres: readonly DocumentGenre[] | "all";
+  genres: readonly string[] | "all";
   /** One-line schema summary used in rejection diagnostics. */
   schema: string;
   /** Corrected minimal example (KTD7 self-repair posture). */
   example: string;
-  render: (input: { data: unknown; genre: DocumentGenre }) => DirectiveRender;
+  render: (input: { data: unknown; genre: string }) => DirectiveRender;
 }
 
 const PILL_TONES = ["acc", "info", "warn", "bad"] as const;

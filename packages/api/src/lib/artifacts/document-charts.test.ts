@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { renderChart } from "./document-charts.js";
 import { compileDocument } from "./document-compositor.js";
+import { resolvePlatformPlate } from "./plate-registry.js";
 import { CHART_TYPES, type ChartDirectiveData } from "./document-directives.js";
 import { runDocumentPreflight } from "./document-preflight.js";
 
@@ -156,7 +157,7 @@ caption: ${type} takeaway.
 \`\`\``,
     ).join("\n\n");
     const result = compileDocument({
-      genre: "report",
+      plate: resolvePlatformPlate("report")!,
       title: "Chart gallery",
       abstract: "All seven launch chart types.",
       markdownBody: `## Charts\n\n${fences}\n`,

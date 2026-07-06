@@ -4,7 +4,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { compileDocument } from "./document-compositor.js";
-import { GENRE_TEMPLATES } from "./document-templates.js";
 import {
   CORE_PLATE_SLUGS,
   PLATFORM_PLATES,
@@ -269,10 +268,10 @@ describe("exemplar builder (KTD7)", () => {
     expect(exemplar.markdownBody).not.toContain("tw:chart");
     expect(exemplar.markdownBody).toContain("tw:stats");
     expect(exemplar.markdownBody).toContain("tw:verdict-grid");
-    // Pre-U2 the compositor still keys on the legacy genre enum; the exemplar
-    // body itself must compile cleanly through the real pipeline.
+    // The exemplar must compile cleanly through the real pipeline WITH the
+    // plate's own directive gate: exactly what save validation compiles.
     const compiled = compileDocument({
-      genre: "report",
+      plate: proposal!,
       title: exemplar.title,
       abstract: exemplar.abstract,
       markdownBody: exemplar.markdownBody,
@@ -287,7 +286,7 @@ describe("exemplar builder (KTD7)", () => {
     expect(exemplar.markdownBody).toContain("tw:verdict-grid");
     expect(exemplar.markdownBody).toContain("tw:chart");
     const compiled = compileDocument({
-      genre: "report",
+      plate: qbr!,
       title: exemplar.title,
       abstract: exemplar.abstract,
       markdownBody: exemplar.markdownBody,
@@ -298,11 +297,19 @@ describe("exemplar builder (KTD7)", () => {
 });
 
 describe("platform definitions snapshot", () => {
-  it("core four match today's GENRE_TEMPLATES verbatim with empty palettes", () => {
+  it("core four carry the retired GENRE_TEMPLATES values verbatim with empty palettes", () => {
+    // Snapshot of the deleted GENRE_TEMPLATES constant (THINK-154) — the
+    // registry definitions must keep these values byte-for-byte.
+    const legacy: Record<string, { eyebrow: string; titleSuffix: string }> = {
+      ideation: { eyebrow: "IDEATION", titleSuffix: "Ideation" },
+      plan: { eyebrow: "PLAN", titleSuffix: "Plan" },
+      report: { eyebrow: "REPORT", titleSuffix: "Report" },
+      brief: { eyebrow: "DECISION BRIEF", titleSuffix: "Brief" },
+    };
     for (const slug of CORE_PLATE_SLUGS) {
       const plate = getPlatformPlate(slug)!;
-      expect(plate.eyebrow).toBe(GENRE_TEMPLATES[slug].eyebrow);
-      expect(plate.titleSuffix).toBe(GENRE_TEMPLATES[slug].titleSuffix);
+      expect(plate.eyebrow).toBe(legacy[slug].eyebrow);
+      expect(plate.titleSuffix).toBe(legacy[slug].titleSuffix);
       expect(plate.paletteLight).toEqual({});
       expect(plate.paletteDark).toEqual({});
       expect(plate.allowedDirectives).toBe("all");

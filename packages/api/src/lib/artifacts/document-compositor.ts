@@ -29,8 +29,7 @@ import { Marked, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { parse as parseYaml } from "yaml";
 import { renderDocumentDirective } from "./document-directives.js";
-import type { DocumentGenre } from "./document-emission.js";
-import { GENRE_TEMPLATES, renderDocumentShell } from "./document-templates.js";
+import { renderDocumentShell } from "./document-templates.js";
 
 /** Mirrors the DocSpector diagnostic shape so rejects surface in-turn (R2). */
 export interface CompositorDiagnostic {
@@ -58,8 +57,22 @@ export type DirectiveRender =
 export type DirectiveEngine = (input: {
   kind: string;
   body: string;
-  genre: DocumentGenre;
+  genre: string;
 }) => DirectiveRender;
+
+/**
+ * The plate configuration the compiler consumes (THINK-153 KTD3). Structurally
+ * satisfied by the registry's ResolvedPlate; the compositor stays decoupled
+ * from resolution.
+ */
+export interface CompositorPlate {
+  slug: string;
+  eyebrow: string;
+  tokensLight: Record<string, string>;
+  tokensDark: Record<string, string>;
+  /** Directive kinds documents in this plate may use; "all" = unrestricted. */
+  allowedDirectives: readonly string[] | "all";
+}
 
 /** Fence info-string prefix that routes a fenced block to the engine. */
 export const DIRECTIVE_FENCE_PREFIX = "tw:";
@@ -179,7 +192,7 @@ function isDataUri(href: string): boolean {
 }
 
 interface CompileState {
-  genre: DocumentGenre;
+  genre: string;
   engine: DirectiveEngine;
   errors: CompositorDiagnostic[];
   warnings: CompositorDiagnostic[];
@@ -333,10 +346,40 @@ const SANITIZE_CONFIG: sanitizeHtml.IOptions = {
 };
 
 export interface CompileDocumentInput {
-  genre: DocumentGenre;
+  plate: CompositorPlate;
   title: string;
   abstract: string;
   markdownBody: string;
+}
+
+/**
+ * Gate the directive engine on the plate's allowed set (KTD8): the plate's
+ * config selects which directives its documents may use, riding the existing
+ * DIRECTIVE_GENRE_RESTRICTED rejection shape the engine already emits for
+ * spec-level restrictions.
+ */
+function gateEngineOnPlate(
+  engine: DirectiveEngine,
+  plate: CompositorPlate,
+): DirectiveEngine {
+  if (plate.allowedDirectives === "all") return engine;
+  const allowed = plate.allowedDirectives;
+  const vocabulary = allowed.map((k) => `tw:${k}`).join(", ") || "(none)";
+  return (input) => {
+    if (!allowed.includes(input.kind)) {
+      return {
+        ok: false,
+        diagnostics: [
+          {
+            code: "DIRECTIVE_GENRE_RESTRICTED",
+            message: `Directive "tw:${input.kind}" is not available for the "${plate.slug}" genre. Directives available for "${plate.slug}": ${vocabulary}.`,
+            location: `tw:${input.kind}`,
+          },
+        ],
+      };
+    }
+    return engine(input);
+  };
 }
 
 /**
@@ -352,11 +395,11 @@ export function compileDocument(
   // Placeholder tokens derive from a hash of the full input: deterministic,
   // and a body cannot contain its own token without a hash preimage.
   const inputHash = createHash("sha256")
-    .update(`${input.genre}\n${input.title}\n${input.markdownBody}`)
+    .update(`${input.plate.slug}\n${input.title}\n${input.markdownBody}`)
     .digest("hex");
   const state: CompileState = {
-    genre: input.genre,
-    engine,
+    genre: input.plate.slug,
+    engine: gateEngineOnPlate(engine, input.plate),
     errors: [],
     warnings,
     placeholders: new Map(),
@@ -380,8 +423,7 @@ export function compileDocument(
     finalBody = finalBody.replace(token, () => html);
   }
 
-  const template = GENRE_TEMPLATES[input.genre];
-  const eyebrow = frontmatter.eyebrow ?? template.eyebrow;
+  const eyebrow = frontmatter.eyebrow ?? input.plate.eyebrow;
   const metaParts: string[] = [];
   if (frontmatter.date) {
     metaParts.push(`<strong>date</strong> ${escapeHtml(frontmatter.date)}`);
@@ -400,15 +442,17 @@ export function compileDocument(
       .filter(Boolean)
       .join("\n") || null;
 
-  const footerHtml = `<footer class="composition-signal">Composed by the ThinkWork document compositor · ${input.genre}${frontmatter.date ? ` · ${escapeHtml(frontmatter.date)}` : ""}</footer>`;
+  const footerHtml = `<footer class="composition-signal">Composed by the ThinkWork document compositor · ${escapeHtml(input.plate.slug)}${frontmatter.date ? ` · ${escapeHtml(frontmatter.date)}` : ""}</footer>`;
 
   const renderHtml = renderDocumentShell({
-    genre: input.genre,
+    plateSlug: input.plate.slug,
     title: input.title,
     eyebrow,
     metaLineHtml,
     bodyHtml: finalBody.trim(),
     footerHtml,
+    tokensLight: input.plate.tokensLight,
+    tokensDark: input.plate.tokensDark,
   });
 
   return { ok: true, renderHtml, warnings: state.warnings };
