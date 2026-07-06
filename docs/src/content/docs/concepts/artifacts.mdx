@@ -9,34 +9,40 @@ An artifact is a durable output the agent produces that outlives the thread it w
 
 ThinkWork ships two artifact kinds on the same living-artifacts substrate:
 
-| Kind                  | Body                                         | Interactivity                                | Typical use                              |
-| --------------------- | -------------------------------------------- | -------------------------------------------- | ---------------------------------------- |
-| **Living Canvas**     | GenUI (json-render) with data bindings       | Interactive components, app-tier when needed | Dashboards, working views over live data |
-| **Document Artifact** | Markdown digest + self-contained HTML render | None (scriptless by design)                  | Reports, plans, briefs, ideation docs    |
+| Kind                  | Body                                                   | Interactivity                                | Typical use                              |
+| --------------------- | ------------------------------------------------------ | -------------------------------------------- | ---------------------------------------- |
+| **Living Canvas**     | GenUI (json-render) with data bindings                 | Interactive components, app-tier when needed | Dashboards, working views over live data |
+| **Document Artifact** | Markdown digest, compiled to a house-style HTML render | None (scriptless by design)                  | Reports, plans, briefs, ideation docs    |
 
 Both are **born as artifacts**: they exist from first emission (status `draft`) rather than being promoted from a thread snapshot after the fact. Both belong to a space, not to the thread that created them, and both can be edited across threads via chat.
 
 ## Document Artifacts
 
-A Document Artifact is the simplest artifact kind — a formal document with two bodies emitted together in a single `emit_document` call:
+A Document Artifact is the simplest artifact kind — a formal document the agent authors as **markdown only** in a single `emit_document` call. The platform's **Document Compositor** compiles that markdown into the house-style HTML render server-side at emission:
 
-- **The markdown digest** — the canonical record. This is what other agents, mobile clients, and memory consolidation consume. It is complete on its own: everything the document says is in the digest.
-- **The HTML render** — the human-facing body. A single self-contained HTML file (inline CSS, system fonts, no external references, no scripts) styled from a genre plate.
+- **The markdown digest** — the canonical record and the only body the agent writes: optional frontmatter (eyebrow, date, context), prose, tables, and `tw:` component blocks. This is what other agents, mobile clients, and memory consolidation consume. It is complete on its own: everything the document says is in the digest.
+- **The HTML render** — the human-facing body, produced by the compiler, never by the model. A single self-contained HTML file (inline CSS, system fonts, no external references, no scripts) on the genre's house template, dark-mode aware, print-ready.
 
-The dual-body design means the pretty version and the machine-readable version can never drift: they are produced in the same call, versioned together, and stored under the same artifact identity.
+Because the render is compiled from the digest, the pretty version and the machine-readable version can never drift — and because no accepted path carries model-written HTML, an improvised, off-brand document is impossible by construction, no matter how the model is prompted.
 
-### Genres and plates
+### Genres
 
-v1 ships four document genres, each backed by a **plate** — a complete exemplar HTML document the agent imitates structurally when composing:
+v1 ships four document genres, each backed by a compiler-owned house template:
 
 - **Ideation** — divergent exploration with options and trade-offs
 - **Plan** — sequenced units of work with dependencies and verification
 - **Report** — findings with evidence, structured for review
 - **Brief** — short-form summary for a decision-maker
 
-Plates are pattern books, not prose style rules: the agent copies the plate's document anatomy (eyebrow, header, section structure, CSS variables, dark-mode handling) and fills it with the content of the current task. Plates ship as assets of the `document-composer` skill, so a tenant can restyle its documents by editing the plates in its skill catalog.
+### Components (`tw:` blocks)
 
-Plates are **enforced, not suggested**. Every plate carries a `tw-plate` marker identifying its genre, and DocSpector rejects an emission whose HTML was not authored on the matching plate — the agent is told to read the plate and re-emit on it. A model cannot ship an improvised, off-brand document no matter how it is prompted.
+Rich visuals are declarative fenced blocks in the markdown — the model writes the data, the compiler renders the pixels:
+
+- **`tw:stats`** — a strip of headline-number tiles.
+- **`tw:verdict-grid`** — a card grid of discrete questions with bold answers.
+- **`tw:chart`** — data drawn by the house SVG chart renderer (bar, line, donut, stat-strip, sparkline, meter, funnel), palette-locked to the house tokens and dark-mode aware. Every chart is paired with a collapsible data table automatically.
+
+The vocabulary is closed and versioned: an unknown component or malformed block rejects the emission with a diagnostic that names the supported set and shows a corrected example, so the agent self-repairs in one turn. There is no raw-HTML escape block, and inline HTML or SVG in the markdown is stripped at compile time.
 
 ### Where artifacts appear
 
@@ -51,7 +57,7 @@ Every artifact kind shares one rendering pattern in chat:
 
 Document Artifacts render at the **document tier**: a sandboxed iframe with `allow-scripts` stripped. A document can carry arbitrary styling but can never execute code. This is enforced twice:
 
-1. **At emission** — DocSpector, the preflight validator, rejects any HTML that is not fully self-contained: external `src`/`href`/`url()`/`@import` references, `javascript:` URLs, any `<script>` element, oversize bodies, missing dark-mode support, and renders not authored on the genre plate all fail with model-actionable diagnostics, so the agent corrects itself in-turn rather than shipping a broken document.
+1. **At compilation** — the compositor itself is the wall: model-authored HTML/SVG is stripped, external links degrade to text, and chart SVG is produced only by the house renderer. DocSpector, the runtime preflight, then re-verifies the compiled output (fully self-contained, scriptless, dark-mode, size ceilings) before anything is stored — a failure there is treated as a platform defect, not the agent's problem.
 2. **At render** — the sandbox attribute set guarantees that even HTML that slipped past validation cannot run scripts or reach the network.
 
 A document that genuinely needs interactivity is not the document tier's job — it graduates deliberately to the app tier (a Living Canvas or MCP app frame), which grants script execution under its own containment rules.
@@ -69,11 +75,11 @@ Clicking **Refresh** on a canvas just works, by whichever path the binding's cre
 After any successful refresh — headless or agent-mediated — the binding reads `GOOD` with fresh timestamps.
 
 <Aside type="note">
-  Document composition is delivered by the `document-composer` skill, which must
-  be published to the tenant's skill catalog, pass the skill trust pipeline, and
-  be installed on the agent. If documents come back as plain chat text instead
-  of plate-styled artifacts, check the skill's trust status first — see [Skills:
-  trust pipeline](/concepts/agents/skills/#the-trust-pipeline).
+  Document authoring guidance is delivered by the `document-composer` skill,
+  which must be published to the tenant's skill catalog, pass the skill trust
+  pipeline, and be installed on the agent. If documents come back as plain chat
+  text instead of house-styled artifacts, check the skill's trust status first —
+  see [Skills: trust pipeline](/concepts/agents/skills/#the-trust-pipeline).
 </Aside>
 
 ## Related pages

@@ -35,7 +35,7 @@ tags:
 
 Updating a default skill's content in `packages/workspace-defaults` and deploying everywhere did not update what agents actually read. During the THINK-177 rollout (2026-07-05), document-composer's plate templates gained a `tw-plate` marker that a new server-side DocSpector PLATE gate enforces. The plate change shipped through the dev pipeline and the canary.319 controller deploys to the TEI and McPherson customer stacks — every deploy succeeded — yet the S3 catalog copies and the materialized workspace copies of `skills/document-composer/references/plate-*.html` still held the old, unmarked content on all three stacks.
 
-This was a near-miss with real teeth: the PLATE gate rejects any render not authored on a marked plate. With stale unmarked plates in the workspace, the agent would copy the plate faithfully and *still* be rejected — document emission would have been soft-bricked on customer stacks. The content gate shipped, but the content it validates against never did.
+This was a near-miss with real teeth: the PLATE gate rejects any render not authored on a marked plate. With stale unmarked plates in the workspace, the agent would copy the plate faithfully and _still_ be rejected — document emission would have been soft-bricked on customer stacks. The content gate shipped, but the content it validates against never did.
 
 ## Symptoms
 
@@ -56,7 +56,7 @@ This was a near-miss with real teeth: the PLATE gate rejects any render not auth
 Three stacked causes, each sufficient to keep agents on stale content:
 
 1. **Seeder allowlist gap.** `document-composer` was not in `DEFAULT_CATALOG_SKILLS` in `packages/api/src/lib/skill-trust/seed-default-skills.ts`. The deploy-time seeder only republishes listed skills (artifact-builder, automation-loop-designer). Its sha-based idempotency is irrelevant when the slug is never even considered.
-2. **Install skips existing.** `installCatalogSkill` (`packages/api/src/lib/catalog-install.ts`) returns `already_installed` when the workspace folder exists. Since the runtime reads the *materialized* copy under `tenants/<slug>/agents/<agent-slug>/skills/<slug>/`, even a successfully republished + re-trusted + re-signed catalog leaves agents on stale content. `reinstallCatalogSkill` (`packages/api/src/lib/catalog-reinstall.ts`) re-materializes from the catalog and is the required second step.
+2. **Install skips existing.** `installCatalogSkill` (`packages/api/src/lib/catalog-install.ts`) returns `already_installed` when the workspace folder exists. Since the runtime reads the _materialized_ copy under `tenants/<slug>/agents/<agent-slug>/skills/<slug>/`, even a successfully republished + re-trusted + re-signed catalog leaves agents on stale content. `reinstallCatalogSkill` (`packages/api/src/lib/catalog-reinstall.ts`) re-materializes from the catalog and is the required second step.
 3. **Concurrency supersession skips path-gated CI.** The PR's own `deploy.yml` run was cancelled by concurrency supersession; the next run's `dorny/paths-filter` only saw its own commit's paths, so the `workspace_defaults`-gated Bootstrap job (`seed-workspace-defaults.ts`) never executed for the plates change. `gh workflow run deploy.yml` (workflow_dispatch) forces the Bootstrap job unconditionally.
 
 ## Solution
@@ -75,12 +75,17 @@ The one-off script must live **inside `packages/api`** (ESM, so top-level await 
 
 ```ts
 await seedDefaultCatalogSkills({
-  s3, bucket, tenantId, tenantSlug,
+  s3,
+  bucket,
+  tenantId,
+  tenantSlug,
   skills: [{ slug: "document-composer", autoGrant: true }],
 });
 // republish + re-trust the catalog is NOT enough — re-materialize the workspace copy:
 await reinstallCatalogSkill({
-  s3, bucket, tenantSlug,
+  s3,
+  bucket,
+  tenantSlug,
   targetPrefix: "tenants/<slug>/agents/<agent-slug>/",
   slug: "document-composer",
 });
@@ -100,9 +105,10 @@ Done:
 
 Remaining:
 
-- The seeder should **reinstall, not skip**, when the catalog `content_sha` changed — republishing without re-materializing is the silent half-update at the heart of this bug.
+- ~~The seeder should **reinstall, not skip**, when the catalog `content_sha` changed~~ — **fixed in #3408 (2026-07-06)**: `ensurePlatformAgentInstall`'s already-installed path now runs `reinstallCatalogSkill`, which no-ops when the installed ref sha matches the catalog sha and re-materializes (+ regenerates the manifest) when it doesn't. Live-proven during the THINK-154 customer cutover: the seeder logged "workspace copy was stale — re-materialized 9 files" on both customer stacks.
+- **New gotcha (THINK-154 cutover, 2026-07-06):** the manual seed one-off publishes from the LOCAL checkout's inlined workspace-defaults canon. Run it from a **stale checkout** and it silently reports "already current" while comparing old content to old content — the update never ships and nothing errors. Always run the one-off from a checkout at (or past) the commit that changed the skill content.
 - Supersession-cancelled runs need a sticky/dispatch mechanism for path-gated jobs (a superseding run's `dorny/paths-filter` only sees its own commit's paths). Until then, `gh workflow run deploy.yml` after a cancelled run whose paths mattered.
-- **Design rule:** any future "validate against skill asset X" gate must confirm X's distribution path exists and actually delivers updated content *before* the gate ships. Content gates and content distribution must ship together — a gate that outruns its content soft-bricks the feature it guards.
+- **Design rule:** any future "validate against skill asset X" gate must confirm X's distribution path exists and actually delivers updated content _before_ the gate ships. Content gates and content distribution must ship together — a gate that outruns its content soft-bricks the feature it guards.
 
 ## References
 
