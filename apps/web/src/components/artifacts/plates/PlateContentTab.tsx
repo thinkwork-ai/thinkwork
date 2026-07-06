@@ -325,7 +325,7 @@ function DivergenceMarker({
         onClick={onRevert}
         data-testid={`plate-section-revert-${field}`}
       >
-        <RotateCcw className="size-3" /> Revert to platform
+        <RotateCcw className="size-3" /> Revert to default
       </button>
     </div>
   );
