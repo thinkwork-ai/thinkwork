@@ -7,6 +7,7 @@ import {
   evalRuns,
   evalTestCases,
   tenants,
+  threads,
 } from "@thinkwork/database-pg/schema";
 import {
   buildEvalWorkerMessages,
@@ -120,6 +121,7 @@ function createFakeDb(dbState: FakeDbState) {
         if (table === evalTestCases) return [dbState.testCase];
         if (table === tenants) return [{ slug: "acme" }];
         if (table === evalReplayToolAllowlist) return dbState.replayOverrides;
+        if (table === threads) return [{ user_id: "owner-user-1" }];
         if (table === evalResults) {
           return dbState.insertedResults.map((row, index) => ({
             id: `result-${index + 1}`,
@@ -551,6 +553,9 @@ describe("eval-worker MCP replay tool overrides (U14)", () => {
       },
       { serverName: "docs--reader", toolName: "search", mode: "block" },
     ]);
+    // Synthetic (non-flagged) cases carry no replay requester — plugin
+    // OAuth servers keep the no-requester fail-closed drop (THINK-179).
+    expect(invokeMock.mock.calls[0][0].replayRequesterUserId).toBeNull();
   });
 });
 
@@ -852,6 +857,23 @@ describe("eval-worker flagged-thread replay (U8)", () => {
     expect(serialized).not.toContain("refunds are impossible");
     expect(state.insertedResults).toHaveLength(1);
     expect(state.insertedResults[0].input).toBe(FLAGGED_QUERY);
+  });
+
+  it("replays as the source thread's owner: requester id threads into the invoke (THINK-179)", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "refund policy: 30-day window",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(flaggedEvent());
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    // The fake db resolves threads.user_id = owner-user-1 for the case's
+    // source_thread_id — per-user OAuth MCP servers resolve as that user.
+    expect(invokeMock.mock.calls[0][0].replayRequesterUserId).toBe(
+      "owner-user-1",
+    );
   });
 
   it("reads replay history from the RUN snapshot only — never the live dataset payload", async () => {

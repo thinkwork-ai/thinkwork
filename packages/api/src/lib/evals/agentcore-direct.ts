@@ -354,6 +354,15 @@ export async function invokeAgentCoreForEval(input: {
   messagesHistory?: EvalReplayHistoryMessage[];
   /** Operator MCP tool overrides for replay (U14). Default-allow heuristic. */
   replayToolOverrides?: EvalReplayToolOverride[];
+  /**
+   * Flagged-thread replay identity (THINK-179): the SOURCE thread's
+   * owner. Passing it makes per-user OAuth MCP servers resolve exactly
+   * as that user's own chat turns would (same token path, same
+   * mint-once semantics — no new token minting; oauth_missing drops
+   * still apply when the owner holds no active token). Synthetic cases
+   * pass null/undefined and keep the no-requester fail-closed behavior.
+   */
+  replayRequesterUserId?: string | null;
 }): Promise<{
   output: string;
   durationMs: number;
@@ -408,6 +417,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   systemPrompt?: string | null;
   messagesHistory?: EvalReplayHistoryMessage[];
   replayToolOverrides?: EvalReplayToolOverride[];
+  replayRequesterUserId?: string | null;
 }): Promise<{
   output: string;
   durationMs: number;
@@ -421,6 +431,13 @@ async function invokeAgentCoreForEvalOnce(input: {
     thinkworkApiSecret: getApiAuthSecret(),
     appsyncApiKey: getAppsyncApiKey(),
     logPrefix: "[eval-worker]",
+    // Flagged-thread replay identity (THINK-179): the source thread's
+    // owner becomes the requester so per-user OAuth servers resolve the
+    // way that user's chat turns do. Undefined for synthetic cases —
+    // plugin OAuth servers then drop fail-closed exactly as before.
+    ...(input.replayRequesterUserId
+      ? { currentUserId: input.replayRequesterUserId }
+      : {}),
   });
   const agentcoreFunctionName = resolveRuntimeFunctionName(
     runtimeConfig.runtimeType,
