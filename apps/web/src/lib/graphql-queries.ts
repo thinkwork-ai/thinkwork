@@ -2729,3 +2729,96 @@ export const RejectRunbookRunMutation = gql`
     __typename
   }
 `;
+
+// ─── Document plates (THINK-153 U6+U7) ────────────────────────────────────
+// Tenant-scoped genre plates: platform library + tenant deltas/creations.
+// AWSJSON fields (tokensLight/tokensDark/overrides, palette*, preview draft
+// config) are JSON-encoded strings on the wire — JSON.parse on read,
+// JSON.stringify on write.
+
+export const DocumentPlatesListQuery = gql`
+  query DocumentPlatesList($tenantId: ID) {
+    documentPlates(tenantId: $tenantId) {
+      slug
+      displayName
+      useFor
+      eyebrow
+      titleSuffix
+      tokensLight
+      tokensDark
+      allowedDirectives
+      origin
+      hidden
+      customized
+      overrides
+    }
+  }
+`;
+
+export const DocumentPlatePreviewQuery = gql`
+  query DocumentPlatePreview(
+    $tenantId: ID
+    $slug: String!
+    $draftConfig: DocumentPlateDraftConfigInput
+  ) {
+    documentPlatePreview(
+      tenantId: $tenantId
+      slug: $slug
+      draftConfig: $draftConfig
+    ) {
+      html
+      diagnostics {
+        code
+        message
+      }
+    }
+  }
+`;
+
+export const TenantDocumentPaletteQuery = gql`
+  query TenantDocumentPalette($tenantId: ID) {
+    tenantDocumentPalette(tenantId: $tenantId) {
+      light
+      dark
+    }
+  }
+`;
+
+export const SaveDocumentPlateMutation = gql`
+  mutation SaveDocumentPlate($input: SaveDocumentPlateInput!) {
+    saveDocumentPlate(input: $input) {
+      slug
+      displayName
+      useFor
+      eyebrow
+      titleSuffix
+      tokensLight
+      tokensDark
+      allowedDirectives
+      origin
+      hidden
+      customized
+      overrides
+    }
+  }
+`;
+
+export const DeleteDocumentPlateMutation = gql`
+  mutation DeleteDocumentPlate($tenantId: ID, $slug: String!) {
+    deleteDocumentPlate(tenantId: $tenantId, slug: $slug) {
+      ok
+      error
+    }
+  }
+`;
+
+export const UpdateTenantDocumentPaletteMutation = gql`
+  mutation UpdateTenantDocumentPalette(
+    $input: UpdateTenantDocumentPaletteInput!
+  ) {
+    updateTenantDocumentPalette(input: $input) {
+      light
+      dark
+    }
+  }
+`;
