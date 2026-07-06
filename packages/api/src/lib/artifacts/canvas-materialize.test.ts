@@ -53,10 +53,12 @@ vi.mock("../../graphql/notify.js", () => ({
 
 vi.mock("../thread-turn-events.js", () => ({
   drizzleThreadTurnEventStore: () => ({}),
-  appendThreadTurnEvent: vi.fn((_store: unknown, input: Record<string, unknown>) => {
-    mocks.appended.push(input);
-    return Promise.resolve({ id: 1, seq: 7 });
-  }),
+  appendThreadTurnEvent: vi.fn(
+    (_store: unknown, input: Record<string, unknown>) => {
+      mocks.appended.push(input);
+      return Promise.resolve({ id: 1, seq: 7 });
+    },
+  ),
 }));
 
 import { materializeCanvasIntoThread } from "./canvas-materialize.js";

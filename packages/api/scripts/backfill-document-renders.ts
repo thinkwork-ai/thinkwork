@@ -40,6 +40,7 @@ import {
   type DocumentBackfillStore,
 } from "../src/lib/artifacts/document-backfill.js";
 import { pinDocumentHead } from "../src/lib/artifacts/document-emission.js";
+import { resolvePlate } from "../src/lib/artifacts/plate-registry.js";
 import {
   artifactContentKey,
   artifactRenderKey,
@@ -128,6 +129,7 @@ function makeStore(tenantSlug: string | null): DocumentBackfillStore {
         .where(and(documentFilter, eq(artifacts.tenant_id, tenantRows[0].id)));
       return rows as unknown as BackfillDocumentRow[];
     },
+    resolvePlate: (row) => resolvePlate(row.tenant_id, row.type),
     readDigest: (row) =>
       readArtifactPayloadFromS3({
         tenantId: row.tenant_id,

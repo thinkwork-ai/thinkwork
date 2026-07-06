@@ -42,9 +42,7 @@ vi.mock("../../graphql/utils.js", () => {
       return updateBuilder;
     }),
     where: vi.fn(() => updateBuilder),
-    returning: vi.fn(() =>
-      Promise.resolve(mocks.updateResults.shift() ?? []),
-    ),
+    returning: vi.fn(() => Promise.resolve(mocks.updateResults.shift() ?? [])),
   };
   const selectBuilder = {
     from: () => selectBuilder,
@@ -74,7 +72,15 @@ vi.mock("../../graphql/utils.js", () => {
 
 vi.mock("./payload-storage.js", () => ({
   artifactContentKey: vi.fn(
-    ({ tenantId, artifactId, revision }: { tenantId: string; artifactId: string; revision?: string }) =>
+    ({
+      tenantId,
+      artifactId,
+      revision,
+    }: {
+      tenantId: string;
+      artifactId: string;
+      revision?: string;
+    }) =>
       revision
         ? `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/content/${revision}.md`
         : `tenants/${tenantId}/artifact-payloads/artifacts/${artifactId}/content.md`,
@@ -198,7 +204,10 @@ describe("upsertDraftCanvasFromActivityEvent", () => {
       tenantId: TENANT_ID,
       threadId: THREAD_ID,
       agentId: AGENT_ID,
-      payload: { kind: "thread_json_render.ui_message_chunk", chunk: { not: "a part" } },
+      payload: {
+        kind: "thread_json_render.ui_message_chunk",
+        chunk: { not: "a part" },
+      },
     });
     expect(result).toBeNull();
     expect(mocks.inserts).toHaveLength(0);

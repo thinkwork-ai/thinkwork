@@ -314,6 +314,19 @@ function resolveFromLayers(input: {
 }
 
 /**
+ * Resolve a platform plate with NO tenant deltas — pure and synchronous.
+ * Serves tests, fixtures, and fallback paths that have no tenant context.
+ */
+export function resolvePlatformPlate(slug: string): ResolvedPlate | null {
+  return resolveFromLayers({
+    slug,
+    platform: getPlatformPlate(slug),
+    row: null,
+    tenantPalette: EMPTY_PALETTE,
+  });
+}
+
+/**
  * Resolve one plate for a tenant (KTD2). Returns null for an unknown slug —
  * callers own the rejection shape (emission: self-repair error; GraphQL:
  * not-found).
@@ -387,6 +400,28 @@ export function visiblePlateSummaries(
       displayName: p.displayName,
       useFor: p.useFor,
     }));
+}
+
+/**
+ * Emission-facing resolution (KTD3): resolves the plate AND carries the
+ * tenant's visible slugs so rejection diagnostics can name the valid set
+ * (R11) without a second round trip.
+ */
+export type EmissionPlateResolution =
+  | { ok: true; plate: ResolvedPlate; visibleSlugs: string[] }
+  | { ok: false; visibleSlugs: string[] };
+
+export async function resolvePlateForEmission(
+  tenantId: string,
+  slug: string,
+  store: PlateStore = drizzlePlateStore(),
+): Promise<EmissionPlateResolution> {
+  const all = await listPlates(tenantId, store);
+  const visibleSlugs = all.filter((p) => !p.hidden).map((p) => p.slug);
+  const plate = all.find((p) => p.slug === slug) ?? null;
+  return plate
+    ? { ok: true, plate, visibleSlugs }
+    : { ok: false, visibleSlugs };
 }
 
 // ---------------------------------------------------------------------------

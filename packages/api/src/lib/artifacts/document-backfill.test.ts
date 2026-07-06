@@ -10,6 +10,7 @@ import {
   type BackfillDocumentRow,
   type DocumentBackfillStore,
 } from "./document-backfill.js";
+import { resolvePlatformPlate } from "./plate-registry.js";
 import { DocumentEmissionConflict } from "./document-emission.js";
 
 const GOOD_DIGEST = "## Summary\n\nAll quiet on the western front.\n";
@@ -50,6 +51,7 @@ function makeStore(
   const pinFailures = new Set(options.pinFailures ?? []);
   const store: DocumentBackfillStore = {
     listDocuments: async () => rows,
+    resolvePlate: async (row) => resolvePlatformPlate(row.type),
     readDigest: async (row) => options.digests?.[row.id] ?? GOOD_DIGEST,
     writeRenderHead: async (row, html) => {
       state.headWrites.push({ id: row.id, html });
