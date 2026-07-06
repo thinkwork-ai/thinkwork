@@ -494,11 +494,12 @@ describe("capability write actions (sheet rows)", () => {
     });
     fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
     await waitFor(() => expect(grantMock).toHaveBeenCalled());
-    // A held gate (reason ≠ not_installed) is settled immediately — no ghost.
-    expect(editorProps()?.pendingSkillSlug).toBeNull();
+    // A held gate (reason ≠ not_installed) is settled immediately — no
+    // footer sync status.
+    expect(screen.queryByTestId("composer-sync-status")).toBeNull();
   });
 
-  it("post-attach S3 lag forwards a sync ghost to the editor, cleared when the row lands active", async () => {
+  it("post-attach S3 lag shows the footer sync status, cleared when the row lands active", async () => {
     grantMock.mockResolvedValue(
       grantResult({
         capabilityClass: "skill",
@@ -516,10 +517,14 @@ describe("capability write actions (sheet rows)", () => {
       (editorProps()?.onAddSkill as () => void)();
     });
     fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
-    // The sync window forwards the affected slug to the editor as a ghost.
+    // The sync window surfaces in the footer status (lower right), NOT as a
+    // ghost node in the tree.
     await waitFor(() =>
-      expect(editorProps()?.pendingSkillSlug).toBe("expenses"),
+      expect(
+        screen.getByTestId("composer-sync-status").textContent,
+      ).toContain("Syncing skill expenses"),
     );
+    expect(editorProps()).not.toHaveProperty("pendingSkillSlug", "expenses");
 
     queryState.inspector = {
       data: inspection({
@@ -538,7 +543,9 @@ describe("capability write actions (sheet rows)", () => {
       error: undefined,
     };
     view.rerender(<SettingsCapabilities />);
-    await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByTestId("composer-sync-status")).toBeNull(),
+    );
   });
 
   it("a granted extension version that left the registry shows a disabled detach (plan U8)", () => {
