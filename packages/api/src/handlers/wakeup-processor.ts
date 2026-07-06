@@ -1931,7 +1931,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     mcpServers.push("restaurant");
   }
 
-  // Build MCP configs from agent_mcp_servers + tenant_mcp_servers.
+  // Build MCP configs from workspace files + the tenant_mcp_servers registry.
   // Dispatch identity (plan 2026-06-12-001 U6): plugin-managed servers
   // gate on the wakeup's honest invoker (`requested_by_actor_type='user'`
   // → requested_by_actor_id, i.e. the thread/job owner). System/agent

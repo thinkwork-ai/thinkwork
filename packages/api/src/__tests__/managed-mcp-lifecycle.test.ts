@@ -183,13 +183,10 @@ describe("Twenty managed MCP lifecycle", () => {
       status: "installed",
     });
 
-    expect(writes).toContainEqual(
-      expect.objectContaining({
-        agent_id: "agent-platform",
-        tenant_id: "tenant-1",
-        mcp_server_id: "server-1",
-        enabled: true,
-      }),
+    // Retired table: the platform-agent assignment is workspace files (the
+    // bucket-gated materialize path), never an agent_mcp_servers insert.
+    expect(writes).not.toContainEqual(
+      expect.objectContaining({ agent_id: expect.anything() }),
     );
   });
 });

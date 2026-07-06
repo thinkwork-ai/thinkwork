@@ -2,6 +2,13 @@
  * Capability-folder backfill (THINK-173 plan U11 — R13, R15, R17, R19,
  * R20; AE4).
  *
+ * DEPRECATION BOUNDARY: this module is the SOLE remaining reader of
+ * `agent_mcp_servers` (see the retired-table note in
+ * packages/database-pg/src/schema/mcp-servers.ts). It migrates
+ * pre-retirement rows into workspace folders on stages that have not cut
+ * over yet. Once every customer stage has run `--apply --flip`, delete
+ * this read, the Drizzle def, and then (deploy-first) the table.
+ *
  * One idempotent, re-runnable per-tenant pipeline with explicitly gated
  * phases, always returning a single structured report:
  *

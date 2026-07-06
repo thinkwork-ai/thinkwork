@@ -83,6 +83,8 @@ const {
   snapshotSpy,
   removeForAgentsSpy,
   snapshotResult,
+  writeConnectionsSpy,
+  removeConnectionsSpy,
 } = vi.hoisted(() => ({
   reconcileForAgentsSpy: vi.fn(async () => 0),
   snapshotSpy: vi.fn(
@@ -92,11 +94,17 @@ const {
   snapshotResult: {
     value: null as { slug: string; agentIds: string[] } | null,
   },
+  writeConnectionsSpy: vi.fn(async () => undefined),
+  removeConnectionsSpy: vi.fn(async () => undefined),
 }));
 vi.mock("../../mcp/assignment-state.js", () => ({
-  reconcileMcpAssignmentFoldersForAgents: reconcileForAgentsSpy,
+  materializeMcpAssignmentFoldersForAgents: reconcileForAgentsSpy,
   snapshotMcpServerAttachment: snapshotSpy,
   removeMcpAssignmentFoldersForAgents: removeForAgentsSpy,
+}));
+vi.mock("../../capabilities/reconcile-connection-folders.js", () => ({
+  writeConnectionFoldersForAgents: writeConnectionsSpy,
+  removeConnectionFoldersForAgents: removeConnectionsSpy,
 }));
 
 import { tenantMcpServers, userMcpTokens } from "@thinkwork/database-pg/schema";
@@ -166,13 +174,21 @@ describe("provisionPluginMcpComponent", () => {
       status: "approved",
     });
     expect(insertCalls[0]!.url_hash).toEqual(expect.any(String));
-    // Platform agent assignment row
-    expect(insertCalls[1]).toMatchObject({
-      agent_id: "agent-1",
-      tenant_id: "tenant-1",
-      mcp_server_id: "server-1",
-      enabled: true,
+    // Platform agent assignment is workspace files, not a DB row (retired).
+    expect(insertCalls).toHaveLength(1);
+    expect(reconcileForAgentsSpy).toHaveBeenCalledWith({
+      agentIds: ["agent-1"],
+      tenantId: "tenant-1",
+      registryServerId: "server-1",
     });
+    expect(writeConnectionsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentIds: ["agent-1"],
+        tenantId: "tenant-1",
+        registryServerId: "server-1",
+        signedBy: "plugin-reconciler",
+      }),
+    );
   });
 
   it("adopts an existing manual row with the same URL instead of inserting a duplicate", async () => {
@@ -231,15 +247,20 @@ describe("provisionPluginMcpComponent", () => {
       plugin_install_id: "install-1",
       status: "approved",
     });
-    // No tenant_mcp_servers insert — only the agent-assignment upsert.
-    expect(insertCalls).toHaveLength(1);
-    expect(insertCalls[0]).toMatchObject({ mcp_server_id: "server-9" });
+    // No inserts at all — the row is repaired in place and the agent
+    // assignment is workspace files (retired table).
+    expect(insertCalls).toHaveLength(0);
+    expect(reconcileForAgentsSpy).toHaveBeenCalledWith({
+      agentIds: ["agent-1"],
+      tenantId: "tenant-1",
+      registryServerId: "server-9",
+    });
   });
 
   it("materializes workspace assignment files for the assigned platform agents", async () => {
-    // Regression for the Composer U9 gap: the plugin server must materialize
-    // its `mcp/<slug>/.assignment.json` (via a whole-set reconcile) or it
-    // silently drops from any agent that already has other mcp/ files.
+    // The workspace files ARE the assignment: the plugin server must
+    // materialize `mcp/<slug>/.assignment.json` + the signed connection
+    // folder or it never reaches the flag-on manifest.
     selectQueue.push([]); // no existing plugin row
     selectQueue.push([]); // no manual row with the same endpoint
     returningQueue.push([{ id: "server-1" }]);
@@ -256,7 +277,14 @@ describe("provisionPluginMcpComponent", () => {
     expect(reconcileForAgentsSpy).toHaveBeenCalledWith({
       agentIds: ["agent-1", "agent-2"],
       tenantId: "tenant-1",
+      registryServerId: "server-1",
     });
+    expect(writeConnectionsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentIds: ["agent-1", "agent-2"],
+        registryServerId: "server-1",
+      }),
+    );
   });
 
   it("namespaces slugs as <pluginKey>--<componentKey>", () => {
@@ -781,11 +809,12 @@ describe("tenant service credential auth (THNK-50 U5)", () => {
       plugin_install_id: "install-n8n",
       status: "approved",
     });
-    expect(insertCalls[1]).toMatchObject({
-      agent_id: "agent-default",
-      tenant_id: "tenant-1",
-      mcp_server_id: "server-n8n",
-      enabled: true,
+    // Agent assignment is workspace files, not a DB row (retired table).
+    expect(insertCalls).toHaveLength(1);
+    expect(reconcileForAgentsSpy).toHaveBeenCalledWith({
+      agentIds: ["agent-default"],
+      tenantId: "tenant-1",
+      registryServerId: "server-n8n",
     });
     expect(JSON.stringify(insertCalls[0])).not.toContain("n8n_token_value");
   });

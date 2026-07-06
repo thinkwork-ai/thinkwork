@@ -527,6 +527,12 @@ export async function teardownPluginMcpComponent(args: {
       const { removeMcpAssignmentFoldersForAgents } =
         await import("../../mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
+      const { removeConnectionFoldersForAgents } =
+        await import("../../capabilities/reconcile-connection-folders.js");
+      await removeConnectionFoldersForAgents({
+        agentIds: folderSnapshot.agentIds,
+        registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+      });
     } catch (err) {
       console.warn(
         "[plugin-mcp] MCP workspace-folder removal failed:",
@@ -548,39 +554,32 @@ async function ensurePluginMcpDefaultAgentAssignments(
       and(eq(agents.tenant_id, tenantId), eq(agents.is_platform_default, true)),
     )) as { id: string }[];
 
-  for (const agent of platformAgents) {
-    await db
-      .insert(agentMcpServers)
-      .values({
-        agent_id: agent.id,
-        tenant_id: tenantId,
-        mcp_server_id: serverId,
-        enabled: true,
-      })
-      .onConflictDoUpdate({
-        target: [agentMcpServers.agent_id, agentMcpServers.mcp_server_id],
-        set: { enabled: true, updated_at: new Date() },
-      });
-  }
-
-  // Workspace-folder parity (Composer U9 follow-up), AFTER the DB upserts.
-  // Without this the plugin server materializes NO `mcp/<slug>/.assignment.json`
-  // and silently drops from any agent that already has other mcp/ files (the
-  // non-empty listing wins in buildMcpConfigs with no DB fallback). Reconcile
-  // the WHOLE attached set per agent so the new server AND pre-existing DB-only
-  // attachments both get files. Best-effort: a failure logs and never fails the
-  // provision the DB row already committed. Bucket-gated — a no-op in
-  // DB-mocked unit tests.
+  // The workspace files ARE the assignment (agent_mcp_servers retired):
+  // materialize the plugin server's `mcp/<slug>/.assignment.json` plus the
+  // signed `connections/<slug>/` folder on each platform agent — without
+  // these the plugin server never reaches the flag-on manifest. Best-effort:
+  // a failure logs and never fails the provision; the next reconcile
+  // converges. Bucket-gated — a no-op in DB-mocked unit tests.
+  const agentIds = platformAgents.map((agent) => agent.id);
   try {
-    const { reconcileMcpAssignmentFoldersForAgents } =
+    const { materializeMcpAssignmentFoldersForAgents } =
       await import("../../mcp/assignment-state.js");
-    await reconcileMcpAssignmentFoldersForAgents({
-      agentIds: platformAgents.map((agent) => agent.id),
+    await materializeMcpAssignmentFoldersForAgents({
+      agentIds,
       tenantId,
+      registryServerId: serverId,
+    });
+    const { writeConnectionFoldersForAgents } =
+      await import("../../capabilities/reconcile-connection-folders.js");
+    await writeConnectionFoldersForAgents({
+      agentIds,
+      tenantId,
+      registryServerId: serverId,
+      signedBy: "plugin-reconciler",
     });
   } catch (err) {
     console.error(
-      "[plugin-mcp] MCP workspace-folder materialization failed (agent_mcp_servers rows remain authoritative):",
+      "[plugin-mcp] MCP workspace-folder materialization failed:",
       err instanceof Error ? err.message : err,
     );
   }

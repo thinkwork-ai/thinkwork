@@ -15,9 +15,9 @@
  *      compat with mcp-configs.ts, which today reads the plaintext.
  *
  * After this handler succeeds, agents are still NOT subscribed — the
- * admin still needs to assign the server to each agent via
- * agent_mcp_servers (either through the admin SPA, GraphQL, or a
- * future agent-assignment endpoint). This is intentional: provisioning
+ * admin still needs to assign the server to each agent (workspace
+ * `mcp/<slug>/` folder via the admin SPA, GraphQL, or the REST assign
+ * endpoint). This is intentional: provisioning
  * the tenant surface and enabling it per-agent are separate decisions.
  *
  * Routes:

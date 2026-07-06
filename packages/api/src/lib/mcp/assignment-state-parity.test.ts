@@ -1,17 +1,14 @@
 /**
- * MCP assignment-folder PARITY helpers (Composer U9 follow-up).
- *
- * These back the non-grantCapability writers of `agent_mcp_servers` (plugin /
- * managed provisioning, direct REST assign, server teardown) so a server can
- * never silently drop from — or ghost onto — an agent when the workspace
- * `mcp/` file listing (not the DB row) is what `buildMcpConfigs` reads.
+ * MCP assignment-folder helpers for the non-Composer writers
+ * (post-retirement: the workspace files ARE the assignment state).
  *
  * Contract under test:
- *  - `reconcileMcpAssignmentFoldersForAgents` writes files for every attached
- *    server of each agent (the backfill that keeps an agent off a PARTIAL file
- *    set), and is bucket-gated.
- *  - `snapshotMcpServerAttachment` returns {slug, agentIds} for a server, and
- *    returns null (no DB read) when no workspace bucket is configured.
+ *  - `materializeMcpAssignmentFoldersForAgents` writes one server's
+ *    `.assignment.json` per agent from the REGISTRY row alone (no
+ *    assignment-table read — the table is retired), and is bucket-gated.
+ *  - `snapshotMcpServerAttachment` returns {slug, agentIds} where agentIds
+ *    is ALL tenant agents (removal is a no-op for agents without the
+ *    folder), and returns null (no DB read) with no workspace bucket.
  *  - `removeMcpAssignmentFoldersForAgents` / `removeMcpAssignmentForAgentServer`
  *    delete the per-agent `mcp/<slug>/` folders.
  */
@@ -25,7 +22,6 @@ const { store, state, putSpy, deleteSpy, bucketRef, TABLES } = vi.hoisted(
       AGENTS: { __table: "agents" },
       TENANTS: { __table: "tenants" },
       TENANT_MCP: { __table: "tenantMcpServers" },
-      AGENT_MCP: { __table: "agentMcpServers" },
     },
     state: {
       // resolveAgentWorkspacePrefix reads agents then tenants.
@@ -35,15 +31,24 @@ const { store, state, putSpy, deleteSpy, bucketRef, TABLES } = vi.hoisted(
         tenant_id: "t-1",
       },
       tenant: { slug: "acme" },
-      // resolveMcpServerSlug reads the registry row.
-      server: { slug: "github", name: "GitHub" } as {
+      // resolveMcpServerSlug + materialize read the registry row.
+      server: {
+        id: "srv-1",
+        slug: "github",
+        name: "GitHub",
+        transport: "streamable-http",
+        auth_type: "none",
+        auth_config: null,
+      } as {
+        id: string;
         slug: string | null;
         name: string;
+        transport: string | null;
+        auth_type: string | null;
+        auth_config: unknown;
       } | null,
-      // snapshot reads agentMcpServers (terminal where).
-      attachedAgentIds: [] as string[],
-      // reconcile reads the innerJoin attached set.
-      attachedJoin: [] as unknown[],
+      // snapshot enumerates the tenant's agents (terminal where).
+      tenantAgentIds: [] as string[],
     },
     putSpy: vi.fn<(key: string) => void>(),
     deleteSpy: vi.fn<(key: string) => void>(),
@@ -58,26 +63,20 @@ function limitFor(table: unknown): unknown[] {
   return [];
 }
 function whereFor(table: unknown): unknown[] {
-  if (table === TABLES.AGENT_MCP)
-    return state.attachedAgentIds.map((agent_id) => ({ agent_id }));
+  if (table === TABLES.AGENTS)
+    return state.tenantAgentIds.map((agent_id) => ({ agent_id }));
   return [];
 }
 
 vi.mock("../../graphql/utils.js", () => {
   const makeChain = () => {
     let table: unknown;
-    let joined = false;
     const chain: Record<string, unknown> = {
       from(t: unknown) {
         table = t;
         return chain;
       },
-      innerJoin() {
-        joined = true;
-        return chain;
-      },
       where() {
-        if (joined) return Promise.resolve(state.attachedJoin);
         return {
           limit: () => Promise.resolve(limitFor(table)),
           then: (res: (v: unknown[]) => void, rej: (e: unknown) => void) =>
@@ -99,10 +98,6 @@ vi.mock("../../graphql/utils.js", () => {
     tenantMcpServers: TABLES.TENANT_MCP,
   };
 });
-
-vi.mock("@thinkwork/database-pg/schema", () => ({
-  agentMcpServers: TABLES.AGENT_MCP,
-}));
 
 vi.mock("@thinkwork/runtime-config", () => ({
   getConfig: () => bucketRef.value,
@@ -160,7 +155,7 @@ const fakeS3 = {
 
 import {
   mcpAssignmentStateKey,
-  reconcileMcpAssignmentFoldersForAgents,
+  materializeMcpAssignmentFoldersForAgents,
   removeMcpAssignmentForAgentServer,
   removeMcpAssignmentFoldersForAgents,
   snapshotMcpServerAttachment,
@@ -175,65 +170,62 @@ beforeEach(() => {
   deleteSpy.mockClear();
   state.agent = { slug: "ada", workspace_folder_name: null, tenant_id: "t-1" };
   state.tenant = { slug: "acme" };
-  state.server = { slug: "github", name: "GitHub" };
-  state.attachedAgentIds = [];
-  state.attachedJoin = [];
+  state.server = {
+    id: "srv-1",
+    slug: "github",
+    name: "GitHub",
+    transport: "streamable-http",
+    auth_type: "none",
+    auth_config: null,
+  };
+  state.tenantAgentIds = [];
   bucketRef.value = "workspace-bucket";
 });
 
-describe("reconcileMcpAssignmentFoldersForAgents (attach backfill)", () => {
-  it("materializes the whole attached set for the agent (dropped-server backfill)", async () => {
-    // The agent already has server-a attached in the DB; a fresh server-b was
-    // just added. Reconcile must write files for BOTH so server-b does not
-    // drop under a partial file set.
-    state.attachedJoin = [
-      {
-        registryId: "srv-a",
-        slug: "server-a",
-        name: "Server A",
-        transport: "streamable-http",
-        auth_type: "none",
-        auth_config: null,
-        config: null,
-        enabled: true,
-      },
-      {
-        registryId: "srv-b",
-        slug: "lastmile--crm",
-        name: "LastMile CRM",
-        transport: "streamable-http",
-        auth_type: "oauth",
-        auth_config: null,
-        config: null,
-        enabled: true,
-      },
-    ];
-
-    const written = await reconcileMcpAssignmentFoldersForAgents(
-      { agentIds: ["agent-1"], tenantId: "t-1" },
+describe("materializeMcpAssignmentFoldersForAgents (attach)", () => {
+  it("writes the server's .assignment.json for each agent from the registry row", async () => {
+    const written = await materializeMcpAssignmentFoldersForAgents(
+      { agentIds: ["agent-1"], tenantId: "t-1", registryServerId: "srv-1" },
       DEPS,
     );
 
-    expect(written).toBe(2);
-    expect(store.has(mcpAssignmentStateKey(ADA, "server-a"))).toBe(true);
-    expect(store.has(mcpAssignmentStateKey(ADA, "lastmile--crm"))).toBe(true);
+    expect(written).toBe(1);
+    const key = mcpAssignmentStateKey(ADA, "github");
+    expect(store.has(key)).toBe(true);
+    const parsed = JSON.parse(store.get(key)!) as {
+      slug: string;
+      registryServerId: string;
+      transport?: string;
+    };
+    expect(parsed.slug).toBe("github");
+    expect(parsed.registryServerId).toBe("srv-1");
+    expect(parsed.transport).toBe("streamable-http");
   });
 
   it("is bucket-gated: no bucket → no DB read, no writes", async () => {
     bucketRef.value = null;
-    const written = await reconcileMcpAssignmentFoldersForAgents(
-      { agentIds: ["agent-1"], tenantId: "t-1" },
+    const written = await materializeMcpAssignmentFoldersForAgents(
+      { agentIds: ["agent-1"], tenantId: "t-1", registryServerId: "srv-1" },
       // No bucket in deps either — falls through to workspaceBucket() → null.
       { s3: fakeS3 as never },
     );
     expect(written).toBe(0);
     expect(putSpy).not.toHaveBeenCalled();
   });
+
+  it("returns 0 when the registry row is gone", async () => {
+    state.server = null;
+    const written = await materializeMcpAssignmentFoldersForAgents(
+      { agentIds: ["agent-1"], tenantId: "t-1", registryServerId: "srv-x" },
+      DEPS,
+    );
+    expect(written).toBe(0);
+  });
 });
 
 describe("snapshotMcpServerAttachment", () => {
-  it("returns the server slug + attached agent ids", async () => {
-    state.attachedAgentIds = ["agent-1", "agent-2"];
+  it("returns the server slug + ALL tenant agent ids (folder removal is idempotent)", async () => {
+    state.tenantAgentIds = ["agent-1", "agent-2"];
     const snap = await snapshotMcpServerAttachment(
       { tenantId: "t-1", registryServerId: "srv-1" },
       DEPS,
