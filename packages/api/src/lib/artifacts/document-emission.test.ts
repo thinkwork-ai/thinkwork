@@ -48,6 +48,7 @@ interface Recorded {
   pins: Array<Record<string, unknown>>;
   cards: Array<Record<string, unknown>>;
   waiverWrites: Array<Record<string, unknown>>;
+  memoryIngests: Array<Record<string, unknown>>;
 }
 
 function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
@@ -61,6 +62,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     pins: [],
     cards: [],
     waiverWrites: [],
+    memoryIngests: [],
   };
   const row: DocumentRow = {
     id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
@@ -107,6 +109,9 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     pinDocumentHead: vi.fn(async (input) => {
       recorded.pins.push(input as unknown as Record<string, unknown>);
       return { headVersion: 1, contentHash: "hash", pinned: true };
+    }),
+    ingestDocumentMemory: vi.fn(async (input) => {
+      recorded.memoryIngests.push(input as unknown as Record<string, unknown>);
     }),
     appendCardEvent: vi.fn(async (input) => {
       recorded.cards.push(input as unknown as Record<string, unknown>);
@@ -321,6 +326,78 @@ describe("handleDocumentEmission", () => {
     });
     const result = await emit(VALID_DOCUMENT, deps);
     expect(result.body.ok).toBe(true);
+  });
+});
+
+describe("documents-as-memory ingest (THINK-152 / THINK-193 P3)", () => {
+  it("draft emission ingests the digest with acting user and no space", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body.ok).toBe(true);
+    expect(recorded.memoryIngests).toHaveLength(1);
+    const ingest = recorded.memoryIngests[0];
+    expect(ingest.artifactId).toBe(
+      deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+    );
+    expect(ingest.genre).toBe("report");
+    expect(ingest.title).toBe("Q3 Report");
+    expect(ingest.digestMarkdown).toBe(VALID_DOCUMENT.digestMarkdown);
+    expect(ingest.status).toBe("draft");
+    expect(ingest.actingUserId).toBe(USER_ID);
+    expect(ingest.spaceId).toBeNull();
+    expect(typeof ingest.emittedAt).toBe("string");
+  });
+
+  it("finalize-with-space ingests with the space owner and final status", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+    );
+    expect(result.body.ok).toBe(true);
+    expect(recorded.memoryIngests).toHaveLength(1);
+    const ingest = recorded.memoryIngests[0];
+    expect(ingest.status).toBe("final");
+    expect(ingest.headVersion).toBe(1);
+    expect(ingest.spaceId).toBe(SPACE_ID);
+  });
+
+  it("a re-emitted draft of a space-assigned document keeps the row's space", async () => {
+    const { deps, recorded } = makeDeps();
+    const spacedRow: DocumentRow = {
+      id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+      tenant_id: TENANT_ID,
+      thread_id: THREAD_ID,
+      space_id: SPACE_ID,
+      status: "final",
+      head_version: 2,
+      head_write_seq: 3,
+      metadata: { kind: "document", genre: "report", documentId: "doc-1" },
+    };
+    deps.loadDocumentRow = vi.fn(async () => spacedRow);
+    await emit(VALID_DOCUMENT, deps);
+    expect(recorded.memoryIngests[0].spaceId).toBe(SPACE_ID);
+  });
+
+  it("memory ingest failure never fails the emission (best-effort)", async () => {
+    const { deps, recorded } = makeDeps({
+      ingestDocumentMemory: vi.fn(async () => {
+        throw new Error("hindsight down");
+      }),
+    });
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body.ok).toBe(true);
+    expect(recorded.cards).toHaveLength(1);
+  });
+
+  it("a rejected emission never ingests memory", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(
+      { ...VALID_DOCUMENT, genre: "not-a-genre" },
+      deps,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(recorded.memoryIngests).toHaveLength(0);
   });
 });
 
