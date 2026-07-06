@@ -222,6 +222,7 @@ export function SettingsGitRoutineDetail({
       defaultOpenFile={files[0]?.path}
       readOnly
       bordered={false}
+      resizable={false}
       className="h-full"
       managedSectionHeadings={[]}
       loadingSlot={<LoadingShimmer />}
