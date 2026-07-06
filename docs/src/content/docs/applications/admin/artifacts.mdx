@@ -5,7 +5,7 @@ description: Tenant-wide gallery of agent-produced artifacts — living canvases
 
 import { Aside } from "@astrojs/starlight/components";
 
-Artifacts are durable, named outputs agents produce during a turn — the deliverable, not the conversation about it. The Artifacts page is the tenant-wide gallery for browsing them; the artifact detail page is the full render with version history. For the underlying model (born-as-artifact, dual bodies, plates, bindings, the trust tiers), see [Concepts: Artifacts](/concepts/artifacts/).
+Artifacts are durable, named outputs agents produce during a turn — the deliverable, not the conversation about it. The Artifacts page is the tenant-wide gallery for browsing them; the artifact detail page is the full render with version history. For the underlying model (born-as-artifact, compiled documents, bindings, the trust tiers), see [Concepts: Artifacts](/concepts/artifacts/).
 
 **Routes:** `/artifacts` (list) · `/artifacts/<id>` (detail)
 
@@ -13,11 +13,11 @@ Artifacts are durable, named outputs agents produce during a turn — the delive
 
 `Artifact.type` is an **open string**, not an enum — plugins can mint their own kinds, and the UI renders every kind with a type badge. The types you will commonly see:
 
-| Type                                  | Produced by                                                          |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| `DATA_VIEW`                           | Living Canvases — GenUI widgets with data bindings                    |
-| `REPORT`, `PLAN`, `BRIEF`, `IDEATION` | Document Artifacts — dual-body (markdown digest + plate-styled HTML) |
-| plugin-defined kinds                  | Application plugins; rendered with the generic detail view            |
+| Type                                  | Produced by                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| `DATA_VIEW`                           | Living Canvases — GenUI widgets with data bindings                        |
+| `REPORT`, `PLAN`, `BRIEF`, `IDEATION` | Document Artifacts — agent-authored markdown compiled to house-style HTML |
+| plugin-defined kinds                  | Application plugins; rendered with the generic detail view                |
 
 ## The list view
 
@@ -26,7 +26,7 @@ A searchable table of every saved artifact in the tenant (drafts behind an "Incl
 ## The detail page
 
 - **Living Canvas** — chrome-free canvas render with muted header icons: **Refresh data** (when the canvas has bindings) and **Pin version**. Version history lists pinned versions with a read-only viewer.
-- **Document Artifact** — the plate-styled HTML render in a sandboxed, scriptless frame, plus version history.
+- **Document Artifact** — the compiled house-style HTML render in a sandboxed, scriptless frame, plus version history.
 - **Other kinds** — generic metadata view with the raw content when renderable.
 
 **Refresh just works:** tenant-scoped bindings refresh headlessly in seconds; a per-user connector binding refreshes under the clicking owner's own stored connection. Only a non-owner viewing someone else's per-user widget is asked to run the refresh through the agent. See [Concepts: Artifacts — Living Canvases and data refresh](/concepts/artifacts/#living-canvases-and-data-refresh).
@@ -37,7 +37,7 @@ Every emission renders as prose plus a compact **artifact card** at the end of t
 
 ## How artifacts get created
 
-Agents emit artifacts mid-turn (`emit_json_render_ui` for canvases, `emit_document` for documents). Both are **born as artifacts**: a draft row exists from first emission, and saving/finalizing flips status and pins versions. Emission is validated server-side — documents pass DocSpector (self-contained, scriptless, dual-theme, authored on the genre plate) or the agent is rejected in-turn and corrects itself.
+Agents emit artifacts mid-turn (`emit_json_render_ui` for canvases, `emit_document` for documents). Both are **born as artifacts**: a draft row exists from first emission, and saving/finalizing flips status and pins versions. Documents are authored as markdown only — the platform's Document Compositor renders the house-style HTML server-side, and DocSpector re-verifies the compiled output (self-contained, scriptless, dual-theme, size ceilings) before it is stored. Invalid component blocks are rejected in-turn with a corrected example so the agent self-repairs.
 
 The admin UI does not create or edit artifact content directly — artifacts are an agent-output primitive. Operators can save/pin canvases and finalize documents through the detail page actions.
 
@@ -48,6 +48,6 @@ The admin UI does not create or edit artifact content directly — artifacts are
 
 ## Related pages
 
-- [Concepts: Artifacts](/concepts/artifacts/) — the model: kinds, plates, bindings, trust tiers
+- [Concepts: Artifacts](/concepts/artifacts/) — the model: kinds, genres, components, bindings, trust tiers
 - [Threads](/applications/web/threads/) — where artifacts are born and edited via chat
 - [Automations (concept)](/concepts/automations/) — automations can produce artifacts as their output
