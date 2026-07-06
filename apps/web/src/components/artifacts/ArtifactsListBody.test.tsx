@@ -87,6 +87,13 @@ function bodyRows(): HTMLElement[] {
   );
 }
 
+function openSearch(): HTMLInputElement {
+  fireEvent.click(screen.getByRole("button", { name: "Search artifacts" }));
+  return screen.getByRole("textbox", {
+    name: "Search artifacts",
+  }) as HTMLInputElement;
+}
+
 describe("ArtifactsListBody", () => {
   it("renders an empty state message when items is empty", () => {
     render(<ArtifactsListBody items={[]} />);
@@ -122,7 +129,7 @@ describe("ArtifactsListBody", () => {
 
   it("filters by title text in the search input", () => {
     render(<ArtifactsListBody items={items} />);
-    const search = screen.getByTestId("artifacts-search") as HTMLInputElement;
+    const search = openSearch();
     fireEvent.change(search, { target: { value: "lastmile" } });
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
@@ -131,19 +138,23 @@ describe("ArtifactsListBody", () => {
 
   it("filters by modelId text even when title doesn't contain it", () => {
     render(<ArtifactsListBody items={items} />);
-    const search = screen.getByTestId("artifacts-search") as HTMLInputElement;
+    const search = openSearch();
     fireEvent.change(search, { target: { value: "sonnet" } });
     const rows = bodyRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]?.textContent).toMatch(/Austin Map/);
   });
 
-  it("renders the toolbar with search and no kind tabs/dropdown", () => {
+  it("renders the toolbar with collapsed search and no kind tabs/dropdown", () => {
     render(<ArtifactsListBody items={items} />);
     const toolbar = screen.getByTestId("artifacts-toolbar");
+    // Work Items convention: search is a collapsed icon button until opened.
     expect(
-      toolbar.querySelector('[data-testid="artifacts-search"]'),
+      screen.getByRole("button", { name: "Search artifacts" }),
     ).not.toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: "Search artifacts" }),
+    ).toBeNull();
     // Artifacts has a single kind today — the All/Apps tabs and the kind
     // dropdown were removed.
     expect(toolbar.querySelector('[data-testid="artifacts-tabs"]')).toBeNull();
@@ -174,35 +185,26 @@ describe("ArtifactsListBody", () => {
   describe("operator user-ID filter", () => {
     it("hides the filter for a default (non-operator) viewer", () => {
       render(<ArtifactsListBody items={items} />);
-      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
     });
 
     it("hides the filter for an explicit non-operator", () => {
       render(
         <ArtifactsListBody items={items} isOperator={false} roleResolved />,
       );
-      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
     });
 
-    it("shows the filter for a resolved operator", () => {
+    it("shows the token filter for a resolved operator", () => {
       render(<ArtifactsListBody items={items} isOperator roleResolved />);
-      expect(screen.getByTestId("artifacts-user-filter-input")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Filter" })).not.toBeNull();
     });
 
     it("hides the filter until the role resolves (no operator-UI flash)", () => {
       render(
         <ArtifactsListBody items={items} isOperator roleResolved={false} />,
       );
-      expect(screen.queryByTestId("artifacts-user-filter")).toBeNull();
-    });
-
-    it("lets an operator type a user ID into the filter", () => {
-      render(<ArtifactsListBody items={items} isOperator roleResolved />);
-      const input = screen.getByTestId(
-        "artifacts-user-filter-input",
-      ) as HTMLInputElement;
-      fireEvent.change(input, { target: { value: "user-123" } });
-      expect(input.value).toBe("user-123");
+      expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
     });
   });
 });

@@ -541,6 +541,8 @@ context: Sample document — compiled to validate and preview this plate
 
 This is a representative document compiled with the **${plate.displayName}** plate. It exercises the elements a real document uses: prose, emphasis, lists, a table, and the plate's component vocabulary, so what you see is what documents in this plate will look like.
 
+${directiveBlocks.join("\n\n")}
+
 - The first point carries the headline finding.
 - The second point adds supporting detail with \`inline code\`.
 - The third point notes an open question.
@@ -552,8 +554,6 @@ This is a representative document compiled with the **${plate.displayName}** pla
 | Delivery | On track | Milestones met through this period |
 | Adoption | Improving | Weekly active usage up steadily |
 | Risks | Watch | One dependency pending external review |
-
-${directiveBlocks.join("\n\n")}
 
 ## What happens next
 

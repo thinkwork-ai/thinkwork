@@ -1,6 +1,22 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// react-resizable-panels chokes on apps/web's ResizeObserver stub — render
+// plain passthroughs so the table/preview split mounts deterministically
+// (same workaround as TaskThreadView.test.tsx).
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const pass = ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    ...actual,
+    ResizablePanelGroup: pass,
+    ResizablePanel: pass,
+    ResizableHandle: () => <div data-testid="resizable-handle" />,
+  };
+});
+
 // Selecting a row mounts PlatePreviewPanel, whose useQuery needs a urql
 // client. The static `items` seam path never issues a real request, so stub
 // useQuery to a paused-empty result rather than standing up a Provider.
@@ -91,26 +107,45 @@ describe("PlatesListBody", () => {
     expect(screen.getByTestId("plates-customized-badge")).not.toBeNull();
   });
 
-  it("shows operator affordances for operators", () => {
-    renderList(<PlatesListBody items={items} isOperator roleResolved />);
-    expect(screen.getByTestId("plates-new")).not.toBeNull();
-    expect(screen.getByTestId("plates-tenant-palette")).not.toBeNull();
-    expect(screen.getAllByTestId("plate-edit-action").length).toBeGreaterThan(
-      0,
+  it("shows operator affordances and publishes the header actions controller for operators", () => {
+    const controllers: unknown[] = [];
+    renderList(
+      <PlatesListBody
+        items={items}
+        isOperator
+        roleResolved
+        onActionsControllerChange={(c) => controllers.push(c)}
+      />,
     );
-    expect(screen.getAllByTestId("plate-clone-action").length).toBeGreaterThan(
-      0,
-    );
+    // Edit/Clone live in the preview panel header: select a row first.
+    fireEvent.click(screen.getAllByTestId("plates-table-row")[0]);
+    expect(screen.getByTestId("plate-edit-action")).not.toBeNull();
+    expect(screen.getByTestId("plate-clone-action")).not.toBeNull();
+    // Create/palette live in the page header now: the body hands the header a
+    // controller instead of rendering its own toolbar buttons.
+    const controller = controllers.at(-1) as {
+      openCreate: () => void;
+      openPalette: () => void;
+    } | null;
+    expect(controller).not.toBeNull();
+    expect(typeof controller!.openCreate).toBe("function");
+    expect(typeof controller!.openPalette).toBe("function");
   });
 
   it("hides all operator affordances for non-operators (AE5)", () => {
+    const controllers: unknown[] = [];
     renderList(
-      <PlatesListBody items={items} isOperator={false} roleResolved />,
+      <PlatesListBody
+        items={items}
+        isOperator={false}
+        roleResolved
+        onActionsControllerChange={(c) => controllers.push(c)}
+      />,
     );
-    expect(screen.queryByTestId("plates-new")).toBeNull();
-    expect(screen.queryByTestId("plates-tenant-palette")).toBeNull();
     expect(screen.queryByTestId("plate-edit-action")).toBeNull();
     expect(screen.queryByTestId("plate-clone-action")).toBeNull();
+    // Non-operators never receive the header controller.
+    expect(controllers.at(-1) ?? null).toBeNull();
   });
 
   it("selects a plate on row click", () => {
@@ -128,7 +163,10 @@ describe("PlatesListBody", () => {
 
   it("filters rows by the search box", () => {
     renderList(<PlatesListBody items={items} isOperator roleResolved />);
-    const search = screen.getByTestId("plates-search") as HTMLInputElement;
+    fireEvent.click(screen.getByRole("button", { name: "Search plates" }));
+    const search = screen.getByRole("textbox", {
+      name: "Search plates",
+    }) as HTMLInputElement;
     fireEvent.change(search, { target: { value: "brief" } });
     const remaining = rows();
     expect(remaining).toHaveLength(1);

@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Copy, Moon, Pencil, Sun, X } from "lucide-react";
 import { useQuery } from "urql";
 import { Button, useTheme } from "@thinkwork/ui";
 import type { DocumentPlateDiagnostic } from "@/gql/graphql";
@@ -39,6 +39,11 @@ export interface PlatePreviewPanelProps {
   diagnostics?: DocumentPlateDiagnostic[];
   fetching?: boolean;
   errorMessage?: string;
+  /** Renders a close (X) header action — the list body owns the split. */
+  onClose?: () => void;
+  /** Operator actions surfaced in the panel header. */
+  onEdit?: () => void;
+  onClone?: () => void;
 }
 
 export function PlatePreviewPanel({
@@ -49,6 +54,9 @@ export function PlatePreviewPanel({
   diagnostics: diagnosticsProp,
   fetching: fetchingProp,
   errorMessage: errorProp,
+  onClose,
+  onEdit,
+  onClone,
 }: PlatePreviewPanelProps) {
   const seamed =
     htmlProp !== undefined || fetchingProp === true || errorProp !== undefined;
@@ -76,6 +84,9 @@ export function PlatePreviewPanel({
       diagnostics={diagnostics}
       fetching={fetching}
       errorMessage={errorMessage}
+      onClose={onClose}
+      onEdit={onEdit}
+      onClone={onClone}
     />
   );
 }
@@ -93,6 +104,9 @@ export function PlatePreviewFrame({
   errorMessage,
   pending,
   className,
+  onClose,
+  onEdit,
+  onClone,
 }: {
   title: string;
   slug: string | null;
@@ -103,6 +117,9 @@ export function PlatePreviewFrame({
   /** U7: a debounced preview request is in flight (shows "Compiling…"). */
   pending?: boolean;
   className?: string;
+  onClose?: () => void;
+  onEdit?: () => void;
+  onClone?: () => void;
 }) {
   const { theme } = useTheme();
   const [localTheme, setLocalTheme] = useState<"light" | "dark">(() =>
@@ -116,7 +133,7 @@ export function PlatePreviewFrame({
 
   return (
     <div
-      className={`flex min-h-0 flex-col rounded-lg border border-border bg-background ${className ?? ""}`}
+      className={`flex h-full w-full min-h-0 min-w-0 flex-col bg-background ${className ?? ""}`}
       data-testid="plate-preview"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -134,6 +151,34 @@ export function PlatePreviewFrame({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {onClone ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Clone plate"
+              title="Clone plate"
+              onClick={onClone}
+              data-testid="plate-clone-action"
+            >
+              <Copy className="size-4" />
+            </Button>
+          ) : null}
+          {onEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Edit plate"
+              title="Edit plate"
+              onClick={onEdit}
+              data-testid="plate-edit-action"
+            >
+              <Pencil className="size-4" />
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant={localTheme === "light" ? "secondary" : "ghost"}
@@ -156,6 +201,20 @@ export function PlatePreviewFrame({
           >
             <Moon className="size-4" />
           </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Close preview"
+              title="Close preview"
+              onClick={onClose}
+              data-testid="plate-preview-close"
+            >
+              <X className="size-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
 
