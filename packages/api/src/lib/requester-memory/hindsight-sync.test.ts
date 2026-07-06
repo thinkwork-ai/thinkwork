@@ -49,8 +49,9 @@ describe("requester memory Hindsight sync", () => {
     expect(isHindsightSyncableRequesterMemoryPath("memory/MEMORY.md")).toBe(
       true,
     );
+    // Dream journal is memory-management meta-content — never synced (THINK-197).
     expect(isHindsightSyncableRequesterMemoryPath("memory/DREAMS.md")).toBe(
-      true,
+      false,
     );
     expect(
       isHindsightSyncableRequesterMemoryPath("memory/working/2026-05-18.md"),
