@@ -17,6 +17,7 @@ import { getDb } from "@thinkwork/database-pg";
 import {
   costEvents,
   evalCaseOverrides,
+  evalDatasets,
   evalReplayToolAllowlist,
   evalResults,
   evalRuns,
@@ -97,6 +98,7 @@ import {
   EVAL_CASE_PAYLOAD_NAMES,
   evalRunSnapshotCasePayloadKey,
   FLAGGED_THREAD_CATEGORY,
+  getEvalDatasetCase,
   isEvalRunSnapshotKeyForRun,
   parseEvalDatasetCase,
   sha256Hex,
@@ -673,22 +675,86 @@ async function loadPinnedCase(
     // is informational-only (AE5: the thread may be deleted), so a
     // missing thread/owner degrades to the synthetic no-requester
     // behavior rather than failing the case.
-    const sourceThreadId = parsed.core.source?.source_thread_id;
-    if (sourceThreadId) {
-      const [sourceThread] = await db
-        .select({ user_id: threads.user_id })
-        .from(threads)
-        .where(
-          and(
-            eq(threads.id, sourceThreadId),
-            eq(threads.tenant_id, run.tenant_id),
-          ),
-        );
-      executionCase.replay_requester_user_id = sourceThread?.user_id ?? null;
-    }
+    executionCase.replay_requester_user_id = await resolveFlaggedThreadOwner(
+      parsed.core.source?.source_thread_id,
+      run.tenant_id,
+    );
   }
 
   return { ok: true, executionCase };
+}
+
+/**
+ * Resolve the flagged thread's owner user id → the eval replay requester
+ * (THINK-179). Per-user OAuth MCP servers resolve like that user's own
+ * chat turns. Provenance is informational-only (AE5: the thread may be
+ * deleted), so a missing thread/owner returns null — the synthetic
+ * no-requester behavior — rather than failing the case.
+ */
+async function resolveFlaggedThreadOwner(
+  sourceThreadId: string | undefined,
+  tenantId: string,
+): Promise<string | null> {
+  if (!sourceThreadId) return null;
+  const db = getDb();
+  const [sourceThread] = await db
+    .select({ user_id: threads.user_id })
+    .from(threads)
+    .where(
+      and(eq(threads.id, sourceThreadId), eq(threads.tenant_id, tenantId)),
+    );
+  return sourceThread?.user_id ?? null;
+}
+
+/**
+ * Resolve the flagged replay requester for a case dispatched WITHOUT a
+ * run snapshot — the legacy category / "All Categories" path
+ * (eval-runner.ts) builds worker messages with no `snapshotKey`, so
+ * `loadPinnedCase` (and its owner resolution above) never runs. The DB
+ * `eval_test_cases` row carries no `source_thread_id`, so read it from
+ * the case's CANONICAL dataset JSON via (dataset_id → slug,
+ * dataset_case_id). Returns null for non-flagged / non-dataset cases and
+ * for any read miss — the no-requester fail-closed default is unchanged.
+ */
+async function resolveFlaggedRequesterForUnpinnedCase(
+  tc: typeof evalTestCases.$inferSelect,
+  tenantId: string,
+): Promise<string | null> {
+  if (
+    tc.category !== FLAGGED_THREAD_CATEGORY ||
+    !tc.dataset_id ||
+    !tc.dataset_case_id
+  ) {
+    return null;
+  }
+  const db = getDb();
+  const [dataset] = await db
+    .select({ slug: evalDatasets.slug })
+    .from(evalDatasets)
+    .where(
+      and(
+        eq(evalDatasets.id, tc.dataset_id),
+        eq(evalDatasets.tenant_id, tenantId),
+      ),
+    );
+  if (!dataset?.slug) return null;
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return null;
+
+  const storage =
+    snapshotStorageForTests ?? createEvalDatasetStorageFromConfig();
+  const canonical = await getEvalDatasetCase(
+    { tenantId, tenantSlug: tenant.slug, slug: dataset.slug },
+    tc.dataset_case_id,
+    storage,
+  );
+  return resolveFlaggedThreadOwner(
+    canonical?.core.source?.source_thread_id,
+    tenantId,
+  );
 }
 
 /**
@@ -1271,6 +1337,14 @@ async function handleMessage(
       );
     }
   } else {
+    // No run snapshot = the legacy category / "All Categories" dispatch
+    // path (eval-runner.ts). loadPinnedCase (and its THINK-179 owner
+    // resolution) never ran, so resolve the flagged replay requester from
+    // the canonical dataset case here — otherwise per-user OAuth MCP
+    // servers drop fail-closed and flagged CRM cases can never carry
+    // twenty--crm / lastmile.
+    executionCase.replay_requester_user_id =
+      await resolveFlaggedRequesterForUnpinnedCase(tc, run.tenant_id);
     outcome = await executeCaseAbsorbingThrottles(
       run,
       executionCase,
