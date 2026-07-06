@@ -25,6 +25,12 @@ const mocks = vi.hoisted(() => ({
   s3Reads: [] as string[],
 }));
 
+const CREATOR_USER_ID = "55555555-5555-5555-5555-555555555555";
+
+vi.mock("./artifact-creator.js", () => ({
+  creatorUserIdForThread: vi.fn(async () => CREATOR_USER_ID),
+}));
+
 vi.mock("../../graphql/utils.js", () => {
   const insertBuilder = {
     values: vi.fn((row: Record<string, unknown>) => {
@@ -134,6 +140,7 @@ describe("upsertDraftCanvasFromActivityEvent", () => {
       tenant_id: TENANT_ID,
       thread_id: THREAD_ID,
       agent_id: AGENT_ID,
+      created_by_user_id: CREATOR_USER_ID,
       status: "draft",
       type: "data_view",
       metadata: {

@@ -30,6 +30,7 @@ import {
 } from "../thread-json-render/persisted-parts.js";
 import { partFromThreadJsonRenderStateSnapshotPayload } from "@thinkwork/thread-json-render";
 import { and, artifacts, db, eq, sql } from "../../graphql/utils.js";
+import { creatorUserIdForThread } from "./artifact-creator.js";
 import {
   artifactContentKey,
   writeArtifactPayloadToS3,
@@ -152,6 +153,7 @@ export async function upsertDraftCanvasFromActivityEvent(input: {
     500,
   );
 
+  const createdByUserId = await creatorUserIdForThread(input.threadId);
   await db
     .insert(artifacts)
     .values({
@@ -159,6 +161,7 @@ export async function upsertDraftCanvasFromActivityEvent(input: {
       tenant_id: input.tenantId,
       agent_id: input.agentId,
       thread_id: input.threadId,
+      created_by_user_id: createdByUserId,
       title,
       type: "data_view",
       status: "draft",

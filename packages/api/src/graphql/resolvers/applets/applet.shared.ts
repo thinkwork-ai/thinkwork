@@ -17,6 +17,7 @@ import {
 } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import { creatorUserIdForThread } from "../../../lib/artifacts/artifact-creator.js";
 import {
   assertAppletArtifactAccess,
   assertCanPromoteDraftApplet,
@@ -435,6 +436,7 @@ export async function saveAppletInner(args: {
           tenant_id: tenantId,
           agent_id: args.ctx.auth.agentId ?? null,
           thread_id: metadata.threadId ?? null,
+          created_by_user_id: await creatorUserIdForThread(metadata.threadId),
           title: metadata.name,
           type: "applet",
           status: "final",
