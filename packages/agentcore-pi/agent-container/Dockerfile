@@ -24,6 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# pnpm patchedDependencies (e.g. @earendil-works/pi-ai per-model Bedrock region
+# override) must be present before `pnpm install` or the frozen-lockfile patch
+# check fails.
+COPY patches/ patches/
 COPY packages/agentcore-pi/package.json packages/agentcore-pi/package.json
 COPY packages/agentcore-pi/tsconfig.json packages/agentcore-pi/tsconfig.json
 COPY packages/agentcore-pi/agent-container/src/ packages/agentcore-pi/agent-container/src/

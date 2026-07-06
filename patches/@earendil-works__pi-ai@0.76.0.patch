@@ -1,0 +1,70 @@
+diff --git a/dist/providers/amazon-bedrock.js b/dist/providers/amazon-bedrock.js
+index 333deceab32e5b6166556eb884ce89eabf2cffa2..657ad3fda84ed25c6bbd0b105c9f9e3074df779f 100644
+--- a/dist/providers/amazon-bedrock.js
++++ b/dist/providers/amazon-bedrock.js
+@@ -31,7 +31,7 @@ export const streamBedrock = (model, context, options = {}) => {
+         const config = {
+             profile: options.profile,
+         };
+-        const configuredRegion = getConfiguredBedrockRegion(options);
++        const configuredRegion = getConfiguredBedrockRegion(options, model);
+         const hasConfiguredProfile = hasConfiguredBedrockProfile();
+         const endpointRegion = getStandardBedrockEndpointRegion(model.baseUrl);
+         const useExplicitEndpoint = shouldUseExplicitBedrockEndpoint(model.baseUrl, configuredRegion, hasConfiguredProfile);
+@@ -655,11 +655,45 @@ function mapStopReason(reason) {
+             return "error";
+     }
+ }
+-function getConfiguredBedrockRegion(options) {
++// Per-model region overrides from PI_BEDROCK_MODEL_REGIONS, a JSON object of
++// { "<modelId>": "<region>" }. Lets a host route individual Bedrock models to
++// another region (e.g. a degraded marketplace endpoint) without changing the
++// process-wide AWS_REGION. Malformed JSON is ignored; the parse is cached per
++// raw env value.
++let cachedBedrockModelRegionMap;
++function getBedrockModelRegionOverride(model) {
++    if (typeof process === "undefined" || !model?.id) {
++        return undefined;
++    }
++    const raw = process.env.PI_BEDROCK_MODEL_REGIONS;
++    if (!raw) {
++        return undefined;
++    }
++    if (!cachedBedrockModelRegionMap || cachedBedrockModelRegionMap.raw !== raw) {
++        let map = null;
++        try {
++            const parsed = JSON.parse(raw);
++            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
++                map = parsed;
++            }
++        }
++        catch {
++            map = null;
++        }
++        cachedBedrockModelRegionMap = { raw, map };
++    }
++    const region = cachedBedrockModelRegionMap.map?.[model.id];
++    return typeof region === "string" && region.trim() ? region.trim() : undefined;
++}
++function getConfiguredBedrockRegion(options, model) {
+     if (typeof process === "undefined") {
+         return options.region;
+     }
+-    return options.region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || undefined;
++    return (options.region ||
++        getBedrockModelRegionOverride(model) ||
++        process.env.AWS_REGION ||
++        process.env.AWS_DEFAULT_REGION ||
++        undefined);
+ }
+ function hasConfiguredBedrockProfile() {
+     if (typeof process === "undefined") {
+@@ -688,7 +722,7 @@ function shouldUseExplicitBedrockEndpoint(baseUrl, configuredRegion, hasConfigur
+     return !configuredRegion && !hasConfiguredProfile;
+ }
+ function isGovCloudBedrockTarget(model, options) {
+-    const region = getConfiguredBedrockRegion(options);
++    const region = getConfiguredBedrockRegion(options, model);
+     if (region?.toLowerCase().startsWith("us-gov-")) {
+         return true;
+     }
