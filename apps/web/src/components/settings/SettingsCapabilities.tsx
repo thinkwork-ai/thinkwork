@@ -232,6 +232,15 @@ function rowKeyOf(
   return `${item.capabilityClass}:${item.capabilityId}`;
 }
 
+/**
+ * `connections/<slug>/` folder name for a registry server id/slug —
+ * folder-write's sanitize rule (THINK-190: the connection folder is the
+ * assignment record for folder-dispatch agents).
+ */
+function connectionSlugFor(capabilityId: string): string {
+  return capabilityId.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+}
+
 function stateChip(item: InspectorItem) {
   if (item.active && item.detail && !item.reason) {
     return (
@@ -655,15 +664,35 @@ export function SettingsCapabilities({
     [items],
   );
 
-  // The Add-connection picker pool — ALL registered mcp_server rows (state
-  // shown verbatim; Add is disabled on already-active rows). The tree's
-  // per-folder mcp_server decoration is gone: on folder-dispatch agents the
-  // class never enters resolution (connections own dispatch), so it stamped
-  // every attached server `not_installed` — a stale-taxonomy artifact, not
-  // real state. `connections/<slug>` decoration carries the live gate state.
+  // The Add-connection picker pool — ALL registered mcp_server rows. On a
+  // folder-dispatch agent the mcp_server class never enters resolution
+  // (connections own dispatch), so its verbatim state stamps every attached
+  // server `not_installed` — THINK-190 Phase 2 overlays the connection
+  // manifest's truth per row (active/Attached, withheld reasons). Rows
+  // without a connection entry keep the inspector state verbatim, which
+  // stays accurate on un-flipped customer stages and for never-attached
+  // servers.
   const addMcpPool = useMemo(
-    () => items.filter((item) => item.capabilityClass === "mcp_server"),
-    [items],
+    () =>
+      items
+        .filter((item) => item.capabilityClass === "mcp_server")
+        .map((item) => {
+          const connection = folderStateBySlug.connection.get(
+            connectionSlugFor(item.capabilityId),
+          );
+          // detail is cleared with the overlay — the inspector's text
+          // explains the mcp_server class's own (dead) resolution, which
+          // reads as "degraded"/excluded next to a healthy connection.
+          return connection
+            ? {
+                ...item,
+                active: connection.active,
+                reason: connection.reason,
+                detail: null,
+              }
+            : item;
+        }),
+    [items, folderStateBySlug.connection],
   );
 
   // ── Pi-extension controls (plan U8) ──────────────────────────────────────
@@ -983,7 +1012,13 @@ export function SettingsCapabilities({
       item.capabilityClass === "mcp_server"
         ? setRemovingMcpSlug
         : setRemovingSkillSlug;
-    setRemoving(item.capabilityId);
+    // mcp_server detach removes the connections/<slug>/ folder (THINK-190),
+    // so the removing decoration carries the connection folder slug.
+    setRemoving(
+      item.capabilityClass === "mcp_server"
+        ? connectionSlugFor(item.capabilityId)
+        : item.capabilityId,
+    );
     await runMutation("detach", item);
     setRemoving(null);
   }
@@ -1207,9 +1242,12 @@ export function SettingsCapabilities({
     confirmation?.syncPending && confirmation.rowKey.startsWith("skill:")
       ? confirmation.rowKey.slice("skill:".length)
       : null;
+  // THINK-190: attach materializes a connections/<slug>/ folder (the mcp/
+  // mirror is retired for folder-dispatch agents), so the pending ghost
+  // carries the CONNECTION folder slug.
   const pendingMcpSlug =
     confirmation?.syncPending && confirmation.rowKey.startsWith("mcp_server:")
-      ? confirmation.rowKey.slice("mcp_server:".length)
+      ? connectionSlugFor(confirmation.rowKey.slice("mcp_server:".length))
       : null;
 
   // Agent page merge U12: page actions live in the header bar as muted icons

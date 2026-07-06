@@ -942,6 +942,35 @@ describe("folder capabilities from the manifest (THINK-173 U9)", () => {
     expect(tools.get("cruncher")?.reason).toBe("trust_gate");
   });
 
+  it("THINK-190: the Add-connection picker's row state prefers connection-manifest truth over the retired mcp_server class", () => {
+    // Inspector says github=active, slack=oauth_missing (the dead class);
+    // the connection manifest says the opposite — manifest truth wins.
+    seedManifest({
+      active: [{ slug: "slack", class: "connection" }],
+      withheld: [
+        { slug: "github", class: "connection", reason: "definition_drift" },
+      ],
+    });
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onAddConnection as () => void)();
+    });
+    const githubRow = screen.getByTestId("add-mcp-row-github");
+    expect(githubRow.textContent).toContain("definition_drift");
+    expect(
+      (screen.getByTestId("add-mcp-pick-github") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    const slackRow = screen.getByTestId("add-mcp-row-slack");
+    expect(slackRow.textContent).toContain("active");
+    expect(
+      (screen.getByTestId("add-mcp-pick-slack") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByTestId("add-mcp-pick-slack").textContent).toBe(
+      "Attached",
+    );
+  });
+
   it("lists ONLY unsigned folders as pending proposals; approve grants with the folder class", async () => {
     seedManifest();
     render(<SettingsCapabilities />);

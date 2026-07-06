@@ -154,9 +154,13 @@ export interface ComposerWorkspaceEditorProps {
    * "Detach MCP server…" — the same picker/confirm/sync machinery, second class.
    */
   mcpStateBySlug?: Map<string, SkillNodeState>;
-  /** MCP-server slug inside the post-attach sync-pending window (ghost node). */
+  /**
+   * CONNECTION folder slug inside the post-attach sync-pending window
+   * (ghost node under connections/ — THINK-190: attach materializes the
+   * connection folder; the mcp/ mirror is retired for flipped agents).
+   */
   pendingMcpSlug?: string | null;
-  /** MCP-server slug whose detach is in flight ("removing…" affordance). */
+  /** Connection folder slug whose MCP detach is in flight ("removing…"). */
   removingMcpSlug?: string | null;
   /** Open the Add-MCP-server picker (context menu on the `mcp/` folder). */
   onAddMcpServer?: () => void;
@@ -839,7 +843,9 @@ export function ComposerWorkspaceEditor({
   const pendingFolderPaths = useMemo(() => {
     const paths: string[] = [];
     if (pendingSkillSlug) paths.push(`skills/${pendingSkillSlug}`);
-    if (pendingMcpSlug) paths.push(`mcp/${pendingMcpSlug}`);
+    // THINK-190: an MCP attach materializes a connections/<slug>/ folder
+    // (the legacy mcp/ mirror is retired for folder-dispatch agents).
+    if (pendingMcpSlug) paths.push(`connections/${pendingMcpSlug}`);
     return paths;
   }, [pendingSkillSlug, pendingMcpSlug]);
   // Debug toggle: compiled artifacts are off by default; the manifest
@@ -1015,7 +1021,11 @@ export function ComposerWorkspaceEditor({
     const isGated = Boolean(gateState && !gateState.active);
     const isRemoving = Boolean(
       (skillSlug && skillSlug === removingSkillSlug) ||
-      (mcpSlug && mcpSlug === removingMcpSlug),
+      // THINK-190: an in-flight MCP detach removes the connections/<slug>/
+      // folder; the mcp/<slug> match stays for un-flipped-stage operators
+      // viewing the legacy mirror behind the compiled toggle.
+      (mcpSlug && mcpSlug === removingMcpSlug) ||
+      (connectionSlug && connectionSlug === removingMcpSlug),
     );
     const jumpEntry = jumpEntryFor(node);
     const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;

@@ -807,12 +807,37 @@ describe("MCP server tree affordances (U9c, behind the compiled toggle)", () => 
     expect(focusRowMock).toHaveBeenCalledWith("mcp_server", "github");
   });
 
-  it("renders a ghost mcp folder while an attach materializes", async () => {
+  it("renders a ghost CONNECTION folder while an MCP attach materializes (THINK-190)", async () => {
     await renderEditor({ pendingMcpSlug: "slack" });
-    expect(await screen.findByTestId("tree-node-mcp/slack")).toBeTruthy();
-    expect(screen.getByTestId("tree-pending-mcp/slack").textContent).toContain(
-      "syncing",
+    expect(
+      await screen.findByTestId("tree-node-connections/slack"),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("tree-pending-connections/slack").textContent,
+    ).toContain("syncing");
+    // The retired mcp/ mirror never ghosts.
+    expect(screen.queryByTestId("tree-node-mcp/slack")).toBeNull();
+  });
+
+  it("marks the connections/<slug> folder removing while an MCP detach is in flight (THINK-190)", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          {
+            path: "connections/github/CONNECTION.md",
+            owner: "agent",
+            generated: false,
+            size: 240,
+          },
+        ],
+      }),
     );
+    await renderEditor({ removingMcpSlug: "github" });
+    expect(
+      (await screen.findByTestId("tree-removing-connections/github"))
+        .textContent,
+    ).toContain("removing");
   });
 
   it("marks an mcp folder removing while a detach is in flight", async () => {
