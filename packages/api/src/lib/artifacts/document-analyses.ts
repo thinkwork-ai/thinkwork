@@ -292,8 +292,7 @@ label: Closed-won deals`,
 const groupCountSpec: AnalysisOpSpec = {
   op: "group_count",
   inputHint: "values: list of group labels (strings), <=500",
-  schema:
-    "values: list of strings (1–500 entries, at most 24 distinct groups)",
+  schema: "values: list of strings (1–500 entries, at most 24 distinct groups)",
   example: `analysis: <declared key>
 values: [Discovery, Discovery, Negotiation, Closed]`,
   compute: (inputs) => {

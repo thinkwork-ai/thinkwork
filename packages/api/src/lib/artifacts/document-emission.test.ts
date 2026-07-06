@@ -605,10 +605,38 @@ No pipeline section, no waiver.
 
 describe("summarizePlateWaivers (THINK-189 seam)", () => {
   const ROWS = [
-    { artifactId: "a1", plateSlug: "sales-rep-review", sectionId: "pipeline-health", tier: "required-if-material", reason: "no data", createdAt: new Date(0) },
-    { artifactId: "a2", plateSlug: "sales-rep-review", sectionId: "pipeline-health", tier: "required-if-material", reason: "still no data", createdAt: new Date(0) },
-    { artifactId: "a2", plateSlug: "sales-rep-review", sectionId: "summary", tier: "required", reason: "n/a", createdAt: new Date(0) },
-    { artifactId: "a3", plateSlug: "weekly-status", sectionId: "metrics", tier: "required", reason: "no metrics source connected", createdAt: new Date(0) },
+    {
+      artifactId: "a1",
+      plateSlug: "sales-rep-review",
+      sectionId: "pipeline-health",
+      tier: "required-if-material",
+      reason: "no data",
+      createdAt: new Date(0),
+    },
+    {
+      artifactId: "a2",
+      plateSlug: "sales-rep-review",
+      sectionId: "pipeline-health",
+      tier: "required-if-material",
+      reason: "still no data",
+      createdAt: new Date(0),
+    },
+    {
+      artifactId: "a2",
+      plateSlug: "sales-rep-review",
+      sectionId: "summary",
+      tier: "required",
+      reason: "n/a",
+      createdAt: new Date(0),
+    },
+    {
+      artifactId: "a3",
+      plateSlug: "weekly-status",
+      sectionId: "metrics",
+      tier: "required",
+      reason: "no metrics source connected",
+      createdAt: new Date(0),
+    },
   ];
   const store = {
     listByTenant: async (_tenant: string, plateSlug?: string) =>
@@ -632,6 +660,9 @@ describe("summarizePlateWaivers (THINK-189 seam)", () => {
       store,
     );
     expect(summaries).toHaveLength(1);
-    expect(summaries[0]).toMatchObject({ plateSlug: "weekly-status", count: 1 });
+    expect(summaries[0]).toMatchObject({
+      plateSlug: "weekly-status",
+      count: 1,
+    });
   });
 });

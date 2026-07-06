@@ -503,6 +503,8 @@ describe("plate contract floor rides both dispatch paths (THINK-183 U6)", () => 
     // Neither builder re-projects the summaries — no .map over the plate
     // list that could strip the contract keys.
     expect(wakeupSource).not.toMatch(/effectiveDocumentPlates\.map/);
-    expect(chatSource).not.toMatch(/documentPlatesForDispatch\(tenantId\)\s*\)\.map/);
+    expect(chatSource).not.toMatch(
+      /documentPlatesForDispatch\(tenantId\)\s*\)\.map/,
+    );
   });
 });

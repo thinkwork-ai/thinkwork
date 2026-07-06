@@ -347,7 +347,8 @@ export function boundedAnalyses(
     out.push({
       key,
       op,
-      params: params !== undefined ? (params as Record<string, unknown>) : undefined,
+      params:
+        params !== undefined ? (params as Record<string, unknown>) : undefined,
       presentation:
         chartType !== undefined
           ? { directive, chartType: chartType as string }

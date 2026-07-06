@@ -524,9 +524,8 @@ describe("content contract save gates (THINK-183 U2)", () => {
   });
 
   it("gate 1b rejects a chart-presented analysis on a plate whose allowedDirectives excludes charts", async () => {
-    const { resolvePlatformPlate } = await import(
-      "../../../lib/artifacts/plate-registry.js"
-    );
+    const { resolvePlatformPlate } =
+      await import("../../../lib/artifacts/plate-registry.js");
     const proposal = resolvePlatformPlate("proposal")!;
     const verdict = validateCandidatePlate(
       {

@@ -252,7 +252,9 @@ describe("group_count", () => {
   });
 
   it("rejects empty, non-string, and oversized inputs", () => {
-    expectRejected(computeAnalysis({ op: "group_count", inputs: { values: [] } }));
+    expectRejected(
+      computeAnalysis({ op: "group_count", inputs: { values: [] } }),
+    );
     expectRejected(
       computeAnalysis({
         op: "group_count",
@@ -312,7 +314,9 @@ describe("top_n", () => {
   it("rejects bad n, empty items, non-numeric values, oversized lists", () => {
     expectRejected(computeAnalysis({ op: "top_n", inputs: { items, n: 0 } }));
     expectRejected(computeAnalysis({ op: "top_n", inputs: { items, n: 2.5 } }));
-    expectRejected(computeAnalysis({ op: "top_n", inputs: { items: [], n: 3 } }));
+    expectRejected(
+      computeAnalysis({ op: "top_n", inputs: { items: [], n: 3 } }),
+    );
     expectRejected(
       computeAnalysis({
         op: "top_n",

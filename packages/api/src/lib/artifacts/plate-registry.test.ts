@@ -418,12 +418,25 @@ describe("content contract resolution (THINK-183 U2)", () => {
             SECTIONS[0],
             { id: "NOT A SLUG", title: "x", tier: "required", guidance: "g" },
             { id: "no-tier", title: "No Tier", guidance: "g" },
-            { id: "pipeline-health", title: "Dup", tier: "required", guidance: "g" },
+            {
+              id: "pipeline-health",
+              title: "Dup",
+              tier: "required",
+              guidance: "g",
+            },
           ],
           analyses: [
             ANALYSES[0],
-            { key: "bad-op", op: "median_absolute_deviation", presentation: { directive: "chart" } },
-            { key: "bad-kind", op: "trend", presentation: { directive: "hologram" } },
+            {
+              key: "bad-op",
+              op: "median_absolute_deviation",
+              presentation: { directive: "chart" },
+            },
+            {
+              key: "bad-kind",
+              op: "trend",
+              presentation: { directive: "hologram" },
+            },
           ],
         } as never,
         hidden: false,
@@ -538,7 +551,9 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
   });
 
   it("a contract-less plate's summary keeps the original three-field shape", async () => {
-    const summaries = visiblePlateSummaries(await listPlates(TENANT, fakeStore()));
+    const summaries = visiblePlateSummaries(
+      await listPlates(TENANT, fakeStore()),
+    );
     for (const summary of summaries.filter((p) =>
       (CORE_PLATE_SLUGS as readonly string[]).includes(p.slug),
     )) {
@@ -643,7 +658,11 @@ describe("platform plate contracts (THINK-183 U7 — the live swap)", () => {
   });
 
   it("AE1 end-to-end at the lib level: a Sales Rep Review without pipeline-health and without a waiver rejects", async () => {
-    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      fakeStore(),
+    ))!;
     const digest = `## Quota Attainment
 
 Attainment held at 82% of target.

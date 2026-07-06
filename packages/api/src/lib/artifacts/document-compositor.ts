@@ -512,7 +512,9 @@ export function compileDocument(
       if (section.tier === "suggested") continue; // R11: never checked.
       if (headingIds.has(section.id) || waivedIds.has(section.id)) continue;
       const suggested = (section.suggestedDirectives ?? [])
-        .map((d) => (d.chartType ? `tw:${d.kind} (${d.chartType})` : `tw:${d.kind}`))
+        .map((d) =>
+          d.chartType ? `tw:${d.kind} (${d.chartType})` : `tw:${d.kind}`,
+        )
         .join(", ");
       const waiverPath =
         section.tier === "required-if-material"
@@ -579,5 +581,10 @@ export function compileDocument(
     tokensDark: input.plate.tokensDark,
   });
 
-  return { ok: true, renderHtml, warnings: state.warnings, waivers: state.waivers };
+  return {
+    ok: true,
+    renderHtml,
+    warnings: state.warnings,
+    waivers: state.waivers,
+  };
 }

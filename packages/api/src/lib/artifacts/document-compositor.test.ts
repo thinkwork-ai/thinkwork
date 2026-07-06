@@ -365,7 +365,9 @@ Keep qualifying harder.
     expect(result.renderHtml).toContain("66.7%");
     expect(result.renderHtml).toContain("37.5%");
     expect(result.renderHtml).toContain("Overall conversion 10%");
-    expect(result.renderHtml).toContain("<details><summary>Chart data</summary>");
+    expect(result.renderHtml).toContain(
+      "<details><summary>Chart data</summary>",
+    );
     const preflight = runDocumentPreflight({
       renderHtml: result.renderHtml,
       digestMarkdown: DIGEST,
@@ -452,7 +454,9 @@ stages:
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostics[0].message).toContain("2–24");
-    expect(result.diagnostics[0].message).toContain("Corrected minimal example");
+    expect(result.diagnostics[0].message).toContain(
+      "Corrected minimal example",
+    );
     expect(result.diagnostics[0].location).toBe("tw:analysis");
   });
 
@@ -516,7 +520,7 @@ denominator: 4
       title: "t",
       abstract: "a",
       markdownBody:
-        '```tw:chart\ntype: bar\ntitle: x\nseries:\n  - { label: a, value: 1 }\n```',
+        "```tw:chart\ntype: bar\ntitle: x\nseries:\n  - { label: a, value: 1 }\n```",
     });
     expect(chartResult.ok).toBe(false);
   });
