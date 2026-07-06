@@ -147,6 +147,10 @@ import {
   piExtensionMutations,
   piExtensionQueries,
 } from "./pi-extensions/index.js";
+import {
+  documentPlateMutations,
+  documentPlateQueries,
+} from "./document-plates/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -198,6 +202,7 @@ export const queryResolvers: Record<string, any> = {
   ...workItemQueries,
   ...agentLoopQueries,
   ...piExtensionQueries,
+  ...documentPlateQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -248,6 +253,7 @@ export const mutationResolvers: Record<string, any> = {
   ...workItemMutations,
   ...agentLoopMutations,
   ...piExtensionMutations,
+  ...documentPlateMutations,
 };
 
 import { agentTypeResolvers } from "./tenant-agent/types.js";

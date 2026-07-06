@@ -1821,6 +1821,12 @@ export type DeleteAgentLoopResult = {
   ok: Scalars["Boolean"]["output"];
 };
 
+export type DeleteDocumentPlateResult = {
+  __typename?: "DeleteDocumentPlateResult";
+  error?: Maybe<Scalars["String"]["output"]>;
+  ok: Scalars["Boolean"]["output"];
+};
+
 /**
  * Result of `deleteScheduledJob`. `id` echoes the row that was removed;
  * `ok` is false when no row matched (already deleted, or tenant mismatch).
@@ -1938,6 +1944,49 @@ export type DisconnectN8nWorkflowResult = {
   __typename?: "DisconnectN8nWorkflowResult";
   binding: WorkflowEngineBinding;
   workflow: Workflow;
+};
+
+export type DocumentPlate = {
+  __typename?: "DocumentPlate";
+  allowedDirectives?: Maybe<Array<Scalars["String"]["output"]>>;
+  customized: Scalars["Boolean"]["output"];
+  displayName: Scalars["String"]["output"];
+  eyebrow: Scalars["String"]["output"];
+  hidden: Scalars["Boolean"]["output"];
+  origin: DocumentPlateOrigin;
+  overrides?: Maybe<Scalars["AWSJSON"]["output"]>;
+  slug: Scalars["ID"]["output"];
+  titleSuffix: Scalars["String"]["output"];
+  tokensDark: Scalars["AWSJSON"]["output"];
+  tokensLight: Scalars["AWSJSON"]["output"];
+  useFor: Scalars["String"]["output"];
+};
+
+export type DocumentPlateDiagnostic = {
+  __typename?: "DocumentPlateDiagnostic";
+  code: Scalars["String"]["output"];
+  message: Scalars["String"]["output"];
+};
+
+export type DocumentPlateDraftConfigInput = {
+  allowedDirectives?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  displayName?: InputMaybe<Scalars["String"]["input"]>;
+  eyebrow?: InputMaybe<Scalars["String"]["input"]>;
+  paletteDark?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  paletteLight?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  titleSuffix?: InputMaybe<Scalars["String"]["input"]>;
+  useFor?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export enum DocumentPlateOrigin {
+  Platform = "platform",
+  Tenant = "tenant",
+}
+
+export type DocumentPlatePreview = {
+  __typename?: "DocumentPlatePreview";
+  diagnostics: Array<DocumentPlateDiagnostic>;
+  html?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type EffectiveCapabilitySet = {
@@ -3704,6 +3753,7 @@ export type Mutation = {
   deleteAgentProfile: Scalars["Boolean"]["output"];
   deleteArtifact: Scalars["Boolean"]["output"];
   deleteBudgetPolicy: Scalars["Boolean"]["output"];
+  deleteDocumentPlate: DeleteDocumentPlateResult;
   deleteEvalRun: Scalars["Boolean"]["output"];
   deleteEvalTestCase: Scalars["Boolean"]["output"];
   deleteKnowledgeBase: Scalars["Boolean"]["output"];
@@ -3849,6 +3899,7 @@ export type Mutation = {
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   saveCanvas: Artifact;
+  saveDocumentPlate: DocumentPlate;
   saveEmailProviderCredential: EmailProviderInstall;
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
@@ -3944,6 +3995,7 @@ export type Mutation = {
   updateTenant: Tenant;
   updateTenantAgent: Agent;
   updateTenantCredential: TenantCredential;
+  updateTenantDocumentPalette: TenantDocumentPalette;
   updateTenantMember: TenantMember;
   updateTenantModelCatalogEntry: TenantModelCatalogEntry;
   /**
@@ -4308,6 +4360,11 @@ export type MutationDeleteArtifactArgs = {
 
 export type MutationDeleteBudgetPolicyArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type MutationDeleteDocumentPlateArgs = {
+  slug: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationDeleteEvalRunArgs = {
@@ -4838,6 +4895,10 @@ export type MutationSaveCanvasArgs = {
   title: Scalars["String"]["input"];
 };
 
+export type MutationSaveDocumentPlateArgs = {
+  input: SaveDocumentPlateInput;
+};
+
 export type MutationSaveEmailProviderCredentialArgs = {
   input: SaveEmailProviderCredentialInput;
 };
@@ -5153,6 +5214,10 @@ export type MutationUpdateTenantAgentArgs = {
 export type MutationUpdateTenantCredentialArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateTenantCredentialInput;
+};
+
+export type MutationUpdateTenantDocumentPaletteArgs = {
+  input: UpdateTenantDocumentPaletteInput;
 };
 
 export type MutationUpdateTenantMemberArgs = {
@@ -6189,6 +6254,8 @@ export type Query = {
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
   discoverN8nWorkflows: N8nWorkflowDiscovery;
+  documentPlatePreview: DocumentPlatePreview;
+  documentPlates: Array<DocumentPlate>;
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
@@ -6333,6 +6400,7 @@ export type Query = {
   tenantAgentSummary: TenantAgentSummary;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
+  tenantDocumentPalette: TenantDocumentPalette;
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
   tenantModelCatalog: Array<TenantModelCatalogEntry>;
@@ -6666,6 +6734,16 @@ export type QueryDeploymentReleasesArgs = {
 
 export type QueryDiscoverN8nWorkflowsArgs = {
   installId: Scalars["ID"]["input"];
+};
+
+export type QueryDocumentPlatePreviewArgs = {
+  draftConfig?: InputMaybe<DocumentPlateDraftConfigInput>;
+  slug: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryDocumentPlatesArgs = {
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryEmailChannelLedgerArgs = {
@@ -7141,6 +7219,10 @@ export type QueryTenantBySlugArgs = {
 export type QueryTenantCredentialsArgs = {
   status?: InputMaybe<TenantCredentialStatus>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryTenantDocumentPaletteArgs = {
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryTenantMembersArgs = {
@@ -8044,6 +8126,19 @@ export type SaveAppletStateInput = {
   value?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
+export type SaveDocumentPlateInput = {
+  allowedDirectives?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  displayName?: InputMaybe<Scalars["String"]["input"]>;
+  eyebrow?: InputMaybe<Scalars["String"]["input"]>;
+  hidden?: InputMaybe<Scalars["Boolean"]["input"]>;
+  paletteDark?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  paletteLight?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  slug: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  titleSuffix?: InputMaybe<Scalars["String"]["input"]>;
+  useFor?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type SaveEmailProviderCredentialInput = {
   apiKey: Scalars["String"]["input"];
   defaultFromEmail?: InputMaybe<Scalars["String"]["input"]>;
@@ -8936,6 +9031,12 @@ export enum TenantCredentialStatus {
   Deleted = "deleted",
   Disabled = "disabled",
 }
+
+export type TenantDocumentPalette = {
+  __typename?: "TenantDocumentPalette";
+  dark: Scalars["AWSJSON"]["output"];
+  light: Scalars["AWSJSON"]["output"];
+};
 
 export type TenantMember = {
   __typename?: "TenantMember";
@@ -9856,6 +9957,12 @@ export type UpdateTenantCredentialInput = {
   metadataJson?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   slug?: InputMaybe<Scalars["String"]["input"]>;
   status?: InputMaybe<TenantCredentialStatus>;
+};
+
+export type UpdateTenantDocumentPaletteInput = {
+  dark: Scalars["AWSJSON"]["input"];
+  light: Scalars["AWSJSON"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type UpdateTenantInput = {

@@ -349,6 +349,36 @@ export async function resolvePlate(
 }
 
 /**
+ * Resolve the WOULD-BE plate for an unsaved row (save validation and editor
+ * draft preview): merges exactly as resolvePlate would after the row is
+ * written — one merge code path (KTD2), no drift between preview and save.
+ * Null only when a platform_override candidate names no platform slug.
+ */
+export async function resolveCandidatePlate(
+  tenantId: string,
+  slug: string,
+  candidate: {
+    origin: DocumentPlateOrigin;
+    config: DocumentPlateConfig;
+    hidden?: boolean;
+  },
+  store: PlateStore = drizzlePlateStore(),
+): Promise<ResolvedPlate | null> {
+  const tenantPalette = await store.getTenantDocumentPalette(tenantId);
+  return resolveFromLayers({
+    slug,
+    platform: getPlatformPlate(slug),
+    row: {
+      slug,
+      origin: candidate.origin,
+      config: candidate.config,
+      hidden: candidate.hidden ?? false,
+    },
+    tenantPalette,
+  });
+}
+
+/**
  * All plates for a tenant, resolved: platform library (minus shadowed slugs,
  * with overrides applied) in definition order, then tenant-created plates by
  * slug. Includes hidden plates — callers filter for agent-facing surfaces.

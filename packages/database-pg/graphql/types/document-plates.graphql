@@ -1,0 +1,118 @@
+# Plate registry (THINK-153): tenant-scoped document genre plates.
+#
+# A plate is a registered genre — display config, palette token overrides,
+# directive availability — resolved as platform definition → tenant document
+# palette → per-plate overrides. Platform plates are code-defined; rows store
+# only tenant deltas and tenant-created plates. Every save is validated by
+# compiling a per-plate exemplar through the compositor plus full DocSpector
+# preflight (KTD7) — failures persist nothing.
+
+enum DocumentPlateOrigin {
+  platform
+  tenant
+}
+
+type DocumentPlate {
+  slug: ID!
+  displayName: String!
+  useFor: String!
+  eyebrow: String!
+  titleSuffix: String!
+  # Resolved effective CSS custom-property overrides (platform + tenant
+  # palette + per-plate deltas). Empty object = base palette.
+  tokensLight: AWSJSON!
+  tokensDark: AWSJSON!
+  # Directive kinds documents in this plate may use; null = all.
+  allowedDirectives: [String!]
+  origin: DocumentPlateOrigin!
+  hidden: Boolean!
+  # True when a platform plate has a tenant delta row.
+  customized: Boolean!
+  # The tenant's raw delta config for this plate (drives the editor form and
+  # reset); null when the plate is untouched platform default.
+  overrides: AWSJSON
+}
+
+type TenantDocumentPalette {
+  light: AWSJSON!
+  dark: AWSJSON!
+}
+
+type DocumentPlatePreview {
+  # Compiled exemplar HTML; null when validation failed.
+  html: String
+  # Validation/compile diagnostics (empty when html is present).
+  diagnostics: [DocumentPlateDiagnostic!]!
+}
+
+type DocumentPlateDiagnostic {
+  code: String!
+  message: String!
+}
+
+input DocumentPlateDraftConfigInput {
+  displayName: String
+  useFor: String
+  eyebrow: String
+  titleSuffix: String
+  # Token-name → CSS-value maps, plate vocabulary only (R7).
+  paletteLight: AWSJSON
+  paletteDark: AWSJSON
+  allowedDirectives: [String!]
+}
+
+input SaveDocumentPlateInput {
+  tenantId: ID
+  slug: String!
+  # Platform plates accept palette/hidden only (R4); tenant plates accept the
+  # full set. displayName + useFor are required when creating a tenant plate.
+  displayName: String
+  useFor: String
+  eyebrow: String
+  titleSuffix: String
+  paletteLight: AWSJSON
+  paletteDark: AWSJSON
+  allowedDirectives: [String!]
+  hidden: Boolean
+}
+
+input UpdateTenantDocumentPaletteInput {
+  tenantId: ID
+  light: AWSJSON!
+  dark: AWSJSON!
+}
+
+type DeleteDocumentPlateResult {
+  ok: Boolean!
+  error: String
+}
+
+extend type Query {
+  # All plates for the tenant: platform library then tenant-created. Hidden
+  # plates are included for operators only.
+  documentPlates(tenantId: ID): [DocumentPlate!]!
+  # Compile the plate's exemplar (optionally with unsaved draft config) and
+  # return the HTML inline — no artifact persisted. Hidden plates preview for
+  # operators only.
+  documentPlatePreview(
+    tenantId: ID
+    slug: String!
+    draftConfig: DocumentPlateDraftConfigInput
+  ): DocumentPlatePreview!
+  tenantDocumentPalette(tenantId: ID): TenantDocumentPalette!
+}
+
+extend type Mutation {
+  # Create or update a plate (operator-gated). Runs the three-gate validation
+  # (token guard + exemplar compile + DocSpector preflight); rejects persist
+  # nothing. Saving a platform slug with empty palettes and hidden=false
+  # resets it to platform defaults.
+  saveDocumentPlate(input: SaveDocumentPlateInput!): DocumentPlate!
+  # Delete a tenant-created plate (operator-gated). Refused for platform
+  # plates and for slugs still referenced by artifacts — hide instead.
+  deleteDocumentPlate(tenantId: ID, slug: String!): DeleteDocumentPlateResult!
+  # Set the tenant-wide document palette (operator-gated, validated).
+  updateTenantDocumentPalette(
+    input: UpdateTenantDocumentPaletteInput!
+  ): TenantDocumentPalette!
+}
