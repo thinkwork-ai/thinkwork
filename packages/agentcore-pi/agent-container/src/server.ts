@@ -272,7 +272,7 @@ function stripProfileMentions(
   for (const profile of profiles) {
     for (const alias of profileAliases(profile)) {
       const pattern = new RegExp(
-        `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+        `(^|\\s)#${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
         "giu",
       );
       task = task.replace(pattern, "$1").trim();
@@ -289,7 +289,7 @@ function explicitAgentProfileSlugsFromMessage(
   for (const profile of profiles) {
     for (const alias of profileAliases(profile)) {
       const pattern = new RegExp(
-        `(^|\\s)[#@]${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
+        `(^|\\s)#${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
         "giu",
       );
       for (const match of message.matchAll(pattern)) {

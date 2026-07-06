@@ -5424,7 +5424,7 @@ function agentProfileMentionForMessage(message?: TaskThreadMessage) {
     };
   }
 
-  const rawMatch = message?.content?.match(/[#@]([a-z][a-z0-9_-]*)/i);
+  const rawMatch = message?.content?.match(/#([a-z][a-z0-9_-]*)/i);
   const rawMention = rawMatch?.[1];
   const displayName = displayNameFromMentionSlug(rawMention);
   return displayName
