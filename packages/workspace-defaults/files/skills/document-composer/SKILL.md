@@ -1,6 +1,6 @@
 ---
 name: document-composer
-description: 'Compose document deliverables — ideation docs, plans, reports, and briefs — as markdown that the platform compiles into a beautiful house-style document, saved as a durable artifact via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.'
+description: 'Compose document deliverables — reports, plans, briefs, and any other genre registered for this workspace — as markdown that the platform compiles into a beautiful house-style document, saved as a durable artifact via emit_document. Use whenever the deliverable is document-shaped: the user asks for a plan, report, brief, write-up, analysis, proposal, or ideation summary, or asks to "write this up", "make a document", "put together a report", or when a substantial multi-section answer deserves a durable, shareable form instead of chat text.'
 ---
 
 # Document Composer
@@ -22,12 +22,10 @@ The thread shows a compact card linking to the full-page reader.
 
 ## Genres
 
-| Genre      | Use for                                                    |
-| ---------- | ---------------------------------------------------------- |
-| `ideation` | Ranked options/ideas with evidence and a rejection record  |
-| `plan`     | How something will be done: decisions, requirements, steps |
-| `report`   | What happened / what is true: findings, metrics, analysis  |
-| `brief`    | A compact one-page summary for a decision-maker            |
+The available genres and their purposes are listed on the `emit_document`
+tool itself — read the tool's `genre` parameter description and pick by
+purpose. The set is workspace-specific (operators can register new genres),
+so never assume a fixed list.
 
 ## Authoring the markdown body
 
