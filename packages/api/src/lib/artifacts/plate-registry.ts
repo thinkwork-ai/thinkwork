@@ -28,12 +28,18 @@ import {
   type DocumentPlateOrigin,
 } from "@thinkwork/database-pg/schema";
 import { and, eq } from "drizzle-orm";
-import { DIRECTIVE_KINDS } from "./document-directives.js";
+import { ANALYSIS_OPS, getAnalysisOp } from "./document-analyses.js";
+import { CHART_TYPES, DIRECTIVE_KINDS } from "./document-directives.js";
 import {
   getPlatformPlate,
   PLATFORM_PLATES,
+  PLATE_SECTION_TIERS,
+  type PlateAnalysisSpec,
   type PlateDefinition,
   type PlatePalette,
+  type PlateSectionSpec,
+  type PlateSectionTier,
+  type PlateSuggestedDirective,
 } from "./plate-definitions.js";
 
 // ---------------------------------------------------------------------------
@@ -135,6 +141,10 @@ export interface ResolvedPlate {
   tokensDark: Record<string, string>;
   /** Directive kinds documents in this plate may use; "all" = unrestricted. */
   allowedDirectives: readonly string[] | "all";
+  /** Content contract: tiered section manifest (THINK-183; absent = none). */
+  sections?: readonly PlateSectionSpec[];
+  /** Content contract: declared analyses (THINK-183; absent = none). */
+  analyses?: readonly PlateAnalysisSpec[];
   /** "platform" (code-defined, possibly overridden) or "tenant" (row-owned). */
   origin: "platform" | "tenant";
   hidden: boolean;
@@ -250,6 +260,131 @@ function normalizeAllowedDirectives(
   return kinds;
 }
 
+// ---------------------------------------------------------------------------
+// Content-contract normalization (THINK-183). Save gates validate loudly;
+// these re-filter stored config at resolution time (defense in depth, same
+// posture as filterPalette) so a row predating a vocabulary tightening can
+// never push an invalid contract into the compiler.
+// ---------------------------------------------------------------------------
+
+/** Matches the document_plates slug CHECK and the compositor slug shape. */
+const CONTRACT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+function normalizeSuggestedDirectives(
+  raw: unknown,
+): PlateSuggestedDirective[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateSuggestedDirective[] = [];
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    const kind = rec?.kind;
+    if (typeof kind !== "string" || !DIRECTIVE_KINDS.includes(kind)) continue;
+    const chartType = rec?.chartType;
+    out.push(
+      typeof chartType === "string" &&
+        (CHART_TYPES as readonly string[]).includes(chartType)
+        ? { kind, chartType }
+        : { kind },
+    );
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeSections(raw: unknown): PlateSectionSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateSectionSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const id = rec.id;
+    const title = rec.title;
+    const tier = rec.tier;
+    const guidance = rec.guidance;
+    if (
+      typeof id !== "string" ||
+      !CONTRACT_SLUG_RE.test(id) ||
+      seen.has(id) ||
+      typeof title !== "string" ||
+      title.trim() === "" ||
+      !(PLATE_SECTION_TIERS as readonly string[]).includes(tier as string) ||
+      typeof guidance !== "string"
+    ) {
+      continue;
+    }
+    seen.add(id);
+    out.push({
+      id,
+      title: title.trim(),
+      tier: tier as PlateSectionTier,
+      guidance: guidance.trim(),
+      suggestedDirectives: normalizeSuggestedDirectives(
+        rec.suggestedDirectives,
+      ),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateAnalysisSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const key = rec.key;
+    const op = rec.op;
+    const presentation =
+      rec.presentation !== null &&
+      typeof rec.presentation === "object" &&
+      !Array.isArray(rec.presentation)
+        ? (rec.presentation as Record<string, unknown>)
+        : null;
+    const directive = presentation?.directive;
+    if (
+      typeof key !== "string" ||
+      !CONTRACT_SLUG_RE.test(key) ||
+      seen.has(key) ||
+      typeof op !== "string" ||
+      !ANALYSIS_OPS.includes(op) ||
+      typeof directive !== "string" ||
+      !DIRECTIVE_KINDS.includes(directive)
+    ) {
+      continue;
+    }
+    const chartType = presentation?.chartType;
+    const params =
+      rec.params !== null &&
+      typeof rec.params === "object" &&
+      !Array.isArray(rec.params)
+        ? (rec.params as Record<string, unknown>)
+        : undefined;
+    seen.add(key);
+    out.push({
+      key,
+      op,
+      params,
+      presentation:
+        typeof chartType === "string" &&
+        (CHART_TYPES as readonly string[]).includes(chartType)
+          ? { directive, chartType }
+          : { directive },
+      source: "model-supplied",
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }
@@ -278,6 +413,8 @@ function resolveFromLayers(input: {
       tokensDark: { ...tenantPalette.dark, ...filterPalette(c.paletteDark) },
       allowedDirectives:
         normalizeAllowedDirectives(c.allowedDirectives) ?? "all",
+      sections: normalizeSections(c.sections),
+      analyses: normalizeAnalyses(c.analyses),
       origin: "tenant",
       hidden: row.hidden,
       customized: false,
@@ -306,6 +443,16 @@ function resolveFromLayers(input: {
     allowedDirectives:
       normalizeAllowedDirectives(c.allowedDirectives) ??
       platform.allowedDirectives,
+    // Wholesale per-key override (KTD7): a config key present replaces the
+    // platform's entirely; absent inherits it.
+    sections:
+      c.sections !== undefined
+        ? normalizeSections(c.sections)
+        : platform.sections,
+    analyses:
+      c.analyses !== undefined
+        ? normalizeAnalyses(c.analyses)
+        : platform.analyses,
     origin: "platform",
     hidden: row?.hidden ?? false,
     customized:
@@ -520,8 +667,10 @@ export interface PlateExemplar {
 
 /**
  * Assemble the representative document for a plate: fixed prose base plus one
- * block per allowed directive. Deterministic — same plate config, same
- * exemplar.
+ * block per allowed directive — and, for contract-bearing plates (THINK-183
+ * KTD7), a heading per manifest section and one example tw:analysis block per
+ * declared analysis, so the exemplar satisfies the plate's own contract and
+ * gate 2 compiles clean. Deterministic — same plate config, same exemplar.
  */
 export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
   const allowed =
@@ -532,6 +681,24 @@ export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
     .map((kind) => EXEMPLAR_DIRECTIVE_SNIPPETS[kind])
     .filter(Boolean);
 
+  // One example block per declared analysis: the op's corrected minimal
+  // example with the declared key substituted in.
+  const analysisBlocks = (plate.analyses ?? [])
+    .map((analysis) => {
+      const spec = getAnalysisOp(analysis.op);
+      if (!spec) return null;
+      const body = spec.example.replace("<declared key>", analysis.key);
+      return `\`\`\`tw:analysis\n${body}\n\`\`\``;
+    })
+    .filter((b): b is string => b !== null);
+
+  // A heading per manifest section (title verbatim — its slug is the section
+  // id by the KTD6 save-time consistency check) with representative prose.
+  const manifestSections = (plate.sections ?? []).map(
+    (section) =>
+      `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`,
+  );
+
   const markdownBody = `---
 date: Q3 2026
 context: Sample document — compiled to validate and preview this plate
@@ -541,13 +708,13 @@ context: Sample document — compiled to validate and preview this plate
 
 This is a representative document compiled with the **${plate.displayName}** plate. It exercises the elements a real document uses: prose, emphasis, lists, a table, and the plate's component vocabulary, so what you see is what documents in this plate will look like.
 
-${directiveBlocks.join("\n\n")}
+${[...directiveBlocks, ...analysisBlocks].join("\n\n")}
 
 - The first point carries the headline finding.
 - The second point adds supporting detail with \`inline code\`.
 - The third point notes an open question.
 
-## Detail by area
+${manifestSections.length > 0 ? `${manifestSections.join("\n\n")}\n\n` : ""}## Detail by area
 
 | Area | Status | Note |
 | --- | --- | --- |

@@ -164,17 +164,28 @@ function parseFrontmatter(markdown: string): {
   return { frontmatter, body, warnings };
 }
 
+/**
+ * The undeduped heading-slug transform. Exported so plate save gates can
+ * verify a manifest section's `title` slugs to its `id` (THINK-183 KTD6) —
+ * one transform, no drift between save-time validation and compile-time
+ * presence checking.
+ */
+export function headingSlug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/&[a-z#0-9]+;/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "section"
+  );
+}
+
 /** Deterministic ASCII slug for heading ids, deduped per document. */
 function makeSlugger(): (text: string) => string {
   const seen = new Map<string, number>();
   return (text: string) => {
-    const base =
-      text
-        .toLowerCase()
-        .replace(/&[a-z#0-9]+;/g, "")
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 64) || "section";
+    const base = headingSlug(text);
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
     return n === 0 ? base : `${base}-${n}`;

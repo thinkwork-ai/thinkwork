@@ -95,6 +95,12 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => ({
   }),
 }));
 
+import {
+  boundedAnalyses,
+  boundedSections,
+  parseDraftConfig,
+  validateCandidatePlate,
+} from "./shared.js";
 import { documentPlates } from "./documentPlates.query.js";
 import { documentPlatePreview } from "./documentPlatePreview.query.js";
 import { saveDocumentPlate } from "./saveDocumentPlate.mutation.js";
@@ -428,5 +434,128 @@ describe("updateTenantDocumentPalette", () => {
     ).rejects.toThrow(/PLATE_TOKEN_INVALID/);
     expect(mocks.settingsUpdates).toHaveLength(0);
     expect(mocks.inserted).toHaveLength(0);
+  });
+});
+
+describe("content contract save gates (THINK-183 U2)", () => {
+  const goodSection = {
+    id: "pipeline-health",
+    title: "Pipeline Health",
+    tier: "required",
+    guidance: "Stage-by-stage funnel with conversion rates.",
+    suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+  };
+  const goodAnalysis = {
+    key: "pipeline-conversion",
+    op: "funnel_conversion",
+    presentation: { directive: "chart", chartType: "funnel" },
+  };
+
+  it("accepts a well-formed contract", () => {
+    expect(boundedSections([goodSection])).toEqual([goodSection]);
+    expect(boundedAnalyses([goodAnalysis])).toEqual([
+      { ...goodAnalysis, params: undefined, source: "model-supplied" },
+    ]);
+  });
+
+  it("rejects an unregistered analysis op, listing available ops (AE5)", () => {
+    expect(() =>
+      boundedAnalyses([{ ...goodAnalysis, op: "median_absolute_deviation" }]),
+    ).toThrow(/Available ops: funnel_conversion.*trend/);
+  });
+
+  it("rejects duplicate section ids", () => {
+    expect(() => boundedSections([goodSection, goodSection])).toThrow(
+      /duplicate id "pipeline-health"/,
+    );
+  });
+
+  it("rejects non-slug section ids (uppercase, spaces, overlong)", () => {
+    for (const id of ["Pipeline-Health", "pipeline health", "a".repeat(65)]) {
+      expect(() =>
+        boundedSections([{ ...goodSection, id, title: id }]),
+      ).toThrow(/slug/);
+    }
+  });
+
+  it("rejects a title whose slug differs from the section id (KTD6)", () => {
+    expect(() =>
+      boundedSections([{ ...goodSection, title: "Funnel Overview" }]),
+    ).toThrow(/slugs to "funnel-overview", not "pipeline-health"/);
+  });
+
+  it("rejects an unknown tier", () => {
+    expect(() =>
+      boundedSections([{ ...goodSection, tier: "mandatory" }]),
+    ).toThrow(/tier must be one of/);
+  });
+
+  it("rejects unknown suggested directive kinds and chart types", () => {
+    expect(() =>
+      boundedSections([
+        { ...goodSection, suggestedDirectives: [{ kind: "hologram" }] },
+      ]),
+    ).toThrow(/unknown suggested directive kind/i);
+    expect(() =>
+      boundedSections([
+        {
+          ...goodSection,
+          suggestedDirectives: [{ kind: "chart", chartType: "treemap" }],
+        },
+      ]),
+    ).toThrow(/unknown chart type/i);
+  });
+
+  it("rejects an analysis presentation with an unknown directive kind", () => {
+    expect(() =>
+      boundedAnalyses([
+        { ...goodAnalysis, presentation: { directive: "hologram" } },
+      ]),
+    ).toThrow(/presentation.directive must be one of/);
+  });
+
+  it("rejects duplicate analysis keys and a non-model-supplied source", () => {
+    expect(() => boundedAnalyses([goodAnalysis, goodAnalysis])).toThrow(
+      /duplicate key/,
+    );
+    expect(() =>
+      boundedAnalyses([{ ...goodAnalysis, source: "binding" }]),
+    ).toThrow(/model-supplied/);
+  });
+
+  it("gate 1b rejects a chart-presented analysis on a plate whose allowedDirectives excludes charts", async () => {
+    const { resolvePlatformPlate } = await import(
+      "../../../lib/artifacts/plate-registry.js"
+    );
+    const proposal = resolvePlatformPlate("proposal")!;
+    const verdict = validateCandidatePlate(
+      {
+        ...proposal,
+        analyses: [
+          {
+            key: "pipeline-conversion",
+            op: "funnel_conversion",
+            presentation: { directive: "chart", chartType: "funnel" },
+            source: "model-supplied",
+          },
+        ],
+      },
+      {},
+    );
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) {
+      expect(verdict.diagnostics[0].code).toBe(
+        "PLATE_ANALYSIS_PRESENTATION_RESTRICTED",
+      );
+    }
+  });
+
+  it("parseDraftConfig threads contract keys through (preview path)", () => {
+    const draft = parseDraftConfig({
+      sections: [goodSection],
+      analyses: [goodAnalysis],
+    });
+    expect(draft.sections).toHaveLength(1);
+    expect(draft.analyses).toHaveLength(1);
   });
 });

@@ -34,6 +34,24 @@ import { tenants } from "./core";
 export const DOCUMENT_PLATE_ORIGINS = ["platform_override", "tenant"] as const;
 export type DocumentPlateOrigin = (typeof DOCUMENT_PLATE_ORIGINS)[number];
 
+/** Section manifest entry (THINK-183); mirrors PlateSectionSpec in api. */
+export interface DocumentPlateSectionConfig {
+  id: string;
+  title: string;
+  tier: "required" | "required-if-material" | "suggested";
+  guidance: string;
+  suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
+}
+
+/** Declared analysis (THINK-183); mirrors PlateAnalysisSpec in api. */
+export interface DocumentPlateAnalysisConfig {
+  key: string;
+  op: string;
+  params?: Record<string, unknown>;
+  presentation: { directive: string; chartType?: string };
+  source?: "model-supplied";
+}
+
 /** Partial for platform_override rows; full definition for tenant rows. */
 export interface DocumentPlateConfig {
   displayName?: string;
@@ -45,6 +63,10 @@ export interface DocumentPlateConfig {
   paletteDark?: Record<string, string>;
   /** Directive kinds this plate's documents may use; absent = all. */
   allowedDirectives?: string[];
+  /** Content contract: section manifest override (wholesale per key). */
+  sections?: DocumentPlateSectionConfig[];
+  /** Content contract: declared analyses override (wholesale per key). */
+  analyses?: DocumentPlateAnalysisConfig[];
 }
 
 export const documentPlates = pgTable(

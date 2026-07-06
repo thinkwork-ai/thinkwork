@@ -16,6 +16,51 @@
 /** Token name → CSS value, plate token vocabulary only. */
 export type PlatePalette = Readonly<Record<string, string>>;
 
+// ---------------------------------------------------------------------------
+// Content contract (THINK-183): tiered section manifest + declared analyses.
+// ---------------------------------------------------------------------------
+
+export const PLATE_SECTION_TIERS = [
+  "required",
+  "required-if-material",
+  "suggested",
+] as const;
+export type PlateSectionTier = (typeof PLATE_SECTION_TIERS)[number];
+
+export interface PlateSuggestedDirective {
+  /** A DIRECTIVE_KINDS member (validated at save). */
+  kind: string;
+  /** Chart type suggestion; only meaningful when kind is "chart". */
+  chartType?: string;
+}
+
+export interface PlateSectionSpec {
+  /**
+   * Stable slug-shaped id, matched exactly against the compositor's
+   * id-anchored heading slugs (KTD6). Must equal the slug of `title`.
+   */
+  id: string;
+  /** Expected heading title — authoring it yields the section id. */
+  title: string;
+  tier: PlateSectionTier;
+  /** What belongs in this section; surfaces in rejection diagnostics. */
+  guidance: string;
+  suggestedDirectives?: readonly PlateSuggestedDirective[];
+}
+
+export interface PlateAnalysisSpec {
+  /** Slug-shaped key the model references in a tw:analysis block. */
+  key: string;
+  /** An ANALYSIS_OPS member (document-analyses.ts; validated at save). */
+  op: string;
+  /** Plate-declared parameters merged over the model's raw inputs. */
+  params?: Readonly<Record<string, unknown>>;
+  /** How the computed result renders (chart/stats; kind validated at save). */
+  presentation: { directive: string; chartType?: string };
+  /** Raw-input provenance; v1 is model-supplied (binding is a future rung). */
+  source: "model-supplied";
+}
+
 export interface PlateDefinition {
   slug: string;
   displayName: string;
@@ -29,6 +74,10 @@ export interface PlateDefinition {
   paletteDark: PlatePalette;
   /** Directive kinds available in this plate; "all" for no restriction. */
   allowedDirectives: readonly string[] | "all";
+  /** Content contract: tiered section manifest (absent = no manifest). */
+  sections?: readonly PlateSectionSpec[];
+  /** Content contract: declared server-computed analyses (absent = none). */
+  analyses?: readonly PlateAnalysisSpec[];
 }
 
 /** The four core plates — values ported verbatim from GENRE_TEMPLATES. */

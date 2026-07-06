@@ -339,3 +339,123 @@ describe("platform definitions snapshot", () => {
     }
   });
 });
+
+describe("content contract resolution (THINK-183 U2)", () => {
+  const SECTIONS = [
+    {
+      id: "pipeline-health",
+      title: "Pipeline Health",
+      tier: "required-if-material",
+      guidance: "Stage-by-stage funnel with conversion rates.",
+      suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+    },
+    {
+      id: "coaching-notes",
+      title: "Coaching Notes",
+      tier: "suggested",
+      guidance: "Specific behaviors to keep or change.",
+    },
+  ];
+  const ANALYSES = [
+    {
+      key: "pipeline-conversion",
+      op: "funnel_conversion",
+      presentation: { directive: "chart", chartType: "funnel" },
+      source: "model-supplied",
+    },
+  ];
+
+  it("a plate with no contract keys resolves with sections/analyses absent (R3)", async () => {
+    const plate = await resolvePlate(TENANT, "qbr", fakeStore());
+    expect(plate!.sections).toBeUndefined();
+    expect(plate!.analyses).toBeUndefined();
+  });
+
+  it("platform_override contract config round-trips into ResolvedPlate", async () => {
+    const store = fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: { sections: SECTIONS, analyses: ANALYSES } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    expect(plate!.sections).toEqual([
+      { ...SECTIONS[0] },
+      { ...SECTIONS[1], suggestedDirectives: undefined },
+    ]);
+    expect(plate!.analyses).toEqual(ANALYSES);
+    expect(plate!.customized).toBe(true);
+  });
+
+  it("tenant-created rows carry their own contract", async () => {
+    const store = fakeStore([
+      {
+        slug: "deal-desk",
+        origin: "tenant",
+        config: {
+          displayName: "Deal Desk",
+          useFor: "Deal desk review",
+          sections: SECTIONS,
+          analyses: ANALYSES,
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = await resolvePlate(TENANT, "deal-desk", store);
+    expect(plate!.sections).toHaveLength(2);
+    expect(plate!.analyses).toHaveLength(1);
+  });
+
+  it("resolution drops malformed stored contract entries (defense in depth)", async () => {
+    const store = fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: {
+          sections: [
+            SECTIONS[0],
+            { id: "NOT A SLUG", title: "x", tier: "required", guidance: "g" },
+            { id: "no-tier", title: "No Tier", guidance: "g" },
+            { id: "pipeline-health", title: "Dup", tier: "required", guidance: "g" },
+          ],
+          analyses: [
+            ANALYSES[0],
+            { key: "bad-op", op: "median_absolute_deviation", presentation: { directive: "chart" } },
+            { key: "bad-kind", op: "trend", presentation: { directive: "hologram" } },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    expect(plate!.sections?.map((s) => s.id)).toEqual(["pipeline-health"]);
+    expect(plate!.analyses?.map((a) => a.key)).toEqual(["pipeline-conversion"]);
+  });
+
+  it("exemplar for a manifest-bearing plate emits every section heading and compiles through gate 2", async () => {
+    const store = fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: { sections: SECTIONS } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const exemplar = buildPlateExemplar(plate!);
+    expect(exemplar.markdownBody).toContain("## Pipeline Health");
+    expect(exemplar.markdownBody).toContain("## Coaching Notes");
+    const compiled = compileDocument({
+      plate: plate!,
+      title: exemplar.title,
+      abstract: exemplar.abstract,
+      markdownBody: exemplar.markdownBody,
+    });
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect(compiled.renderHtml).toContain('id="pipeline-health"');
+    }
+  });
+});
