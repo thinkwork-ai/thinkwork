@@ -1,6 +1,7 @@
 ---
 title: "Canary releases: manual v* tags, mirrored desktop-v* numbers, web ships with desktop"
 date: 2026-06-11
+last_updated: 2026-07-06
 category: docs/solutions/workflow-issues/
 module: release-engineering
 problem_type: workflow_issue
@@ -11,7 +12,9 @@ applies_when:
   - Wondering why a new `v0.1.0-canary.N` release appeared "by itself"
   - A release is "missing web artifacts" or "missing desktop artifacts"
   - Deciding what number the next desktop tag should carry
-tags: [release, canary, desktop, web, tags, app-thinkwork-ai, github-actions]
+  - Running browser-based dogfood/UI verification right after a web-facing PR
+    merges to main and the change doesn't appear to have taken effect
+tags: [release, canary, desktop, web, tags, app-thinkwork-ai, github-actions, dogfood, verification]
 ---
 
 # Canary releases: manual v* tags, mirrored desktop-v* numbers, web ships with desktop
@@ -53,6 +56,22 @@ two tag-triggered workflows:
 5. **GHCR login timeouts are transient.** `release.yml`'s "Login to GHCR"
    step occasionally dies with `Client.Timeout exceeded`;
    `gh run rerun <id> --failed` fixes it.
+6. **This recurs every time browser-based verification follows a merge.**
+   THINK-178 (rename Pin → Snapshot) hit it twice within the same issue —
+   once needing a "Needs User" round-trip to get a canary cut before the
+   four browser flows (S1-S5) could even be attempted — and THINK-180 hit it
+   independently the same day. The pattern each time: GraphQL/Lambda changes
+   are live within minutes of merge, so backend checks pass immediately;
+   the web bundle (`app.thinkwork.ai`) does not update until a human pushes
+   a `desktop-v0.1.0-canary.N` tag, so browser verification of the same PR
+   can silently be exercising stale JS with no error to signal it. Detect it
+   before spending time debugging "why doesn't the browser show my change":
+   `curl -sI https://app.thinkwork.ai/ | grep -i last-modified` (or check the
+   app's `releaseVersion` against `git log -1 --format=%cI origin/main` for
+   the merge commit) — if the bundle predates the merge, browser verification
+   is blocked pending a new `desktop-v*` tag, not a code problem. Escalate to
+   a human to cut the tag (tag-pushing is a release action outside dogfood
+   scope) rather than looping on cache-busting or re-deploying.
 
 ## Working recipe (cut a full web+desktop release)
 
