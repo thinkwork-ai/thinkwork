@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SQSEvent } from "aws-lambda";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
+  evalDatasets,
   evalReplayToolAllowlist,
   evalResults,
   evalRuns,
@@ -25,6 +26,7 @@ import type { EngineScoringResult, ScoringEngine } from "@thinkwork/evals-core";
 import {
   evalRunSnapshotCaseKey,
   evalRunSnapshotCasePayloadKey,
+  evalDatasetCaseKey,
   serializeEvalDatasetCase,
   sha256Hex,
   type DatasetStorage,
@@ -100,6 +102,8 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => ({
 interface FakeDbState {
   run: Record<string, unknown>;
   testCase: Record<string, unknown>;
+  /** Dataset row returned for evalDatasets lookups (THINK-179 category path). */
+  dataset?: Record<string, unknown>;
   insertedResults: Array<Record<string, any>>;
   runUpdates: Array<Record<string, any>>;
   // MCP replay tool override rows (U14). Empty = default-allow heuristic.
@@ -119,6 +123,8 @@ function createFakeDb(dbState: FakeDbState) {
       where: async () => {
         if (table === evalRuns) return [dbState.run];
         if (table === evalTestCases) return [dbState.testCase];
+        if (table === evalDatasets)
+          return dbState.dataset ? [dbState.dataset] : [];
         if (table === tenants) return [{ slug: "acme" }];
         if (table === evalReplayToolAllowlist) return dbState.replayOverrides;
         if (table === threads) return [{ user_id: "owner-user-1" }];
@@ -1647,5 +1653,118 @@ describe("eval-worker execution tiers", () => {
 
     const row = state.insertedResults[0];
     expect(row.execution_tier).toBe("agent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-179 — category / "All Categories" path resolves the flagged replay
+// requester from the canonical dataset case (no run snapshot).
+// ---------------------------------------------------------------------------
+
+describe("eval-worker category-path flagged requester (THINK-179)", () => {
+  const CASE_ID = "flagged-cat-1";
+  let storage: MemoryStorage;
+
+  const canonicalContent = serializeEvalDatasetCase(
+    {
+      case_id: CASE_ID,
+      name: "Flagged: last 5 opportunities in the CRM?",
+      category: "flagged-thread",
+      query: "what are the last 5 opportunities in the CRM?",
+      system_prompt: null,
+      expected_behavior: null,
+      assertions: [],
+      tags: ["flagged-thread"],
+      enabled: true,
+      source: {
+        source_thread_id: "thread-crm-1",
+        source_turn_id: "turn-crm-1",
+        flagged_at: "2026-06-13T00:00:00.000Z",
+      },
+      completeness: {
+        history: true,
+        workspace: false,
+        traces: false,
+        truncated: false,
+      },
+    },
+    null,
+  );
+
+  beforeEach(() => {
+    storage = makeMemoryStorage();
+    // The canonical dataset case (what the category path reads to recover
+    // source_thread_id) lives at the dataset case key, NOT a run snapshot.
+    storage.objects.set(
+      evalDatasetCaseKey("acme", "ds-slug", CASE_ID),
+      canonicalContent,
+    );
+    _setSnapshotStorageForTests(storage);
+    state.dataset = { slug: "ds-slug" };
+    state.testCase = {
+      id: "tc-1",
+      tenant_id: "tenant-1",
+      name: "Flagged: last 5 opportunities in the CRM?",
+      query: "what are the last 5 opportunities in the CRM?",
+      system_prompt: null,
+      category: "flagged-thread",
+      dataset_id: "dataset-1",
+      dataset_case_id: CASE_ID,
+      assertions: [],
+      agentcore_evaluator_ids: [],
+    };
+  });
+
+  afterEach(() => {
+    _setSnapshotStorageForTests(undefined);
+  });
+
+  it("threads the source thread owner into the invoke for an unpinned (no-snapshotKey) flagged case", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "the last 5 orders are ...",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    // A category run: buildEvalWorkerMessages emits NO snapshotKey.
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock.mock.calls[0][0].replayRequesterUserId).toBe(
+      "owner-user-1",
+    );
+  });
+
+  it("returns null requester for a non-flagged category case (fail-closed unchanged)", async () => {
+    state.testCase = {
+      ...state.testCase,
+      category: "red-team",
+    };
+    invokeMock.mockResolvedValueOnce({
+      output: "no",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock.mock.calls[0][0].replayRequesterUserId).toBeNull();
+  });
+
+  it("returns null requester when the case has no dataset linkage", async () => {
+    state.testCase = {
+      ...state.testCase,
+      dataset_id: null,
+      dataset_case_id: null,
+    };
+    invokeMock.mockResolvedValueOnce({
+      output: "no",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock.mock.calls[0][0].replayRequesterUserId).toBeNull();
   });
 });
