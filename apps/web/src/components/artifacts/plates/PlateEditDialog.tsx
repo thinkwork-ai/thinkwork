@@ -506,7 +506,10 @@ export function PlateEditDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-wrap gap-2 border-t border-border px-6 py-4">
+        {/* The DialogFooter base assumes a p-4 DialogContent and offsets with
+            -mx-4/-mb-4; this dialog is p-0, so neutralize the offsets or the
+            footer buttons sit flush against the dialog edge. */}
+        <DialogFooter className="mx-0 mb-0 flex-wrap gap-2 border-t border-border px-6 py-4">
           {isPlatform ? (
             <div className="mr-auto flex gap-2">
               <Button
