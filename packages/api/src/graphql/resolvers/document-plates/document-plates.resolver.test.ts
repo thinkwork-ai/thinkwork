@@ -98,6 +98,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => ({
 import {
   boundedAnalyses,
   boundedSections,
+  boundedSectionOverrides,
   parseDraftConfig,
   validateCandidatePlate,
 } from "./shared.js";
@@ -556,5 +557,275 @@ describe("content contract save gates (THINK-183 U2)", () => {
     });
     expect(draft.sections).toHaveLength(1);
     expect(draft.analyses).toHaveLength(1);
+  });
+});
+
+describe("floor save gates (THINK-188 U2)", () => {
+  const TERRITORY = {
+    id: "territory-notes",
+    title: "Territory Notes",
+    tier: "suggested",
+    guidance: "Notes on territory coverage this period.",
+  };
+
+  it("covers AE1 (API half): lowering a floor tier rejects naming the floor rule; raise + guidance succeeds", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "sales-rep-review",
+            sectionOverrides: {
+              "coaching-notes": { tier: "suggested" },
+            },
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/cannot lower the platform floor/);
+    expect(mocks.inserted).toHaveLength(0);
+
+    const result = (await saveDocumentPlate(
+      {},
+      {
+        input: {
+          slug: "sales-rep-review",
+          sectionOverrides: {
+            "quota-attainment": {
+              tier: "required",
+              guidance: "Attainment vs our fiscal-year plan.",
+            },
+          },
+        },
+      },
+      ctx,
+    )) as { origin: string };
+    expect(result.origin).toBe("platform");
+    expect(mocks.inserted).toHaveLength(1);
+    const config = mocks.inserted[0].config as Record<string, unknown>;
+    expect(config.sectionOverrides).toEqual({
+      "quota-attainment": {
+        tier: "required",
+        guidance: "Attainment vs our fiscal-year plan.",
+      },
+    });
+  });
+
+  it("clearing a raised tier back to the platform floor is accepted (not a ratchet)", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "sales-rep-review",
+            sectionOverrides: {
+              "quota-attainment": { tier: "required-if-material" },
+            },
+          },
+        },
+        ctx,
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  it("covers AE1: an addition colliding with a floor id rejects; a fresh addition round-trips", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "sales-rep-review",
+            sections: [
+              {
+                id: "pipeline-health",
+                title: "Pipeline Health",
+                tier: "suggested",
+                guidance: "attempted replacement",
+              },
+            ],
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/platform floor section and cannot be redefined/);
+
+    const result = (await saveDocumentPlate(
+      {},
+      { input: { slug: "sales-rep-review", sections: [TERRITORY] } },
+      ctx,
+    )) as { origin: string };
+    expect(result.origin).toBe("platform");
+    const config = mocks.inserted.at(-1)!.config as Record<string, unknown>;
+    expect(config.sections).toEqual([TERRITORY]);
+  });
+
+  it("rejects overrides keyed to unknown floor ids, listing the floor", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "sales-rep-review",
+            sectionOverrides: { "churn-analysis": { guidance: "x" } },
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/not a platform floor section.*quota-attainment/);
+  });
+
+  it("rejects a floor-analysis key collision and a chart-presented addition on a chart-restricted plate", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "sales-rep-review",
+            analyses: [
+              {
+                key: "pipeline-conversion",
+                op: "trend",
+                presentation: { directive: "stats" },
+              },
+            ],
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/platform floor analysis/);
+
+    // Proposal excludes charts; gate 1b holds for platform additions too.
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "proposal",
+            analyses: [
+              {
+                key: "win-trend",
+                op: "trend",
+                presentation: { directive: "chart", chartType: "line" },
+              },
+            ],
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/PLATE_ANALYSIS_PRESENTATION_RESTRICTED/);
+  });
+
+  it("tier-clamp boundary: every lower pairing rejects, equal and higher pass", async () => {
+    const TIERS = ["suggested", "required-if-material", "required"] as const;
+    const floor = [{ id: "s", tier: "x" }];
+    for (const floorTier of TIERS) {
+      for (const overrideTier of TIERS) {
+        floor[0] = { id: "s", tier: floorTier };
+        const attempt = () =>
+          boundedSectionOverrides({ s: { tier: overrideTier } }, floor);
+        if (TIERS.indexOf(overrideTier) < TIERS.indexOf(floorTier)) {
+          expect(attempt, `${floorTier} -> ${overrideTier}`).toThrow(
+            /cannot lower the platform floor/,
+          );
+        } else {
+          expect(attempt(), `${floorTier} -> ${overrideTier}`).toEqual({
+            s: { tier: overrideTier },
+          });
+        }
+      }
+    }
+  });
+
+  it("platform identity fields stay locked with the narrowed message", async () => {
+    await expect(
+      saveDocumentPlate(
+        {},
+        { input: { slug: "sales-rep-review", displayName: "Renamed" } },
+        ctx,
+      ),
+    ).rejects.toThrow(/identity fields and allowed directives cannot/);
+  });
+
+  it("wipe guard (server half): palette-only save that resends contract state preserves the deltas", async () => {
+    const result = (await saveDocumentPlate(
+      {},
+      {
+        input: {
+          slug: "sales-rep-review",
+          paletteLight: JSON.stringify({ "--accent": "#123456" }),
+          sections: [TERRITORY],
+          sectionOverrides: {
+            "quota-attainment": { guidance: "Fiscal-year attainment." },
+          },
+        },
+      },
+      ctx,
+    )) as { origin: string };
+    expect(result.origin).toBe("platform");
+    const config = mocks.inserted.at(-1)!.config as Record<string, unknown>;
+    expect(config.paletteLight).toEqual({ "--accent": "#123456" });
+    expect(config.sections).toEqual([TERRITORY]);
+    expect(config.sectionOverrides).toBeTruthy();
+  });
+
+  it("a platform row holding only contract deltas resets when saved empty", async () => {
+    mocks.rows = [
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: { sections: [TERRITORY] },
+        hidden: false,
+      },
+    ];
+    const result = (await saveDocumentPlate(
+      {},
+      { input: { slug: "sales-rep-review" } },
+      ctx,
+    )) as { customized: boolean };
+    expect(mocks.deleted).toBe(1);
+    expect(result.customized).toBe(false);
+  });
+
+  it("tenant plates: full contract persists; sectionOverrides is rejected", async () => {
+    const result = (await saveDocumentPlate(
+      {},
+      {
+        input: {
+          slug: "deal-desk",
+          displayName: "Deal Desk",
+          useFor: "Deal desk reviews.",
+          sections: [TERRITORY],
+          analyses: [
+            {
+              key: "win-rate",
+              op: "ratio_pct",
+              presentation: { directive: "stats" },
+            },
+          ],
+        },
+      },
+      ctx,
+    )) as { origin: string };
+    expect(result.origin).toBe("tenant");
+    const config = mocks.inserted.at(-1)!.config as Record<string, unknown>;
+    expect(config.sections).toEqual([TERRITORY]);
+    expect(
+      (config.analyses as Array<{ key: string }>).map((a) => a.key),
+    ).toEqual(["win-rate"]);
+
+    await expect(
+      saveDocumentPlate(
+        {},
+        {
+          input: {
+            slug: "deal-desk-2",
+            displayName: "Deal Desk 2",
+            useFor: "x",
+            sectionOverrides: { anything: { guidance: "y" } },
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/applies only to platform plates/);
   });
 });

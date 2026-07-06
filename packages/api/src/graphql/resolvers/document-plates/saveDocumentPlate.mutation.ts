@@ -12,8 +12,11 @@ import {
 import type { DocumentPlateConfig } from "@thinkwork/database-pg/schema";
 import {
   badInput,
+  boundedAnalyses,
   boundedDirectives,
   boundedPalette,
+  boundedSections,
+  boundedSectionOverrides,
   plateToGraphql,
   requirePlateAdmin,
   validateCandidatePlate,
@@ -30,6 +33,11 @@ interface SaveDocumentPlateInput {
   paletteDark?: unknown;
   allowedDirectives?: unknown;
   hidden?: boolean | null;
+  /** THINK-188 contract fields: tenant plates carry the full contract;
+   * platform plates carry additions + sectionOverrides under the floor. */
+  sections?: unknown;
+  analyses?: unknown;
+  sectionOverrides?: unknown;
 }
 
 function text(v: string | null | undefined): string | undefined {
@@ -70,11 +78,15 @@ export async function saveDocumentPlate(
   // definition — its slug keeps full tenant semantics.
   const isPlatformPath = platform !== null && existingRow?.origin !== "tenant";
 
+  const sections = boundedSections(input.sections);
+  const analyses = boundedAnalyses(input.analyses);
+
   let origin: "platform_override" | "tenant";
   let config: DocumentPlateConfig;
   if (isPlatformPath) {
-    // R4: built-in plates can be token-overridden and hidden, never edited
-    // structurally and never deleted.
+    // R4 narrowed by THINK-188 R8: built-in plates accept palette overrides,
+    // hidden, and content-contract deltas under the floor rules — additions
+    // plus per-floor-section patches. Identity fields stay locked.
     if (
       text(input.displayName) !== undefined ||
       text(input.useFor) !== undefined ||
@@ -83,8 +95,31 @@ export async function saveDocumentPlate(
       allowedDirectives !== undefined
     ) {
       throw badInput(
-        `"${slug}" is a platform plate: only palette token overrides and hidden can be changed. Create a tenant plate to define new structure.`,
+        `"${slug}" is a platform plate: palette overrides, hidden, and content-contract additions/overrides can be changed — identity fields and allowed directives cannot. Create a tenant plate to define new structure.`,
       );
+    }
+    const floorSections = platform!.sections ?? [];
+    const floorAnalysisKeys = new Set(
+      (platform!.analyses ?? []).map((a) => a.key),
+    );
+    const sectionOverrides = boundedSectionOverrides(
+      input.sectionOverrides,
+      floorSections,
+    );
+    const floorIds = new Set(floorSections.map((s) => s.id));
+    for (const addition of sections ?? []) {
+      if (floorIds.has(addition.id)) {
+        throw badInput(
+          `sections: "${addition.id}" is a platform floor section and cannot be redefined (floor rule). Patch it via sectionOverrides instead.`,
+        );
+      }
+    }
+    for (const addition of analyses ?? []) {
+      if (floorAnalysisKeys.has(addition.key)) {
+        throw badInput(
+          `analyses: "${addition.key}" is a platform floor analysis and cannot be redefined (floor rule).`,
+        );
+      }
     }
     origin = "platform_override";
     config = {
@@ -94,12 +129,20 @@ export async function saveDocumentPlate(
       ...(paletteDark && Object.keys(paletteDark).length > 0
         ? { paletteDark }
         : {}),
+      ...(sections && sections.length > 0 ? { sections } : {}),
+      ...(analyses && analyses.length > 0 ? { analyses } : {}),
+      ...(sectionOverrides ? { sectionOverrides } : {}),
     };
   } else {
     if (platform && !existingRow) {
       // Unreachable by construction (isPlatformPath covers it) — guard kept
       // for clarity if the branching above changes.
       throw badInput(`"${slug}" is a platform plate`);
+    }
+    if (input.sectionOverrides !== undefined) {
+      throw badInput(
+        "sectionOverrides applies only to platform plates — tenant plates own their contract; edit sections directly.",
+      );
     }
     origin = "tenant";
     const prior = existingRow?.config ?? {};
@@ -111,6 +154,8 @@ export async function saveDocumentPlate(
       paletteLight: paletteLight ?? prior.paletteLight,
       paletteDark: paletteDark ?? prior.paletteDark,
       allowedDirectives: allowedDirectives ?? prior.allowedDirectives,
+      sections: sections ?? prior.sections,
+      analyses: analyses ?? prior.analyses,
     };
     if (!config.displayName || !config.useFor) {
       throw badInput(

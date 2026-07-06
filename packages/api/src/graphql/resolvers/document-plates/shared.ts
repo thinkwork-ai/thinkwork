@@ -86,10 +86,15 @@ const MAX_GUIDANCE = 500;
 const MAX_SUGGESTED_DIRECTIVES = 4;
 const CONTRACT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+export type PlateDraftSectionTier =
+  | "required"
+  | "required-if-material"
+  | "suggested";
+
 export interface PlateDraftSection {
   id: string;
   title: string;
-  tier: string;
+  tier: PlateDraftSectionTier;
   guidance: string;
   suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
 }
@@ -269,7 +274,7 @@ export function boundedSections(
     out.push({
       id,
       title,
-      tier,
+      tier: tier as PlateDraftSectionTier,
       guidance: guidance.trim(),
       suggestedDirectives: boundedSuggestedDirectives(
         rec.suggestedDirectives,
@@ -278,6 +283,96 @@ export function boundedSections(
     });
   }
   return out;
+}
+
+/** Floor-model tier rank (THINK-188 KTD2): overrides may only raise. */
+const TIER_RANK: Record<string, number> = {
+  suggested: 0,
+  "required-if-material": 1,
+  required: 2,
+};
+
+export interface PlateDraftSectionOverride {
+  guidance?: string;
+  tier?: PlateDraftSectionTier;
+  suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
+}
+
+/**
+ * Bound and validate floor-section overrides on a platform plate (THINK-188
+ * R5/R6). Keys must name the platform floor's section ids; tier patches may
+ * raise but never lower; the patch shape carries no id/title, so removal and
+ * retitle stay unrepresentable.
+ */
+export function boundedSectionOverrides(
+  value: unknown,
+  platformSections: ReadonlyArray<{ id: string; tier: string }>,
+): Record<string, PlateDraftSectionOverride> | undefined {
+  if (value === undefined || value === null) return undefined;
+  const rec = asObject(value);
+  if (!rec) {
+    throw badInput(
+      "sectionOverrides must be an object keyed by platform section id",
+    );
+  }
+  const floorIds = platformSections.map((s) => s.id);
+  const out: Record<string, PlateDraftSectionOverride> = {};
+  for (const [id, raw] of Object.entries(rec)) {
+    const floor = platformSections.find((s) => s.id === id);
+    if (!floor) {
+      throw badInput(
+        `sectionOverrides["${id}"]: not a platform floor section of this plate. Floor sections: ${floorIds.join(", ") || "(none)"}.`,
+      );
+    }
+    const patch = asObject(raw);
+    if (!patch) {
+      throw badInput(`sectionOverrides["${id}"] must be an object`);
+    }
+    const allowed = new Set(["guidance", "tier", "suggestedDirectives"]);
+    for (const key of Object.keys(patch)) {
+      if (!allowed.has(key)) {
+        throw badInput(
+          `sectionOverrides["${id}"].${key} is not an overridable field. Floor sections allow: guidance, tier (raise only), suggestedDirectives.`,
+        );
+      }
+    }
+    const override: PlateDraftSectionOverride = {};
+    if (patch.guidance !== undefined) {
+      if (typeof patch.guidance !== "string" || patch.guidance.trim() === "") {
+        throw badInput(`sectionOverrides["${id}"].guidance must be non-empty`);
+      }
+      if (patch.guidance.length > MAX_GUIDANCE) {
+        throw badInput(
+          `sectionOverrides["${id}"].guidance must be ≤${MAX_GUIDANCE} characters`,
+        );
+      }
+      override.guidance = patch.guidance.trim();
+    }
+    if (patch.tier !== undefined) {
+      if (
+        typeof patch.tier !== "string" ||
+        !(PLATE_SECTION_TIERS as readonly string[]).includes(patch.tier)
+      ) {
+        throw badInput(
+          `sectionOverrides["${id}"].tier must be one of: ${PLATE_SECTION_TIERS.join(", ")}`,
+        );
+      }
+      if (TIER_RANK[patch.tier] < TIER_RANK[floor.tier]) {
+        throw badInput(
+          `sectionOverrides["${id}"].tier cannot lower the platform floor: "${id}" is ${floor.tier} on the platform plate (floor rule — tiers may only be raised, or cleared back to the floor).`,
+        );
+      }
+      override.tier = patch.tier as PlateDraftSectionTier;
+    }
+    if (patch.suggestedDirectives !== undefined) {
+      override.suggestedDirectives = boundedSuggestedDirectives(
+        patch.suggestedDirectives,
+        `sectionOverrides["${id}"]`,
+      );
+    }
+    if (Object.keys(override).length > 0) out[id] = override;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Bound and validate declared analyses (THINK-183 R13/AE5). */
