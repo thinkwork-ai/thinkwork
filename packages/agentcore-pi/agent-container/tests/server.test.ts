@@ -1082,11 +1082,13 @@ describe("handleInvocation — happy path", () => {
     ]);
   });
 
-  it("keeps guarded @Research shortcuts as explicit profile delegation", async () => {
-    let childMessage: unknown;
+  it("does not treat @Profile mentions as explicit profile delegation (THINK-180)", async () => {
+    // Uses a Reviewer profile so the automatic-Research heuristic (which
+    // keys on the word "research") cannot mask the explicit-trigger check.
+    const calls: Array<{ modelId: unknown; message: unknown }> = [];
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
-        message: "Please @Research find current sources",
+        message: "Please @Reviewer double-check the summary wording",
         model: "anthropic/claude-sonnet-4-5",
         approved_model_ids: [
           "anthropic/claude-sonnet-4-5",
@@ -1095,37 +1097,22 @@ describe("handleInvocation — happy path", () => {
         web_search_config: { provider: "exa", apiKey: "exa-key" },
         agent_profiles: [
           {
-            id: "profile-research",
-            slug: "research",
-            name: "Research",
+            id: "profile-reviewer",
+            slug: "reviewer",
+            name: "Reviewer",
             modelId: "anthropic/claude-haiku-4-5",
-            builtInKey: "research",
-            instructions: "Research with sources.",
-            builtInTools: ["read", "web-search"],
+            builtInKey: "reviewer",
+            instructions: "Review handoffs.",
+            builtInTools: ["read"],
             executionControls: { maxRuntimeMs: 10_000 },
           },
         ],
       }),
       deps: makeDeps({
-        runAgentLoop: async ({
-          modelId,
-          message,
-          builtinToolNames,
-          extensionToolNames,
-        }) => {
-          if (modelId === "anthropic/claude-sonnet-4-5") {
-            return {
-              content: "Parent final answer from explicit Research",
-              modelId: String(modelId),
-              toolsCalled: [],
-              toolInvocations: [],
-            };
-          }
-          childMessage = message;
-          expect(builtinToolNames).toEqual(["read"]);
-          expect(extensionToolNames).toEqual(["web_search"]);
+        runAgentLoop: async ({ modelId, message }) => {
+          calls.push({ modelId, message });
           return {
-            content: "Research handoff",
+            content: "Parent answer without profile delegation",
             modelId: String(modelId),
             toolsCalled: [],
             toolInvocations: [],
@@ -1135,15 +1122,18 @@ describe("handleInvocation — happy path", () => {
     });
 
     expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
-    expect(String(childMessage)).not.toContain("@Research");
-    expect(String(childMessage)).toContain("find current sources");
-    const body = result.body as Record<string, unknown>;
-    expect(body.agent_profile_runs).toEqual([
-      expect.objectContaining({
-        profileSlug: "research",
-        model: "anthropic/claude-haiku-4-5",
-      }),
+    expect(calls).toEqual([
+      {
+        modelId: "anthropic/claude-sonnet-4-5",
+        message: "Please @Reviewer double-check the summary wording",
+      },
     ]);
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([]);
+    expect(body.tool_invocations).toEqual([]);
+    expect(body.response).toMatchObject({
+      content: "Parent answer without profile delegation",
+    });
   });
 
   it("retries the specialist once when Reviewer requests revision", async () => {

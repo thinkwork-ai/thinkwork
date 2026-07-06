@@ -161,22 +161,31 @@ describe("parseMessageMentions", () => {
     ]);
   });
 
-  it("keeps @ Agent Profile mentions as a backwards-compatible text alias", () => {
+  it("does not treat @ Agent Profile mentions as a delegation trigger", () => {
     expect(
       parseMessageMentions({
         content: "@research cite the source",
         targets,
-      }).map((mention) => ({
-        targetType: mention.targetType,
-        displayName: mention.displayName,
-        rawText: mention.rawText,
-      })),
-    ).toEqual([
-      {
-        targetType: "agent_profile",
-        displayName: "Research",
-        rawText: "@research",
-      },
-    ]);
+      }),
+    ).toEqual([]);
+  });
+
+  it("produces zero agent_profile mentions for a plain @ profile alias (THINK-180 repro)", () => {
+    const mentions = parseMessageMentions({
+      content: "@SurSum what do you think? Can run the credit check?",
+      targets: [
+        ...targets,
+        {
+          targetType: "agent_profile" as const,
+          targetId: "44444444-4444-4444-8444-444444444444",
+          displayName: "SurSum",
+          aliases: ["sursum"],
+        },
+      ],
+    });
+    expect(
+      mentions.filter((mention) => mention.targetType === "agent_profile"),
+    ).toEqual([]);
+    expect(mentions).toEqual([]);
   });
 });

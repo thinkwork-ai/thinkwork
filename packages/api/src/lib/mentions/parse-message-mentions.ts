@@ -86,7 +86,7 @@ function findTextMentions(
   const claimedStartOffsets = new Set<number>();
 
   for (const { alias, target } of aliases) {
-    const trigger = target.targetType === "agent_profile" ? "[#@]" : "@";
+    const trigger = target.targetType === "agent_profile" ? "#" : "@";
     const pattern = new RegExp(
       `(^|\\s)${trigger}${escapeRegExp(alias)}(?=$|\\s|[.,!?;:])`,
       "iu",
