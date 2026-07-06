@@ -176,3 +176,34 @@ describe("idempotency helpers", () => {
     expect(__test.nonSignatureFilesEqual(a, b)).toBe(false);
   });
 });
+
+describe("rematerializeIfStale (THINK-154 seeder half-update fix)", () => {
+  it("re-materializes and regenerates the manifest when the workspace copy is stale", async () => {
+    const calls: string[] = [];
+    await __test.rematerializeIfStale({
+      reinstall: async () => {
+        calls.push("reinstall");
+        return { reinstalled_paths: ["SKILL.md", "references/a.md"] };
+      },
+      regenerate: async () => {
+        calls.push("regenerate");
+      },
+      log: (line) => calls.push(`log:${line}`),
+    });
+    expect(calls[0]).toBe("reinstall");
+    expect(calls[1]).toBe("regenerate");
+    expect(calls[2]).toContain("re-materialized 2 files");
+  });
+
+  it("writes nothing when the workspace copy is already current (noop)", async () => {
+    const calls: string[] = [];
+    await __test.rematerializeIfStale({
+      reinstall: async () => ({ noop: true, reinstalled_paths: [] }),
+      regenerate: async () => {
+        calls.push("regenerate");
+      },
+      log: (line) => calls.push(`log:${line}`),
+    });
+    expect(calls).toEqual([]);
+  });
+});

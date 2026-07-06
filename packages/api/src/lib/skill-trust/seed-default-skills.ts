@@ -42,6 +42,7 @@ import {
   CatalogInstallError,
   installCatalogSkill,
 } from "../catalog-install.js";
+import { reinstallCatalogSkill } from "../catalog-reinstall.js";
 import { parseWiringMd } from "../wiring-md.js";
 import { regenerateManifest } from "../workspace-manifest.js";
 import {
@@ -424,12 +425,48 @@ async function ensurePlatformAgentInstall(
       err instanceof CatalogInstallError &&
       err.code === "already_installed"
     ) {
+      await rematerializeIfStale({
+        reinstall: () =>
+          reinstallCatalogSkill({
+            s3: input.s3,
+            bucket: input.bucket,
+            tenantSlug: input.tenantSlug,
+            targetPrefix,
+            slug,
+          }),
+        regenerate: () =>
+          regenerateManifest(input.bucket, input.tenantSlug, workspaceFolder),
+        log: (line) =>
+          console.log(`${logPrefix} ${input.tenantSlug}/${slug}: ${line}`),
+      });
       return true;
     }
     throw err;
   }
   await regenerateManifest(input.bucket, input.tenantSlug, workspaceFolder);
   return true;
+}
+
+/**
+ * Republishing the catalog is only half the update: the runtime reads the
+ * MATERIALIZED workspace copy, and installCatalogSkill skips it when the
+ * folder exists — the silent half-update behind the THINK-177 "default-skill
+ * content updates never reach agents" incident (and its THINK-154 repeat).
+ * Re-materialize on the already-installed path; reinstallCatalogSkill
+ * self-detects the no-op case (installed ref sha === catalog sha) and writes
+ * nothing when the copy is already current.
+ */
+async function rematerializeIfStale(deps: {
+  reinstall: () => Promise<{ noop?: true; reinstalled_paths: string[] }>;
+  regenerate: () => Promise<void>;
+  log: (line: string) => void;
+}): Promise<void> {
+  const reinstall = await deps.reinstall();
+  if (reinstall.noop) return;
+  await deps.regenerate();
+  deps.log(
+    `workspace copy was stale — re-materialized ${reinstall.reinstalled_paths.length} files from the catalog`,
+  );
 }
 
 async function firstWiringChoice(
@@ -627,4 +664,5 @@ export const __test = {
   replaceFile,
   catalogShaFor,
   assertReportRuntimeReady,
+  rematerializeIfStale,
 };
