@@ -412,6 +412,10 @@ resource "aws_lambda_function" "agentcore_pi" {
       # manifests and must never hold signing material (KTD-3).
       CAPABILITY_SIGNING_PUBLIC_KEY = var.capability_signing_public_key
       OKF_WIKI_ROOT                 = var.okf_efs_mount_path
+      # Per-model Bedrock region overrides, honored by the patched pi-ai
+      # provider (patches/@earendil-works__pi-ai). SigV4 signing and endpoint
+      # selection both follow the override.
+      PI_BEDROCK_MODEL_REGIONS = jsonencode(var.pi_bedrock_model_regions)
     }
   }
 

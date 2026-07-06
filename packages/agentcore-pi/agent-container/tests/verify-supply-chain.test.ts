@@ -108,6 +108,37 @@ describe("verify-supply-chain.sh", () => {
     expect(result.stderr).toContain(tokens[0]!);
   });
 
+  it("verifies against the packages entry when a patchedDependencies block shadows it", () => {
+    // pnpm's `patchedDependencies` section repeats the `'<name>@<version>':`
+    // header ahead of the real `packages:` entry, with a patch path + hash
+    // but no `integrity:` field. The scanner must keep going and verify the
+    // integrity-bearing block instead of failing on the first occurrence.
+    const integrity =
+      "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+    const tmpDir = mkdtempSync(path.join(tmpdir(), "verify-supply-chain-"));
+    const tmpBaseline = path.join(tmpDir, "baseline.txt");
+    const tmpLockfile = path.join(tmpDir, "pnpm-lock.yaml");
+    writeFileSync(tmpBaseline, `@scope/patched-pkg@1.0.0 ${integrity}\n`);
+    writeFileSync(
+      tmpLockfile,
+      [
+        "patchedDependencies:",
+        "  '@scope/patched-pkg@1.0.0':",
+        "    hash: abc123",
+        "    path: patches/@scope__patched-pkg@1.0.0.patch",
+        "",
+        "packages:",
+        "  '@scope/patched-pkg@1.0.0':",
+        `    resolution: {integrity: ${integrity}}`,
+        "",
+      ].join("\n"),
+    );
+
+    const result = runScript([tmpBaseline, tmpLockfile]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/OK . verified 1 package\(s\)/);
+  });
+
   it("failure path: missing baseline file exits non-zero with a descriptive error", () => {
     const result = runScript([
       "/tmp/this-baseline-does-not-exist-supply-chain-test",
