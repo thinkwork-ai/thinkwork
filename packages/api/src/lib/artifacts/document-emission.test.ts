@@ -427,6 +427,7 @@ describe("dual-shape emission (THINK-154 U4)", () => {
         ok: true as const,
         renderHtml: "<html>broken</html>",
         warnings: [],
+        waivers: [],
       })),
       // …and the retained runtime preflight catches it (R6).
       preflight: vi.fn<DocumentEmissionDeps["preflight"]>(() => ({

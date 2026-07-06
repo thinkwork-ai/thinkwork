@@ -482,6 +482,113 @@ export function renderAnalysisDirective(input: {
 }
 
 // ---------------------------------------------------------------------------
+// tw:waiver — explicit suitability waiver for a manifest section (THINK-183
+// U4). The second structural contract directive (KTD11): validated against
+// the plate's section manifest, never against allowedDirectives. Placement is
+// meaning — the omission notice renders where the block sits (R9), and the
+// compositor collects the waiver for the post-parse contract check, the
+// provenance footer, and persistence.
+// ---------------------------------------------------------------------------
+
+export interface WaiverableSection {
+  id: string;
+  title: string;
+  tier: "required" | "required-if-material" | "suggested";
+}
+
+export interface CollectedWaiver {
+  sectionId: string;
+  title: string;
+  tier: "required" | "required-if-material";
+  reason: string;
+}
+
+export type WaiverRender =
+  | { ok: true; html: string; waiver: CollectedWaiver }
+  | { ok: false; diagnostics: CompositorDiagnostic[] };
+
+const MAX_WAIVER_REASON = 300;
+
+const WAIVER_EXAMPLE = `section: pipeline-health
+reason: No stage-level pipeline data is connected for this rep.`;
+
+function rejectWaiver(message: string): WaiverRender {
+  return {
+    ok: false,
+    diagnostics: [
+      {
+        code: "DIRECTIVE_INVALID",
+        message: `${message} Corrected minimal example:\n\`\`\`tw:waiver\n${WAIVER_EXAMPLE}\n\`\`\``,
+        location: "tw:waiver",
+      },
+    ],
+  };
+}
+
+export function renderWaiverDirective(input: {
+  body: string;
+  sections: readonly WaiverableSection[] | undefined;
+}): WaiverRender {
+  const manifest = input.sections ?? [];
+  if (manifest.length === 0) {
+    return rejectWaiver(
+      "This plate has no section manifest, so there is nothing to waive — remove the tw:waiver block.",
+    );
+  }
+  let data: unknown;
+  try {
+    data = parseYaml(input.body, { strict: true });
+  } catch (err) {
+    return rejectWaiver(
+      `tw:waiver body failed to parse as YAML: ${err instanceof Error ? err.message.split("\n")[0] : "parse error"}.`,
+    );
+  }
+  const root = asRecord(data);
+  const sectionId = textOf(root?.section);
+  const waiverable = manifest.filter((s) => s.tier !== "suggested");
+  if (sectionId === null) {
+    return rejectWaiver(
+      `tw:waiver needs a \`section\` field naming a manifest section. Waivable sections: ${waiverable.map((s) => s.id).join(", ") || "(none)"}.`,
+    );
+  }
+  const section = manifest.find((s) => s.id === sectionId);
+  if (!section) {
+    return rejectWaiver(
+      `Section ${JSON.stringify(sectionId)} is not in this plate's manifest. Waivable sections: ${waiverable.map((s) => s.id).join(", ") || "(none)"}.`,
+    );
+  }
+  if (section.tier === "suggested") {
+    return rejectWaiver(
+      `Section "${sectionId}" is suggested-tier — suggested sections never block, so no waiver is needed. Remove the tw:waiver block.`,
+    );
+  }
+  const reason = textOf(root?.reason)?.trim();
+  if (!reason) {
+    return rejectWaiver(
+      "tw:waiver needs a `reason` explaining why the section's data is unavailable.",
+    );
+  }
+  if (reason.length > MAX_WAIVER_REASON) {
+    return rejectWaiver(
+      `The waiver reason must be ≤${MAX_WAIVER_REASON} characters — state the data gap, not the narrative.`,
+    );
+  }
+  // The omission notice: house card vocabulary only (tokens follow the plate
+  // palette, so light/dark both hold — DocSpector DARK_MODE stays clean).
+  const html = `<div class="card waived-section"><div class="q">Section omitted</div><div class="a">${escapeHtml(section.title)}</div><p>${escapeHtml(reason)}</p></div>`;
+  return {
+    ok: true,
+    html,
+    waiver: {
+      sectionId: section.id,
+      title: section.title,
+      tier: section.tier,
+      reason,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Registry + engine
 // ---------------------------------------------------------------------------
 

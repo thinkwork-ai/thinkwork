@@ -553,3 +553,185 @@ items:
     expect(result.renderHtml).not.toMatch(/<td>Acme<\/td>/);
   });
 });
+
+describe("tw:waiver + section enforcement (THINK-183 U4)", () => {
+  const MANIFEST_PLATE: CompositorPlate = {
+    ...REPORT_PLATE,
+    sections: [
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        guidance: "Stage-by-stage funnel with conversion rates.",
+        suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+      },
+      {
+        id: "quota-attainment",
+        title: "Quota Attainment",
+        tier: "required",
+        guidance: "Attainment vs target for the period.",
+      },
+      {
+        id: "coaching-notes",
+        title: "Coaching Notes",
+        tier: "suggested",
+        guidance: "Specific behaviors to keep or change.",
+      },
+    ],
+  };
+  const QUOTA_SECTION = `## Quota Attainment
+
+Attainment held at 82% of target.`;
+  const PIPELINE_SECTION = `## Pipeline Health
+
+Funnel narrative goes here.`;
+  const WAIVER_BLOCK = `\`\`\`tw:waiver
+section: pipeline-health
+reason: No stage-level pipeline data is connected for this rep.
+\`\`\``;
+
+  function compileWith(markdownBody: string, plate = MANIFEST_PLATE) {
+    return compileDocument({
+      plate,
+      title: "Rep Review — Report",
+      abstract: "Representative review.",
+      markdownBody,
+    });
+  }
+
+  it("silent omission of a required section rejects, naming section, guidance, and suggested directives (AE1/F3)", () => {
+    const result = compileWith(`${QUOTA_SECTION}\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics).toHaveLength(1);
+    const d = result.diagnostics[0];
+    expect(d.code).toBe("REQUIRED_SECTION_MISSING");
+    expect(d.location).toBe("section:pipeline-health");
+    expect(d.message).toContain("Pipeline Health");
+    expect(d.message).toContain("Stage-by-stage funnel");
+    expect(d.message).toContain("tw:chart (funnel)");
+    expect(d.message).toContain("tw:waiver");
+  });
+
+  it("an explicit waiver passes: omission notice in place, footer line, waiver on the result (F2)", () => {
+    const result = compileWith(`${QUOTA_SECTION}\n\n${WAIVER_BLOCK}\n`);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.waivers).toEqual([
+      {
+        sectionId: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        reason: "No stage-level pipeline data is connected for this rep.",
+      },
+    ]);
+    expect(result.renderHtml).toContain("Section omitted");
+    expect(result.renderHtml).toContain(
+      "Section waived: Pipeline Health — No stage-level pipeline data",
+    );
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: QUOTA_SECTION,
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
+  it("authoring the manifest title satisfies the check; a different heading slug does not", () => {
+    const good = compileWith(`${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n`);
+    expect(good.ok).toBe(true);
+    const bad = compileWith(
+      `${QUOTA_SECTION}\n\n## Funnel Overview\n\nWrong slug.\n`,
+    );
+    expect(bad.ok).toBe(false);
+  });
+
+  it("required-if-material shares the code but names waiving as the expected path; suggested is never checked (R11)", () => {
+    const result = compileWith(`${PIPELINE_SECTION}\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // quota-attainment (required) missing; coaching-notes (suggested) silent.
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].location).toBe("section:quota-attainment");
+    // The required-if-material diagnostic names waiving as expected:
+    const rim = compileWith(`${QUOTA_SECTION}\n`);
+    if (rim.ok) return;
+    expect(rim.diagnostics[0].message).toContain(
+      "waiving is the expected path",
+    );
+    expect(rim.diagnostics[0].code).toBe("REQUIRED_SECTION_MISSING");
+  });
+
+  it("waiver validation: unknown section, missing reason, suggested tier, no manifest", () => {
+    const unknown = compileWith(
+      `${QUOTA_SECTION}\n\n\`\`\`tw:waiver\nsection: churn\nreason: x\n\`\`\`\n`,
+    );
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) {
+      expect(unknown.diagnostics[0].message).toContain("pipeline-health");
+    }
+    const noReason = compileWith(
+      `${QUOTA_SECTION}\n\n\`\`\`tw:waiver\nsection: pipeline-health\n\`\`\`\n`,
+    );
+    expect(noReason.ok).toBe(false);
+    const suggested = compileWith(
+      `${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n\n\`\`\`tw:waiver\nsection: coaching-notes\nreason: nothing to coach\n\`\`\`\n`,
+    );
+    expect(suggested.ok).toBe(false);
+    if (!suggested.ok) {
+      expect(suggested.diagnostics[0].message).toContain("suggested");
+    }
+    const noManifest = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: `## Summary\n\n\`\`\`tw:waiver\nsection: x\nreason: y\n\`\`\`\n`,
+    });
+    expect(noManifest.ok).toBe(false);
+    if (!noManifest.ok) {
+      expect(noManifest.diagnostics[0].message).toContain(
+        "no section manifest",
+      );
+    }
+  });
+
+  it("waiving a section that is also authored rejects with SECTION_WAIVER_CONFLICT", () => {
+    const result = compileWith(
+      `${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n\n${WAIVER_BLOCK}\n`,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].code).toBe("SECTION_WAIVER_CONFLICT");
+  });
+
+  it("multiple missing required sections produce one diagnostic each (single-pass repair)", () => {
+    const result = compileWith(`## Summary\n\nNothing else.\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.map((d) => d.location).sort()).toEqual([
+      "section:pipeline-health",
+      "section:quota-attainment",
+    ]);
+  });
+
+  it("duplicate headings elsewhere don't false-positive the check (slugger -1 suffixes)", () => {
+    // Two "Notes" headings dedupe to notes / notes-1; the manifest sections
+    // are present exactly once each and still satisfy.
+    const result = compileWith(
+      `## Notes\n\nx\n\n## Notes\n\ny\n\n${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n`,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("a contract-less plate reports no waivers and compiles as before (AE4)", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: REPORT_MARKDOWN,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.waivers).toEqual([]);
+    expect(result.renderHtml).not.toContain("Section waived");
+  });
+});
