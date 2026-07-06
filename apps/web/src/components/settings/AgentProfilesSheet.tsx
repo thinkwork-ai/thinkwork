@@ -133,7 +133,7 @@ export function AgentProfilesSheet({
   /** Deep-link target: open directly on this profile's detail. */
   initialProfileId?: string | null;
   /**
-   * Increment to request a new-profile creation (tree "Add New Agent…").
+   * Increment to request a new-profile creation (tree "Add Sub-Agent").
    * Fires once per increment, after the model catalog is available.
    */
   createRequest?: number;
@@ -206,7 +206,7 @@ export function AgentProfilesSheet({
     if (id) setDetailId(id);
   }
 
-  // Tree-menu create ("Add New Agent…"): the request arrives before this
+  // Tree-menu create ("Add Sub-Agent"): the request arrives before this
   // sheet's queries resolve, so fire once per increment only after a model
   // id is derivable — otherwise create would fail on an empty catalog.
   const [lastCreateRequest, setLastCreateRequest] = useState(createRequest);

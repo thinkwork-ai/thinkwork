@@ -508,7 +508,7 @@ describe("context-menu actions (item 4)", () => {
     ).toBeNull();
   });
 
-  it("offers Add New Agent… on the agents/ folder and hides raw file ops there", async () => {
+  it("offers Add Sub-Agent on the agents/ folder and hides raw file ops there", async () => {
     getManifestMock.mockResolvedValue(
       manifest({
         entries: [
@@ -677,6 +677,29 @@ describe("standard file-tree menu (v1.1)", () => {
     );
   });
 
+  it("shows a busy spinner on the delete confirm while the delete is in flight", async () => {
+    let resolveDelete!: () => void;
+    deleteFileMock.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDelete = () => resolve();
+      }),
+    );
+    await renderEditor();
+    await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");
+    fireEvent.click(
+      screen.getByTestId("menu-delete-Spaces/customer-success/notes.md"),
+    );
+    fireEvent.click(await screen.findByTestId("composer-delete-confirm"));
+    // Dialog stays open, spins, and disables while the delete runs.
+    const busyButton = await screen.findByTestId("composer-delete-confirm");
+    expect(busyButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("composer-delete-spinner")).toBeTruthy();
+    resolveDelete();
+    await waitFor(() =>
+      expect(screen.queryByTestId("composer-delete-confirm")).toBeNull(),
+    );
+  });
+
   it("offers NO standard ops on a generated file (derived)", async () => {
     await renderEditor();
     await screen.findByTestId("tree-node-AGENTS.md");
@@ -708,14 +731,33 @@ describe("standard file-tree menu (v1.1)", () => {
   });
 });
 
-describe("MCP server tree affordances (U9c)", () => {
+/**
+ * The mcp/ assignment records live behind the Show-compiled toggle (the
+ * connections/ folders are the tree's capability surface). Reveal them and
+ * expand the newly listed folders.
+ */
+async function revealMcpFolder() {
+  fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
+  await screen.findByTestId("tree-node-mcp");
+  for (let pass = 0; pass < 6; pass += 1) {
+    const collapsed = Array.from(
+      document.querySelectorAll(
+        '[data-testid^="tree-toggle-"][aria-expanded="false"]',
+      ),
+    );
+    if (collapsed.length === 0) break;
+    collapsed.forEach((toggle) => fireEvent.click(toggle));
+  }
+}
+
+describe("MCP server tree affordances (U9c, behind the compiled toggle)", () => {
   it("offers Add MCP server on the mcp root and Detach on an mcp/<slug> folder", async () => {
     await renderEditor({
       canManageSkills: true,
       onAddMcpServer: addMcpMock,
       onDetachMcpServer: detachMcpMock,
     });
-    await screen.findByTestId("tree-node-mcp");
+    await revealMcpFolder();
     fireEvent.click(screen.getByTestId("menu-add-mcp-server"));
     expect(addMcpMock).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("menu-detach-mcp-github"));
@@ -728,7 +770,7 @@ describe("MCP server tree affordances (U9c)", () => {
       onAddMcpServer: addMcpMock,
       onDetachMcpServer: detachMcpMock,
     });
-    await screen.findByTestId("tree-node-mcp");
+    await revealMcpFolder();
     expect(screen.queryByTestId("menu-add-mcp-server")).toBeNull();
     expect(screen.queryByTestId("menu-detach-mcp-github")).toBeNull();
   });
@@ -738,6 +780,7 @@ describe("MCP server tree affordances (U9c)", () => {
       canManageSkills: true,
       onDetachMcpServer: detachMcpMock,
     });
+    await revealMcpFolder();
     await screen.findByTestId("tree-node-mcp/github");
     expect(screen.queryByTestId("menu-delete-mcp/github")).toBeNull();
     expect(screen.queryByTestId("menu-rename-mcp/github")).toBeNull();
@@ -750,6 +793,7 @@ describe("MCP server tree affordances (U9c)", () => {
       ["gmail", { active: true, reason: null }],
     ]);
     await renderEditor({ mcpStateBySlug });
+    await revealMcpFolder();
     const gate = await screen.findByTestId("tree-gate-mcp/github");
     expect(gate.textContent).toContain("oauth_missing");
     expect(
@@ -773,6 +817,7 @@ describe("MCP server tree affordances (U9c)", () => {
 
   it("marks an mcp folder removing while a detach is in flight", async () => {
     await renderEditor({ removingMcpSlug: "github" });
+    await revealMcpFolder();
     expect(
       (await screen.findByTestId("tree-removing-mcp/github")).textContent,
     ).toContain("removing");
@@ -780,6 +825,7 @@ describe("MCP server tree affordances (U9c)", () => {
 
   it("the .assignment.json opens as a normal agent-source file", async () => {
     await renderEditor();
+    await revealMcpFolder();
     await screen.findByTestId("tree-file-mcp/github/.assignment.json");
     fireEvent.click(
       screen.getByTestId("tree-file-mcp/github/.assignment.json"),
@@ -1285,6 +1331,35 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     expect(revokeMock).toHaveBeenCalledWith("connection", "firecrawl");
   });
 
+  it("connections root is managed: Add connection…, no raw file ops", async () => {
+    seedCapabilityTree();
+    const addConnectionMock = vi.fn();
+    await renderEditor({
+      canManageSkills: true,
+      onAddConnection: addConnectionMock,
+    });
+    await screen.findByTestId("tree-node-connections");
+    // No raw std ops on the managed root (parity with skills/ and mcp/).
+    expect(screen.queryByTestId("menu-new-file-connections")).toBeNull();
+    expect(screen.queryByTestId("menu-new-folder-connections")).toBeNull();
+    expect(screen.queryByTestId("menu-rename-connections")).toBeNull();
+    expect(screen.queryByTestId("menu-cut-connections")).toBeNull();
+    expect(screen.queryByTestId("menu-delete-connections")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-add-connection"));
+    expect(addConnectionMock).toHaveBeenCalled();
+  });
+
+  it("withholds Add connection when writes aren't allowed", async () => {
+    seedCapabilityTree();
+    const addConnectionMock = vi.fn();
+    await renderEditor({
+      canManageSkills: false,
+      onAddConnection: addConnectionMock,
+    });
+    await screen.findByTestId("tree-node-connections");
+    expect(screen.queryByTestId("menu-add-connection")).toBeNull();
+  });
+
   it("U12: deleting a tools/<slug> folder shows the automation-reference warning", async () => {
     seedCapabilityTree();
     const countRefs = vi.fn(async () => 2);
@@ -1342,16 +1417,22 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     // Off by default: neither the latest pointer nor the hashed copy lists.
     expect(screen.queryByTestId("tree-node-capabilities.json")).toBeNull();
     expect(screen.queryByTestId("tree-node-capabilities")).toBeNull();
+    // The mcp/ assignment records are platform state behind the same
+    // toggle — connections/ is the tree's one capability surface.
+    expect(screen.queryByTestId("tree-node-mcp")).toBeNull();
+    expect(screen.getByTestId("tree-node-connections")).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
     expect(
       await screen.findByTestId("tree-node-capabilities.json"),
     ).toBeTruthy();
     expect(screen.getByTestId("tree-node-capabilities")).toBeTruthy();
+    expect(screen.getByTestId("tree-node-mcp")).toBeTruthy();
 
     // Toggle back off.
     fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
     expect(screen.queryByTestId("tree-node-capabilities.json")).toBeNull();
+    expect(screen.queryByTestId("tree-node-mcp")).toBeNull();
   });
 
   it("offers Re-approve on a definition_drift tool and routes the approve callback", async () => {
