@@ -22,19 +22,10 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import {
-  ArrowRight,
-  Play,
-  Bot,
-  Clock,
-  Repeat,
-  Webhook,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, Play, Bot, Clock, Repeat, Webhook } from "lucide-react";
 import { RoutineExecutionsListQuery } from "@/lib/routine-queries";
 import { RoutineExecutionStatus } from "@/gql/graphql";
 import {
-  Button,
   DataTable,
   DataTableTokenFilter,
   type DataTableTokenFilterColumn,
@@ -42,7 +33,6 @@ import {
 } from "@thinkwork/ui";
 import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
 import { StatusBadge } from "@/components/StatusBadge";
-import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -351,7 +341,7 @@ export function ExecutionList({
         accessorKey: "id",
         header: "Run",
         cell: ({ row }) => (
-          <div className="flex items-center gap-3 px-3 py-3">
+          <div className="flex h-10 items-center gap-3 px-3">
             <span className="text-muted-foreground">
               {triggerIcon(row.original.triggerSource)}
             </span>
@@ -366,7 +356,7 @@ export function ExecutionList({
         accessorKey: "triggerSource",
         header: "Trigger",
         cell: ({ row }) => (
-          <div className="px-3 py-3 text-sm capitalize text-muted-foreground">
+          <div className="flex h-10 items-center px-3 text-sm capitalize text-muted-foreground">
             {row.original.triggerSource.replace(/_/g, " ")}
           </div>
         ),
@@ -376,7 +366,7 @@ export function ExecutionList({
         accessorKey: "startedAt",
         header: "Started",
         cell: ({ row }) => (
-          <div className="px-3 py-3 text-sm text-muted-foreground">
+          <div className="flex h-10 items-center px-3 text-sm text-muted-foreground">
             {row.original.startedAt
               ? relativeTime(row.original.startedAt)
               : "Pending"}
@@ -392,7 +382,7 @@ export function ExecutionList({
         id: "duration",
         header: "Duration",
         cell: ({ row }) => (
-          <div className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
+          <div className="flex h-10 items-center justify-end px-3 text-sm tabular-nums text-muted-foreground">
             {formatDurationMs(row.original.startedAt, row.original.finishedAt)}
           </div>
         ),
@@ -402,7 +392,7 @@ export function ExecutionList({
         accessorKey: "totalLlmCostUsdCents",
         header: "Cost",
         cell: ({ row }) => (
-          <div className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
+          <div className="flex h-10 items-center justify-end px-3 text-sm tabular-nums text-muted-foreground">
             {formatLlmCost(row.original.totalLlmCostUsdCents)}
           </div>
         ),
@@ -412,7 +402,7 @@ export function ExecutionList({
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
-          <div className="flex justify-end px-3 py-3">
+          <div className="flex h-10 items-center justify-end px-3">
             <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
           </div>
         ),
@@ -422,7 +412,7 @@ export function ExecutionList({
         id: "action",
         header: "",
         cell: () => (
-          <div className="flex items-center justify-end gap-1 px-3 py-3 text-sm text-muted-foreground">
+          <div className="flex h-10 items-center justify-end gap-1 px-3 text-sm text-muted-foreground">
             View output
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
@@ -434,8 +424,8 @@ export function ExecutionList({
   );
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <CollapsedFilterSearch
           value={search}
           onChange={setSearch}
@@ -452,52 +442,39 @@ export function ExecutionList({
           className="max-w-full"
           popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
         />
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => refetch({ requestPolicy: "network-only" })}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          <RefreshCw
-            className={cn(
-              "h-3.5 w-3.5",
-              queryResult.fetching && "animate-spin",
-            )}
-          />
-        </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={visibleRows}
-        tableClassName="table-fixed"
-        pageSize={pageSize}
-        totalCount={Math.max(syntheticTotalCount, 1)}
-        pageIndex={pageIndex}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-        onRowClick={(row) =>
-          navigate({
-            to: "/settings/routines/$routineId/executions/$executionId",
-            params: { routineId, executionId: row.id },
-          })
-        }
-      />
-
-      {visibleRows.length === 0 && (
-        <div className="rounded-md border border-dashed border-border/70 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {search.trim()
-              ? "No runs match your search."
-              : statusFilter === "all"
-                ? "No executions yet."
-                : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
-          </p>
-          {emptyCta ? <div className="mt-3">{emptyCta}</div> : null}
-        </div>
-      )}
+      <div className="min-h-0 flex-1">
+        <DataTable
+          columns={columns}
+          data={visibleRows}
+          scrollable
+          tableClassName="table-fixed"
+          pageSize={pageSize}
+          totalCount={Math.max(syntheticTotalCount, 1)}
+          pageIndex={pageIndex}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onRowClick={(row) =>
+            navigate({
+              to: "/settings/routines/$routineId/executions/$executionId",
+              params: { routineId, executionId: row.id },
+            })
+          }
+          emptyState={
+            <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
+              <p>
+                {search.trim()
+                  ? "No runs match your search."
+                  : statusFilter === "all"
+                    ? "No executions yet."
+                    : `No executions match "${FILTER_PILLS.find((p) => p.id === statusFilter)?.label}".`}
+              </p>
+              {emptyCta}
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }
