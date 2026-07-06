@@ -29,8 +29,7 @@ export type DocumentPreflightCode =
   | "SCRIPT_FORBIDDEN"
   | "EXTERNAL_REF"
   | "SKELETON"
-  | "DARK_MODE"
-  | "PLATE";
+  | "DARK_MODE";
 
 export interface DocumentPreflightDiagnostic {
   code: DocumentPreflightCode;
@@ -127,21 +126,6 @@ function balancedBlock(source: string, from: number): string | null {
 export function runDocumentPreflight(input: {
   renderHtml: string;
   digestMarkdown: string;
-  /**
-   * Emission genre (THINK-177). When provided, the render must be authored ON
-   * the matching genre plate — proven by the plate's `tw-plate` meta marker.
-   * Models reliably skip the polite "use the plate" instruction in SKILL.md
-   * (observed live on TEI with two different models) but comply with
-   * validation rejections; this is the enforcement-over-nudge gate for
-   * documents, the same doctrine as the canvas emit-binding gate.
-   */
-  genre?: string;
-  /**
-   * THINK-154 (R10): compositor-path emissions are plate-conformant by
-   * construction, so the PLATE check is structurally redundant there. Every
-   * other check still runs. Legacy dual-body emissions never set this.
-   */
-  skipPlateGate?: boolean;
 }): DocumentPreflightResult {
   const { renderHtml, digestMarkdown } = input;
   const diagnostics: DocumentPreflightDiagnostic[] = [];
@@ -300,38 +284,6 @@ export function runDocumentPreflight(input: {
         "Document needs a non-empty `@media (prefers-color-scheme: dark)` block that redefines at least one color (custom properties preferred). Both themes are required.",
       location: darkMedia ? lineOf(renderHtml, darkMedia.index) : "styles",
     });
-  }
-
-  // ---- Plate (THINK-177: genre plates are ENFORCED, not suggested) --------
-  if (input.genre && !input.skipPlateGate) {
-    const plateMeta =
-      /<meta\b[^>]*\bname\s*=\s*["']tw-plate["'][^>]*\bcontent\s*=\s*["']([^"']*)["']/i.exec(
-        renderHtml,
-      ) ??
-      /<meta\b[^>]*\bcontent\s*=\s*["']([^"']*)["'][^>]*\bname\s*=\s*["']tw-plate["']/i.exec(
-        renderHtml,
-      );
-    if (!plateMeta) {
-      diagnostics.push({
-        code: "PLATE",
-        message:
-          `This document was not authored on the ${input.genre} genre plate. ` +
-          `Read skills/document-composer/references/plate-${input.genre}.html with the workspace_skill tool, ` +
-          `then re-emit with the SAME documentId, keeping the plate's <head> (including its <style> and ` +
-          `<meta name="tw-plate"> marker) and layout skeleton intact — replace only the bracketed placeholder content. ` +
-          `Do not invent your own styling.`,
-        location: "head",
-      });
-    } else if (plateMeta[1].trim().toLowerCase() !== input.genre) {
-      diagnostics.push({
-        code: "PLATE",
-        message:
-          `This document is authored on the "${plateMeta[1]}" plate but its genre is "${input.genre}". ` +
-          `Read skills/document-composer/references/plate-${input.genre}.html with the workspace_skill tool and ` +
-          `re-emit on that plate (same documentId), or emit with genre "${plateMeta[1]}" if that genre is what you intended.`,
-        location: lineOf(renderHtml, plateMeta.index),
-      });
-    }
   }
 
   return diagnostics.length === 0 ? { ok: true } : { ok: false, diagnostics };

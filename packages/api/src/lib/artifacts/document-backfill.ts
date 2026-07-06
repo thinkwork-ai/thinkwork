@@ -140,8 +140,6 @@ export async function runDocumentBackfill(
       ? runDocumentPreflight({
           renderHtml: compiled.renderHtml,
           digestMarkdown: digest,
-          genre: row.type,
-          skipPlateGate: true,
         })
       : null;
     if (!compiled.ok || (preflight && !preflight.ok)) {

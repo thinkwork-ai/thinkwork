@@ -33,8 +33,6 @@ describe("document-composer plates pass DocSpector", () => {
       const result = runDocumentPreflight({
         renderHtml,
         digestMarkdown: "# Plate digest placeholder",
-        // THINK-177: plates must pass their own enforcement gate.
-        genre,
       });
       if (!result.ok) {
         throw new Error(

@@ -169,7 +169,6 @@ caption: ${type} takeaway.
       const preflight = runDocumentPreflight({
         renderHtml: result.renderHtml,
         digestMarkdown: "# d",
-        genre: "report",
       });
       if (!preflight.ok) {
         throw new Error(

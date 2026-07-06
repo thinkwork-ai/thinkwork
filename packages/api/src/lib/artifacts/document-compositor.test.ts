@@ -91,7 +91,6 @@ describe("compileDocument", () => {
       const preflight = runDocumentPreflight({
         renderHtml,
         digestMarkdown: REPORT_MARKDOWN,
-        genre,
       });
       if (!preflight.ok) {
         throw new Error(
@@ -139,7 +138,6 @@ describe("compileDocument", () => {
     const preflight = runDocumentPreflight({
       renderHtml: result.renderHtml,
       digestMarkdown: "# d",
-      genre: "report",
     });
     expect(preflight.ok).toBe(true);
   });
