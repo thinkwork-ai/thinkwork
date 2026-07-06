@@ -6,7 +6,10 @@ problem_type: debug_findings
 component: agent_profile_routing
 severity: high
 linear: THINK-180
-status: diagnosed
+status: resolved
+fix_pr: "#3413"
+verify_pr: "#3416"
+debug_pr: "#3410"
 supersedes_decision: THNK-51 (#2701) backward-compatible `@Profile` alias
 tags:
   - agent-profiles
@@ -184,7 +187,33 @@ agent-profile delegation. `@` is reserved for people/agents. No known product
 surface relies on `@Profile` delegation (composers already emit `#` for
 profiles), so removing the `@` alias has no legitimate-behavior regression.
 
+## Resolution & Verification
+
+The fix plan above shipped exactly as scoped, in PR #3413 (`fix(api): scope
+Agent Profile delegation trigger to # only`, commit
+`c8dc8130fa8743948598fe38e1038bcff8b11948`), with the test inversions applied
+at all three sites and deploy run `28761330305` succeeding. Verification ran
+as a separate dogfood pass (PR #3416, merged) — see
+`docs/dogfood-reports/2026-07-06-THINK-180-dogfood.md` for the full evidence:
+live `sendMessage` GraphQL proof that `@Profile` no longer produces an
+`AGENT_PROFILE` mention (scenario A), that `#Profile` still delegates
+end-to-end to a real profile-lane turn (scenario B), and that the exact
+screenshot repro string (`@SurSum …`) now resolves to the `USER` target, not
+a profile (scenario C) — plus browser dogfood confirming no
+"Delegated via @…" card appears for `@`-mentions. **Verdict: PASS** on all
+three backend-provable scenarios.
+
+One site from the fix plan — the `TaskThreadView.tsx:5427` web display
+fallback — is merged but not yet live on `app.thinkwork.ai`, because `apps/web`
+only ships on a `desktop-v*` canary tag, not on merge-to-main (see
+[Canary releases: manual v* tags, mirrored desktop-v* numbers, web ships with
+desktop](../workflow-issues/canary-release-tagging-web-desktop-2026-06-11.md)).
+This does not block the fix: the backend no longer dispatches a profile lane
+for `@`-mentions, so the stale display fallback has no live code path to
+misfire on (it only runs inside `actionRowsForTurn`, i.e. only for a message
+that actually dispatched a turn). It self-heals on the next routine canary
+cut — no action required, and no decision is pending on it.
+
 ## Next phase
 
-Diagnosis only (per the Debug baton). Hand to Ready to Work for the LFG
-implementation lane to apply the three-site fix + test inversions above.
+None. Debug → Implementation → Verification chain is complete for THINK-180.
