@@ -10,6 +10,7 @@ import {
   type AgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
 import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
+import { resolveCurrentCapabilitiesManifest } from "../capabilities/current-manifest.js";
 
 // Import from the leaf module (used internally below) and re-export so
 // callers that only need the id (e.g. skill-eval-run.ts) can import it
@@ -424,6 +425,22 @@ async function invokeAgentCoreForEvalOnce(input: {
   composedSystemPrompt: string | null;
   usage?: EvalAgentUsage;
 }> {
+  // THINK-179: eval dispatch is a folder-AWARE buildMcpConfigs caller.
+  // Without this, a capability_folder_dispatch agent's runtime config
+  // resolves with `{ defer: true }` — and since nothing in the eval
+  // worker rebuilds post-render (that's chat-agent-invoke's pattern),
+  // every eval turn shipped ZERO MCP servers. The manifest is used ONLY
+  // to resolve the connection set here at dispatch; the runtime payload
+  // still carries no manifest fingerprint, so eval turns never register
+  // folder binding/script tools that would bypass selectReplayMcpTools'
+  // read-only filter.
+  const capabilitiesManifest = await resolveCurrentCapabilitiesManifest({
+    tenantId: input.tenantId,
+    agentId: input.agentId,
+    userId: input.replayRequesterUserId ?? null,
+    logPrefix: "[eval-worker]",
+  });
+
   const runtimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
     agentId: input.agentId,
@@ -431,6 +448,7 @@ async function invokeAgentCoreForEvalOnce(input: {
     thinkworkApiSecret: getApiAuthSecret(),
     appsyncApiKey: getAppsyncApiKey(),
     logPrefix: "[eval-worker]",
+    ...(capabilitiesManifest !== undefined ? { capabilitiesManifest } : {}),
     // Flagged-thread replay identity (THINK-179): the source thread's
     // owner becomes the requester so per-user OAuth servers resolve the
     // way that user's chat turns do. Undefined for synthetic cases —

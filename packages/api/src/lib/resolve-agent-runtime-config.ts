@@ -844,9 +844,13 @@ export async function resolveAgentRuntimeConfig(
     {
       tokenMode: opts.mcpTokenMode,
       diagnostics,
-      folderCapabilities: opts.capabilitiesManifest
-        ? { manifest: opts.capabilitiesManifest }
-        : { defer: true },
+      // `undefined` = caller resolves before render → defer + post-render
+      // rebuild. `null` is a FOLDER-AWARE value (the caller rendered and
+      // no manifest compiled) and must not regress to defer (R20).
+      folderCapabilities:
+        opts.capabilitiesManifest !== undefined
+          ? { manifest: opts.capabilitiesManifest }
+          : { defer: true },
     },
   );
 
