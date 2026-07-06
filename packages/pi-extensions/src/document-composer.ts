@@ -26,7 +26,72 @@ import {
 
 export const EMIT_DOCUMENT_TOOL_NAME = "emit_document";
 
-export const DOCUMENT_GENRES = ["ideation", "plan", "report", "brief"] as const;
+/** One registered plate on the tenant's emit_document tool surface (R10). */
+export interface DocumentPlateSummary {
+  slug: string;
+  displayName: string;
+  useFor: string;
+}
+
+/**
+ * Fallback surface when the dispatch payload carries no `document_plates`
+ * field (older server or lagging customer stack). Server-side registry
+ * validation remains the authority either way (KTD4).
+ */
+export const FALLBACK_PLATES: readonly DocumentPlateSummary[] = [
+  {
+    slug: "report",
+    displayName: "Report",
+    useFor:
+      "General findings and analysis presented as a narrative with evidence.",
+  },
+  {
+    slug: "plan",
+    displayName: "Plan",
+    useFor: "A course of action: phases, workstreams, owners, and sequencing.",
+  },
+  {
+    slug: "brief",
+    displayName: "Decision Brief",
+    useFor: "A decision brief: options, tradeoffs, and a recommendation.",
+  },
+  {
+    slug: "ideation",
+    displayName: "Ideation",
+    useFor: "Exploratory thinking: directions, concepts, and open questions.",
+  },
+];
+
+const PLATE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * Normalize the payload's `document_plates` field. A missing or malformed
+ * field (wrong shape, junk entries only) is treated as ABSENT — the caller
+ * falls back to the core four and logs a structured event — never a throw.
+ */
+export function normalizeDocumentPlates(
+  raw: unknown,
+): DocumentPlateSummary[] | null {
+  if (!Array.isArray(raw)) return null;
+  const plates: DocumentPlateSummary[] = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const rec = entry as Record<string, unknown>;
+    const slug = typeof rec.slug === "string" ? rec.slug.trim() : "";
+    if (!PLATE_SLUG_RE.test(slug)) continue;
+    plates.push({
+      slug,
+      displayName:
+        typeof rec.displayName === "string" && rec.displayName.trim()
+          ? rec.displayName.trim()
+          : slug,
+      useFor: typeof rec.useFor === "string" ? rec.useFor.trim() : "",
+    });
+  }
+  return plates.length > 0 ? plates : null;
+}
 
 /**
  * Local fast-fail ceiling. Kept in sync with the server-side source of truth
@@ -42,6 +107,8 @@ export interface DocumentComposerConfig {
   threadId?: string;
   threadTurnId?: string;
   agentId?: string;
+  /** Raw `document_plates` dispatch-payload field (KTD4); normalized here. */
+  documentPlates?: unknown;
 }
 
 export interface DocumentComposerExtensionOptions {
@@ -78,11 +145,37 @@ export function createDocumentComposerExtension(
       if (!enabled) return;
       const fetchImpl = options.fetchImpl ?? fetch;
 
+      // KTD4: compose the genre surface from the dispatch payload — fresh
+      // every turn, no skill or workspace re-materialization. Defensive by
+      // construction: ANY failure here degrades to the core-4 fallback
+      // rather than dropping the whole emit_document tool for the turn.
+      let plates: readonly DocumentPlateSummary[];
+      try {
+        const normalized = normalizeDocumentPlates(config?.documentPlates);
+        if (!normalized) {
+          console.log(
+            JSON.stringify({
+              event: "document_plates_missing_from_payload",
+              tenantId,
+              threadId,
+              fieldPresent: config?.documentPlates !== undefined,
+            }),
+          );
+        }
+        plates = normalized ?? FALLBACK_PLATES;
+      } catch {
+        plates = FALLBACK_PLATES;
+      }
+      const genreLines = plates
+        .map((p) => `\`${p.slug}\`${p.useFor ? ` — ${p.useFor}` : ""}`)
+        .join("; ");
+      const genreList = plates.map((p) => p.slug).join(", ");
+
       const tool: ToolDefinition = {
         name: EMIT_DOCUMENT_TOOL_NAME,
         label: "Emit Document",
         description:
-          "Save a document deliverable (ideation, plan, report, or brief) as a durable artifact. " +
+          `Save a document deliverable as a durable artifact. Genres available in this workspace: ${genreList}. ` +
           "You author MARKDOWN ONLY in digest_markdown — optional frontmatter (eyebrow, date, context), " +
           "## sections, GFM tables, and tw: component blocks (```tw:stats, ```tw:verdict-grid, ```tw:chart " +
           "with types bar|line|donut|stat-strip|sparkline|meter|funnel). The platform compiles the " +
@@ -95,7 +188,7 @@ export function createDocumentComposerExtension(
           "editable. Never include secrets, tokens, or credentials.",
         parameters: Type.Object({
           genre: Type.String({
-            description: "One of: ideation, plan, report, brief.",
+            description: `The document genre — pick by purpose. One of: ${genreLines}.`,
           }),
           title: Type.String({ description: "Document title (≤160 chars)." }),
           abstract: Type.String({
@@ -134,9 +227,12 @@ export function createDocumentComposerExtension(
               ? typed.digest_markdown
               : "";
 
-          if (!(DOCUMENT_GENRES as readonly string[]).includes(genre)) {
+          // Soft check only (R11): the server-side registry is the
+          // validation authority; an unlisted-but-registered slug (e.g. a
+          // plate created mid-session) must still succeed.
+          if (!PLATE_SLUG_RE.test(genre)) {
             throw new Error(
-              `emit_document genre must be one of: ${DOCUMENT_GENRES.join(", ")}`,
+              `emit_document genre must be a lowercase slug. Genres available: ${genreList}`,
             );
           }
           // Local fast-fail (same diagnostic shape the server returns) — saves

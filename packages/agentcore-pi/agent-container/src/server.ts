@@ -1584,6 +1584,10 @@ export async function buildInvocationResources(
           threadId: args.identity.threadId,
           threadTurnId: asString(args.payload.thread_turn_id),
           agentId: args.identity.agentId ?? undefined,
+          // THINK-153 KTD4: the tenant's registered plates ride the dispatch
+          // payload; the extension composes the genre surface from them and
+          // falls back to the core four when the field is absent/malformed.
+          documentPlates: args.payload.document_plates,
         },
       }),
     );

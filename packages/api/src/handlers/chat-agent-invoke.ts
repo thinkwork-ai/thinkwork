@@ -53,6 +53,7 @@ import {
   THREAD_JSON_RENDER_UI_CAPABILITY,
 } from "../lib/thread-json-render/capability.js";
 import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js";
+import { documentPlatesForDispatch } from "../lib/artifacts/plate-registry.js";
 import {
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
@@ -1610,6 +1611,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // dispatch-critical field inline here — add it to the helper so the
       // wakeup paths get it too (the parity test enforces this).
       ...buildAgentDispatchControlFields({
+        documentPlates: await documentPlatesForDispatch(tenantId),
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret,
         threadId,
