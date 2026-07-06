@@ -27,7 +27,10 @@
  *      folder-derived connection surface (read back from S3) must equal
  *      the DB-derived surface before `capability_folder_dispatch`
  *      flips, atomically per agent (R20). Apply errors or divergence
- *      block the flip; a re-run completes it (AE4).
+ *      block the flip; a re-run completes it (AE4). Flipped agents (this
+ *      run or a prior one) also get their superseded legacy `mcp/<slug>/`
+ *      mirror folders scrubbed (THINK-190) — the connection sidecar is
+ *      their single assignment record.
  *   4. SCRUB (`scrub: true`, requires flip): once EVERY agent in the
  *      tenant is flipped, inline secret values in
  *      `tenantMcpServers.auth_config` are replaced with a
@@ -60,6 +63,7 @@ import {
   capabilitySidecarKey,
   type CapabilityFolderWriteDeps,
 } from "./folder-write.js";
+import { removeLegacyMcpFolders } from "../mcp/assignment-state.js";
 
 const LOG_PREFIX = "[capability-backfill]";
 
@@ -153,6 +157,12 @@ export interface BackfillAgentReport {
     changed: string[];
   };
   flipped?: boolean;
+  /**
+   * THINK-190: legacy `mcp/<slug>/` mirror folders scrubbed after this
+   * agent's flip — the connection sidecar is the single assignment record
+   * for flipped agents. Present only in flip mode for flipped agents.
+   */
+  legacyMcpRemoved?: string[];
 }
 
 export interface BackfillReport {
@@ -174,6 +184,7 @@ export interface BackfillReport {
     applyErrors: number;
     flipped: number;
     divergent: number;
+    legacyMcpRemoved: number;
   };
 }
 
@@ -558,6 +569,18 @@ export async function runCapabilityFolderBackfill(
       );
       report.flipped = false;
     }
+
+    // ── Flip follow-up (THINK-190): scrub the superseded mcp/ mirror ──
+    // A flipped agent (this run or a prior one) holds its assignment
+    // record in the connection sidecars — every reader/writer forks on
+    // the flag — so the legacy folders are dead weight that duplicate-
+    // render in Composer. Idempotent: a clean workspace returns [].
+    if (report.alreadyFlipped || report.flipped === true) {
+      report.legacyMcpRemoved = await removeLegacyMcpFolders(targetPrefix, {
+        s3,
+        bucket,
+      });
+    }
   }
 
   // ── Phase 4: secret scrub (tenant-wide, only when fully flipped) ──
@@ -627,6 +650,10 @@ export async function runCapabilityFolderBackfill(
     divergent: reports.filter(
       (report) => report.divergence && !report.divergence.equal,
     ).length,
+    legacyMcpRemoved: reports.reduce(
+      (sum, report) => sum + (report.legacyMcpRemoved?.length ?? 0),
+      0,
+    ),
   };
 
   return {

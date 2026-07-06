@@ -501,7 +501,14 @@ async function mcpAgentMutation(
   // S3 writes are the mutation itself, so a failed write is a failed
   // mutation (thrown), exactly like the connection/tool folder classes.
   // The shared driver emits the audit event after the write commits.
+  //
+  // THINK-190: WHICH file is the record forks on the agent's migration
+  // flag. Flipped agents hold ONE record — the signed connection sidecar
+  // (the legacy mcp/ mirror is retired for them: never written, removed
+  // best-effort on detach). Un-flipped agents keep the mcp/ file as the
+  // record plus the connection dual-write.
   const {
+    agentUsesFolderDispatch,
     materializeMcpAssignmentFolder,
     readMcpAssignmentState,
     removeMcpAssignmentFolder,
@@ -512,18 +519,50 @@ async function mcpAgentMutation(
     removeCapabilityFolder,
   } = await import("../../../lib/capabilities/folder-write.js");
 
-  const existing = await readMcpAssignmentState(target.targetPrefix, itemId);
   const generated = connectionDefinitionFromRegistryRow(server);
+  const flipped = await agentUsesFolderDispatch(target.agentId);
+
+  /** Normalized prior state: null = not attached. */
+  let existing: { enabled: boolean; enabledTools: string[] | null } | null;
+  if (flipped) {
+    const { readConnectionAssignment } = await import(
+      "../../../lib/capabilities/connection-assignments.js"
+    );
+    const record = await readConnectionAssignment(
+      target.targetPrefix,
+      generated.slug,
+    );
+    existing = record
+      ? {
+          enabled: record.enabled,
+          enabledTools: record.operations.length > 0 ? record.operations : null,
+        }
+      : null;
+  } else {
+    const state = await readMcpAssignmentState(target.targetPrefix, itemId);
+    existing = state
+      ? {
+          enabled: state.enabled !== false,
+          enabledTools:
+            state.enabledTools && state.enabledTools.length > 0
+              ? state.enabledTools
+              : null,
+        }
+      : null;
+  }
 
   if (mode === "detach") {
     if (!existing) {
       return { outcome: "noop" as const, auditEmitted: false, itemId };
     }
+    // Legacy mcp/ record: the record itself for un-flipped agents (a failed
+    // removal fails the detach); a stale-mirror cleanup for flipped agents
+    // (best-effort — their record is the connection folder below).
     const folderRemoved = await removeMcpAssignmentFolder(
       target.targetPrefix,
       itemId,
     );
-    if (!folderRemoved) {
+    if (!folderRemoved && !flipped) {
       throw new GraphQLError(
         `failed to detach MCP server '${itemId}': workspace folder removal failed`,
         { extensions: { code: "INTERNAL_SERVER_ERROR" } },
@@ -578,17 +617,22 @@ async function mcpAgentMutation(
     return { outcome: "noop" as const, auditEmitted: false, itemId };
   }
 
-  const materialized = await materializeMcpAssignmentFolder({
-    targetPrefix: target.targetPrefix,
-    registryServerId: server.id,
-    tenantId: input.tenantId,
-    agentConfig: nextConfig,
-  });
-  if (!materialized) {
-    throw new GraphQLError(
-      `failed to grant MCP server '${itemId}': workspace assignment write failed`,
-      { extensions: { code: "INTERNAL_SERVER_ERROR" } },
-    );
+  // Legacy mcp/ record: written only for un-flipped agents — a flipped
+  // agent's single record is the signed connection sidecar, and writing
+  // the mirror would resurrect folders the THINK-190 migration removed.
+  if (!flipped) {
+    const materialized = await materializeMcpAssignmentFolder({
+      targetPrefix: target.targetPrefix,
+      registryServerId: server.id,
+      tenantId: input.tenantId,
+      agentConfig: nextConfig,
+    });
+    if (!materialized) {
+      throw new GraphQLError(
+        `failed to grant MCP server '${itemId}': workspace assignment write failed`,
+        { extensions: { code: "INTERNAL_SERVER_ERROR" } },
+      );
+    }
   }
   const written = await putCapabilityFolder({
     targetPrefix: target.targetPrefix,
