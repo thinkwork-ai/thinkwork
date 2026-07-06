@@ -198,7 +198,7 @@ function SectionRow({
         />
         {isFloor ? (
           <span
-            className="shrink-0 rounded border border-amber-500/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400"
+            className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
             data-testid="plate-section-floor-badge"
           >
             Platform floor
@@ -320,13 +320,13 @@ function DivergenceMarker({
 }) {
   return (
     <span
-      className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"
+      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
       data-testid={`plate-section-diverged-${field}`}
     >
       Customized — platform updates paused for this field.
       <button
         type="button"
-        className="inline-flex items-center gap-0.5 underline underline-offset-2"
+        className="inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
         onClick={onRevert}
         data-testid={`plate-section-revert-${field}`}
       >
