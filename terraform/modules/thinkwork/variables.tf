@@ -365,9 +365,9 @@ variable "memory_engine" {
 }
 
 variable "hindsight_image_tag" {
-  description = "Hindsight Docker image tag (used when enable_hindsight = true)"
+  description = "Hindsight Docker image tag (used when enable_hindsight = true). 0.8.4 upgrade validated 2026-07-06 (THINK-201): migration rehearsal over a dev-data copy passed (orphan-observation backsweep deletes ~650 broken-provenance rows — expected); retain/recall/consolidation verified; 0.8.4 fixes the Bedrock-Anthropic extraction tool schema AND fails retain loudly (500) instead of silently storing zero units. Known upstream gap: maintenance discovery routines (reconcile sweep, mental-model cron, llm_requests retention) expect functions in the public schema and no-op with warnings when HINDSIGHT_API_DATABASE_SCHEMA != public."
   type        = string
-  default     = "0.5.0"
+  default     = "0.8.4"
 }
 
 variable "hindsight_enable_auto_consolidation" {
