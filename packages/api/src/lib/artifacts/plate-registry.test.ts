@@ -340,7 +340,7 @@ describe("platform definitions snapshot", () => {
   });
 });
 
-describe("content contract resolution (THINK-183 U2)", () => {
+describe("content contract resolution — tenant rows + floorless platform additions (THINK-183 U2 / THINK-188)", () => {
   const SECTIONS = [
     {
       id: "pipeline-health",
@@ -374,13 +374,13 @@ describe("content contract resolution (THINK-183 U2)", () => {
   it("platform_override contract config round-trips into ResolvedPlate", async () => {
     const store = fakeStore([
       {
-        slug: "sales-rep-review",
+        slug: "report",
         origin: "platform_override",
         config: { sections: SECTIONS, analyses: ANALYSES } as never,
         hidden: false,
       },
     ]);
-    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const plate = await resolvePlate(TENANT, "report", store);
     expect(plate!.sections).toEqual([
       { ...SECTIONS[0] },
       { ...SECTIONS[1], suggestedDirectives: undefined },
@@ -411,7 +411,7 @@ describe("content contract resolution (THINK-183 U2)", () => {
   it("resolution drops malformed stored contract entries (defense in depth)", async () => {
     const store = fakeStore([
       {
-        slug: "sales-rep-review",
+        slug: "report",
         origin: "platform_override",
         config: {
           sections: [
@@ -442,7 +442,7 @@ describe("content contract resolution (THINK-183 U2)", () => {
         hidden: false,
       },
     ]);
-    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const plate = await resolvePlate(TENANT, "report", store);
     expect(plate!.sections?.map((s) => s.id)).toEqual(["pipeline-health"]);
     expect(plate!.analyses?.map((a) => a.key)).toEqual(["pipeline-conversion"]);
   });
@@ -450,13 +450,13 @@ describe("content contract resolution (THINK-183 U2)", () => {
   it("exemplar for a full contract plate (manifest + analyses) compiles clean with computed output", async () => {
     const store = fakeStore([
       {
-        slug: "sales-rep-review",
+        slug: "report",
         origin: "platform_override",
         config: { sections: SECTIONS, analyses: ANALYSES } as never,
         hidden: false,
       },
     ]);
-    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const plate = await resolvePlate(TENANT, "report", store);
     const exemplar = buildPlateExemplar(plate!);
     expect(exemplar.markdownBody).toContain("tw:analysis");
     expect(exemplar.markdownBody).toContain("analysis: pipeline-conversion");
@@ -476,13 +476,13 @@ describe("content contract resolution (THINK-183 U2)", () => {
   it("exemplar for a manifest-bearing plate emits every section heading and compiles through gate 2", async () => {
     const store = fakeStore([
       {
-        slug: "sales-rep-review",
+        slug: "report",
         origin: "platform_override",
         config: { sections: SECTIONS } as never,
         hidden: false,
       },
     ]);
-    const plate = await resolvePlate(TENANT, "sales-rep-review", store);
+    const plate = await resolvePlate(TENANT, "report", store);
     const exemplar = buildPlateExemplar(plate!);
     expect(exemplar.markdownBody).toContain("## Pipeline Health");
     expect(exemplar.markdownBody).toContain("## Coaching Notes");
@@ -503,7 +503,7 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
   it("a contract-bearing plate's summary includes section ids/titles and analysis keys with input hints", async () => {
     const store = fakeStore([
       {
-        slug: "sales-rep-review",
+        slug: "report",
         origin: "platform_override",
         config: {
           sections: [
@@ -532,7 +532,7 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
       },
     ]);
     const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
-    const srr = summaries.find((s) => s.slug === "sales-rep-review")!;
+    const srr = summaries.find((s) => s.slug === "report")!;
     // Suggested-tier sections are for THINK-185/189, not the dispatch floor.
     expect(srr.sections).toEqual([
       {
@@ -686,5 +686,143 @@ Keep the discovery call cadence; tighten follow-up notes.
     expect(result.diagnostics[0].message).toContain(
       "waiving is the expected path",
     );
+  });
+});
+
+describe("floor-model layered merge (THINK-188 U1)", () => {
+  function customizedStore(config: Record<string, unknown>) {
+    return fakeStore([
+      {
+        slug: "sales-rep-review",
+        origin: "platform_override",
+        config: config as never,
+        hidden: false,
+      },
+    ]);
+  }
+  const TERRITORY = {
+    id: "territory-notes",
+    title: "Territory Notes",
+    tier: "suggested",
+    guidance: "Notes on territory coverage.",
+  };
+
+  it("covers AE3: overrides patch their field, other floor fields keep flowing from platform, additions append last", async () => {
+    const store = customizedStore({
+      sectionOverrides: {
+        "quota-attainment": { guidance: "Attainment vs our fiscal-year plan." },
+      },
+      sections: [TERRITORY],
+    });
+    const plate = (await resolvePlate(TENANT, "sales-rep-review", store))!;
+    const floorDef = getPlatformPlate("sales-rep-review")!;
+    const ids = plate.sections!.map((s) => s.id);
+    // Floor order preserved, addition appended last.
+    expect(ids).toEqual([...floorDef.sections!.map((s) => s.id), "territory-notes"]);
+    const quota = plate.sections!.find((s) => s.id === "quota-attainment")!;
+    expect(quota.guidance).toBe("Attainment vs our fiscal-year plan.");
+    // A non-overridden floor field still reads the PLATFORM value — a
+    // platform guidance improvement propagates (AE3).
+    const pipeline = plate.sections!.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.guidance).toBe(
+      floorDef.sections!.find((s) => s.id === "pipeline-health")!.guidance,
+    );
+    expect(plate.customized).toBe(true);
+  });
+
+  it("tier overrides raise but never lower (resolution clamp)", async () => {
+    const raised = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      customizedStore({
+        sectionOverrides: { "quota-attainment": { tier: "required" } },
+      }),
+    ))!;
+    expect(
+      raised.sections!.find((s) => s.id === "quota-attainment")!.tier,
+    ).toBe("required");
+    const lowered = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      customizedStore({
+        sectionOverrides: { "coaching-notes": { tier: "suggested" } },
+      }),
+    ))!;
+    // coaching-notes is required on the platform floor; the clamp holds.
+    expect(
+      lowered.sections!.find((s) => s.id === "coaching-notes")!.tier,
+    ).toBe("required");
+  });
+
+  it("drops overrides keyed to unknown floor ids and additions colliding with floor ids", async () => {
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      customizedStore({
+        sectionOverrides: { "not-a-floor-section": { guidance: "x" } },
+        sections: [
+          {
+            id: "pipeline-health",
+            title: "Pipeline Health",
+            tier: "suggested",
+            guidance: "attempted floor replacement",
+          },
+          TERRITORY,
+        ],
+      }),
+    ))!;
+    const floorDef = getPlatformPlate("sales-rep-review")!;
+    const pipeline = plate.sections!.find((s) => s.id === "pipeline-health")!;
+    // The colliding addition was dropped — the floor entry survives intact.
+    expect(pipeline.tier).toBe("required-if-material");
+    expect(pipeline.guidance).toBe(
+      floorDef.sections!.find((s) => s.id === "pipeline-health")!.guidance,
+    );
+    expect(plate.sections!.map((s) => s.id)).toContain("territory-notes");
+  });
+
+  it("floor analyses always present; tenant additions append; key collisions dropped", async () => {
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      customizedStore({
+        analyses: [
+          {
+            key: "win-rate",
+            op: "ratio_pct",
+            presentation: { directive: "stats" },
+          },
+          {
+            key: "pipeline-conversion",
+            op: "trend",
+            presentation: { directive: "stats" },
+          },
+        ],
+      }),
+    ))!;
+    const keys = plate.analyses!.map((a) => a.key);
+    expect(keys).toEqual(["pipeline-conversion", "quota-attainment", "win-rate"]);
+    // The colliding addition did not replace the floor analysis.
+    expect(
+      plate.analyses!.find((a) => a.key === "pipeline-conversion")!.op,
+    ).toBe("funnel_conversion");
+  });
+
+  it("inert proof: a platform plate with no row resolves its code-defined contract unchanged", async () => {
+    const plate = (await resolvePlate(TENANT, "sales-rep-review", fakeStore()))!;
+    const floorDef = getPlatformPlate("sales-rep-review")!;
+    expect(plate.sections).toEqual(floorDef.sections);
+    expect(plate.analyses).toEqual(floorDef.analyses);
+  });
+
+  it("style-only platform row (palette/hidden) leaves the contract at pure platform values", async () => {
+    const plate = (await resolvePlate(
+      TENANT,
+      "sales-rep-review",
+      customizedStore({ paletteLight: { "--accent": "#123456" } }),
+    ))!;
+    const floorDef = getPlatformPlate("sales-rep-review")!;
+    expect(plate.sections).toEqual(floorDef.sections);
+    expect(plate.analyses).toEqual(floorDef.analyses);
   });
 });

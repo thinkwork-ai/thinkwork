@@ -336,6 +336,101 @@ function normalizeSections(raw: unknown): PlateSectionSpec[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+/**
+ * Floor-model tier order (THINK-188 KTD2): overrides may only raise. The
+ * resolution-time clamp `max(platform, override)` means a stale row that
+ * predates a validation tightening can never weaken the floor.
+ */
+const SECTION_TIER_RANK: Record<PlateSectionTier, number> = {
+  suggested: 0,
+  "required-if-material": 1,
+  required: 2,
+};
+
+function maxTier(a: PlateSectionTier, b: PlateSectionTier): PlateSectionTier {
+  return SECTION_TIER_RANK[a] >= SECTION_TIER_RANK[b] ? a : b;
+}
+
+interface NormalizedSectionOverride {
+  guidance?: string;
+  tier?: PlateSectionTier;
+  suggestedDirectives?: PlateSuggestedDirective[];
+}
+
+/** Defensive re-filter of stored sectionOverrides (filterPalette posture). */
+function normalizeSectionOverrides(
+  raw: unknown,
+): Record<string, NormalizedSectionOverride> | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const out: Record<string, NormalizedSectionOverride> = {};
+  for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!CONTRACT_SLUG_RE.test(id)) continue;
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const override: NormalizedSectionOverride = {};
+    if (typeof rec.guidance === "string" && rec.guidance.trim() !== "") {
+      override.guidance = rec.guidance.trim();
+    }
+    if (
+      typeof rec.tier === "string" &&
+      (PLATE_SECTION_TIERS as readonly string[]).includes(rec.tier)
+    ) {
+      override.tier = rec.tier as PlateSectionTier;
+    }
+    const suggested = normalizeSuggestedDirectives(rec.suggestedDirectives);
+    if (suggested) override.suggestedDirectives = suggested;
+    if (Object.keys(override).length > 0) out[id] = override;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * The floor-model merge for platform plates (THINK-188 KTD1/R7): platform
+ * floor sections in platform order, each patched by its override (tier
+ * clamped raise-only), then tenant additions appended — dropping any addition
+ * whose id collides with a floor id (defense in depth; save gates reject the
+ * collision loudly).
+ */
+function mergeFloorSections(
+  floor: readonly PlateSectionSpec[] | undefined,
+  overrides: Record<string, NormalizedSectionOverride> | undefined,
+  additions: PlateSectionSpec[] | undefined,
+): PlateSectionSpec[] | undefined {
+  const floorIds = new Set((floor ?? []).map((s) => s.id));
+  const patched = (floor ?? []).map((section) => {
+    const override = overrides?.[section.id];
+    if (!override) return section;
+    return {
+      ...section,
+      guidance: override.guidance ?? section.guidance,
+      tier: override.tier ? maxTier(section.tier, override.tier) : section.tier,
+      suggestedDirectives:
+        override.suggestedDirectives ?? section.suggestedDirectives,
+    };
+  });
+  const appended = (additions ?? []).filter((s) => !floorIds.has(s.id));
+  const merged = [...patched, ...appended];
+  return merged.length > 0 ? merged : undefined;
+}
+
+/** Platform floor analyses + tenant additions (key collisions dropped). */
+function mergeFloorAnalyses(
+  floor: readonly PlateAnalysisSpec[] | undefined,
+  additions: PlateAnalysisSpec[] | undefined,
+): PlateAnalysisSpec[] | undefined {
+  const floorKeys = new Set((floor ?? []).map((a) => a.key));
+  const merged = [
+    ...(floor ?? []),
+    ...(additions ?? []).filter((a) => !floorKeys.has(a.key)),
+  ];
+  return merged.length > 0 ? merged : undefined;
+}
+
 function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: PlateAnalysisSpec[] = [];
@@ -449,16 +544,21 @@ function resolveFromLayers(input: {
     allowedDirectives:
       normalizeAllowedDirectives(c.allowedDirectives) ??
       platform.allowedDirectives,
-    // Wholesale per-key override (KTD7): a config key present replaces the
-    // platform's entirely; absent inherits it.
-    sections:
-      c.sections !== undefined
-        ? normalizeSections(c.sections)
-        : platform.sections,
-    analyses:
-      c.analyses !== undefined
-        ? normalizeAnalyses(c.analyses)
-        : platform.analyses,
+    // Floor-model layered merge (THINK-188 KTD1/R7): the platform contract is
+    // a floor — config `sections`/`analyses` are tenant ADDITIONS and
+    // `sectionOverrides` patches floor sections (tier raise-only) — so
+    // platform contract improvements keep flowing to customized tenants.
+    // (Replaces THINK-183's wholesale per-key override for platform rows;
+    // tenant-origin rows above keep full-contract semantics.)
+    sections: mergeFloorSections(
+      platform.sections,
+      normalizeSectionOverrides(c.sectionOverrides),
+      normalizeSections(c.sections),
+    ),
+    analyses: mergeFloorAnalyses(
+      platform.analyses,
+      normalizeAnalyses(c.analyses),
+    ),
     origin: "platform",
     hidden: row?.hidden ?? false,
     customized:
