@@ -30,9 +30,10 @@ Linear is the durable _state_.
 | **Routing contract** (shared, both lanes) | `.agents/skills/thinkwork-linear-dispatcher/references/routing-contract.md` | Lane rules, label semantics, status routing table, handoff-baton contract, question protocol, verification rebound/governor, ledger/marker formats, duplicate-worker handling |
 | **Launch prompts** (shared, both lanes)   | `.agents/skills/thinkwork-linear-dispatcher/references/launch-prompts.md`   | Worker prompt templates per phase, handoff comment template, QA-brief rules, goal discipline, model/orchestration policy notes                                                |
 | **Codex-lane dispatcher skill**           | `.agents/skills/thinkwork-linear-dispatcher/SKILL.md`                       | Codex heartbeat loop, Codex thread creation rules (`create_thread`, worktree envs, `/goal`), pendingWorktreeId handling                                                       |
-| **Claude-lane dispatcher skill**          | `.claude/skills/linear-dispatch/SKILL.md`                                   | Claude heartbeat loop, local worker launches (headless `claude -p` in worktrees), model policy table, liveness/sweep rules, concurrency cap                                   |
+| **Claude-lane dispatcher skill**          | `.claude/skills/linear-dispatch/SKILL.md`                                   | Claude heartbeat loop + self-pacing table, local worker launches (headless `claude -p` in worktrees), model/budget policy table, liveness/sweep rules, concurrency cap        |
 | **Human runbook**                         | `docs/runbooks/linear-autonomous-development-loop.md`                       | Operator-facing explanation, startup/ops, agent-browser setup                                                                                                                 |
 | **Startup script**                        | `scripts/factory-up.sh`                                                     | One-command Claude-lane bootstrap (preflight → caffeinate → Sonnet loop session)                                                                                              |
+| **Status snapshot**                       | `scripts/factory-status.sh`                                                 | Deterministic per-heartbeat snapshot: worker ALIVE/DEAD from pid sidecars, log age/tails, `auto-*` worktrees, orphan logs — replaces ad-hoc `ps`/`ls` reasoning               |
 | **Codex heartbeat prompt**                | Codex app → Scheduled → "Linear Agent Dispatcher"                           | Tiny skill-invoking prompt only — all real rules live in the repo files above                                                                                                 |
 | **Worker scratch**                        | `~/.thinkwork-factory/{prompts,logs}/`                                      | Machine-local, disposable; worker id = `pid + log path + worktree path`                                                                                                       |
 | **Artifacts**                             | `docs/{brainstorms,plans,solutions,dogfood-reports}/`, `CONCEPTS.md`        | Requirements, plans, debug findings, verification reports, compounded learnings, vocabulary                                                                                   |
@@ -52,8 +53,11 @@ Two dispatchers execute the same contract:
   app (every 5 min). Workers are Codex cloud threads in worktree
   environments.
 - **Claude lane** — a local Claude Code session on Eric's Mac running
-  `/loop 4m linear-dispatch` (started by `scripts/factory-up.sh`). Workers
-  are headless `claude -p` runs in `.claude/worktrees/auto-*` worktrees.
+  `/loop linear-dispatch` (self-paced; started by `scripts/factory-up.sh`).
+  Workers are headless `claude -p` runs in `.claude/worktrees/auto-*`
+  worktrees. The dispatcher picks each next heartbeat from factory state:
+  ~4 min while workers/CI/deploys are in flight, 20–30 min when everything
+  is gated on humans or the queue is empty — an idle factory doesn't poll.
 
 `Codex` and `Claude` are **lane labels**: exactly one per automated issue
 (both at once → `Needs User` lane conflict). Child issues inherit the
@@ -139,6 +143,10 @@ Launched fresh per phase from `origin/main` worktrees; prompt = template from
   `fable-advisor:codex-implementer` (GPT-5.5, default) → `implementer`
   (opus) → sonnet, keeping all verification and Linear duties itself;
   verify/debug `opus`; compound `sonnet`.
+- **Budget backstop**: every launch also passes `--max-budget-usd` (per-phase
+  table in the Claude-lane SKILL.md) as a runaway cap, not a target. A
+  budget-killed worker is a normal dead worker; two consecutive budget kills
+  on the same phase escalate as a blocker instead of a third relaunch.
 - **Unit checkpoints**: one PR per plan unit; Progress updated at
   unit-selected / PR-opened / CI-change / unit-shipped; next unit starts from
   fresh `origin/main` and the Progress doc's Next Steps.
@@ -192,8 +200,6 @@ human must check.
 - The dispatcher janitor must check worker liveness _immediately_ before
   removing worktrees (a live worker once had its worktree swept from under
   it; it survived, but don't).
-- Debug → Brainstorming routing worked well on THINK-170 but isn't yet in the
-  routing table (contract says Ready to Work / Plan Review).
 - Skipping Planning collapses implementation scope to whatever the
   requirements spec tightly (THINK-170 shipped R0 only this way — deliberate,
   but a plan-less Ready to Work always narrows to the best-specified unit).
