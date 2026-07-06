@@ -3,7 +3,7 @@
  *
  * Follows the Work Items list idiom: a hidden-column react-table drives the
  * token filters (origin, state) + collapsed search, and the visible rows
- * render through the shared DataTable. Operator row actions (Edit, Clone) are
+ * render through the shared DataTable. Edit/Clone live in the preview panel
  * inline, always visible, outline style — matching ArtifactsTable / work-items.
  */
 
@@ -15,19 +15,17 @@ import {
   getFilteredRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Copy, Pencil, Search } from "lucide-react";
 import {
   Badge,
-  Button,
   DataTable,
   DataTableTokenFilter,
   type DataTableTokenFilterColumn,
   dataTableTokenFilterFns,
-  Input,
 } from "@thinkwork/ui";
-import { summarizeDirectives, type PlateItem } from "./plate-support";
+import type { PlateItem } from "./plate-support";
+import { CollapsedFilterSearch } from "../CollapsedFilterSearch";
 
-const CELL = "flex h-10 min-w-0 items-center px-2";
+const CELL = "flex h-10 min-w-0 items-center";
 
 const FILTER_COLUMNS = {
   search: "filterSearch",
@@ -41,8 +39,6 @@ export interface PlatesTableProps {
   onRowClick: (item: PlateItem) => void;
   /** Operators only: inline row actions + the state (hidden) filter. */
   isOperator?: boolean;
-  onEdit?: (item: PlateItem) => void;
-  onClone?: (item: PlateItem) => void;
   emptyMessage?: string;
 }
 
@@ -58,20 +54,24 @@ export function PlatesTable({
   selectedSlug,
   onRowClick,
   isOperator = false,
-  onEdit,
-  onClone,
   emptyMessage,
 }: PlatesTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const filterRows = useMemo<PlateFilterRow[]>(
     () =>
-      items.map((item) => ({
-        item,
-        filterSearch: `${item.displayName} ${item.slug} ${item.useFor}`,
-        filterOrigin: item.origin,
-        filterState: item.hidden ? "hidden" : "visible",
-      })),
+      [...items]
+        .sort((a, b) =>
+          a.displayName.localeCompare(b.displayName, undefined, {
+            sensitivity: "base",
+          }),
+        )
+        .map((item) => ({
+          item,
+          filterSearch: `${item.displayName} ${item.slug} ${item.useFor}`,
+          filterOrigin: item.origin,
+          filterState: item.hidden ? "hidden" : "visible",
+        })),
     [items],
   );
 
@@ -110,6 +110,17 @@ export function PlatesTable({
     .getFilteredRowModel()
     .rows.map((row) => row.original.item);
 
+  const searchFilterValue = columnFilters.find(
+    (filter) => filter.id === FILTER_COLUMNS.search,
+  )?.value;
+  const searchValue =
+    searchFilterValue &&
+    typeof searchFilterValue === "object" &&
+    "value" in searchFilterValue &&
+    typeof (searchFilterValue as { value: unknown }).value === "string"
+      ? (searchFilterValue as { value: string }).value
+      : "";
+
   const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(() => {
     const columns: DataTableTokenFilterColumn[] = [
       {
@@ -143,26 +154,46 @@ export function PlatesTable({
       {
         accessorKey: "displayName",
         header: "Name",
-        size: 240,
+        size: 190,
         cell: ({ row }) => (
           <span
-            className={`${CELL} flex-col !items-start justify-center gap-0`}
+            className={`${CELL} gap-2`}
             data-testid="plates-table-row"
             data-slug={row.original.slug}
           >
             <span className="truncate text-sm font-medium">
               {row.original.displayName}
             </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {row.original.slug}
-            </span>
+            {row.original.hidden ? (
+              <Badge
+                variant="outline"
+                className="font-normal text-muted-foreground"
+                data-testid="plates-hidden-badge"
+              >
+                Hidden
+              </Badge>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "slug",
+        header: "Type",
+        size: 180,
+        cell: ({ row }) => (
+          <span className={CELL}>
+            <Badge
+              variant="outline"
+              className="max-w-full font-mono text-xs font-normal text-muted-foreground"
+            >
+              <span className="truncate">{row.original.slug}</span>
+            </Badge>
           </span>
         ),
       },
       {
         accessorKey: "useFor",
         header: "Use for",
-        size: 220,
         cell: ({ row }) => (
           <span
             className={`${CELL} text-sm text-muted-foreground`}
@@ -175,7 +206,7 @@ export function PlatesTable({
       {
         accessorKey: "origin",
         header: "Origin",
-        size: 130,
+        size: 110,
         cell: ({ row }) => (
           <span className={`${CELL} gap-1.5`}>
             <Badge variant="outline" className="font-normal">
@@ -193,86 +224,26 @@ export function PlatesTable({
           </span>
         ),
       },
-      {
-        accessorKey: "allowedDirectives",
-        header: "Components",
-        size: 160,
-        cell: ({ row }) => (
-          <span className={`${CELL} text-xs text-muted-foreground`}>
-            <span className="truncate">
-              {summarizeDirectives(row.original.allowedDirectives)}
-            </span>
-          </span>
-        ),
-      },
-      {
-        id: "state",
-        header: "State",
-        size: 100,
-        cell: ({ row }) =>
-          row.original.hidden ? (
-            <span className={CELL}>
-              <Badge
-                variant="outline"
-                className="font-normal text-muted-foreground"
-                data-testid="plates-hidden-badge"
-              >
-                Hidden
-              </Badge>
-            </span>
-          ) : (
-            <span className={`${CELL} text-xs text-muted-foreground`}>
-              Visible
-            </span>
-          ),
-      },
     ];
 
-    if (isOperator) {
-      base.push({
-        id: "actions",
-        header: "",
-        size: 150,
-        cell: ({ row }) => (
-          <span className={`${CELL} justify-end gap-1.5`}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                onClone?.(row.original);
-              }}
-              data-testid="plate-clone-action"
-            >
-              <Copy className="size-3.5" />
-              Clone
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit?.(row.original);
-              }}
-              data-testid="plate-edit-action"
-            >
-              <Pencil className="size-3.5" />
-              Edit
-            </Button>
-          </span>
-        ),
-      });
-    }
-
     return base;
-  }, [isOperator, onClone, onEdit]);
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <PlatesToolbarSearch table={filterTable} />
+        <CollapsedFilterSearch
+          value={searchValue}
+          onChange={(value) =>
+            filterTable
+              .getColumn(FILTER_COLUMNS.search)
+              ?.setFilterValue(
+                value ? { operator: "contains", value } : undefined,
+              )
+          }
+          label="Search plates"
+          placeholder="Search plates..."
+        />
         <DataTableTokenFilter
           table={filterTable}
           columns={tokenFilterColumns}
@@ -304,48 +275,10 @@ export function PlatesTable({
             onRowClick={onRowClick}
             scrollable
             pageSize={50}
-            tableClassName="table-fixed"
+            tableClassName="w-full table-fixed"
           />
         </div>
       )}
-    </div>
-  );
-}
-
-function PlatesToolbarSearch({
-  table,
-}: {
-  table: ReturnType<typeof useReactTable<PlateFilterRow>>;
-}) {
-  const current = table
-    .getState()
-    .columnFilters.find((filter) => filter.id === FILTER_COLUMNS.search)?.value;
-  const value =
-    current &&
-    typeof current === "object" &&
-    "value" in current &&
-    typeof (current as { value: unknown }).value === "string"
-      ? ((current as { value: string }).value ?? "")
-      : "";
-
-  return (
-    <div className="relative w-fit min-w-56 max-w-full">
-      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        type="search"
-        placeholder="Search plates…"
-        value={value}
-        onChange={(event) => {
-          const trimmed = event.target.value.trimStart();
-          table
-            .getColumn(FILTER_COLUMNS.search)
-            ?.setFilterValue(
-              trimmed ? { operator: "contains", value: trimmed } : undefined,
-            );
-        }}
-        className="pl-9"
-        data-testid="plates-search"
-      />
     </div>
   );
 }

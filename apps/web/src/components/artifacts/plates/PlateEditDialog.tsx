@@ -501,7 +501,7 @@ export function PlateEditDialog({
               html={preview.html}
               diagnostics={preview.diagnostics}
               pending={pending}
-              className="h-full"
+              className="h-full rounded-lg border border-border"
             />
           </div>
         </div>

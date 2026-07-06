@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArtifactsCreateAction } from "@/components/artifacts/ArtifactsListBody";
-import { ArtifactsPageTabs } from "@/components/artifacts/ArtifactsPageTabs";
+import {
+  ArtifactsCreateAction,
+  ArtifactsListBody,
+} from "@/components/artifacts/ArtifactsListBody";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 export const Route = createFileRoute("/_authed/_shell/artifacts/")({
@@ -13,5 +15,5 @@ function ArtifactsPage() {
     action: <ArtifactsCreateAction />,
     actionKey: "artifacts-create",
   });
-  return <ArtifactsPageTabs />;
+  return <ArtifactsListBody />;
 }

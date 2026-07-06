@@ -1,14 +1,25 @@
-import { Search, User } from "lucide-react";
-import { Input, Switch } from "@thinkwork/ui";
+import { useMemo, useState } from "react";
+import {
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+  type ColumnFiltersState,
+} from "@tanstack/react-table";
+import { User } from "lucide-react";
+import { CollapsedFilterSearch } from "./CollapsedFilterSearch";
+import {
+  DataTableTokenFilter,
+  Switch,
+  type DataTableTokenFilterColumn,
+} from "@thinkwork/ui";
 
 export interface ArtifactsToolbarProps {
   search: string;
   onSearchChange: (value: string) => void;
-  searchPlaceholder?: string;
   /**
-   * Operator-only: show a "filter by user ID" input. Distinct from the
-   * content `search` field — this scopes the list to one user's applets via
-   * the admin query. Hidden for non-operators.
+   * Operator-only: a "User" token filter. Distinct from the content `search`
+   * field — this scopes the list to one user's applets via the admin query.
+   * Hidden for non-operators.
    */
   showUserFilter?: boolean;
   userIdFilter?: string;
@@ -21,50 +32,92 @@ export interface ArtifactsToolbarProps {
   onIncludeDraftsChange?: (value: boolean) => void;
 }
 
-// Artifacts has a single kind (`applet`) today, so the toolbar carries only
-// content search plus the operator user-ID filter — no kind tabs or dropdown.
+const FILTER_COLUMNS = {
+  user: "filterUser",
+} as const;
+
+function textValueOf(filters: ColumnFiltersState, id: string): string {
+  const value = filters.find((filter) => filter.id === id)?.value;
+  return value &&
+    typeof value === "object" &&
+    "value" in value &&
+    typeof (value as { value: unknown }).value === "string"
+    ? (value as { value: string }).value
+    : "";
+}
+
+/**
+ * Work Items-convention toolbar (collapsed search icon + token filters).
+ * The filter table carries no rows — filtering happens upstream (content
+ * search client-side, the user filter via the admin query) — it exists so
+ * DataTableTokenFilter has state to drive.
+ */
 export function ArtifactsToolbar({
   search,
   onSearchChange,
-  searchPlaceholder = "Search artifacts…",
   showUserFilter = false,
-  userIdFilter = "",
   onUserIdFilterChange,
   includeDrafts = false,
   onIncludeDraftsChange,
 }: ArtifactsToolbarProps) {
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
+  const filterColumns = useMemo<ColumnDef<Record<string, never>>[]>(
+    () => [{ id: FILTER_COLUMNS.user, accessorFn: () => "" }],
+    [],
+  );
+
+  const filterTable = useReactTable({
+    data: EMPTY_ROWS,
+    columns: filterColumns,
+    state: { columnFilters },
+    onColumnFiltersChange: (updater) => {
+      setColumnFilters((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        onUserIdFilterChange?.(textValueOf(next, FILTER_COLUMNS.user));
+        return next;
+      });
+    },
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
+    () =>
+      showUserFilter
+        ? [
+            {
+              id: FILTER_COLUMNS.user,
+              label: "User",
+              type: "text",
+              icon: <User className="size-4" />,
+            },
+          ]
+        : [],
+    [showUserFilter],
+  );
+
   return (
     <div
-      className="relative z-10 flex shrink-0 flex-wrap items-center gap-3 px-6 py-3"
+      className="relative z-10 flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3"
       data-testid="artifacts-toolbar"
     >
-      <div className="relative w-fit min-w-56 max-w-full">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder={searchPlaceholder}
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          className="pl-9"
-          data-testid="artifacts-search"
-        />
-      </div>
-
+      <CollapsedFilterSearch
+        value={search}
+        onChange={onSearchChange}
+        label="Search artifacts"
+        placeholder="Search artifacts..."
+      />
       {showUserFilter ? (
-        <div
-          className="relative w-fit min-w-52"
-          data-testid="artifacts-user-filter"
-        >
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Filter by user ID"
-            value={userIdFilter}
-            onChange={(event) => onUserIdFilterChange?.(event.target.value)}
-            className="pl-9"
-            data-testid="artifacts-user-filter-input"
-          />
-        </div>
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={tokenFilterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
       ) : null}
 
       {onIncludeDraftsChange ? (
@@ -83,3 +136,5 @@ export function ArtifactsToolbar({
     </div>
   );
 }
+
+const EMPTY_ROWS: Record<string, never>[] = [];
