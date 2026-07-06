@@ -48,6 +48,7 @@ import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 import { mcpListTools, type McpServerTarget } from "../lib/mcp-client-call.js";
+import { cacheDiscoveredMcpTools } from "../lib/mcp-tool-cache.js";
 import {
   mcpOAuthCompletionUrl,
   normalizeMcpOAuthReturnTo,
@@ -2234,27 +2235,18 @@ async function mcpTestConnection(
 
   try {
     const discoveredTools = await mcpListTools(target, { timeoutMs: 10000 });
-    const discoveredToolRecords = discoveredTools.map((t) => ({
-      name: t.name,
-      ...(t.description !== undefined ? { description: t.description } : {}),
-      ...(t.inputSchema !== undefined ? { inputSchema: t.inputSchema } : {}),
-    }));
-    const tools = discoveredToolRecords.map((t) => ({
+    const tools = discoveredTools.map((t) => ({
       name: t.name,
       description: t.description,
     }));
 
-    // Cache discovered tools in DB
-    await db
-      .update(tenantMcpServers)
-      .set({ tools, updated_at: new Date() })
-      .where(eq(tenantMcpServers.id, serverId));
-
-    await upsertMcpContextToolEligibility(
+    // Cache discovered tools + context-tool eligibility (shared with the
+    // mcp-proxy lazy write-back — THINK-179).
+    await cacheDiscoveredMcpTools({
       tenantId,
       serverId,
-      discoveredToolRecords,
-    );
+      defs: discoveredTools,
+    });
 
     return json({ ok: true, tools });
   } catch (err: any) {
@@ -2434,63 +2426,6 @@ function formatMcpContextTool(row: typeof tenantMcpContextTools.$inferSelect) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-async function upsertMcpContextToolEligibility(
-  tenantId: string,
-  serverId: string,
-  tools: Array<
-    Record<string, unknown> & { name: string; description?: string }
-  >,
-): Promise<void> {
-  for (const tool of tools) {
-    const context = isRecord(tool.contextEngine)
-      ? tool.contextEngine
-      : isRecord(tool.metadata) && isRecord(tool.metadata.contextEngine)
-        ? tool.metadata.contextEngine
-        : {};
-    const annotations = isRecord(tool.annotations) ? tool.annotations : {};
-    const declaredReadOnly =
-      annotations.readOnlyHint === true || context.readOnly === true;
-    const declaredSearchSafe = context.searchSafe === true;
-    const displayName =
-      typeof tool.title === "string"
-        ? tool.title
-        : typeof tool.description === "string"
-          ? tool.description.slice(0, 80)
-          : tool.name;
-
-    await db
-      .insert(tenantMcpContextTools)
-      .values({
-        tenant_id: tenantId,
-        mcp_server_id: serverId,
-        tool_name: tool.name,
-        display_name: displayName,
-        declared_read_only: declaredReadOnly,
-        declared_search_safe: declaredSearchSafe,
-        metadata: tool,
-        updated_at: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [
-          tenantMcpContextTools.tenant_id,
-          tenantMcpContextTools.mcp_server_id,
-          tenantMcpContextTools.tool_name,
-        ],
-        set: {
-          display_name: displayName,
-          declared_read_only: declaredReadOnly,
-          declared_search_safe: declaredSearchSafe,
-          metadata: tool,
-          updated_at: new Date(),
-        },
-      });
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function resolveTenantApiKeyToken(

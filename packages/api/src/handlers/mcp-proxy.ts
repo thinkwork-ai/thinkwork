@@ -58,6 +58,7 @@ import {
   McpTransportError,
   type McpToolDefinition,
 } from "../lib/mcp-client-call.js";
+import { cacheDiscoveredMcpTools } from "../lib/mcp-tool-cache.js";
 
 const { users, agents } = schema;
 
@@ -213,6 +214,22 @@ async function handleList(
       });
       continue;
     }
+    // Lazy tool-cache write-back (THINK-179): this is the one server-side
+    // point that performs an authenticated tools/list with per-user OAuth
+    // already resolved, so OAuth/plugin servers — which the operator
+    // "Test Connection" flow can never authenticate — get their registry
+    // `tools` cache populated on first successful discovery. An empty
+    // cache otherwise makes eval replay drop the server entirely
+    // (selectReplayMcpTools can't classify tools it has never seen).
+    // Fires only while the cache is empty; never fails the request.
+    if (!config.availableTools?.length && defs.length > 0) {
+      await cacheDiscoveredMcpTools({
+        tenantId: ctx.tenantId,
+        serverConfigName: config.name,
+        defs,
+      });
+    }
+
     // Honor the per-server tool allowlist (config.tools) if present.
     const allow = config.tools?.length ? new Set(config.tools) : null;
     for (const def of defs) {
