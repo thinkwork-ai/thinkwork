@@ -12,6 +12,7 @@ import {
   carryNodePositions,
   initialCameraZ,
   labelsVisibleAtZoom,
+  CAMERA_DISTANCE_SCALE,
 } from "./graph-utils.js";
 
 describe("endpointId", () => {
@@ -471,16 +472,18 @@ describe("labelsVisibleAtZoom", () => {
   });
 
   it("threshold never drops below the readable floor", () => {
-    // 200 nodes: initialZ ~1414, quarter = ~354 < 700 floor.
-    expect(labelsVisibleAtZoom(699, 200)).toBe(true);
-    expect(labelsVisibleAtZoom(701, 200)).toBe(false);
+    // 200 nodes: base initialZ ~1414, quarter < the 700 floor (both
+    // scaled by the flat-FOV distance compensation).
+    const floor = 700 * CAMERA_DISTANCE_SCALE;
+    expect(labelsVisibleAtZoom(floor - 1, 200)).toBe(true);
+    expect(labelsVisibleAtZoom(floor + 1, 200)).toBe(false);
   });
 });
 
 describe("initialCameraZ", () => {
-  it("clamps between 800 and 6000", () => {
-    expect(initialCameraZ(1)).toBe(800);
-    expect(initialCameraZ(10000)).toBe(6000);
-    expect(initialCameraZ(400)).toBe(2000);
+  it("clamps between 800 and 6000 before flat-FOV compensation", () => {
+    expect(initialCameraZ(1)).toBeCloseTo(800 * CAMERA_DISTANCE_SCALE);
+    expect(initialCameraZ(10000)).toBeCloseTo(6000 * CAMERA_DISTANCE_SCALE);
+    expect(initialCameraZ(400)).toBeCloseTo(2000 * CAMERA_DISTANCE_SCALE);
   });
 });

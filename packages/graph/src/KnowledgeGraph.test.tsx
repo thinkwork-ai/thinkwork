@@ -671,15 +671,18 @@ describe("KnowledgeGraph", () => {
       ).toBeFalsy();
     });
 
-    it("positions edge-label sprites at the link midpoint", async () => {
+    it("positions edge-label sprites above the midpoint, rotated along the line", async () => {
       const props = await renderLarge();
       const set = vi.fn();
+      const material = { rotation: -1 };
       const keepDefault = props.linkPositionUpdate(
-        { position: { set } },
-        { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 0 } },
+        { position: { set }, material },
+        { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
         props.graphData.links[0],
       );
-      expect(set).toHaveBeenCalledWith(5, 10, 0);
+      // Horizontal link: label sits 8 units above the midpoint, unrotated.
+      expect(set).toHaveBeenCalledWith(5, 8, 0);
+      expect(material.rotation).toBe(0);
       expect(keepDefault).toBe(false);
     });
 

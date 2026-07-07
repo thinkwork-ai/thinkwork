@@ -56,10 +56,24 @@ export function deriveGraphClassification<TLink extends GraphLinkLike>(
   return { matchedIds, neighborIds };
 }
 
+/** Narrow FOV flattens perspective distortion into a near-orthographic,
+ *  2D-feeling view (the library default is 50°). */
+export const FLAT_CAMERA_FOV = 20;
+
+/** Distance multiplier that keeps framing identical after narrowing the
+ *  FOV from the library's 50° default. Exported for tests. */
+export const CAMERA_DISTANCE_SCALE =
+  Math.tan((50 / 2) * (Math.PI / 180)) /
+  Math.tan((FLAT_CAMERA_FOV / 2) * (Math.PI / 180));
+
 /** One-shot starting camera distance — scales with node count so large
- *  graphs start framed. Shared by camera init and the label zoom gate. */
+ *  graphs start framed. Shared by camera init and the label zoom gate.
+ *  Includes the flat-FOV compensation. */
 export function initialCameraZ(nodeCount: number): number {
-  return Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount)));
+  return (
+    Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount))) *
+    CAMERA_DISTANCE_SCALE
+  );
 }
 
 /** Graphs at or below this node count always show labels — gating adds
@@ -76,7 +90,10 @@ export function labelsVisibleAtZoom(
   nodeCount: number,
 ): boolean {
   if (nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES) return true;
-  return cameraZ <= Math.max(700, initialCameraZ(nodeCount) * 0.25);
+  return (
+    cameraZ <=
+    Math.max(700 * CAMERA_DISTANCE_SCALE, initialCameraZ(nodeCount) * 0.25)
+  );
 }
 
 /** Tri-state label visibility control: `auto` follows zoom gating and

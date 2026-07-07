@@ -29,6 +29,7 @@ import {
   endpointId,
   expandNeighborhood,
   initialCameraZ,
+  FLAT_CAMERA_FOV,
   labelsVisibleAtZoom,
   normalizeGraphSearch,
   DEFAULT_FOCUS_CAP,
@@ -565,19 +566,31 @@ export const KnowledgeGraph = forwardRef<
         node.evidenceCount ?? 0,
         1,
       );
-      const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
+      const r = Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
       const sphereOp = state === "matched" ? 1 : 0.15;
       const ringOp = state === "neighbor" ? 1 : 0;
 
       const group = new THREE.Group();
 
-      const geometry = new THREE.SphereGeometry(r, 16, 16);
-      const material = new THREE.MeshLambertMaterial({
+      // Flat neo4j-style disc: unlit fill + darker rim. The camera looks
+      // straight down +z, so a CircleGeometry needs no billboarding.
+      const material = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
         opacity: sphereOp,
       });
-      group.add(new THREE.Mesh(geometry, material));
+      group.add(new THREE.Mesh(new THREE.CircleGeometry(r, 48), material));
+      const rimMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color).multiplyScalar(0.55),
+        transparent: true,
+        opacity: sphereOp,
+      });
+      const rim = new THREE.Mesh(
+        new THREE.RingGeometry(r * 0.9, r, 48),
+        rimMaterial,
+      );
+      rim.position.z = 0.5;
+      group.add(rim);
 
       const canvas = document.createElement("canvas");
       const size = 128;
@@ -621,6 +634,7 @@ export const KnowledgeGraph = forwardRef<
       group.add(ringSprite);
 
       node.__sphereMat = material;
+      node.__rimMat = rimMaterial;
       node.__spriteMat = spriteMaterial;
       node.__ringMat = ringMaterial;
       node.__labelSprite = sprite;
@@ -636,6 +650,7 @@ export const KnowledgeGraph = forwardRef<
       const opacity = state === "matched" ? 1 : 0.15;
       const ringOpacity = state === "neighbor" ? 1 : 0;
       if (node.__sphereMat) node.__sphereMat.opacity = opacity;
+      if (node.__rimMat) node.__rimMat.opacity = opacity;
       if (node.__spriteMat) node.__spriteMat.opacity = opacity;
       if (node.__ringMat) node.__ringMat.opacity = ringOpacity;
     }
@@ -702,6 +717,10 @@ export const KnowledgeGraph = forwardRef<
       ONE: THREE.TOUCH.PAN,
       TWO: THREE.TOUCH.DOLLY_PAN,
     };
+    // Near-orthographic: a narrow FOV kills the perspective skew that
+    // made the 2D layout read as 3D. initialCameraZ compensates.
+    camera.fov = FLAT_CAMERA_FOV;
+    camera.updateProjectionMatrix?.();
     cameraInitRef.current = true;
   }, [dims, graphData]);
 
@@ -771,8 +790,8 @@ export const KnowledgeGraph = forwardRef<
             ? `${knowledgeGraphTrustColor(link)}cc`
             : "rgba(255,255,255,0.12)"
         }
-        linkWidth={(link: any) => (link.evidenceCount > 1 ? 2.5 : 1.8)}
-        linkDirectionalArrowLength={() => 4}
+        linkWidth={0}
+        linkDirectionalArrowLength={() => 6}
         linkDirectionalArrowRelPos={1}
         linkDirectionalArrowColor={(link: any) =>
           isLinkBright(link)
@@ -804,11 +823,17 @@ export const KnowledgeGraph = forwardRef<
         linkPositionUpdate={(obj: any, coords: any) => {
           if (!obj) return false;
           const { start, end } = coords;
+          // Align the label with its line (neo4j-style), flipped to stay
+          // upright, and nudged just above the line along its normal.
+          let angle = Math.atan2(end.y - start.y, end.x - start.x);
+          if (angle > Math.PI / 2) angle -= Math.PI;
+          else if (angle < -Math.PI / 2) angle += Math.PI;
           obj.position.set(
-            (start.x + end.x) / 2,
-            (start.y + end.y) / 2,
+            (start.x + end.x) / 2 - Math.sin(angle) * 8,
+            (start.y + end.y) / 2 + Math.cos(angle) * 8,
             ((start.z ?? 0) + (end.z ?? 0)) / 2,
           );
+          if (obj.material) obj.material.rotation = angle;
           return false;
         }}
         nodeLabel={(node: any) =>

@@ -31,6 +31,7 @@ import {
   endpointId,
   expandNeighborhood,
   initialCameraZ,
+  FLAT_CAMERA_FOV,
   labelsVisibleAtZoom,
   DEFAULT_FOCUS_CAP,
   DEFAULT_FOCUS_DEGREE,
@@ -574,21 +575,32 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         // Size by mention count (edgeCount carries mention_count from resolver)
         const mentions = node.edgeCount || 1;
         const r = isMemory
-          ? 10
-          : Math.max(5, Math.min(18, 5 + Math.sqrt(mentions) * 1.5));
+          ? 12
+          : Math.max(8, Math.min(24, 8 + Math.sqrt(mentions) * 2));
         const opacity = muted ? 0.15 : 1;
 
         const group = new THREE.Group();
 
         // Sphere — always transparent so runtime opacity tweaks take effect
-        const geometry = new THREE.SphereGeometry(r, 16, 16);
-        const material = new THREE.MeshLambertMaterial({
+        // Flat neo4j-style disc: unlit fill + darker rim. The camera looks
+        // straight down +z, so a CircleGeometry needs no billboarding.
+        const material = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity,
+          opacity: opacity,
         });
-        const sphere = new THREE.Mesh(geometry, material);
-        group.add(sphere);
+        group.add(new THREE.Mesh(new THREE.CircleGeometry(r, 48), material));
+        const rimMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color).multiplyScalar(0.55),
+          transparent: true,
+          opacity: opacity,
+        });
+        const rim = new THREE.Mesh(
+          new THREE.RingGeometry(r * 0.9, r, 48),
+          rimMaterial,
+        );
+        rim.position.z = 0.5;
+        group.add(rim);
 
         // Text label via sprite — canvas drawn pure white; mute effect comes
         // from spriteMaterial.opacity so we don't have to redraw the canvas
@@ -620,6 +632,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         // Stash material refs so the filter effect can mutate opacity without
         // rebuilding the graph.
         node.__sphereMat = material;
+        node.__rimMat = rimMaterial;
         node.__spriteMat = spriteMaterial;
         node.__labelSprite = sprite;
 
@@ -634,6 +647,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       for (const n of graphData.nodes as any[]) {
         const op = classifyNode(n.id, classification) === "matched" ? 1 : 0.15;
         if (n.__sphereMat) n.__sphereMat.opacity = op;
+        if (n.__rimMat) n.__rimMat.opacity = op;
         if (n.__spriteMat) n.__spriteMat.opacity = op;
       }
       // Focus flips which labels are lit; refresh() also re-runs the link
@@ -711,6 +725,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         ONE: THREE.TOUCH.PAN,
         TWO: THREE.TOUCH.DOLLY_PAN,
       };
+      // Near-orthographic: a narrow FOV kills the perspective skew that
+      // made the 2D layout read as 3D. initialCameraZ compensates.
+      camera.fov = FLAT_CAMERA_FOV;
+      camera.updateProjectionMatrix?.();
       cameraInitRef.current = true;
     }, [dims, graphData]);
 
@@ -761,8 +779,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               ? "rgba(255,255,255,0.7)"
               : "rgba(255,255,255,0.1)"
           }
-          linkWidth={() => 2}
-          linkDirectionalArrowLength={() => 4}
+          linkWidth={0}
+          linkDirectionalArrowLength={() => 6}
           linkDirectionalArrowRelPos={1}
           linkDirectionalArrowColor={(link: any) =>
             isLinkBright(link)
@@ -794,11 +812,17 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           linkPositionUpdate={(obj: any, coords: any) => {
             if (!obj) return false;
             const { start, end } = coords;
+            // Align the label with its line (neo4j-style), flipped to stay
+            // upright, and nudged just above the line along its normal.
+            let angle = Math.atan2(end.y - start.y, end.x - start.x);
+            if (angle > Math.PI / 2) angle -= Math.PI;
+            else if (angle < -Math.PI / 2) angle += Math.PI;
             obj.position.set(
-              (start.x + end.x) / 2,
-              (start.y + end.y) / 2,
+              (start.x + end.x) / 2 - Math.sin(angle) * 8,
+              (start.y + end.y) / 2 + Math.cos(angle) * 8,
               ((start.z ?? 0) + (end.z ?? 0)) / 2,
             );
+            if (obj.material) obj.material.rotation = angle;
             return false;
           }}
           nodeLabel={(node: any) =>
