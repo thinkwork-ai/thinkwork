@@ -143,6 +143,8 @@ import {
 } from "../lib/goal-mode.js";
 import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
 import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
+import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
+import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-step-finalize.js";
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   THREAD_JSON_RENDER_UI_CAPABILITY,
@@ -3081,6 +3083,23 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       now: new Date(),
     });
 
+    // THINK-219: wakeup turns never pass through chat-agent-finalize, so the
+    // workflow-step hook must fire HERE (payload-parity learning — the
+    // interpreter path is wakeup-only). Resumes the parked SFN task token.
+    if (wakeup.source === "workflow_step") {
+      await projectWorkflowStepFinalizeSafely({
+        tenantId: wakeup.tenant_id,
+        threadTurnId: run.id,
+        contextSnapshot: payload,
+        goalRun: goalRunProjectionFromFinalizePayload({
+          response: invokeResult.response as never,
+          usage: invokeResult as never,
+        }),
+        responseText,
+        turnStatus: "completed",
+      });
+    }
+
     await updateWorkspaceRunAfterTurn(
       workspacePayload,
       wakeup,
@@ -3198,6 +3217,20 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       error: errMsg,
       now: new Date(),
     });
+
+    // THINK-219: fail the parked interpreter step too — otherwise the run
+    // hangs until the SFN heartbeat timeout instead of recording the failure.
+    if (wakeup.source === "workflow_step") {
+      await projectWorkflowStepFinalizeSafely({
+        tenantId: wakeup.tenant_id,
+        threadTurnId: run.id,
+        contextSnapshot: payload,
+        goalRun: null,
+        responseText: "",
+        turnStatus: "failed",
+        errorMessage: errMsg,
+      });
+    }
 
     await updateWorkspaceRunAfterTurn(
       workspacePayload,
