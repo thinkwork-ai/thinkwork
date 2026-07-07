@@ -93,6 +93,12 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "hindsight_database_name" {
+  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty keeps Hindsight in the hindsight schema of the primary database."
+  type        = string
+  default     = ""
+}
+
 variable "enable_hindsight" {
   description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
   type        = bool
@@ -731,6 +737,7 @@ module "thinkwork" {
   db_password                                 = var.db_password
   database_engine                             = var.database_engine
   enable_hindsight                            = var.enable_hindsight
+  hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned
   twenty_runtime_enabled                      = var.twenty_runtime_enabled
