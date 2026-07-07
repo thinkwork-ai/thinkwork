@@ -31,7 +31,7 @@ export function GraphLabelToggles({
     <button
       type="button"
       aria-label="Toggle labels"
-      className="absolute top-3 left-3 flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+      className="pointer-events-auto absolute top-3 left-3 flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
       onClick={() => onLabelModeChange(nextLabelMode(labelMode))}
     >
       <span className="font-medium">Labels</span>

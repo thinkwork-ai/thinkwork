@@ -880,43 +880,48 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             setFramed(true);
           }}
         />
-        {focus && selectedNode && (
-          <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
-            <button
-              type="button"
-              aria-label={`Open details for ${selectedNode.label}`}
-              className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
-              onClick={() => {
-                if (!onNodeClick) return;
-                const detail = getNodeWithEdgesRef.current(selectedNode.id);
-                if (detail) onNodeClick(detail.node, detail.edges);
-              }}
-            >
-              <span className="font-medium">{selectedNode.label}</span>
-              <span className="text-muted-foreground">View details</span>
-            </button>
-            {focus.truncated && (
-              <div
-                role="status"
-                className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+        {/* Overlay chrome lives in its own explicit stacking layer above
+            the canvas; the layer passes pointer events through except on
+            the interactive controls. */}
+        <div className="pointer-events-none absolute inset-0 z-20">
+          {focus && selectedNode && (
+            <div className="pointer-events-auto absolute top-3 right-3 flex flex-col items-end gap-1.5">
+              <button
+                type="button"
+                aria-label={`Open details for ${selectedNode.label}`}
+                className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  if (!onNodeClick) return;
+                  const detail = getNodeWithEdgesRef.current(selectedNode.id);
+                  if (detail) onNodeClick(detail.node, detail.edges);
+                }}
               >
-                Showing direct connections only
-              </div>
-            )}
-          </div>
-        )}
-        {tooltip && (
-          <div
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
-            style={{ left: tooltip.x, top: tooltip.y }}
-          >
-            {tooltip.text}
-          </div>
-        )}
-        <GraphLabelToggles
-          labelMode={labelMode}
-          onLabelModeChange={setLabelMode}
-        />
+                <span className="font-medium">{selectedNode.label}</span>
+                <span className="text-muted-foreground">View details</span>
+              </button>
+              {focus.truncated && (
+                <div
+                  role="status"
+                  className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+                >
+                  Showing direct connections only
+                </div>
+              )}
+            </div>
+          )}
+          {tooltip && (
+            <div
+              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+              style={{ left: tooltip.x, top: tooltip.y }}
+            >
+              {tooltip.text}
+            </div>
+          )}
+          <GraphLabelToggles
+            labelMode={labelMode}
+            onLabelModeChange={setLabelMode}
+          />
+        </div>
       </div>
     );
   },
