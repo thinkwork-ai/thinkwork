@@ -17,6 +17,7 @@ import {
   RelationshipConnector,
   hashColor,
 } from "@/components/memory/relationship-badges";
+import { RelatedMemories } from "@/components/memory/RelatedMemories";
 
 export interface WikiPageSheetEdge {
   label: string;
@@ -233,6 +234,11 @@ export function WikiPageDetailSheet({
                   )}
               </div>
             )}
+            <RelatedMemories
+              tenantId={tenantId}
+              userId={userId}
+              query={page.title ?? title}
+            />
           </>
         )}
 

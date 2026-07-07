@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "urql";
 import type { MemoryGraphNode } from "@thinkwork/graph";
 import {
   Badge,
@@ -11,7 +9,7 @@ import {
   SheetTitle,
 } from "@thinkwork/ui";
 import { parseMemoryTopics, stripTopicTags } from "@/lib/memory-strategy";
-import { ComputerMemorySearchQuery } from "@/lib/graphql-queries";
+import { RelatedMemories } from "@/components/memory/RelatedMemories";
 import {
   NodeBadge,
   RelationshipConnector,
@@ -82,20 +80,6 @@ export function MemoryGraphNodeSheet({
   const colorFor = (label: string) =>
     resolveNodeColor?.(label) ?? hashColor(label);
 
-  // Entities carry no content of their own — surface the memories that
-  // mention them via semantic search.
-  const [memoriesResult] = useQuery({
-    query: ComputerMemorySearchQuery,
-    variables: { tenantId, userId, query: node.label, limit: 15 },
-    pause: isMemory || !node.label || !tenantId,
-  });
-  const relatedMemories: any[] =
-    memoriesResult.data?.memorySearch?.records ?? [];
-  const [showAllMemories, setShowAllMemories] = useState(false);
-  const visibleMemories = showAllMemories
-    ? relatedMemories
-    : relatedMemories.slice(0, 5);
-
   return (
     <SheetContent className="sm:max-w-lg flex flex-col">
       <SheetHeader className="p-6 pb-0">
@@ -142,51 +126,12 @@ export function MemoryGraphNodeSheet({
           </Link>
         )}
 
-        {!isMemory && relatedMemories.length > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Memories
-            </h4>
-            <div className="space-y-2.5">
-              {visibleMemories.map((record) => (
-                <div key={record.memoryRecordId}>
-                  <p className="text-xs leading-snug line-clamp-3">
-                    {stripTopicTags(record.content?.text ?? "")}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-2.5 text-[11px] text-muted-foreground">
-                    {record.createdAt && (
-                      <span>
-                        {new Date(record.createdAt).toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric" },
-                        )}
-                      </span>
-                    )}
-                    {record.threadId && (
-                      <Link
-                        to="/threads/$id"
-                        params={{ id: record.threadId }}
-                        className="text-sky-400 hover:text-sky-300 hover:underline"
-                      >
-                        View thread →
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {relatedMemories.length > 5 && (
-                <button
-                  type="button"
-                  className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-                  onClick={() => setShowAllMemories((v) => !v)}
-                >
-                  {showAllMemories
-                    ? "Show fewer"
-                    : `Show ${relatedMemories.length - 5} more`}
-                </button>
-              )}
-            </div>
-          </div>
+        {!isMemory && (
+          <RelatedMemories
+            tenantId={tenantId}
+            userId={userId}
+            query={node.label}
+          />
         )}
 
         {edges.length > 0 && (
