@@ -363,14 +363,20 @@ function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
       ? (budget.visibleSpendUsd / budget.policy.limitUsd) * 100
       : 0;
   const percent = Math.min(100, Math.max(0, visiblePercent));
+  // Color from the same number that drives the bar width (visible spend),
+  // not the server status — the server's enforced-spend status can lag
+  // behind what the bar visibly shows.
   const barClass =
-    budget.status === "exceeded"
+    visiblePercent >= 100
       ? "bg-red-500"
-      : budget.status === "warning"
-        ? "bg-yellow-500"
+      : visiblePercent >= 75
+        ? "bg-amber-500"
         : "bg-primary";
   return (
-    <div className="w-24">
+    <div
+      className="w-24"
+      title="Month-to-date spend against the monthly budget. The Cost column shows the last 30 days."
+    >
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full ${barClass}`}
