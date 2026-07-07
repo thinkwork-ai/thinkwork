@@ -2918,6 +2918,31 @@ def pg_literal(value):
     return "'" + value.replace("'", "''") + "'"
 
 
+def ensure_hindsight_database(database_url, vars_json):
+    """THINK-220: the dedicated Hindsight database is bootstrap SQL — Terraform
+    cannot CREATE DATABASE inside the cluster. Runs post-apply; the Hindsight
+    service may crash-loop briefly on a first enablement until this creates
+    the database, then ECS stabilizes on its own. Vanilla boot migrations
+    (RUN_MIGRATIONS_ON_STARTUP) build the schema, including the maintenance
+    discovery functions the repair migration installs on base-schema runs."""
+    db_name = (vars_json.get("hindsight_database_name") or "").strip()
+    if not db_name:
+        return
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", db_name):
+        raise RuntimeError(f"invalid hindsight_database_name: {db_name!r}")
+    admin_url = re.sub(r"/[^/?]+(\?|$)", r"/postgres\1", database_url, count=1)
+    exists = psql_output(
+        admin_url,
+        f"SELECT 1 FROM pg_database WHERE datname = '{db_name}'",
+    ).strip()
+    if not exists:
+        print(f"[hindsight] creating database {db_name}")
+        psql(admin_url, sql=f'CREATE DATABASE "{db_name}"')
+    hindsight_url = re.sub(r"/[^/?]+(\?|$)", f"/{db_name}\\1", database_url, count=1)
+    psql(hindsight_url, sql="CREATE EXTENSION IF NOT EXISTS vector;")
+    print(f"[hindsight] database {db_name} ready (pgvector ensured)")
+
+
 def push_database_schema(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     checkout_source(
@@ -2926,6 +2951,7 @@ def push_database_schema(outputs_path, vars_json):
         os.environ.get("THINKWORK_RELEASE_VERSION", "main"),
     )
     database_url = database_url_from_outputs(outputs)
+    ensure_hindsight_database(database_url, vars_json)
     fresh = not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip()
     ledger_present = bool(
         psql_output(database_url, "SELECT to_regclass('public.platform_schema_migrations')").strip()
@@ -3050,6 +3076,16 @@ def write_runner_files(payload, runner_secrets):
             reviewed_payload,
             "enableHindsight",
             default=False,
+        ),
+        # THINK-220: dedicated Hindsight database on the stage cluster.
+        # Empty keeps the legacy hindsight-schema layout; set (e.g.
+        # "thinkwork_hindsight") points the Hindsight service and platform
+        # readers at that database's public schema, where upstream's
+        # maintenance discovery actually runs.
+        "hindsight_database_name": safe_get(
+            reviewed_payload,
+            "hindsightDatabaseName",
+            default="",
         ),
         "platform_operator_emails": safe_get(
             runner_secrets,
@@ -3248,6 +3284,11 @@ variable "database_engine" {{
 
 variable "enable_hindsight" {{
   type = bool
+}}
+
+variable "hindsight_database_name" {{
+  type    = string
+  default = ""
 }}
 
 variable "platform_operator_emails" {{
@@ -3643,6 +3684,7 @@ module "thinkwork" {{
   agentcore_pi_source_image_uri = var.agentcore_pi_source_image_uri
 
   enable_hindsight               = var.enable_hindsight
+  hindsight_database_name        = var.hindsight_database_name
   enable_workspace_orchestration = true
 
   twenty_provisioned     = var.twenty_provisioned
