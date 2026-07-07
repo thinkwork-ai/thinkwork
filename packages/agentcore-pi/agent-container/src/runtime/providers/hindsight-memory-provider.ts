@@ -47,6 +47,27 @@ const RETRY_DELAYS_MS = [1_000, 3_000, 9_000] as const;
 const RETRY_JITTER_MS = 500;
 const RECALL_MAX_TOKENS = 1_500;
 
+/**
+ * THINK-220 Hindsight cutover seam (module-local; this package cannot import
+ * @thinkwork/database-pg). `HINDSIGHT_DATABASE_NAME` is read at call time (not
+ * module load) so container env injected after warm boot is observed:
+ *
+ *   - unset (today): Hindsight lives in the `hindsight` schema of the primary
+ *     database — RDS Data API `database` = `dbName || "thinkwork"`, SQL keeps
+ *     the `hindsight.` prefix. Byte-identical to before this seam.
+ *   - set (post-cutover): Hindsight has its own database where its schema is
+ *     `public` — `database` = the named database, SQL uses the `public.` prefix.
+ */
+function resolveHindsightTarget(dbName: string | undefined): {
+  database: string;
+  prefix: "hindsight." | "public.";
+} {
+  const hindsightDatabaseName = process.env.HINDSIGHT_DATABASE_NAME || undefined;
+  return hindsightDatabaseName
+    ? { database: hindsightDatabaseName, prefix: "public." }
+    : { database: dbName || "thinkwork", prefix: "hindsight." };
+}
+
 export interface HindsightMemoryProviderOptions {
   /** Hindsight HTTP endpoint (e.g. https://hindsight.dev.thinkwork.ai). */
   endpoint: string;
@@ -237,13 +258,14 @@ async function recordMemoryAccess(
   if (ids.length === 0) return;
   const client = options.rdsDataClient ?? new RDSDataClient({});
   const placeholders = ids.map((_, i) => `:id${i}`).join(", ");
+  const { database, prefix } = resolveHindsightTarget(options.dbName);
   try {
     await client.send(
       new ExecuteStatementCommand({
         resourceArn: options.dbClusterArn,
         secretArn: options.dbSecretArn,
-        database: options.dbName || "thinkwork",
-        sql: `UPDATE hindsight.memory_units SET access_count = COALESCE(access_count, 0) + 1 WHERE id::text IN (${placeholders})`,
+        database,
+        sql: `UPDATE ${prefix}memory_units SET access_count = COALESCE(access_count, 0) + 1 WHERE id::text IN (${placeholders})`,
         parameters: ids.map((id, i) => ({
           name: `id${i}`,
           value: { stringValue: id },
@@ -740,9 +762,10 @@ async function listHighConfidenceMemoryItems(
     return [];
   }
   const client = options.rdsDataClient ?? new RDSDataClient({});
+  const { database, prefix } = resolveHindsightTarget(options.dbName);
   const sql = `
     SELECT id::text, bank_id, document_id, context, fact_type, text
-    FROM hindsight.memory_units
+    FROM ${prefix}memory_units
     WHERE bank_id = :bank_id
       AND context = 'thinkwork_high_confidence_fact'
       AND text ILIKE :pattern
@@ -754,7 +777,7 @@ async function listHighConfidenceMemoryItems(
       new ExecuteStatementCommand({
         resourceArn: options.dbClusterArn,
         secretArn: options.dbSecretArn,
-        database: options.dbName || "thinkwork",
+        database,
         sql,
         parameters: [
           { name: "bank_id", value: { stringValue: target.bankId } },

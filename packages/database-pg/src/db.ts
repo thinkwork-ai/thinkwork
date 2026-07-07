@@ -54,13 +54,19 @@ export function isConnectionError(err: unknown): boolean {
  * Build DATABASE_URL from environment variables.
  * Falls back to Secrets Manager resolution (async, called once on cold start).
  */
-function buildDatabaseUrl(): string | null {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+export function buildDatabaseUrl(dbNameOverride?: string): string | null {
+  if (process.env.DATABASE_URL) {
+    if (!dbNameOverride) return process.env.DATABASE_URL;
+    // Swap only the database path segment; keep credentials/host/query.
+    const url = new URL(process.env.DATABASE_URL);
+    url.pathname = `/${dbNameOverride}`;
+    return url.toString();
+  }
 
   // Construct from individual components (terraform-owned; env wins over
   // the SSM runtime-config document — plan 2026-06-11-006)
   const host = getConfig("DATABASE_HOST") || process.env.DB_CLUSTER_ENDPOINT;
-  const dbName = getConfig("DATABASE_NAME") || "thinkwork";
+  const dbName = dbNameOverride || getConfig("DATABASE_NAME") || "thinkwork";
   const user = process.env.DATABASE_USER || "thinkwork_admin";
   const password = process.env.DATABASE_PASSWORD;
   const port = process.env.DATABASE_PORT || "5432";
@@ -75,11 +81,13 @@ function buildDatabaseUrl(): string | null {
 /**
  * Resolve DATABASE_URL from Secrets Manager (async, used when password not in env).
  */
-async function resolveDatabaseUrlFromSecrets(): Promise<string> {
+export async function resolveDatabaseUrlFromSecrets(
+  dbNameOverride?: string,
+): Promise<string> {
   const secretArn = getConfig("DATABASE_SECRET_ARN");
   const host =
     getConfig("DATABASE_HOST") || process.env.DB_CLUSTER_ENDPOINT || "localhost";
-  const dbName = getConfig("DATABASE_NAME") || "thinkwork";
+  const dbName = dbNameOverride || getConfig("DATABASE_NAME") || "thinkwork";
 
   if (!secretArn) {
     throw new Error(
@@ -126,7 +134,10 @@ async function resolveDatabaseUrlFromSecrets(): Promise<string> {
  *     client-level error, so `getDb()` returns a fresh client on the next
  *     request rather than handing out a dead one.
  */
-export function createDb(connectionString: string) {
+export function createDb(
+  connectionString: string,
+  onPoolError?: (err: Error) => void,
+) {
   const pool = new Pool({
     connectionString,
     max: 2,
@@ -144,13 +155,17 @@ export function createDb(connectionString: string) {
       message: err?.message,
       code: (err as { code?: string })?.code,
     });
-    if (_pool === pool) {
+    if (onPoolError) {
+      onPoolError(err);
+    } else if (_pool === pool) {
       _pool = undefined;
       _db = undefined;
     }
     pool.end().catch(() => {});
   });
-  _pool = pool;
+  // Callers that pass onPoolError own their client's lifecycle (e.g. the
+  // hindsight pool) — don't adopt their pool as the primary singleton.
+  if (!onPoolError) _pool = pool;
   return drizzle(pool, { schema });
 }
 

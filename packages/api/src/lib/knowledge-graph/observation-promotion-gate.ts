@@ -22,6 +22,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { hindsightSql, resolveHindsightDb } from "@thinkwork/database-pg";
 import type { Database } from "../db.js";
 import { invokeClaudeJson } from "../wiki/bedrock.js";
 
@@ -107,11 +108,15 @@ export async function resolveNonSharedCandidates(
   ];
   if (proofIds.length === 0) return new Set();
 
+  // Hindsight proof units route to the Hindsight handle; the threads/spaces
+  // lookup below stays on the primary handle.
+  const hdb = resolveHindsightDb(db);
+
   // Proof units → their source thread ids (retainConversation stores
   // threadId in the unit metadata).
-  const proofRows = await db.execute(sql`
+  const proofRows = await hdb.execute(sql`
 		SELECT id::text AS id, metadata->>'threadId' AS thread_id
-		FROM hindsight.memory_units
+		FROM ${hindsightSql()}memory_units
 		WHERE id IN (${sql.join(
       proofIds.map((id) => sql`${id}::uuid`),
       sql`, `,
@@ -193,12 +198,13 @@ export async function resolveCandidateContexts(
   ].filter((id) => UUID_RE.test(id));
   if (proofIds.length === 0) return contexts;
 
+  const hdb = resolveHindsightDb(db);
   try {
-    const proofRows = await db.execute(sql`
+    const proofRows = await hdb.execute(sql`
 			SELECT id::text AS id,
 			       context,
 			       metadata->>'threadId' AS thread_id
-			FROM hindsight.memory_units
+			FROM ${hindsightSql()}memory_units
 			WHERE id IN (${sql.join(
         proofIds.map((id) => sql`${id}::uuid`),
         sql`, `,

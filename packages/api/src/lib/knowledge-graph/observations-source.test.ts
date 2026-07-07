@@ -57,7 +57,7 @@ describe("collectTenantObservationCandidates", () => {
     const { db } = routeDb([
       { match: "FROM users", rows: [[{ id: USER_A }, { id: USER_B }]] },
       {
-        match: "hindsight.memory_units",
+        match: "memory_units",
         rows: [
           // One call per bank: a partial page (< page size) means drained.
           [
@@ -95,7 +95,7 @@ describe("collectTenantObservationCandidates", () => {
     const { db, execute } = routeDb([
       { match: "FROM users", rows: [[{ id: USER_A }]] },
       {
-        match: "hindsight.memory_units",
+        match: "memory_units",
         rows: [
           [
             obsRow(
@@ -113,7 +113,7 @@ describe("collectTenantObservationCandidates", () => {
     });
     const bankQuery = execute.mock.calls
       .map((call) => JSON.stringify(call[0]?.queryChunks ?? call[0]))
-      .find((text) => text.includes("hindsight.memory_units"));
+      .find((text) => text.includes("memory_units"));
     expect(bankQuery).toContain("evalTraffic");
   });
 
@@ -126,7 +126,7 @@ describe("collectTenantObservationCandidates", () => {
     );
     const { db } = routeDb([
       { match: "FROM users", rows: [[{ id: USER_A }, { id: USER_B }]] },
-      { match: "hindsight.memory_units", rows: [rows.slice(0, 2)] },
+      { match: "memory_units", rows: [rows.slice(0, 2)] },
     ]);
     const batch = await collectTenantObservationCandidates({
       db,
@@ -145,7 +145,7 @@ describe("loadObservationsKnowledgeGraphSource", () => {
       { match: "knowledge_graph_observation_cursors", rows: [[]] },
       { match: "FROM users", rows: [[{ id: USER_A }]] },
       {
-        match: "hindsight.memory_units",
+        match: "memory_units",
         rows: [
           // Call 1: bank read (partial page → drained). Call 2: the gate's
           // proof lookup against the same table; no thread context.
@@ -187,7 +187,7 @@ describe("loadObservationsKnowledgeGraphSource", () => {
     const { db } = routeDb([
       { match: "knowledge_graph_observation_cursors", rows: [[]] },
       { match: "FROM users", rows: [[{ id: USER_A }]] },
-      { match: "hindsight.memory_units", rows: [[]] },
+      { match: "memory_units", rows: [[]] },
     ]);
     const result = await loadObservationsKnowledgeGraphSource({
       db,

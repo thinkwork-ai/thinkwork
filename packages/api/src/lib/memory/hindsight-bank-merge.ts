@@ -7,7 +7,13 @@
  */
 
 import { sql } from "drizzle-orm";
-import { getDb, type Database } from "@thinkwork/database-pg";
+import {
+  getDb,
+  hindsightSchemaPrefix,
+  hindsightSql,
+  resolveHindsightDb,
+  type Database,
+} from "@thinkwork/database-pg";
 
 export type DbLike = Pick<Database, "execute" | "transaction">;
 
@@ -142,12 +148,17 @@ export function parseAliasMappings(values: string[]): AliasMapping[] {
 export async function runHindsightBankMerge(
   options: RunHindsightBankMergeOptions = {},
 ): Promise<HindsightBankMergeReport> {
+  // `agents` is a thinkwork table (mapping source), so loadMappings stays on
+  // the primary handle; every bank_id-keyed statement targets Hindsight tables
+  // and routes through the Hindsight handle (identical to `db` until the
+  // cutover env var is set).
   const db = options.db ?? getDb();
+  const hdb = resolveHindsightDb(db);
   const mappings = await loadMappings(db, options);
   const candidateBanks = uniqueStrings(
     mappings.flatMap((m) => [m.destinationBankId, ...m.candidateLegacyBankIds]),
   );
-  const allNonEmpty = await countNonEmptyBanks(db);
+  const allNonEmpty = await countNonEmptyBanks(hdb);
   const candidateSet = new Set(candidateBanks);
   const pairs: BankMergePairReport[] = [];
 
@@ -155,10 +166,10 @@ export async function runHindsightBankMerge(
     const destination = mapping.destinationBankId;
     for (const source of mapping.candidateLegacyBankIds) {
       if (source === destination) continue;
-      const sourceCounts = await countBankTables(db, source);
+      const sourceCounts = await countBankTables(hdb, source);
       if (sourceCounts.total === 0) continue;
-      const destinationCounts = await countBankTables(db, destination);
-      const conflicts = await detectConflicts(db, source, destination);
+      const destinationCounts = await countBankTables(hdb, destination);
+      const conflicts = await detectConflicts(hdb, source, destination);
       const pair: BankMergePairReport = {
         sourceBankId: source,
         destinationBankId: destination,
@@ -178,10 +189,10 @@ export async function runHindsightBankMerge(
             `Blocking Hindsight conflicts for ${source} -> ${destination}: documents=${conflicts.blockingDocuments} mentalModels=${conflicts.blockingMentalModels}`,
           );
         }
-        pair.apply = await applyMergePair(db, source, destination);
+        pair.apply = await applyMergePair(hdb, source, destination);
         pair.after = {
-          source: await countBankTables(db, source),
-          destination: await countBankTables(db, destination),
+          source: await countBankTables(hdb, source),
+          destination: await countBankTables(hdb, destination),
         };
       }
 
@@ -258,7 +269,7 @@ async function countNonEmptyBanks(db: DbLike): Promise<BankTableCounts[]> {
   // not automatically merged by this tool.
   const result = await db.execute(sql`
 		SELECT bank_id, COUNT(*)::int AS count
-		FROM hindsight.memory_units
+		FROM ${hindsightSql()}memory_units
 		WHERE bank_id IS NOT NULL
 		GROUP BY bank_id
 	`);
@@ -280,7 +291,7 @@ export async function countBankTables(
     const result = await db.execute(
       sql.raw(`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.${table}
+			FROM ${hindsightSchemaPrefix()}${table}
 			WHERE bank_id = ${literal(bankId)}
 		`),
     );
@@ -306,8 +317,8 @@ async function detectConflicts(
       db,
       sql`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.documents s
-			JOIN hindsight.documents d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
+			FROM ${hindsightSql()}documents s
+			JOIN ${hindsightSql()}documents d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
 			WHERE s.bank_id = ${sourceBankId}
 		`,
     ),
@@ -315,8 +326,8 @@ async function detectConflicts(
       db,
       sql`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.documents s
-			JOIN hindsight.documents d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
+			FROM ${hindsightSql()}documents s
+			JOIN ${hindsightSql()}documents d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
 			WHERE s.bank_id = ${sourceBankId}
 			  AND (
 				s.content_hash IS DISTINCT FROM d.content_hash
@@ -328,8 +339,8 @@ async function detectConflicts(
       db,
       sql`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.mental_models s
-			JOIN hindsight.mental_models d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
+			FROM ${hindsightSql()}mental_models s
+			JOIN ${hindsightSql()}mental_models d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
 			WHERE s.bank_id = ${sourceBankId}
 		`,
     ),
@@ -337,8 +348,8 @@ async function detectConflicts(
       db,
       sql`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.mental_models s
-			JOIN hindsight.mental_models d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
+			FROM ${hindsightSql()}mental_models s
+			JOIN ${hindsightSql()}mental_models d ON d.id = s.id AND d.bank_id = ${destinationBankIdValue}
 			WHERE s.bank_id = ${sourceBankId}
 			  AND (
 				s.content IS DISTINCT FROM d.content
@@ -350,8 +361,8 @@ async function detectConflicts(
       db,
       sql`
 			SELECT COUNT(*)::int AS count
-			FROM hindsight.entities s
-			JOIN hindsight.entities d
+			FROM ${hindsightSql()}entities s
+			JOIN ${hindsightSql()}entities d
 			  ON d.bank_id = ${destinationBankIdValue}
 			 AND lower(d.canonical_name) = lower(s.canonical_name)
 			WHERE s.bank_id = ${sourceBankId}
@@ -441,7 +452,7 @@ async function ensureDestinationBank(
   destinationBankIdValue: string,
 ): Promise<void> {
   await db.execute(sql`
-		INSERT INTO hindsight.banks (
+		INSERT INTO ${hindsightSql()}banks (
 			bank_id,
 			name,
 			disposition,
@@ -459,8 +470,8 @@ async function ensureDestinationBank(
 			COALESCE(dest.mission, src.mission),
 			COALESCE(dest.config, src.config, '{}'::jsonb)
 		FROM (SELECT 1) seed
-		LEFT JOIN hindsight.banks src ON src.bank_id = ${sourceBankId}
-		LEFT JOIN hindsight.banks dest ON dest.bank_id = ${destinationBankIdValue}
+		LEFT JOIN ${hindsightSql()}banks src ON src.bank_id = ${sourceBankId}
+		LEFT JOIN ${hindsightSql()}banks dest ON dest.bank_id = ${destinationBankIdValue}
 		ON CONFLICT (bank_id) DO NOTHING
 	`);
 }
@@ -473,7 +484,7 @@ async function copyDocumentsToDestination(
   return executeRowCount(
     db,
     sql`
-		INSERT INTO hindsight.documents (
+		INSERT INTO ${hindsightSql()}documents (
 			id,
 			bank_id,
 			original_text,
@@ -498,11 +509,11 @@ async function copyDocumentsToDestination(
 			s.file_storage_key,
 			s.file_original_name,
 			s.file_content_type
-		FROM hindsight.documents s
+		FROM ${hindsightSql()}documents s
 		WHERE s.bank_id = ${sourceBankId}
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM hindsight.documents d
+			FROM ${hindsightSql()}documents d
 			WHERE d.bank_id = ${destinationBankIdValue}
 			  AND d.id = s.id
 		  )
@@ -517,7 +528,7 @@ async function deleteSourceDocuments(
   return executeRowCount(
     db,
     sql`
-		DELETE FROM hindsight.documents
+		DELETE FROM ${hindsightSql()}documents
 		WHERE bank_id = ${sourceBankId}
 	`,
   );
@@ -531,8 +542,8 @@ async function deleteIdenticalDuplicateMentalModels(
   return executeRowCount(
     db,
     sql`
-		DELETE FROM hindsight.mental_models s
-		USING hindsight.mental_models d
+		DELETE FROM ${hindsightSql()}mental_models s
+		USING ${hindsightSql()}mental_models d
 		WHERE s.bank_id = ${sourceBankId}
 		  AND d.bank_id = ${destinationBankIdValue}
 		  AND d.id = s.id
@@ -549,8 +560,8 @@ async function mergeDuplicateEntities(
 ): Promise<number> {
   const result = await db.execute(sql`
 		SELECT s.id AS source_id, d.id AS destination_id
-		FROM hindsight.entities s
-		JOIN hindsight.entities d
+		FROM ${hindsightSql()}entities s
+		JOIN ${hindsightSql()}entities d
 		  ON d.bank_id = ${destinationBankIdValue}
 		 AND lower(d.canonical_name) = lower(s.canonical_name)
 		WHERE s.bank_id = ${sourceBankId}
@@ -572,20 +583,20 @@ async function mergeEntityPair(
   destinationEntityIdValue: string,
 ): Promise<void> {
   await db.execute(sql`
-		DELETE FROM hindsight.unit_entities s
-		USING hindsight.unit_entities d
+		DELETE FROM ${hindsightSql()}unit_entities s
+		USING ${hindsightSql()}unit_entities d
 		WHERE s.entity_id = ${sourceEntityId}::uuid
 		  AND d.entity_id = ${destinationEntityIdValue}::uuid
 		  AND d.unit_id = s.unit_id
 	`);
   await db.execute(sql`
-		UPDATE hindsight.unit_entities
+		UPDATE ${hindsightSql()}unit_entities
 		SET entity_id = ${destinationEntityIdValue}::uuid
 		WHERE entity_id = ${sourceEntityId}::uuid
 	`);
   await db.execute(sql`
-		DELETE FROM hindsight.memory_links s
-		USING hindsight.memory_links d
+		DELETE FROM ${hindsightSql()}memory_links s
+		USING ${hindsightSql()}memory_links d
 		WHERE s.entity_id = ${sourceEntityId}::uuid
 		  AND d.entity_id = ${destinationEntityIdValue}::uuid
 		  AND d.from_unit_id = s.from_unit_id
@@ -593,24 +604,24 @@ async function mergeEntityPair(
 		  AND d.link_type = s.link_type
 	`);
   await db.execute(sql`
-		UPDATE hindsight.memory_links
+		UPDATE ${hindsightSql()}memory_links
 		SET entity_id = ${destinationEntityIdValue}::uuid
 		WHERE entity_id = ${sourceEntityId}::uuid
 	`);
   await mergeCooccurrences(db, sourceEntityId, destinationEntityIdValue);
   await db.execute(sql`
-		UPDATE hindsight.entities d
+		UPDATE ${hindsightSql()}entities d
 		SET
 			mention_count = COALESCE(d.mention_count, 0) + COALESCE(s.mention_count, 0),
 			first_seen = LEAST(d.first_seen, s.first_seen),
 			last_seen = GREATEST(d.last_seen, s.last_seen),
 			metadata = COALESCE(d.metadata, '{}'::jsonb) || COALESCE(s.metadata, '{}'::jsonb)
-		FROM hindsight.entities s
+		FROM ${hindsightSql()}entities s
 		WHERE d.id = ${destinationEntityIdValue}::uuid
 		  AND s.id = ${sourceEntityId}::uuid
 	`);
   await db.execute(
-    sql`DELETE FROM hindsight.entities WHERE id = ${sourceEntityId}::uuid`,
+    sql`DELETE FROM ${hindsightSql()}entities WHERE id = ${sourceEntityId}::uuid`,
   );
 }
 
@@ -620,7 +631,7 @@ async function mergeCooccurrences(
   destinationEntityIdValue: string,
 ): Promise<void> {
   await db.execute(sql`
-		INSERT INTO hindsight.entity_cooccurrences (
+		INSERT INTO ${hindsightSql()}entity_cooccurrences (
 			entity_id_1,
 			entity_id_2,
 			cooccurrence_count,
@@ -628,12 +639,12 @@ async function mergeCooccurrences(
 		)
 		WITH source_edges AS (
 			SELECT entity_id_2 AS other_entity_id, cooccurrence_count, last_cooccurred
-			FROM hindsight.entity_cooccurrences
+			FROM ${hindsightSql()}entity_cooccurrences
 			WHERE entity_id_1 = ${sourceEntityId}::uuid
 			  AND entity_id_2 <> ${destinationEntityIdValue}::uuid
 			UNION ALL
 			SELECT entity_id_1 AS other_entity_id, cooccurrence_count, last_cooccurred
-			FROM hindsight.entity_cooccurrences
+			FROM ${hindsightSql()}entity_cooccurrences
 			WHERE entity_id_2 = ${sourceEntityId}::uuid
 			  AND entity_id_1 <> ${destinationEntityIdValue}::uuid
 		),
@@ -654,14 +665,14 @@ async function mergeCooccurrences(
 		GROUP BY entity_id_1, entity_id_2
 		ON CONFLICT (entity_id_1, entity_id_2) DO UPDATE
 		SET
-			cooccurrence_count = hindsight.entity_cooccurrences.cooccurrence_count + EXCLUDED.cooccurrence_count,
+			cooccurrence_count = ${hindsightSql()}entity_cooccurrences.cooccurrence_count + EXCLUDED.cooccurrence_count,
 			last_cooccurred = GREATEST(
-				hindsight.entity_cooccurrences.last_cooccurred,
+				${hindsightSql()}entity_cooccurrences.last_cooccurred,
 				EXCLUDED.last_cooccurred
 			)
 	`);
   await db.execute(sql`
-		DELETE FROM hindsight.entity_cooccurrences
+		DELETE FROM ${hindsightSql()}entity_cooccurrences
 		WHERE entity_id_1 = ${sourceEntityId}::uuid
 		   OR entity_id_2 = ${sourceEntityId}::uuid
 	`);
@@ -676,7 +687,7 @@ async function updateBankId(
   return executeRowCount(
     db,
     sql.raw(`
-		UPDATE hindsight.${table}
+		UPDATE ${hindsightSchemaPrefix()}${table}
 		SET bank_id = ${literal(destinationBankIdValue)}
 		WHERE bank_id = ${literal(sourceBankId)}
 	`),

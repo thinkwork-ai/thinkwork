@@ -2,11 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const executeMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@thinkwork/database-pg", () => ({
-  getDb: () => ({
-    execute: executeMock,
-  }),
-}));
+vi.mock("@thinkwork/database-pg", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/database-pg")>();
+  const handle = () => ({ execute: executeMock });
+  return {
+    // getDb and getHindsightDb resolve to the same mock handle (env unset =
+    // status quo). hindsightSql renders the real `hindsight.` chunk.
+    getDb: handle,
+    getHindsightDb: handle,
+    resolveHindsightDb: <T,>(primary: T) => primary,
+    hindsightSql: actual.hindsightSql,
+  };
+});
 
 import { HindsightAdapter, HindsightRetainError } from "./hindsight-adapter.js";
 

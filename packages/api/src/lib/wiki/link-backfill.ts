@@ -169,7 +169,7 @@ export interface PhaseCPage {
  * `readPlaceMetadata` (dry-run path) and `resolvePlaceForRecord`
  * (wet-run path) to consume. Kept narrower than `ThinkWorkMemoryRecord`
  * so callers don't have to round-trip through a full adapter fetch when
- * they only have `hindsight.memory_units.metadata` JSONB to hand back. */
+ * they only have the memory_units `metadata` JSONB to hand back. */
 export type PhaseCSourceRecord = Pick<ThinkWorkMemoryRecord, "id" | "metadata">;
 
 /** Result of the wet-run place-service call for a single record. The

@@ -18,7 +18,11 @@
  */
 
 import { sql } from "drizzle-orm";
-import type { Database } from "@thinkwork/database-pg";
+import {
+  hindsightSql,
+  resolveHindsightDb,
+  type Database,
+} from "@thinkwork/database-pg";
 import type { DreamActionSpec } from "./ledger.js";
 
 /** Synthetic fixture content shapes; must stay in sync with scripts/quarantine-eval-residue.ts. */
@@ -45,10 +49,12 @@ export async function planBankActions(
 ): Promise<DreamActionSpec[]> {
   const actions: DreamActionSpec[] = [];
   let ordinal = 0;
+  // All planner reads target Hindsight memory_units.
+  const hdb = resolveHindsightDb(args.db);
 
-  const quarantine = await args.db.execute(sql`
+  const quarantine = await hdb.execute(sql`
     SELECT id::text AS id, document_id
-    FROM hindsight.memory_units
+    FROM ${hindsightSql()}memory_units
     WHERE bank_id = ${args.bankId}
       AND (
         COALESCE(metadata->>'evalTraffic', '') = 'true'
@@ -79,9 +85,9 @@ export async function planBankActions(
     });
   }
 
-  const junk = await args.db.execute(sql`
+  const junk = await hdb.execute(sql`
     SELECT id::text AS id
-    FROM hindsight.memory_units
+    FROM ${hindsightSql()}memory_units
     WHERE bank_id = ${args.bankId}
       AND btrim(text) ~* ${JUNK_MEMORY_PATTERN}
     ORDER BY id
