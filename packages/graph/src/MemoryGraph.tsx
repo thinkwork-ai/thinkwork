@@ -842,9 +842,14 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           // cooldown until the initial framing lands (no load animation),
           // then normal cooldown so dragging a node relaxes its neighbors.
           cooldownTicks={framed ? 120 : 0}
-          d3AlphaDecay={0.05}
+          // Warmup runs at slow decay so the pre-paint settle converges
+          // fully (communities separate); once framed, fast decay keeps
+          // drag-triggered reheats snappy.
+          d3AlphaDecay={
+            framed ? 0.05 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
+          }
           d3VelocityDecay={0.55}
-          warmupTicks={graphData.nodes.length > 2000 ? 120 : 300}
+          warmupTicks={graphData.nodes.length > 2000 ? 200 : 600}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
