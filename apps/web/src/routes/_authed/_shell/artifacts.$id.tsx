@@ -178,19 +178,31 @@ export function AppletRouteContent({
     );
   }, [artifactId, favoritedAt]);
 
-  usePageHeaderActions({
-    title,
-    ...(breadcrumbRoot
-      ? { breadcrumbs: [breadcrumbRoot, { label: title }] }
-      : {}),
-    backHref,
-    backBehavior: "history",
-    action: composedHeaderAction,
-    titleTrailing,
-    actionKey: composedHeaderAction
-      ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
-      : "",
-  });
+  // Document and canvas artifacts render through child components that own
+  // the page header themselves (Share/Download/snapshot actions). Passing
+  // null here relinquishes the header instead of racing the child's
+  // registration with an empty one (the intermittent blank-header-actions
+  // bug on /artifacts/$id and the Settings artifact embed).
+  const delegatesHeaderToChild =
+    !!artifact &&
+    (isDocumentArtifactNode(artifact) || artifact.type === "DATA_VIEW");
+  usePageHeaderActions(
+    delegatesHeaderToChild
+      ? null
+      : {
+          title,
+          ...(breadcrumbRoot
+            ? { breadcrumbs: [breadcrumbRoot, { label: title }] }
+            : {}),
+          backHref,
+          backBehavior: "history",
+          action: composedHeaderAction,
+          titleTrailing,
+          actionKey: composedHeaderAction
+            ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
+            : "",
+        },
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => {
