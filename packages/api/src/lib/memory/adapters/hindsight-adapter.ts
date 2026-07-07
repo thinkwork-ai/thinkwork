@@ -991,16 +991,19 @@ export class HindsightAdapter implements MemoryAdapter {
         return current === undefined || String(current) !== String(value);
       });
       if (drifted) {
-        const putResp = await fetch(configUrl, {
-          method: "PUT",
+        // Hindsight's bank-config write is PATCH {updates: {...}} — validated
+        // empirically against 0.5.6 and 0.8.4 in the memory-eval harness
+        // (THINK-201; a PUT with a bare body 405s / no-ops).
+        const patchResp = await fetch(configUrl, {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(desired),
+          body: JSON.stringify({ updates: desired }),
           signal: AbortSignal.timeout(this.timeoutMs),
         });
-        if (!putResp.ok) {
-          const body = await putResp.text().catch(() => "");
+        if (!patchResp.ok) {
+          const body = await patchResp.text().catch(() => "");
           throw new Error(
-            `config PUT ${putResp.status}: ${body.slice(0, 200)}`,
+            `config PATCH ${patchResp.status}: ${body.slice(0, 200)}`,
           );
         }
         console.log(

@@ -1089,7 +1089,7 @@ describe("HindsightAdapter bank configuration", () => {
     };
   }
 
-  it("PUTs desired config when the bank has no overrides", async () => {
+  it("PATCHes desired config when the bank has no overrides", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: {} }))
@@ -1107,12 +1107,14 @@ describe("HindsightAdapter bank configuration", () => {
       `https://hindsight.example/v1/default/banks/user_${USER_ID}/config`,
     );
     expect(calls[0]?.[1]?.method).toBe("GET");
-    expect(calls[1]?.[1]?.method).toBe("PUT");
-    expect(JSON.parse(calls[1]?.[1]?.body as string)).toEqual(DESIRED);
+    expect(calls[1]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(calls[1]?.[1]?.body as string)).toEqual({
+      updates: DESIRED,
+    });
     expect(String(calls[2]?.[0])).toContain("/memories");
   });
 
-  it("skips the PUT when overrides already match", async () => {
+  it("skips the PATCH when overrides already match", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ config: {}, overrides: DESIRED }))
@@ -1129,7 +1131,7 @@ describe("HindsightAdapter bank configuration", () => {
     expect(methods).toEqual(["GET", "POST"]);
   });
 
-  it("PUTs when one configured field drifted", async () => {
+  it("PATCHes when one configured field drifted", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -1148,7 +1150,7 @@ describe("HindsightAdapter bank configuration", () => {
     await adapter.retainConversation(retainConversationArgs());
 
     const methods = fetchMock.mock.calls.map((c) => c[1]?.method);
-    expect(methods).toEqual(["GET", "PUT", "POST"]);
+    expect(methods).toEqual(["GET", "PATCH", "POST"]);
   });
 
   it("throws structured retryable retain errors for Hindsight 5xx writes", async () => {

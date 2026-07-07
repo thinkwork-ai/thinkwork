@@ -331,7 +331,10 @@ describe("memory-retain handler", () => {
       userId: USER_ID,
       threadId: THREAD_ID,
       transcript: [
-        { role: "user", content: "My user orbit checksum 8a9a4d57 is UserMarkerff3cbac6." },
+        {
+          role: "user",
+          content: "My user orbit checksum 8a9a4d57 is UserMarkerff3cbac6.",
+        },
         { role: "assistant", content: "Noted." },
       ],
       metadata: { evalTraffic: true },
@@ -447,12 +450,11 @@ describe("memory-retain handler", () => {
 
     expect(result.ok).toBe(true);
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(6);
+    expect(executeMock).toHaveBeenCalledTimes(7);
     expect(hasRawArrayQueryChunk(executeMock.mock.calls[1][0])).toBe(false);
     expect(hasRawArrayQueryChunk(executeMock.mock.calls[4][0])).toBe(false);
-    const hindsightPayloads = parsedJsonQueryChunksContaining(
-      "sourceMessageIndex",
-    );
+    const hindsightPayloads =
+      parsedJsonQueryChunksContaining("sourceMessageIndex");
     expect(hindsightPayloads).not.toEqual([]);
     expect(
       hindsightPayloads.every((payload) => {
@@ -701,7 +703,7 @@ describe("memory-retain handler", () => {
       }),
     );
     expect(upsertMarkdownMemoryDocumentMock).not.toHaveBeenCalled();
-    expect(executeMock).toHaveBeenCalledTimes(5);
+    expect(executeMock).toHaveBeenCalledTimes(6);
     expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
   });
 

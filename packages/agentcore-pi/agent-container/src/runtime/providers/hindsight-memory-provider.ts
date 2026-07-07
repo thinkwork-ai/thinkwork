@@ -15,6 +15,7 @@ import {
   type ExecuteStatementCommandOutput,
   type Field,
 } from "@aws-sdk/client-rds-data";
+import { logStructured } from "../../handler-context.js";
 
 /**
  * Plan §004 U5 — Hindsight-backed {@link MemoryProvider}.
@@ -862,12 +863,17 @@ export function createHindsightMemoryProvider(
       ): Promise<MemoryRecallResult> => {
         const memories = request.limit ? items.slice(0, request.limit) : items;
         if (memories.length > 0) {
-          console.log(
-            `[hindsight-memory] recalled tier=${tier} n=${memories.length} observations=${memories.filter((m) => m.factType === "observation").length} ids=${memories
-              .map((m) => m.id)
-              .slice(0, 10)
-              .join(",")}`,
-          );
+          // THINK-201: structured (not plain console.log) so the event name
+          // is alarm-matchable alongside the runtime's other JSON log lines.
+          logStructured({
+            level: "info",
+            event: "hindsight_memory_recalled",
+            tier,
+            count: memories.length,
+            observations: memories.filter((m) => m.factType === "observation")
+              .length,
+            ids: memories.map((m) => m.id).slice(0, 10),
+          });
           await recordMemoryAccess(options, memories);
         }
         return { memories, usage };
