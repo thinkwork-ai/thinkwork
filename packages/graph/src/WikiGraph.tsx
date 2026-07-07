@@ -36,6 +36,7 @@ import {
   carryNodePositions,
   classifyNode,
   composeGraphClassification,
+  communityColor,
   computeCommunityLayout,
   darkenColor,
   isDarkMode,
@@ -53,9 +54,6 @@ import {
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
 import {
-  PAGE_TYPES,
-  PAGE_TYPE_FORCE_COLORS,
-  PAGE_TYPE_DEFAULT_FORCE_COLOR,
   PAGE_TYPE_LABELS,
   type WikiPageType,
 } from "./palettes/wiki-palette.js";
@@ -386,6 +384,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       () => computeCommunityLayout(graphData.nodes, graphData.links),
       [graphData],
     );
+    const communityLayoutRef = useRef(communityLayout);
+    communityLayoutRef.current = communityLayout;
 
     const matchedIdsRef = useRef<Set<string> | null>(null);
     matchedIdsRef.current = matchedIds;
@@ -535,9 +535,11 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       (node: any, ctx: CanvasRenderingContext2D) => {
         const state = classifyNode(node.id, classificationRef.current);
         const alpha = state === "matched" ? 1 : 0.15;
-        const entityType = node.entityType as WikiPageType;
-        const color =
-          PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
+        // Color by detected community so cluster membership reads at a
+        // glance — page-type colors were near-uniform in practice.
+        const color = communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
         const r = wikiNodeRadius(node);
 
         ctx.globalAlpha = alpha;
@@ -796,13 +798,6 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       );
     }
 
-    const typeCounts = PAGE_TYPES.map((t) => ({
-      type: t,
-      count: graphData.nodes.filter(
-        (n: any) => (n.entityType as WikiPageType) === t,
-      ).length,
-    }));
-
     return (
       <div ref={setContainerEl} className="absolute inset-0 overflow-hidden">
         <ForceGraph2D
@@ -882,19 +877,6 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           labelMode={labelMode}
           onLabelModeChange={setLabelMode}
         />
-        <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
-          {typeCounts
-            .filter((t) => t.count > 0)
-            .map((t) => (
-              <span key={t.type} className="flex items-center gap-1">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: PAGE_TYPE_FORCE_COLORS[t.type] }}
-                />
-                {PAGE_TYPE_LABELS[t.type]} ({t.count})
-              </span>
-            ))}
-        </div>
       </div>
     );
   },
