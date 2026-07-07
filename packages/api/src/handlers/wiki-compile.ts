@@ -36,6 +36,7 @@ import {
   type WikiCompileJobRow,
 } from "../lib/wiki/repository.js";
 import { writeUserKnowledgePack } from "../lib/wiki/pack-renderer.js";
+import { maybeChainOkfMaterialize } from "../lib/okf/chain.js";
 import {
   loadGooglePlacesClientFromSsm,
   type GooglePlacesClient,
@@ -137,6 +138,10 @@ export async function handler(
         };
       }
       await writePackIfSucceeded(job, result.status);
+      await maybeChainOkfMaterialize({
+        tenantId: job.tenant_id,
+        status: result.status,
+      });
       return {
         ok: result.status === "succeeded",
         jobId: result.jobId,
@@ -163,6 +168,10 @@ export async function handler(
     }
     const result = await runCompileJob(claimed, opts);
     await writePackIfSucceeded(claimed, result.status);
+    await maybeChainOkfMaterialize({
+      tenantId: claimed.tenant_id,
+      status: result.status,
+    });
     return {
       ok: result.status === "succeeded",
       jobId: result.jobId,
@@ -196,6 +205,10 @@ async function runGraphDispatch(
       // CAS claim lost (concurrent invocation) or job no longer claimable.
       return { ok: true, jobId: event.jobId, status: "already_done" as const };
     }
+    await maybeChainOkfMaterialize({
+      tenantId: job.tenant_id,
+      status: result.status,
+    });
     return {
       ok: result.status !== "failed",
       jobId: result.jobId,
@@ -208,6 +221,13 @@ async function runGraphDispatch(
   const result = await runNextGraphCompileJob();
   if (!result) {
     return { ok: true, status: "no_job" as const };
+  }
+  if (result.status === "succeeded" && result.jobId) {
+    const job = await getCompileJob(result.jobId);
+    await maybeChainOkfMaterialize({
+      tenantId: job?.tenant_id,
+      status: result.status,
+    });
   }
   return {
     ok: result.status !== "failed",

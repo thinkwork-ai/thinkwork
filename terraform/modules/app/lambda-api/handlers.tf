@@ -251,6 +251,10 @@ locals {
       # The parameter may contain a placeholder value at apply time — the
       # Lambda logs and degrades gracefully if decryption returns empty.
       GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
+      # THINK-200 chain: a successful compile Event-invokes okf-materialize
+      # so the OKF projection (and, chained, the Pi navigator's EFS view)
+      # stays current without manual invocation.
+      OKF_MATERIALIZE_FN_NAME = "thinkwork-${var.stage}-api-okf-materialize"
     }
     "ontology-scan" = {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
@@ -261,6 +265,8 @@ locals {
     }
     "okf-materialize" = {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+      # THINK-200 chain: fresh bundles fan out to the EFS current view.
+      OKF_EFS_REFRESH_FN_NAME = "thinkwork-${var.stage}-api-okf-efs-refresh"
     }
     "okf-efs-refresh" = {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket

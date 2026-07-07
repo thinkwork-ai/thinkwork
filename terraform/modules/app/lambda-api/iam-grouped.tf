@@ -520,6 +520,13 @@ locals {
           # ontology-reprocess: approveOntologyChangeSet Event-invokes this
           # after inserting a durable reprocess job row.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-reprocess",
+          # okf-materialize / okf-efs-refresh: the OKF distribution chain
+          # (THINK-200). wiki-compile Event-invokes okf-materialize after a
+          # successful compile; okf-materialize Event-invokes okf-efs-refresh
+          # after publishing bundles, keeping the Pi wiki navigator's EFS
+          # view current without manual invocation.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-okf-materialize",
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-okf-efs-refresh",
           # routine-resume: routine-approval-bridge (Phase B U8) invokes
           # this with RequestResponse after a HITL decideInboxItem
           # decision. Calls SendTaskSuccess/SendTaskFailure on the SFN

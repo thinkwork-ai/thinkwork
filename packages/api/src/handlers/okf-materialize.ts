@@ -6,6 +6,7 @@ import {
   buildOkfBundle,
   loadTenantOkfMaterializationSource,
 } from "../lib/okf/materializer.js";
+import { maybeChainOkfEfsRefresh } from "../lib/okf/chain.js";
 import { publishOkfBundle } from "../lib/okf/publisher.js";
 
 export interface OkfMaterializeEvent {
@@ -62,6 +63,7 @@ export async function handler(
   }
 
   const s3 = new S3Client({ region: REGION });
+  const publishedSlugs: string[] = [];
   for (const tenantId of tenantIds) {
     result.tenants_processed += 1;
     try {
@@ -89,6 +91,7 @@ export async function handler(
           result.bundles_published += 1;
           result.objects_written += publish.objectsWritten;
           result.bytes_uploaded += publish.bytesUploaded;
+          publishedSlugs.push(bundle.tenantSlug);
         }
       }
     } catch (error) {
@@ -99,6 +102,10 @@ export async function handler(
       });
     }
   }
+
+  // THINK-200: fresh bundles fan out to the EFS current view so the Pi wiki
+  // navigator stays current without manual invocation. Env-gated best-effort.
+  await maybeChainOkfEfsRefresh(publishedSlugs);
 
   console.log(`[okf-materialize] ${JSON.stringify(result)}`);
   return result;
