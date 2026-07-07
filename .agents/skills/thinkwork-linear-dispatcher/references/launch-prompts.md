@@ -59,13 +59,23 @@ exit, and the dispatcher treats an exited worker with an unmet goal as dead
 and relaunches from the Progress document. Restate your goal as your first
 action and check your last action against it before ending the run.
 
-Claude workers, mechanically: the CI wait MUST be a blocking foreground
-command — run `gh pr merge <pr> --squash --auto --delete-branch`, then
-`gh pr checks <pr> --watch` and keep polling `gh pr view <pr> --json mergedAt`
-in the foreground until `mergedAt` is non-null, all as regular (non-background)
-commands. Do not use background/run-in-background execution for any step on
-the goal's critical path — the THINK-170 E2E run proved twice that "a
-background watcher will notify me" is how workers die with unmet goals. The
+Claude workers, mechanically: the CI wait MUST be this exact single
+foreground command chain, run as ONE Bash invocation — not paraphrased into
+separate steps, not backgrounded:
+
+```bash
+gh pr merge <pr> --squash --auto --delete-branch && \
+  gh pr checks <pr> --watch; \
+  until [ -n "$(gh pr view <pr> --json mergedAt --jq '.mergedAt // empty')" ]; do sleep 30; done
+```
+
+Do not end the run until this chain returns and `mergedAt` is non-null. Do
+not use background/run-in-background execution for any step on the goal's
+critical path, and never end a run planning to "act on a later
+notification" — your process exits when you stop and the goal dies with it.
+History: THINK-170 lost two workers this way; on THINK-202 (2026-07-06) two
+more workers died on background watchers when this rule was stated as prose,
+and zero died after the exact command chain above was mandated. The
 dispatcher's dead-worker sweep is a safety net, not the plan.
 
 ## Handoff Comment Template
@@ -157,7 +167,8 @@ notes, risks, and explicit verification contract for each child/unit — the
 verification contract must name the complete user flows that prove the unit
 works end to end, since verification drives them in a real browser against
 deployed dev. Create/update Linear child issues for shippable units when
-appropriate and inherit the parent's lane label plus LFG when present. Define
+appropriate, in Todo status (never Backlog — the dispatcher ignores Backlog),
+inheriting the parent's lane label plus LFG when present. Define
 the expected checkpoint PR boundary for each unit: one PR per unit by default,
 with explicit justification for any grouped units. Commit the plan artifact,
 open a PR to main, wait for checks, fix real failures, squash-merge when
@@ -293,12 +304,24 @@ Scope and scenarios (diff-scoped, never whole-app):
 Execution:
 4. Drive the deployed dev stack through each scenario in a real browser
    (agent-browser / Chrome). Capture concrete evidence per scenario: URLs,
-   screenshots, console and network errors, persisted data checks.
+   screenshots, console and network errors, persisted data checks. When the
+   change affects compiled/persisted output (composed documents, rendered
+   artifacts), exercise FRESHLY GENERATED output — pre-change output embeds
+   the old behavior and re-opening it proves nothing.
 5. Record two verdicts per scenario: functional (flow completes end to end,
    data persists, no console errors) and experiential (as the feature's
    target persona, hunt paper cuts: confusing labels, unnecessary clicks,
-   unexpected jumps). Paper cuts do not fail verification; record them in the
-   report and file or append follow-up Linear issues.
+   unexpected jumps). For visual features, experiential means comparing the
+   render against the stated design intent at pixel level — inspect your own
+   screenshots critically (is the line actually continuous? do elements
+   actually align?), not just "it rendered without errors": on THINK-205 an
+   automated pass shipped a visibly broken track that human review then
+   failed. A render that contradicts the design intent is a functional FAIL,
+   not a paper cut. Paper cuts do not fail verification; record them in the
+   report and file or append follow-up Linear issues. For probabilistic
+   agent-behavior criteria (e.g. unprompted directive selection), allow one
+   retry in a fresh thread before failing; two consecutive misses with
+   confirmed-fresh inputs is the FAIL.
 
 Verdict policy (fix-loop governor — never fix product code yourself):
 - Failure with a small, well-understood, low-risk fix: post exact
