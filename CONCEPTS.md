@@ -246,6 +246,9 @@ The per-thread dispatch posture — Agent (messages auto-dispatch to the agent) 
 ### Mention Invite
 The grant created by @mentioning a user in a thread: the user becomes a thread participant and gains visibility to that one thread, even inside a private Space they are not a member of. It is thread-level access, not Space membership.
 
+### Mention Trigger Character
+The `@` and `#` sigils are disjoint by target type, not interchangeable delegation shortcuts: `@` addresses a user or agent (Mention Invite, per-sender context), `#` addresses an Agent Profile (delegation to that profile's lane). A name matching both a user and a profile resolves `@` to the user and produces zero profile mentions — `@` can never trigger profile delegation, regardless of what the matched alias also happens to be. This supersedes an earlier backward-compatible `@Profile` alias that was deliberately removed once product decided the ambiguity itself (not just automatic inference) was the defect.
+
 ### Per-Sender Context Injection
 The rule that an agent turn is contextualized by whoever triggered it: the sending user's workspace projection and memory bank are injected into that turn, on every dispatch path. In multiplayer threads this means consecutive turns can carry different users' contexts.
 

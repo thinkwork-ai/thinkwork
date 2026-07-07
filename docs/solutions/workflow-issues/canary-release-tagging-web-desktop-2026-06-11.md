@@ -73,6 +73,30 @@ two tag-triggered workflows:
    a human to cut the tag (tag-pushing is a release action outside dogfood
    scope) rather than looping on cache-busting or re-deploying.
 
+   A git-native equivalent of the same check, useful when you already have
+   the fix's commit SHA in hand rather than a wall-clock timestamp:
+
+   ```bash
+   git fetch origin main --tags
+   LATEST_DESKTOP_TAG=$(git tag -l 'desktop-v0.1.0-canary.*' | sed 's/.*canary\.//' | sort -n | tail -1)
+   TAG_COMMIT=$(git rev-list -n1 "desktop-v0.1.0-canary.$LATEST_DESKTOP_TAG")
+   git merge-base --is-ancestor <fix-commit-sha> "$TAG_COMMIT" && echo "web-live" || echo "not yet on a canary"
+   ```
+
+   If the fix's commit is not yet an ancestor of the latest `desktop-v*` tag's
+   commit, the web-only piece is **not deployed** — expected, not a blocker,
+   and not evidence the fix is broken. Scope verification to the parts of the
+   fix that ship on every main merge (backend Lambdas, API resolvers, Pi
+   runtime) via a deployed API call or backend-only browser observation, and
+   say so explicitly in the dogfood report; only escalate to Needs User if
+   the undeployed web piece is load-bearing for the contract under test, not
+   merely because the bundle hasn't refreshed yet. See
+   [THINK-180's diagnostic doc](../diagnostics/think-180-at-mention-agent-profile-delegation-2026-07-06.md)
+   and its
+   [dogfood report](../../dogfood-reports/2026-07-06-THINK-180-dogfood.md)
+   for a worked example of scoping verification around this gap without
+   stalling.
+
 ## Working recipe (cut a full web+desktop release)
 
 ```bash
