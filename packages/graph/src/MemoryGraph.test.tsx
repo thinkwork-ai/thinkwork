@@ -1,8 +1,13 @@
 import React from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WikiGraph } from "./WikiGraph.js";
-import { WikiGraphQuery } from "./queries.js";
+import { MemoryGraph } from "./MemoryGraph.js";
 
 const forceGraphCalls = vi.hoisted(() => [] as any[]);
 const urqlMocks = vi.hoisted(() => ({
@@ -72,73 +77,74 @@ function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
 }
 
-const wikiGraphFixture = {
+const memoryGraphFixture = {
   nodes: [
-    { id: "page-1", label: "Paris Office", entityType: "ENTITY", slug: "p1" },
-    { id: "page-2", label: "Q3 Planning", entityType: "TOPIC", slug: "p2" },
-    { id: "page-3", label: "Lone Page", entityType: "TOPIC", slug: "p3" },
+    { id: "ent-1", label: "Acme", type: "entity", entityType: "company" },
+    { id: "ent-2", label: "Q3 Risk", type: "entity", entityType: "risk" },
+    { id: "ent-3", label: "Lone Entity", type: "entity", entityType: "person" },
   ],
-  edges: [{ source: "page-1", target: "page-2", label: "references" }],
+  edges: [{ source: "ent-1", target: "ent-2", label: "mentions" }],
 };
 
-describe("WikiGraph", () => {
-  it("revalidates the graph query so an empty cached graph cannot stick", () => {
-    render(
-      <WikiGraph tenantId="tenant-1" useRequesterScope searchQuery="Paris" />,
-    );
+function seedMaterials(nodes: any[]) {
+  for (const node of nodes) {
+    node.__sphereMat = { opacity: -1 };
+    node.__spriteMat = { opacity: -1 };
+  }
+}
 
-    expect(urqlMocks.useQuery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: WikiGraphQuery,
-        variables: { tenantId: "tenant-1", userId: null },
-        requestPolicy: "cache-and-network",
-        pause: false,
-      }),
-    );
-  });
+function opacityById(nodes: any[]) {
+  return Object.fromEntries(
+    nodes.map((node: any) => [node.id, node.__sphereMat.opacity]),
+  );
+}
 
-  it("focus lights the clicked node's neighborhood and background click restores", async () => {
+describe("MemoryGraph focus mode", () => {
+  async function renderWithData() {
     urqlMocks.useQuery.mockReturnValue([
       {
         fetching: false,
-        data: { wikiGraph: wikiGraphFixture },
+        data: { memoryGraph: memoryGraphFixture },
         error: null,
       },
       vi.fn(),
     ] as any);
-
-    render(<WikiGraph tenantId="tenant-1" useRequesterScope />);
+    render(<MemoryGraph useRequesterScope />);
     await screen.findByTestId("force-graph");
     const props = latestForceGraphProps();
-    for (const node of props.graphData.nodes) {
-      node.__sphereMat = { opacity: -1 };
-      node.__spriteMat = { opacity: -1 };
-      node.__ringMat = { opacity: -1 };
-    }
+    seedMaterials(props.graphData.nodes);
+    return props;
+  }
+
+  it("focus lights the neighborhood, Escape restores the overview", async () => {
+    const props = await renderWithData();
 
     await act(async () => {
       props.onNodeClick(props.graphData.nodes[0]);
     });
 
-    const opacities = Object.fromEntries(
-      latestForceGraphProps().graphData.nodes.map((node: any) => [
-        node.id,
-        node.__sphereMat.opacity,
-      ]),
-    );
-    expect(opacities["page-1"]).toBe(1);
-    expect(opacities["page-2"]).toBe(1);
-    expect(opacities["page-3"]).toBe(0.15);
-    // graphData identity untouched by focus (no-restart invariant).
+    let opacities = opacityById(latestForceGraphProps().graphData.nodes);
+    expect(opacities["ent-1"]).toBe(1);
+    expect(opacities["ent-2"]).toBe(1);
+    expect(opacities["ent-3"]).toBe(0.15);
     expect(latestForceGraphProps().graphData).toBe(props.graphData);
 
     await act(async () => {
-      latestForceGraphProps().onBackgroundClick();
+      fireEvent.keyDown(window, { key: "Escape" });
     });
-    expect(
-      latestForceGraphProps().graphData.nodes.every(
-        (node: any) => node.__sphereMat.opacity === 1,
-      ),
-    ).toBe(true);
+    opacities = opacityById(latestForceGraphProps().graphData.nodes);
+    expect(opacities["ent-3"]).toBe(1);
+  });
+
+  it("focusing an isolated node lights only it, no truncation chip", async () => {
+    const props = await renderWithData();
+
+    await act(async () => {
+      props.onNodeClick(props.graphData.nodes[2]);
+    });
+
+    const opacities = opacityById(latestForceGraphProps().graphData.nodes);
+    expect(opacities).toEqual({ "ent-1": 0.15, "ent-2": 0.15, "ent-3": 1 });
+    expect(screen.queryByText("Showing direct connections only")).toBeNull();
   });
 });

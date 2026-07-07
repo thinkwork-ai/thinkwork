@@ -56,6 +56,11 @@ export function deriveGraphClassification<TLink extends GraphLinkLike>(
   return { matchedIds, neighborIds };
 }
 
+/** Neighborhood depth lit by Graph Focus Mode. */
+export const DEFAULT_FOCUS_DEGREE = 2;
+/** Above this lit-set size, focus silently degrades to 1 degree (R5). */
+export const DEFAULT_FOCUS_CAP = 150;
+
 /** Focus state produced by clicking a node (Graph Focus Mode). The lit set
  *  always contains the focused node itself. */
 export type GraphFocusState = {

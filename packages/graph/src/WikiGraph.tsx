@@ -36,11 +36,16 @@ import { WikiGraphQuery } from "./queries.js";
 import {
   carryNodePositions,
   classifyNode,
+  composeGraphClassification,
   computeCommunityLayout,
   deriveGraphClassification,
   endpointId,
+  expandNeighborhood,
   normalizeGraphSearch,
+  DEFAULT_FOCUS_CAP,
+  DEFAULT_FOCUS_DEGREE,
   type GraphClassification,
+  type GraphFocusState,
 } from "./graph-utils.js";
 import {
   PAGE_TYPES,
@@ -378,13 +383,56 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // visible: full opacity when at least one endpoint is matched,
     // muted when both are unmatched. Nothing is hidden — the whole
     // graph remains visible so users keep spatial context.
-    const classification = useMemo<GraphClassification | null>(
+    const searchClassification = useMemo<GraphClassification | null>(
       () => deriveGraphClassification(matchedIds, graphData.links),
       [matchedIds, graphData],
     );
 
+    // Graph Focus Mode: clicking a node lights its neighborhood in place
+    // while everything else dims. Focus supersedes search while active; the
+    // search classification is restored untouched on exit. Focus changes
+    // flow through the same opacity-mutation path as search — no graphData
+    // rebuild, no force re-registration.
+    const [focus, setFocus] = useState<GraphFocusState | null>(null);
+    const focusRef = useRef<GraphFocusState | null>(null);
+    focusRef.current = focus;
+
+    const classification = useMemo<GraphClassification | null>(
+      () => composeGraphClassification(searchClassification, focus),
+      [searchClassification, focus],
+    );
+
     const classificationRef = useRef<GraphClassification | null>(null);
     classificationRef.current = classification;
+
+    const focusNode = useCallback(
+      (nodeId: string) => {
+        const expansion = expandNeighborhood(
+          [nodeId],
+          graphData.links,
+          DEFAULT_FOCUS_DEGREE,
+          DEFAULT_FOCUS_CAP,
+        );
+        setFocus({
+          focusedId: nodeId,
+          litIds: expansion.ids,
+          degreeUsed: expansion.degreeUsed,
+          truncated: expansion.truncated,
+        });
+      },
+      [graphData],
+    );
+
+    // Escape exits focus. Skip events a dialog/sheet already consumed so
+    // closing an open detail sheet doesn't also tear down focus.
+    useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (focusRef.current) setFocus(null);
+      };
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
 
     getNodeWithEdgesRef.current = (nodeId: string) => {
       const node = graphData.nodes.find((n: any) => n.id === nodeId);
@@ -617,6 +665,21 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       );
     }
 
+    // Edge brightness follows endpoint lit-state. In focus mode an edge is
+    // bright only when BOTH endpoints are lit — a half-lit edge would imply
+    // the outside node belongs to the neighborhood. Search keeps the
+    // either-endpoint rule. Reads refs so identity stays inert; repaints
+    // ride the classification effect's refresh().
+    const isLinkBright = (link: any) => {
+      const sId = endpointId(link.source);
+      const tId = endpointId(link.target);
+      const focusLit = focusRef.current?.litIds;
+      if (focusLit) return focusLit.has(sId) && focusLit.has(tId);
+      const m = matchedIdsRef.current;
+      if (!m) return true;
+      return m.has(sId) || m.has(tId);
+    };
+
     const typeCounts = PAGE_TYPES.map((t) => ({
       type: t,
       count: graphData.nodes.filter(
@@ -636,31 +699,19 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           nodeThreeObject={nodeThreeObject}
           nodeRelSize={6}
           showNavInfo={false}
-          linkColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
+          linkColor={(link: any) =>
+            isLinkBright(link)
               ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
+              : "rgba(255,255,255,0.1)"
+          }
           linkWidth={() => 2}
           linkDirectionalArrowLength={() => 4}
           linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
+          linkDirectionalArrowColor={(link: any) =>
+            isLinkBright(link)
               ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
+              : "rgba(255,255,255,0.1)"
+          }
           linkLabel={(link: any) => link.label || "references"}
           nodeLabel={(node: any) =>
             `${node.label}${
@@ -674,6 +725,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           d3VelocityDecay={0.3}
           warmupTicks={50}
           onNodeClick={(node: any) => {
+            // Focus is additive to the existing click behavior: any node —
+            // lit or dimmed — becomes the new focus, and the detail sheet
+            // callback still fires.
+            focusNode(node.id);
             if (!onNodeClick) return;
             const edges = graphData.links
               .filter((l: any) => {
@@ -701,12 +756,23 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               });
             onNodeClick(node as WikiGraphNode, edges);
           }}
+          onBackgroundClick={() => {
+            if (focusRef.current) setFocus(null);
+          }}
           onNodeDragEnd={(node: any) => {
             node.fx = node.x;
             node.fy = node.y;
             node.fz = node.z;
           }}
         />
+        {focus?.truncated && (
+          <div
+            role="status"
+            className="absolute top-3 left-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+          >
+            Showing direct connections only
+          </div>
+        )}
         <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
           {typeCounts
             .filter((t) => t.count > 0)

@@ -23,12 +23,17 @@ import { KnowledgeGraphQuery } from "./queries.js";
 import {
   carryNodePositions,
   classifyNode,
+  composeGraphClassification,
   computeCommunityLayout,
   deriveGraphClassification,
   endpointId,
+  expandNeighborhood,
   normalizeGraphSearch,
+  DEFAULT_FOCUS_CAP,
+  DEFAULT_FOCUS_DEGREE,
   type GraphClassification,
   type GraphEndpoint,
+  type GraphFocusState,
 } from "./graph-utils.js";
 
 export type KnowledgeGraphGroundingStatus =
@@ -320,15 +325,72 @@ export const KnowledgeGraph = forwardRef<
     typeFilter,
   ]);
 
-  const classification = useMemo<GraphClassification | null>(
+  const searchClassification = useMemo<GraphClassification | null>(
     () => deriveGraphClassification(matchedIds, graphData.links),
     [matchedIds, graphData.links],
+  );
+
+  // Graph Focus Mode: clicking a node lights its neighborhood in place
+  // while everything else dims. Focus supersedes search while active; the
+  // search classification is restored untouched on exit. Focus changes
+  // flow through the same opacity-mutation path as search — no graphData
+  // rebuild, no force re-registration.
+  const [focus, setFocus] = useState<GraphFocusState | null>(null);
+  const focusRef = useRef<GraphFocusState | null>(null);
+  focusRef.current = focus;
+
+  const classification = useMemo<GraphClassification | null>(
+    () => composeGraphClassification(searchClassification, focus),
+    [searchClassification, focus],
   );
   const classificationRef = useRef<GraphClassification | null>(null);
   classificationRef.current = classification;
 
   const matchedIdsRef = useRef<Set<string> | null>(null);
   matchedIdsRef.current = matchedIds;
+
+  const focusNode = useCallback(
+    (nodeId: string) => {
+      const expansion = expandNeighborhood(
+        [nodeId],
+        graphData.links,
+        DEFAULT_FOCUS_DEGREE,
+        DEFAULT_FOCUS_CAP,
+      );
+      setFocus({
+        focusedId: nodeId,
+        litIds: expansion.ids,
+        degreeUsed: expansion.degreeUsed,
+        truncated: expansion.truncated,
+      });
+    },
+    [graphData],
+  );
+
+  // Escape exits focus. Skip events a dialog/sheet already consumed so
+  // closing an open detail sheet doesn't also tear down focus.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (focusRef.current) setFocus(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Edge brightness follows endpoint lit-state. In focus mode an edge is
+  // bright only when BOTH endpoints are lit; search keeps the
+  // either-endpoint rule. Reads refs so identity stays inert; repaints
+  // ride the classification effect's refresh().
+  const isLinkBright = (link: any) => {
+    const sourceId = endpointId(link.source);
+    const targetId = endpointId(link.target);
+    const focusLit = focusRef.current?.litIds;
+    if (focusLit) return focusLit.has(sourceId) && focusLit.has(targetId);
+    const matched = matchedIdsRef.current;
+    if (!matched) return true;
+    return matched.has(sourceId) || matched.has(targetId);
+  };
 
   const getNodeWithEdgesRef = useRef<KnowledgeGraphHandle["getNodeWithEdges"]>(
     () => null,
@@ -594,27 +656,19 @@ export const KnowledgeGraph = forwardRef<
         nodeThreeObject={nodeThreeObject}
         nodeRelSize={6}
         showNavInfo={false}
-        linkColor={(link: any) => {
-          const matched = matchedIdsRef.current;
-          if (!matched) return `${knowledgeGraphTrustColor(link)}cc`;
-          const sourceId = endpointId(link.source);
-          const targetId = endpointId(link.target);
-          return matched.has(sourceId) || matched.has(targetId)
+        linkColor={(link: any) =>
+          isLinkBright(link)
             ? `${knowledgeGraphTrustColor(link)}cc`
-            : "rgba(255,255,255,0.12)";
-        }}
+            : "rgba(255,255,255,0.12)"
+        }
         linkWidth={(link: any) => (link.evidenceCount > 1 ? 2.5 : 1.8)}
         linkDirectionalArrowLength={() => 4}
         linkDirectionalArrowRelPos={1}
-        linkDirectionalArrowColor={(link: any) => {
-          const matched = matchedIdsRef.current;
-          if (!matched) return `${knowledgeGraphTrustColor(link)}cc`;
-          const sourceId = endpointId(link.source);
-          const targetId = endpointId(link.target);
-          return matched.has(sourceId) || matched.has(targetId)
+        linkDirectionalArrowColor={(link: any) =>
+          isLinkBright(link)
             ? `${knowledgeGraphTrustColor(link)}cc`
-            : "rgba(255,255,255,0.12)";
-        }}
+            : "rgba(255,255,255,0.12)"
+        }
         linkLabel={(link: any) => link.label || "related to"}
         nodeLabel={(node: any) =>
           `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
@@ -628,9 +682,16 @@ export const KnowledgeGraph = forwardRef<
         d3VelocityDecay={0.3}
         warmupTicks={50}
         onNodeClick={(node: any) => {
+          // Focus is additive to the existing click behavior: any node —
+          // lit or dimmed — becomes the new focus, and the detail sheet
+          // callback still fires.
+          focusNode(node.id);
           if (!onNodeClick) return;
           const detail = getNodeWithEdgesRef.current(node.id);
           if (detail) onNodeClick(detail.node, detail.edges);
+        }}
+        onBackgroundClick={() => {
+          if (focusRef.current) setFocus(null);
         }}
         onNodeDragEnd={(node: any) => {
           node.fx = node.x;
@@ -638,6 +699,14 @@ export const KnowledgeGraph = forwardRef<
           node.fz = node.z;
         }}
       />
+      {focus?.truncated && (
+        <div
+          role="status"
+          className="absolute top-3 left-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+        >
+          Showing direct connections only
+        </div>
+      )}
       <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
         {trustCounts
           .filter((item) => item.count > 0)

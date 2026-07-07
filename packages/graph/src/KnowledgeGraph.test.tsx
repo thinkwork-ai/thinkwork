@@ -1,5 +1,12 @@
 import React from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   KnowledgeGraph,
@@ -289,6 +296,251 @@ describe("KnowledgeGraph", () => {
     expect(graphRef.current?.getNodeWithEdges("entity-2")?.edges).toHaveLength(
       2,
     );
+  });
+
+  describe("Graph Focus Mode", () => {
+    function seedMaterials(nodes: any[]) {
+      for (const node of nodes) {
+        node.__sphereMat = { opacity: -1 };
+        node.__spriteMat = { opacity: -1 };
+        node.__ringMat = { opacity: -1 };
+      }
+    }
+
+    function opacityById(nodes: any[]) {
+      return Object.fromEntries(
+        nodes.map((node) => [node.id, node.__sphereMat.opacity]),
+      );
+    }
+
+    async function renderFocusable(extraProps: Record<string, any> = {}) {
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: graphFixture },
+        error: null,
+      };
+      const view = render(
+        <KnowledgeGraph
+          tenantId="tenant-1"
+          threadId="thread-1"
+          {...extraProps}
+        />,
+      );
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+      seedMaterials(props.graphData.nodes);
+      return { view, props };
+    }
+
+    it("clicking a node lights its 2-degree neighborhood and dims the rest (fixture chain lights fully)", async () => {
+      const { props } = await renderFocusable();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+
+      // entity-1 -> entity-2 -> entity-3 is a chain: 2 degrees from
+      // entity-1 covers all three nodes.
+      expect(opacityById(latestForceGraphProps().graphData.nodes)).toEqual({
+        "entity-1": 1,
+        "entity-2": 1,
+        "entity-3": 1,
+      });
+      expect(
+        screen.queryByText("Showing direct connections only"),
+      ).toBeNull();
+    });
+
+    it("background click clears focus and restores prior opacities (AE4)", async () => {
+      const { props } = await renderFocusable();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      await act(async () => {
+        latestForceGraphProps().onBackgroundClick();
+      });
+
+      // No filter active — everything returns to full opacity.
+      expect(opacityById(latestForceGraphProps().graphData.nodes)).toEqual({
+        "entity-1": 1,
+        "entity-2": 1,
+        "entity-3": 1,
+      });
+    });
+
+    it("focus supersedes search dimming and exit restores it (AE5)", async () => {
+      const { view, props } = await renderFocusable();
+
+      // Activate search after materials are seeded so the mutation effect
+      // writes into them. entity-3 "Beta Contract" matches; the rest dim.
+      view.rerender(
+        <KnowledgeGraph
+          tenantId="tenant-1"
+          threadId="thread-1"
+          searchQuery="Beta"
+        />,
+      );
+      await waitFor(() =>
+        expect(
+          opacityById(latestForceGraphProps().graphData.nodes)["entity-1"],
+        ).toBe(0.15),
+      );
+
+      // Focus entity-1: 2-degree neighborhood lights everything.
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      expect(
+        opacityById(latestForceGraphProps().graphData.nodes)["entity-1"],
+      ).toBe(1);
+
+      // Escape exits focus; search classification returns exactly.
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Escape" });
+      });
+      const restored = opacityById(latestForceGraphProps().graphData.nodes);
+      expect(restored["entity-1"]).toBe(0.15);
+      expect(restored["entity-3"]).toBe(1);
+    });
+
+    it("clicking a dimmed node moves focus to it (AE6)", async () => {
+      const isolatedFixture = {
+        nodes: graphFixture.nodes,
+        edges: [graphFixture.edges[0]], // entity-3 isolated
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: isolatedFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+      seedMaterials(props.graphData.nodes);
+
+      // Focus entity-1: lights entity-1 and entity-2; entity-3 dims.
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      expect(
+        opacityById(latestForceGraphProps().graphData.nodes)["entity-3"],
+      ).toBe(0.15);
+
+      // Click the dimmed entity-3 — focus traverses to it.
+      await act(async () => {
+        latestForceGraphProps().onNodeClick(props.graphData.nodes[2]);
+      });
+      const opacities = opacityById(latestForceGraphProps().graphData.nodes);
+      expect(opacities["entity-3"]).toBe(1);
+      expect(opacities["entity-1"]).toBe(0.15);
+    });
+
+    it("focusing an isolated node lights only it with no truncation chip (AE8)", async () => {
+      const isolatedFixture = {
+        nodes: graphFixture.nodes,
+        edges: [graphFixture.edges[0]], // entity-3 has no edges
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: isolatedFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+      seedMaterials(props.graphData.nodes);
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[2]);
+      });
+
+      const opacities = opacityById(latestForceGraphProps().graphData.nodes);
+      expect(opacities).toEqual({
+        "entity-1": 0.15,
+        "entity-2": 0.15,
+        "entity-3": 1,
+      });
+      expect(
+        screen.queryByText("Showing direct connections only"),
+      ).toBeNull();
+    });
+
+    it("hub over the cap degrades to 1 degree and shows the truncation chip (AE1)", async () => {
+      const hubFixture = {
+        nodes: [
+          { id: "hub", entityId: "hub", label: "Hub" },
+          ...Array.from({ length: 151 }, (_, i) => ({
+            id: `leaf-${i}`,
+            entityId: `leaf-${i}`,
+            label: `Leaf ${i}`,
+          })),
+        ],
+        edges: Array.from({ length: 151 }, (_, i) => ({
+          id: `edge-${i}`,
+          relationshipId: `rel-${i}`,
+          source: "hub",
+          target: `leaf-${i}`,
+          label: "links",
+        })),
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: hubFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+
+      expect(
+        await screen.findByText("Showing direct connections only"),
+      ).toBeTruthy();
+    });
+
+    it("Escape without focus is a no-op and focus survives clearing search", async () => {
+      const { view, props } = await renderFocusable({ searchQuery: "Acme" });
+
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Escape" });
+      });
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      // Clear the search — focus stays active.
+      view.rerender(
+        <KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />,
+      );
+      await waitFor(() =>
+        expect(
+          opacityById(latestForceGraphProps().graphData.nodes)["entity-1"],
+        ).toBe(1),
+      );
+    });
+
+    it("focus changes rebuild nothing: same graphData, no force re-registration, sheet callback fires", async () => {
+      const onNodeClick = vi.fn();
+      const { props } = await renderFocusable({ onNodeClick });
+      const initialGraphData = props.graphData;
+      const initialForceCalls = d3ForceCalls.length;
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[1]);
+      });
+
+      const nextProps = latestForceGraphProps();
+      expect(nextProps.graphData).toBe(initialGraphData);
+      expect(d3ForceCalls.length).toBe(initialForceCalls);
+      expect(onNodeClick).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "entity-2" }),
+        expect.any(Array),
+      );
+    });
   });
 
   it("renders loading, empty, and error states for the Settings surface", async () => {

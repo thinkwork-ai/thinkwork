@@ -25,8 +25,15 @@ import * as d3 from "d3-force";
 import { MemoryGraphQuery } from "./queries.js";
 import {
   carryNodePositions,
+  classifyNode,
+  composeGraphClassification,
   computeCommunityLayout,
   endpointId,
+  expandNeighborhood,
+  DEFAULT_FOCUS_CAP,
+  DEFAULT_FOCUS_DEGREE,
+  type GraphClassification,
+  type GraphFocusState,
 } from "./graph-utils.js";
 import {
   MEMORY_COLOR,
@@ -347,6 +354,73 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const matchedIdsRef = useRef<Set<string> | null>(null);
     matchedIdsRef.current = matchedIds;
 
+    // MemoryGraph search has no neighbor-ring affordance — matched nodes
+    // light, the rest dim.
+    const searchClassification = useMemo<GraphClassification | null>(
+      () =>
+        matchedIds ? { matchedIds, neighborIds: new Set<string>() } : null,
+      [matchedIds],
+    );
+
+    // Graph Focus Mode: clicking a node lights its neighborhood in place
+    // while everything else dims. Focus supersedes search while active; the
+    // search classification is restored untouched on exit. Focus changes
+    // flow through the same opacity-mutation path as search — no graphData
+    // rebuild, no force re-registration.
+    const [focus, setFocus] = useState<GraphFocusState | null>(null);
+    const focusRef = useRef<GraphFocusState | null>(null);
+    focusRef.current = focus;
+
+    const classification = useMemo<GraphClassification | null>(
+      () => composeGraphClassification(searchClassification, focus),
+      [searchClassification, focus],
+    );
+    const classificationRef = useRef<GraphClassification | null>(null);
+    classificationRef.current = classification;
+
+    const focusNode = useCallback(
+      (nodeId: string) => {
+        const expansion = expandNeighborhood(
+          [nodeId],
+          graphData.links,
+          DEFAULT_FOCUS_DEGREE,
+          DEFAULT_FOCUS_CAP,
+        );
+        setFocus({
+          focusedId: nodeId,
+          litIds: expansion.ids,
+          degreeUsed: expansion.degreeUsed,
+          truncated: expansion.truncated,
+        });
+      },
+      [graphData],
+    );
+
+    // Escape exits focus. Skip events a dialog/sheet already consumed so
+    // closing an open detail sheet doesn't also tear down focus.
+    useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (focusRef.current) setFocus(null);
+      };
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
+
+    // Edge brightness follows endpoint lit-state. In focus mode an edge is
+    // bright only when BOTH endpoints are lit; search keeps the
+    // either-endpoint rule. Reads refs so identity stays inert; repaints
+    // ride the classification effect's refresh().
+    const isLinkBright = (link: any) => {
+      const sId = endpointId(link.source);
+      const tId = endpointId(link.target);
+      const focusLit = focusRef.current?.litIds;
+      if (focusLit) return focusLit.has(sId) && focusLit.has(tId);
+      const m = matchedIdsRef.current;
+      if (!m) return true;
+      return m.has(sId) || m.has(tId);
+    };
+
     // Update getNodeWithEdges ref after graphData is available
     getNodeWithEdgesRef.current = (nodeId: string) => {
       const node = graphData.nodes.find((n: any) => n.id === nodeId);
@@ -373,8 +447,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     };
 
     const nodeThreeObject = useCallback((node: any) => {
-      const matched = matchedIdsRef.current;
-      const muted = matched ? !matched.has(node.id) : false;
+      const state = classifyNode(node.id, classificationRef.current);
+      const muted = state !== "matched";
       const isMemory = node.nodeType === "memory";
       const entityType = node.entityType as string | null;
       const label = isMemory
@@ -440,16 +514,16 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       return group;
     }, []);
 
-    // Apply filter via in-place material opacity — NO graphData rebuild.
+    // Apply filter/focus via in-place material opacity — NO graphData
+    // rebuild.
     useEffect(() => {
       for (const n of graphData.nodes as any[]) {
-        const muted = matchedIds ? !matchedIds.has(n.id) : false;
-        const op = muted ? 0.15 : 1;
+        const op = classifyNode(n.id, classification) === "matched" ? 1 : 0.15;
         if (n.__sphereMat) n.__sphereMat.opacity = op;
         if (n.__spriteMat) n.__spriteMat.opacity = op;
       }
       fgRef.current?.refresh?.();
-    }, [matchedIds, graphData]);
+    }, [classification, graphData]);
 
     // Force layout tuning — safe to re-run when data changes (strengths
     // scale with node count). Does NOT touch the camera, so filter updates
@@ -571,31 +645,19 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           nodeThreeObject={nodeThreeObject}
           nodeRelSize={6}
           showNavInfo={false}
-          linkColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
+          linkColor={(link: any) =>
+            isLinkBright(link)
               ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
+              : "rgba(255,255,255,0.1)"
+          }
           linkWidth={() => 2}
           linkDirectionalArrowLength={() => 4}
           linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
+          linkDirectionalArrowColor={(link: any) =>
+            isLinkBright(link)
               ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
+              : "rgba(255,255,255,0.1)"
+          }
           linkLabel={(link: any) => link.label || "mentions"}
           nodeLabel={(node: any) =>
             `${node.label}${node.entityType ? ` (${node.entityType})` : ""}${
@@ -607,6 +669,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           d3VelocityDecay={0.3}
           warmupTicks={50}
           onNodeClick={(node: any) => {
+            // Focus is additive to the existing click behavior: any node —
+            // lit or dimmed — becomes the new focus, and the detail sheet
+            // callback still fires.
+            focusNode(node.id);
             if (!onNodeClick) return;
             const edges = graphData.links
               .filter((l: any) => {
@@ -634,12 +700,23 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               });
             onNodeClick(node as MemoryGraphNode, edges);
           }}
+          onBackgroundClick={() => {
+            if (focusRef.current) setFocus(null);
+          }}
           onNodeDragEnd={(node: any) => {
             node.fx = node.x;
             node.fy = node.y;
             node.fz = node.z;
           }}
         />
+        {focus?.truncated && (
+          <div
+            role="status"
+            className="absolute top-3 left-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+          >
+            Showing direct connections only
+          </div>
+        )}
         <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
           {Object.entries(MEMORY_TYPE_COLORS)
             .filter(([k]) =>
