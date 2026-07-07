@@ -294,12 +294,12 @@ function CostByUserCard({
         <UserRound className="size-4 text-muted-foreground" />
         Cost by User
       </h2>
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
-            <TableHead className="w-20 text-center">Events</TableHead>
-            <TableHead className="w-24">Budget</TableHead>
+            <TableHead className="w-16 text-center">Events</TableHead>
+            <TableHead className="w-28">Budget</TableHead>
             <TableHead className="w-20 text-right">Cost</TableHead>
           </TableRow>
         </TableHeader>
@@ -315,20 +315,15 @@ function CostByUserCard({
               const budget = r.userId ? userBudgetMap.get(r.userId) : null;
               return (
                 <TableRow key={r.userId ?? "system"}>
-                  <TableCell className="min-w-0">
+                  <TableCell className="max-w-0">
                     <div className="truncate font-medium">
                       {r.isSystem ? "System" : r.userName}
                     </div>
-                    {!r.isSystem && r.userEmail ? (
-                      <div className="truncate text-xs text-muted-foreground">
-                        {r.userEmail}
-                      </div>
-                    ) : null}
                   </TableCell>
-                  <TableCell className="w-20 text-center tabular-nums text-muted-foreground">
+                  <TableCell className="w-16 text-center tabular-nums text-muted-foreground">
                     {r.eventCount}
                   </TableCell>
-                  <TableCell className="w-24">
+                  <TableCell className="w-28">
                     {budget ? (
                       <BudgetProgress budget={budget} />
                     ) : (
