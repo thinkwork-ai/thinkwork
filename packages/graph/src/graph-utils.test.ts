@@ -5,6 +5,9 @@ import {
   classifyNode,
   deriveGraphClassification,
   connectedGraphEdges,
+  detectCommunities,
+  expandNeighborhood,
+  composeGraphClassification,
 } from "./graph-utils.js";
 
 describe("endpointId", () => {
@@ -176,5 +179,194 @@ describe("connectedGraphEdges", () => {
     const edges = connectedGraphEdges("a", nodes, objLinks);
     expect(edges).toHaveLength(1);
     expect(edges[0].targetId).toBe("b");
+  });
+});
+
+describe("detectCommunities", () => {
+  // Two dense triangles joined by one bridge edge.
+  const clusteredNodes = ["a1", "a2", "a3", "b1", "b2", "b3"].map((id) => ({
+    id,
+  }));
+  const clusteredLinks = [
+    { source: "a1", target: "a2" },
+    { source: "a2", target: "a3" },
+    { source: "a3", target: "a1" },
+    { source: "b1", target: "b2" },
+    { source: "b2", target: "b3" },
+    { source: "b3", target: "b1" },
+    { source: "a1", target: "b1" },
+  ];
+
+  it("assigns every node exactly one community", () => {
+    const communities = detectCommunities(clusteredNodes, clusteredLinks);
+    expect(communities.size).toBe(6);
+    for (const node of clusteredNodes) {
+      expect(communities.has(node.id)).toBe(true);
+    }
+  });
+
+  it("groups dense clusters together and separates them across the bridge", () => {
+    const communities = detectCommunities(clusteredNodes, clusteredLinks);
+    expect(communities.get("a1")).toBe(communities.get("a2"));
+    expect(communities.get("a2")).toBe(communities.get("a3"));
+    expect(communities.get("b1")).toBe(communities.get("b2"));
+    expect(communities.get("b2")).toBe(communities.get("b3"));
+    expect(communities.get("a1")).not.toBe(communities.get("b1"));
+  });
+
+  it("is deterministic: same seed produces identical partitions", () => {
+    const first = detectCommunities(clusteredNodes, clusteredLinks, {
+      seed: 7,
+    });
+    const second = detectCommunities(clusteredNodes, clusteredLinks, {
+      seed: 7,
+    });
+    expect([...first.entries()]).toEqual([...second.entries()]);
+  });
+
+  it("handles an edgeless graph with singleton communities", () => {
+    const communities = detectCommunities(
+      [{ id: "x" }, { id: "y" }],
+      [],
+    );
+    expect(communities.get("x")).not.toBe(communities.get("y"));
+    expect(communities.size).toBe(2);
+  });
+
+  it("returns empty for an empty graph without throwing", () => {
+    expect(detectCommunities([], []).size).toBe(0);
+  });
+
+  it("tolerates parallel edges, self-loops, and dangling endpoints", () => {
+    const communities = detectCommunities(
+      [{ id: "a" }, { id: "b" }],
+      [
+        { source: "a", target: "b" },
+        { source: "a", target: "b" },
+        { source: "a", target: "a" },
+        { source: "a", target: "ghost" },
+      ],
+    );
+    expect(communities.size).toBe(2);
+  });
+
+  it("handles object-style endpoints", () => {
+    const communities = detectCommunities(
+      [{ id: "a" }, { id: "b" }],
+      [{ source: { id: "a" }, target: { id: "b" } }],
+    );
+    expect(communities.get("a")).toBe(communities.get("b"));
+  });
+});
+
+describe("expandNeighborhood", () => {
+  // Chain: seed - n1 - n2 - n3, plus a direct neighbor n4.
+  const chainLinks = [
+    { source: "seed", target: "n1" },
+    { source: "n1", target: "n2" },
+    { source: "n2", target: "n3" },
+    { source: "seed", target: "n4" },
+  ];
+
+  it("expands 2 degrees: seed + neighbors + neighbors-of-neighbors", () => {
+    const result = expandNeighborhood(["seed"], chainLinks, 2, 100);
+    expect([...result.ids].sort()).toEqual(["n1", "n2", "n4", "seed"]);
+    expect(result.degreeUsed).toBe(2);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("isolated node expands to itself without truncation", () => {
+    const result = expandNeighborhood(["lone"], chainLinks, 2, 100);
+    expect([...result.ids]).toEqual(["lone"]);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("empty seed set returns empty without throwing", () => {
+    const result = expandNeighborhood([], chainLinks, 2, 100);
+    expect(result.ids.size).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("empty graph returns just the seed", () => {
+    const result = expandNeighborhood(["seed"], [], 2, 100);
+    expect([...result.ids]).toEqual(["seed"]);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("size exactly at cap does not truncate", () => {
+    // 2-degree set is exactly 4 nodes.
+    const result = expandNeighborhood(["seed"], chainLinks, 2, 4);
+    expect(result.degreeUsed).toBe(2);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("size one over cap falls back to 1 degree with truncated flag", () => {
+    const result = expandNeighborhood(["seed"], chainLinks, 2, 3);
+    expect(result.degreeUsed).toBe(1);
+    expect(result.truncated).toBe(true);
+    expect([...result.ids].sort()).toEqual(["n1", "n4", "seed"]);
+  });
+
+  it("degree 1 is accepted even when it exceeds the cap (hub node)", () => {
+    const hubLinks = Array.from({ length: 10 }, (_, i) => ({
+      source: "hub",
+      target: `leaf-${i}`,
+    }));
+    const result = expandNeighborhood(["hub"], hubLinks, 2, 5);
+    expect(result.degreeUsed).toBe(1);
+    expect(result.ids.size).toBe(11);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("multi-agent prefixed ids traverse without crossing subgraphs", () => {
+    const links = [
+      { source: "u1:p1", target: "u1:p2" },
+      { source: "u1:p2", target: "u1:p3" },
+      { source: "u2:p1", target: "u2:p2" },
+    ];
+    const result = expandNeighborhood(["u1:p1"], links, 2, 100);
+    expect([...result.ids].sort()).toEqual(["u1:p1", "u1:p2", "u1:p3"]);
+  });
+
+  it("handles object-style endpoints", () => {
+    const result = expandNeighborhood(
+      ["a"],
+      [{ source: { id: "a" }, target: { id: "b" } }],
+      2,
+      100,
+    );
+    expect([...result.ids].sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("composeGraphClassification", () => {
+  const search = {
+    matchedIds: new Set(["s1"]),
+    neighborIds: new Set(["s2"]),
+  };
+  const focus = {
+    focusedId: "f1",
+    litIds: new Set(["f1", "f2"]),
+    degreeUsed: 2,
+    truncated: false,
+  };
+
+  it("returns focus classification when focus is active", () => {
+    const result = composeGraphClassification(search, focus);
+    expect(result!.matchedIds).toBe(focus.litIds);
+    expect(result!.neighborIds.size).toBe(0);
+  });
+
+  it("focus wins even when search is null", () => {
+    const result = composeGraphClassification(null, focus);
+    expect(result!.matchedIds).toBe(focus.litIds);
+  });
+
+  it("returns search classification untouched once focus clears", () => {
+    expect(composeGraphClassification(search, null)).toBe(search);
+  });
+
+  it("returns null when neither is active", () => {
+    expect(composeGraphClassification(null, null)).toBeNull();
   });
 });

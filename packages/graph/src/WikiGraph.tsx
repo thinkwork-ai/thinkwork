@@ -34,6 +34,12 @@ import { useQuery, useClient } from "urql";
 import * as d3 from "d3-force";
 import { WikiGraphQuery } from "./queries.js";
 import {
+  classifyNode,
+  deriveGraphClassification,
+  normalizeGraphSearch,
+  type GraphClassification,
+} from "./graph-utils.js";
+import {
   PAGE_TYPES,
   PAGE_TYPE_FORCE_COLORS,
   PAGE_TYPE_DEFAULT_FORCE_COLOR,
@@ -42,23 +48,6 @@ import {
 } from "./palettes/wiki-palette.js";
 
 export type { WikiPageType };
-
-type NodeVisualState = "matched" | "neighbor" | "other";
-
-type GraphClassification = {
-  matchedIds: Set<string>;
-  neighborIds: Set<string>;
-};
-
-function classifyNode(
-  id: string,
-  c: GraphClassification | null,
-): NodeVisualState {
-  if (!c) return "matched";
-  if (c.matchedIds.has(id)) return "matched";
-  if (c.neighborIds.has(id)) return "neighbor";
-  return "other";
-}
 
 export interface WikiGraphNode {
   id: string;
@@ -345,14 +334,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         );
       }
       if (searchQuery) {
-        const normalize = (s: string) =>
-          s
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-        const q = normalize(searchQuery);
-        filtered = filtered.filter((n) => normalize(n.label).includes(q));
+        const q = normalizeGraphSearch(searchQuery);
+        filtered = filtered.filter((n) =>
+          normalizeGraphSearch(n.label).includes(q),
+        );
       }
       return new Set(filtered.map((n) => n.id));
     }, [allNodes, typeFilter, searchQuery, hasFilter]);
@@ -382,25 +367,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // visible: full opacity when at least one endpoint is matched,
     // muted when both are unmatched. Nothing is hidden — the whole
     // graph remains visible so users keep spatial context.
-    const classification = useMemo<GraphClassification | null>(() => {
-      if (!matchedIds) return null;
-      const neighborIds = new Set<string>();
-      for (const l of graphData.links) {
-        const sId =
-          typeof (l as any).source === "object"
-            ? ((l as any).source as any).id
-            : (l as any).source;
-        const tId =
-          typeof (l as any).target === "object"
-            ? ((l as any).target as any).id
-            : (l as any).target;
-        const sMatched = matchedIds.has(sId);
-        const tMatched = matchedIds.has(tId);
-        if (sMatched && !tMatched) neighborIds.add(tId);
-        else if (tMatched && !sMatched) neighborIds.add(sId);
-      }
-      return { matchedIds, neighborIds };
-    }, [matchedIds, graphData]);
+    const classification = useMemo<GraphClassification | null>(
+      () => deriveGraphClassification(matchedIds, graphData.links),
+      [matchedIds, graphData],
+    );
 
     const classificationRef = useRef<GraphClassification | null>(null);
     classificationRef.current = classification;

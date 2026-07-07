@@ -1,3 +1,6 @@
+import Graph from "graphology";
+import louvain from "graphology-communities-louvain";
+
 export type GraphEndpoint = string | { id: string };
 
 export type GraphLinkLike = {
@@ -51,6 +54,157 @@ export function deriveGraphClassification<TLink extends GraphLinkLike>(
   }
 
   return { matchedIds, neighborIds };
+}
+
+/** Focus state produced by clicking a node (Graph Focus Mode). The lit set
+ *  always contains the focused node itself. */
+export type GraphFocusState = {
+  focusedId: string;
+  litIds: Set<string>;
+  degreeUsed: number;
+  truncated: boolean;
+};
+
+/**
+ * Compose search and focus classification: focus wins while active (lit set
+ * renders as "matched", everything else as "other"), the search
+ * classification is untouched underneath and returned again once focus
+ * clears. Neighbor rings are a search-only affordance — focus mode lights
+ * the whole neighborhood at full opacity instead.
+ */
+export function composeGraphClassification(
+  search: GraphClassification | null,
+  focus: GraphFocusState | null,
+): GraphClassification | null {
+  if (focus) {
+    return { matchedIds: focus.litIds, neighborIds: new Set() };
+  }
+  return search;
+}
+
+/** Deterministic RNG (mulberry32) so louvain partitions are stable across
+ *  reloads of the same graph. */
+function seededRng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export type CommunityDetectionOptions = {
+  /** Louvain resolution — higher yields more, smaller communities. */
+  resolution?: number;
+  seed?: number;
+};
+
+/**
+ * Assign every node to a community based on edge structure (Louvain).
+ * Deterministic for a given (graph, seed). Isolated nodes and edgeless
+ * graphs each get singleton communities rather than throwing — louvain
+ * rejects graphs without edges. Parallel edges collapse via mergeEdge.
+ */
+export function detectCommunities<TLink extends GraphLinkLike>(
+  nodes: readonly { id: string }[],
+  links: readonly TLink[],
+  { resolution = 1, seed = 1 }: CommunityDetectionOptions = {},
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (nodes.length === 0) return result;
+
+  const graph = new Graph({ type: "undirected", multi: false });
+  for (const node of nodes) graph.mergeNode(node.id);
+  for (const link of links) {
+    const sourceId = endpointId(link.source);
+    const targetId = endpointId(link.target);
+    if (!graph.hasNode(sourceId) || !graph.hasNode(targetId)) continue;
+    if (sourceId === targetId) continue; // louvain rejects self-loops
+    graph.mergeEdge(sourceId, targetId);
+  }
+
+  if (graph.size === 0) {
+    nodes.forEach((node, i) => result.set(node.id, i));
+    return result;
+  }
+
+  const communities = louvain(graph, {
+    resolution,
+    rng: seededRng(seed),
+    getEdgeWeight: null,
+  });
+  // Louvain community ids are arbitrary; renumber densely in first-seen
+  // node order so ids are stable for anchor placement.
+  const renumber = new Map<number | string, number>();
+  for (const node of nodes) {
+    const raw = communities[node.id];
+    const key = raw ?? `__isolated:${node.id}`;
+    if (!renumber.has(key)) renumber.set(key, renumber.size);
+    result.set(node.id, renumber.get(key)!);
+  }
+  return result;
+}
+
+export type NeighborhoodExpansion = {
+  ids: Set<string>;
+  degreeUsed: number;
+  truncated: boolean;
+};
+
+/**
+ * BFS expansion of seed ids out to `degree` hops. If the expanded set
+ * exceeds `cap`, degrade one degree at a time (2° → 1°) and report
+ * `truncated: true`; degree 1 is always accepted regardless of size so a
+ * hub node still lights its direct neighbors.
+ */
+export function expandNeighborhood(
+  seedIds: Iterable<string>,
+  links: readonly GraphLinkLike[],
+  degree: number,
+  cap: number,
+): NeighborhoodExpansion {
+  const seeds = new Set(seedIds);
+  if (seeds.size === 0) {
+    return { ids: new Set(), degreeUsed: degree, truncated: false };
+  }
+
+  const adjacency = new Map<string, string[]>();
+  for (const link of links) {
+    const sourceId = endpointId(link.source);
+    const targetId = endpointId(link.target);
+    if (sourceId === targetId) continue;
+    if (!adjacency.has(sourceId)) adjacency.set(sourceId, []);
+    if (!adjacency.has(targetId)) adjacency.set(targetId, []);
+    adjacency.get(sourceId)!.push(targetId);
+    adjacency.get(targetId)!.push(sourceId);
+  }
+
+  // Levels: levels[0] = seeds, levels[k] = nodes first reached at hop k.
+  const visited = new Set(seeds);
+  const cumulative: Set<string>[] = [new Set(seeds)];
+  let frontier = [...seeds];
+  for (let hop = 1; hop <= degree; hop += 1) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        next.push(neighbor);
+      }
+    }
+    cumulative.push(new Set(visited));
+    frontier = next;
+  }
+
+  for (let d = degree; d >= 1; d -= 1) {
+    const ids = cumulative[Math.min(d, cumulative.length - 1)]!;
+    if (ids.size <= cap || d === 1) {
+      return { ids: new Set(ids), degreeUsed: d, truncated: d < degree };
+    }
+  }
+  return { ids: new Set(seeds), degreeUsed: degree, truncated: false };
 }
 
 export function connectedGraphEdges<
