@@ -1162,7 +1162,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     (wakeup.source === "trigger" ||
       wakeup.source === "on_demand" ||
       wakeup.source === "timer" ||
-      wakeup.source === "agent_loop")
+      wakeup.source === "agent_loop" ||
+      // Interpreter agent steps arrive with threadId null by design — the
+      // workflow run, not a thread, is their home. Pi still requires a
+      // thread_id, so each step turn gets a thread here.
+      wakeup.source === "workflow_step")
   ) {
     try {
       const triggerName = String(

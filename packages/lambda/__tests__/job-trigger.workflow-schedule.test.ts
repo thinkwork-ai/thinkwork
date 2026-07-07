@@ -155,6 +155,9 @@ describe("handleWorkflowSchedule", () => {
       agentId: "agent-1",
       workflowName: "Nightly Digest",
       spaceId: "space-1",
+      // Pi requires a human invoker on each step turn; the dispatcher reads
+      // this to stamp requested_by_actor on the step wakeups.
+      requestedByUserId: "user-1",
     });
     expect(runInsert?.backend_execution_id).toBeUndefined();
 

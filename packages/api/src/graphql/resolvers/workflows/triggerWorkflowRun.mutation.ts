@@ -17,6 +17,7 @@ import { db, snakeToCamel } from "../../utils.js";
 import { createWorkflowRunLedger } from "../../../lib/workflows/run-ledger.js";
 import { resolveInterpreterStateMachineArn } from "../../../lib/workflows/interpreter-state-machine.js";
 import { triggerRoutineRun } from "../routines/triggerRoutineRun.mutation.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { assertCanReadWorkflowTenant } from "./types.js";
 
 const _SFN_CLIENT = new SFNClient({});
@@ -91,6 +92,7 @@ export async function triggerWorkflowRun(
       triggerSource,
       normalizedInput,
       idempotencyKey: args.input.idempotencyKey ?? null,
+      requestedByUserId: await resolveCallerUserId(ctx),
     });
     if (interpreterRun) return interpreterRun;
   }
@@ -189,6 +191,7 @@ async function tryStartInterpreterRun(input: {
   triggerSource: string;
   normalizedInput: Record<string, unknown>;
   idempotencyKey: string | null;
+  requestedByUserId: string | null;
 }): Promise<unknown | null> {
   const { workflow, actor, triggerSource, normalizedInput } = input;
 
@@ -232,6 +235,9 @@ async function tryStartInterpreterRun(input: {
       agentId: platformAgent.id,
       workflowName: workflow.name ?? null,
       spaceId: null,
+      // Pi refuses invocations without a human invoker (user_id); the step
+      // dispatcher stamps this onto each wakeup's requested_by_actor fields.
+      requestedByUserId: input.requestedByUserId,
     },
   });
 

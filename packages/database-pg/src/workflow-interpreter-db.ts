@@ -191,7 +191,10 @@ export async function createInterpreterWorkflowRun(
       // Postgres only matches ON CONFLICT to it when the target repeats the
       // index predicate. Without this, every insert errors with "no unique or
       // exclusion constraint matching the ON CONFLICT specification".
-      targetWhere: sql`${workflowRuns.idempotency_key} IS NOT NULL`,
+      // (onConflictDoNothing takes `where` as the index predicate — the
+      // `targetWhere` name is onConflictDoUpdate-only in this drizzle version
+      // and is silently dropped here.)
+      where: sql`${workflowRuns.idempotency_key} IS NOT NULL`,
     })
     .returning({ id: workflowRuns.id, status: workflowRuns.status });
 

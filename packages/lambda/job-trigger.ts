@@ -1181,6 +1181,9 @@ export async function handleWorkflowSchedule(input: {
     agentId: platformAgent.id,
     workflowName: workflow.name ?? null,
     spaceId,
+    // Pi refuses invocations without a human invoker (user_id); the step
+    // dispatcher stamps this onto each wakeup's requested_by_actor fields.
+    requestedByUserId: input.actorId ?? null,
   };
 
   const { run, created } = await createInterpreterWorkflowRun(db, {
