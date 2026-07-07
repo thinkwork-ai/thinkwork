@@ -48,6 +48,15 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # Public artifact share route (THINK-208 KTD-6): route-level throttle for
+  # enumeration resistance on the unauthenticated token lookup. The HMAC
+  # signature makes forgery impractical regardless; this bounds probe volume.
+  route_settings {
+    route_key              = "GET /share/{token}"
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
+
   tags = {
     Name = "thinkwork-${var.stage}-api-default"
   }

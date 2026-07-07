@@ -337,6 +337,10 @@ export const COMPLIANCE_EVENT_TYPES = [
   "attachment.received",
   "skill.activated",
   "output.artifact_produced",
+  // Public artifact share links (THINK-208). The output. prefix is already
+  // admitted by the *_v3 event-type CHECK, so no migration is needed.
+  "output.artifact_share_created",
+  "output.artifact_share_revoked",
   // Application plugins (U5/U6 of 2026-06-12-001-feat-application-plugins-plan).
   // The plugin.* prefix is recognized by the *_v3 event-type CHECK
   // constraints (drizzle/0160_compliance_event_types_plugins.sql), which

@@ -2679,6 +2679,56 @@ export const DeleteArtifactMutation = gql`
   }
 `;
 
+// Public artifact share links (THINK-208). Mint is get-or-create: re-sharing
+// returns the existing active link's URL. Queries never carry a signed token.
+export const MintArtifactShareLinkMutation = gql`
+  mutation MintArtifactShareLink($artifactId: ID!) {
+    mintArtifactShareLink(artifactId: $artifactId) {
+      url
+      share {
+        id
+        artifactId
+        artifactTitle
+        createdBy
+        createdByName
+        createdAt
+      }
+    }
+  }
+`;
+
+export const RevokeArtifactShareLinkMutation = gql`
+  mutation RevokeArtifactShareLink($shareId: ID!) {
+    revokeArtifactShareLink(shareId: $shareId)
+  }
+`;
+
+export const ArtifactSharesQuery = gql`
+  query ArtifactShares($artifactId: ID!) {
+    artifactShares(artifactId: $artifactId) {
+      id
+      artifactId
+      artifactTitle
+      createdBy
+      createdByName
+      createdAt
+    }
+  }
+`;
+
+export const TenantArtifactSharesQuery = gql`
+  query TenantArtifactShares($tenantId: ID!) {
+    tenantArtifactShares(tenantId: $tenantId) {
+      id
+      artifactId
+      artifactTitle
+      createdBy
+      createdByName
+      createdAt
+    }
+  }
+`;
+
 export const FavoriteArtifactsQuery = gql`
   query FavoriteArtifacts($tenantId: ID!, $limit: Int) {
     artifacts(tenantId: $tenantId, favoritedOnly: true, limit: $limit) {

@@ -82,6 +82,7 @@ import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/
 import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_authed/settings.evaluations.compare";
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsAutomationIdRouteImport } from "./routes/_authed/settings.automations.$automationId";
+import { Route as AuthedSettingsArtifactsSharesRouteImport } from "./routes/_authed/settings.artifacts.shares";
 import { Route as AuthedSettingsArtifactsPlatesRouteImport } from "./routes/_authed/settings.artifacts.plates";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
@@ -528,6 +529,12 @@ const AuthedSettingsAutomationsAutomationIdRoute =
     path: "/automations/$automationId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsArtifactsSharesRoute =
+  AuthedSettingsArtifactsSharesRouteImport.update({
+    id: "/shares",
+    path: "/shares",
+    getParentRoute: () => AuthedSettingsArtifactsRoute,
+  } as any);
 const AuthedSettingsArtifactsPlatesRoute =
   AuthedSettingsArtifactsPlatesRouteImport.update({
     id: "/plates",
@@ -800,6 +807,7 @@ export interface FileRoutesByFullPath {
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/artifacts/plates": typeof AuthedSettingsArtifactsPlatesRoute;
+  "/settings/artifacts/shares": typeof AuthedSettingsArtifactsSharesRoute;
   "/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
@@ -906,6 +914,7 @@ export interface FileRoutesByTo {
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/artifacts/plates": typeof AuthedSettingsArtifactsPlatesRoute;
+  "/settings/artifacts/shares": typeof AuthedSettingsArtifactsSharesRoute;
   "/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
@@ -1020,6 +1029,7 @@ export interface FileRoutesById {
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/artifacts/plates": typeof AuthedSettingsArtifactsPlatesRoute;
+  "/_authed/settings/artifacts/shares": typeof AuthedSettingsArtifactsSharesRoute;
   "/_authed/settings/automations/$automationId": typeof AuthedSettingsAutomationsAutomationIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/_authed/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
@@ -1133,6 +1143,7 @@ export interface FileRouteTypes {
     | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
     | "/settings/artifacts/plates"
+    | "/settings/artifacts/shares"
     | "/settings/automations/$automationId"
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
@@ -1239,6 +1250,7 @@ export interface FileRouteTypes {
     | "/settings/agents/$profileId"
     | "/settings/artifacts/$id"
     | "/settings/artifacts/plates"
+    | "/settings/artifacts/shares"
     | "/settings/automations/$automationId"
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
@@ -1352,6 +1364,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/artifacts/plates"
+    | "/_authed/settings/artifacts/shares"
     | "/_authed/settings/automations/$automationId"
     | "/_authed/settings/evaluations/$runId"
     | "/_authed/settings/evaluations/compare"
@@ -1940,6 +1953,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsAutomationsAutomationIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/artifacts/shares": {
+      id: "/_authed/settings/artifacts/shares";
+      path: "/shares";
+      fullPath: "/settings/artifacts/shares";
+      preLoaderRoute: typeof AuthedSettingsArtifactsSharesRouteImport;
+      parentRoute: typeof AuthedSettingsArtifactsRoute;
+    };
     "/_authed/settings/artifacts/plates": {
       id: "/_authed/settings/artifacts/plates";
       path: "/plates";
@@ -2366,6 +2386,7 @@ const AuthedSettingsActivityRouteWithChildren =
 interface AuthedSettingsArtifactsRouteChildren {
   AuthedSettingsArtifactsIdRoute: typeof AuthedSettingsArtifactsIdRoute;
   AuthedSettingsArtifactsPlatesRoute: typeof AuthedSettingsArtifactsPlatesRoute;
+  AuthedSettingsArtifactsSharesRoute: typeof AuthedSettingsArtifactsSharesRoute;
   AuthedSettingsArtifactsIndexRoute: typeof AuthedSettingsArtifactsIndexRoute;
 }
 
@@ -2373,6 +2394,7 @@ const AuthedSettingsArtifactsRouteChildren: AuthedSettingsArtifactsRouteChildren
   {
     AuthedSettingsArtifactsIdRoute: AuthedSettingsArtifactsIdRoute,
     AuthedSettingsArtifactsPlatesRoute: AuthedSettingsArtifactsPlatesRoute,
+    AuthedSettingsArtifactsSharesRoute: AuthedSettingsArtifactsSharesRoute,
     AuthedSettingsArtifactsIndexRoute: AuthedSettingsArtifactsIndexRoute,
   };
 
