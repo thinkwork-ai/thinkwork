@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
@@ -85,11 +86,15 @@ export function MemoryGraphNodeSheet({
   // mention them via semantic search.
   const [memoriesResult] = useQuery({
     query: ComputerMemorySearchQuery,
-    variables: { tenantId, userId, query: node.label, limit: 5 },
+    variables: { tenantId, userId, query: node.label, limit: 15 },
     pause: isMemory || !node.label || !tenantId,
   });
   const relatedMemories: any[] =
     memoriesResult.data?.memorySearch?.records ?? [];
+  const [showAllMemories, setShowAllMemories] = useState(false);
+  const visibleMemories = showAllMemories
+    ? relatedMemories
+    : relatedMemories.slice(0, 5);
 
   return (
     <SheetContent className="sm:max-w-lg flex flex-col">
@@ -142,16 +147,13 @@ export function MemoryGraphNodeSheet({
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
               Memories
             </h4>
-            <div className="space-y-2">
-              {relatedMemories.map((record) => (
-                <div
-                  key={record.memoryRecordId}
-                  className="rounded-md bg-muted/30 px-3 py-2"
-                >
-                  <p className="text-sm leading-relaxed line-clamp-3">
+            <div className="space-y-2.5">
+              {visibleMemories.map((record) => (
+                <div key={record.memoryRecordId}>
+                  <p className="text-xs leading-snug line-clamp-3">
                     {stripTopicTags(record.content?.text ?? "")}
                   </p>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="mt-0.5 flex items-center gap-2.5 text-[11px] text-muted-foreground">
                     {record.createdAt && (
                       <span>
                         {new Date(record.createdAt).toLocaleDateString(
@@ -172,6 +174,17 @@ export function MemoryGraphNodeSheet({
                   </div>
                 </div>
               ))}
+              {relatedMemories.length > 5 && (
+                <button
+                  type="button"
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  onClick={() => setShowAllMemories((v) => !v)}
+                >
+                  {showAllMemories
+                    ? "Show fewer"
+                    : `Show ${relatedMemories.length - 5} more`}
+                </button>
+              )}
             </div>
           </div>
         )}
