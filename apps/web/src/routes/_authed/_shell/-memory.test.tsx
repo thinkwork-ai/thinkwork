@@ -151,6 +151,9 @@ describe("apps/web Memory in-page tab strip", () => {
                 createdAt: "2026-05-11T12:00:00.000Z",
                 namespace: "user_requester-1",
                 strategy: "semantic",
+                // THINK-199: the default view shows curated memory only —
+                // an observation passes the curation filter.
+                factType: "observation",
               },
             ],
           },

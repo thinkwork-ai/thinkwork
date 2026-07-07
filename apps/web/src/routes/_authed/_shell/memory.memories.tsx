@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouterState } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { Search, X } from "lucide-react";
+import { Eye, EyeOff, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -34,6 +34,7 @@ import {
   strategyLabel,
   stripTopicTags,
 } from "@/lib/memory-strategy";
+import { isCuratedMemory } from "@/lib/memory-curation";
 import {
   MemoryDetailSheet,
   type MemoryRow,
@@ -99,6 +100,9 @@ function MemoriesPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  // THINK-199: raw uncorroborated units are hidden by default (mirrors the
+  // THINK-173 show-compiled debug toggle). Search results always show all.
+  const [showRaw, setShowRaw] = useState(false);
   const graphRef = useRef<MemoryGraphHandle>(null);
 
   const effectiveTenantId = tenantId ?? null;
@@ -171,12 +175,23 @@ function MemoriesPage() {
     return recordsResult.data?.memoryRecords ?? [];
   }, [activeSearch, searchResult.data, recordsResult.data]);
 
-  const rows: MemoryRow[] = useMemo(
+  const allRows: MemoryRow[] = useMemo(
     () =>
       rawRecords
         .map(mapRecord)
         .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
     [rawRecords, mapRecord],
+  );
+
+  const rawHiddenCount = useMemo(
+    () =>
+      activeSearch ? 0 : allRows.filter((row) => !isCuratedMemory(row)).length,
+    [allRows, activeSearch],
+  );
+
+  const rows: MemoryRow[] = useMemo(
+    () => (activeSearch || showRaw ? allRows : allRows.filter(isCuratedMemory)),
+    [allRows, activeSearch, showRaw],
   );
 
   const columns: ColumnDef<MemoryRow>[] = useMemo(
@@ -299,20 +314,39 @@ function MemoriesPage() {
             </Tabs>
           </div>
         </div>
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(v) => v && setView(v as MemoryView)}
-          variant="outline"
-          className="ml-auto"
-        >
-          <ToggleGroupItem value="table" className="px-3 text-xs">
-            Table
-          </ToggleGroupItem>
-          <ToggleGroupItem value="graph" className="px-3 text-xs">
-            Graph
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <div className="ml-auto flex items-center gap-2">
+          {view === "table" && !activeSearch && rawHiddenCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRaw((v) => !v)}
+              className="text-xs text-muted-foreground"
+              data-testid="memory-toggle-raw"
+            >
+              {showRaw ? (
+                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+              ) : (
+                <Eye className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {showRaw
+                ? "Hide raw units"
+                : `Show raw units (${rawHiddenCount})`}
+            </Button>
+          )}
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as MemoryView)}
+            variant="outline"
+          >
+            <ToggleGroupItem value="table" className="px-3 text-xs">
+              Table
+            </ToggleGroupItem>
+            <ToggleGroupItem value="graph" className="px-3 text-xs">
+              Graph
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 px-4">
@@ -346,7 +380,9 @@ function MemoriesPage() {
             <p className="text-sm text-muted-foreground">
               {activeSearch
                 ? "No memories match your search."
-                : "No requester memories have been captured yet."}
+                : rawHiddenCount > 0
+                  ? `No curated memories yet — ${rawHiddenCount} raw unit${rawHiddenCount === 1 ? "" : "s"} hidden. Use "Show raw units" to see them.`
+                  : "No requester memories have been captured yet."}
             </p>
           </div>
         ) : (

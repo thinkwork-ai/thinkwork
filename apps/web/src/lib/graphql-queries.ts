@@ -2123,6 +2123,31 @@ export const RejectComputerApprovalMutation = gql`
   ${ComputerApprovalFields}
 `;
 
+/**
+ * THINK-199: lightweight source-thread context for the Memory Detail sheet —
+ * title + a short transcript head so a memory's provenance is readable in
+ * place instead of only via the thread link.
+ */
+export const MemorySourceThreadQuery = gql`
+  query MemorySourceThread($id: ID!) {
+    thread(id: $id) {
+      id
+      title
+      createdAt
+      messages(limit: 3) {
+        edges {
+          node {
+            id
+            role
+            content
+            createdAt
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const ComputerMemoryRecordsQuery = gql`
   query ComputerMemoryRecords(
     $tenantId: ID!
