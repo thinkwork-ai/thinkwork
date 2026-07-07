@@ -57,6 +57,7 @@ import {
   toRuntimeGoalMode,
 } from "../../../lib/goal-mode.js";
 import { parseSkillCreatorCommandMetadata } from "../../../lib/skill-creator/command-metadata.js";
+import { getUserBudgetStatus } from "../../../lib/user-budget-enforcement.js";
 
 // Thread Mode for dispatch decisions (U4/R1/R4): count distinct human
 // participants, union any not-yet-committed additions (the sender and this
@@ -283,6 +284,62 @@ export const sendMessage = async (
     throw new GraphQLError("Goal mode requires default agent dispatch.", {
       extensions: { code: "BAD_USER_INPUT" },
     });
+  }
+  // User-budget fail-fast (pre-persist): a send that would dispatch an agent
+  // turn is rejected here, before the message row exists, so an over-budget
+  // user gets an immediate error instead of a thread that starts and then
+  // dies at the chat-agent-invoke gate. Sends that dispatch nothing
+  // (multiplayer chatter, FORCE_OFF) stay free — human-to-human messages
+  // cost nothing. chat-agent-invoke keeps its own gate for the dispatch
+  // routes that don't come through this mutation.
+  if (isUserMessage && senderType === "user" && senderId) {
+    const wouldDispatchAgentTurn =
+      (hasAgentMentions &&
+        !shouldSuppressAgentMentionDispatch({
+          agentDispatch: i.agentDispatch,
+        })) ||
+      shouldDispatchDefaultAgentTurn({
+        isUserMessage,
+        senderType,
+        agentRequested: i.agentRequested,
+        agentDispatch: i.agentDispatch,
+        dispatchMode: i.dispatchMode,
+        hasAgentMentions,
+        hasAgentProfileMentions,
+        hasComputerThread: Boolean(thread.computer_id),
+        // Pre-transaction prediction, same shape as the goal-mode check.
+        threadMode: await resolveDispatchThreadMode({
+          tenantId: thread.tenant_id,
+          threadId: i.threadId,
+          override: thread.mode_override ?? null,
+          extraUserIds: [
+            senderId,
+            ...parsedMentions
+              .filter((mention) => mention.targetType === "user")
+              .map((mention) => mention.targetId),
+          ],
+        }),
+      });
+    if (wouldDispatchAgentTurn) {
+      let overBudgetError: GraphQLError | null = null;
+      try {
+        const budget = await getUserBudgetStatus({
+          tenantId: thread.tenant_id,
+          userId: senderId,
+        });
+        if (budget.overBudget) {
+          overBudgetError = new GraphQLError(
+            `Monthly budget exceeded: $${budget.spentUsd.toFixed(2)} of $${budget.limitUsd.toFixed(2)} used. Ask your operator to raise the limit or unpause your budget.`,
+            { extensions: { code: "BUDGET_EXCEEDED" } },
+          );
+        }
+      } catch (err) {
+        // Fail open on infra errors — a broken budget lookup must not take
+        // down chat. The chat-agent-invoke gate is the backstop.
+        console.error("[sendMessage] budget pre-check failed:", err);
+      }
+      if (overBudgetError) throw overBudgetError;
+    }
   }
   const messageActivityAt = new Date();
 

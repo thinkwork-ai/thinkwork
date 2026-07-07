@@ -34,8 +34,15 @@ const ORDER: Record<BudgetMinimumReconciliationState, number> = {
   "bill-reconciled": 2,
 };
 
+// Default to enforcing on ALL runtime-observed spend. Stricter floors
+// ("invocation-reconciled" / "bill-reconciled") make enforcement lag —
+// or never fire at all when the reconciliation pipeline hasn't attributed
+// events yet (found live: $115 visible spend vs a $25 limit enforced as $0
+// because zero events were bill-reconciled). Operators who prefer to gate
+// only on reconciled spend can raise the floor via
+// USER_BUDGET_MIN_RECONCILIATION_STATE / BUDGET_MIN_RECONCILIATION_STATE.
 export const DEFAULT_BUDGET_MINIMUM_RECONCILIATION_STATE: BudgetMinimumReconciliationState =
-  "bill-reconciled";
+  "runtime-reported";
 
 export function normalizeBudgetMinimumReconciliationState(
   value: unknown,
