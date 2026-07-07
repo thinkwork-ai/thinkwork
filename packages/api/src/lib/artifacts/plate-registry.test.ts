@@ -263,12 +263,13 @@ describe("tenant document palette parsing", () => {
 });
 
 describe("exemplar builder (KTD7)", () => {
-  it("a plate excluding tw:chart produces an exemplar with no chart block that compiles cleanly", async () => {
+  it("a plate excluding tw:chart produces an exemplar with timeline and no chart block that compiles cleanly", async () => {
     const proposal = await resolvePlate(TENANT, "proposal", fakeStore());
     const exemplar = buildPlateExemplar(proposal!);
     expect(exemplar.markdownBody).not.toContain("tw:chart");
     expect(exemplar.markdownBody).toContain("tw:stats");
     expect(exemplar.markdownBody).toContain("tw:verdict-grid");
+    expect(exemplar.markdownBody).toContain("tw:timeline");
     // The exemplar must compile cleanly through the real pipeline WITH the
     // plate's own directive gate: exactly what save validation compiles.
     const compiled = compileDocument({
@@ -285,6 +286,7 @@ describe("exemplar builder (KTD7)", () => {
     const exemplar = buildPlateExemplar(qbr!);
     expect(exemplar.markdownBody).toContain("tw:stats");
     expect(exemplar.markdownBody).toContain("tw:verdict-grid");
+    expect(exemplar.markdownBody).toContain("tw:timeline");
     expect(exemplar.markdownBody).toContain("tw:chart");
     const compiled = compileDocument({
       plate: qbr!,
@@ -294,6 +296,38 @@ describe("exemplar builder (KTD7)", () => {
     });
     expect(compiled.ok).toBe(true);
     if (compiled.ok) expect(compiled.warnings).toEqual([]);
+  });
+
+  it("a plate excluding tw:timeline rejects it with DIRECTIVE_GENRE_RESTRICTED (AE5)", async () => {
+    const plate = await resolvePlate(
+      TENANT,
+      "rollout-plan",
+      fakeStore([
+        {
+          slug: "rollout-plan",
+          origin: "tenant",
+          config: {
+            displayName: "Rollout Plan",
+            useFor: "Internal rollout plans.",
+            allowedDirectives: ["stats", "verdict-grid"],
+          },
+          hidden: false,
+        },
+      ]),
+    );
+    const result = compileDocument({
+      plate: plate!,
+      title: "Rollout",
+      abstract: "",
+      markdownBody:
+        "## Body\n\n```tw:timeline\nitems:\n  - { label: Kickoff }\n  - { label: Build, current: true }\n  - { label: Launch }\n```\n",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].code).toBe("DIRECTIVE_GENRE_RESTRICTED");
+    expect(result.diagnostics[0].message).toContain("rollout-plan");
+    expect(result.diagnostics[0].message).toContain("tw:stats");
+    expect(result.diagnostics[0].message).toContain("tw:verdict-grid");
   });
 });
 

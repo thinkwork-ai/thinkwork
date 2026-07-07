@@ -786,6 +786,12 @@ cards:
   - { question: Overall health, answer: Strong, note: All commitments met this period, tone: acc }
   - { question: Attention needed, answer: One item, note: Renewal paperwork pending signature, tone: warn }
 \`\`\``,
+  timeline: `\`\`\`tw:timeline
+items:
+  - { label: Kickoff, caption: Goals and owners locked, date: Week 1 }
+  - { label: Rollout, caption: Phased team onboarding, current: true }
+  - { label: Full adoption, date: Q4 }
+\`\`\``,
   chart: `\`\`\`tw:chart
 type: bar
 title: Quarterly momentum
