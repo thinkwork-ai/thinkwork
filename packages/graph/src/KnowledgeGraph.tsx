@@ -275,12 +275,21 @@ export const KnowledgeGraph = forwardRef<
     pause: !tenantId,
   });
 
-  const prevNodesRef = useRef<KnowledgeGraphNode[] | null>(null);
+  const prevGraphRef = useRef<{
+    key: string;
+    data: { nodes: KnowledgeGraphNode[]; links: KnowledgeGraphEdge[] };
+  } | null>(null);
   const graphData = useMemo(() => {
+    // Content-keyed identity: identical refetch payloads keep the existing
+    // graphData object so the engine never restarts for them.
+    const key = JSON.stringify(result.data?.knowledgeGraphGraph ?? null);
+    if (prevGraphRef.current && prevGraphRef.current.key === key) {
+      return prevGraphRef.current.data;
+    }
     const data = buildKnowledgeGraphData(result.data?.knowledgeGraphGraph);
     // Keep simulation positions and user-drag pins stable across refetches.
-    carryNodePositions(prevNodesRef.current, data.nodes);
-    prevNodesRef.current = data.nodes;
+    carryNodePositions(prevGraphRef.current?.data.nodes ?? null, data.nodes);
+    prevGraphRef.current = { key, data };
     return data;
   }, [result.data]);
 

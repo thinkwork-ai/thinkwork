@@ -378,8 +378,21 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // Filter mute is in-place material opacity (see effect below). Isolated
     // compiled pages stay visible so the graph and table agree on whether
     // wiki data exists.
-    const prevNodesRef = useRef<WikiGraphNode[] | null>(null);
+    const prevGraphRef = useRef<{
+      key: string;
+      data: { nodes: WikiGraphNode[]; links: WikiGraphLink[] };
+    } | null>(null);
     const graphData = useMemo(() => {
+      // Content-keyed identity: cache-and-network re-emits an identical
+      // payload as a fresh object ~1s after the cached render; rebuilding
+      // graphData for it restarts the engine and visibly nudges the
+      // layout. Byte-identical payloads keep the existing object.
+      const key = JSON.stringify(
+        isMultiAgent ? multiResults : (singleResult.data?.wikiGraph ?? null),
+      );
+      if (prevGraphRef.current && prevGraphRef.current.key === key) {
+        return prevGraphRef.current.data;
+      }
       const data = isMultiAgent
         ? buildConnectedWikiGraphData(allNodes, Object.entries(multiResults))
         : buildConnectedWikiGraphData(allNodes, [
@@ -387,8 +400,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           ]);
       // Keep simulation positions and user-drag pins stable across
       // refetches — fresh node objects would otherwise scatter the layout.
-      carryNodePositions(prevNodesRef.current, data.nodes);
-      prevNodesRef.current = data.nodes;
+      carryNodePositions(prevGraphRef.current?.data.nodes ?? null, data.nodes);
+      prevGraphRef.current = { key, data };
       return data;
     }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
 

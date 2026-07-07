@@ -319,8 +319,19 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     // opacity in-place (see effect below), not by rebuilding graphData.
     // Rebuilding would give ForceGraph3D a new identity → restart the
     // simulation and reset the camera on every keystroke.
-    const prevNodesRef = useRef<MemoryGraphNode[] | null>(null);
+    const prevGraphRef = useRef<{
+      key: string;
+      data: { nodes: MemoryGraphNode[]; links: any[] };
+    } | null>(null);
     const graphData = useMemo(() => {
+      // Content-keyed identity: identical refetch payloads keep the
+      // existing graphData object so the engine never restarts for them.
+      const key = JSON.stringify(
+        isMultiAgent ? multiResults : (singleResult.data?.memoryGraph ?? null),
+      );
+      if (prevGraphRef.current && prevGraphRef.current.key === key) {
+        return prevGraphRef.current.data;
+      }
       const nodeIds = new Set(allNodes.map((n) => n.id));
       const links: {
         source: string;
@@ -361,9 +372,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       }
       // Keep simulation positions and user-drag pins stable across
       // refetches — fresh node objects would otherwise scatter the layout.
-      carryNodePositions(prevNodesRef.current, allNodes);
-      prevNodesRef.current = allNodes;
-      return { nodes: allNodes, links };
+      carryNodePositions(prevGraphRef.current?.data.nodes ?? null, allNodes);
+      const data = { nodes: allNodes, links };
+      prevGraphRef.current = { key, data };
+      return data;
     }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
 
     // Community layout runs at graphData-identity cadence only — never on
