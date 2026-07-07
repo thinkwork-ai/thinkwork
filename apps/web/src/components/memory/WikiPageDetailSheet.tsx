@@ -3,7 +3,6 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import {
   COMMUNITY_COLORS,
   PAGE_TYPE_BADGE_CLASSES,
-  PAGE_TYPE_BORDER_CLASSES,
   pageTypeLabel,
   type WikiPageType,
 } from "@thinkwork/graph";
@@ -78,10 +77,10 @@ function NodeBadge({
       type="button"
       disabled={!onClick}
       onClick={onClick}
-      className="inline-flex max-w-full items-center truncate rounded-full border px-2 py-0.5 text-xs font-medium transition-opacity enabled:hover:opacity-75 disabled:cursor-default"
+      className="inline-flex min-w-0 max-w-[38%] items-center rounded-full border px-1.5 py-px text-[11px] font-medium transition-opacity enabled:hover:opacity-75 disabled:cursor-default"
       style={{ borderColor: color, backgroundColor: `${color}26` }}
     >
-      {label}
+      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -223,7 +222,7 @@ export function WikiPageDetailSheet({
                               ) : (
                                 <div
                                   key={i}
-                                  className="flex flex-wrap items-center gap-1.5"
+                                  className="flex items-center gap-1.5 overflow-hidden"
                                 >
                                   <NodeBadge
                                     label={row.source}
@@ -233,7 +232,7 @@ export function WikiPageDetailSheet({
                                     }
                                     onClick={edgeClickFor(row.source)}
                                   />
-                                  <span className="whitespace-nowrap font-mono text-[10px] tracking-tight text-muted-foreground">
+                                  <span className="shrink-0 whitespace-nowrap font-mono text-[9px] tracking-tight text-muted-foreground">
                                     ── {row.relationship.toUpperCase()} ──▶
                                   </span>
                                   <NodeBadge
@@ -277,16 +276,6 @@ export function WikiPageDetailSheet({
                   className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => onEdgeClick(edge)}
                 >
-                  <Badge
-                    variant="outline"
-                    className={`shrink-0 text-[10px] mt-0.5 ${
-                      PAGE_TYPE_BORDER_CLASSES[
-                        edge.targetType?.toUpperCase() as WikiPageType
-                      ] ?? "border-muted text-muted-foreground"
-                    }`}
-                  >
-                    Page
-                  </Badge>
                   <div className="min-w-0">
                     <p className="font-medium text-foreground truncate">
                       {edge.targetLabel}
