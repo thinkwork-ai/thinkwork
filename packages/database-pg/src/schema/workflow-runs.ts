@@ -26,6 +26,7 @@ import { workflowVersions, workflows } from "./workflows";
 export const WORKFLOW_RUN_STATUSES = [
   "queued",
   "running",
+  "waiting_for_human",
   "succeeded",
   "failed",
   "canceled",

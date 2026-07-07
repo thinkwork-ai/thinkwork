@@ -11655,7 +11655,8 @@ export enum WorkflowRunStatus {
   Queued = 'queued',
   Running = 'running',
   Succeeded = 'succeeded',
-  TimedOut = 'timed_out'
+  TimedOut = 'timed_out',
+  WaitingForHuman = 'waiting_for_human'
 }
 
 export type WorkflowTemplateBinding = {

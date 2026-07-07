@@ -234,6 +234,10 @@ export const SettingsWorkflowsQuery = gql`
       visibility
       primaryTriggerFamily
       currentVersionNumber
+      currentVersion {
+        id
+        definitionSnapshot
+      }
       capabilityFlags
       readinessState
       readinessReasons
@@ -483,6 +487,20 @@ export const SettingsWorkflowRunQuery = gql`
         retentionExpiresAt
       }
       createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const ResolveWorkflowApprovalMutation = gql`
+  mutation ResolveWorkflowApproval(
+    $runId: ID!
+    $approve: Boolean!
+    $note: String
+  ) {
+    resolveWorkflowApproval(runId: $runId, approve: $approve, note: $note) {
+      id
+      status
       updatedAt
     }
   }

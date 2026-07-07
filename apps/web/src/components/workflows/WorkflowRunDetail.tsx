@@ -1,15 +1,19 @@
-import { useEffect } from "react";
-import { useQuery } from "urql";
-import { Badge } from "@thinkwork/ui";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "urql";
+import { Button, Textarea } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { RoutineExecutionDetailView } from "@/components/settings/SettingsRoutineExecutionDetail";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { SettingsWorkflowRunQuery } from "@/lib/graphql-queries";
+import {
+  ResolveWorkflowApprovalMutation,
+  SettingsWorkflowRunQuery,
+} from "@/lib/graphql-queries";
 import {
   WorkflowEvidencePanel,
   type WorkflowEvidenceItem,
 } from "./WorkflowEvidencePanel";
+import { WorkflowRunTimeline } from "./WorkflowRunTimeline";
 import {
   DefinitionList,
   formatDateTime,
@@ -84,6 +88,23 @@ const TERMINAL_STATUSES = new Set([
   "blocked_not_ready",
 ]);
 
+/**
+ * Build a Step Functions console link from an execution ARN, e.g.
+ * arn:aws:states:us-east-1:123:execution:machine:name. Returns null when the
+ * value is not a states execution ARN.
+ */
+function stepFunctionsConsoleUrl(executionArn: string): string | null {
+  const parts = executionArn.split(":");
+  if (parts.length < 6 || parts[0] !== "arn" || parts[2] !== "states") {
+    return null;
+  }
+  const region = parts[3];
+  if (!region) return null;
+  const base = `https://${region}.console.aws.amazon.com/states/home`;
+  const arn = encodeURIComponent(executionArn);
+  return `${base}?region=${region}#/v2/executions/details/${arn}`;
+}
+
 export function WorkflowRunDetail({
   workflowId,
   runId,
@@ -101,6 +122,7 @@ export function WorkflowRunDetail({
   const isTerminal = run
     ? TERMINAL_STATUSES.has(run.status.toLowerCase())
     : true;
+  const isWaitingForHuman = run?.status.toLowerCase() === "waiting_for_human";
 
   useEffect(() => {
     if (isTerminal) return;
@@ -110,6 +132,29 @@ export function WorkflowRunDetail({
     );
     return () => clearInterval(timer);
   }, [isTerminal, refetch]);
+
+  const [approvalState, resolveApproval] = useMutation(
+    ResolveWorkflowApprovalMutation,
+  );
+  const [note, setNote] = useState("");
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const approvalDisabled = approvalState.fetching || approvalError !== null;
+
+  const decide = async (approve: boolean) => {
+    setApprovalError(null);
+    const res = await resolveApproval({
+      runId,
+      approve,
+      note: note.trim() || null,
+    });
+    if (res.error) {
+      setApprovalError(
+        "This run has already left the waiting state — refresh to see its current status.",
+      );
+      return;
+    }
+    refetch({ requestPolicy: "network-only" });
+  };
 
   usePageHeaderActions({
     title: run?.workflow?.name ?? "Workflow run",
@@ -151,6 +196,14 @@ export function WorkflowRunDetail({
     run.engineBinding?.routineId ?? nestedString(backendRef, "routineId");
   const routineExecutionId = nestedString(backendRef, "routineExecutionId");
   const source = sourceLabel(run.engineBinding);
+  const executionArn =
+    nestedString(backendRef, "executionArn") ??
+    (run.backendExecutionId?.startsWith("arn:aws:states:")
+      ? run.backendExecutionId
+      : null);
+  const diagnosticsUrl = executionArn
+    ? stepFunctionsConsoleUrl(executionArn)
+    : null;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto p-6">
@@ -189,10 +242,65 @@ export function WorkflowRunDetail({
               },
               { label: "Execution ID", value: run.backendExecutionId ?? "—" },
               { label: "Correlation", value: run.correlationId ?? "—" },
+              ...(diagnosticsUrl
+                ? [
+                    {
+                      label: "Diagnostics",
+                      value: (
+                        <a
+                          href={diagnosticsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          Open execution
+                        </a>
+                      ),
+                    },
+                  ]
+                : []),
             ]}
           />
         </InfoCard>
       </div>
+
+      {isWaitingForHuman ? (
+        <InfoCard title="Approval required">
+          <p className="text-sm text-muted-foreground">
+            This run is paused on a human-approval checkpoint. Approve to
+            continue the workflow, or deny to cancel the run.
+          </p>
+          <Textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Add an optional note for the record…"
+            rows={2}
+            disabled={approvalDisabled}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={approvalDisabled}
+              onClick={() => decide(true)}
+            >
+              Approve
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={approvalDisabled}
+              onClick={() => decide(false)}
+            >
+              Deny
+            </Button>
+          </div>
+          {approvalError ? (
+            <p className="text-sm text-destructive">{approvalError}</p>
+          ) : null}
+        </InfoCard>
+      ) : null}
 
       {run.errorCode || run.errorMessage ? (
         <InfoCard title="Failure">
@@ -203,39 +311,7 @@ export function WorkflowRunDetail({
       ) : null}
 
       <InfoCard title="Timeline">
-        {run.events.length ? (
-          <ol className="space-y-3">
-            {run.events.map((event) => (
-              <li
-                key={event.id}
-                className="rounded-md border border-border/70 p-3"
-              >
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {titleize(event.eventType)}
-                  </Badge>
-                  {event.eventStatus ? (
-                    <Badge variant="outline" className="text-xs">
-                      {titleize(event.eventStatus)}
-                    </Badge>
-                  ) : null}
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateTime(event.occurredAt)}
-                  </span>
-                </div>
-                {event.message ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {event.message}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No run events have been recorded yet.
-          </p>
-        )}
+        <WorkflowRunTimeline events={run.events} />
       </InfoCard>
 
       <WorkflowEvidencePanel evidence={run.evidence} />
