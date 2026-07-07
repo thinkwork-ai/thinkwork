@@ -285,6 +285,11 @@ export async function handleDispatchAgent(
   if (!existing) {
     const workflowName = (input as { workflowName?: unknown }).workflowName;
     const spaceId = (input as { spaceId?: unknown }).spaceId;
+    // Pi requires a human invoker (user_id) on every invocation; the trigger
+    // paths record who started the run in input_summary.requestedByUserId and
+    // each step's wakeup carries it as the requesting actor.
+    const requestedByUserId = (input as { requestedByUserId?: unknown })
+      .requestedByUserId;
     const payload = buildWorkflowStepWakeupPayload({
       workflowRunId: run.id,
       workflowName: typeof workflowName === "string" ? workflowName : null,
@@ -304,6 +309,12 @@ export async function handleDispatchAgent(
       payload,
       status: "queued",
       idempotency_key: idempotencyKey,
+      ...(typeof requestedByUserId === "string" && requestedByUserId
+        ? {
+            requested_by_actor_type: "user",
+            requested_by_actor_id: requestedByUserId,
+          }
+        : {}),
       requested_at: now,
       created_at: now,
     });

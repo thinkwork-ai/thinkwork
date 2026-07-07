@@ -34,6 +34,8 @@ import {
 } from "@thinkwork/database-pg";
 import {
   agents,
+  scheduledJobs,
+  users,
   workflowRunEvents,
   workflowRuns,
   workflowVersions,
@@ -82,7 +84,15 @@ async function resolveTenantAndAgent(db: Db) {
     .where(eq(agents.is_platform_default, true))
     .limit(1);
   if (!agent) throw new Error("no platform-default agent on this stage");
-  return { tenantId: agent.tenant_id, agentId: agent.id };
+  // Pi requires a human invoker on every agent turn (user_id) — act as an
+  // existing tenant user, the same way schedule fires act as the job owner.
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.tenant_id, agent.tenant_id))
+    .limit(1);
+  if (!user) throw new Error("no user in the platform agent's tenant");
+  return { tenantId: agent.tenant_id, agentId: agent.id, userId: user.id };
 }
 
 async function seedWorkflow(db: Db, tenantId: string, tag: string) {
@@ -125,7 +135,7 @@ async function seedWorkflow(db: Db, tenantId: string, tag: string) {
       tenant_id: tenantId,
       workflow_id: workflow.id,
       version_number: 1,
-      version_status: "published",
+      version_status: "active",
       definition_snapshot: definition,
       published_at: new Date(),
     })
@@ -181,7 +191,7 @@ function assertWellFormedLedger(shape: string[]) {
 describe.skipIf(skip)("integration: shared workflow interpreter (live)", () => {
   it("manual start runs the loop to terminal with a well-formed ledger", async () => {
     const db = createDb(DATABASE_URL!);
-    const { tenantId, agentId } = await resolveTenantAndAgent(db);
+    const { tenantId, agentId, userId } = await resolveTenantAndAgent(db);
     const tag = `m${Date.now().toString(36)}`;
     const { workflowId, versionId } = await seedWorkflow(db, tenantId, tag);
 
@@ -203,6 +213,7 @@ describe.skipIf(skip)("integration: shared workflow interpreter (live)", () => {
         agentId,
         workflowName: `itest interpreter ${tag}`,
         spaceId: null,
+        requestedByUserId: userId,
       },
     });
 
@@ -238,14 +249,29 @@ describe.skipIf(skip)("integration: shared workflow interpreter (live)", () => {
 
   it("workflow_schedule fire via the deployed job-trigger produces the same ledger shape (AE4 + single dispatcher)", async () => {
     const db = createDb(DATABASE_URL!);
-    const { tenantId } = await resolveTenantAndAgent(db);
+    const { tenantId, userId } = await resolveTenantAndAgent(db);
     const tag = `s${Date.now().toString(36)}`;
     const { workflowId } = await seedWorkflow(db, tenantId, tag);
+
+    // A real scheduled_jobs row, exactly as job-schedule-manager would write
+    // it: job-trigger resolves the run's acting user from the job owner.
+    const [job] = await db
+      .insert(scheduledJobs)
+      .values({
+        tenant_id: tenantId,
+        trigger_type: "workflow_schedule",
+        workflow_id: workflowId,
+        name: `itest interpreter schedule ${tag}`,
+        created_by_type: "user",
+        created_by_id: userId,
+        enabled: true,
+      })
+      .returning({ id: scheduledJobs.id });
 
     const lambda = new LambdaClient({});
     const fireId = `itest-fire-${tag}`;
     const payload = {
-      triggerId: `itest-trigger-${tag}`,
+      triggerId: job.id,
       triggerType: "workflow_schedule",
       tenantId,
       workflowId,
