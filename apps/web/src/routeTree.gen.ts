@@ -36,7 +36,6 @@ import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/se
 import { Route as AuthedSettingsActivityRouteImport } from "./routes/_authed/settings.activity";
 import { Route as AuthedShellProfileRouteImport } from "./routes/_authed/_shell/profile";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
-import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
 import { Route as AuthedSettingsWorkflowsIndexRouteImport } from "./routes/_authed/settings.workflows.index";
@@ -56,7 +55,6 @@ import { Route as AuthedSettingsAgentLoopsIndexRouteImport } from "./routes/_aut
 import { Route as AuthedShellWorkItemsIndexRouteImport } from "./routes/_authed/_shell/work-items.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
-import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_shell/memory.index";
 import { Route as AuthedShellCustomizeIndexRouteImport } from "./routes/_authed/_shell/customize.index";
 import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
@@ -92,10 +90,6 @@ import { Route as AuthedSettingsActivityThreadsRouteImport } from "./routes/_aut
 import { Route as AuthedShellWorkItemsWorkItemIdRouteImport } from "./routes/_authed/_shell/work-items.$workItemId";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
 import { Route as AuthedShellSpacesSpaceIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId";
-import { Route as AuthedShellMemoryPagesRouteImport } from "./routes/_authed/_shell/memory.pages";
-import { Route as AuthedShellMemoryMemoriesRouteImport } from "./routes/_authed/_shell/memory.memories";
-import { Route as AuthedShellMemoryKbsRouteImport } from "./routes/_authed/_shell/memory.kbs";
-import { Route as AuthedShellMemoryBrainRouteImport } from "./routes/_authed/_shell/memory.brain";
 import { Route as AuthedShellCustomizeWorkflowsRouteImport } from "./routes/_authed/_shell/customize.workflows";
 import { Route as AuthedShellCustomizeSkillsRouteImport } from "./routes/_authed/_shell/customize.skills";
 import { Route as AuthedShellAutomationsAutomationIdRouteImport } from "./routes/_authed/_shell/automations.$automationId";
@@ -111,7 +105,6 @@ import { Route as AuthedSettingsPluginsN8nSettingsRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
-import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
 import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$pluginKey.$appRouteSegment";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
@@ -260,11 +253,6 @@ const AuthedShellNewRoute = AuthedShellNewRouteImport.update({
   path: "/new",
   getParentRoute: () => AuthedShellRoute,
 } as any);
-const AuthedShellMemoryRoute = AuthedShellMemoryRouteImport.update({
-  id: "/memory",
-  path: "/memory",
-  getParentRoute: () => AuthedShellRoute,
-} as any);
 const AuthedShellCustomizeRoute = AuthedShellCustomizeRouteImport.update({
   id: "/customize",
   path: "/customize",
@@ -374,11 +362,6 @@ const AuthedShellSpacesIndexRoute = AuthedShellSpacesIndexRouteImport.update({
   id: "/spaces/",
   path: "/spaces/",
   getParentRoute: () => AuthedShellRoute,
-} as any);
-const AuthedShellMemoryIndexRoute = AuthedShellMemoryIndexRouteImport.update({
-  id: "/",
-  path: "/",
-  getParentRoute: () => AuthedShellMemoryRoute,
 } as any);
 const AuthedShellCustomizeIndexRoute =
   AuthedShellCustomizeIndexRouteImport.update({
@@ -588,27 +571,6 @@ const AuthedShellSpacesSpaceIdRoute =
     path: "/spaces/$spaceId",
     getParentRoute: () => AuthedShellRoute,
   } as any);
-const AuthedShellMemoryPagesRoute = AuthedShellMemoryPagesRouteImport.update({
-  id: "/pages",
-  path: "/pages",
-  getParentRoute: () => AuthedShellMemoryRoute,
-} as any);
-const AuthedShellMemoryMemoriesRoute =
-  AuthedShellMemoryMemoriesRouteImport.update({
-    id: "/memories",
-    path: "/memories",
-    getParentRoute: () => AuthedShellMemoryRoute,
-  } as any);
-const AuthedShellMemoryKbsRoute = AuthedShellMemoryKbsRouteImport.update({
-  id: "/kbs",
-  path: "/kbs",
-  getParentRoute: () => AuthedShellMemoryRoute,
-} as any);
-const AuthedShellMemoryBrainRoute = AuthedShellMemoryBrainRouteImport.update({
-  id: "/brain",
-  path: "/brain",
-  getParentRoute: () => AuthedShellMemoryRoute,
-} as any);
 const AuthedShellCustomizeWorkflowsRoute =
   AuthedShellCustomizeWorkflowsRouteImport.update({
     id: "/workflows",
@@ -698,12 +660,6 @@ const AuthedSettingsEvaluationsDatasetsSlugRoute =
     path: "/evaluations/datasets/$slug",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedShellMemoryKbsKbIdRoute =
-  AuthedShellMemoryKbsKbIdRouteImport.update({
-    id: "/$kbId",
-    path: "/$kbId",
-    getParentRoute: () => AuthedShellMemoryKbsRoute,
-  } as any);
 const AuthedShellAppsPluginKeyAppRouteSegmentRoute =
   AuthedShellAppsPluginKeyAppRouteSegmentRouteImport.update({
     id: "/apps/$pluginKey/$appRouteSegment",
@@ -770,7 +726,6 @@ export interface FileRoutesByFullPath {
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
-  "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
@@ -794,10 +749,6 @@ export interface FileRoutesByFullPath {
   "/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
-  "/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
-  "/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
-  "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
@@ -833,7 +784,6 @@ export interface FileRoutesByFullPath {
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/customize/": typeof AuthedShellCustomizeIndexRoute;
-  "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
   "/work-items/": typeof AuthedShellWorkItemsIndexRoute;
@@ -852,7 +802,6 @@ export interface FileRoutesByFullPath {
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
-  "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -901,10 +850,6 @@ export interface FileRoutesByTo {
   "/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
-  "/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
-  "/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
-  "/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
@@ -940,7 +885,6 @@ export interface FileRoutesByTo {
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
   "/automations": typeof AuthedShellAutomationsIndexRoute;
   "/customize": typeof AuthedShellCustomizeIndexRoute;
-  "/memory": typeof AuthedShellMemoryIndexRoute;
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
   "/work-items": typeof AuthedShellWorkItemsIndexRoute;
@@ -959,7 +903,6 @@ export interface FileRoutesByTo {
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows": typeof AuthedSettingsWorkflowsIndexRoute;
   "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
-  "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -992,7 +935,6 @@ export interface FileRoutesById {
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
-  "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/_shell/profile": typeof AuthedShellProfileRoute;
   "/_authed/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
@@ -1016,10 +958,6 @@ export interface FileRoutesById {
   "/_authed/_shell/automations/$automationId": typeof AuthedShellAutomationsAutomationIdRoute;
   "/_authed/_shell/customize/skills": typeof AuthedShellCustomizeSkillsRoute;
   "/_authed/_shell/customize/workflows": typeof AuthedShellCustomizeWorkflowsRoute;
-  "/_authed/_shell/memory/brain": typeof AuthedShellMemoryBrainRoute;
-  "/_authed/_shell/memory/kbs": typeof AuthedShellMemoryKbsRouteWithChildren;
-  "/_authed/_shell/memory/memories": typeof AuthedShellMemoryMemoriesRoute;
-  "/_authed/_shell/memory/pages": typeof AuthedShellMemoryPagesRoute;
   "/_authed/_shell/spaces/$spaceId": typeof AuthedShellSpacesSpaceIdRouteWithChildren;
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/_shell/work-items/$workItemId": typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
@@ -1055,7 +993,6 @@ export interface FileRoutesById {
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/_authed/_shell/customize/": typeof AuthedShellCustomizeIndexRoute;
-  "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
   "/_authed/_shell/work-items/": typeof AuthedShellWorkItemsIndexRoute;
@@ -1074,7 +1011,6 @@ export interface FileRoutesById {
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/_authed/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/_authed/_shell/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
-  "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -1106,7 +1042,6 @@ export interface FileRouteTypes {
     | "/onboarding/welcome"
     | "/automations"
     | "/customize"
-    | "/memory"
     | "/new"
     | "/profile"
     | "/settings/activity"
@@ -1130,10 +1065,6 @@ export interface FileRouteTypes {
     | "/automations/$automationId"
     | "/customize/skills"
     | "/customize/workflows"
-    | "/memory/brain"
-    | "/memory/kbs"
-    | "/memory/memories"
-    | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/work-items/$workItemId"
@@ -1169,7 +1100,6 @@ export interface FileRouteTypes {
     | "/artifacts/"
     | "/automations/"
     | "/customize/"
-    | "/memory/"
     | "/spaces/"
     | "/threads/"
     | "/work-items/"
@@ -1188,7 +1118,6 @@ export interface FileRouteTypes {
     | "/settings/webhooks/"
     | "/settings/workflows/"
     | "/apps/$pluginKey/$appRouteSegment"
-    | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
@@ -1237,10 +1166,6 @@ export interface FileRouteTypes {
     | "/automations/$automationId"
     | "/customize/skills"
     | "/customize/workflows"
-    | "/memory/brain"
-    | "/memory/kbs"
-    | "/memory/memories"
-    | "/memory/pages"
     | "/spaces/$spaceId"
     | "/threads/$id"
     | "/work-items/$workItemId"
@@ -1276,7 +1201,6 @@ export interface FileRouteTypes {
     | "/artifacts"
     | "/automations"
     | "/customize"
-    | "/memory"
     | "/spaces"
     | "/threads"
     | "/work-items"
@@ -1295,7 +1219,6 @@ export interface FileRouteTypes {
     | "/settings/webhooks"
     | "/settings/workflows"
     | "/apps/$pluginKey/$appRouteSegment"
-    | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
@@ -1327,7 +1250,6 @@ export interface FileRouteTypes {
     | "/onboarding/welcome"
     | "/_authed/_shell/automations"
     | "/_authed/_shell/customize"
-    | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
     | "/_authed/_shell/profile"
     | "/_authed/settings/activity"
@@ -1351,10 +1273,6 @@ export interface FileRouteTypes {
     | "/_authed/_shell/automations/$automationId"
     | "/_authed/_shell/customize/skills"
     | "/_authed/_shell/customize/workflows"
-    | "/_authed/_shell/memory/brain"
-    | "/_authed/_shell/memory/kbs"
-    | "/_authed/_shell/memory/memories"
-    | "/_authed/_shell/memory/pages"
     | "/_authed/_shell/spaces/$spaceId"
     | "/_authed/_shell/threads/$id"
     | "/_authed/_shell/work-items/$workItemId"
@@ -1390,7 +1308,6 @@ export interface FileRouteTypes {
     | "/_authed/_shell/artifacts/"
     | "/_authed/_shell/automations/"
     | "/_authed/_shell/customize/"
-    | "/_authed/_shell/memory/"
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
     | "/_authed/_shell/work-items/"
@@ -1409,7 +1326,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/webhooks/"
     | "/_authed/settings/workflows/"
     | "/_authed/_shell/apps/$pluginKey/$appRouteSegment"
-    | "/_authed/_shell/memory/kbs/$kbId"
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
@@ -1631,13 +1547,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellNewRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
-    "/_authed/_shell/memory": {
-      id: "/_authed/_shell/memory";
-      path: "/memory";
-      fullPath: "/memory";
-      preLoaderRoute: typeof AuthedShellMemoryRouteImport;
-      parentRoute: typeof AuthedShellRoute;
-    };
     "/_authed/_shell/customize": {
       id: "/_authed/_shell/customize";
       path: "/customize";
@@ -1770,13 +1679,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/spaces/";
       preLoaderRoute: typeof AuthedShellSpacesIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
-    };
-    "/_authed/_shell/memory/": {
-      id: "/_authed/_shell/memory/";
-      path: "/";
-      fullPath: "/memory/";
-      preLoaderRoute: typeof AuthedShellMemoryIndexRouteImport;
-      parentRoute: typeof AuthedShellMemoryRoute;
     };
     "/_authed/_shell/customize/": {
       id: "/_authed/_shell/customize/";
@@ -2023,34 +1925,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellSpacesSpaceIdRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
-    "/_authed/_shell/memory/pages": {
-      id: "/_authed/_shell/memory/pages";
-      path: "/pages";
-      fullPath: "/memory/pages";
-      preLoaderRoute: typeof AuthedShellMemoryPagesRouteImport;
-      parentRoute: typeof AuthedShellMemoryRoute;
-    };
-    "/_authed/_shell/memory/memories": {
-      id: "/_authed/_shell/memory/memories";
-      path: "/memories";
-      fullPath: "/memory/memories";
-      preLoaderRoute: typeof AuthedShellMemoryMemoriesRouteImport;
-      parentRoute: typeof AuthedShellMemoryRoute;
-    };
-    "/_authed/_shell/memory/kbs": {
-      id: "/_authed/_shell/memory/kbs";
-      path: "/kbs";
-      fullPath: "/memory/kbs";
-      preLoaderRoute: typeof AuthedShellMemoryKbsRouteImport;
-      parentRoute: typeof AuthedShellMemoryRoute;
-    };
-    "/_authed/_shell/memory/brain": {
-      id: "/_authed/_shell/memory/brain";
-      path: "/brain";
-      fullPath: "/memory/brain";
-      preLoaderRoute: typeof AuthedShellMemoryBrainRouteImport;
-      parentRoute: typeof AuthedShellMemoryRoute;
-    };
     "/_authed/_shell/customize/workflows": {
       id: "/_authed/_shell/customize/workflows";
       path: "/workflows";
@@ -2156,13 +2030,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/_shell/memory/kbs/$kbId": {
-      id: "/_authed/_shell/memory/kbs/$kbId";
-      path: "/$kbId";
-      fullPath: "/memory/kbs/$kbId";
-      preLoaderRoute: typeof AuthedShellMemoryKbsKbIdRouteImport;
-      parentRoute: typeof AuthedShellMemoryKbsRoute;
-    };
     "/_authed/_shell/apps/$pluginKey/$appRouteSegment": {
       id: "/_authed/_shell/apps/$pluginKey/$appRouteSegment";
       path: "/apps/$pluginKey/$appRouteSegment";
@@ -2261,36 +2128,6 @@ const AuthedShellCustomizeRouteChildren: AuthedShellCustomizeRouteChildren = {
 const AuthedShellCustomizeRouteWithChildren =
   AuthedShellCustomizeRoute._addFileChildren(AuthedShellCustomizeRouteChildren);
 
-interface AuthedShellMemoryKbsRouteChildren {
-  AuthedShellMemoryKbsKbIdRoute: typeof AuthedShellMemoryKbsKbIdRoute;
-}
-
-const AuthedShellMemoryKbsRouteChildren: AuthedShellMemoryKbsRouteChildren = {
-  AuthedShellMemoryKbsKbIdRoute: AuthedShellMemoryKbsKbIdRoute,
-};
-
-const AuthedShellMemoryKbsRouteWithChildren =
-  AuthedShellMemoryKbsRoute._addFileChildren(AuthedShellMemoryKbsRouteChildren);
-
-interface AuthedShellMemoryRouteChildren {
-  AuthedShellMemoryBrainRoute: typeof AuthedShellMemoryBrainRoute;
-  AuthedShellMemoryKbsRoute: typeof AuthedShellMemoryKbsRouteWithChildren;
-  AuthedShellMemoryMemoriesRoute: typeof AuthedShellMemoryMemoriesRoute;
-  AuthedShellMemoryPagesRoute: typeof AuthedShellMemoryPagesRoute;
-  AuthedShellMemoryIndexRoute: typeof AuthedShellMemoryIndexRoute;
-}
-
-const AuthedShellMemoryRouteChildren: AuthedShellMemoryRouteChildren = {
-  AuthedShellMemoryBrainRoute: AuthedShellMemoryBrainRoute,
-  AuthedShellMemoryKbsRoute: AuthedShellMemoryKbsRouteWithChildren,
-  AuthedShellMemoryMemoriesRoute: AuthedShellMemoryMemoriesRoute,
-  AuthedShellMemoryPagesRoute: AuthedShellMemoryPagesRoute,
-  AuthedShellMemoryIndexRoute: AuthedShellMemoryIndexRoute,
-};
-
-const AuthedShellMemoryRouteWithChildren =
-  AuthedShellMemoryRoute._addFileChildren(AuthedShellMemoryRouteChildren);
-
 interface AuthedShellSpacesSpaceIdRouteChildren {
   AuthedShellSpacesSpaceIdThreadsThreadIdRoute: typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
 }
@@ -2324,7 +2161,6 @@ const AuthedShellWorkItemsWorkItemIdRouteWithChildren =
 interface AuthedShellRouteChildren {
   AuthedShellAutomationsRoute: typeof AuthedShellAutomationsRouteWithChildren;
   AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRouteWithChildren;
-  AuthedShellMemoryRoute: typeof AuthedShellMemoryRouteWithChildren;
   AuthedShellNewRoute: typeof AuthedShellNewRoute;
   AuthedShellProfileRoute: typeof AuthedShellProfileRoute;
   AuthedShellActivityThreadIdRoute: typeof AuthedShellActivityThreadIdRoute;
@@ -2345,7 +2181,6 @@ interface AuthedShellRouteChildren {
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellAutomationsRoute: AuthedShellAutomationsRouteWithChildren,
   AuthedShellCustomizeRoute: AuthedShellCustomizeRouteWithChildren,
-  AuthedShellMemoryRoute: AuthedShellMemoryRouteWithChildren,
   AuthedShellNewRoute: AuthedShellNewRoute,
   AuthedShellProfileRoute: AuthedShellProfileRoute,
   AuthedShellActivityThreadIdRoute: AuthedShellActivityThreadIdRoute,

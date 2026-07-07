@@ -3,7 +3,6 @@ import {
   COMPUTER_ADMIN_ROUTE,
   COMPUTER_ARTIFACTS_ROUTE,
   COMPUTER_CUSTOMIZE_ROUTE,
-  COMPUTER_MEMORY_ROUTE,
   COMPUTER_NEW_THREAD_ROUTE,
   COMPUTER_ROUTE_LABELS,
   COMPUTER_THREADS_ROUTE,
@@ -35,12 +34,10 @@ describe("computer route helpers", () => {
     expect(COMPUTER_NEW_THREAD_ROUTE).toBe("/new");
     expect(COMPUTER_ADMIN_ROUTE).toBe("/admin");
     expect(COMPUTER_ARTIFACTS_ROUTE).toBe("/artifacts");
-    expect(COMPUTER_MEMORY_ROUTE).toBe("/memory");
     expect(COMPUTER_ROUTE_LABELS.threads).toBe("Chat");
     expect(COMPUTER_ROUTE_LABELS.newThread).toBe("Spaces");
     expect(COMPUTER_ROUTE_LABELS.admin).toBe("Admin");
     expect(COMPUTER_ROUTE_LABELS.artifacts).toBe("Artifacts");
-    expect(COMPUTER_ROUTE_LABELS.memory).toBe("Memory");
   });
 
   it("exposes the customize route constant + label", () => {

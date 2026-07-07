@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Button, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsMemory,
+  type MemoryRawUnitsController,
   type MemoryRefreshController,
 } from "@/components/settings/SettingsMemory";
 import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
@@ -36,10 +37,18 @@ export function SettingsMemoryHome() {
   const [refreshController, setRefreshController] =
     useState<MemoryRefreshController | null>(null);
   const [refreshPending, setRefreshPending] = useState(false);
+  const [rawUnitsController, setRawUnitsController] =
+    useState<MemoryRawUnitsController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
       setRefreshController(controller);
+    },
+    [],
+  );
+  const updateRawUnitsController = useCallback(
+    (controller: MemoryRawUnitsController | null) => {
+      setRawUnitsController(controller);
     },
     [],
   );
@@ -62,21 +71,42 @@ export function SettingsMemoryHome() {
 
   const refreshAction =
     activeTab === "memory" ? (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className={cn(
-          "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
-          refreshing && "bg-primary/10 text-primary hover:text-primary",
-        )}
-        aria-label="Refresh memory records"
-        title="Refresh memory records"
-        disabled={refreshDisabled}
-        onClick={() => void refreshMemory()}
-      >
-        <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-      </Button>
+      <div className="flex items-center gap-1">
+        {rawUnitsController ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            data-testid="settings-memory-toggle-raw"
+            onClick={() => rawUnitsController.toggle()}
+          >
+            {rawUnitsController.showRaw ? (
+              <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {rawUnitsController.showRaw
+              ? "Hide raw units"
+              : `Show raw units (${rawUnitsController.hiddenCount})`}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={cn(
+            "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+            refreshing && "bg-primary/10 text-primary hover:text-primary",
+          )}
+          aria-label="Refresh memory records"
+          title="Refresh memory records"
+          disabled={refreshDisabled}
+          onClick={() => void refreshMemory()}
+        >
+          <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+        </Button>
+      </div>
     ) : null;
 
   usePageHeaderActions({
@@ -89,7 +119,7 @@ export function SettingsMemoryHome() {
       { to: ONTOLOGY, label: "Ontology" },
     ],
     action: refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}`,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}`,
   });
 
   return (
@@ -98,6 +128,7 @@ export function SettingsMemoryHome() {
         <SettingsMemory
           embedded
           onRefreshControllerChange={updateRefreshController}
+          onRawUnitsControllerChange={updateRawUnitsController}
         />
       ) : null}
       {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
