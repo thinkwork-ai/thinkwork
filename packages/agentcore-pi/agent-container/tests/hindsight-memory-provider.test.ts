@@ -603,17 +603,18 @@ describe("observation signal parsing", () => {
 
     const result = await provider.recall({ query: "anything" });
 
+    // THINK-199: at equal score the consolidated observation ranks first.
     expect(result.memories[0]).toEqual({
-      id: "plain",
-      content: "no signals at all",
-      sourceScope: "user",
-    });
-    expect(result.memories[1]).toEqual({
       id: "meta",
       content: "signals in metadata",
       sourceScope: "user",
       factType: "observation",
       freshness: "stale",
+    });
+    expect(result.memories[1]).toEqual({
+      id: "plain",
+      content: "no signals at all",
+      sourceScope: "user",
     });
   });
 });

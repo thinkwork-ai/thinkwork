@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyPromotionGate,
   containsSecretShapedContent,
+  resolveCandidateContexts,
   type GateCandidate,
 } from "./observation-promotion-gate.js";
 
@@ -159,6 +160,76 @@ describe("applyPromotionGate", () => {
     const db = fakeDb([{ rows: [] }]);
     const result = await applyPromotionGate([], { db });
     expect(result.audit.classifierModelId).toBeTruthy();
-    expect(result.audit.classifierPromptVersion).toBe("v1");
+    expect(result.audit.classifierPromptVersion).toBe("v2");
+  });
+
+  it("passes resolved source context to the classifier (THINK-199)", async () => {
+    const classify = vi.fn(allInstitutional);
+    const db = fakeDb([
+      // resolveNonSharedCandidates: proof units → shared thread
+      {
+        rows: [
+          {
+            id: "00000000-0000-0000-0000-0000000000f1",
+            thread_id: "11111111-0000-0000-0000-000000000001",
+          },
+        ],
+      },
+      { rows: [{ id: "11111111-0000-0000-0000-000000000001" }] },
+      // resolveCandidateContexts: proof units with context + threadId
+      {
+        rows: [
+          {
+            id: "00000000-0000-0000-0000-0000000000f1",
+            context: "thinkwork_thread",
+            thread_id: "11111111-0000-0000-0000-000000000001",
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            id: "11111111-0000-0000-0000-000000000001",
+            title: "Acme renewal planning",
+          },
+        ],
+      },
+    ]);
+    await applyPromotionGate([candidate({})], { db, classify });
+    expect(classify).toHaveBeenCalledWith([
+      {
+        id: "00000000-0000-0000-0000-00000000000a",
+        text: "Acme Corp renewed their annual contract",
+        context: 'from thread "Acme renewal planning"',
+      },
+    ]);
+  });
+});
+
+describe("resolveCandidateContexts", () => {
+  it("labels non-thread proof contexts with friendly names", async () => {
+    const db = fakeDb([
+      {
+        rows: [
+          {
+            id: "00000000-0000-0000-0000-0000000000f1",
+            context: "thinkwork_document",
+            thread_id: null,
+          },
+        ],
+      },
+    ]);
+    const contexts = await resolveCandidateContexts(db, [candidate({})]);
+    expect(contexts.get("00000000-0000-0000-0000-00000000000a")).toBe(
+      "from emitted document",
+    );
+  });
+
+  it("degrades to no context on query failure", async () => {
+    const db = {
+      execute: vi.fn().mockRejectedValue(new Error("db down")),
+    } as any;
+    const contexts = await resolveCandidateContexts(db, [candidate({})]);
+    expect(contexts.size).toBe(0);
   });
 });

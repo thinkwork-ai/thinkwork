@@ -178,7 +178,7 @@ describe("loadObservationsKnowledgeGraphSource", () => {
       "hindsight_observation",
     );
     expect(result.bundle.diagnostics.promotedCount).toBe(1);
-    expect(result.bundle.diagnostics.classifierPromptVersion).toBe("v1");
+    expect(result.bundle.diagnostics.classifierPromptVersion).toBe("v2");
     expect(result.gate.audit.promotedIds).toHaveLength(1);
     expect(result.nextCursors.size).toBe(1);
   });

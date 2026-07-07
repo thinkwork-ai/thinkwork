@@ -1,5 +1,7 @@
 import { Loader2, Trash2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "urql";
+import { MemorySourceThreadQuery } from "@/lib/graphql-queries";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -127,13 +129,7 @@ export function MemoryDetailSheet({
           <MemoryContent text={record.text} />
 
           {record.threadId && (
-            <Link
-              to="/threads/$id"
-              params={{ id: record.threadId }}
-              className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 hover:underline"
-            >
-              View source thread →
-            </Link>
+            <SourceThreadContext threadId={record.threadId} />
           )}
 
           <div className="border-t border-muted pt-4 space-y-3">
@@ -262,6 +258,63 @@ export function MemoryDetailSheet({
         </div>
       </div>
     </SheetContent>
+  );
+}
+
+interface SourceThreadResult {
+  thread?: {
+    id: string;
+    title?: string | null;
+    createdAt?: string | null;
+    messages?: {
+      edges?: Array<{
+        node?: {
+          id: string;
+          role?: string | null;
+          content?: string | null;
+        } | null;
+      } | null> | null;
+    } | null;
+  } | null;
+}
+
+/**
+ * THINK-199: show the memory's source-thread context (title + a short
+ * transcript excerpt) in place — provenance shouldn't require leaving the
+ * sheet. Falls back to the plain link while loading or if the thread is
+ * unreadable.
+ */
+function SourceThreadContext({ threadId }: { threadId: string }) {
+  const [result] = useQuery<SourceThreadResult>({
+    query: MemorySourceThreadQuery,
+    variables: { id: threadId },
+  });
+  const thread = result.data?.thread;
+  const excerpt = (thread?.messages?.edges ?? [])
+    .map((edge) => edge?.node)
+    .find((node) => node?.content?.trim())
+    ?.content?.trim();
+
+  return (
+    <div className="rounded-md border border-muted bg-muted/30 p-3 space-y-1.5">
+      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
+        Source thread
+      </p>
+      {thread?.title && <p className="text-sm font-medium">{thread.title}</p>}
+      {excerpt && (
+        <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+          {excerpt.slice(0, 280)}
+          {excerpt.length > 280 ? "…" : ""}
+        </p>
+      )}
+      <Link
+        to="/threads/$id"
+        params={{ id: threadId }}
+        className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 hover:underline"
+      >
+        View source thread →
+      </Link>
+    </div>
   );
 }
 
