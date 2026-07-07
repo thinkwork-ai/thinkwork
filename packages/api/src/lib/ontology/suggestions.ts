@@ -510,15 +510,15 @@ export async function collectOntologySuggestionSources(args: {
     if (evidence) observations.push({ ...evidence, text });
   }
 
-  const hindsight = await collectHindsightSuggestionObservations({
+  const hindsightSources = await collectHindsightSuggestionObservations({
     tenantId: args.tenantId,
     db,
     memoryAdapter: args.memoryAdapter,
     userLimit: args.hindsightUserLimit ?? HINDSIGHT_SCAN_USER_LIMIT,
     recordLimit: args.hindsightRecordLimit ?? HINDSIGHT_SCAN_RECORD_LIMIT,
   });
-  observations.push(...hindsight.observations);
-  providerStatuses.push(hindsight.providerStatus);
+  observations.push(...hindsightSources.observations);
+  providerStatuses.push(hindsightSources.providerStatus);
 
   return { observations, providerStatuses };
 }

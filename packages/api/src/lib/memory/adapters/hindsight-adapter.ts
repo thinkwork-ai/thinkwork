@@ -14,7 +14,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { getDb } from "@thinkwork/database-pg";
+import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
 import type {
   ListRecordsUpdatedSinceRequest,
   ListRecordsUpdatedSinceResult,
@@ -153,7 +153,14 @@ export class HindsightAdapter implements MemoryAdapter {
   private readonly bankConfigInFlight = new Map<string, Promise<void>>();
   /** Per-bank last-failure timestamp for the ensure cooldown. */
   private readonly bankConfigFailures = new Map<string, number>();
+  /** Primary (thinkwork) handle — agents/tenant_members/spaces lookups. */
   private readonly db = getDb();
+  /**
+   * Hindsight handle — pure `memory_units` reads/writes route here. Until the
+   * cutover env var is set, `getHindsightDb()` returns the same handle as
+   * `getDb()`, so behavior is byte-identical.
+   */
+  private readonly hdb = getHindsightDb();
 
   constructor(opts: HindsightAdapterOptions) {
     if (!opts.endpoint) {
@@ -513,13 +520,13 @@ export class HindsightAdapter implements MemoryAdapter {
 
     let result: any;
     try {
-      result = await this.db.execute(sql`
+      result = await this.hdb.execute(sql`
 				SELECT
 					id, bank_id, text, context, fact_type,
 					event_date, occurred_start, occurred_end,
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at
-				FROM hindsight.memory_units
+				FROM ${hindsightSql()}memory_units
 				WHERE bank_id IN (${sql.join(
           bankIds.map((bankId) => sql`${bankId}`),
           sql`, `,
@@ -545,6 +552,11 @@ export class HindsightAdapter implements MemoryAdapter {
 
     let result: any;
     try {
+      // CUTOVER BLOCKER (THINK-220): this statement joins Hindsight
+      // `memory_units` to thinkwork `tenant_members`/`spaces`/`agents` in one
+      // query. It cannot run cross-database, so it stays on the primary handle
+      // and keeps the schema prefix via hindsightSql(). Splitting it is a
+      // follow-up; today (env unset) it is byte-identical.
       result = await this.db.execute(sql`
         WITH tenant_banks AS (
           SELECT DISTINCT
@@ -606,7 +618,7 @@ export class HindsightAdapter implements MemoryAdapter {
             WHEN 'agent' THEN COALESCE(m.metadata->>'agentId', b.owner_id)
             ELSE COALESCE(m.metadata->>'userId', b.owner_id)
           END AS inferred_owner_id
-        FROM hindsight.memory_units m
+        FROM ${hindsightSql()}memory_units m
         LEFT JOIN tenant_banks b ON b.bank_id = m.bank_id
         WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR b.bank_id IS NOT NULL)
           ${
@@ -638,13 +650,13 @@ export class HindsightAdapter implements MemoryAdapter {
     const bankIds = await this.resolveReadBankIds(req);
     let result: any;
     try {
-      result = await this.db.execute(sql`
+      result = await this.hdb.execute(sql`
 				SELECT
 					id, bank_id, text, context, fact_type,
 					event_date, occurred_start, occurred_end,
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at
-				FROM hindsight.memory_units
+				FROM ${hindsightSql()}memory_units
 				WHERE bank_id IN (${sql.join(
           bankIds.map((bankId) => sql`${bankId}`),
           sql`, `,
@@ -677,8 +689,8 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async forget(recordId: string): Promise<void> {
-    await this.db.execute(
-      sql`DELETE FROM hindsight.memory_units WHERE id = ${recordId}::uuid`,
+    await this.hdb.execute(
+      sql`DELETE FROM ${hindsightSql()}memory_units WHERE id = ${recordId}::uuid`,
     );
   }
 
@@ -771,8 +783,8 @@ export class HindsightAdapter implements MemoryAdapter {
   }
 
   async update(recordId: string, content: string): Promise<void> {
-    await this.db.execute(sql`
-			UPDATE hindsight.memory_units
+    await this.hdb.execute(sql`
+			UPDATE ${hindsightSql()}memory_units
 			SET text = ${content}, updated_at = NOW()
 			WHERE id = ${recordId}::uuid
 		`);
@@ -801,14 +813,14 @@ export class HindsightAdapter implements MemoryAdapter {
       // JS Date carries millisecond precision; Postgres timestamptz stores
       // microseconds. Truncate the DB side to ms so cursor `>` can't spin on
       // a sub-ms tail that JS can't represent and thus never catches up to.
-      result = await this.db.execute(sql`
+      result = await this.hdb.execute(sql`
 				SELECT
 					id, bank_id, text, context, fact_type,
 					event_date, occurred_start, occurred_end,
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at,
 					date_trunc('milliseconds', COALESCE(updated_at, created_at)) AS cursor_ts
-				FROM hindsight.memory_units
+				FROM ${hindsightSql()}memory_units
 				WHERE bank_id IN (${sql.join(
           bankIds.map((bankId) => sql`${bankId}`),
           sql`, `,

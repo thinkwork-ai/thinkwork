@@ -3,12 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const selectMock = vi.hoisted(() => vi.fn());
 const executeMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@thinkwork/database-pg", () => ({
-  getDb: () => ({
-    select: selectMock,
-    execute: executeMock,
-  }),
-}));
+vi.mock("@thinkwork/database-pg", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/database-pg")>();
+  const handle = () => ({ select: selectMock, execute: executeMock });
+  return {
+    // getDb and getHindsightDb resolve to the same mock handle (env unset =
+    // status quo), so hindsight-routed statements still land on executeMock.
+    getDb: handle,
+    getHindsightDb: handle,
+    resolveHindsightDb: <T,>(primary: T) => primary,
+    // Real seam chunk so `${hindsightSql()}` renders `hindsight.` in query text.
+    hindsightSql: actual.hindsightSql,
+  };
+});
 
 const retainConversationMock = vi.hoisted(() => vi.fn());
 const retainTurnMock = vi.hoisted(() => vi.fn());

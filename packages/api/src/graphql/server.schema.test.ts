@@ -46,5 +46,8 @@ describe("executable schema construction (cold-start guard)", () => {
     expect(schema.getMutationType()).toBeTruthy();
     // The field whose absence caused the outage.
     expect(schema.getQueryType()!.getFields().plateConformance).toBeDefined();
-  });
+    // Importing the whole server takes ~3s idle and can exceed vitest's 5s
+    // default under full-suite CPU contention — a real timeout here means
+    // construction hung, not that the machine was busy.
+  }, 30_000);
 });

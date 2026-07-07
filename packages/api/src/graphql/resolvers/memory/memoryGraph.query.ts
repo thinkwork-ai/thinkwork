@@ -7,6 +7,7 @@
  * gated on the adapter's `inspectGraph` capability.
  */
 
+import { hindsightSql, resolveHindsightDb } from "@thinkwork/database-pg";
 import type { GraphQLContext } from "../../context.js";
 import { db, sql } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
@@ -29,12 +30,15 @@ export const memoryGraph = async (
   }
 
   const bankId = `user_${userId}`;
+  // Hindsight entity/cooccurrence tables — route to the Hindsight handle
+  // (identical to `db` until the cutover env var is set).
+  const hdb = resolveHindsightDb(db);
 
   let entityRows: any;
   try {
-    entityRows = await db.execute(sql`
+    entityRows = await hdb.execute(sql`
 			SELECT id, canonical_name, mention_count, metadata
-			FROM hindsight.entities
+			FROM ${hindsightSql()}entities
 			WHERE bank_id = ${bankId}
 			ORDER BY mention_count DESC
 			LIMIT 200
@@ -43,14 +47,14 @@ export const memoryGraph = async (
     return { nodes: [], edges: [] };
   }
 
-  const edgeRows = await db.execute(sql`
+  const edgeRows = await hdb.execute(sql`
 		SELECT
 			e1.id AS source_id,
 			e2.id AS target_id,
 			ec.cooccurrence_count
-		FROM hindsight.entity_cooccurrences ec
-		JOIN hindsight.entities e1 ON e1.id = ec.entity_id_1
-		JOIN hindsight.entities e2 ON e2.id = ec.entity_id_2
+		FROM ${hindsightSql()}entity_cooccurrences ec
+		JOIN ${hindsightSql()}entities e1 ON e1.id = ec.entity_id_1
+		JOIN ${hindsightSql()}entities e2 ON e2.id = ec.entity_id_2
 		WHERE e1.bank_id = ${bankId}
 		ORDER BY ec.cooccurrence_count DESC
 		LIMIT 500
@@ -66,12 +70,12 @@ export const memoryGraph = async (
   const threadByEntity = new Map<string, string>();
   if (entityIds.length > 0) {
     try {
-      const threadRows = await db.execute(sql`
+      const threadRows = await hdb.execute(sql`
 				SELECT DISTINCT ON (ue.entity_id)
 					ue.entity_id::text AS entity_id,
 					m.metadata->>'thread_id' AS thread_id
-				FROM hindsight.unit_entities ue
-				JOIN hindsight.memory_units m ON m.id = ue.unit_id
+				FROM ${hindsightSql()}unit_entities ue
+				JOIN ${hindsightSql()}memory_units m ON m.id = ue.unit_id
 				WHERE ue.entity_id = ANY(${entityIds}::uuid[])
 					AND m.metadata->>'thread_id' IS NOT NULL
 				ORDER BY ue.entity_id, m.created_at DESC

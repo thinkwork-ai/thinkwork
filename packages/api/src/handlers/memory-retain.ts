@@ -17,7 +17,7 @@
 
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { getDb } from "@thinkwork/database-pg";
+import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
 import { isEvalTrafficMetadata } from "../lib/memory/eval-traffic.js";
@@ -290,7 +290,7 @@ async function processClaimedRetainAttempt(
       // retained (carrying the evalTraffic marker in its metadata so KG
       // ingest and the dream state can exclude it), but high-confidence-fact
       // extraction is skipped — it writes synthetic fixtures into
-      // hindsight.memory_units and user_profiles as if they were real facts.
+      // Hindsight memory_units and user_profiles as if they were real facts.
       const highConfidenceFactPromise = evalTraffic
         ? Promise.resolve({
             documents: [] as RetainedHighConfidenceFactDocument[],
@@ -713,19 +713,21 @@ async function persistHighConfidenceFactMemoryUnit(input: {
   tags: string[];
   retainParams: Record<string, unknown>;
 }): Promise<void> {
-  const db = getDb();
+  // Every statement here targets Hindsight tables — route to the Hindsight
+  // handle (identical to getDb() until the cutover env var is set).
+  const db = getHindsightDb();
   const now = new Date();
   const contentHash = createHash("sha256").update(input.content).digest("hex");
   const factId =
     typeof input.metadata.factId === "string" ? input.metadata.factId : "";
   await db.execute(sql`
-    INSERT INTO hindsight.banks (bank_id, name, updated_at)
+    INSERT INTO ${hindsightSql()}banks (bank_id, name, updated_at)
     VALUES (${input.bankId}, ${input.bankId}, ${now})
     ON CONFLICT (bank_id)
     DO UPDATE SET updated_at = EXCLUDED.updated_at
   `);
   await db.execute(sql`
-    INSERT INTO hindsight.documents (
+    INSERT INTO ${hindsightSql()}documents (
       id,
       bank_id,
       original_text,
@@ -752,7 +754,7 @@ async function persistHighConfidenceFactMemoryUnit(input: {
       updated_at = EXCLUDED.updated_at
   `);
   await db.execute(sql`
-    DELETE FROM hindsight.memory_units
+    DELETE FROM ${hindsightSql()}memory_units
     WHERE bank_id = ${input.bankId}
       AND document_id = ${input.documentId}
       AND context = 'thinkwork_high_confidence_fact'
@@ -760,14 +762,14 @@ async function persistHighConfidenceFactMemoryUnit(input: {
   if (factId) {
     await db.execute(sql`
       WITH stale_units AS (
-        DELETE FROM hindsight.memory_units
+        DELETE FROM ${hindsightSql()}memory_units
         WHERE bank_id = ${input.bankId}
           AND context = 'thinkwork_high_confidence_fact'
           AND metadata->>'factId' = ${factId}
           AND document_id <> ${input.documentId}
         RETURNING document_id
       )
-      DELETE FROM hindsight.documents d
+      DELETE FROM ${hindsightSql()}documents d
       USING stale_units s
       WHERE d.bank_id = ${input.bankId}
         AND d.id = s.document_id
@@ -775,7 +777,7 @@ async function persistHighConfidenceFactMemoryUnit(input: {
     `);
   }
   await db.execute(sql`
-    INSERT INTO hindsight.memory_units (
+    INSERT INTO ${hindsightSql()}memory_units (
       bank_id,
       document_id,
       text,
@@ -835,13 +837,13 @@ function highConfidenceFactDocumentId(
  * extraction actually produce anything?". Returns null (never throws) on any
  * failure — the readback is diagnostic, not a retain gate.
  */
-async function countExtractedUnitsForThread(
+export async function countExtractedUnitsForThread(
   threadId: string,
 ): Promise<number | null> {
   try {
-    const db = getDb();
+    const db = getHindsightDb();
     const result = await db.execute(
-      sql`SELECT count(*)::int AS n FROM hindsight.memory_units WHERE document_id = ${threadId}`,
+      sql`SELECT count(*)::int AS n FROM ${hindsightSql()}memory_units WHERE document_id = ${threadId}`,
     );
     const row = (result.rows ?? [])[0] as { n?: number } | undefined;
     return typeof row?.n === "number" ? row.n : null;

@@ -10,7 +10,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import type { Database } from "@thinkwork/database-pg";
+import { hindsightSql, type Database } from "@thinkwork/database-pg";
 import { applyDreamRun, type DreamConsolidator } from "./applier.js";
 import {
   createDreamRun,
@@ -52,6 +52,12 @@ export async function enumerateDreamBanks(
   db: Database,
   tenantId: string,
 ): Promise<string[]> {
+  // CUTOVER BLOCKER (THINK-220): this statement correlates thinkwork
+  // `users`/`spaces` with a Hindsight `memory_units` EXISTS subquery in one
+  // query. It cannot run cross-database, so it stays on the primary handle and
+  // keeps the schema prefix via hindsightSql(). Splitting it (enumerate banks,
+  // then filter by a separate Hindsight round-trip) is a follow-up; today (env
+  // unset) it is byte-identical.
   const result = await db.execute(sql`
     SELECT b.bank_id
     FROM (
@@ -60,7 +66,7 @@ export async function enumerateDreamBanks(
       SELECT 'space_' || id::text AS bank_id FROM spaces WHERE tenant_id = ${tenantId}
     ) b
     WHERE EXISTS (
-      SELECT 1 FROM hindsight.memory_units u WHERE u.bank_id = b.bank_id
+      SELECT 1 FROM ${hindsightSql()}memory_units u WHERE u.bank_id = b.bank_id
     )
     ORDER BY b.bank_id
     LIMIT ${MAX_BANKS_PER_RUN}

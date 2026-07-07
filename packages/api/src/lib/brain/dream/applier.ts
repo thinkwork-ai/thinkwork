@@ -11,7 +11,11 @@
  */
 
 import { sql, type SQL } from "drizzle-orm";
-import type { Database } from "@thinkwork/database-pg";
+import {
+  hindsightSql,
+  resolveHindsightDb,
+  type Database,
+} from "@thinkwork/database-pg";
 import {
   completeDreamRun,
   failDreamRun,
@@ -83,25 +87,28 @@ async function applyAction(
   bankId: string,
   action: StagedActionRow,
 ): Promise<void> {
+  // Deletes target Hindsight tables; ledger writes in applyDreamRun stay on
+  // the primary handle. Identical to `db` until the cutover env var is set.
+  const hdb = resolveHindsightDb(db);
   switch (action.action_type) {
     case "quarantine": {
       const unitIds = action.target?.memoryUnitIds ?? [];
       const documentIds = action.target?.documentIds ?? [];
       if (unitIds.length > 0) {
-        await db.execute(sql`
-          DELETE FROM hindsight.memory_units
+        await hdb.execute(sql`
+          DELETE FROM ${hindsightSql()}memory_units
           WHERE bank_id = ${bankId}
             AND id IN (${idList(unitIds, "uuid")})
         `);
       }
       if (documentIds.length > 0) {
         // Remove quarantined documents only once no other units reference them.
-        await db.execute(sql`
-          DELETE FROM hindsight.documents d
+        await hdb.execute(sql`
+          DELETE FROM ${hindsightSql()}documents d
           WHERE d.bank_id = ${bankId}
             AND d.id IN (${idList(documentIds, "varchar")})
             AND NOT EXISTS (
-              SELECT 1 FROM hindsight.memory_units u
+              SELECT 1 FROM ${hindsightSql()}memory_units u
               WHERE u.bank_id = d.bank_id AND u.document_id = d.id
             )
         `);
@@ -111,8 +118,8 @@ async function applyAction(
     case "forget": {
       const unitIds = action.target?.memoryUnitIds ?? [];
       if (unitIds.length > 0) {
-        await db.execute(sql`
-          DELETE FROM hindsight.memory_units
+        await hdb.execute(sql`
+          DELETE FROM ${hindsightSql()}memory_units
           WHERE bank_id = ${bankId}
             AND id IN (${idList(unitIds, "uuid")})
         `);

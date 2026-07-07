@@ -1,4 +1,12 @@
 export { createDb, getDb, isConnectionError, type Database } from "./db";
+export {
+  getHindsightDb,
+  hindsightDatabaseName,
+  hindsightSchemaPrefix,
+  hindsightSql,
+  resetHindsightDbForTests,
+  resolveHindsightDb,
+} from "./hindsight-db";
 export * as schema from "./schema/index";
 export { ensureThreadForWork, type ThreadChannel } from "./lib/thread-helpers";
 export {

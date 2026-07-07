@@ -17,6 +17,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { hindsightSql, resolveHindsightDb } from "@thinkwork/database-pg";
 import type { Database } from "../db.js";
 import {
   applyPromotionGate,
@@ -83,16 +84,18 @@ async function readBankObservations(args: {
   let cursorTs = args.cursor.updatedAt ?? new Date(0);
   let cursorId = args.cursor.recordId ?? "00000000-0000-0000-0000-000000000000";
   let drained = false;
+  // Bank observations live in Hindsight — route to the Hindsight handle.
+  const hdb = resolveHindsightDb(args.db);
 
   while (candidates.length < args.limit) {
     const pageSize = Math.min(PAGE_SIZE, args.limit - candidates.length);
-    const result = await args.db.execute(sql`
+    const result = await hdb.execute(sql`
 			SELECT
 				id::text AS id,
 				text,
 				source_memory_ids,
 				date_trunc('milliseconds', COALESCE(updated_at, created_at)) AS cursor_ts
-			FROM hindsight.memory_units
+			FROM ${hindsightSql()}memory_units
 			WHERE bank_id = ${args.bankId}
 			  AND fact_type = 'observation'
 			  AND source_memory_ids IS NOT NULL

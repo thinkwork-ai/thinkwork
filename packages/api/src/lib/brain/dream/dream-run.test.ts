@@ -118,9 +118,15 @@ describe("applyDreamRun", () => {
       JSON.stringify(call[0]?.queryChunks ?? call[0]),
     );
     // One delete (forget), two applied markers, no quarantine delete.
-    expect(texts.filter((t) => t.includes("DELETE FROM hindsight.memory_units"))).toHaveLength(1);
+    // The schema qualifier is a separate SQL chunk (THINK-220 seam), so match
+    // "DELETE FROM" and the table name independently within one query's chunks.
+    expect(
+      texts.filter(
+        (t) => t.includes("DELETE FROM") && t.includes("memory_units"),
+      ),
+    ).toHaveLength(1);
     expect(texts.filter((t) => t.includes("status = 'applied', applied_at"))).toHaveLength(2);
-    expect(texts.filter((t) => t.includes("hindsight.documents"))).toHaveLength(0);
+    expect(texts.filter((t) => t.includes("documents"))).toHaveLength(0);
     // Run completes.
     expect(texts.some((t) => t.includes("status = 'applied',") && t.includes("finished_at"))).toBe(true);
   });
@@ -196,8 +202,14 @@ describe("applyDreamRun", () => {
     const texts = execute.mock.calls.map((call) =>
       JSON.stringify(call[0]?.queryChunks ?? call[0]),
     );
-    expect(texts.some((t) => t.includes("DELETE FROM hindsight.memory_units"))).toBe(true);
-    expect(texts.some((t) => t.includes("DELETE FROM hindsight.documents"))).toBe(true);
+    expect(
+      texts.some(
+        (t) => t.includes("DELETE FROM") && t.includes("memory_units"),
+      ),
+    ).toBe(true);
+    expect(
+      texts.some((t) => t.includes("DELETE FROM") && t.includes("documents")),
+    ).toBe(true);
     // Regression (dev run ef5a9c73): drizzle binds a raw JS array as a
     // malformed composite literal — deletes must build explicit id lists.
     expect(texts.some((t) => t.includes("unnest"))).toBe(false);
