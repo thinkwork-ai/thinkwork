@@ -33,6 +33,30 @@ variable "database_url" {
   sensitive = true
 }
 
+variable "database_name" {
+  description = <<-EOT
+    Dedicated Hindsight database name (THINK-220). Empty (default) keeps the
+    legacy layout: Hindsight lives in the `hindsight` schema of the primary
+    database named in database_url. Set (e.g. "thinkwork_hindsight") to point
+    the service at that database on the same cluster with schema `public` —
+    the vanilla upstream configuration, which its maintenance-loop discovery
+    queries require. The database must already exist (bootstrap SQL; Terraform
+    cannot CREATE DATABASE inside the cluster).
+  EOT
+  type        = string
+  default     = ""
+}
+
+locals {
+  # database_url with its path segment swapped for var.database_name.
+  # Matches "...host:port/<db>" with an optional "?query" tail.
+  hindsight_database_url = (
+    var.database_name == ""
+    ? var.database_url
+    : replace(var.database_url, "/(/[^/?]+)([?].*)?$/", "/${var.database_name}$2")
+  )
+}
+
 variable "image_tag" {
   description = "Hindsight Docker image tag (ghcr.io/vectorize-io/hindsight:<tag>)"
   type        = string
@@ -266,6 +290,15 @@ resource "aws_ecs_task_definition" "hindsight" {
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
 
+  lifecycle {
+    precondition {
+      # A dedicated Hindsight database that is actually the primary database
+      # would put Hindsight's `public` schema on top of the thinkwork tables.
+      condition     = var.database_name == "" || !endswith(split("?", var.database_url)[0], "/${var.database_name}")
+      error_message = "database_name must be distinct from the primary database in database_url (THINK-220)."
+    }
+  }
+
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"
@@ -282,8 +315,10 @@ resource "aws_ecs_task_definition" "hindsight" {
     }]
 
     environment = concat([
-      { name = "HINDSIGHT_API_DATABASE_URL", value = var.database_url },
-      { name = "HINDSIGHT_API_DATABASE_SCHEMA", value = "hindsight" },
+      { name = "HINDSIGHT_API_DATABASE_URL", value = local.hindsight_database_url },
+      # `public` on a dedicated database is upstream's vanilla layout — the
+      # maintenance-loop discovery queries only work there (THINK-220).
+      { name = "HINDSIGHT_API_DATABASE_SCHEMA", value = var.database_name == "" ? "hindsight" : "public" },
       { name = "HINDSIGHT_API_VECTOR_EXTENSION", value = "pgvector" },
       { name = "HINDSIGHT_API_TEXT_SEARCH_EXTENSION", value = "native" },
       { name = "HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP", value = "true" },

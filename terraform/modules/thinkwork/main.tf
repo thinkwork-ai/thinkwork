@@ -1047,6 +1047,7 @@ module "api" {
   agentcore_pi_function_arn             = module.agentcore_pi.agentcore_pi_function_arn
   enable_agentcore_pi_invoke_policy     = true
   hindsight_endpoint                    = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  hindsight_database_name               = var.hindsight_database_name
   agentcore_memory_id                   = module.agentcore_memory.memory_id
   memory_engine                         = local.resolved_memory_engine
   okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
@@ -1158,6 +1159,7 @@ module "agentcore_pi" {
   async_dlq_arn      = module.agentcore_platform.agentcore_async_dlq_arn
 
   hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  hindsight_database_name                = var.hindsight_database_name
   agentcore_memory_id                    = module.agentcore_memory.memory_id
   memory_engine                          = local.resolved_memory_engine
   requester_idle_memory_learning_enabled = var.requester_idle_memory_learning_enabled
@@ -1310,6 +1312,7 @@ module "hindsight" {
   subnet_ids           = module.vpc.public_subnet_ids
   db_security_group_id = module.database.db_security_group_id
   database_url         = module.database.database_url
+  database_name        = var.hindsight_database_name
   image_tag            = var.hindsight_image_tag
 
   enable_auto_consolidation     = var.hindsight_enable_auto_consolidation

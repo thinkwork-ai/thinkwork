@@ -399,6 +399,8 @@ resource "aws_lambda_function" "agentcore_pi" {
       CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
       MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
+      # THINK-220 cutover flag — see the variable description.
+      HINDSIGHT_DATABASE_NAME                = var.hindsight_database_name
       THINKWORK_API_URL                      = var.api_endpoint
       API_AUTH_SECRET                        = var.api_auth_secret
       # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist

@@ -97,8 +97,11 @@ locals {
     # nowhere (R7).
     WORKSPACE_BUCKET    = var.bucket_name
     HINDSIGHT_ENDPOINT  = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID = var.agentcore_memory_id
-    MEMORY_ENGINE       = var.memory_engine
+    # THINK-220 cutover flag: empty = hindsight schema on the primary DB;
+    # set = that database's public schema via the database-pg seam.
+    HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
+    AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
+    MEMORY_ENGINE           = var.memory_engine
     # CHAT_AGENT_INVOKE_FN_ARN (~112 serialized bytes) was dropped for the
     # 4KB env ceiling (#2375): getChatAgentInvokeFnArn and managed-dispatch
     # now derive the ARN from the deterministic naming pattern

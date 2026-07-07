@@ -20,6 +20,7 @@
  */
 
 import { sql, type SQL } from "drizzle-orm";
+import { getConfig } from "@thinkwork/runtime-config";
 
 import {
   buildDatabaseUrl,
@@ -29,9 +30,14 @@ import {
   type Database,
 } from "./db";
 
-/** Read at call time (not module load) so tests can flip the env var. */
+/**
+ * Read at call time (not module load) so tests can flip the value. Resolved
+ * via getConfig — env wins (incident override), then the SSM runtime-config
+ * document, where HINDSIGHT_DATABASE_NAME lives in the deployed stack (the
+ * graphql-http Lambda has no env budget for it, #2375).
+ */
 export function hindsightDatabaseName(): string | undefined {
-  return process.env.HINDSIGHT_DATABASE_NAME || undefined;
+  return getConfig("HINDSIGHT_DATABASE_NAME") || undefined;
 }
 
 /**

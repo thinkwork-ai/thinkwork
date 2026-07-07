@@ -244,6 +244,12 @@ variable "hindsight_endpoint" {
   default     = ""
 }
 
+variable "hindsight_database_name" {
+  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty = Hindsight tables live in the `hindsight` schema of the primary database; set = the api reads them from this database's `public` schema. Rides the SSM runtime-config document (getConfig), not Lambda env."
+  type        = string
+  default     = ""
+}
+
 variable "agentcore_memory_id" {
   description = "Bedrock AgentCore Memory resource ID — used by the GraphQL memory resolvers to list records across tenant agents."
   type        = string
