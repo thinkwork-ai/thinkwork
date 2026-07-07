@@ -147,6 +147,69 @@ export function detectCommunities<TLink extends GraphLinkLike>(
   return result;
 }
 
+export type CommunityAnchor = { x: number; y: number };
+
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+/**
+ * Place one anchor per community on a golden-angle spiral, packed so the
+ * spiral's cumulative area tracks the summed cluster areas. Cluster radius
+ * scales with sqrt(member count) so big communities claim more room, and
+ * `gap` opens consistent breathing space between clusters. Largest
+ * community sits at the origin, keeping the layout centered without a
+ * d3 center force.
+ */
+export function computeCommunityAnchors(
+  communityByNode: ReadonlyMap<string, number>,
+  { spacing = 26, gap = 1.35 }: { spacing?: number; gap?: number } = {},
+): Map<number, CommunityAnchor> {
+  const counts = new Map<number, number>();
+  for (const communityId of communityByNode.values()) {
+    counts.set(communityId, (counts.get(communityId) ?? 0) + 1);
+  }
+  const ordered = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0] - b[0],
+  );
+
+  const anchors = new Map<number, CommunityAnchor>();
+  let placedArea = 0;
+  ordered.forEach(([communityId, count], index) => {
+    const radius = spacing * Math.sqrt(count);
+    if (index === 0) {
+      anchors.set(communityId, { x: 0, y: 0 });
+    } else {
+      const dist = (Math.sqrt(placedArea / Math.PI) + radius) * gap;
+      const angle = index * GOLDEN_ANGLE;
+      anchors.set(communityId, {
+        x: dist * Math.cos(angle),
+        y: dist * Math.sin(angle),
+      });
+    }
+    placedArea += Math.PI * radius * radius;
+  });
+  return anchors;
+}
+
+export type CommunityLayout = {
+  communityByNode: Map<string, number>;
+  anchors: Map<number, CommunityAnchor>;
+};
+
+/** One-call community layout: louvain assignment + spiral anchors. Runs at
+ *  graphData-identity cadence only — never on filter/focus changes. */
+export function computeCommunityLayout<TLink extends GraphLinkLike>(
+  nodes: readonly { id: string }[],
+  links: readonly TLink[],
+  options: CommunityDetectionOptions & {
+    spacing?: number;
+    gap?: number;
+  } = {},
+): CommunityLayout {
+  const communityByNode = detectCommunities(nodes, links, options);
+  const anchors = computeCommunityAnchors(communityByNode, options);
+  return { communityByNode, anchors };
+}
+
 export type NeighborhoodExpansion = {
   ids: Set<string>;
   degreeUsed: number;
@@ -205,6 +268,39 @@ export function expandNeighborhood(
     }
   }
   return { ids: new Set(seeds), degreeUsed: degree, truncated: false };
+}
+
+const CARRIED_POSITION_KEYS = [
+  "x",
+  "y",
+  "z",
+  "vx",
+  "vy",
+  "vz",
+  "fx",
+  "fy",
+  "fz",
+] as const;
+
+/**
+ * Copy simulation positions and user-drag pins (fx/fy) from a previous
+ * node array onto freshly built nodes by id, so a refetch doesn't scatter
+ * the layout or drop pins. Mutates and returns `next`.
+ */
+export function carryNodePositions<TNode extends { id: string }>(
+  prev: readonly { id: string }[] | null | undefined,
+  next: TNode[],
+): TNode[] {
+  if (!prev || prev.length === 0) return next;
+  const prevById = new Map(prev.map((node) => [node.id, node as any]));
+  for (const node of next as any[]) {
+    const previous = prevById.get(node.id);
+    if (!previous) continue;
+    for (const key of CARRIED_POSITION_KEYS) {
+      if (previous[key] !== undefined) node[key] = previous[key];
+    }
+  }
+  return next;
 }
 
 export function connectedGraphEdges<

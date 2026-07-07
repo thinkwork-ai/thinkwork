@@ -8,6 +8,8 @@ import {
   detectCommunities,
   expandNeighborhood,
   composeGraphClassification,
+  computeCommunityAnchors,
+  carryNodePositions,
 } from "./graph-utils.js";
 
 describe("endpointId", () => {
@@ -368,5 +370,86 @@ describe("composeGraphClassification", () => {
 
   it("returns null when neither is active", () => {
     expect(composeGraphClassification(null, null)).toBeNull();
+  });
+});
+
+describe("computeCommunityAnchors", () => {
+  it("places a single community at the origin without NaN", () => {
+    const communityByNode = new Map([
+      ["a", 0],
+      ["b", 0],
+      ["c", 0],
+    ]);
+    const anchors = computeCommunityAnchors(communityByNode);
+    expect(anchors.size).toBe(1);
+    expect(anchors.get(0)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("gives every community a distinct finite anchor", () => {
+    const communityByNode = new Map<string, number>();
+    for (let c = 0; c < 5; c += 1) {
+      for (let n = 0; n < (5 - c) * 3; n += 1) {
+        communityByNode.set(`c${c}-n${n}`, c);
+      }
+    }
+    const anchors = computeCommunityAnchors(communityByNode);
+    expect(anchors.size).toBe(5);
+    const seen = new Set<string>();
+    for (const anchor of anchors.values()) {
+      expect(Number.isFinite(anchor.x)).toBe(true);
+      expect(Number.isFinite(anchor.y)).toBe(true);
+      seen.add(`${anchor.x.toFixed(3)},${anchor.y.toFixed(3)}`);
+    }
+    expect(seen.size).toBe(5);
+  });
+
+  it("puts the largest community at the origin", () => {
+    const communityByNode = new Map([
+      ["a", 7],
+      ["b", 3],
+      ["c", 3],
+      ["d", 3],
+    ]);
+    const anchors = computeCommunityAnchors(communityByNode);
+    expect(anchors.get(3)).toEqual({ x: 0, y: 0 });
+    expect(anchors.get(7)).not.toEqual({ x: 0, y: 0 });
+  });
+
+  it("returns empty for an empty map", () => {
+    expect(computeCommunityAnchors(new Map()).size).toBe(0);
+  });
+
+  it("spreads anchors farther apart with a larger gap", () => {
+    const communityByNode = new Map([
+      ["a", 0],
+      ["b", 1],
+    ]);
+    const near = computeCommunityAnchors(communityByNode, { gap: 1 });
+    const far = computeCommunityAnchors(communityByNode, { gap: 2 });
+    const dist = (m: Map<number, { x: number; y: number }>) =>
+      Math.hypot(m.get(1)!.x - m.get(0)!.x, m.get(1)!.y - m.get(0)!.y);
+    expect(dist(far)).toBeGreaterThan(dist(near));
+  });
+});
+
+describe("carryNodePositions", () => {
+  it("copies positions and pins from previous nodes by id", () => {
+    const prev = [
+      { id: "a", x: 10, y: 20, vx: 1, vy: 2, fx: 10, fy: 20 },
+      { id: "b", x: -5, y: 3 },
+    ];
+    const next = [{ id: "a" }, { id: "b" }, { id: "c" }] as any[];
+    carryNodePositions(prev, next);
+    expect(next[0]).toMatchObject({ x: 10, y: 20, fx: 10, fy: 20 });
+    expect(next[1]).toMatchObject({ x: -5, y: 3 });
+    expect(next[1].fx).toBeUndefined();
+    expect(next[2].x).toBeUndefined();
+  });
+
+  it("is a no-op with null or empty previous", () => {
+    const next = [{ id: "a" }] as any[];
+    expect(carryNodePositions(null, next)).toBe(next);
+    expect(carryNodePositions([], next)).toBe(next);
+    expect((next[0] as any).x).toBeUndefined();
   });
 });

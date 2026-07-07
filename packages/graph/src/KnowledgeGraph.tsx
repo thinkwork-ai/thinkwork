@@ -21,7 +21,9 @@ import { useQuery } from "urql";
 import * as d3 from "d3-force";
 import { KnowledgeGraphQuery } from "./queries.js";
 import {
+  carryNodePositions,
   classifyNode,
+  computeCommunityLayout,
   deriveGraphClassification,
   endpointId,
   normalizeGraphSearch,
@@ -256,9 +258,20 @@ export const KnowledgeGraph = forwardRef<
     pause: !tenantId,
   });
 
-  const graphData = useMemo(
-    () => buildKnowledgeGraphData(result.data?.knowledgeGraphGraph),
-    [result.data],
+  const prevNodesRef = useRef<KnowledgeGraphNode[] | null>(null);
+  const graphData = useMemo(() => {
+    const data = buildKnowledgeGraphData(result.data?.knowledgeGraphGraph);
+    // Keep simulation positions and user-drag pins stable across refetches.
+    carryNodePositions(prevNodesRef.current, data.nodes);
+    prevNodesRef.current = data.nodes;
+    return data;
+  }, [result.data]);
+
+  // Community layout runs at graphData-identity cadence only — never on
+  // filter or focus changes.
+  const communityLayout = useMemo(
+    () => computeCommunityLayout(graphData.nodes, graphData.links),
+    [graphData],
   );
 
   const prevTypesRef = useRef<string>("");
@@ -457,13 +470,42 @@ export const KnowledgeGraph = forwardRef<
     const fg = fgRef.current;
     if (!fg) return;
     const nodeCount = graphData.nodes.length;
+    const { communityByNode, anchors } = communityLayout;
+    const anchorFor = (node: any) =>
+      anchors.get(communityByNode.get(node.id) ?? -1) ?? { x: 0, y: 0 };
+    const sameCommunity = (link: any) => {
+      const s = communityByNode.get(endpointId(link.source));
+      const t = communityByNode.get(endpointId(link.target));
+      return s !== undefined && s === t;
+    };
+
     fg.d3Force("charge")
       ?.strength(nodeCount > 50 ? -200 : -130)
       .distanceMax(200);
-    fg.d3Force("link")?.distance(nodeCount > 50 ? 100 : 75);
-    fg.d3Force("center")?.strength(1);
+    // Community-aware springs: short/strong inside a community, long/weak
+    // across bridges, so clusters densify without collapsing together.
+    const baseDistance = nodeCount > 50 ? 100 : 75;
+    const linkForce = fg.d3Force("link");
+    linkForce?.distance((link: any) =>
+      sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
+    );
+    linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
+    // Per-community anchors replace the global center force — anchors are
+    // packed around the origin so the graph stays framed. Unassigned nodes
+    // (defensive) fall back to center attraction.
+    fg.d3Force("center", null);
+    fg.d3Force(
+      "x",
+      d3.forceX((node: any) => anchorFor(node).x).strength(0.08),
+    );
+    fg.d3Force(
+      "y",
+      d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
+    );
     fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
-  }, [graphData]);
+    // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
+    // the first pass fires before the container is measured (fg == null).
+  }, [graphData, communityLayout, dims]);
 
   const cameraInitRef = useRef(false);
   useEffect(() => {

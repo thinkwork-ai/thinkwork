@@ -10,6 +10,7 @@ import {
 } from "./KnowledgeGraph.js";
 
 const forceGraphCalls = vi.hoisted(() => [] as any[]);
+const d3ForceCalls = vi.hoisted(() => [] as { name: string; force?: any }[]);
 const urqlState = vi.hoisted(() => ({
   result: { fetching: false, data: null as any, error: null as any },
   reexecute: vi.fn(),
@@ -30,10 +31,13 @@ vi.mock("react-force-graph-3d", async () => {
           lookAt: vi.fn(),
         }),
         controls: () => ({}),
-        d3Force: () => ({
-          strength: () => ({ distanceMax: vi.fn() }),
-          distance: vi.fn(),
-        }),
+        d3Force: (name: string, force?: any) => {
+          d3ForceCalls.push({ name, force });
+          return {
+            strength: () => ({ distanceMax: vi.fn() }),
+            distance: vi.fn(),
+          };
+        },
         refresh: vi.fn(),
       }));
       forceGraphCalls.push(props);
@@ -108,6 +112,7 @@ const graphFixture = {
 
 beforeEach(() => {
   forceGraphCalls.length = 0;
+  d3ForceCalls.length = 0;
   urqlState.result = { fetching: false, data: null, error: null };
   urqlState.reexecute.mockClear();
 
@@ -204,6 +209,42 @@ describe("KnowledgeGraph", () => {
     expect(nextProps.linkColor(nextProps.graphData.links[1])).toBe(
       "rgba(255,255,255,0.12)",
     );
+  });
+
+  it("registers community cluster forces at data cadence, not filter cadence", async () => {
+    urqlState.result = {
+      fetching: false,
+      data: { knowledgeGraphGraph: graphFixture },
+      error: null,
+    };
+
+    const { rerender } = render(
+      <KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />,
+    );
+    await screen.findByTestId("force-graph");
+
+    const clusterForceCalls = () =>
+      d3ForceCalls.filter(
+        (call) => call.name === "x" || call.name === "y",
+      ).length;
+    const centerRemovals = d3ForceCalls.filter(
+      (call) => call.name === "center" && call.force === null,
+    );
+    const initialClusterCalls = clusterForceCalls();
+    expect(initialClusterCalls).toBeGreaterThanOrEqual(2);
+    expect(centerRemovals.length).toBeGreaterThanOrEqual(1);
+
+    rerender(
+      <KnowledgeGraph
+        tenantId="tenant-1"
+        threadId="thread-1"
+        searchQuery="Acme"
+      />,
+    );
+    await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
+
+    // Filter changes must not re-register forces (no-restart invariant).
+    expect(clusterForceCalls()).toBe(initialClusterCalls);
   });
 
   it("returns connected edges for entity detail sheets", async () => {

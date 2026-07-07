@@ -24,6 +24,11 @@ import { useQuery, useClient } from "urql";
 import * as d3 from "d3-force";
 import { MemoryGraphQuery } from "./queries.js";
 import {
+  carryNodePositions,
+  computeCommunityLayout,
+  endpointId,
+} from "./graph-utils.js";
+import {
   MEMORY_COLOR,
   ENTITY_COLOR,
   MEMORY_TYPE_COLORS,
@@ -283,6 +288,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     // opacity in-place (see effect below), not by rebuilding graphData.
     // Rebuilding would give ForceGraph3D a new identity → restart the
     // simulation and reset the camera on every keystroke.
+    const prevNodesRef = useRef<MemoryGraphNode[] | null>(null);
     const graphData = useMemo(() => {
       const nodeIds = new Set(allNodes.map((n) => n.id));
       const links: {
@@ -322,8 +328,19 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           }
         }
       }
+      // Keep simulation positions and user-drag pins stable across
+      // refetches — fresh node objects would otherwise scatter the layout.
+      carryNodePositions(prevNodesRef.current, allNodes);
+      prevNodesRef.current = allNodes;
       return { nodes: allNodes, links };
     }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
+
+    // Community layout runs at graphData-identity cadence only — never on
+    // filter or focus changes.
+    const communityLayout = useMemo(
+      () => computeCommunityLayout(graphData.nodes, graphData.links),
+      [graphData],
+    );
 
     // Ref so nodeThreeObject (stable callback) can read the current filter
     // without being re-created each time matchedIds changes.
@@ -441,12 +458,43 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const fg = fgRef.current;
       if (!fg) return;
       const nodeCount = graphData.nodes.length;
+      const { communityByNode, anchors } = communityLayout;
+      const anchorFor = (node: any) =>
+        anchors.get(communityByNode.get(node.id) ?? -1) ?? { x: 0, y: 0 };
+      const sameCommunity = (link: any) => {
+        const s = communityByNode.get(endpointId(link.source));
+        const t = communityByNode.get(endpointId(link.target));
+        return s !== undefined && s === t;
+      };
+
       const chargeStrength = nodeCount > 50 ? -120 : -80;
       fg.d3Force("charge")?.strength(chargeStrength).distanceMax(200);
-      fg.d3Force("link")?.distance(nodeCount > 50 ? 70 : 55);
-      fg.d3Force("center")?.strength(1);
+      // Community-aware springs: short/strong inside a community, long/weak
+      // across bridges, so clusters densify without collapsing together.
+      const baseDistance = nodeCount > 50 ? 70 : 55;
+      const linkForce = fg.d3Force("link");
+      linkForce?.distance((link: any) =>
+        sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
+      );
+      linkForce?.strength?.((link: any) =>
+        sameCommunity(link) ? 0.6 : 0.05,
+      );
+      // Per-community anchors replace the global center force — anchors
+      // are packed around the origin so the graph stays framed. Unassigned
+      // nodes (defensive) fall back to center attraction.
+      fg.d3Force("center", null);
+      fg.d3Force(
+        "x",
+        d3.forceX((node: any) => anchorFor(node).x).strength(0.08),
+      );
+      fg.d3Force(
+        "y",
+        d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
+      );
       fg.d3Force("collide", d3.forceCollide().radius(20).strength(0.8));
-    }, [graphData]);
+      // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
+      // the first pass fires before the container is measured (fg == null).
+    }, [graphData, communityLayout, dims]);
 
     // Camera + controls setup — runs exactly once when the ForceGraph is
     // first available. Zoom/pan after that belongs to the user (and the
