@@ -481,16 +481,16 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }, []);
 
     const linkLabelVisible = useCallback((link: any) => {
-      const mode = linkLabelModeRef.current;
-      if (mode === "off") return false;
+      // Relationship labels exist only in focus mode — at overview scale
+      // they float mid-air along long bridge edges as pure noise. The
+      // toggle governs the focused lit set: auto/on show, off hides.
+      if (linkLabelModeRef.current === "off") return false;
       const focusState = focusRef.current;
-      if (focusState) {
-        return (
-          focusState.litIds.has(endpointId(link.source)) &&
-          focusState.litIds.has(endpointId(link.target))
-        );
-      }
-      return mode === "on" ? labelGateRef.current : false;
+      if (!focusState) return false;
+      return (
+        focusState.litIds.has(endpointId(link.source)) &&
+        focusState.litIds.has(endpointId(link.target))
+      );
     }, []);
 
     // Mutates stashed sprite visibility in place — same no-restart
@@ -860,7 +860,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               !!focusState &&
               focusState.litIds.has(endpointId(link.source)) &&
               focusState.litIds.has(endpointId(link.target));
-            if (mode === "off" || (!lit && mode !== "on")) {
+            if (mode === "off" || !lit) {
               link.__labelSprite = undefined;
               return undefined as unknown as THREE.Object3D;
             }
