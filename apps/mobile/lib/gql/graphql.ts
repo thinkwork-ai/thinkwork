@@ -793,7 +793,9 @@ export type Artifact = {
   favoritedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   headVersion: Scalars["Int"]["output"];
   id: Scalars["ID"]["output"];
+  lastRefreshAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  refreshFailedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   renderHtml?: Maybe<Scalars["String"]["output"]>;
   s3Key?: Maybe<Scalars["String"]["output"]>;
   sourceMessageId?: Maybe<Scalars["ID"]["output"]>;

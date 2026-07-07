@@ -2560,6 +2560,8 @@ export const ArtifactDetailForRouteQuery = gql`
       sourceMessageId
       metadata
       favoritedAt
+      lastRefreshAt
+      refreshFailedAt
       createdAt
       updatedAt
       versions {

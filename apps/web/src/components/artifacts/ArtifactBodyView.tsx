@@ -32,6 +32,11 @@ export interface ArtifactBodyNode {
   summary?: string | null;
   metadata?: unknown;
   updatedAt: string;
+  // THINK-155: scheduled-refresh observability. refreshFailedAt newer than
+  // lastRefreshAt means the document is stale (a scheduled refresh failed
+  // since the last success).
+  lastRefreshAt?: string | null;
+  refreshFailedAt?: string | null;
   bindings?: CanvasBinding[] | null;
   versions?: CanvasVersion[] | null;
 }
@@ -76,13 +81,26 @@ export function DocumentArtifactBody({
 }: {
   artifact: Pick<
     ArtifactBodyNode,
-    "title" | "type" | "status" | "headVersion" | "renderHtml" | "updatedAt"
+    | "title"
+    | "type"
+    | "status"
+    | "headVersion"
+    | "renderHtml"
+    | "updatedAt"
+    | "lastRefreshAt"
+    | "refreshFailedAt"
   >;
 }) {
   const statusChip =
     artifact.status === "FINAL"
       ? `Final · v${artifact.headVersion ?? 0}`
       : "Draft";
+  // THINK-155 R8: stale when a scheduled refresh failed since the last
+  // success. Never-refreshed documents (both fields null) show nothing new.
+  const refreshedAt = artifact.lastRefreshAt ?? null;
+  const failedAt = artifact.refreshFailedAt ?? null;
+  const isStale =
+    !!failedAt && (!refreshedAt || new Date(failedAt) > new Date(refreshedAt));
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
@@ -92,6 +110,19 @@ export function DocumentArtifactBody({
         </span>
         <span data-testid="document-status-chip">{statusChip}</span>
         <span>· Updated {relativeTime(artifact.updatedAt)}</span>
+        {refreshedAt ? (
+          <span data-testid="document-refreshed-chip">
+            · Refreshed {relativeTime(refreshedAt)}
+          </span>
+        ) : null}
+        {isStale && failedAt ? (
+          <span
+            data-testid="document-stale-chip"
+            className="font-medium text-amber-600 dark:text-amber-500"
+          >
+            · Scheduled refresh failed {relativeTime(failedAt)}
+          </span>
+        ) : null}
       </div>
       {artifact.renderHtml ? (
         <DocumentFrame

@@ -93,3 +93,67 @@ describe("ArtifactBodyView", () => {
     ).toBeTruthy();
   });
 });
+
+describe("document staleness indicator (THINK-155 R8)", () => {
+  const doc = {
+    ...base,
+    type: "DOCUMENT",
+    renderHtml: "<html></html>",
+    metadata: { kind: "document" },
+  };
+
+  it("shows nothing new when the refresh fields are null (regression)", () => {
+    render(<ArtifactBodyView artifact={doc} />);
+    expect(screen.queryByTestId("document-refreshed-chip")).toBeNull();
+    expect(screen.queryByTestId("document-stale-chip")).toBeNull();
+  });
+
+  it("shows the Refreshed line without a warning after a successful refresh", () => {
+    render(
+      <ArtifactBodyView
+        artifact={{ ...doc, lastRefreshAt: "2026-07-06T07:00:00.000Z" }}
+      />,
+    );
+    expect(screen.getByTestId("document-refreshed-chip")).toBeTruthy();
+    expect(screen.queryByTestId("document-stale-chip")).toBeNull();
+  });
+
+  it("shows the stale warning when a refresh failed after the last success", () => {
+    render(
+      <ArtifactBodyView
+        artifact={{
+          ...doc,
+          lastRefreshAt: "2026-06-29T07:00:00.000Z",
+          refreshFailedAt: "2026-07-06T07:00:00.000Z",
+        }}
+      />,
+    );
+    expect(screen.getByTestId("document-refreshed-chip")).toBeTruthy();
+    expect(
+      screen.getByTestId("document-stale-chip").textContent,
+    ).toContain("Scheduled refresh failed");
+  });
+
+  it("clears the warning once a later refresh succeeds (recovered)", () => {
+    render(
+      <ArtifactBodyView
+        artifact={{
+          ...doc,
+          lastRefreshAt: "2026-07-06T07:00:00.000Z",
+          refreshFailedAt: "2026-06-29T07:00:00.000Z",
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("document-stale-chip")).toBeNull();
+  });
+
+  it("warns when the only scheduled refresh ever attempted failed", () => {
+    render(
+      <ArtifactBodyView
+        artifact={{ ...doc, refreshFailedAt: "2026-07-06T07:00:00.000Z" }}
+      />,
+    );
+    expect(screen.getByTestId("document-stale-chip")).toBeTruthy();
+    expect(screen.queryByTestId("document-refreshed-chip")).toBeNull();
+  });
+});

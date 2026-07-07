@@ -29,6 +29,12 @@ type Artifact {
   # has no user.
   userName: String
   favoritedAt: AWSDateTime
+  # THINK-155: scheduled-refresh observability (stamped only by run-derived
+  # document emission). lastRefreshAt = last successful scheduled refresh;
+  # refreshFailedAt is set when a scheduled refresh fails and cleared by the
+  # next success — refreshFailedAt > lastRefreshAt means the document is stale.
+  lastRefreshAt: AWSDateTime
+  refreshFailedAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
   # Snapshotted, content-addressed version history (read-only; newest first).
