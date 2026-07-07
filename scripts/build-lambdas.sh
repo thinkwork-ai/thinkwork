@@ -74,7 +74,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
