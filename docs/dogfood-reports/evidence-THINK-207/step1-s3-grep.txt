@@ -1,0 +1,16 @@
+# THINK-207 Step 1 distribution-gate evidence — installed platform-agent workspace copy
+# Bucket: thinkwork-dev-storage
+# Path:   tenants/sleek-squirrel-230/agents/thinkwork/skills/document-composer (platform agent slug 'thinkwork', tenant sleek-squirrel-230)
+# Captured: reseed run 28835663056 Bootstrap job, files written 2026-07-07T02:03:18-19Z
+
+$ aws s3 cp .../SKILL.md - | grep -c 'tw:timeline'
+1
+
+$ aws s3 cp .../SKILL.md - | grep -n '^\*\*Timeline\*\*'
+82:**Timeline** — an ordered sequence of named events or phases on a horizontal
+
+$ aws s3 cp .../references/authoring-rules.md - | grep -c 'ordered sequence of named events or phases'
+1
+
+$ ... grep -n 'Sequences: when to reach for'
+64:## Sequences: when to reach for `tw:timeline`

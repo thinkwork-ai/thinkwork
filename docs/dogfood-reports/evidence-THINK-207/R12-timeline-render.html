@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="tw-plate" content="plan">
+<title>Q4 Customer Onboarding Rollout</title>
+<style>
+:root{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+    --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+    --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+    --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+    --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+  --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+  --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+  --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+  --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+}
+:root[data-theme="light"]{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:32px 24px 64px}
+p,li,dd{max-width:72ch}
+h1{font-size:1.7em;line-height:1.25;margin:.2em 0 .3em}
+h2{font-size:1.25em;margin:2.2em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.05em;margin:1.4em 0 .4em}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+.eyebrow{font-size:.72em;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.meta{color:var(--muted);font-size:.9em;margin:.2em 0 1.2em}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
+.stat .n{font-size:1.35em;font-weight:700}
+.stat .l{font-size:.78em;color:var(--muted)}
+.timeline{display:flex;flex-wrap:wrap;margin:18px 0 6px}
+.timeline .t-item{flex:1 1 0;min-width:120px;max-width:220px;text-align:center;padding:0 6px;position:relative}
+.timeline .t-label{font-size:.92em;font-weight:600;overflow-wrap:break-word}
+.timeline .t-track{position:relative;height:22px;margin:6px 0}
+.timeline .t-track::before{content:"";position:absolute;left:-6px;right:-6px;top:50%;height:2px;background:var(--line)}
+.timeline .t-item:first-child .t-track::before{left:50%}
+.timeline .t-item:last-child .t-track::before{right:50%}
+.timeline .t-dot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:999px;background:var(--card);border:2px solid var(--accent)}
+.timeline .t-item.current .t-dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.timeline .t-item.current .t-label{font-weight:800}
+.timeline .t-caption{font-size:.8em;color:var(--muted)}
+.timeline .t-date{font-size:.75em;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .q{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card .a{font-weight:700;margin:.25em 0 .35em}
+.card p{font-size:.92em;margin:0;color:var(--muted)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.75em;font-weight:600}
+.pill.acc{background:var(--accent-soft);color:var(--accent-text)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+.pill.info{background:var(--info-soft);color:var(--info-text)}
+.pill.bad{background:var(--bad-soft);color:var(--bad-text)}
+article.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+article.item h3{margin:.1em 0 .5em}
+article.item .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+dl.fields{margin:0}
+dl.fields dt{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.8em}
+dl.fields dd{margin:.15em 0 0}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent-text);font-size:.85em}
+figure{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+figcaption{font-size:.85em;color:var(--muted);margin-top:8px}
+footer.composition-signal{margin-top:48px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.82em}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+@media print{
+  body{background:#fff;color:#111}
+  main{max-width:none;padding:0}
+  article.item,.card,.stat,figure,table{break-inside:avoid}
+  .timeline .t-item{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<main>
+
+<div class="eyebrow">ROLLOUT PLAN</div>
+<h1 id="doc-title">Q4 Customer Onboarding Rollout</h1>
+<p class="meta"><strong>date</strong> Q4 2026 &nbsp;·&nbsp; customer onboarding program</p>
+<p class="meta">A shareable timeline of the Q4 onboarding program, from October discovery workshops through December go-live, with current focus on the late November guided pilot.</p>
+
+<h2 id="summary">Summary</h2>
+<p>This document lays out the Q4 customer onboarding rollout from discovery through go-live. The program moves through four distinct phases across the quarter, with the team currently planning toward the late November guided pilot.</p>
+<div class="timeline"><div class="t-item"><div class="t-label">Discovery</div><div class="t-track"><span class="t-dot"></span></div><div class="t-caption">Workshop and requirements gathering</div><div class="t-date">October</div></div><div class="t-item"><div class="t-label">Configuration</div><div class="t-track"><span class="t-dot"></span></div><div class="t-caption">System setup and data migration</div><div class="t-date">Early November</div></div><div class="t-item current"><div class="t-label">Guided Pilot</div><div class="t-track"><span class="t-dot"></span></div><div class="t-caption">Two-week structured testing period</div><div class="t-date">Late November</div></div><div class="t-item"><div class="t-label">Go-Live</div><div class="t-track"><span class="t-dot"></span></div><div class="t-caption">Full launch and team handoff</div><div class="t-date">December</div></div></div>
+<h2 id="phase-1-discovery-workshop-october">Phase 1: Discovery Workshop — October</h2>
+<p><strong>Goal:</strong> Align on customer needs, success criteria, and rollout scope.</p>
+<table class="data"><thead><tr><th>Activity</th><th>Output</th></tr></thead><tbody><tr><td>Stakeholder interviews</td><td>Requirements document</td></tr><tr><td>Current-state review</td><td>Gap analysis</td></tr><tr><td>Success metrics workshop</td><td>KPI baseline</td></tr><tr><td>Timeline confirmation</td><td>Signed project plan</td></tr></tbody></table>
+<p><strong>Exit criteria:</strong> Approved requirements and committed timeline.</p>
+<hr />
+<h2 id="phase-2-configuration-data-migration-early-november">Phase 2: Configuration &amp; Data Migration — Early November</h2>
+<p><strong>Goal:</strong> Build the environment and migrate customer data.</p>
+<table class="data"><thead><tr><th>Activity</th><th>Output</th></tr></thead><tbody><tr><td>Environment provisioning</td><td>Staging instance ready</td></tr><tr><td>Feature configuration</td><td>Settings aligned to requirements</td></tr><tr><td>Data migration</td><td>Validated dataset in staging</td></tr><tr><td>Integration setup</td><td>Connected upstream/downstream systems</td></tr></tbody></table>
+<p><strong>Exit criteria:</strong> Staging environment passes internal QA; data validation complete.</p>
+<hr />
+<h2 id="phase-3-guided-pilot-late-november">Phase 3: Guided Pilot — Late November</h2>
+<p><strong>Goal:</strong> Validate the solution with real workflows in a controlled, two-week window.</p>
+<table class="data"><thead><tr><th>Week</th><th>Focus</th><th>Activities</th></tr></thead><tbody><tr><td>Week 1</td><td>Onboarding &amp; first runs</td><td>Orientation, supervised usage, daily check-ins</td></tr><tr><td>Week 2</td><td>Expansion &amp; feedback</td><td>Broader use cases, issue triage, feedback synthesis</td></tr></tbody></table>
+<p><strong>Daily rhythm:</strong> Morning standups, async channel support, end-of-day summaries.</p>
+<p><strong>Exit criteria:</strong> Pilot users complete core workflows; critical issues resolved; go/no-go decision made.</p>
+<blockquote>
+<p><strong>Current status:</strong> This is the phase the team is actively planning toward now.</p>
+</blockquote>
+<hr />
+<h2 id="phase-4-go-live-handoff-december">Phase 4: Go-Live &amp; Handoff — December</h2>
+<p><strong>Goal:</strong> Launch to full team and transition to steady-state operations.</p>
+<table class="data"><thead><tr><th>Activity</th><th>Deliverable</th></tr></thead><tbody><tr><td>Production cutover</td><td>Live environment</td></tr><tr><td>User enablement sessions</td><td>Trained end users</td></tr><tr><td>Runbook delivery</td><td>Operational documentation</td></tr><tr><td>Support handoff</td><td>Escalation paths documented</td></tr></tbody></table>
+<p><strong>Exit criteria:</strong> All users active in production; support team owns ongoing operations.</p>
+<hr />
+<h2 id="key-dates-at-a-glance">Key Dates at a Glance</h2>
+<div class="stats"><div class="stat"><div class="n">October</div><div class="l">discovery workshop</div></div><div class="stat"><div class="n">Nov 1–15</div><div class="l">configuration &amp; migration</div></div><div class="stat"><div class="n">Nov 17–28</div><div class="l">guided pilot (planned)</div></div><div class="stat"><div class="n">December</div><div class="l">go-live &amp; handoff</div></div></div>
+<h2 id="next-steps">Next Steps</h2>
+<ol>
+<li><strong>Finalize pilot user list</strong> — identify 3–5 participants for late November</li>
+<li><strong>Lock pilot scope</strong> — confirm which workflows are in/out of bounds</li>
+<li><strong>Schedule daily check-ins</strong> — book recurring standups for pilot weeks</li>
+<li><strong>Draft pilot success criteria</strong> — define what "good" looks like by Week 2</li>
+</ol>
+
+<footer class="composition-signal">Composed by the ThinkWork document compositor · plan · Q4 2026</footer>
+</main>
+</body>
+</html>
+
