@@ -800,10 +800,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               node.edgeCount ? ` — ${node.edgeCount} mentions` : ""
             }`
           }
-          cooldownTicks={100}
+          // Settle the layout synchronously before the first paint and skip
+          // the animated cooldown — the graph appears already laid out and
+          // framed instead of sliding into place and snapping on zoomToFit.
+          cooldownTicks={0}
           d3AlphaDecay={0.05}
           d3VelocityDecay={0.55}
-          warmupTicks={50}
+          warmupTicks={graphData.nodes.length > 2000 ? 120 : 300}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
