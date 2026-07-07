@@ -41,6 +41,7 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
+import { useGraphPointer } from "./use-graph-pointer.js";
 
 export type KnowledgeGraphGroundingStatus =
   "GROUNDED" | "UNAPPROVED_TYPE" | "UNGROUNDED" | "CONFLICT" | "UNKNOWN";
@@ -587,18 +588,6 @@ export const KnowledgeGraph = forwardRef<
     [nodeLabelVisible, nodeRadius],
   );
 
-  // With a custom nodeCanvasObject the renderer can't infer hit areas —
-  // without this, node clicks and drags silently stop working.
-  const nodePointerAreaPaint = useCallback(
-    (node: any, color: string, ctx: CanvasRenderingContext2D) => {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
-      ctx.fill();
-    },
-    [nodeRadius],
-  );
-
   // Full link painter (replace mode): line trimmed to disc edges,
   // arrowhead terminating on the target rim, relationship label along
   // lit edges in focus mode. Trust colors carry over from the 3D links.
@@ -746,6 +735,30 @@ export const KnowledgeGraph = forwardRef<
     // the first pass fires before the container is measured (fg == null).
   }, [graphData, communityLayout, dims]);
 
+  // Geometric pointer handling — replaces the library's canvas-picking
+  // (broken under Brave/Firefox fingerprinting protection).
+  const { tooltip } = useGraphPointer({
+    containerEl,
+    fgRef,
+    graphDataRef,
+    nodeRadius,
+    tooltipText: (node: any) =>
+      `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
+        node.evidenceCount
+          ? ` - ${node.evidenceCount} evidence item${node.evidenceCount === 1 ? "" : "s"}`
+          : ""
+      }`,
+    onNodeClick: (node: any) => {
+      // Clicking a node focuses it and surfaces the selected-node chip —
+      // the detail sheet opens only from the chip.
+      focusNode(node.id);
+      setSelectedNode(node as KnowledgeGraphNode);
+    },
+    onBackgroundClick: () => {
+      if (focusRef.current) exitFocus();
+    },
+  });
+
   // One-shot framing: zoom to fit after the first simulation settle.
   // Zoom/pan after that belongs to the user.
   const zoomInitRef = useRef(false);
@@ -806,6 +819,7 @@ export const KnowledgeGraph = forwardRef<
   return (
     <div
       ref={setContainerEl}
+      data-testid="graph-container"
       className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
         framed ? "opacity-100" : "opacity-0"
       }`}
@@ -817,20 +831,13 @@ export const KnowledgeGraph = forwardRef<
         height={dims.h}
         backgroundColor="rgba(0,0,0,0)"
         nodeCanvasObject={nodeCanvasObject}
-        nodePointerAreaPaint={nodePointerAreaPaint}
         // Continuous repaint so ref-driven focus/filter/zoom changes show
         // without rebuilding graphData.
         autoPauseRedraw={false}
+        enablePointerInteraction={false}
         linkLabel={(link: any) => link.label || "related to"}
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
-        nodeLabel={(node: any) =>
-          `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
-            node.evidenceCount
-              ? ` - ${node.evidenceCount} evidence item${node.evidenceCount === 1 ? "" : "s"}`
-              : ""
-          }`
-        }
         // Settle the layout synchronously before the first paint: zero
         // cooldown until the initial framing lands (no load animation),
         // then normal cooldown so dragging a node relaxes its neighbors.
@@ -859,20 +866,6 @@ export const KnowledgeGraph = forwardRef<
           }
           setFramed(true);
         }}
-        onNodeClick={(node: any) => {
-          // Clicking a node focuses it and surfaces the selected-node
-          // chip — the detail sheet opens only from the chip, so the
-          // layout never shifts mid-exploration.
-          focusNode(node.id);
-          setSelectedNode(node as KnowledgeGraphNode);
-        }}
-        onBackgroundClick={() => {
-          if (focusRef.current) exitFocus();
-        }}
-        onNodeDragEnd={(node: any) => {
-          node.fx = node.x;
-          node.fy = node.y;
-        }}
       />
       {focus && selectedNode && (
         <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
@@ -897,6 +890,14 @@ export const KnowledgeGraph = forwardRef<
               Showing direct connections only
             </div>
           )}
+        </div>
+      )}
+      {tooltip && (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          {tooltip.text}
         </div>
       )}
       <GraphLabelToggles

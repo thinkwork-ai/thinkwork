@@ -33,7 +33,10 @@ vi.mock("react-force-graph-2d", async () => {
           distance: vi.fn(),
         }),
         zoomToFit: vi.fn(),
-        zoom: vi.fn(),
+        zoom: () => 1,
+        screen2GraphCoords: (x: number, y: number) => ({ x, y }),
+        graph2ScreenCoords: (x: number, y: number) => ({ x, y }),
+        d3ReheatSimulation: vi.fn(),
       }));
       forceGraphCalls.push(props);
       return ReactActual.createElement("div", {
@@ -70,6 +73,40 @@ afterEach(() => {
 
 function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
+}
+
+/** Position nodes 1000px apart so geometric hit-testing is unambiguous
+ *  (the identity screen<->graph mocks make screen == graph coords). */
+function placeNodes(props: any) {
+  props.graphData.nodes.forEach((node: any, i: number) => {
+    node.x = i * 1000;
+    node.y = 0;
+  });
+}
+
+function pointerEvent(type: string, x: number, y: number) {
+  return new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+  });
+}
+
+async function clickNodeIndex(index: number) {
+  placeNodes(latestForceGraphProps());
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", index * 1000, 0));
+  });
+}
+
+async function clickBackground() {
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", 5_000_000, 5000));
+  });
 }
 
 /** Minimal 2D context recorder: captures alpha at fill time and text. */
@@ -137,41 +174,31 @@ describe("MemoryGraph (2D canvas)", () => {
     return latestForceGraphProps();
   }
 
-  it("wires the interactivity contract: click, drag, background, pointer area", async () => {
+  it("wires the interactivity contract: geometric click, drag, background", async () => {
     const props = await renderWithData();
 
-    // Custom-painted nodes need an explicit pointer area or clicks/drags
-    // silently die — the regression that sank previous 2D attempts.
-    expect(typeof props.nodePointerAreaPaint).toBe("function");
-    const pointerCtx = {
-      fillStyle: "",
-      beginPath: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
-    };
-    props.nodePointerAreaPaint(
-      { ...props.graphData.nodes[0], x: 5, y: 6 },
-      "#ff0000",
-      pointerCtx,
-    );
-    expect(pointerCtx.fill).toHaveBeenCalled();
-    expect(pointerCtx.fillStyle).toBe("#ff0000");
+    // The library's canvas color-picking is disabled (Brave's
+    // fingerprinting shield poisons canvas readback); interaction is
+    // geometric via the pointer hook.
+    expect(props.enablePointerInteraction).toBe(false);
 
-    expect(typeof props.onNodeClick).toBe("function");
-    expect(typeof props.onBackgroundClick).toBe("function");
-    // Drag end pins the node in the plane.
-    const dragged: any = { fx: undefined, fy: undefined, x: 3, y: 4 };
-    props.onNodeDragEnd(dragged);
-    expect(dragged.fx).toBe(3);
-    expect(dragged.fy).toBe(4);
+    // Drag: pointerdown on a node, move, release — node pins in place.
+    placeNodes(latestForceGraphProps());
+    const container = screen.getByTestId("graph-container");
+    const node = props.graphData.nodes[0];
+    await act(async () => {
+      container.dispatchEvent(pointerEvent("pointerdown", 0, 0));
+      window.dispatchEvent(pointerEvent("pointermove", 40, 25));
+      window.dispatchEvent(pointerEvent("pointerup", 40, 25));
+    });
+    expect(node.fx).toBe(40);
+    expect(node.fy).toBe(25);
   });
 
   it("focus dims non-neighborhood nodes; Escape restores the overview", async () => {
     const props = await renderWithData();
 
-    await act(async () => {
-      props.onNodeClick(props.graphData.nodes[0]);
-    });
+    await clickNodeIndex(0);
 
     let latest = latestForceGraphProps();
     expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(1);
@@ -190,9 +217,7 @@ describe("MemoryGraph (2D canvas)", () => {
   it("focusing an isolated node lights only it, labels only the lit set", async () => {
     const props = await renderWithData();
 
-    await act(async () => {
-      props.onNodeClick(props.graphData.nodes[2]);
-    });
+    await clickNodeIndex(2);
 
     const latest = latestForceGraphProps();
     expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
@@ -246,9 +271,7 @@ describe("MemoryGraph (2D canvas)", () => {
 
     // Focus an unrelated node: this link is no longer lit — plain line.
     texts.length = 0;
-    await act(async () => {
-      props.onNodeClick(props.graphData.nodes[2]);
-    });
+    await clickNodeIndex(2);
     latestForceGraphProps().linkCanvasObject(link, ctx as any, 1);
     expect(texts).toEqual([]);
   });

@@ -54,6 +54,7 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
+import { useGraphPointer } from "./use-graph-pointer.js";
 import {
   PAGE_TYPE_LABELS,
   type WikiPageType,
@@ -625,18 +626,6 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       [nodeLabelVisible, nodeRadius],
     );
 
-    // With a custom nodeCanvasObject the renderer can't infer hit areas —
-    // without this, node clicks and drags silently stop working.
-    const nodePointerAreaPaint = useCallback(
-      (node: any, color: string, ctx: CanvasRenderingContext2D) => {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
-        ctx.fill();
-      },
-      [],
-    );
-
     // Edge brightness follows endpoint lit-state. In focus mode an edge is
     // bright only when BOTH endpoints are lit — a half-lit edge would imply
     // the outside node belongs to the neighborhood. Search keeps the
@@ -804,6 +793,30 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // the first pass fires before the container is measured (fg == null).
     }, [graphData, communityLayout, dims]);
 
+    // Geometric pointer handling — replaces the library's canvas-picking
+    // (broken under Brave/Firefox fingerprinting protection).
+    const { tooltip } = useGraphPointer({
+      containerEl,
+      fgRef,
+      graphDataRef,
+      nodeRadius,
+      tooltipText: (node: any) =>
+        `${node.label}${
+          node.displayType || node.entityType
+            ? ` (${node.displayType ?? PAGE_TYPE_LABELS[node.entityType as WikiPageType] ?? node.entityType})`
+            : ""
+        }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`,
+      onNodeClick: (node: any) => {
+        // Clicking a node focuses it and surfaces the selected-node chip —
+        // the detail sheet opens only from the chip.
+        focusNode(node.id);
+        setSelectedNode(node as WikiGraphNode);
+      },
+      onBackgroundClick: () => {
+        if (focusRef.current) exitFocus();
+      },
+    });
+
     // One-shot framing: zoom to fit after the first simulation settle.
     // Zoom/pan after that belongs to the user.
     const zoomInitRef = useRef(false);
@@ -845,6 +858,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     return (
       <div
         ref={setContainerEl}
+        data-testid="graph-container"
         className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
           framed ? "opacity-100" : "opacity-0"
         }`}
@@ -856,20 +870,13 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           height={dims.h}
           backgroundColor="rgba(0,0,0,0)"
           nodeCanvasObject={nodeCanvasObject}
-          nodePointerAreaPaint={nodePointerAreaPaint}
           // Continuous repaint so ref-driven focus/filter/zoom changes show
           // without rebuilding graphData.
           autoPauseRedraw={false}
+          enablePointerInteraction={false}
           linkLabel={(link: any) => link.label || "references"}
           linkCanvasObjectMode={() => "replace" as const}
           linkCanvasObject={linkCanvasObject}
-          nodeLabel={(node: any) =>
-            `${node.label}${
-              node.displayType || node.entityType
-                ? ` (${node.displayType ?? PAGE_TYPE_LABELS[node.entityType as WikiPageType] ?? node.entityType})`
-                : ""
-            }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`
-          }
           // Settle the layout synchronously before the first paint: zero
           // cooldown until the initial framing lands (no load animation),
           // then normal cooldown so dragging a node relaxes its neighbors.
@@ -898,20 +905,6 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
             }
             setFramed(true);
           }}
-          onNodeClick={(node: any) => {
-            // Clicking a node focuses it and surfaces the selected-node
-            // chip — the detail sheet opens only from the chip, so the
-            // layout never shifts mid-exploration.
-            focusNode(node.id);
-            setSelectedNode(node as WikiGraphNode);
-          }}
-          onBackgroundClick={() => {
-            if (focusRef.current) exitFocus();
-          }}
-          onNodeDragEnd={(node: any) => {
-            node.fx = node.x;
-            node.fy = node.y;
-          }}
         />
         {focus && selectedNode && (
           <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
@@ -936,6 +929,14 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
                 Showing direct connections only
               </div>
             )}
+          </div>
+        )}
+        {tooltip && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.text}
           </div>
         )}
         <GraphLabelToggles

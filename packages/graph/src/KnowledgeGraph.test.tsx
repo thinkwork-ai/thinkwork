@@ -40,7 +40,10 @@ vi.mock("react-force-graph-2d", async () => {
           };
         },
         zoomToFit: vi.fn(),
-        zoom: vi.fn(),
+        zoom: () => 1,
+        screen2GraphCoords: (x: number, y: number) => ({ x, y }),
+        graph2ScreenCoords: (x: number, y: number) => ({ x, y }),
+        d3ReheatSimulation: vi.fn(),
       }));
       forceGraphCalls.push(props);
       return ReactActual.createElement("div", {
@@ -141,6 +144,40 @@ afterEach(() => {
 
 function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
+}
+
+/** Position nodes 1000px apart so geometric hit-testing is unambiguous
+ *  (the identity screen<->graph mocks make screen == graph coords). */
+function placeNodes(props: any) {
+  props.graphData.nodes.forEach((node: any, i: number) => {
+    node.x = i * 1000;
+    node.y = 0;
+  });
+}
+
+function pointerEvent(type: string, x: number, y: number) {
+  return new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+  });
+}
+
+async function clickNodeIndex(index: number) {
+  placeNodes(latestForceGraphProps());
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", index * 1000, 0));
+  });
+}
+
+async function clickBackground() {
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", 5_000_000, 5000));
+  });
 }
 
 function makeCtx(record: { fillAlpha?: number; texts: string[] }) {
@@ -299,9 +336,7 @@ describe("KnowledgeGraph", () => {
     const { props } = await renderGraph({ ref: graphRef, onNodeClick });
 
     // Node click surfaces the chip without opening the sheet.
-    await act(async () => {
-      props.onNodeClick(props.graphData.nodes[1]);
-    });
+    await clickNodeIndex(1);
     expect(onNodeClick).not.toHaveBeenCalled();
 
     fireEvent.click(
@@ -333,9 +368,7 @@ describe("KnowledgeGraph", () => {
     it("clicking a node lights its direct neighborhood (1 degree)", async () => {
       const { props } = await renderGraph();
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]);
-      });
+      await clickNodeIndex(0);
 
       // entity-1 -> entity-2 -> entity-3 is a chain: 1 degree from
       // entity-1 lights entity-2 but not entity-3.
@@ -349,12 +382,8 @@ describe("KnowledgeGraph", () => {
     it("background click clears focus and restores prior state (AE4)", async () => {
       const { props } = await renderGraph();
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]);
-      });
-      await act(async () => {
-        latestForceGraphProps().onBackgroundClick();
-      });
+      await clickNodeIndex(0);
+      await clickBackground();
 
       const latest = latestForceGraphProps();
       for (const node of props.graphData.nodes) {
@@ -379,9 +408,7 @@ describe("KnowledgeGraph", () => {
         ).toBe(0.15),
       );
 
-      await act(async () => {
-        latestForceGraphProps().onNodeClick(props.graphData.nodes[0]);
-      });
+      await clickNodeIndex(0);
       expect(
         paintNode(latestForceGraphProps(), props.graphData.nodes[0]).fillAlpha,
       ).toBe(1);
@@ -410,16 +437,12 @@ describe("KnowledgeGraph", () => {
       await screen.findByTestId("force-graph");
       const props = latestForceGraphProps();
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]);
-      });
+      await clickNodeIndex(0);
       expect(
         paintNode(latestForceGraphProps(), props.graphData.nodes[2]).fillAlpha,
       ).toBe(0.15);
 
-      await act(async () => {
-        latestForceGraphProps().onNodeClick(props.graphData.nodes[2]);
-      });
+      await clickNodeIndex(2);
       const latest = latestForceGraphProps();
       expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(1);
       expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
@@ -439,9 +462,7 @@ describe("KnowledgeGraph", () => {
       await screen.findByTestId("force-graph");
       const props = latestForceGraphProps();
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[2]);
-      });
+      await clickNodeIndex(2);
 
       const latest = latestForceGraphProps();
       expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
@@ -476,9 +497,7 @@ describe("KnowledgeGraph", () => {
       await screen.findByTestId("force-graph");
       const props = latestForceGraphProps();
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]);
-      });
+      await clickNodeIndex(0);
 
       // Degree 1 is always accepted in full — no silent truncation.
       const latest = latestForceGraphProps();
@@ -491,9 +510,7 @@ describe("KnowledgeGraph", () => {
       const initialGraphData = props.graphData;
       const initialForceCalls = d3ForceCalls.length;
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[1]);
-      });
+      await clickNodeIndex(1);
 
       const nextProps = latestForceGraphProps();
       expect(nextProps.graphData).toBe(initialGraphData);
@@ -566,9 +583,7 @@ describe("KnowledgeGraph", () => {
 
       // Focus "a": lit edge labeled at any zoom; node labels lit-only.
       props.onZoom({ k: 0.3 });
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]);
-      });
+      await clickNodeIndex(0);
       const latest = latestForceGraphProps();
       expect(paintLink(latest, litLink)).toEqual(["supports"]);
       expect(
