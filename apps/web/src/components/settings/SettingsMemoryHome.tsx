@@ -105,7 +105,11 @@ export function SettingsMemoryHome() {
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-64">
+            <TooltipContent
+              side="bottom"
+              className="max-w-64 border border-border bg-popover text-popover-foreground shadow-md"
+              arrowClassName="bg-popover fill-popover border-b border-r border-border"
+            >
               {rawUnitsController.showRaw
                 ? "Showing all memory units. Click to return to the curated view (consolidated observations, corroborated facts, and deliberate captures)."
                 : `Curated view — ${rawUnitsController.hiddenCount} raw uncorroborated unit${rawUnitsController.hiddenCount === 1 ? "" : "s"} hidden. Click to show everything.`}
