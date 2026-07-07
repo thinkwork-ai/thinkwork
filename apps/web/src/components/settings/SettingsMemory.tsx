@@ -501,6 +501,8 @@ export function SettingsMemory({
           <MemoryGraphNodeSheet
             node={graphNode}
             edges={graphNodeEdges}
+            tenantId={effectiveTenantId}
+            userId={requesterUserId}
             resolveNodeColor={(label) =>
               graphRef.current?.getNodeColorByLabel?.(label)
             }
