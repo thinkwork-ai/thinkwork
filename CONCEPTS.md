@@ -205,7 +205,7 @@ The deploy-time process that publishes a curated allowlist of platform skills th
 The deterministic server-side compiler (v2 of the document pipeline, THINK-154) that turns an agent-authored markdown body — frontmatter, prose, and Directive Blocks — into the house-style HTML render at emission. Removes HTML from the model's hands entirely: identical input compiles to identical output, plate conformance holds by construction rather than by DocSpector rejection, and the same function powers corpus backfill.
 
 ### Directive Block
-A fenced block in a compositor-authored markdown body carrying declarative data for a house component — a chart, stats strip, or verdict grid — from a versioned, closed, per-genre vocabulary. The model writes the data; the compiler renders the pixels. Unknown directives are a compile-time rejection, and there is no raw-HTML escape block. Because directives live in the canonical digest, agents and mobile read them as legible fenced data.
+A fenced block in a compositor-authored markdown body carrying declarative data for a house component — a chart, stats strip, verdict grid, or timeline — from a versioned, closed, per-genre vocabulary. The model writes the data; the compiler renders the pixels. Unknown directives are a compile-time rejection, and there is no raw-HTML escape block. Because directives live in the canonical digest, agents and mobile read them as legible fenced data.
 
 ### House Chart Renderer
 The compositor's deterministic SVG chart engine: palette-locked to the house tokens, dark-mode aware, scriptless by construction. Renders chart Directive Blocks at compile time so every document's visuals match. Launch catalog: bar, line, donut, stat-strip, sparkline, meter, funnel.

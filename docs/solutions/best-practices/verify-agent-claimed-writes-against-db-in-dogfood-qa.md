@@ -123,6 +123,9 @@ ORDER BY created_at;
 
 ## Related
 
+- `docs/solutions/best-practices/dogfood-experiential-verdicts-need-pixel-level-render-checks.md`
+  — sibling doctrine for rendered-visual claims: a screenshot needs a
+  geometry-level assertion the same way a write needs a store-level one.
 - `docs/dogfood-reports/2026-07-05-THINK-170-dogfood.md` — primary evidence (PC1, S2/S4 evidence rows, scenario matrix)
 - `docs/solutions/logic-errors/customer-onboarding-chat-interceptor-swallows-thread-2026-07-05.md` — sibling THINK-170 finding from the same dogfood cycle (interception architecture; different problem)
 - `docs/solutions/workflow-issues/deploy-silent-arch-mismatch-took-a-week-to-surface-2026-04-24.md` — same meta-lesson from the infra side (pipeline reports success while real state is unchanged)
