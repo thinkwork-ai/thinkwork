@@ -6,7 +6,7 @@ import {
   JUNK_MEMORY_PATTERN,
   planBankActions,
 } from "./planner.js";
-import { runBrainDreamState } from "./runner.js";
+import { enumerateDreamBanks, runBrainDreamState } from "./runner.js";
 
 const TENANT = "0015953e-aa13-4cab-8398-2e70f73dda63";
 const BANK = "user_4dee701a-c17b-46fe-9f38-a333d4c3fad0";
@@ -288,5 +288,43 @@ describe("runBrainDreamState", () => {
     expect(texts.some((t) => t.includes("INSERT INTO"))).toBe(false);
     expect(texts.some((t) => t.includes("DELETE"))).toBe(false);
     expect(consolidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("enumerateDreamBanks (THINK-220 two-step split)", () => {
+  it("intersects primary-DB candidates with Hindsight banks that hold units", async () => {
+    const { db, execute } = routeDb([
+      {
+        match: "FROM users WHERE tenant_id",
+        rows: [
+          [
+            { bank_id: "space_a" },
+            { bank_id: "space_b" },
+            { bank_id: "user_a" },
+          ],
+        ],
+      },
+      {
+        match: "SELECT DISTINCT bank_id",
+        rows: [[{ bank_id: "user_a" }, { bank_id: "space_b" }]],
+      },
+    ]);
+    const banks = await enumerateDreamBanks(db, TENANT);
+    // Candidate order preserved; space_a (no units) filtered out.
+    expect(banks).toEqual(["space_b", "user_a"]);
+    const texts = execute.mock.calls.map((call) =>
+      JSON.stringify(call[0]?.queryChunks ?? call[0]),
+    );
+    // The two halves stay separate statements — no cross-schema JOIN/EXISTS.
+    expect(texts.some((t) => t.includes("FROM users") && t.includes("memory_units"))).toBe(false);
+  });
+
+  it("skips the Hindsight round-trip when the tenant has no candidate banks", async () => {
+    const { db, execute } = routeDb([
+      { match: "FROM users WHERE tenant_id", rows: [[]] },
+    ]);
+    const banks = await enumerateDreamBanks(db, TENANT);
+    expect(banks).toEqual([]);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

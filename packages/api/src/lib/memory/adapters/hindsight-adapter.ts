@@ -550,77 +550,75 @@ export class HindsightAdapter implements MemoryAdapter {
     const query = req.query?.trim();
     const searchPattern = query ? `%${escapeLikePattern(query)}%` : null;
 
+    // Two-step tenant inspect (THINK-220): Hindsight tables can live in a
+    // different database than the thinkwork tables, so the old single query
+    // joining memory_units to tenant_members/spaces/agents is split — bank
+    // inventory from the primary, units from the Hindsight handle, owner
+    // inference joined in application code (same pattern as the observation
+    // promotion gate).
+    let bankRows: any;
+    try {
+      bankRows = await this.db.execute(sql`
+        SELECT DISTINCT
+          ('user_' || principal_id::text) AS bank_id,
+          'user'::text AS owner_type,
+          principal_id::text AS owner_id
+        FROM tenant_members
+        WHERE tenant_id = ${req.tenantId}
+          AND lower(principal_type) = 'user'
+          AND status = 'active'
+        UNION
+        SELECT DISTINCT
+          ('space_' || id::text) AS bank_id,
+          'space'::text AS owner_type,
+          id::text AS owner_id
+        FROM spaces
+        WHERE tenant_id = ${req.tenantId}
+        UNION
+        SELECT DISTINCT
+          id::text AS bank_id,
+          'agent'::text AS owner_type,
+          id::text AS owner_id
+        FROM agents
+        WHERE tenant_id = ${req.tenantId}
+        UNION
+        SELECT DISTINCT
+          slug::text AS bank_id,
+          'agent'::text AS owner_type,
+          id::text AS owner_id
+        FROM agents
+        WHERE tenant_id = ${req.tenantId}
+          AND slug IS NOT NULL
+          AND slug <> ''
+      `);
+    } catch (err) {
+      console.warn(
+        `[hindsight-adapter] inspectTenant bank inventory SQL failed: ${(err as Error)?.message}`,
+      );
+      return [];
+    }
+    const bankOwners = new Map<string, { ownerType: string; ownerId: string }>(
+      ((bankRows.rows ?? []) as Array<{
+        bank_id: string;
+        owner_type: string;
+        owner_id: string;
+      }>).map((row) => [
+        row.bank_id,
+        { ownerType: row.owner_type, ownerId: row.owner_id },
+      ]),
+    );
+    const bankIds = [...bankOwners.keys()];
+
     let result: any;
     try {
-      // CUTOVER BLOCKER (THINK-220): this statement joins Hindsight
-      // `memory_units` to thinkwork `tenant_members`/`spaces`/`agents` in one
-      // query. It cannot run cross-database, so it stays on the primary handle
-      // and keeps the schema prefix via hindsightSql(). Splitting it is a
-      // follow-up; today (env unset) it is byte-identical.
-      result = await this.db.execute(sql`
-        WITH tenant_banks AS (
-          SELECT DISTINCT
-            ('user_' || principal_id::text) AS bank_id,
-            'user'::text AS owner_type,
-            principal_id::text AS owner_id
-          FROM tenant_members
-          WHERE tenant_id = ${req.tenantId}
-            AND lower(principal_type) = 'user'
-            AND status = 'active'
-          UNION
-          SELECT DISTINCT
-            ('space_' || id::text) AS bank_id,
-            'space'::text AS owner_type,
-            id::text AS owner_id
-          FROM spaces
-          WHERE tenant_id = ${req.tenantId}
-          UNION
-          SELECT DISTINCT
-            id::text AS bank_id,
-            'agent'::text AS owner_type,
-            id::text AS owner_id
-          FROM agents
-          WHERE tenant_id = ${req.tenantId}
-          UNION
-          SELECT DISTINCT
-            slug::text AS bank_id,
-            'agent'::text AS owner_type,
-            id::text AS owner_id
-          FROM agents
-          WHERE tenant_id = ${req.tenantId}
-            AND slug IS NOT NULL
-            AND slug <> ''
-        )
+      result = await this.hdb.execute(sql`
         SELECT
           m.id, m.bank_id, m.text, m.context, m.fact_type,
           m.event_date, m.occurred_start, m.occurred_end,
           m.mentioned_at, m.tags, m.access_count, m.proof_count,
-          m.metadata, m.created_at, m.updated_at,
-          COALESCE(
-            m.metadata->>'ownerType',
-            b.owner_type,
-            CASE
-              WHEN m.bank_id LIKE 'space_%' THEN 'space'
-              WHEN m.bank_id LIKE 'user_%' THEN 'user'
-              ELSE 'agent'
-            END
-          ) AS inferred_owner_type,
-          CASE COALESCE(
-            m.metadata->>'ownerType',
-            b.owner_type,
-            CASE
-              WHEN m.bank_id LIKE 'space_%' THEN 'space'
-              WHEN m.bank_id LIKE 'user_%' THEN 'user'
-              ELSE 'agent'
-            END
-          )
-            WHEN 'space' THEN COALESCE(m.metadata->>'spaceId', b.owner_id)
-            WHEN 'agent' THEN COALESCE(m.metadata->>'agentId', b.owner_id)
-            ELSE COALESCE(m.metadata->>'userId', b.owner_id)
-          END AS inferred_owner_id
+          m.metadata, m.created_at, m.updated_at
         FROM ${hindsightSql()}memory_units m
-        LEFT JOIN tenant_banks b ON b.bank_id = m.bank_id
-        WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR b.bank_id IS NOT NULL)
+        WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR m.bank_id = ANY(${bankIds}::text[]))
           ${
             searchPattern
               ? sql`AND (
@@ -642,7 +640,10 @@ export class HindsightAdapter implements MemoryAdapter {
     }
 
     return (result.rows || []).map((row: any) =>
-      this.mapOperatorRow(row, req.tenantId),
+      this.mapOperatorRow(
+        withInferredOwner(row, bankOwners),
+        req.tenantId,
+      ),
     );
   }
 
@@ -1211,6 +1212,46 @@ export class HindsightAdapter implements MemoryAdapter {
       bankId,
     );
   }
+}
+
+/**
+ * Application-side replacement for the owner-inference columns the old
+ * single-query inspectTenant computed in SQL (THINK-220 split): metadata
+ * wins, then the tenant bank inventory, then the bank-id prefix heuristic.
+ */
+function withInferredOwner(
+  row: any,
+  bankOwners: Map<string, { ownerType: string; ownerId: string }>,
+): any {
+  let meta: any = {};
+  try {
+    meta =
+      typeof row.metadata === "string"
+        ? JSON.parse(row.metadata)
+        : row.metadata || {};
+  } catch {
+    meta = {};
+  }
+  const bankId = String(row.bank_id || "");
+  const bank = bankOwners.get(bankId);
+  const prefixType = bankId.startsWith("space_")
+    ? "space"
+    : bankId.startsWith("user_")
+      ? "user"
+      : "agent";
+  const ownerType =
+    stringField(meta.ownerType) ?? bank?.ownerType ?? prefixType;
+  const ownerId =
+    ownerType === "space"
+      ? (stringField(meta.spaceId) ?? bank?.ownerId)
+      : ownerType === "agent"
+        ? (stringField(meta.agentId) ?? bank?.ownerId)
+        : (stringField(meta.userId) ?? bank?.ownerId);
+  return {
+    ...row,
+    inferred_owner_type: ownerType,
+    inferred_owner_id: ownerId ?? null,
+  };
 }
 
 function uniqueStrings(values: string[]): string[] {
