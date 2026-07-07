@@ -508,6 +508,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             targetId: otherId,
           };
         });
+      edges.sort((a, b) => a.targetLabel.localeCompare(b.targetLabel));
       return { node: node as MemoryGraphNode, edges };
     };
 
@@ -533,7 +534,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
         ctx.fillStyle = color;
         ctx.fill();
-        ctx.lineWidth = Math.max(1.25, r * 0.1);
+        ctx.lineWidth = Math.max(0.75, r * 0.05);
         ctx.strokeStyle = darkenColor(color);
         ctx.stroke();
 

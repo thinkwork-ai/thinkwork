@@ -522,6 +522,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
             targetId: otherId,
           };
         });
+      edges.sort((a, b) => a.targetLabel.localeCompare(b.targetLabel));
       return { node: node as WikiGraphNode, edges };
     };
 
@@ -547,12 +548,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         if (state === "neighbor") {
           // Full-alpha type-colored ring marks 1-hop search neighbors.
           ctx.globalAlpha = 1;
-          ctx.lineWidth = Math.max(1.5, r * 0.12);
+          ctx.lineWidth = Math.max(1.25, r * 0.08);
           ctx.strokeStyle = color;
           ctx.stroke();
           ctx.globalAlpha = alpha;
         } else {
-          ctx.lineWidth = Math.max(1.25, r * 0.1);
+          ctx.lineWidth = Math.max(0.75, r * 0.05);
           ctx.strokeStyle = darkenColor(color);
           ctx.stroke();
         }

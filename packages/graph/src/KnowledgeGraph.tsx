@@ -494,6 +494,7 @@ export const KnowledgeGraph = forwardRef<
           evidenceCount: link.evidenceCount,
         };
       });
+    edges.sort((a, b) => a.targetLabel.localeCompare(b.targetLabel));
     return { node, edges };
   };
 
@@ -533,12 +534,12 @@ export const KnowledgeGraph = forwardRef<
       ctx.fill();
       if (state === "neighbor") {
         ctx.globalAlpha = 1;
-        ctx.lineWidth = Math.max(1.5, r * 0.12);
+        ctx.lineWidth = Math.max(1.25, r * 0.08);
         ctx.strokeStyle = color;
         ctx.stroke();
         ctx.globalAlpha = alpha;
       } else {
-        ctx.lineWidth = Math.max(1.25, r * 0.1);
+        ctx.lineWidth = Math.max(0.75, r * 0.05);
         ctx.strokeStyle = darkenColor(color);
         ctx.stroke();
       }
