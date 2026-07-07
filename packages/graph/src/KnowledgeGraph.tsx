@@ -740,6 +740,10 @@ export const KnowledgeGraph = forwardRef<
   // One-shot framing: zoom to fit after the first simulation settle.
   // Zoom/pan after that belongs to the user.
   const zoomInitRef = useRef(false);
+  // The first paint happens at the default zoom for a frame before
+  // onEngineStop applies the fit — keep the canvas invisible until the
+  // framing has landed so there's no visible jump.
+  const [framed, setFramed] = useState(false);
 
   const anyFetching = result.fetching && !result.data;
   if (anyFetching) {
@@ -791,7 +795,12 @@ export const KnowledgeGraph = forwardRef<
   }));
 
   return (
-    <div ref={setContainerEl} className="absolute inset-0 overflow-hidden">
+    <div
+      ref={setContainerEl}
+      className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
+        framed ? "opacity-100" : "opacity-0"
+      }`}
+    >
       <ForceGraph2D
         ref={fgRef}
         graphData={graphData}
@@ -834,6 +843,7 @@ export const KnowledgeGraph = forwardRef<
           if (typeof k === "number" && k < 0.55) {
             fgRef.current?.zoom?.(0.55, 0);
           }
+          setFramed(true);
         }}
         onNodeClick={(node: any) => {
           // Clicking a node focuses it and surfaces the selected-node
