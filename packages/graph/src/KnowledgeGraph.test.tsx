@@ -330,17 +330,19 @@ describe("KnowledgeGraph", () => {
   });
 
   describe("Graph Focus Mode", () => {
-    it("clicking a node lights its 2-degree neighborhood (chain lights fully)", async () => {
+    it("clicking a node lights its direct neighborhood (1 degree)", async () => {
       const { props } = await renderGraph();
 
       await act(async () => {
         props.onNodeClick(props.graphData.nodes[0]);
       });
 
+      // entity-1 -> entity-2 -> entity-3 is a chain: 1 degree from
+      // entity-1 lights entity-2 but not entity-3.
       const latest = latestForceGraphProps();
       expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(1);
       expect(paintNode(latest, props.graphData.nodes[1]).fillAlpha).toBe(1);
-      expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(1);
+      expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(0.15);
       expect(screen.queryByText("Showing direct connections only")).toBeNull();
     });
 
@@ -447,7 +449,7 @@ describe("KnowledgeGraph", () => {
       expect(screen.queryByText("Showing direct connections only")).toBeNull();
     });
 
-    it("hub over the cap degrades to 1 degree and shows the truncation chip (AE1)", async () => {
+    it("hub focus lights all direct neighbors without a truncation chip", async () => {
       const hubFixture = {
         nodes: [
           { id: "hub", entityId: "hub", label: "Hub" },
@@ -478,9 +480,10 @@ describe("KnowledgeGraph", () => {
         props.onNodeClick(props.graphData.nodes[0]);
       });
 
-      expect(
-        await screen.findByText("Showing direct connections only"),
-      ).toBeTruthy();
+      // Degree 1 is always accepted in full — no silent truncation.
+      const latest = latestForceGraphProps();
+      expect(paintNode(latest, props.graphData.nodes[1]).fillAlpha).toBe(1);
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
     });
 
     it("focus changes rebuild nothing: same graphData, no force re-registration", async () => {
@@ -574,50 +577,34 @@ describe("KnowledgeGraph", () => {
       expect(paintNode(latest, props.graphData.nodes[5]).texts.length).toBe(0);
     });
 
-    it("node-label toggle On overrides the closed zoom gate (AE7)", async () => {
+    it("the single Labels toggle overrides the gate in both directions (AE7/AE3)", async () => {
       const props = await renderLarge();
       props.onZoom({ k: 0.3 }); // gate closed
       const nodeA = props.graphData.nodes[0];
-      expect(paintNode(props, nodeA).texts.length).toBe(0);
-
-      // auto -> on
-      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
-      expect(
-        paintNode(latestForceGraphProps(), nodeA).texts.length,
-      ).toBeGreaterThan(0);
-
-      // on -> off hides everywhere, even zoomed in.
-      props.onZoom({ k: 2 });
-      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
-      expect(paintNode(latestForceGraphProps(), nodeA).texts.length).toBe(0);
-
-      // off -> auto: gated behavior returns (zoomed in => visible).
-      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
-      expect(
-        paintNode(latestForceGraphProps(), nodeA).texts.length,
-      ).toBeGreaterThan(0);
-    });
-
-    it("relationship toggle Off removes edge labels while node labels remain (AE3)", async () => {
-      const props = await renderLarge();
       const litLink = hydrateLink(props.graphData.links[0]);
+      expect(paintNode(props, nodeA).texts.length).toBe(0);
+      expect(paintLink(props, litLink)).toEqual([]);
 
-      await act(async () => {
-        props.onNodeClick(props.graphData.nodes[0]); // focus "a"
-      });
+      const toggle = () =>
+        screen.getByRole("button", { name: "Toggle labels" });
+
+      // auto -> on: node and relationship labels appear despite the gate.
+      fireEvent.click(toggle());
+      expect(
+        paintNode(latestForceGraphProps(), nodeA).texts.length,
+      ).toBeGreaterThan(0);
       expect(paintLink(latestForceGraphProps(), litLink)).toEqual(["supports"]);
 
-      // auto -> on -> off
-      const relToggle = () =>
-        screen.getByRole("button", { name: "Show relationship labels" });
-      fireEvent.click(relToggle());
-      fireEvent.click(relToggle());
+      // on -> off hides both everywhere, even zoomed in.
+      props.onZoom({ k: 2 });
+      fireEvent.click(toggle());
+      expect(paintNode(latestForceGraphProps(), nodeA).texts.length).toBe(0);
+      expect(paintLink(latestForceGraphProps(), litLink)).toEqual([]);
 
-      const latest = latestForceGraphProps();
-      expect(paintLink(latest, litLink)).toEqual([]);
-      // Lit node labels stay.
+      // off -> auto: gated behavior returns (zoomed in => visible).
+      fireEvent.click(toggle());
       expect(
-        paintNode(latest, props.graphData.nodes[0]).texts.length,
+        paintNode(latestForceGraphProps(), nodeA).texts.length,
       ).toBeGreaterThan(0);
     });
   });

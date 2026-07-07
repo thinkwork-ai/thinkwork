@@ -12,42 +12,30 @@ export function nextLabelMode(mode: LabelMode): LabelMode {
 }
 
 interface GraphLabelTogglesProps {
-  nodeLabelMode: LabelMode;
-  linkLabelMode: LabelMode;
-  onNodeLabelModeChange: (mode: LabelMode) => void;
-  onLinkLabelModeChange: (mode: LabelMode) => void;
+  labelMode: LabelMode;
+  onLabelModeChange: (mode: LabelMode) => void;
 }
 
 /**
- * Label visibility controls, overlaid top-right inside the graph container
- * (the bottom-left corner belongs to the type legend). `Auto` follows zoom
- * gating and focus defaults; `On`/`Off` override absolutely. Session-only
- * state — the host component owns it per mount.
+ * Single label-visibility control for node and relationship labels
+ * together, overlaid top-left inside the graph container and styled to
+ * match the selected-node chip. `Auto` follows zoom gating and focus
+ * defaults; `On`/`Off` override absolutely. Session-only state — the
+ * host component owns it per mount.
  */
 export function GraphLabelToggles({
-  nodeLabelMode,
-  linkLabelMode,
-  onNodeLabelModeChange,
-  onLinkLabelModeChange,
+  labelMode,
+  onLabelModeChange,
 }: GraphLabelTogglesProps) {
   return (
-    <div className="absolute top-3 right-3 flex items-center gap-1.5 text-[11px] text-muted-foreground bg-background/80 rounded px-2 py-1.5">
-      <button
-        type="button"
-        aria-label="Show node labels"
-        className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-accent-foreground"
-        onClick={() => onNodeLabelModeChange(nextLabelMode(nodeLabelMode))}
-      >
-        Node labels: {MODE_LABELS[nodeLabelMode]}
-      </button>
-      <button
-        type="button"
-        aria-label="Show relationship labels"
-        className="rounded border border-border px-2 py-0.5 hover:bg-accent hover:text-accent-foreground"
-        onClick={() => onLinkLabelModeChange(nextLabelMode(linkLabelMode))}
-      >
-        Relationship labels: {MODE_LABELS[linkLabelMode]}
-      </button>
-    </div>
+    <button
+      type="button"
+      aria-label="Toggle labels"
+      className="absolute top-3 left-3 flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+      onClick={() => onLabelModeChange(nextLabelMode(labelMode))}
+    >
+      <span className="font-medium">Labels</span>
+      <span className="text-muted-foreground">{MODE_LABELS[labelMode]}</span>
+    </button>
   );
 }

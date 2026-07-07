@@ -53,8 +53,8 @@ describe("scale validation at 10k nodes / ~50k edges", () => {
     const elapsed = performance.now() - start;
     // eslint-disable-next-line no-console
     console.info(`expandNeighborhood(hub): ${elapsed.toFixed(0)}ms`);
-    expect(hub.truncated).toBe(true);
     expect(hub.degreeUsed).toBe(1);
+    expect(hub.ids.size).toBeGreaterThan(100);
     expect(elapsed).toBeLessThan(50 * CI_SLACK);
   });
 

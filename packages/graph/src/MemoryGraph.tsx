@@ -432,12 +432,9 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
 
     // Label visibility: `auto` follows the zoom gate in the overview and
     // lights lit-set labels in focus; `on`/`off` override absolutely.
-    const [nodeLabelMode, setNodeLabelMode] = useState<LabelMode>("auto");
-    const [linkLabelMode, setLinkLabelMode] = useState<LabelMode>("auto");
-    const nodeLabelModeRef = useRef<LabelMode>("auto");
-    nodeLabelModeRef.current = nodeLabelMode;
-    const linkLabelModeRef = useRef<LabelMode>("auto");
-    linkLabelModeRef.current = linkLabelMode;
+    const [labelMode, setLabelMode] = useState<LabelMode>("auto");
+    const labelModeRef = useRef<LabelMode>("auto");
+    labelModeRef.current = labelMode;
     // Canvas zoom scale from onZoom — the 2D renderer's zoom gate signal.
     const zoomKRef = useRef(1);
     const graphDataRef = useRef(graphData);
@@ -446,7 +443,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     dimsRef.current = dims;
 
     const nodeLabelVisible = useCallback((nodeId: string) => {
-      const mode = nodeLabelModeRef.current;
+      const mode = labelModeRef.current;
       if (mode === "on") return true;
       if (mode === "off") return false;
       const focusState = focusRef.current;
@@ -461,7 +458,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       // Relationship labels ride the line itself (neo4j style). Off hides
       // them everywhere; in focus they mark the lit set; in the overview
       // they follow the same zoom gate as node labels.
-      if (linkLabelModeRef.current === "off") return false;
+      if (labelModeRef.current === "off") return false;
       const focusState = focusRef.current;
       if (focusState) {
         return (
@@ -469,6 +466,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           focusState.litIds.has(endpointId(link.target))
         );
       }
+      if (labelModeRef.current === "on") return true;
       return labelsVisibleAtScale(
         zoomKRef.current,
         graphDataRef.current.nodes.length,
@@ -817,7 +815,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           }}
         />
         {focus && selectedNode && (
-          <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5">
+          <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
             <button
               type="button"
               aria-label={`Open details for ${selectedNode.label}`}
@@ -842,10 +840,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           </div>
         )}
         <GraphLabelToggles
-          nodeLabelMode={nodeLabelMode}
-          linkLabelMode={linkLabelMode}
-          onNodeLabelModeChange={setNodeLabelMode}
-          onLinkLabelModeChange={setLinkLabelMode}
+          labelMode={labelMode}
+          onLabelModeChange={setLabelMode}
         />
       </div>
     );

@@ -234,8 +234,9 @@ export function darkenColor(hex: string, factor = 0.55): string {
  *  focus defaults; `on`/`off` override absolutely (R11). */
 export type LabelMode = "auto" | "on" | "off";
 
-/** Neighborhood depth lit by Graph Focus Mode. */
-export const DEFAULT_FOCUS_DEGREE = 2;
+/** Neighborhood depth lit by Graph Focus Mode: the clicked node and its
+ *  direct connections. */
+export const DEFAULT_FOCUS_DEGREE = 1;
 /** Above this lit-set size, focus silently degrades to 1 degree (R5). */
 export const DEFAULT_FOCUS_CAP = 150;
 
