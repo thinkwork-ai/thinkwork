@@ -51,6 +51,8 @@ interface Recorded {
   waiverWrites: Array<Record<string, unknown>>;
   conformanceRecords: Array<Record<string, unknown>>;
   memoryIngests: Array<Record<string, unknown>>;
+  refreshSuccesses: Array<Record<string, unknown>>;
+  refreshFailures: Array<Record<string, unknown>>;
 }
 
 function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
@@ -66,6 +68,8 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     waiverWrites: [],
     conformanceRecords: [],
     memoryIngests: [],
+    refreshSuccesses: [],
+    refreshFailures: [],
   };
   const row: DocumentRow = {
     id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
@@ -100,7 +104,13 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     resolveActingUserId: vi.fn(async ({ triggeringMessageId }) =>
       triggeringMessageId ? USER_ID : null,
     ),
-    resolveRunActingUserId: vi.fn(async () => null),
+    resolveTurnRunContext: vi.fn(async () => null),
+    markRefreshSucceeded: vi.fn(async (input) => {
+      recorded.refreshSuccesses.push(input as unknown as Record<string, unknown>);
+    }),
+    recordRefreshFailure: vi.fn(async (input) => {
+      recorded.refreshFailures.push(input as unknown as Record<string, unknown>);
+    }),
     findExistingDraftDocument: vi.fn(async () => null),
     upsertDocumentRow: vi.fn(async (input) => {
       recorded.upserts.push(input as unknown as Record<string, unknown>);
@@ -338,12 +348,24 @@ describe("handleDocumentEmission", () => {
   });
 });
 
-describe("run-derived acting user (THINK-155 U1)", () => {
-  const RUN_AS_USER_ID = "88888888-8888-8888-8888-888888888888";
+const RUN_AS_USER_ID = "88888888-8888-8888-8888-888888888888";
+const RUN_ID = "99999999-9999-9999-9999-999999999999";
+const LOOP_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
+/** A linked automation run whose run-as user passed the membership check. */
+function runContext(actingUserId: string | null = RUN_AS_USER_ID) {
+  return {
+    runId: RUN_ID,
+    agentLoopId: LOOP_ID,
+    loopName: "Weekly pipeline report",
+    actingUserId,
+  };
+}
+
+describe("run-derived acting user (THINK-155 U1)", () => {
   it("scheduled finalize-with-space succeeds as the run-as user (AE1 identity leg)", async () => {
     const { deps, recorded } = makeDeps({
-      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+      resolveTurnRunContext: vi.fn(async () => runContext()),
     });
     const result = await emit(
       { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
@@ -352,7 +374,7 @@ describe("run-derived acting user (THINK-155 U1)", () => {
     );
     expect(result.body.ok).toBe(true);
     expect(result.body.status).toBe("final");
-    expect(deps.resolveRunActingUserId).toHaveBeenCalledWith({
+    expect(deps.resolveTurnRunContext).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       turnId: TURN_ID,
     });
@@ -366,9 +388,9 @@ describe("run-derived acting user (THINK-155 U1)", () => {
   });
 
   it("triggering-message user wins over the run source (priority order)", async () => {
-    const runResolver = vi.fn(async () => RUN_AS_USER_ID);
+    const runResolver = vi.fn(async () => runContext());
     const { deps, recorded } = makeDeps({
-      resolveRunActingUserId: runResolver,
+      resolveTurnRunContext: runResolver,
     });
     const result = await emit(VALID_DOCUMENT, deps); // human turn
     expect(result.body.ok).toBe(true);
@@ -376,10 +398,10 @@ describe("run-derived acting user (THINK-155 U1)", () => {
     expect(recorded.upserts[0].actingUserId).toBe(USER_ID);
   });
 
-  it("run resolver yielding null (stale/non-member run-as) keeps the guard firing", async () => {
-    const runResolver = vi.fn(async () => null);
+  it("run context with a null acting user (stale/non-member run-as) keeps the guard firing", async () => {
+    const runResolver = vi.fn(async () => runContext(null));
     const { deps, recorded } = makeDeps({
-      resolveRunActingUserId: runResolver,
+      resolveTurnRunContext: runResolver,
     });
     const result = await emit(
       { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
@@ -394,7 +416,7 @@ describe("run-derived acting user (THINK-155 U1)", () => {
 
   it("run-as user without space membership is rejected (AE3)", async () => {
     const { deps, recorded } = makeDeps({
-      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+      resolveTurnRunContext: vi.fn(async () => runContext()),
       hasSpaceWriteRole: vi.fn(async () => false),
     });
     const result = await emit(
@@ -410,12 +432,10 @@ describe("run-derived acting user (THINK-155 U1)", () => {
 });
 
 describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => {
-  const RUN_AS_USER_ID = "88888888-8888-8888-8888-888888888888";
-
   /** Deps where every mutating call appends to a shared op log. */
   function makeOrderedDeps(overrides: Partial<DocumentEmissionDeps> = {}) {
     const { deps, recorded } = makeDeps({
-      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+      resolveTurnRunContext: vi.fn(async () => runContext()),
     });
     const ops: string[] = [];
     const wrapped: DocumentEmissionDeps = {
@@ -583,6 +603,123 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
     expect(ops.indexOf("s3:digest")).toBeLessThan(ops.indexOf("db:upsert"));
     expect(ops.indexOf("db:upsert")).toBeLessThan(ops.indexOf("db:pin"));
     expect(recorded.upserts[0].preserveHeadOnConflict).toBeUndefined();
+  });
+});
+
+describe("refresh state + failure observability (THINK-155 U3)", () => {
+  it("run-derived finalize gate rejection records the failure against the automation", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      preflight: vi.fn(() => ({
+        ok: false as const,
+        diagnostics: [
+          { code: "SKELETON" as const, message: "empty", location: "head" },
+        ],
+      })),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(recorded.refreshFailures).toHaveLength(1);
+    expect(recorded.refreshFailures[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      agentLoopId: LOOP_ID,
+      loopName: "Weekly pipeline report",
+      runId: RUN_ID,
+      errorCode: "COMPILER_DEFECT",
+    });
+    expect(recorded.refreshFailures[0].artifactId).toBeTruthy();
+    expect(recorded.refreshSuccesses).toHaveLength(0);
+  });
+
+  it("run-derived DRAFT gate rejection records nothing (in-turn self-correction loop)", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      resolvePlate: vi.fn(async () => ({
+        ok: false as const,
+        visibleSlugs: ["report"],
+      })),
+    });
+    const result = await emit({ ...VALID_DOCUMENT, genre: "novel" }, deps, null);
+    expect(result.body.ok).toBe(false);
+    expect(recorded.refreshFailures).toHaveLength(0);
+  });
+
+  it("space-membership rejection (AE3) records a FORBIDDEN failure naming the automation", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      hasSpaceWriteRole: vi.fn(async () => false),
+    });
+    await emit({ ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID }, deps, null);
+    expect(recorded.refreshFailures).toHaveLength(1);
+    expect(recorded.refreshFailures[0].errorCode).toBe("FORBIDDEN");
+    expect(String(recorded.refreshFailures[0].errorMessage)).toContain(
+      "not a member of the target space",
+    );
+  });
+
+  it("stale run-as rejection names the run-as user problem in the failure", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext(null)),
+    });
+    await emit({ ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID }, deps, null);
+    expect(recorded.refreshFailures).toHaveLength(1);
+    expect(String(recorded.refreshFailures[0].errorMessage)).toContain(
+      "run-as user",
+    );
+  });
+
+  it("run-derived finalize success stamps the refresh (last_refresh_at path)", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+    });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(result.body.ok).toBe(true);
+    expect(recorded.refreshSuccesses).toHaveLength(1);
+    expect(recorded.refreshSuccesses[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      artifactId: result.body.artifactId,
+    });
+    expect(recorded.refreshFailures).toHaveLength(0);
+  });
+
+  it("human-turn emission failure records no refresh state and no item", async () => {
+    const { deps, recorded } = makeDeps({
+      hasSpaceWriteRole: vi.fn(async () => false),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(recorded.refreshFailures).toHaveLength(0);
+    expect(recorded.refreshSuccesses).toHaveLength(0);
+  });
+
+  it("human-turn successful finalize never stamps refresh state", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps);
+    expect(result.body.ok).toBe(true);
+    expect(recorded.refreshSuccesses).toHaveLength(0);
+  });
+
+  it("a refresh-record fault never masks the emission response (best-effort)", async () => {
+    const { deps } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      hasSpaceWriteRole: vi.fn(async () => false),
+      recordRefreshFailure: vi.fn(async () => {
+        throw new Error("inbox down");
+      }),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.code).toBe("FORBIDDEN");
   });
 });
 

@@ -15,6 +15,8 @@ export {
   loadAgentLoopRunRepairState,
   loadActiveSpaceId,
   loadAgentDefaultSpaceId,
+  recordDocumentRefreshFailure,
+  DOCUMENT_REFRESH_FAILURE_INBOX_TYPE,
   type DbAgentLoopLedgerHooks,
 } from "./ledger-db";
 export {

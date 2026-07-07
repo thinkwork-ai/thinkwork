@@ -77,7 +77,11 @@ import {
   resolvePlateForEmission,
   type EmissionPlateResolution,
 } from "./plate-registry.js";
-import { resolveRunActingUserId } from "../agent-loops/run-acting-user.js";
+import {
+  resolveTurnRunContext,
+  type TurnRunContext,
+} from "../agent-loops/run-acting-user.js";
+import { recordDocumentRefreshFailure } from "@thinkwork/database-pg";
 
 /** `artifacts.metadata.kind` for dual-body document artifacts. */
 export const DOCUMENT_METADATA_KIND = "document" as const;
@@ -244,14 +248,39 @@ export interface DocumentEmissionDeps {
   }) => Promise<string | null>;
   /**
    * THINK-155 U1: second derivation source for scheduled turns — the
-   * automation's run-as user (turn → run → `agent_loops.run_as_user_id`,
-   * tenant-membership cross-checked). Consulted only when the triggering-
-   * message source yields no user; human turns keep priority.
+   * automation's run context (turn → run → `agent_loops`), whose
+   * `actingUserId` is the tenant-membership-cross-checked run-as user.
+   * Consulted only when the triggering-message source yields no user; human
+   * turns keep priority.
    */
-  resolveRunActingUserId: (input: {
+  resolveTurnRunContext: (input: {
     tenantId: string;
     turnId: string;
-  }) => Promise<string | null>;
+  }) => Promise<TurnRunContext | null>;
+  /**
+   * THINK-155 U3: stamp a successful scheduled refresh — sets
+   * `artifacts.last_refresh_at`, clears `refresh_failed_at`. Best-effort;
+   * called only on the run-derived path.
+   */
+  markRefreshSucceeded: (input: {
+    tenantId: string;
+    artifactId: string;
+  }) => Promise<void>;
+  /**
+   * THINK-155 U3: record a failed scheduled refresh — stamps
+   * `artifacts.refresh_failed_at` and raises the deduplicated
+   * `document_refresh_failed` inbox item (one OPEN item per automation).
+   * Best-effort; called only on the run-derived path.
+   */
+  recordRefreshFailure: (input: {
+    tenantId: string;
+    agentLoopId: string;
+    loopName: string | null;
+    runId: string;
+    errorCode: string;
+    errorMessage: string;
+    artifactId: string | null;
+  }) => Promise<void>;
   findExistingDraftDocument: (input: {
     tenantId: string;
     threadId: string;
@@ -354,7 +383,21 @@ function defaultDeps(): DocumentEmissionDeps {
         ? row.sender_id
         : null;
     },
-    resolveRunActingUserId: (input) => resolveRunActingUserId(input),
+    resolveTurnRunContext: (input) => resolveTurnRunContext(input),
+    markRefreshSucceeded: async ({ tenantId, artifactId }) => {
+      await db
+        .update(artifacts)
+        .set({
+          last_refresh_at: new Date(),
+          refresh_failed_at: null,
+          updated_at: new Date(),
+        })
+        .where(
+          and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, tenantId)),
+        );
+    },
+    recordRefreshFailure: (input) =>
+      recordDocumentRefreshFailure(getDb(), { ...input, now: new Date() }),
     findExistingDraftDocument: async ({ tenantId, threadId, genre, title }) => {
       const rows = await db
         .select({ metadata: artifacts.metadata })
@@ -626,6 +669,78 @@ export async function handleDocumentEmission(
   }
   const doc = parsed.value;
 
+  // ---- Identity: acting user + documentId fallback (KTD8) ----------------
+  // Resolved before the content gates so a failed scheduled refresh can be
+  // recorded against its automation (THINK-155 U3).
+  let actingUserId = await deps.resolveActingUserId({
+    tenantId: input.tenantId,
+    triggeringMessageId: input.triggeringMessageId,
+  });
+  // THINK-155 U1: scheduled turns (no triggering user message) fall back to
+  // the automation's run-as user; human turns keep priority. The run context
+  // also drives write ordering (U2 keep-last-good) and failure
+  // observability (U3).
+  let runContext: TurnRunContext | null = null;
+  if (!actingUserId) {
+    runContext = await deps.resolveTurnRunContext({
+      tenantId: input.tenantId,
+      turnId: input.turnId,
+    });
+    actingUserId = runContext?.actingUserId ?? null;
+  }
+  const runDerived = runContext !== null;
+
+  let documentId = doc.documentId ?? null;
+  if (!documentId) {
+    // THINK-155 U2: run-derived turns never adopt a stray draft row —
+    // continuity rides the documentId the agent carries between emits.
+    if (runDerived) {
+      documentId = randomUUID();
+    } else {
+      const existing = await deps.findExistingDraftDocument({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        genre: doc.genre,
+        title: doc.title,
+      });
+      documentId = existing?.documentId ?? randomUUID();
+    }
+  }
+  const artifactId = deriveDocumentArtifactId(
+    input.tenantId,
+    input.threadId,
+    documentId,
+  );
+
+  // THINK-155 U3: a failed scheduled *finalize* is recorded (refresh stamp +
+  // deduplicated inbox item). Draft-stage rejections are the agent's in-turn
+  // self-correction loop (DocSpector-style), not a refresh failure yet — the
+  // run either recovers with a successful finalize or fails terminally
+  // (caught by the finalize-projection path). Best-effort: recording never
+  // masks the emission response.
+  const recordScheduledRefreshFailure = async (
+    errorCode: string,
+    errorMessage: string,
+  ) => {
+    if (!runContext || doc.status !== "final") return;
+    try {
+      await deps.recordRefreshFailure({
+        tenantId: input.tenantId,
+        agentLoopId: runContext.agentLoopId,
+        loopName: runContext.loopName,
+        runId: runContext.runId,
+        errorCode,
+        errorMessage,
+        artifactId,
+      });
+    } catch (err) {
+      console.error(
+        "[document-emission] refresh-failure record failed (best-effort):",
+        err,
+      );
+    }
+  };
+
   // ---- Plate registry (THINK-153 KTD3): validate the genre between parse
   // and compile. Unknown slug → self-repair rejection naming the valid set;
   // hidden slug → rejected for NEW documents, but a revision turn carrying an
@@ -636,6 +751,10 @@ export async function handleDocumentEmission(
     slug: doc.genre,
   });
   if (!resolution.ok) {
+    await recordScheduledRefreshFailure(
+      "COMPILE_REJECTED",
+      `UNKNOWN_GENRE: genre "${doc.genre}" is not registered`,
+    );
     return {
       statusCode: 200,
       body: {
@@ -663,6 +782,10 @@ export async function handleDocumentEmission(
         )
       : null;
     if (!revisionRow) {
+      await recordScheduledRefreshFailure(
+        "COMPILE_REJECTED",
+        `GENRE_HIDDEN: genre "${doc.genre}" cannot start a new document`,
+      );
       return {
         statusCode: 200,
         body: {
@@ -693,6 +816,10 @@ export async function handleDocumentEmission(
       `[document-emission] compile rejected: ${compiled.diagnostics
         .map((d) => d.code)
         .join(",")} (digest ${Buffer.byteLength(doc.digestMarkdown, "utf8")}B)`,
+    );
+    await recordScheduledRefreshFailure(
+      "COMPILE_REJECTED",
+      compiled.diagnostics.map((d) => d.code).join(", "),
     );
     return {
       statusCode: 200,
@@ -725,6 +852,10 @@ export async function handleDocumentEmission(
           ",",
         )} (genre ${doc.genre}, digest ${Buffer.byteLength(doc.digestMarkdown, "utf8")}B sha256:${digestHash}, render ${Buffer.byteLength(renderHtml, "utf8")}B)`,
     );
+    await recordScheduledRefreshFailure(
+      "COMPILER_DEFECT",
+      preflight.diagnostics.map((d) => `${d.code}@${d.location}`).join(", "),
+    );
     return {
       statusCode: 500,
       body: {
@@ -736,60 +867,21 @@ export async function handleDocumentEmission(
     };
   }
 
-  // ---- Identity: acting user + documentId fallback (KTD8) ----------------
-  let actingUserId = await deps.resolveActingUserId({
-    tenantId: input.tenantId,
-    triggeringMessageId: input.triggeringMessageId,
-  });
-  // THINK-155 U1: scheduled turns (no triggering user message) fall back to
-  // the automation's run-as user; human turns keep priority. The source
-  // distinction also drives write ordering (U2 keep-last-good).
-  let actingUserSource: "message" | "run" | null = actingUserId
-    ? "message"
-    : null;
-  if (!actingUserId) {
-    actingUserId = await deps.resolveRunActingUserId({
-      tenantId: input.tenantId,
-      turnId: input.turnId,
-    });
-    if (actingUserId) actingUserSource = "run";
-  }
-  const runDerived = actingUserSource === "run";
-
-  let documentId = doc.documentId ?? null;
-  if (!documentId) {
-    // THINK-155 U2: run-derived turns never adopt a stray draft row —
-    // continuity rides the documentId the agent carries between emits.
-    if (runDerived) {
-      documentId = randomUUID();
-    } else {
-      const existing = await deps.findExistingDraftDocument({
-        tenantId: input.tenantId,
-        threadId: input.threadId,
-        genre: doc.genre,
-        title: doc.title,
-      });
-      documentId = existing?.documentId ?? randomUUID();
-    }
-  }
-  const artifactId = deriveDocumentArtifactId(
-    input.tenantId,
-    input.threadId,
-    documentId,
-  );
-
   // ---- Finalize-time space authorization (before any write) --------------
   if (doc.status === "final" && doc.spaceId) {
     if (!actingUserId) {
-      return {
+      const failure = {
         statusCode: 200,
         body: {
           ok: false,
           code: "FORBIDDEN",
-          error:
-            "Space assignment requires an acting user (turn has no triggering user message). Finalize without spaceId, or have the user finalize.",
+          error: runContext
+            ? "The automation's run-as user is unset or no longer an active tenant member; finalize into a space requires a valid run-as user."
+            : "Space assignment requires an acting user (turn has no triggering user message). Finalize without spaceId, or have the user finalize.",
         },
       };
+      await recordScheduledRefreshFailure("FORBIDDEN", failure.body.error);
+      return failure;
     }
     const allowed = await deps.hasSpaceWriteRole(
       input.tenantId,
@@ -797,7 +889,7 @@ export async function handleDocumentEmission(
       actingUserId,
     );
     if (!allowed) {
-      return {
+      const failure = {
         statusCode: 200,
         body: {
           ok: false,
@@ -806,6 +898,8 @@ export async function handleDocumentEmission(
             "The acting user is not a member of the target space; the document was not modified.",
         },
       };
+      await recordScheduledRefreshFailure("FORBIDDEN", failure.body.error);
+      return failure;
     }
   }
 
@@ -902,6 +996,10 @@ export async function handleDocumentEmission(
     });
     const row = await deps.loadDocumentRow(artifactId);
     if (!row) {
+      await recordScheduledRefreshFailure(
+        "INTERNAL",
+        "Document row missing after upsert",
+      );
       return {
         statusCode: 500,
         body: {
@@ -924,6 +1022,7 @@ export async function handleDocumentEmission(
       status = "final";
     } catch (err) {
       if (err instanceof DocumentEmissionConflict) {
+        await recordScheduledRefreshFailure("CONFLICT", err.message);
         return {
           statusCode: 200,
           body: { ok: false, code: "CONFLICT", error: err.message },
@@ -936,6 +1035,18 @@ export async function handleDocumentEmission(
       await writeHeadBodies();
     }
     await writeWaivers();
+    // THINK-155 U3: the refresh succeeded — stamp it (best-effort).
+    try {
+      await deps.markRefreshSucceeded({
+        tenantId: input.tenantId,
+        artifactId,
+      });
+    } catch (err) {
+      console.error(
+        "[document-emission] refresh-success stamp failed (best-effort):",
+        err,
+      );
+    }
   } else {
     await writeHeadBodies();
     await deps.upsertDocumentRow({
