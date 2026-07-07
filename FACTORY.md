@@ -193,10 +193,18 @@ human must check.
 ## Known sharp edges / improvement seams
 
 - Headless workers historically exited "waiting on CI" on background
-  watchers; goal discipline + blocking-foreground waits fixed it, and the
-  dispatcher sweep covers relapses. An alternative design — workers end at
-  "PR opened + auto-merge armed" and the dispatcher owns all merge-detection
-  and phase exits — was considered and parked.
+  watchers. Prose prohibitions did not stop it (two THINK-170 deaths, then
+  two more on THINK-202 on 2026-07-06); mandating one exact foreground
+  command chain in `launch-prompts.md` did — zero deaths in the five runs
+  after it landed. The dispatcher sweep covers relapses. An alternative
+  design — workers end at "PR opened + auto-merge armed" and the dispatcher
+  owns all merge-detection and phase exits — was considered and parked.
+- Automated experiential verdicts can pass visually broken renders (THINK-205
+  shipped a gapped timeline track its own screenshots showed; Eric's review
+  caught it, and the Verification Failed rebound repaired it cleanly).
+  `launch-prompts.md` now mandates pixel-level design-intent scrutiny and
+  fresh-output recomposition, but human spot-checks of visual features
+  remain worth the minute they take.
 - The dispatcher janitor must check worker liveness _immediately_ before
   removing worktrees (a live worker once had its worktree swept from under
   it; it survived, but don't).

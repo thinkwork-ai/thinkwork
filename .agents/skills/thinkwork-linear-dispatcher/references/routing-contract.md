@@ -138,7 +138,14 @@ Linear child issues are the canonical autonomous implementation unit.
 
 During Planning, create/update child issues when work has multiple shippable
 units. Each child needs objective, scope, dependencies, verification contract,
-and the parent's inherited lane label plus `LFG` when present.
+and the parent's inherited lane label plus `LFG` when present. Create children
+in `Todo`, never `Backlog` — the dispatcher's candidate scan ignores Backlog,
+so a Backlog child is reachable only through its parent's routing and can
+strand if the parent is manually moved (observed on THINK-202: the plan worker
+created children in Backlog and the dispatcher had to route them via the
+parent's handoff). A dispatcher encountering a lane-labeled Backlog child of
+an actively routed parent should treat it as `Todo` for routing purposes and
+fix its status.
 
 Before launching parent implementation, inspect child issues and active child
 workers. Do not launch parent implementation if any child issue is in an
