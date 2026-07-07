@@ -26,10 +26,15 @@ loop verified live), then customer stages. Customer runs use the same kit
 - [x] Phase 1 seam deployed (#3491)
 - [x] Phase 2 terraform merged (#3493)
 - [x] Rehearsal passed on a data copy (2026-07-07)
-- [ ] Cross-schema blockers reshaped (`inspectTenant`,
-      `enumerateDreamBanks`)
-- [ ] Cutover executed (Phase 4)
-- [ ] Maintenance loop verified live over a full cycle (Phase 5 gate)
+- [x] Cross-schema blockers reshaped (#3498; array-param hotfix #3506 —
+      drizzle arrays render as records, use ARRAY[...] with sql.join)
+- [x] Cutover executed (Phase 4, 2026-07-07 ~19:40Z): MIGRATION_OK
+      17,574 units; flip deploy via HINDSIGHT_DATABASE_NAME repo variable +
+      workflow_dispatch. Window loss: 14 units retained 19:21-19:40Z remain
+      in the old schema only.
+- [x] Maintenance loop verified live (revision 16, 19:50Z+): reconcile /
+      retention / mental-model refresh all clean; retains land in the new
+      database with nonzero extractedUnitCount (Phase 5 soak clock started)
 - [ ] ≥1 week soak, then old `hindsight` schema dropped (explicit approval)
 
 ## Stage: prod
