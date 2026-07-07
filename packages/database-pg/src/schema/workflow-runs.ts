@@ -132,7 +132,7 @@ export const workflowRuns = pgTable(
       .where(sql`${table.idempotency_key} IS NOT NULL`),
     check(
       "workflow_runs_status_check",
-      sql`${table.status} IN ('queued', 'running', 'succeeded', 'failed', 'canceled', 'timed_out', 'blocked_not_ready')`,
+      sql`${table.status} IN ('queued', 'running', 'waiting_for_human', 'succeeded', 'failed', 'canceled', 'timed_out', 'blocked_not_ready')`,
     ),
   ],
 );

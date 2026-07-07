@@ -115,7 +115,7 @@ export const workflowEngineBindings = pgTable(
       .where(sql`${table.external_workflow_id} IS NOT NULL`),
     check(
       "workflow_engine_bindings_type_check",
-      sql`${table.binding_type} IN ('step_functions_routine', 'n8n_bridge', 'n8n_import', 'twenty_crm', 'connected_app', 'native')`,
+      sql`${table.binding_type} IN ('step_functions_routine', 'step_functions_interpreter', 'n8n_bridge', 'n8n_import', 'twenty_crm', 'connected_app', 'native')`,
     ),
     check(
       "workflow_engine_bindings_status_check",

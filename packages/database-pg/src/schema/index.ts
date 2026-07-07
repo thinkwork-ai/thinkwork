@@ -56,6 +56,7 @@ export * from "./agent-loops";
 export * from "./workflows";
 export * from "./workflow-bindings";
 export * from "./workflow-runs";
+export * from "./workflow-task-tokens";
 export * from "./mcp-servers";
 export * from "./mcp-admin-keys";
 export * from "./builtin-tools";
