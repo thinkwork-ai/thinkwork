@@ -1,7 +1,13 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Eye, EyeOff, RefreshCw } from "lucide-react";
-import { Button, cn } from "@thinkwork/ui";
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+} from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsMemory,
@@ -73,23 +79,38 @@ export function SettingsMemoryHome() {
     activeTab === "memory" ? (
       <div className="flex items-center gap-1">
         {rawUnitsController ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-            data-testid="settings-memory-toggle-raw"
-            onClick={() => rawUnitsController.toggle()}
-          >
-            {rawUnitsController.showRaw ? (
-              <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            {rawUnitsController.showRaw
-              ? "Hide raw units"
-              : `Show raw units (${rawUnitsController.hiddenCount})`}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+                  rawUnitsController.showRaw &&
+                    "bg-primary/10 text-primary hover:text-primary",
+                )}
+                aria-label={
+                  rawUnitsController.showRaw
+                    ? "Hide raw memory units"
+                    : "Show raw memory units"
+                }
+                data-testid="settings-memory-toggle-raw"
+                onClick={() => rawUnitsController.toggle()}
+              >
+                {rawUnitsController.showRaw ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-64">
+              {rawUnitsController.showRaw
+                ? "Showing all memory units. Click to return to the curated view (consolidated observations, corroborated facts, and deliberate captures)."
+                : `Curated view — ${rawUnitsController.hiddenCount} raw uncorroborated unit${rawUnitsController.hiddenCount === 1 ? "" : "s"} hidden. Click to show everything.`}
+            </TooltipContent>
+          </Tooltip>
         ) : null}
         <Button
           type="button"
