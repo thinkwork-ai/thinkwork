@@ -85,6 +85,20 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).not.toContain("tokenBudget: parsedMetadata");
   });
 
+  it("rejects agent-dispatching sends before persistence when the sender is over budget", () => {
+    expect(source).toContain("getUserBudgetStatus");
+    expect(source).toContain('extensions: { code: "BUDGET_EXCEEDED" }');
+    expect(source).toContain("Monthly budget exceeded");
+    // The gate must run before the message row exists — an over-budget send
+    // leaves no trace and starts no turn.
+    expect(source.indexOf("await getUserBudgetStatus")).toBeLessThan(
+      source.indexOf(".insert(messages)"),
+    );
+    // Only sends that would dispatch an agent turn are gated; multiplayer
+    // human-to-human messages stay free.
+    expect(source).toContain("wouldDispatchAgentTurn");
+  });
+
   it("rejects goal mode before persistence when it cannot dispatch the default agent", () => {
     expect(source).toContain("Goal mode requires default agent dispatch.");
     expect(

@@ -140,7 +140,7 @@ describe("budgetStatus", () => {
     ]);
   });
 
-  it("keeps runtime-only budget usage visible without enforcing it by default", async () => {
+  it("enforces runtime-only budget usage by default", async () => {
     mocks.rows = [
       [
         {
@@ -170,13 +170,13 @@ describe("budgetStatus", () => {
         "tenant-1",
       ),
     ).resolves.toMatchObject({
-      spentUsd: 0,
+      spentUsd: 12,
       visibleSpendUsd: 12,
       estimatedUsd: 12,
-      minimumReconciliationState: "bill-reconciled",
-      remainingUsd: 10,
-      percentUsed: 0,
-      status: "normal",
+      minimumReconciliationState: "runtime-reported",
+      remainingUsd: 0,
+      percentUsed: 120,
+      status: "exceeded",
     });
   });
 });

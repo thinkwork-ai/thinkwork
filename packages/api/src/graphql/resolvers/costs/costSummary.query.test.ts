@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("costSummary", () => {
-  it("returns visible totals and strict confidence-aware enforced totals", async () => {
+  it("returns visible totals and confidence-aware enforced totals", async () => {
     mocks.rows = [
       [
         {
@@ -79,11 +79,11 @@ describe("costSummary", () => {
       ),
     ).resolves.toMatchObject({
       totalUsd: 17,
-      enforcedUsd: 3,
+      enforcedUsd: 17,
       estimatedUsd: 9,
       invocationReconciledUsd: 5,
       billReconciledUsd: 3,
-      minimumReconciliationState: "bill-reconciled",
+      minimumReconciliationState: "runtime-reported",
       totalInputTokens: 1200,
       totalOutputTokens: 600,
       eventCount: 4,

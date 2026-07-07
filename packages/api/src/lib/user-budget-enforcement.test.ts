@@ -187,7 +187,7 @@ describe("getUserBudgetStatus", () => {
     });
   });
 
-  it("excludes runtime-only usage from the default strict budget spend", async () => {
+  it("enforces runtime-reported usage by default", async () => {
     const fake = createFakeDb();
     fake.selectRows.push(
       [{ id: "user-1" }],
@@ -195,7 +195,6 @@ describe("getUserBudgetStatus", () => {
       [
         {
           totalUsd: 12,
-          enforcedUsd: 0,
           estimatedUsd: 12,
           invocationReconciledUsd: 0,
           billReconciledUsd: 0,
@@ -210,6 +209,41 @@ describe("getUserBudgetStatus", () => {
         tenantId: "tenant-1",
         userId: "user-1",
         monthStart: new Date("2026-06-01T00:00:00Z"),
+        db: fake.db as never,
+      }),
+    ).resolves.toMatchObject({
+      state: "exceeded",
+      spentUsd: 12,
+      visibleSpendUsd: 12,
+      estimatedUsd: 12,
+      minimumReconciliationState: "runtime-reported",
+      overBudget: true,
+    });
+  });
+
+  it("excludes runtime-only usage when a strict bill-reconciled floor is configured", async () => {
+    const fake = createFakeDb();
+    fake.selectRows.push(
+      [{ id: "user-1" }],
+      [{ id: "policy-1", limit_usd: "10.00" }],
+      [
+        {
+          totalUsd: 12,
+          estimatedUsd: 12,
+          invocationReconciledUsd: 0,
+          billReconciledUsd: 0,
+          mismatchUsd: 0,
+          unreconciledUsd: 0,
+        },
+      ],
+    );
+
+    await expect(
+      getUserBudgetStatus({
+        tenantId: "tenant-1",
+        userId: "user-1",
+        monthStart: new Date("2026-06-01T00:00:00Z"),
+        minimumReconciliationState: "bill-reconciled",
         db: fake.db as never,
       }),
     ).resolves.toMatchObject({
