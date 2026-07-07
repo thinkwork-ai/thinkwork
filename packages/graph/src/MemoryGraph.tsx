@@ -39,6 +39,7 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { makeEdgeLabelSprite } from "./three-label-sprite.js";
+import { GraphLabelToggles } from "./GraphLabelToggles.js";
 import {
   MEMORY_COLOR,
   ENTITY_COLOR,
@@ -413,8 +414,12 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
 
     // Label visibility: `auto` follows the zoom gate in the overview and
     // lights lit-set labels in focus; `on`/`off` override absolutely.
+    const [nodeLabelMode, setNodeLabelMode] = useState<LabelMode>("auto");
+    const [linkLabelMode, setLinkLabelMode] = useState<LabelMode>("auto");
     const nodeLabelModeRef = useRef<LabelMode>("auto");
+    nodeLabelModeRef.current = nodeLabelMode;
     const linkLabelModeRef = useRef<LabelMode>("auto");
+    linkLabelModeRef.current = linkLabelMode;
     const labelGateRef = useRef(true);
     const graphDataRef = useRef(graphData);
     graphDataRef.current = graphData;
@@ -451,6 +456,18 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         if (l.__labelSprite) l.__labelSprite.visible = linkLabelVisible(l);
       }
     }, [nodeLabelVisible, linkLabelVisible]);
+
+    // Mode changes reapply visibility and refresh() so the link object
+    // accessor re-runs (edge-label sprites created/dropped to match).
+    const labelModesInitRef = useRef(false);
+    useEffect(() => {
+      if (!labelModesInitRef.current) {
+        labelModesInitRef.current = true;
+        return;
+      }
+      applyLabelVisibility();
+      fgRef.current?.refresh?.();
+    }, [nodeLabelMode, linkLabelMode, applyLabelVisibility]);
 
     // Zoom gate: 3D mode has no onZoom event, so listen (throttled) on the
     // controls' change event and read the camera distance.
@@ -526,75 +543,78 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       return { node: node as MemoryGraphNode, edges };
     };
 
-    const nodeThreeObject = useCallback((node: any) => {
-      const state = classifyNode(node.id, classificationRef.current);
-      const muted = state !== "matched";
-      const isMemory = node.nodeType === "memory";
-      const entityType = node.entityType as string | null;
-      const label = isMemory
-        ? "Memory"
-        : entityType
-          ? entityType.charAt(0).toUpperCase() + entityType.slice(1)
-          : node.label?.slice(0, 12) || "Entity";
-      const color = isMemory
-        ? MEMORY_COLOR
-        : entityType
-          ? MEMORY_TYPE_COLORS[entityType] || ENTITY_COLOR
-          : ENTITY_COLOR;
-      // Size by mention count (edgeCount carries mention_count from resolver)
-      const mentions = node.edgeCount || 1;
-      const r = isMemory
-        ? 10
-        : Math.max(5, Math.min(18, 5 + Math.sqrt(mentions) * 1.5));
-      const opacity = muted ? 0.15 : 1;
+    const nodeThreeObject = useCallback(
+      (node: any) => {
+        const state = classifyNode(node.id, classificationRef.current);
+        const muted = state !== "matched";
+        const isMemory = node.nodeType === "memory";
+        const entityType = node.entityType as string | null;
+        const label = isMemory
+          ? "Memory"
+          : entityType
+            ? entityType.charAt(0).toUpperCase() + entityType.slice(1)
+            : node.label?.slice(0, 12) || "Entity";
+        const color = isMemory
+          ? MEMORY_COLOR
+          : entityType
+            ? MEMORY_TYPE_COLORS[entityType] || ENTITY_COLOR
+            : ENTITY_COLOR;
+        // Size by mention count (edgeCount carries mention_count from resolver)
+        const mentions = node.edgeCount || 1;
+        const r = isMemory
+          ? 10
+          : Math.max(5, Math.min(18, 5 + Math.sqrt(mentions) * 1.5));
+        const opacity = muted ? 0.15 : 1;
 
-      const group = new THREE.Group();
+        const group = new THREE.Group();
 
-      // Sphere — always transparent so runtime opacity tweaks take effect
-      const geometry = new THREE.SphereGeometry(r, 16, 16);
-      const material = new THREE.MeshLambertMaterial({
-        color,
-        transparent: true,
-        opacity,
-      });
-      const sphere = new THREE.Mesh(geometry, material);
-      group.add(sphere);
+        // Sphere — always transparent so runtime opacity tweaks take effect
+        const geometry = new THREE.SphereGeometry(r, 16, 16);
+        const material = new THREE.MeshLambertMaterial({
+          color,
+          transparent: true,
+          opacity,
+        });
+        const sphere = new THREE.Mesh(geometry, material);
+        group.add(sphere);
 
-      // Text label via sprite — canvas drawn pure white; mute effect comes
-      // from spriteMaterial.opacity so we don't have to redraw the canvas
-      // when the filter changes.
-      const canvas = document.createElement("canvas");
-      const size = 128;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, size, size);
-      const fontSize = isMemory ? 18 : 14;
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, size / 2, size / 2);
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        opacity,
-      });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(r * 3, r * 3, 1);
-      sprite.position.set(0, 0, 0);
-      sprite.visible = nodeLabelVisible(node.id);
-      group.add(sprite);
+        // Text label via sprite — canvas drawn pure white; mute effect comes
+        // from spriteMaterial.opacity so we don't have to redraw the canvas
+        // when the filter changes.
+        const canvas = document.createElement("canvas");
+        const size = 128;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(0, 0, size, size);
+        const fontSize = isMemory ? 18 : 14;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, size / 2, size / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity,
+        });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(r * 3, r * 3, 1);
+        sprite.position.set(0, 0, 0);
+        sprite.visible = nodeLabelVisible(node.id);
+        group.add(sprite);
 
-      // Stash material refs so the filter effect can mutate opacity without
-      // rebuilding the graph.
-      node.__sphereMat = material;
-      node.__spriteMat = spriteMaterial;
-      node.__labelSprite = sprite;
+        // Stash material refs so the filter effect can mutate opacity without
+        // rebuilding the graph.
+        node.__sphereMat = material;
+        node.__spriteMat = spriteMaterial;
+        node.__labelSprite = sprite;
 
-      return group;
-    }, [nodeLabelVisible]);
+        return group;
+      },
+      [nodeLabelVisible],
+    );
 
     // Apply filter/focus via in-place material opacity — NO graphData
     // rebuild.
@@ -635,9 +655,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       linkForce?.distance((link: any) =>
         sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
       );
-      linkForce?.strength?.((link: any) =>
-        sameCommunity(link) ? 0.6 : 0.05,
-      );
+      linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
       // Per-community anchors replace the global center force — anchors
       // are packed around the origin so the graph stays framed. Unassigned
       // nodes (defensive) fall back to center attraction.
@@ -829,6 +847,12 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             Showing direct connections only
           </div>
         )}
+        <GraphLabelToggles
+          nodeLabelMode={nodeLabelMode}
+          linkLabelMode={linkLabelMode}
+          onNodeLabelModeChange={setNodeLabelMode}
+          onLinkLabelModeChange={setLinkLabelMode}
+        />
         <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
           {Object.entries(MEMORY_TYPE_COLORS)
             .filter(([k]) =>

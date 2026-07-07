@@ -229,10 +229,7 @@ describe("detectCommunities", () => {
   });
 
   it("handles an edgeless graph with singleton communities", () => {
-    const communities = detectCommunities(
-      [{ id: "x" }, { id: "y" }],
-      [],
-    );
+    const communities = detectCommunities([{ id: "x" }, { id: "y" }], []);
     expect(communities.get("x")).not.toBe(communities.get("y"));
     expect(communities.size).toBe(2);
   });

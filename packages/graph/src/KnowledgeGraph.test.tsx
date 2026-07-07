@@ -254,9 +254,8 @@ describe("KnowledgeGraph", () => {
     await screen.findByTestId("force-graph");
 
     const clusterForceCalls = () =>
-      d3ForceCalls.filter(
-        (call) => call.name === "x" || call.name === "y",
-      ).length;
+      d3ForceCalls.filter((call) => call.name === "x" || call.name === "y")
+        .length;
     const centerRemovals = d3ForceCalls.filter(
       (call) => call.name === "center" && call.force === null,
     );
@@ -369,9 +368,7 @@ describe("KnowledgeGraph", () => {
         "entity-2": 1,
         "entity-3": 1,
       });
-      expect(
-        screen.queryByText("Showing direct connections only"),
-      ).toBeNull();
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
     });
 
     it("background click clears focus and restores prior opacities (AE4)", async () => {
@@ -484,9 +481,7 @@ describe("KnowledgeGraph", () => {
         "entity-2": 0.15,
         "entity-3": 1,
       });
-      expect(
-        screen.queryByText("Showing direct connections only"),
-      ).toBeNull();
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
     });
 
     it("hub over the cap degrades to 1 degree and shows the truncation chip (AE1)", async () => {
@@ -536,9 +531,7 @@ describe("KnowledgeGraph", () => {
         props.onNodeClick(props.graphData.nodes[0]);
       });
       // Clear the search — focus stays active.
-      view.rerender(
-        <KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />,
-      );
+      view.rerender(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
       await waitFor(() =>
         expect(
           opacityById(latestForceGraphProps().graphData.nodes)["entity-1"],
@@ -675,6 +668,65 @@ describe("KnowledgeGraph", () => {
       );
       expect(set).toHaveBeenCalledWith(5, 10, 0);
       expect(keepDefault).toBe(false);
+    });
+
+    it("node-label toggle On overrides the closed zoom gate (AE7)", async () => {
+      const props = await renderLarge();
+
+      // Gate closed at framing distance; toggle cycles auto -> on.
+      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
+      await waitFor(() =>
+        expect(
+          props.graphData.nodes.every((n: any) => n.__labelSprite.visible),
+        ).toBe(true),
+      );
+
+      // Second click: on -> off hides everything, even zoomed in.
+      cameraMock.position.z = 400;
+      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
+      await waitFor(() =>
+        expect(
+          props.graphData.nodes.some((n: any) => n.__labelSprite.visible),
+        ).toBe(false),
+      );
+
+      // Third click: back to auto — zoomed-in gate applies again.
+      controlsMock.listeners.forEach((cb) => cb());
+      fireEvent.click(screen.getByRole("button", { name: "Show node labels" }));
+      await waitFor(() =>
+        expect(
+          props.graphData.nodes.every((n: any) => n.__labelSprite.visible),
+        ).toBe(true),
+      );
+    });
+
+    it("relationship toggle Off removes edge labels while node labels remain (AE3)", async () => {
+      const props = await renderLarge();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]); // focus "a"
+      });
+      expect(
+        latestForceGraphProps().linkThreeObject(props.graphData.links[0]),
+      ).toBeTruthy();
+
+      // Cycle relationship labels auto -> on -> off.
+      const relToggle = () =>
+        screen.getByRole("button", { name: "Show relationship labels" });
+      fireEvent.click(relToggle());
+      fireEvent.click(relToggle());
+
+      await waitFor(() =>
+        expect(
+          latestForceGraphProps().linkThreeObject(props.graphData.links[0]),
+        ).toBeFalsy(),
+      );
+      // Lit node labels stay visible.
+      const byId = Object.fromEntries(
+        props.graphData.nodes.map((n: any) => [n.id, n.__labelSprite.visible]),
+      );
+      expect(byId["a"]).toBe(true);
+      expect(byId["b"]).toBe(true);
     });
   });
 

@@ -39,6 +39,7 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { makeEdgeLabelSprite } from "./three-label-sprite.js";
+import { GraphLabelToggles } from "./GraphLabelToggles.js";
 
 export type KnowledgeGraphGroundingStatus =
   "GROUNDED" | "UNAPPROVED_TYPE" | "UNGROUNDED" | "CONFLICT" | "UNKNOWN";
@@ -384,8 +385,12 @@ export const KnowledgeGraph = forwardRef<
 
   // Label visibility: `auto` follows the zoom gate in the overview and
   // lights lit-set labels in focus; `on`/`off` override absolutely.
+  const [nodeLabelMode, setNodeLabelMode] = useState<LabelMode>("auto");
+  const [linkLabelMode, setLinkLabelMode] = useState<LabelMode>("auto");
   const nodeLabelModeRef = useRef<LabelMode>("auto");
+  nodeLabelModeRef.current = nodeLabelMode;
   const linkLabelModeRef = useRef<LabelMode>("auto");
+  linkLabelModeRef.current = linkLabelMode;
   const labelGateRef = useRef(true);
   const graphDataRef = useRef(graphData);
   graphDataRef.current = graphData;
@@ -422,6 +427,18 @@ export const KnowledgeGraph = forwardRef<
       if (l.__labelSprite) l.__labelSprite.visible = linkLabelVisible(l);
     }
   }, [nodeLabelVisible, linkLabelVisible]);
+
+  // Mode changes reapply visibility and refresh() so the link object
+  // accessor re-runs (edge-label sprites created/dropped to match).
+  const labelModesInitRef = useRef(false);
+  useEffect(() => {
+    if (!labelModesInitRef.current) {
+      labelModesInitRef.current = true;
+      return;
+    }
+    applyLabelVisibility();
+    fgRef.current?.refresh?.();
+  }, [nodeLabelMode, linkLabelMode, applyLabelVisibility]);
 
   // Zoom gate: 3D mode has no onZoom event, so listen (throttled) on the
   // controls' change event and read the camera distance.
@@ -524,79 +541,82 @@ export const KnowledgeGraph = forwardRef<
     return () => ro.disconnect();
   }, [containerEl]);
 
-  const nodeThreeObject = useCallback((node: any) => {
-    const state = classifyNode(node.id, classificationRef.current);
-    const color = knowledgeGraphTrustColor(node);
-    const rawLabel = node.label ?? "";
-    const label =
-      rawLabel.length > 16 ? rawLabel.slice(0, 15) + "..." : rawLabel;
-    const degree = Math.max(
-      node.relationshipCount ?? 0,
-      node.evidenceCount ?? 0,
-      1,
-    );
-    const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
-    const sphereOp = state === "matched" ? 1 : 0.15;
-    const ringOp = state === "neighbor" ? 1 : 0;
+  const nodeThreeObject = useCallback(
+    (node: any) => {
+      const state = classifyNode(node.id, classificationRef.current);
+      const color = knowledgeGraphTrustColor(node);
+      const rawLabel = node.label ?? "";
+      const label =
+        rawLabel.length > 16 ? rawLabel.slice(0, 15) + "..." : rawLabel;
+      const degree = Math.max(
+        node.relationshipCount ?? 0,
+        node.evidenceCount ?? 0,
+        1,
+      );
+      const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
+      const sphereOp = state === "matched" ? 1 : 0.15;
+      const ringOp = state === "neighbor" ? 1 : 0;
 
-    const group = new THREE.Group();
+      const group = new THREE.Group();
 
-    const geometry = new THREE.SphereGeometry(r, 16, 16);
-    const material = new THREE.MeshLambertMaterial({
-      color,
-      transparent: true,
-      opacity: sphereOp,
-    });
-    group.add(new THREE.Mesh(geometry, material));
+      const geometry = new THREE.SphereGeometry(r, 16, 16);
+      const material = new THREE.MeshLambertMaterial({
+        color,
+        transparent: true,
+        opacity: sphereOp,
+      });
+      group.add(new THREE.Mesh(geometry, material));
 
-    const canvas = document.createElement("canvas");
-    const size = 128;
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, size, size);
-    ctx.font = "bold 14px sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, size / 2, size / 2);
-    const spriteMaterial = new THREE.SpriteMaterial({
-      map: new THREE.CanvasTexture(canvas),
-      transparent: true,
-      opacity: sphereOp,
-    });
-    const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.scale.set(r * 3, r * 3, 1);
-    sprite.visible = nodeLabelVisible(node.id);
-    group.add(sprite);
+      const canvas = document.createElement("canvas");
+      const size = 128;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d")!;
+      ctx.clearRect(0, 0, size, size);
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, size / 2, size / 2);
+      const spriteMaterial = new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(canvas),
+        transparent: true,
+        opacity: sphereOp,
+      });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(r * 3, r * 3, 1);
+      sprite.visible = nodeLabelVisible(node.id);
+      group.add(sprite);
 
-    const ringCanvas = document.createElement("canvas");
-    const ringSize = 128;
-    ringCanvas.width = ringSize;
-    ringCanvas.height = ringSize;
-    const rCtx = ringCanvas.getContext("2d")!;
-    rCtx.clearRect(0, 0, ringSize, ringSize);
-    rCtx.strokeStyle = color;
-    rCtx.lineWidth = 10;
-    rCtx.beginPath();
-    rCtx.arc(ringSize / 2, ringSize / 2, ringSize / 2 - 10, 0, Math.PI * 2);
-    rCtx.stroke();
-    const ringMaterial = new THREE.SpriteMaterial({
-      map: new THREE.CanvasTexture(ringCanvas),
-      transparent: true,
-      opacity: ringOp,
-    });
-    const ringSprite = new THREE.Sprite(ringMaterial);
-    ringSprite.scale.set(r * 2, r * 2, 1);
-    group.add(ringSprite);
+      const ringCanvas = document.createElement("canvas");
+      const ringSize = 128;
+      ringCanvas.width = ringSize;
+      ringCanvas.height = ringSize;
+      const rCtx = ringCanvas.getContext("2d")!;
+      rCtx.clearRect(0, 0, ringSize, ringSize);
+      rCtx.strokeStyle = color;
+      rCtx.lineWidth = 10;
+      rCtx.beginPath();
+      rCtx.arc(ringSize / 2, ringSize / 2, ringSize / 2 - 10, 0, Math.PI * 2);
+      rCtx.stroke();
+      const ringMaterial = new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(ringCanvas),
+        transparent: true,
+        opacity: ringOp,
+      });
+      const ringSprite = new THREE.Sprite(ringMaterial);
+      ringSprite.scale.set(r * 2, r * 2, 1);
+      group.add(ringSprite);
 
-    node.__sphereMat = material;
-    node.__spriteMat = spriteMaterial;
-    node.__ringMat = ringMaterial;
-    node.__labelSprite = sprite;
+      node.__sphereMat = material;
+      node.__spriteMat = spriteMaterial;
+      node.__ringMat = ringMaterial;
+      node.__labelSprite = sprite;
 
-    return group;
-  }, [nodeLabelVisible]);
+      return group;
+    },
+    [nodeLabelVisible],
+  );
 
   useEffect(() => {
     for (const node of graphData.nodes as any[]) {
@@ -641,14 +661,8 @@ export const KnowledgeGraph = forwardRef<
     // packed around the origin so the graph stays framed. Unassigned nodes
     // (defensive) fall back to center attraction.
     fg.d3Force("center", null);
-    fg.d3Force(
-      "x",
-      d3.forceX((node: any) => anchorFor(node).x).strength(0.08),
-    );
-    fg.d3Force(
-      "y",
-      d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
-    );
+    fg.d3Force("x", d3.forceX((node: any) => anchorFor(node).x).strength(0.08));
+    fg.d3Force("y", d3.forceY((node: any) => anchorFor(node).y).strength(0.08));
     fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
     // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
     // the first pass fires before the container is measured (fg == null).
@@ -822,6 +836,12 @@ export const KnowledgeGraph = forwardRef<
           Showing direct connections only
         </div>
       )}
+      <GraphLabelToggles
+        nodeLabelMode={nodeLabelMode}
+        linkLabelMode={linkLabelMode}
+        onNodeLabelModeChange={setNodeLabelMode}
+        onLinkLabelModeChange={setLinkLabelMode}
+      />
       <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
         {trustCounts
           .filter((item) => item.count > 0)
