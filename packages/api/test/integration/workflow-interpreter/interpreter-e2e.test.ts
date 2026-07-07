@@ -125,7 +125,7 @@ async function seedWorkflow(db: Db, tenantId: string, tag: string) {
       tenant_id: tenantId,
       workflow_id: workflow.id,
       version_number: 1,
-      version_status: "published",
+      version_status: "active",
       definition_snapshot: definition,
       published_at: new Date(),
     })

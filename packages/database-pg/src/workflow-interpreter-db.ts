@@ -187,6 +187,11 @@ export async function createInterpreterWorkflowRun(
     })
     .onConflictDoNothing({
       target: [workflowRuns.tenant_id, workflowRuns.idempotency_key],
+      // workflow_runs_tenant_idempotency_uidx is a PARTIAL unique index;
+      // Postgres only matches ON CONFLICT to it when the target repeats the
+      // index predicate. Without this, every insert errors with "no unique or
+      // exclusion constraint matching the ON CONFLICT specification".
+      targetWhere: sql`${workflowRuns.idempotency_key} IS NOT NULL`,
     })
     .returning({ id: workflowRuns.id, status: workflowRuns.status });
 
