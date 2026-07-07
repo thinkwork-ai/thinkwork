@@ -791,30 +791,35 @@ describe("HindsightAdapter legacy user bank reads", () => {
   });
 
   it("inspects tenant-visible Hindsight records across user and Space banks", async () => {
-    executeMock.mockResolvedValueOnce({
-      rows: [
-        {
-          ...row({
+    executeMock
+      // Step 1 (primary DB): tenant bank inventory.
+      .mockResolvedValueOnce({
+        rows: [
+          { bank_id: `user_${USER_ID}`, owner_type: "user", owner_id: USER_ID },
+          {
+            bank_id: `space_${SPACE_ID}`,
+            owner_type: "space",
+            owner_id: SPACE_ID,
+          },
+        ],
+      })
+      // Step 2 (Hindsight DB): units — owner inference happens in app code.
+      .mockResolvedValueOnce({
+        rows: [
+          row({
             id: "00000000-0000-0000-0000-000000000007",
             bank_id: `user_${USER_ID}`,
             text: "operator user memory",
             created_at: "2026-06-27T10:00:00.000Z",
           }),
-          inferred_owner_type: "user",
-          inferred_owner_id: USER_ID,
-        },
-        {
-          ...row({
+          row({
             id: "00000000-0000-0000-0000-000000000008",
             bank_id: `space_${SPACE_ID}`,
             text: "operator space memory",
             created_at: "2026-06-27T11:00:00.000Z",
           }),
-          inferred_owner_type: "space",
-          inferred_owner_id: SPACE_ID,
-        },
-      ],
-    });
+        ],
+      });
 
     const adapter = new HindsightAdapter({
       endpoint: "https://hindsight.example",
@@ -825,7 +830,7 @@ describe("HindsightAdapter legacy user bank reads", () => {
       limit: 50,
     });
 
-    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledTimes(2);
     expect(records).toEqual([
       expect.objectContaining({
         tenantId: TENANT_ID,
@@ -845,10 +850,18 @@ describe("HindsightAdapter legacy user bank reads", () => {
   });
 
   it("keeps user-bank owner ids when user memories also carry Space metadata", async () => {
-    executeMock.mockResolvedValueOnce({
-      rows: [
-        {
-          ...row({
+    executeMock
+      // Step 1 (primary DB): tenant bank inventory.
+      .mockResolvedValueOnce({
+        rows: [
+          { bank_id: `user_${USER_ID}`, owner_type: "user", owner_id: USER_ID },
+        ],
+      })
+      // Step 2 (Hindsight DB): the unit carries both user and Space metadata;
+      // app-side inference must keep the user identity.
+      .mockResolvedValueOnce({
+        rows: [
+          row({
             id: "00000000-0000-0000-0000-000000000009",
             bank_id: `user_${USER_ID}`,
             text: "User memory: the calibration shelf marker is UserMarker90868884.",
@@ -860,11 +873,8 @@ describe("HindsightAdapter legacy user bank reads", () => {
             },
             created_at: "2026-06-27T12:00:00.000Z",
           }),
-          inferred_owner_type: "user",
-          inferred_owner_id: SPACE_ID,
-        },
-      ],
-    });
+        ],
+      });
 
     const adapter = new HindsightAdapter({
       endpoint: "https://hindsight.example",

@@ -10,7 +10,11 @@
  */
 
 import { sql } from "drizzle-orm";
-import { hindsightSql, type Database } from "@thinkwork/database-pg";
+import {
+  hindsightSql,
+  resolveHindsightDb,
+  type Database,
+} from "@thinkwork/database-pg";
 import { applyDreamRun, type DreamConsolidator } from "./applier.js";
 import {
   createDreamRun,
@@ -52,28 +56,33 @@ export async function enumerateDreamBanks(
   db: Database,
   tenantId: string,
 ): Promise<string[]> {
-  // CUTOVER BLOCKER (THINK-220): this statement correlates thinkwork
-  // `users`/`spaces` with a Hindsight `memory_units` EXISTS subquery in one
-  // query. It cannot run cross-database, so it stays on the primary handle and
-  // keeps the schema prefix via hindsightSql(). Splitting it (enumerate banks,
-  // then filter by a separate Hindsight round-trip) is a follow-up; today (env
-  // unset) it is byte-identical.
-  const result = await db.execute(sql`
-    SELECT b.bank_id
-    FROM (
-      SELECT 'user_' || id::text AS bank_id FROM users WHERE tenant_id = ${tenantId}
-      UNION ALL
-      SELECT 'space_' || id::text AS bank_id FROM spaces WHERE tenant_id = ${tenantId}
-    ) b
-    WHERE EXISTS (
-      SELECT 1 FROM ${hindsightSql()}memory_units u WHERE u.bank_id = b.bank_id
-    )
-    ORDER BY b.bank_id
-    LIMIT ${MAX_BANKS_PER_RUN}
+  // Two-step enumeration (THINK-220): Hindsight tables can live in a
+  // different database than the thinkwork tables, so candidates come from
+  // the primary and the has-units filter is a separate Hindsight round-trip.
+  const candidates = await db.execute(sql`
+    SELECT 'user_' || id::text AS bank_id FROM users WHERE tenant_id = ${tenantId}
+    UNION ALL
+    SELECT 'space_' || id::text AS bank_id FROM spaces WHERE tenant_id = ${tenantId}
+    ORDER BY bank_id
   `);
-  return ((result.rows ?? []) as Array<{ bank_id: string }>).map(
-    (row) => row.bank_id,
+  const candidateIds = (
+    (candidates.rows ?? []) as Array<{ bank_id: string }>
+  ).map((row) => row.bank_id);
+  if (candidateIds.length === 0) return [];
+
+  const withUnits = await resolveHindsightDb(db).execute(sql`
+    SELECT DISTINCT bank_id
+    FROM ${hindsightSql()}memory_units
+    WHERE bank_id = ANY(${candidateIds}::text[])
+  `);
+  const present = new Set(
+    ((withUnits.rows ?? []) as Array<{ bank_id: string }>).map(
+      (row) => row.bank_id,
+    ),
   );
+  return candidateIds
+    .filter((bankId) => present.has(bankId))
+    .slice(0, MAX_BANKS_PER_RUN);
 }
 
 async function enumerateTenants(db: Database): Promise<string[]> {
