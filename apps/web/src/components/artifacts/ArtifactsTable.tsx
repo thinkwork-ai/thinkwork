@@ -22,7 +22,12 @@ export function ArtifactsTable({
       {
         accessorKey: "title",
         header: "Name",
-        size: 240,
+        // Name flexes to absorb the leftover width (the other columns fit
+        // their content), truncating only once the table runs out of room.
+        meta: {
+          headClassName: "w-full min-w-[200px]",
+          cellClassName: "w-full min-w-[200px] max-w-0",
+        },
         cell: ({ row }) => (
           <span
             className={`${COMPACT_TABLE_CELL} text-sm font-medium`}
@@ -37,7 +42,10 @@ export function ArtifactsTable({
       {
         accessorKey: "typeLabel",
         header: "Type",
-        size: 110,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) =>
           row.original.typeLabel ? (
             <span className={COMPACT_TABLE_CELL}>
@@ -54,20 +62,32 @@ export function ArtifactsTable({
       {
         accessorKey: "userName",
         header: "User",
-        size: 160,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
+        // Ownerless rows (automation/system jobs with no thread owner) read
+        // "System" — a deliberate state, not missing data.
         cell: ({ row }) => (
           <span
             className={`${COMPACT_TABLE_CELL} text-sm text-muted-foreground`}
-            title={row.original.userName ?? undefined}
+            title={row.original.userName ?? "System-generated"}
           >
-            <span className="truncate">{row.original.userName ?? "—"}</span>
+            <span
+              className={`max-w-48 truncate ${row.original.userName ? "" : "italic opacity-70"}`}
+            >
+              {row.original.userName ?? "System"}
+            </span>
           </span>
         ),
       },
       {
         accessorKey: "generatedAt",
         header: "Generated",
-        size: 140,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <span
             className={`${COMPACT_TABLE_CELL} text-xs text-muted-foreground`}
@@ -79,16 +99,21 @@ export function ArtifactsTable({
       {
         accessorKey: "version",
         header: "Version",
-        size: 90,
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) =>
           row.original.version != null ? (
-            <span className={COMPACT_TABLE_CELL}>
+            <span className={`${COMPACT_TABLE_CELL} justify-center`}>
               <Badge variant="outline" className="font-normal">
                 v{row.original.version}
               </Badge>
             </span>
           ) : (
-            <span className={`${COMPACT_TABLE_CELL} text-muted-foreground`}>
+            <span
+              className={`${COMPACT_TABLE_CELL} justify-center text-muted-foreground`}
+            >
               —
             </span>
           ),
@@ -116,7 +141,7 @@ export function ArtifactsTable({
         onRowClick={onRowClick}
         scrollable
         pageSize={50}
-        tableClassName="table-fixed"
+        tableClassName="w-full table-auto"
       />
     </div>
   );

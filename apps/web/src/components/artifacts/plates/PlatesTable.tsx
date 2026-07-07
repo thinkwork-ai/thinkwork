@@ -206,21 +206,29 @@ export function PlatesTable({
       {
         accessorKey: "origin",
         header: "Origin",
-        size: 110,
+        size: 120,
+        // One badge, never two — a second badge overflows the fixed-width
+        // column. "Customized" = platform plate with workspace deltas.
         cell: ({ row }) => (
-          <span className={`${CELL} gap-1.5`}>
-            <Badge variant="outline" className="font-normal">
-              {row.original.origin === "tenant" ? "Custom" : "Platform"}
-            </Badge>
-            {row.original.origin === "platform" && row.original.customized ? (
+          <span className={CELL}>
+            {row.original.origin === "tenant" ? (
+              <Badge variant="outline" className="font-normal">
+                Custom
+              </Badge>
+            ) : row.original.customized ? (
               <Badge
                 variant="secondary"
                 className="font-normal"
+                title="Platform plate with workspace customizations"
                 data-testid="plates-customized-badge"
               >
                 Customized
               </Badge>
-            ) : null}
+            ) : (
+              <Badge variant="outline" className="font-normal">
+                Platform
+              </Badge>
+            )}
           </span>
         ),
       },
