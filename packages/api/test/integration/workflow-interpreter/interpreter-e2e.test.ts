@@ -118,8 +118,9 @@ async function seedWorkflow(db: Db, tenantId: string, tag: string) {
         kind: "agent",
         objective:
           "This is an automated integration test of the workflow engine. " +
-          "Do not use any tools. Reply with exactly one short sentence " +
-          "confirming the test step ran, then finish the goal as complete.",
+          "Reply with exactly one short sentence confirming the test step " +
+          "ran, then immediately call the goal_complete tool — completion " +
+          "is signaled ONLY by that tool call.",
         tokenBudget: 20_000,
       },
     ],
