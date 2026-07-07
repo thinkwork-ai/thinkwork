@@ -74,6 +74,8 @@ export interface ThreadArtifactPanelHandle {
 const PANEL_WIDTH_STORAGE_KEY = "thinkwork.thread-artifact-panel.width";
 export const DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX = 480;
 export const MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX = 360;
+/** Floor for the thread conversation pane in the thread/artifact split (THINK-211). */
+export const MIN_THREAD_PANE_WIDTH_PX = 500;
 
 let panelWidthFallbackPx = DEFAULT_THREAD_ARTIFACT_PANEL_WIDTH_PX;
 

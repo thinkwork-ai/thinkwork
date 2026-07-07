@@ -164,6 +164,7 @@ import { ThreadArtifactPanel } from "@/components/artifacts/ThreadArtifactPanel"
 import {
   getStoredThreadArtifactPanelWidthPx,
   MIN_THREAD_ARTIFACT_PANEL_WIDTH_PX,
+  MIN_THREAD_PANE_WIDTH_PX,
   storeThreadArtifactPanelWidthPx,
   THREAD_ARTIFACT_PANEL_LIST,
   useThreadArtifactPanel,
@@ -750,7 +751,10 @@ export function TaskThreadView({
         // layout-occupying gutter — a wide transparent handle read as a gap).
         resizeTargetMinimumSize={{ coarse: 24, fine: 10 }}
       >
-        <ResizablePanel className="flex min-h-0 min-w-0 flex-col">
+        <ResizablePanel
+          className="flex min-h-0 min-w-0 flex-col"
+          minSize={`${MIN_THREAD_PANE_WIDTH_PX}px`}
+        >
           <section
             className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
             aria-label="Thread conversation"
