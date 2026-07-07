@@ -36,11 +36,17 @@ export const MAX_ROLLOVERS = 40;
 export type NextStepDirective =
   | { type: "dispatch_agent"; step: Extract<WorkflowStep, { kind: "agent" }> }
   | { type: "wait_until"; step: WorkflowStep; until: string }
+  | { type: "unsupported_step"; step: WorkflowStep }
   | { type: "iteration_end" };
 
 /**
  * Resolve what the interpreter does at the current cursor. `now` is injected
  * so wait resolution is deterministic in tests.
+ *
+ * Step kinds that validate but have no dispatch path yet (THINK-214 ships the
+ * schema ahead of THINK-215's dispatch) return `unsupported_step` so the run
+ * fails cleanly in ThinkWork terms instead of misrouting as a zero-second
+ * wait.
  */
 export function planNextStep(
   definition: WorkflowDefinition,
@@ -49,19 +55,32 @@ export function planNextStep(
 ): NextStepDirective {
   const step = definition.steps[cursor.stepPointer];
   if (!step) return { type: "iteration_end" };
-  if (step.kind === "agent") return { type: "dispatch_agent", step };
-  const until =
-    step.until ??
-    new Date(now.getTime() + (step.durationSeconds ?? 0) * 1000).toISOString();
-  return { type: "wait_until", step, until };
+  switch (step.kind) {
+    case "agent":
+      return { type: "dispatch_agent", step };
+    case "wait": {
+      const until =
+        step.until ??
+        new Date(
+          now.getTime() + (step.durationSeconds ?? 0) * 1000,
+        ).toISOString();
+      return { type: "wait_until", step, until };
+    }
+    case "routine":
+    case "tool":
+    case "approval":
+    case "http":
+    case "emit_event":
+      return { type: "unsupported_step", step };
+    default: {
+      const exhaustive: never = step;
+      return { type: "unsupported_step", step: exhaustive as WorkflowStep };
+    }
+  }
 }
 
 export type WorkflowContinuationDecision =
-  | "complete"
-  | "continue"
-  | "human_needed"
-  | "failed"
-  | "budget_stopped";
+  "complete" | "continue" | "human_needed" | "failed" | "budget_stopped";
 
 export interface WorkflowGoalEvidence {
   /** Goal runtime status projected from the finalized turn. */

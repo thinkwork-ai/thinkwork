@@ -201,6 +201,28 @@ export async function handleLoadNext(
     return { directive: "wait_until", cursor, until: plan.until };
   }
 
+  // Step kinds that validate but are not yet executable (THINK-214 ships the
+  // schema ahead of THINK-215's dispatch) fail the run cleanly, in ThinkWork
+  // terms — never a silent misroute.
+  if (plan.type === "unsupported_step") {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_failed",
+      summary: {
+        stepId: plan.step.id,
+        stepKind: plan.step.kind,
+        iteration: cursor.iteration,
+        status: "failed",
+        reason: "step_kind_not_executable",
+        errorSummary: `step "${plan.step.id}" has kind "${plan.step.kind}", which this workspace cannot execute yet`,
+      },
+      runStatus: "failed",
+      now,
+    });
+    return { directive: "terminal_failure", cursor };
+  }
+
   // iteration_end here means the pointer drifted out of range (record_advance
   // normally evaluates the iteration boundary). Fail loudly, in ThinkWork
   // terms, rather than silently looping.
