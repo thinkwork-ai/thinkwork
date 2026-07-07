@@ -18,8 +18,11 @@ import {
 
 import {
   handleDispatchAgent,
+  handleExecuteStep,
   handleLoadNext,
   handleRecordAdvance,
+  handleRecordApproval,
+  type StepExecutors,
 } from "../workflow-step-dispatch";
 
 type Rows = Record<string, unknown>[];
@@ -43,6 +46,7 @@ function makeDb(): FakeDb {
       from: () => ({
         where: () => ({
           limit: () => Promise.resolve(selectQueue.shift() ?? []),
+          orderBy: () => Promise.resolve(selectQueue.shift() ?? []),
         }),
       }),
     }),
@@ -346,11 +350,11 @@ describe("load_next", () => {
   });
 
   it("fails the run cleanly for a valid-but-not-yet-executable step kind", async () => {
-    const routineDef: WorkflowDefinition = {
+    const toolDef: WorkflowDefinition = {
       version: 1,
-      steps: [{ id: "crunch", kind: "routine", routineId: "r-1" }],
+      steps: [{ id: "crunch", kind: "tool", tool: "emit_document" }],
     };
-    fake.selectQueue.push([runRow()], [versionRow(routineDef)]);
+    fake.selectQueue.push([runRow()], [versionRow(toolDef)]);
     const result = await handleLoadNext(
       fake.db as never,
       { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
@@ -362,7 +366,7 @@ describe("load_next", () => {
     ) as { payload_summary?: Record<string, unknown> } | undefined;
     expect(event?.payload_summary).toMatchObject({
       stepId: "crunch",
-      stepKind: "routine",
+      stepKind: "tool",
       reason: "step_kind_not_executable",
     });
   });
@@ -424,5 +428,269 @@ describe("dispatch_agent", () => {
         NOW,
       ),
     ).rejects.toThrow(/no agent to dispatch/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// execute_step (THINK-215)
+// ---------------------------------------------------------------------------
+
+function makeExecutors(overrides: Partial<StepExecutors> = {}): StepExecutors {
+  return {
+    invokeRoutine: async () => ({
+      status: "succeeded",
+      executionId: "exec-1",
+      outputJson: { ok: true },
+    }),
+    httpFetch: (async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '{"echo":true}',
+    })) as unknown as typeof fetch,
+    ...overrides,
+  };
+}
+
+describe("execute_step", () => {
+  it("emit_event: records started/output/finished and completes a single-step run", async () => {
+    const def: WorkflowDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "announce",
+          kind: "emit_event",
+          eventType: "probe.done",
+          payload: { note: "{{ run.input.note }}" },
+        },
+      ],
+    };
+    fake.selectQueue.push(
+      [runRow({ input_summary: { note: "weekly" } })],
+      [versionRow(def)],
+      [], // no prior completion
+      [], // no prior step outputs
+      [], // no prior policy decision
+    );
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors(),
+    );
+    expect(result.directive).toBe("terminal_success");
+    const types = fake.inserts.map((r) => r.event_type ?? r.evidence_type);
+    expect(types).toContain("workflow_step_started");
+    expect(types).toContain("step_output");
+    expect(types).toContain("workflow_step_finished");
+    expect(types).toContain("workflow_policy_decision");
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: { output?: { payload?: { note?: string } } };
+    };
+    expect(output?.summary?.output?.payload?.note).toBe("weekly");
+  });
+
+  it("routine: invokes the existing engine and stores its output", async () => {
+    const def: WorkflowDefinition = {
+      version: 1,
+      steps: [
+        { id: "crunch", kind: "routine", routineId: "r-9", input: { n: 1 } },
+        { id: "after", kind: "emit_event", eventType: "x.y" },
+      ],
+    };
+    const calls: unknown[] = [];
+    fake.selectQueue.push([runRow()], [versionRow(def)], [], [], []);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        invokeRoutine: async (input) => {
+          calls.push(input);
+          return {
+            status: "succeeded",
+            executionId: "e-1",
+            outputJson: { v: 7 },
+          };
+        },
+      }),
+    );
+    expect(calls).toEqual([{ routineId: "r-9", input: { n: 1 } }]);
+    expect(result.directive).toBe("continue");
+    expect(result.cursor.stepPointer).toBe(1);
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: { output?: { result?: { v?: number } } };
+    };
+    expect(output?.summary?.output?.result?.v).toBe(7);
+  });
+
+  it("http: a non-2xx response fails the step and the run (mid-workflow)", async () => {
+    const def: WorkflowDefinition = {
+      version: 1,
+      steps: [
+        { id: "post", kind: "http", method: "POST", url: "https://x.dev/hook" },
+        { id: "after", kind: "emit_event", eventType: "x.y" },
+      ],
+    };
+    fake.selectQueue.push([runRow()], [versionRow(def)], [], [], []);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        httpFetch: (async () => ({
+          ok: false,
+          status: 502,
+          text: async () => "bad gateway",
+        })) as unknown as typeof fetch,
+      }),
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toContain("502");
+  });
+
+  it("unresolved template references fail the step in ThinkWork terms", async () => {
+    const def: WorkflowDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "announce",
+          kind: "emit_event",
+          eventType: "x.y",
+          payload: { v: "{{ run.input.absent }}" },
+        },
+      ],
+    };
+    fake.selectQueue.push([runRow()], [versionRow(def)], [], [], []);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors(),
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toContain("run.input.absent");
+  });
+
+  it("replays a recorded completion without re-executing side effects", async () => {
+    const def: WorkflowDefinition = {
+      version: 1,
+      steps: [{ id: "announce", kind: "emit_event", eventType: "x.y" }],
+    };
+    let fetchCalls = 0;
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(def)],
+      [{ event_type: "workflow_step_finished" }], // prior completion exists
+      [], // prior policy decision check
+    );
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        httpFetch: (async () => {
+          fetchCalls += 1;
+          throw new Error("must not execute");
+        }) as unknown as typeof fetch,
+      }),
+    );
+    expect(fetchCalls).toBe(0);
+    expect(result.directive).toBe("terminal_success");
+    // No duplicate completion event — only the policy decision is recorded.
+    const completions = fake.inserts.filter(
+      (r) => r.event_type === "workflow_step_finished",
+    );
+    expect(completions).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// approval step (THINK-215)
+// ---------------------------------------------------------------------------
+
+const APPROVAL_MID_DEF: WorkflowDefinition = {
+  version: 1,
+  steps: [
+    { id: "sign-off", kind: "approval", prompt: "Ship it?" },
+    { id: "announce", kind: "emit_event", eventType: "x.y" },
+  ],
+};
+
+describe("approval step", () => {
+  it("load_next marks the run waiting_for_human and parks on await_approval", async () => {
+    fake.selectQueue.push([runRow()], [versionRow(APPROVAL_MID_DEF)]);
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_approval");
+    const started = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_started",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(started?.payload_summary).toMatchObject({
+      stepId: "sign-off",
+      stepKind: "approval",
+      status: "waiting",
+    });
+    const runPatch = fake.updates.find((u) => u.status === "waiting_for_human");
+    expect(runPatch).toBeTruthy();
+  });
+
+  it("record_approval on an approval STEP advances the pointer, not the iteration", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(APPROVAL_MID_DEF)],
+      [], // prior policy decision check in advance tail
+    );
+    const result = await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: { approved: true, note: "go" },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("continue");
+    expect(result.cursor).toMatchObject({ stepPointer: 1, iteration: 1 });
+    const decision = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_decision",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(decision?.payload_summary).toMatchObject({
+      stepId: "sign-off",
+      decision: "approved",
+    });
+  });
+
+  it("record_approval deny on an approval STEP cancels the run", async () => {
+    fake.selectQueue.push([runRow()], [versionRow(APPROVAL_MID_DEF)]);
+    const result = await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: { approved: false, note: "not yet" },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_canceled");
+    const decision = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_decision",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(decision?.payload_summary).toMatchObject({
+      stepId: "sign-off",
+      decision: "rejected",
+    });
   });
 });

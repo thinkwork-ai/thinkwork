@@ -36,6 +36,7 @@ import {
   agents,
   scheduledJobs,
   users,
+  workflowEvidence,
   workflowRunEvents,
   workflowRuns,
   workflowVersions,
@@ -95,7 +96,32 @@ async function resolveTenantAndAgent(db: Db) {
   return { tenantId: agent.tenant_id, agentId: agent.id, userId: user.id };
 }
 
-async function seedWorkflow(db: Db, tenantId: string, tag: string) {
+const AGENT_LOOP_DEFINITION = {
+  version: 1,
+  steps: [
+    {
+      id: "work",
+      kind: "agent",
+      objective:
+        "This is an automated integration test of the workflow engine. " +
+        "Reply with exactly one short sentence confirming the test step " +
+        "ran, then immediately call the goal_complete tool — completion " +
+        "is signaled ONLY by that tool call.",
+      tokenBudget: 20_000,
+    },
+  ],
+  continuationPolicy: {
+    exitSignal: "the confirmation sentence has been produced",
+    maxIterations: 3,
+  },
+};
+
+async function seedWorkflow(
+  db: Db,
+  tenantId: string,
+  tag: string,
+  definition: Record<string, unknown> = AGENT_LOOP_DEFINITION,
+) {
   const slug = `itest-interpreter-${tag}`;
   const [workflow] = await db
     .insert(workflows)
@@ -109,26 +135,6 @@ async function seedWorkflow(db: Db, tenantId: string, tag: string) {
       primary_trigger_family: "manual",
     })
     .returning({ id: workflows.id });
-
-  const definition = {
-    version: 1,
-    steps: [
-      {
-        id: "work",
-        kind: "agent",
-        objective:
-          "This is an automated integration test of the workflow engine. " +
-          "Reply with exactly one short sentence confirming the test step " +
-          "ran, then immediately call the goal_complete tool — completion " +
-          "is signaled ONLY by that tool call.",
-        tokenBudget: 20_000,
-      },
-    ],
-    continuationPolicy: {
-      exitSignal: "the confirmation sentence has been produced",
-      maxIterations: 3,
-    },
-  };
 
   const [version] = await db
     .insert(workflowVersions)
@@ -148,6 +154,112 @@ async function seedWorkflow(db: Db, tenantId: string, tag: string) {
     .where(eq(workflows.id, workflow.id));
 
   return { workflowId: workflow.id, versionId: version.id };
+}
+
+/** Start a seeded workflow's run through the deployed interpreter, exactly
+ * like triggerWorkflowRun does. Shared by every manual-start case. */
+async function startManualRun(
+  db: Db,
+  input: {
+    tenantId: string;
+    agentId: string;
+    userId: string;
+    workflowId: string;
+    versionId: string;
+    tag: string;
+  },
+) {
+  const stateMachineArn = await resolveStateMachineArn();
+  const binding = await ensureInterpreterBinding(db, {
+    tenantId: input.tenantId,
+    workflowId: input.workflowId,
+    stateMachineArn,
+  });
+  const { run } = await createInterpreterWorkflowRun(db, {
+    tenantId: input.tenantId,
+    workflowId: input.workflowId,
+    workflowVersionId: input.versionId,
+    engineBindingId: binding.id,
+    triggerFamily: "manual",
+    triggerSource: "integration_test",
+    idempotencyKey: `itest:${input.tag}`,
+    inputSummary: {
+      agentId: input.agentId,
+      workflowName: `itest interpreter ${input.tag}`,
+      spaceId: null,
+      requestedByUserId: input.userId,
+    },
+  });
+  const sfn = new SFNClient({});
+  const execution = await sfn.send(
+    new StartExecutionCommand({
+      stateMachineArn,
+      name: `run-${run.id}-r0`,
+      input: JSON.stringify({
+        cursor: {
+          workflowRunId: run.id,
+          tenantId: input.tenantId,
+          stepPointer: 0,
+          iteration: 1,
+          loopCycleCount: 0,
+          rolloverCount: 0,
+        },
+      }),
+    }),
+  );
+  await markInterpreterRunStarted(db, {
+    tenantId: input.tenantId,
+    workflowId: input.workflowId,
+    runId: run.id,
+    executionArn: execution.executionArn!,
+  });
+  return run;
+}
+
+async function waitForStatus(db: Db, runId: string, wanted: string) {
+  const deadline = Date.now() + RUN_TIMEOUT_MS;
+  for (;;) {
+    const [run] = await db
+      .select({ status: workflowRuns.status })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId))
+      .limit(1);
+    if (run && run.status === wanted) return;
+    if (run && TERMINAL_STATUSES.has(run.status)) {
+      throw new Error(
+        `run ${runId} reached terminal ${run.status} while waiting for ${wanted}`,
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `run ${runId} never reached ${wanted} (last status: ${run?.status})`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+}
+
+async function resolveApproval(input: {
+  tenantId: string;
+  runId: string;
+  approved: boolean;
+}) {
+  const lambda = new LambdaClient({});
+  const res = await lambda.send(
+    new InvokeCommand({
+      FunctionName: `thinkwork-${STAGE}-api-workflow-resume`,
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(
+        JSON.stringify({
+          tenantId: input.tenantId,
+          workflowRunId: input.runId,
+          approved: input.approved,
+          note: "integration test decision",
+        }),
+      ),
+    }),
+  );
+  expect(res.FunctionError).toBeUndefined();
 }
 
 async function waitForTerminal(db: Db, runId: string) {
@@ -195,51 +307,13 @@ describe.skipIf(skip)("integration: shared workflow interpreter (live)", () => {
     const { tenantId, agentId, userId } = await resolveTenantAndAgent(db);
     const tag = `m${Date.now().toString(36)}`;
     const { workflowId, versionId } = await seedWorkflow(db, tenantId, tag);
-
-    const stateMachineArn = await resolveStateMachineArn();
-    const binding = await ensureInterpreterBinding(db, {
+    const run = await startManualRun(db, {
       tenantId,
+      agentId,
+      userId,
       workflowId,
-      stateMachineArn,
-    });
-    const { run } = await createInterpreterWorkflowRun(db, {
-      tenantId,
-      workflowId,
-      workflowVersionId: versionId,
-      engineBindingId: binding.id,
-      triggerFamily: "manual",
-      triggerSource: "integration_test",
-      idempotencyKey: `itest:${tag}`,
-      inputSummary: {
-        agentId,
-        workflowName: `itest interpreter ${tag}`,
-        spaceId: null,
-        requestedByUserId: userId,
-      },
-    });
-
-    const sfn = new SFNClient({});
-    const execution = await sfn.send(
-      new StartExecutionCommand({
-        stateMachineArn,
-        name: `run-${run.id}-r0`,
-        input: JSON.stringify({
-          cursor: {
-            workflowRunId: run.id,
-            tenantId,
-            stepPointer: 0,
-            iteration: 1,
-            loopCycleCount: 0,
-            rolloverCount: 0,
-          },
-        }),
-      }),
-    );
-    await markInterpreterRunStarted(db, {
-      tenantId,
-      workflowId,
-      runId: run.id,
-      executionArn: execution.executionArn!,
+      versionId,
+      tag,
     });
 
     const terminal = await waitForTerminal(db, run.id);
@@ -308,5 +382,100 @@ describe.skipIf(skip)("integration: shared workflow interpreter (live)", () => {
     const shape = await eventShape(db, runs[0].id);
     assertWellFormedLedger(shape);
     expect(terminal).toBe("succeeded");
+  });
+
+  it("full step taxonomy: http → emit_event (templated) → approval approve reaches succeeded (THINK-215)", async () => {
+    const db = createDb(DATABASE_URL!);
+    const { tenantId, agentId, userId } = await resolveTenantAndAgent(db);
+    const tag = `t${Date.now().toString(36)}`;
+    const { workflowId, versionId } = await seedWorkflow(db, tenantId, tag, {
+      version: 1,
+      steps: [
+        {
+          id: "fetch",
+          kind: "http",
+          method: "GET",
+          url: "https://checkip.amazonaws.com",
+        },
+        {
+          id: "announce",
+          kind: "emit_event",
+          eventType: "itest.taxonomy",
+          payload: { sourceIp: "{{ steps.fetch.output.bodyPreview }}" },
+        },
+        {
+          id: "sign-off",
+          kind: "approval",
+          prompt: "Approve the integration-test run?",
+        },
+      ],
+    });
+    const run = await startManualRun(db, {
+      tenantId,
+      agentId,
+      userId,
+      workflowId,
+      versionId,
+      tag,
+    });
+
+    await waitForStatus(db, run.id, "waiting_for_human");
+    await resolveApproval({ tenantId, runId: run.id, approved: true });
+
+    const terminal = await waitForTerminal(db, run.id);
+    expect(terminal).toBe("succeeded");
+
+    const shape = await eventShape(db, run.id);
+    expect(shape.filter((t) => t === "workflow_step_finished")).toHaveLength(3);
+    expect(shape).toContain("workflow_approval_decision");
+    expect(shape).toContain("workflow_policy_decision");
+    expect(shape).not.toContain("workflow_step_failed");
+
+    // Step outputs landed as evidence, and the emit_event payload resolved
+    // the {{ steps.fetch.output.bodyPreview }} reference to a real value.
+    const outputs = await db
+      .select({ summary: workflowEvidence.summary })
+      .from(workflowEvidence)
+      .where(
+        and(
+          eq(workflowEvidence.workflow_run_id, run.id),
+          eq(workflowEvidence.evidence_type, "step_output"),
+        ),
+      );
+    expect(outputs.length).toBeGreaterThanOrEqual(2);
+    const announce = outputs
+      .map((row) => row.summary as Record<string, any>)
+      .find((s) => s.stepId === "announce");
+    expect(String(announce?.output?.payload?.sourceIp ?? "")).toMatch(
+      /\d+\.\d+\.\d+\.\d+/,
+    );
+  });
+
+  it("approval deny cancels the run with the decision on the ledger (THINK-215)", async () => {
+    const db = createDb(DATABASE_URL!);
+    const { tenantId, agentId, userId } = await resolveTenantAndAgent(db);
+    const tag = `d${Date.now().toString(36)}`;
+    const { workflowId, versionId } = await seedWorkflow(db, tenantId, tag, {
+      version: 1,
+      steps: [
+        { id: "sign-off", kind: "approval", prompt: "Deny this test run." },
+      ],
+    });
+    const run = await startManualRun(db, {
+      tenantId,
+      agentId,
+      userId,
+      workflowId,
+      versionId,
+      tag,
+    });
+
+    await waitForStatus(db, run.id, "waiting_for_human");
+    await resolveApproval({ tenantId, runId: run.id, approved: false });
+
+    const terminal = await waitForTerminal(db, run.id);
+    expect(terminal).toBe("canceled");
+    const shape = await eventShape(db, run.id);
+    expect(shape).toContain("workflow_approval_decision");
   });
 });
