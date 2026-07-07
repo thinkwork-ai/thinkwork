@@ -80,6 +80,10 @@ export interface WikiGraphNode {
 
 export interface WikiGraphHandle {
   refetch: () => void;
+  /** Community hue for the node whose label matches (case-insensitive) —
+   *  lets detail surfaces color-code node badges consistently with the
+   *  canvas. */
+  getNodeColorByLabel: (label: string) => string | undefined;
   getNodeWithEdges: (nodeId: string) => {
     node: WikiGraphNode;
     edges: {
@@ -263,6 +267,16 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         else singleReexecute({ requestPolicy: "network-only" });
       },
       getNodeWithEdges: (nodeId: string) => getNodeWithEdgesRef.current(nodeId),
+      getNodeColorByLabel: (label: string) => {
+        const normalized = label.trim().toLowerCase();
+        const node = (graphDataRef.current.nodes as any[]).find(
+          (n) => (n.label ?? "").trim().toLowerCase() === normalized,
+        );
+        if (!node) return undefined;
+        return communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
+      },
     }));
 
     useEffect(() => {
