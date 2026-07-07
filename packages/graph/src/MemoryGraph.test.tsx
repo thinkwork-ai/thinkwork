@@ -96,6 +96,9 @@ function paintNode(props: any, node: any) {
     restore() {},
     translate() {},
     rotate() {},
+    measureText(text: string) {
+      return { width: text.length * 6 };
+    },
     fillText(text: string) {
       record.texts.push(text);
     },
@@ -195,7 +198,9 @@ describe("MemoryGraph (2D canvas)", () => {
     expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
     expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(1);
     // Lit node draws its label; dimmed node does not.
-    expect(paintNode(latest, props.graphData.nodes[2]).texts.length).toBe(1);
+    expect(
+      paintNode(latest, props.graphData.nodes[2]).texts.length,
+    ).toBeGreaterThan(0);
     expect(paintNode(latest, props.graphData.nodes[0]).texts.length).toBe(0);
     expect(screen.queryByText("Showing direct connections only")).toBeNull();
   });
@@ -214,11 +219,15 @@ describe("MemoryGraph (2D canvas)", () => {
       translate() {},
       rotate() {},
       beginPath() {},
+      arc() {},
       moveTo() {},
       lineTo() {},
       closePath() {},
       stroke() {},
       fill() {},
+      measureText(t: string) {
+        return { width: t.length * 6 };
+      },
       fillText(t: string) {
         texts.push(t);
       },
@@ -230,14 +239,17 @@ describe("MemoryGraph (2D canvas)", () => {
       lineWidth: 0,
     };
 
-    // Overview: no edge labels.
+    // Small graph: the gate is always open, so the overview shows the
+    // label inline in the line (neo4j style).
     props.linkCanvasObject(link, ctx as any, 1);
-    expect(texts).toEqual([]);
+    expect(texts).toEqual(["mentions"]);
 
+    // Focus an unrelated node: this link is no longer lit — plain line.
+    texts.length = 0;
     await act(async () => {
-      props.onNodeClick(props.graphData.nodes[0]);
+      props.onNodeClick(props.graphData.nodes[2]);
     });
     latestForceGraphProps().linkCanvasObject(link, ctx as any, 1);
-    expect(texts).toEqual(["mentions"]);
+    expect(texts).toEqual([]);
   });
 });

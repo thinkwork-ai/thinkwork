@@ -15,8 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import ForceGraph3D from "react-force-graph-3d";
-import * as THREE from "three";
+import ForceGraph2D from "react-force-graph-2d";
 import { useQuery } from "urql";
 import * as d3 from "d3-force";
 import { KnowledgeGraphQuery } from "./queries.js";
@@ -25,12 +24,13 @@ import {
   classifyNode,
   composeGraphClassification,
   computeCommunityLayout,
+  darkenColor,
   deriveGraphClassification,
   endpointId,
   expandNeighborhood,
-  initialCameraZ,
-  FLAT_CAMERA_FOV,
-  labelsVisibleAtZoom,
+  isDarkMode,
+  labelsVisibleAtScale,
+  wrapLabelLines,
   normalizeGraphSearch,
   DEFAULT_FOCUS_CAP,
   DEFAULT_FOCUS_DEGREE,
@@ -39,7 +39,6 @@ import {
   type GraphFocusState,
   type LabelMode,
 } from "./graph-utils.js";
-import { makeEdgeLabelSprite } from "./three-label-sprite.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
 
 export type KnowledgeGraphGroundingStatus =
@@ -415,9 +414,12 @@ export const KnowledgeGraph = forwardRef<
   nodeLabelModeRef.current = nodeLabelMode;
   const linkLabelModeRef = useRef<LabelMode>("auto");
   linkLabelModeRef.current = linkLabelMode;
-  const labelGateRef = useRef(true);
+  // Canvas zoom scale from onZoom — the 2D renderer's zoom gate signal.
+  const zoomKRef = useRef(1);
   const graphDataRef = useRef(graphData);
   graphDataRef.current = graphData;
+  const dimsRef = useRef(dims);
+  dimsRef.current = dims;
 
   const nodeLabelVisible = useCallback((nodeId: string) => {
     const mode = nodeLabelModeRef.current;
@@ -425,85 +427,35 @@ export const KnowledgeGraph = forwardRef<
     if (mode === "off") return false;
     const focusState = focusRef.current;
     if (focusState) return focusState.litIds.has(nodeId);
-    return labelGateRef.current;
+    return labelsVisibleAtScale(
+      zoomKRef.current,
+      graphDataRef.current.nodes.length,
+    );
   }, []);
 
   const linkLabelVisible = useCallback((link: any) => {
-    // Relationship labels exist only in focus mode — at overview scale
-    // they float mid-air along long bridge edges as pure noise. The
-    // toggle governs the focused lit set: auto/on show, off hides.
+    // Relationship labels ride the line itself (neo4j style). Off hides
+    // them everywhere; in focus they mark the lit set; in the overview
+    // they follow the same zoom gate as node labels.
     if (linkLabelModeRef.current === "off") return false;
     const focusState = focusRef.current;
-    if (!focusState) return false;
-    return (
-      focusState.litIds.has(endpointId(link.source)) &&
-      focusState.litIds.has(endpointId(link.target))
+    if (focusState) {
+      return (
+        focusState.litIds.has(endpointId(link.source)) &&
+        focusState.litIds.has(endpointId(link.target))
+      );
+    }
+    return labelsVisibleAtScale(
+      zoomKRef.current,
+      graphDataRef.current.nodes.length,
     );
   }, []);
-
-  // Mutates stashed sprite visibility in place — same no-restart
-  // discipline as the opacity effect.
-  const applyLabelVisibility = useCallback(() => {
-    for (const n of graphDataRef.current.nodes as any[]) {
-      if (n.__labelSprite) n.__labelSprite.visible = nodeLabelVisible(n.id);
-    }
-    for (const l of graphDataRef.current.links as any[]) {
-      if (l.__labelSprite) l.__labelSprite.visible = linkLabelVisible(l);
-    }
-  }, [nodeLabelVisible, linkLabelVisible]);
-
-  // Mode changes reapply visibility and refresh() so the link object
-  // accessor re-runs (edge-label sprites created/dropped to match).
-  const labelModesInitRef = useRef(false);
-  useEffect(() => {
-    if (!labelModesInitRef.current) {
-      labelModesInitRef.current = true;
-      return;
-    }
-    applyLabelVisibility();
-    fgRef.current?.refresh?.();
-  }, [nodeLabelMode, linkLabelMode, applyLabelVisibility]);
-
-  // Zoom gate: 3D mode has no onZoom event, so listen (throttled) on the
-  // controls' change event and read the camera distance.
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg || !dims) return;
-    const controls = fg.controls?.();
-    const nodeCount = graphDataRef.current.nodes.length;
-    labelGateRef.current = labelsVisibleAtZoom(
-      // Falls back to the initial framing distance when this runs before
-      // camera init (z still 0).
-      fg.camera?.()?.position?.z || initialCameraZ(nodeCount),
-      nodeCount,
-    );
-    applyLabelVisibility();
-    if (!controls?.addEventListener) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const onChange = () => {
-      if (timer) return;
-      timer = setTimeout(() => {
-        timer = null;
-        const count = graphDataRef.current.nodes.length;
-        const gate = labelsVisibleAtZoom(fg.camera().position.z, count);
-        if (gate !== labelGateRef.current) {
-          labelGateRef.current = gate;
-          applyLabelVisibility();
-        }
-      }, 150);
-    };
-    controls.addEventListener("change", onChange);
-    return () => {
-      if (timer) clearTimeout(timer);
-      controls.removeEventListener("change", onChange);
-    };
-  }, [dims, graphData, applyLabelVisibility]);
 
   // Edge brightness follows endpoint lit-state. In focus mode an edge is
   // bright only when BOTH endpoints are lit; search keeps the
   // either-endpoint rule. Reads refs so identity stays inert; repaints
   // ride the classification effect's refresh().
-  const isLinkBright = (link: any) => {
+  const isLinkBright = useCallback((link: any) => {
     const sourceId = endpointId(link.source);
     const targetId = endpointId(link.target);
     const focusLit = focusRef.current?.litIds;
@@ -511,7 +463,7 @@ export const KnowledgeGraph = forwardRef<
     const matched = matchedIdsRef.current;
     if (!matched) return true;
     return matched.has(sourceId) || matched.has(targetId);
-  };
+  }, []);
 
   const getNodeWithEdgesRef = useRef<KnowledgeGraphHandle["getNodeWithEdges"]>(
     () => null,
@@ -565,113 +517,176 @@ export const KnowledgeGraph = forwardRef<
     return () => ro.disconnect();
   }, [containerEl]);
 
-  const nodeThreeObject = useCallback(
-    (node: any) => {
+  // Canvas painter: flat neo4j-style disc + rim + clipped label, colored
+  // by trust state. The neighbor state (1-hop from a search match) keeps
+  // the dim fill but draws its ring at full alpha. Reads state through
+  // refs; the canvas repaints continuously (autoPauseRedraw false).
+  const nodeCanvasObject = useCallback(
+    (node: any, ctx: CanvasRenderingContext2D) => {
       const state = classifyNode(node.id, classificationRef.current);
+      const alpha = state === "matched" ? 1 : 0.15;
       const color = knowledgeGraphTrustColor(node);
-      const rawLabel = node.label ?? "";
-      const label =
-        rawLabel.length > 16 ? rawLabel.slice(0, 15) + "..." : rawLabel;
-      const degree = Math.max(
-        node.relationshipCount ?? 0,
-        node.evidenceCount ?? 0,
-        1,
-      );
       const r = knowledgeNodeRadius(node);
-      const sphereOp = state === "matched" ? 1 : 0.15;
-      const ringOp = state === "neighbor" ? 1 : 0;
 
-      const group = new THREE.Group();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+      if (state === "neighbor") {
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = Math.max(1.5, r * 0.12);
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+      } else {
+        ctx.lineWidth = Math.max(1.25, r * 0.1);
+        ctx.strokeStyle = darkenColor(color);
+        ctx.stroke();
+      }
 
-      // Flat neo4j-style disc: unlit fill + darker rim. The camera looks
-      // straight down +z, so a CircleGeometry needs no billboarding.
-      const material = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: sphereOp,
-      });
-      group.add(new THREE.Mesh(new THREE.CircleGeometry(r, 48), material));
-      const rimMaterial = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color).multiplyScalar(0.55),
-        transparent: true,
-        opacity: sphereOp,
-      });
-      const rim = new THREE.Mesh(
-        new THREE.RingGeometry(r * 0.9, r, 48),
-        rimMaterial,
-      );
-      rim.position.z = 0.5;
-      group.add(rim);
-
-      const canvas = document.createElement("canvas");
-      const size = 128;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, size, size);
-      ctx.font = "bold 14px sans-serif";
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, size / 2, size / 2);
-      const spriteMaterial = new THREE.SpriteMaterial({
-        map: new THREE.CanvasTexture(canvas),
-        transparent: true,
-        opacity: sphereOp,
-      });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(r * 3, r * 3, 1);
-      sprite.position.set(0, 0, 2);
-      sprite.visible = nodeLabelVisible(node.id);
-      group.add(sprite);
-
-      const ringCanvas = document.createElement("canvas");
-      const ringSize = 128;
-      ringCanvas.width = ringSize;
-      ringCanvas.height = ringSize;
-      const rCtx = ringCanvas.getContext("2d")!;
-      rCtx.clearRect(0, 0, ringSize, ringSize);
-      rCtx.strokeStyle = color;
-      rCtx.lineWidth = 10;
-      rCtx.beginPath();
-      rCtx.arc(ringSize / 2, ringSize / 2, ringSize / 2 - 10, 0, Math.PI * 2);
-      rCtx.stroke();
-      const ringMaterial = new THREE.SpriteMaterial({
-        map: new THREE.CanvasTexture(ringCanvas),
-        transparent: true,
-        opacity: ringOp,
-      });
-      const ringSprite = new THREE.Sprite(ringMaterial);
-      ringSprite.scale.set(r * 2, r * 2, 1);
-      ringSprite.position.set(0, 0, 1);
-      group.add(ringSprite);
-
-      node.__sphereMat = material;
-      node.__rimMat = rimMaterial;
-      node.__spriteMat = spriteMaterial;
-      node.__ringMat = ringMaterial;
-      node.__labelSprite = sprite;
-
-      return group;
+      if (nodeLabelVisible(node.id)) {
+        const rawLabel = node.label ?? "";
+        // Wrapped white text that stays inside the disc (neo4j style).
+        const fontSize = Math.max(3.5, r * 0.32);
+        ctx.font = `600 ${fontSize}px sans-serif`;
+        const lines = wrapLabelLines(
+          (s) => ctx.measureText?.(s)?.width ?? s.length * fontSize * 0.6,
+          rawLabel,
+          r * 1.7,
+          3,
+        );
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#ffffff";
+        const lineHeight = fontSize * 1.15;
+        const y0 = node.y - ((lines.length - 1) / 2) * lineHeight;
+        lines.forEach((line, index) => {
+          ctx.fillText(line, node.x, y0 + index * lineHeight);
+        });
+      }
+      ctx.globalAlpha = 1;
     },
     [nodeLabelVisible],
   );
 
-  useEffect(() => {
-    for (const node of graphData.nodes as any[]) {
-      const state = classifyNode(node.id, classification);
-      const opacity = state === "matched" ? 1 : 0.15;
-      const ringOpacity = state === "neighbor" ? 1 : 0;
-      if (node.__sphereMat) node.__sphereMat.opacity = opacity;
-      if (node.__rimMat) node.__rimMat.opacity = opacity;
-      if (node.__spriteMat) node.__spriteMat.opacity = opacity;
-      if (node.__ringMat) node.__ringMat.opacity = ringOpacity;
-    }
-    // Focus flips which labels are lit; refresh() also re-runs the link
-    // object accessor so lit edges gain/drop their label sprites.
-    applyLabelVisibility();
-    fgRef.current?.refresh?.();
-  }, [classification, graphData.nodes, applyLabelVisibility]);
+  // With a custom nodeCanvasObject the renderer can't infer hit areas —
+  // without this, node clicks and drags silently stop working.
+  const nodePointerAreaPaint = useCallback(
+    (node: any, color: string, ctx: CanvasRenderingContext2D) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, knowledgeNodeRadius(node) + 4, 0, 2 * Math.PI);
+      ctx.fill();
+    },
+    [],
+  );
+
+  // Full link painter (replace mode): line trimmed to disc edges,
+  // arrowhead terminating on the target rim, relationship label along
+  // lit edges in focus mode. Trust colors carry over from the 3D links.
+  // Full link painter (replace mode): the line is trimmed to the disc
+  // edges with the arrowhead terminating at the target's rim. When the
+  // relationship label is visible it becomes part of the line itself —
+  // a gap opens at the midpoint and the text sits inline, in the line's
+  // color (neo4j style).
+  const linkCanvasObject = useCallback(
+    (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const start = link.source;
+      const end = link.target;
+      if (typeof start !== "object" || typeof end !== "object") return;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dist = Math.hypot(dx, dy);
+      if (!dist) return;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const sourceTrim = knowledgeNodeRadius(start) + 1.5;
+      const targetTrim = knowledgeNodeRadius(end) + 1.5;
+      if (dist <= sourceTrim + targetTrim) return;
+      const sx = start.x + ux * sourceTrim;
+      const sy = start.y + uy * sourceTrim;
+      const tx = end.x - ux * targetTrim;
+      const ty = end.y - uy * targetTrim;
+      const lineLen = dist - sourceTrim - targetTrim;
+
+      const color = isLinkBright(link)
+        ? `${knowledgeGraphTrustColor(link)}cc`
+        : "rgba(148,163,184,0.15)";
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      // Constant 1px screen width regardless of zoom.
+      ctx.lineWidth = 1 / globalScale;
+
+      let labeled = false;
+      if (linkLabelVisible(link)) {
+        const label = link.label || "related to";
+        const fontSize = 10 / globalScale;
+        ctx.font = `${fontSize}px sans-serif`;
+        const textWidth =
+          ctx.measureText?.(label)?.width ?? label.length * fontSize * 0.6;
+        const gap = textWidth + 10 / globalScale;
+        // Only inline the label when the line has room for it, and only
+        // when the midpoint is anywhere near the viewport (cheap cull so
+        // 10k offscreen labels don't cost a frame).
+        const mx = (sx + tx) / 2;
+        const my = (sy + ty) / 2;
+        let onScreen = true;
+        const t = (ctx as any).getTransform?.();
+        const viewport = dimsRef.current;
+        if (t && viewport) {
+          const px = t.a * mx + t.c * my + t.e;
+          const py = t.b * mx + t.d * my + t.f;
+          const bound = Math.max(viewport.w, viewport.h) * 2.5;
+          onScreen = px > -bound && px < bound && py > -bound && py < bound;
+        }
+        if (onScreen && lineLen > gap + 14 / globalScale) {
+          const half = gap / 2;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(mx - ux * half, my - uy * half);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(mx + ux * half, my + uy * half);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+          let angle = Math.atan2(dy, dx);
+          if (angle > Math.PI / 2) angle -= Math.PI;
+          else if (angle < -Math.PI / 2) angle += Math.PI;
+          ctx.save();
+          ctx.translate(mx, my);
+          ctx.rotate(angle);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
+          labeled = true;
+        }
+      }
+      if (!labeled) {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      }
+
+      // Arrowhead sitting exactly on the target disc's rim.
+      const ah = 4;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(
+        tx - ux * ah - uy * (ah * 0.5),
+        ty - uy * ah + ux * (ah * 0.5),
+      );
+      ctx.lineTo(
+        tx - ux * ah + uy * (ah * 0.5),
+        ty - uy * ah - ux * (ah * 0.5),
+      );
+      ctx.closePath();
+      ctx.fill();
+    },
+    [linkLabelVisible, isLinkBright],
+  );
 
   useEffect(() => {
     const fg = fgRef.current;
@@ -694,7 +709,7 @@ export const KnowledgeGraph = forwardRef<
     const baseDistance = nodeCount > 50 ? 100 : 75;
     const linkForce = fg.d3Force("link");
     linkForce?.distance((link: any) =>
-      sameCommunity(link) ? baseDistance * 0.7 : baseDistance * 1.8,
+      sameCommunity(link) ? baseDistance : baseDistance * 2,
     );
     linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
     // Per-community anchors replace the global center force — anchors are
@@ -707,41 +722,16 @@ export const KnowledgeGraph = forwardRef<
       "collide",
       d3
         .forceCollide()
-        .radius((node: any) => knowledgeNodeRadius(node) + 6)
+        .radius((node: any) => knowledgeNodeRadius(node) + 12)
         .strength(0.9),
     );
     // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
     // the first pass fires before the container is measured (fg == null).
   }, [graphData, communityLayout, dims]);
 
-  const cameraInitRef = useRef(false);
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg || !dims || cameraInitRef.current) return;
-    const camera = fg.camera();
-    const controls = fg.controls();
-    const initialZ = initialCameraZ(graphData.nodes.length);
-    camera.position.set(0, 0, initialZ);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(0, 0, 0);
-    controls.enableRotate = false;
-    controls.panSpeed = 0.15;
-    controls.zoomSpeed = 0.5;
-    controls.mouseButtons = {
-      LEFT: THREE.MOUSE.PAN,
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.PAN,
-    };
-    controls.touches = {
-      ONE: THREE.TOUCH.PAN,
-      TWO: THREE.TOUCH.DOLLY_PAN,
-    };
-    // Near-orthographic: a narrow FOV kills the perspective skew that
-    // made the 2D layout read as 3D. initialCameraZ compensates.
-    camera.fov = FLAT_CAMERA_FOV;
-    camera.updateProjectionMatrix?.();
-    cameraInitRef.current = true;
-  }, [dims, graphData]);
+  // One-shot framing: zoom to fit after the first simulation settle.
+  // Zoom/pan after that belongs to the user.
+  const zoomInitRef = useRef(false);
 
   const anyFetching = result.fetching && !result.data;
   if (anyFetching) {
@@ -794,60 +784,20 @@ export const KnowledgeGraph = forwardRef<
 
   return (
     <div ref={setContainerEl} className="absolute inset-0 overflow-hidden">
-      <ForceGraph3D
+      <ForceGraph2D
         ref={fgRef}
         graphData={graphData}
         width={dims.w}
         height={dims.h}
         backgroundColor="rgba(0,0,0,0)"
-        numDimensions={2}
-        nodeThreeObject={nodeThreeObject}
-        nodeRelSize={6}
-        showNavInfo={false}
-        linkColor={(link: any) =>
-          isLinkBright(link)
-            ? `${knowledgeGraphTrustColor(link)}cc`
-            : "rgba(255,255,255,0.12)"
-        }
-        linkWidth={1.2}
+        nodeCanvasObject={nodeCanvasObject}
+        nodePointerAreaPaint={nodePointerAreaPaint}
+        // Continuous repaint so ref-driven focus/filter/zoom changes show
+        // without rebuilding graphData.
+        autoPauseRedraw={false}
         linkLabel={(link: any) => link.label || "related to"}
-        linkThreeObjectExtend={true}
-        linkThreeObject={(link: any) => {
-          // Persistent edge-label sprites exist only where they can show:
-          // the focused lit set (auto) or the zoom-gated overview (mode
-          // "on"). Everything else returns nothing — at 10k+ nodes,
-          // sprite-per-edge is the perf cliff.
-          const mode = linkLabelModeRef.current;
-          const focusState = focusRef.current;
-          const lit =
-            !!focusState &&
-            focusState.litIds.has(endpointId(link.source)) &&
-            focusState.litIds.has(endpointId(link.target));
-          if (mode === "off" || !lit) {
-            link.__labelSprite = undefined;
-            return undefined as unknown as THREE.Object3D;
-          }
-          const sprite = makeEdgeLabelSprite(link.label || "related to");
-          sprite.visible = linkLabelVisible(link);
-          link.__labelSprite = sprite;
-          return sprite;
-        }}
-        linkPositionUpdate={(obj: any, coords: any) => {
-          if (!obj) return false;
-          const { start, end } = coords;
-          // Align the label with its line (neo4j-style), flipped to stay
-          // upright, and nudged just above the line along its normal.
-          let angle = Math.atan2(end.y - start.y, end.x - start.x);
-          if (angle > Math.PI / 2) angle -= Math.PI;
-          else if (angle < -Math.PI / 2) angle += Math.PI;
-          obj.position.set(
-            (start.x + end.x) / 2 - Math.sin(angle) * 8,
-            (start.y + end.y) / 2 + Math.cos(angle) * 8,
-            ((start.z ?? 0) + (end.z ?? 0)) / 2,
-          );
-          if (obj.material) obj.material.rotation = angle;
-          return false;
-        }}
+        linkCanvasObjectMode={() => "replace" as const}
+        linkCanvasObject={linkCanvasObject}
         nodeLabel={(node: any) =>
           `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
             node.evidenceCount
@@ -856,9 +806,17 @@ export const KnowledgeGraph = forwardRef<
           }`
         }
         cooldownTicks={100}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
+        d3AlphaDecay={0.05}
+        d3VelocityDecay={0.55}
         warmupTicks={50}
+        onZoom={({ k }: { k: number }) => {
+          zoomKRef.current = k;
+        }}
+        onEngineStop={() => {
+          if (zoomInitRef.current) return;
+          zoomInitRef.current = true;
+          fgRef.current?.zoomToFit?.(400, 40);
+        }}
         onNodeClick={(node: any) => {
           // Clicking a node focuses it and surfaces the selected-node
           // chip — the detail sheet opens only from the chip, so the
@@ -872,7 +830,6 @@ export const KnowledgeGraph = forwardRef<
         onNodeDragEnd={(node: any) => {
           node.fx = node.x;
           node.fy = node.y;
-          node.fz = node.z;
         }}
       />
       {focus && selectedNode && (

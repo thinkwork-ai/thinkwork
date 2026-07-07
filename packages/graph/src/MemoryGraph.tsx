@@ -26,11 +26,14 @@ import {
   carryNodePositions,
   classifyNode,
   composeGraphClassification,
+  communityColor,
   computeCommunityLayout,
   darkenColor,
+  isDarkMode,
   endpointId,
   expandNeighborhood,
   labelsVisibleAtScale,
+  wrapLabelLines,
   DEFAULT_FOCUS_CAP,
   DEFAULT_FOCUS_DEGREE,
   type GraphClassification,
@@ -38,11 +41,6 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
-import {
-  MEMORY_COLOR,
-  ENTITY_COLOR,
-  MEMORY_TYPE_COLORS,
-} from "./palettes/memory-palette.js";
 
 export interface MemoryGraphNode {
   id: string;
@@ -359,6 +357,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       () => computeCommunityLayout(graphData.nodes, graphData.links),
       [graphData],
     );
+    const communityLayoutRef = useRef(communityLayout);
+    communityLayoutRef.current = communityLayout;
 
     // Ref so nodeThreeObject (stable callback) can read the current filter
     // without being re-created each time matchedIds changes.
@@ -442,6 +442,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const zoomKRef = useRef(1);
     const graphDataRef = useRef(graphData);
     graphDataRef.current = graphData;
+    const dimsRef = useRef(dims);
+    dimsRef.current = dims;
 
     const nodeLabelVisible = useCallback((nodeId: string) => {
       const mode = nodeLabelModeRef.current;
@@ -456,15 +458,20 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     }, []);
 
     const linkLabelVisible = useCallback((link: any) => {
-      // Relationship labels exist only in focus mode — at overview scale
-      // they float mid-air along long bridge edges as pure noise. The
-      // toggle governs the focused lit set: auto/on show, off hides.
+      // Relationship labels ride the line itself (neo4j style). Off hides
+      // them everywhere; in focus they mark the lit set; in the overview
+      // they follow the same zoom gate as node labels.
       if (linkLabelModeRef.current === "off") return false;
       const focusState = focusRef.current;
-      if (!focusState) return false;
-      return (
-        focusState.litIds.has(endpointId(link.source)) &&
-        focusState.litIds.has(endpointId(link.target))
+      if (focusState) {
+        return (
+          focusState.litIds.has(endpointId(link.source)) &&
+          focusState.litIds.has(endpointId(link.target))
+        );
+      }
+      return labelsVisibleAtScale(
+        zoomKRef.current,
+        graphDataRef.current.nodes.length,
       );
     }, []);
 
@@ -516,11 +523,11 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         const alpha = state === "matched" ? 1 : 0.15;
         const isMemory = node.nodeType === "memory";
         const entityType = node.entityType as string | null;
-        const color = isMemory
-          ? MEMORY_COLOR
-          : entityType
-            ? MEMORY_TYPE_COLORS[entityType] || ENTITY_COLOR
-            : ENTITY_COLOR;
+        // Color by detected community so cluster membership reads at a
+        // glance — entity-type colors were near-uniform in practice.
+        const color = communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
         const r = memoryNodeRadius(node);
 
         ctx.globalAlpha = alpha;
@@ -533,16 +540,24 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         ctx.stroke();
 
         if (nodeLabelVisible(node.id)) {
-          const label = isMemory
-            ? "Memory"
-            : entityType
-              ? entityType.charAt(0).toUpperCase() + entityType.slice(1)
-              : node.label?.slice(0, 12) || "Entity";
-          ctx.font = `600 ${Math.max(4, r * 0.42)}px sans-serif`;
+          const rawLabel = isMemory ? "Memory" : (node.label ?? "");
+          // Wrapped white text that stays inside the disc (neo4j style).
+          const fontSize = Math.max(3.5, r * 0.32);
+          ctx.font = `600 ${fontSize}px sans-serif`;
+          const lines = wrapLabelLines(
+            (s) => ctx.measureText?.(s)?.width ?? s.length * fontSize * 0.6,
+            rawLabel,
+            r * 1.7,
+            3,
+          );
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillStyle = "#ffffff";
-          ctx.fillText(label, node.x, node.y);
+          const lineHeight = fontSize * 1.15;
+          const y0 = node.y - ((lines.length - 1) / 2) * lineHeight;
+          lines.forEach((line, index) => {
+            ctx.fillText(line, node.x, y0 + index * lineHeight);
+          });
         }
         ctx.globalAlpha = 1;
       },
@@ -566,6 +581,11 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     // edges with the arrowhead terminating at the target's rim — lines
     // never run under translucent discs. Relationship labels draw along
     // lit edges (focus mode only), constant on-screen size, upright.
+    // Full link painter (replace mode): the line is trimmed to the disc
+    // edges with the arrowhead terminating at the target's rim. When the
+    // relationship label is visible it becomes part of the line itself —
+    // a gap opens at the midpoint and the text sits inline, in the line's
+    // color (neo4j style).
     const linkCanvasObject = useCallback(
       (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
         const start = link.source;
@@ -579,46 +599,87 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         const uy = dy / dist;
         const sourceTrim = memoryNodeRadius(start) + 1.5;
         const targetTrim = memoryNodeRadius(end) + 1.5;
-        if (dist <= sourceTrim + targetTrim) return; // discs touch
+        if (dist <= sourceTrim + targetTrim) return;
         const sx = start.x + ux * sourceTrim;
         const sy = start.y + uy * sourceTrim;
         const tx = end.x - ux * targetTrim;
         const ty = end.y - uy * targetTrim;
+        const lineLen = dist - sourceTrim - targetTrim;
 
         const color = isLinkBright(link)
           ? "rgba(148,163,184,0.9)"
-          : "rgba(148,163,184,0.12)";
+          : "rgba(148,163,184,0.15)";
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(tx, ty);
-        ctx.stroke();
+        // Constant 1px screen width regardless of zoom.
+        ctx.lineWidth = 1 / globalScale;
+
+        let labeled = false;
+        if (linkLabelVisible(link)) {
+          const label = link.label || "mentions";
+          const fontSize = 10 / globalScale;
+          ctx.font = `${fontSize}px sans-serif`;
+          const textWidth =
+            ctx.measureText?.(label)?.width ?? label.length * fontSize * 0.6;
+          const gap = textWidth + 10 / globalScale;
+          // Only inline the label when the line has room for it, and only
+          // when the midpoint is anywhere near the viewport (cheap cull so
+          // 10k offscreen labels don't cost a frame).
+          const mx = (sx + tx) / 2;
+          const my = (sy + ty) / 2;
+          let onScreen = true;
+          const t = (ctx as any).getTransform?.();
+          const viewport = dimsRef.current;
+          if (t && viewport) {
+            const px = t.a * mx + t.c * my + t.e;
+            const py = t.b * mx + t.d * my + t.f;
+            const bound = Math.max(viewport.w, viewport.h) * 2.5;
+            onScreen = px > -bound && px < bound && py > -bound && py < bound;
+          }
+          if (onScreen && lineLen > gap + 14 / globalScale) {
+            const half = gap / 2;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(mx - ux * half, my - uy * half);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(mx + ux * half, my + uy * half);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+            let angle = Math.atan2(dy, dx);
+            if (angle > Math.PI / 2) angle -= Math.PI;
+            else if (angle < -Math.PI / 2) angle += Math.PI;
+            ctx.save();
+            ctx.translate(mx, my);
+            ctx.rotate(angle);
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+            labeled = true;
+          }
+        }
+        if (!labeled) {
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+        }
 
         // Arrowhead sitting exactly on the target disc's rim.
-        const ah = 5;
+        const ah = 4;
         ctx.beginPath();
         ctx.moveTo(tx, ty);
-        ctx.lineTo(tx - ux * ah - uy * (ah * 0.5), ty - uy * ah + ux * (ah * 0.5));
-        ctx.lineTo(tx - ux * ah + uy * (ah * 0.5), ty - uy * ah - ux * (ah * 0.5));
+        ctx.lineTo(
+          tx - ux * ah - uy * (ah * 0.5),
+          ty - uy * ah + ux * (ah * 0.5),
+        );
+        ctx.lineTo(
+          tx - ux * ah + uy * (ah * 0.5),
+          ty - uy * ah - ux * (ah * 0.5),
+        );
         ctx.closePath();
         ctx.fill();
-
-        if (linkLabelVisible(link)) {
-          let angle = Math.atan2(dy, dx);
-          if (angle > Math.PI / 2) angle -= Math.PI;
-          else if (angle < -Math.PI / 2) angle += Math.PI;
-          ctx.save();
-          ctx.translate((sx + tx) / 2, (sy + ty) / 2);
-          ctx.rotate(angle);
-          ctx.font = `${11 / globalScale}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillStyle = "rgba(226,232,240,0.9)";
-          ctx.fillText(link.label || "mentions", 0, -2 / globalScale);
-          ctx.restore();
-        }
       },
       [linkLabelVisible, isLinkBright],
     );
@@ -729,8 +790,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             }`
           }
           cooldownTicks={100}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
+          d3AlphaDecay={0.05}
+          d3VelocityDecay={0.55}
           warmupTicks={50}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
@@ -786,33 +847,6 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           onNodeLabelModeChange={setNodeLabelMode}
           onLinkLabelModeChange={setLinkLabelMode}
         />
-        <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
-          {Object.entries(MEMORY_TYPE_COLORS)
-            .filter(([k]) =>
-              graphData.nodes.some((n: any) => n.entityType === k),
-            )
-            .slice(0, 6)
-            .map(([type, c]) => (
-              <span key={type} className="flex items-center gap-1">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: c }}
-                />
-                {type}
-              </span>
-            ))}
-          {graphData.nodes.some(
-            (n: any) => !n.entityType && n.nodeType === "entity",
-          ) && (
-            <span className="flex items-center gap-1">
-              <span
-                className="inline-block w-2.5 h-2.5 rounded-full"
-                style={{ background: ENTITY_COLOR }}
-              />
-              Untyped
-            </span>
-          )}
-        </div>
       </div>
     );
   },

@@ -18,22 +18,17 @@ vi.mock("urql", () => ({
   useQuery: urqlMocks.useQuery,
 }));
 
-vi.mock("react-force-graph-3d", async () => {
+vi.mock("react-force-graph-2d", async () => {
   const ReactActual = await vi.importActual<typeof React>("react");
   return {
     default: ReactActual.forwardRef((props: any, ref) => {
       ReactActual.useImperativeHandle(ref, () => ({
-        camera: () => ({
-          position: { set: vi.fn() },
-          up: { set: vi.fn() },
-          lookAt: vi.fn(),
-        }),
-        controls: () => ({}),
         d3Force: () => ({
           strength: () => ({ distanceMax: vi.fn() }),
           distance: vi.fn(),
         }),
-        refresh: vi.fn(),
+        zoomToFit: vi.fn(),
+        zoom: vi.fn(),
       }));
       forceGraphCalls.push(props);
       return ReactActual.createElement("div", {
@@ -70,6 +65,34 @@ afterEach(() => {
 
 function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
+}
+
+function paintNodeAlpha(props: any, node: any) {
+  let currentAlpha = 1;
+  let fillAlpha = -1;
+  const ctx = {
+    set globalAlpha(v: number) {
+      currentAlpha = v;
+    },
+    get globalAlpha() {
+      return currentAlpha;
+    },
+    beginPath() {},
+    arc() {},
+    fill() {
+      fillAlpha = currentAlpha;
+    },
+    stroke() {},
+    fillText() {},
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+  };
+  props.nodeCanvasObject({ ...node, x: 0, y: 0 }, ctx as any, 1);
+  return fillAlpha;
 }
 
 const wikiGraphFixture = {
@@ -110,35 +133,26 @@ describe("WikiGraph", () => {
     render(<WikiGraph tenantId="tenant-1" useRequesterScope />);
     await screen.findByTestId("force-graph");
     const props = latestForceGraphProps();
-    for (const node of props.graphData.nodes) {
-      node.__sphereMat = { opacity: -1 };
-      node.__spriteMat = { opacity: -1 };
-      node.__ringMat = { opacity: -1 };
-    }
+
+    // Interactivity contract: custom-painted nodes must provide a pointer
+    // area or clicks/drags silently die.
+    expect(typeof props.nodePointerAreaPaint).toBe("function");
 
     await act(async () => {
       props.onNodeClick(props.graphData.nodes[0]);
     });
 
-    const opacities = Object.fromEntries(
-      latestForceGraphProps().graphData.nodes.map((node: any) => [
-        node.id,
-        node.__sphereMat.opacity,
-      ]),
-    );
-    expect(opacities["page-1"]).toBe(1);
-    expect(opacities["page-2"]).toBe(1);
-    expect(opacities["page-3"]).toBe(0.15);
+    let latest = latestForceGraphProps();
+    expect(paintNodeAlpha(latest, props.graphData.nodes[0])).toBe(1);
+    expect(paintNodeAlpha(latest, props.graphData.nodes[1])).toBe(1);
+    expect(paintNodeAlpha(latest, props.graphData.nodes[2])).toBe(0.15);
     // graphData identity untouched by focus (no-restart invariant).
-    expect(latestForceGraphProps().graphData).toBe(props.graphData);
+    expect(latest.graphData).toBe(props.graphData);
 
     await act(async () => {
       latestForceGraphProps().onBackgroundClick();
     });
-    expect(
-      latestForceGraphProps().graphData.nodes.every(
-        (node: any) => node.__sphereMat.opacity === 1,
-      ),
-    ).toBe(true);
+    latest = latestForceGraphProps();
+    expect(paintNodeAlpha(latest, props.graphData.nodes[2])).toBe(1);
   });
 });

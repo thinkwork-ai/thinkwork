@@ -106,6 +106,112 @@ export function labelsVisibleAtScale(k: number, nodeCount: number): boolean {
   return k >= LABEL_GATE_MIN_SCALE;
 }
 
+/** Distinct hues cycled across detected communities so cluster membership
+ *  reads at a glance (the neo4j-browser look). */
+export const COMMUNITY_COLORS = [
+  "#60a5fa", // blue
+  "#f472b6", // pink
+  "#4ade80", // green
+  "#facc15", // yellow
+  "#a78bfa", // violet
+  "#f87171", // red
+  "#38bdf8", // sky
+  "#fb923c", // orange
+  "#34d399", // emerald
+  "#e879f9", // fuchsia
+  "#fbbf24", // amber
+  "#2dd4bf", // teal
+];
+
+export function communityColor(communityId: number | undefined): string {
+  if (communityId === undefined) return COMMUNITY_COLORS[0]!;
+  return COMMUNITY_COLORS[communityId % COMMUNITY_COLORS.length]!;
+}
+
+/**
+ * Word-wrap a node label to fit inside a disc (neo4j style): up to
+ * `maxLines` lines within `maxWidth`, ellipsized when it can't fit.
+ * `measure` is the canvas text measurer for the already-set font.
+ */
+export function wrapLabelLines(
+  measure: (text: string) => number,
+  text: string,
+  maxWidth: number,
+  maxLines = 3,
+): string[] {
+  const truncate = (value: string): string => {
+    if (measure(value) <= maxWidth) return value;
+    let out = value;
+    while (out.length > 1 && measure(out + "…") > maxWidth) {
+      out = out.slice(0, -1);
+    }
+    return out + "…";
+  };
+
+  const words = String(text ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  let overflow = false;
+
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i]!;
+    const candidate = current ? `${current} ${word}` : word;
+    if (measure(candidate) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (!current) {
+      // Single word wider than the disc.
+      lines.push(truncate(word));
+    } else {
+      lines.push(current);
+      i -= 1; // reprocess this word on the next line
+    }
+    current = "";
+    if (lines.length === maxLines) {
+      overflow = true;
+      break;
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  else if (current) overflow = true;
+
+  if (overflow && lines.length > 0) {
+    lines[lines.length - 1] = truncate(lines[lines.length - 1] + "…");
+  }
+  return lines;
+}
+
+/** The web app toggles theme by stamping `dark` on the root element
+ *  (see apps/web `applets/mount.tsx`) — the canvas painters read it per
+ *  frame so graph chrome follows the theme. */
+export function isDarkMode(): boolean {
+  if (typeof document === "undefined") return true;
+  return document.documentElement.classList.contains("dark");
+}
+
+/** Legible text color for a label drawn ON a colored disc, independent of
+ *  page theme — picked by the disc color's relative luminance. */
+export function contrastTextColor(hex: string): string {
+  const raw = hex.replace("#", "");
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : raw;
+  const n = Number.parseInt(full.slice(0, 6), 16);
+  if (Number.isNaN(n)) return "#ffffff";
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? "#1e293b" : "#ffffff";
+}
+
 /** Darken a hex color for disc rims (canvas has no material math). */
 export function darkenColor(hex: string, factor = 0.55): string {
   const raw = hex.replace("#", "");
